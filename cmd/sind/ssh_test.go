@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,38 +14,12 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestSSH_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"ssh"})
-	require.NoError(t, err)
-	assert.Contains(t, c.Use, "ssh")
-}
-
-func TestEnter_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"enter"})
-	require.NoError(t, err)
-	assert.Equal(t, "enter [CLUSTER]", c.Use)
-}
-
-func TestEnter_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("enter", "a", "b")
-	assert.Error(t, err)
-}
-
-func TestExec_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"exec"})
-	require.NoError(t, err)
-	assert.Contains(t, c.Use, "exec")
-}
 
 func TestParseSSHArgs_NodeOnly(t *testing.T) {
 	opts, node, cmd, err := parseSSHArgs([]string{"worker-0"})
@@ -85,15 +60,13 @@ func TestParseSSHArgs_Empty(t *testing.T) {
 
 func TestParseSSHArgs_OnlyDash(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"--"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "node argument required")
+	assert.ErrorContains(t, err, "node argument required")
 }
 
 func TestParseSSHArgs_OnlyOptions(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"-v", "-l", "alice", "--", "id"})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "node argument required")
 	assert.True(t, isUsageError(err))
-	assert.Contains(t, err.Error(), "node argument required")
 }
 
 // TestParseSSHArgs_OptionValues checks that the node is found among SSH
@@ -152,9 +125,8 @@ func TestParseSSHArgs_MissingOptionValue(t *testing.T) {
 
 func TestParseSSHArgs_LongOption(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"--realm", "ci", "worker-0"})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "ssh has no option --realm")
 	assert.True(t, isUsageError(err))
-	assert.Contains(t, err.Error(), "ssh has no option --realm")
 }
 
 func TestSSH_CommandWithoutDashExits2(t *testing.T) {
@@ -215,20 +187,17 @@ func TestParseExecArgs_WithCluster(t *testing.T) {
 
 func TestParseExecArgs_MissingSeparator(t *testing.T) {
 	_, _, err := parseExecArgs([]string{"hostname"}, -1)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "-- separator")
+	assert.ErrorContains(t, err, "-- separator")
 }
 
 func TestParseExecArgs_MissingCommand(t *testing.T) {
 	_, _, err := parseExecArgs(nil, 0)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "command required")
+	assert.ErrorContains(t, err, "command required")
 }
 
 func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 	_, _, err := parseExecArgs([]string{"a", "b", "cmd"}, 2)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "at most one argument before --")
+	assert.ErrorContains(t, err, "at most one argument before --")
 }
 
 func TestSSH_Help(t *testing.T) {
@@ -237,6 +206,8 @@ func TestSSH_Help(t *testing.T) {
 			stdout, _, err := executeCommand("ssh", flag)
 			require.NoError(t, err)
 			assert.Contains(t, stdout, "SSH into a cluster node")
+			assert.Contains(t, stdout, "sind's\nown flags, such as --realm, go before ssh")
+			assert.Contains(t, stdout, "  sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]\n")
 		})
 	}
 }
@@ -246,7 +217,8 @@ func TestExec_Help(t *testing.T) {
 		t.Run(flag, func(t *testing.T) {
 			stdout, _, err := executeCommand("exec", flag)
 			require.NoError(t, err)
-			assert.Contains(t, stdout, "Run a command on submitter or controller")
+			assert.Contains(t, stdout, "Run a command on the submitter or controller")
+			assert.Contains(t, stdout, "  sind exec [flags] [CLUSTER] -- COMMAND [ARGS...]\n")
 		})
 	}
 }
@@ -299,23 +271,25 @@ func TestExec_VerboseAfterExec(t *testing.T) {
 
 func TestExec_UnknownFlag(t *testing.T) {
 	_, _, err := executeCommand("exec", "--bogus", "--", "hostname")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown flag: --bogus")
+	require.ErrorContains(t, err, "unknown flag: --bogus")
 }
 
-// dockerArgs runs sind with args, with the default cluster's submitter as
-// the target of enter and exec, and returns the arguments of the docker
-// command it ran.
-func dockerArgs(t *testing.T, args ...string) []string {
+// dockerArgs runs sind with args, stdin and stdout, with the default
+// cluster's submitter as the target of enter and exec, and returns the
+// arguments of the docker command it ran.
+func dockerArgs(t *testing.T, stdin io.Reader, stdout io.Writer, args ...string) []string {
 	t.Helper()
 	fakeDockerOnPath(t, "0")
 	file := filepath.Join(t.TempDir(), "args")
 	t.Setenv(fakeDockerArgsEnv, file)
-	var stderr bytes.Buffer
+	cmd := NewRootCommand()
+	cmd.SetIn(stdin)
+	cmd.SetOut(stdout)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs(args)
+	cmd.SetContext(submitterCtx(t.Context()))
 
-	code := run(submitterCtx(t.Context()), args, &stderr)
-
-	require.Equal(t, 0, code, stderr.String())
+	require.NoError(t, cmd.Execute())
 	data, err := os.ReadFile(file)
 	require.NoError(t, err)
 	return strings.Split(string(data), "\n")
@@ -345,7 +319,7 @@ func TestUser_DockerArgs(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, dockerArgs(t, tc.args...))
+			assert.Equal(t, tc.want, dockerArgs(t, noStdin(t), io.Discard, tc.args...))
 		})
 	}
 }
@@ -358,7 +332,7 @@ func TestSSHAccess(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
 	checkPrerequisites(t, c)
-	image := testImage(t)
+	image := testutil.Image()
 	dataDir := t.TempDir()
 
 	realm := "it-ssh-" + testID
@@ -366,20 +340,7 @@ func TestSSHAccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		for _, name := range []string{"controller", "submitter", "worker-0"} {
-			cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
-			_ = c.KillContainer(bg, cn)
-			_ = c.RemoveContainer(bg, cn)
-		}
-		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
-		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
-		_ = meshMgr.CleanupMesh(bg)
-	})
+	cleanupRealm(t, c, realm)
 
 	// Create cluster with a submitter for enter/exec routing tests.
 	cfgDir := t.TempDir()
@@ -391,22 +352,16 @@ func TestSSHAccess(t *testing.T) {
 	require.NoError(t, err, "create cluster: stdout=%q stderr=%q", stdout, stderr)
 
 	// --- sind ssh: run command on specific node ---
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "controller."+cluster, "--", "hostname")
-	require.NoError(t, err, "ssh controller: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "controller")
-
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "worker-0."+cluster, "--", "hostname")
-	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "worker-0")
+	for _, node := range []string{"controller", "worker-0"} {
+		stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", node+"."+cluster, "--", "hostname")
+		require.NoError(t, err, "ssh %s: stdout=%q stderr=%q", node, stdout, stderr)
+		assert.Contains(t, stdout, node)
+	}
 
 	// --- sind enter: routes to submitter when present ---
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "enter", cluster)
-	// enter opens an interactive shell — will exit immediately since stdin is not a TTY.
-	// But the connection itself should succeed (exit code 0 or similar).
-	// We can't assert much about stdout here since it's an interactive session.
-	_ = stdout
-	_ = stderr
-	_ = err
+	// enter opens an interactive shell, which exits at once since stdin is
+	// not a TTY: there is nothing to assert about an interactive session.
+	_, _, _ = executeWithRealmCtx(ctx, realm, "enter", cluster)
 
 	// --- sind exec: routes to submitter when present ---
 	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", cluster, "--", "hostname")
@@ -414,7 +369,7 @@ func TestSSHAccess(t *testing.T) {
 	assert.Contains(t, stdout, "submitter", "exec should route to submitter when present")
 
 	// --- user SSH client via exported ssh_config ---
-	sshConfigDir, err := sindStateDir(realm)
+	sshConfigDir, err := state.RealmDir(realm)
 	require.NoError(t, err)
 	sshConfigPath := filepath.Join(sshConfigDir, "ssh_config")
 
@@ -429,26 +384,12 @@ func TestSSHAccess(t *testing.T) {
 		assert.NotContains(t, string(data), "%h")
 
 		// Test direct SSH access.
-		sshCmd := exec.CommandContext(ctx, "ssh",
-			"-F", sshConfigPath,
-			"-o", "BatchMode=yes",
-			"controller."+cluster+"."+realm+".sind",
-			"hostname",
-		)
-		out, sshErr := sshCmd.CombinedOutput()
-		require.NoError(t, sshErr, "user ssh: %s", string(out))
-		assert.Contains(t, string(out), "controller")
-
-		// Also test worker access.
-		sshCmd = exec.CommandContext(ctx, "ssh",
-			"-F", sshConfigPath,
-			"-o", "BatchMode=yes",
-			"worker-0."+cluster+"."+realm+".sind",
-			"hostname",
-		)
-		out, sshErr = sshCmd.CombinedOutput()
-		require.NoError(t, sshErr, "user ssh worker: %s", string(out))
-		assert.Contains(t, string(out), "worker-0")
+		for _, node := range []string{"controller", "worker-0"} {
+			out, sshErr := exec.CommandContext(ctx, "ssh", "-F", sshConfigPath, "-o", "BatchMode=yes",
+				node+"."+cluster+"."+realm+".sind", "hostname").CombinedOutput()
+			require.NoError(t, sshErr, "user ssh %s: %s", node, string(out))
+			assert.Contains(t, string(out), node)
+		}
 	}
 
 	// --- delete cluster ---
@@ -456,8 +397,10 @@ func TestSSHAccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestStdinIsTTY_NotATerminal(t *testing.T) {
-	// A reader set with cmd.SetIn, and a file that is not a terminal.
-	assert.False(t, stdinIsTTY(strings.NewReader("")))
-	assert.False(t, stdinIsTTY(noStdin(t)))
+func TestIsTerminal_NotATerminal(t *testing.T) {
+	// A reader or writer set with cmd.SetIn or cmd.SetOut, and a file that
+	// is not a terminal.
+	assert.False(t, isTerminal(strings.NewReader("")))
+	assert.False(t, isTerminal(new(bytes.Buffer)))
+	assert.False(t, isTerminal(noStdin(t)))
 }

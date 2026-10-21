@@ -26,23 +26,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// withoutCalls draws the spans of events as progresstest.Capture.Tree
-// does, leaving out the calls and what is under them: the docker commands,
-// which the tests of the docker package cover, and of which a readiness
-// wait runs as many as its rounds take.
-func withoutCalls(events []progress.Event) string {
-	var c progresstest.Capture
-	calls := map[progress.SpanID]bool{}
-	for _, e := range events {
-		if e.Kind == progress.KindCall || calls[e.Parent] {
-			calls[e.Span] = true
-			continue
-		}
-		c.Handle(e)
-	}
-	return c.Tree()
-}
-
 // endSpan ends a span failed with the work's error, unless the context
 // had been canceled for another reason first: then the work was stopped,
 // and the span ends canceled with the work's error as its text.
@@ -116,12 +99,8 @@ func workerConfigs(names ...string) []RunConfig {
 // before the first runs, each waiting for its node to get ready.
 func TestSetupNodes_ReportsTheNodes(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	m := &mock.Executor{OnCall: nodesOnCall(t, func([]string) (mock.Result, bool) { return mock.Result{}, false })}
-	client := docker.NewClient(m)
-	configs := append([]RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}},
-		workerConfigs("worker-0", "worker-1")...)
-
-	_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	_, _, err := setupNodesWith(ctx, t, func([]string) (mock.Result, bool) { return mock.Result{}, false },
+		append([]RunConfig{controllerConfig}, workerConfigs("worker-0", "worker-1")...)...)
 
 	require.NoError(t, err)
 	w.Finish()
@@ -130,7 +109,7 @@ func TestSetupNodes_ReportsTheNodes(t *testing.T) {
     wait ready: ok
   target worker-[0-1] role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A node's setup is the call "setup", with its docker exec under it,
@@ -169,7 +148,7 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 // canceled, not failed, and the error is that of the node that failed.
 func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	m := &mock.Executor{OnCall: nodesOnCall(t, func(args []string) (mock.Result, bool) {
+	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
 		switch {
 		case args[0] == "create" && strings.Contains(strings.Join(args, " "), "sind-dev-worker-0"):
 			return mock.Result{Err: errors.New("image not found")}, true
@@ -178,24 +157,21 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 			return mock.Result{Stdout: inspectJSON(t, args[1], "created", nil)}, true
 		}
 		return mock.Result{}, false
-	})}
-	client := docker.NewClient(m)
-
-	_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", workerConfigs("worker-0", "worker-1", "worker-2"), &readiness{interval: time.Millisecond}, nil)
+	}, workerConfigs("worker-0", "worker-1", "worker-2")...)
 
 	require.EqualError(t, err, "node worker-0: creating container worker-0: image not found")
 	w.Finish()
 	assert.Equal(t, `step nodes total=3 [fold]: failed (target): node worker-0: creating container worker-0: image not found
   target worker-0 role=worker: failed (target): node {}: creating container {}: image not found
-  target worker-[1-2] role=worker: canceled (canceled): waiting for {}: node sind-dev-{} not ready: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
-    wait ready message=container: canceled (canceled): node sind-dev-{} not ready: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
-`, withoutCalls(w.Events()))
+  target worker-[1-2] role=worker: canceled (canceled): node {}: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
+    wait ready message=container: canceled (canceled): context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // The pull is the step "pull images", with a target for each image it
 // pulls, only when it pulls one.
 func TestStartPull_ReportsThePulls(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	for _, tc := range []struct {
 		name    string
 		present []string
@@ -222,7 +198,7 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 			require.NoError(t, g.Wait())
 			require.NoError(t, p.err)
 			w.Finish()
-			assert.Equal(t, tc.want, withoutCalls(w.Events()))
+			assert.Equal(t, tc.want, testutil.WithoutCalls(w.Events()))
 		})
 	}
 }
@@ -232,13 +208,10 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 // created.
 func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
-	client := docker.NewClient(&m)
 	cfg := createCfg()
 	cfg.Pull = true
 
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	_, _, err := runCreate(ctx, t, cfg, false, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
 
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	w.Finish()
@@ -246,7 +219,7 @@ func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 step pull images total=1 [fold,show-lines]: failed (target): pulling img:1: manifest unknown
   target img:1 [show-lines]: failed (target): pulling {}: manifest unknown
 step rollback: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // An inspection of the images that fails before any pull fails the
@@ -254,22 +227,15 @@ step rollback: ok
 // the preflight is not stopped by a pull.
 func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if isImageExists(args) {
-			return mock.Result{Err: errors.New("docker daemon unavailable")}, true
-		}
-		return mock.Result{}, false
+	_, _, err := runCreate(ctx, t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Err: errors.New("docker daemon unavailable")}, isImageExists(args)
 	})
-	client := docker.NewClient(&m)
-
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), time.Millisecond)
 
 	require.EqualError(t, err, "inspecting image img:1: docker daemon unavailable")
 	w.Finish()
 	assert.Equal(t, `step preflight [hidden]: failed (target): inspecting image img:1: docker daemon unavailable
 step rollback: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A Create reports its steps: the hidden preflight, the nodes, the mesh
@@ -277,15 +243,9 @@ step rollback: ok
 // a target of the nodes and of Slurm.
 func TestCreate_ReportsItsSteps(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
 	var registered atomic.Int32
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), accountsOnCall(&registered, mock.Result{}))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
 
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), accountsCfg(), time.Millisecond)
+	_, _, err := runCreate(ctx, t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 
 	require.NoError(t, err)
 	w.Finish()
@@ -308,7 +268,7 @@ step slurm total=3 [fold]: ok
     wait ready: ok
   target worker-0 role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A db node that fails ends the step: the nodes that did not start end
@@ -337,7 +297,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
   target controller role=controller: canceled (canceled): not finished
   target db role=db: failed (target): enabling mariadb on {}: mariadb failed\nmariadb journal:\n
   target worker-0 role=worker: canceled (canceled): not finished
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // WorkerAdd reports the same steps as Create for the nodes it adds.
@@ -361,7 +321,7 @@ step nodes total=2 [fold]: ok
 step slurm total=2 [fold]: ok
   target worker-[1-2] role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A power action is the step its verb names, with a target for each node,
@@ -383,8 +343,7 @@ func TestPower_ReportsTheNodes(t *testing.T) {
 
 	err := PowerShutdown(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", []string{"controller", "worker-0", "worker-1"})
 
-	require.Error(t, err)
-	assert.Equal(t, "stopping sind-dev-worker-0: container already stopped", err.Error())
+	require.EqualError(t, err, "stopping sind-dev-worker-0: container already stopped")
 	assert.Equal(t, `call docker ps [hidden]: ok
 step stopping total=3 limit=8 [fold]: failed (target): stopping sind-dev-worker-0: container already stopped
   target controller.dev role=controller: ok
@@ -437,7 +396,7 @@ func TestPower_TellsTheClustersApart(t *testing.T) {
     target worker-0.dev role=worker: failed (target): container already stopped
   step stopping total=1 limit=8 [fold]: ok
     target worker-0 role=worker: ok
-`, withoutCalls(capture.Events()))
+`, testutil.WithoutCalls(capture.Events()))
 	assert.Contains(t, summary.Line(), ": 1 ok, 1 failed")
 }
 
@@ -457,10 +416,9 @@ func TestPower_JoinsTheFailures(t *testing.T) {
 
 	err := PowerFreeze(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", []string{"worker-1", "controller", "worker-0"})
 
-	require.Error(t, err)
-	assert.Equal(t, "pausing sind-dev-worker-1: sind-dev-worker-1 is not running\n"+
+	require.EqualError(t, err, "pausing sind-dev-worker-1: sind-dev-worker-1 is not running\n"+
 		"pausing sind-dev-controller: sind-dev-controller is not running\n"+
-		"pausing sind-dev-worker-0: sind-dev-worker-0 is not running", err.Error())
+		"pausing sind-dev-worker-0: sind-dev-worker-0 is not running")
 	assert.Equal(t, progress.ClassTarget, progress.Classify(err, nil))
 }
 
@@ -482,7 +440,7 @@ func TestForEachContainer_Interrupted(t *testing.T) {
 
 	assert.Empty(t, done)
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled", err.Error())
+	assert.EqualError(t, err, "stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled")
 	assert.Equal(t, progress.ClassCanceled, progress.Classify(err, nil))
 	assert.Equal(t, `step stopping total=2 limit=8 [fold]: canceled (canceled): stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled
   target worker-[0-1] role=worker: canceled (canceled): context canceled
@@ -517,7 +475,7 @@ func TestForEachContainer_Panic(t *testing.T) {
 			})
 
 			assert.Equal(t, targets[1:], done)
-			assert.Equal(t, `stopping sind-dev-worker-0: sind panicked; this is a bug, please report it: "boom"`, err.Error())
+			assert.EqualError(t, err, `stopping sind-dev-worker-0: sind panicked; this is a bug, please report it: "boom"`)
 			_, isPanic := errors.AsType[*fanout.PanicError](err)
 			assert.True(t, isPanic, "the panic is in the error")
 			written, unused := &busLog, &ctxLog
@@ -553,13 +511,13 @@ func TestDeleteAll_Interrupted(t *testing.T) {
 	err := DeleteAll(ctx, c, mesh.NewManager(c, mesh.DefaultRealm))
 
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "deleting cluster dev: listing containers: context canceled\n"+
-		"deleting cluster prod: listing containers: context canceled", err.Error())
+	assert.EqualError(t, err, "deleting cluster dev: listing containers: context canceled\n"+
+		"deleting cluster prod: listing containers: context canceled")
 	assert.Equal(t, progress.ClassCanceled, progress.Classify(err, nil))
 	w.Finish()
 	assert.Equal(t, `step clusters total=2 limit=4 [fold]: canceled (canceled): deleting cluster dev: listing containers: context canceled\ndeleting cluster prod: listing containers: context canceled
   target dev,prod: canceled (canceled): context canceled
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // delete cluster --all deletes the clusters as the step "clusters", with a
@@ -579,11 +537,10 @@ func TestDeleteAll_ReportsTheClusters(t *testing.T) {
 
 	err := DeleteAll(ctx, c, mesh.NewManager(c, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Equal(t, "deleting cluster test: removing container sind-test-controller: docker daemon unavailable", err.Error())
+	require.EqualError(t, err, "deleting cluster test: removing container sind-test-controller: docker daemon unavailable")
 	w.Finish()
 	assert.Equal(t, `step clusters total=3 limit=4 [fold]: failed (target): deleting cluster test: removing container sind-test-controller: docker daemon unavailable
   target dev,prod: ok
   target test: failed (target): removing container sind-{}-controller: docker daemon unavailable
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }

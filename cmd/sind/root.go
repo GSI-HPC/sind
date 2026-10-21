@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -43,6 +44,7 @@ func NewRootCommand() *cobra.Command {
 	}
 
 	cmd.SetVersionTemplate("{{.Version}}\n")
+	cmd.SetFlagErrorFunc(flagError)
 
 	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
 	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
@@ -74,6 +76,7 @@ func NewRootCommand() *cobra.Command {
 	requireKnownSubcommand(cmd)
 	usageArgs(cmd)
 	annotateMCPTools(cmd)
+	noFileCompletions(cmd)
 
 	return cmd
 }
@@ -153,7 +156,29 @@ func requireKnownSubcommand(cmd *cobra.Command) {
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return cmd.Help()
 	}
+	cmd.Flags().VarP(new(groupHelp), "help", "h", "help for "+cmd.DisplayName())
+	cmd.Flags().Lookup("help").NoOptDefVal = "true"
+	_ = cmd.Flags().SetAnnotation("help", cobra.FlagSetByCobraAnnotation, []string{"true"})
 }
+
+// groupHelp is the -h, --help flag of a command group. cobra prints the
+// help of a command whose help flag is set before it checks the command's
+// arguments, so `sind get bogus --help` printed the help of get and
+// succeeded. groupHelp reads as false to cobra whatever it is set to, so
+// the group's argument check runs, and its RunE prints the help once the
+// check has passed.
+type groupHelp struct{}
+
+func (*groupHelp) String() string { return "false" }
+
+func (*groupHelp) Set(s string) error {
+	_, err := strconv.ParseBool(s)
+	return err
+}
+
+func (*groupHelp) Type() string { return "bool" }
+
+func (*groupHelp) IsBoolFlag() bool { return true }
 
 // removedCommands maps top-level commands that sind dropped to their
 // replacement, for the hint on the error that a script gets.

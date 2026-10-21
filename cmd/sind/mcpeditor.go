@@ -32,21 +32,20 @@ type mcpEditor struct {
 	// workspace is the directory of the workspace configuration, which
 	// --workspace selects, or empty if the editor has none.
 	workspace string
-	// userConfig returns the path of the user configuration.
-	userConfig func() (string, error)
+	// userDir returns the directory of userFile, the user configuration.
+	userDir  func() (string, error)
+	userFile string
 }
 
 // mcpEditors are the editors sind registers its MCP server with, at the
 // paths ophis used.
 var mcpEditors = []mcpEditor{
 	{
-		name:  "claude",
-		title: "Claude Desktop",
-		key:   "mcpServers",
-		userConfig: func() (string, error) {
-			dir, err := os.UserConfigDir()
-			return filepath.Join(dir, "Claude", "claude_desktop_config.json"), err
-		},
+		name:     "claude",
+		title:    "Claude Desktop",
+		key:      "mcpServers",
+		userDir:  os.UserConfigDir,
+		userFile: "Claude/claude_desktop_config.json",
 	},
 	{
 		name:      "vscode",
@@ -54,10 +53,8 @@ var mcpEditors = []mcpEditor{
 		key:       "servers",
 		stdio:     true,
 		workspace: ".vscode",
-		userConfig: func() (string, error) {
-			dir, err := os.UserConfigDir()
-			return filepath.Join(dir, "Code", "User", "mcp.json"), err
-		},
+		userDir:   os.UserConfigDir,
+		userFile:  "Code/User/mcp.json",
 	},
 	{
 		name:      "cursor",
@@ -65,19 +62,9 @@ var mcpEditors = []mcpEditor{
 		key:       "mcpServers",
 		stdio:     true,
 		workspace: ".cursor",
-		userConfig: func() (string, error) {
-			dir, err := os.UserHomeDir()
-			return filepath.Join(dir, ".cursor", "mcp.json"), err
-		},
+		userDir:   os.UserHomeDir,
+		userFile:  ".cursor/mcp.json",
 	},
-}
-
-// mcpServerEntry is the entry `enable` writes.
-type mcpServerEntry struct {
-	Type    string            `json:"type,omitempty"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env,omitempty"`
 }
 
 // mcpEditorFlags are the flags of an editor's subcommands.
@@ -113,14 +100,18 @@ func newMCPEnableCommand(e mcpEditor) *cobra.Command {
 entry of that name. The rest of the configuration file stays as it is, and
 the file as it was is first copied to <file>.<time>.bak. The root --realm
 sets SIND_REALM in the entry's environment, so the server serves that realm.`,
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPEnable(cmd, e, f)
 		},
 	}
 	addMCPEditorFlags(cmd, e, f)
+	cmd.Flags().StringVar(&f.serverName, "server-name", mcpServerName, "name of the MCP server entry")
 	cmd.Flags().StringVar(&f.logLevel, "log-level", "", "log level of the MCP server (debug, info, warn, error)")
-	cmd.Flags().StringToStringVarP(&f.env, "env", "e", nil, "environment variable of the MCP server, KEY=VALUE (repeatable)")
+	// The back quotes name the value KEY=VALUE rather than pflag's type, and
+	// the help shows no default, which pflag would print as [].
+	cmd.Flags().StringToStringVarP(&f.env, "env", "e", nil, "environment variable of the MCP server, `KEY=VALUE` (repeatable)")
+	cmd.Flags().Lookup("env").DefValue = ""
 	return cmd
 }
 
@@ -132,12 +123,13 @@ func newMCPDisableCommand(e mcpEditor) *cobra.Command {
 		Long: `Remove the entry of sind's MCP server from ` + e.title + `'s configuration.
 The rest of the file stays as it is, and the file as it was is first copied
 to <file>.<time>.bak. A server that is not registered is an error.`,
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPDisable(cmd, e, f)
 		},
 	}
 	addMCPEditorFlags(cmd, e, f)
+	cmd.Flags().StringVar(&f.serverName, "server-name", mcpServerName, "name of the MCP server entry")
 	return cmd
 }
 
@@ -146,24 +138,18 @@ func newMCPListCommand(e mcpEditor) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List the MCP servers registered with " + e.title,
-		Args:  cobra.NoArgs,
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPList(cmd, e, f)
 		},
 	}
-	cmd.Flags().StringVar(&f.configPath, "config-path", "", "path to the "+e.title+" configuration file")
-	addMCPWorkspaceFlag(cmd, e, f)
+	addMCPEditorFlags(cmd, e, f)
 	return cmd
 }
 
-// addMCPEditorFlags adds the flags enable and disable share.
+// addMCPEditorFlags adds the flags that select the configuration file.
 func addMCPEditorFlags(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) {
 	cmd.Flags().StringVar(&f.configPath, "config-path", "", "path to the "+e.title+" configuration file")
-	cmd.Flags().StringVar(&f.serverName, "server-name", mcpServerName, "name of the MCP server entry")
-	addMCPWorkspaceFlag(cmd, e, f)
-}
-
-func addMCPWorkspaceFlag(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) {
 	if e.workspace != "" {
 		cmd.Flags().BoolVar(&f.workspace, "workspace", false, "use the workspace configuration ("+filepath.Join(e.workspace, "mcp.json")+") instead of the user's")
 	}
@@ -177,11 +163,11 @@ func (f *mcpEditorFlags) path(e mcpEditor) (string, error) {
 	case f.workspace:
 		return filepath.Join(e.workspace, "mcp.json"), nil
 	}
-	path, err := e.userConfig()
+	dir, err := e.userDir()
 	if err != nil {
 		return "", fmt.Errorf("locating the %s configuration: %w", e.title, err)
 	}
-	return path, nil
+	return filepath.Join(dir, e.userFile), nil
 }
 
 // loadMCPConfig loads the configuration file the flags select.
@@ -214,9 +200,7 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	if err != nil {
 		return err
 	}
-	if err := cfg.Set(f.serverName, entry); err != nil {
-		return err
-	}
+	cfg.Set(entry)
 	return saveMCPConfig(cmd, cfg)
 }
 
@@ -224,12 +208,12 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 // path, running `mcp start`, with the environment of --env and the root's
 // --realm. An editor starts its MCP servers with its own environment, not
 // the shell's, so a realm the entry does not name is the default one.
-func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntry, error) {
+func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Server, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return mcpServerEntry{}, fmt.Errorf("locating the sind binary: %w", err)
+		return mcpconfig.Server{}, fmt.Errorf("locating the sind binary: %w", err)
 	}
-	entry := mcpServerEntry{Command: exe, Args: []string{"mcp", "start"}}
+	entry := mcpconfig.Server{Name: f.serverName, Command: exe, Args: []string{"mcp", "start"}}
 	if e.stdio {
 		entry.Type = "stdio"
 	}
@@ -242,10 +226,10 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntr
 	if cmd.Root().Flags().Changed("realm") {
 		realm, err := realmFromFlag(cmd)
 		if err != nil {
-			return mcpServerEntry{}, err
+			return mcpconfig.Server{}, err
 		}
 		if env, ok := f.env["SIND_REALM"]; ok && env != realm {
-			return mcpServerEntry{}, usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
+			return mcpconfig.Server{}, usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
 		}
 		if entry.Env == nil {
 			entry.Env = map[string]string{}

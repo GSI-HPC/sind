@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,7 +57,7 @@ func TestGenerateNodesConf_SkipsUnmanaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
 		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
-		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: testutil.Ptr(false)},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: new(false)},
 	}
 
 	conf := generateNodesConf(t, nodes)
@@ -87,7 +86,7 @@ func TestGenerateNodesConf_SkipsNonCompute(t *testing.T) {
 func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: testutil.Ptr(false)},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: new(false)},
 	}
 
 	conf := generateNodesConf(t, nodes)
@@ -99,7 +98,7 @@ func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 func TestGenerateNodesConf_ExplicitManaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "worker", CPUs: 2, Memory: "2g", Managed: testutil.Ptr(true)},
+		{Role: "worker", CPUs: 2, Memory: "2g", Managed: new(true)},
 	}
 
 	conf := generateNodesConf(t, nodes)
@@ -359,7 +358,7 @@ func TestManagedWorkers(t *testing.T) {
 	workers, err := ManagedWorkers([]config.Node{
 		{Role: "controller", CPUs: 1, Memory: "bogus"},
 		{Role: "worker", Count: 2, CPUs: 2, Memory: "1.5g"},
-		{Role: "worker", CPUs: 1, Memory: "bogus", Managed: testutil.Ptr(false)},
+		{Role: "worker", CPUs: 1, Memory: "bogus", Managed: new(false)},
 		{Role: "worker", CPUs: 4, Memory: "2GiB"},
 	})
 	require.NoError(t, err)
@@ -424,15 +423,4 @@ func TestDefMemPerCPU(t *testing.T) {
 	}))
 	// A worker without CPUs (no ApplyDefaults) counts as one CPU.
 	assert.Equal(t, 512, DefMemPerCPU([]NodeEntry{{Name: "worker-0", MemoryMB: 512}}))
-}
-
-// --- ParseMemoryMB ---
-
-func TestParseMemoryMB(t *testing.T) {
-	got, err := ParseMemoryMB("2gb")
-	require.NoError(t, err)
-	assert.Equal(t, 2048, got)
-
-	_, err = ParseMemoryMB("2x")
-	assert.Error(t, err)
 }

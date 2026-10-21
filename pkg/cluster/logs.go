@@ -2,7 +2,14 @@
 
 package cluster
 
-import "strconv"
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
+)
 
 // LogOptions bounds and shapes the log output of ContainerLogArgs and
 // ServiceLogArgs.
@@ -42,4 +49,21 @@ func ServiceLogArgs(realm, node, cluster, service string, opts LogOptions) []str
 		args = append(args, "-n", strconv.Itoa(*opts.Tail))
 	}
 	return args
+}
+
+// NodeServices returns the systemd units of a node whose journal
+// ServiceLogArgs shows, by name: those get node checks on it, which depend
+// on its role and on whether sind manages Slurm on it. It inspects the
+// node's container, for shell completion.
+func NodeServices(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) ([]string, error) {
+	info, err := client.InspectContainer(ctx, ContainerName(realm, clusterName, shortName))
+	if err != nil {
+		return nil, fmt.Errorf("inspecting container: %w", err)
+	}
+	services := nodeServices(config.Role(info.Labels[LabelRole]), info.Labels)
+	names := make([]string, len(services))
+	for i, s := range services {
+		names[i] = string(s)
+	}
+	return names, nil
 }

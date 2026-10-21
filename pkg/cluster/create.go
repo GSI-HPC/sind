@@ -219,7 +219,7 @@ type nodeResult struct {
 //	├ CheckNsdelegate ──────────────────────────────────┤
 //	└ pullImages (missing images; all with cfg.Pull) ───┘
 //	                        │
-//	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only) ║ ensureMonitoring (monitoring only)
+//	registerNodes ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only) ║ ensureMonitoring (monitoring only)
 //	                        │
 //	              registerStackDNS (monitoring only)
 //	                        │
@@ -263,7 +263,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return
 		}
 		if rd.expired() {
-			retErr = fmt.Errorf("cluster %s %w within %s: %w", cfg.Name, ErrNotReady, rd.wait, retErr)
+			retErr = fmt.Errorf("cluster %q %w within %s: %w", cfg.Name, ErrNotReady, rd.wait, retErr)
 		}
 		if !resourcesCreated && !meshMgr.Created() {
 			return
@@ -416,7 +416,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
-	// registerMesh, enableSlurm and createHomes are independent: Slurm uses
+	// registerNodes, enableSlurm and createHomes are independent: Slurm uses
 	// short hostnames resolved by Docker embedded DNS on the cluster network.
 	// Mesh DNS records are for SSH relay and host-side resolution only.
 	readyCtx, cancelReady := rd.context(ctx)
@@ -424,11 +424,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	var cluster *Cluster
 	g, gctx := errgroup.WithContext(readyCtx)
 	g.Go(func() error {
-		var meshErr error
-		cluster, meshErr = registerMesh(gctx, meshMgr, cfg.Name, slurmVersion, nodeConfigs, nodeResults)
-		if meshErr != nil {
-			return meshErr
+		nodes, err := registerNodes(gctx, meshMgr, cfg.Name, nodeConfigs, nodeResults)
+		if err != nil {
+			return err
 		}
+		cluster = &Cluster{Name: cfg.Name, SlurmVersion: slurmVersion, State: StateRunning, Nodes: nodes}
 		log.DebugContext(gctx, "mesh registration complete")
 		return nil
 	})
@@ -524,7 +524,7 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.
 	if !found {
 		return "", "", fmt.Errorf("inspecting DNS container: %s not found", meshMgr.DNSContainerName())
 	}
-	key, err := client.ReadFile(ctx, meshMgr.SSHContainerName(), "/root/.ssh/id_ed25519.pub")
+	key, err := client.ReadFile(ctx, meshMgr.SSHContainerName(), mesh.PublicKeyPath)
 	if err != nil {
 		return "", "", fmt.Errorf("reading SSH public key: %w", err)
 	}
@@ -551,28 +551,18 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client, meshMgr)
 		return meshErr
 	})
-	if cfg.Monitoring {
-		g.Go(func() error {
-			if err := pull.wait(gctx); err != nil {
+	if cfg.Monitoring || cfg.Managed() {
+		g.Go(func() (err error) {
+			if err = pull.wait(gctx); err != nil {
 				return err
 			}
-			ver, err := probeMonitoringImages(gctx, client, meshMgr, cfg)
-			if err != nil {
+			if cfg.Monitoring {
+				slurmVersion, err = probeMonitoringImages(gctx, client, meshMgr, cfg)
 				return err
 			}
-			slurmVersion = ver
-			return nil
-		})
-	} else if cfg.Managed() {
-		g.Go(func() error {
-			if err := pull.wait(gctx); err != nil {
-				return err
-			}
-			ver, err := slurm.DiscoverVersion(gctx, client, image)
-			if err != nil {
+			if slurmVersion, err = slurm.DiscoverVersion(gctx, client, image); err != nil {
 				return fmt.Errorf("discovering Slurm version: %w", err)
 			}
-			slurmVersion = ver
 			return nil
 		})
 	}
@@ -714,7 +704,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			}
 			log.DebugContext(nctx, "waiting for node", "node", nc.ShortName)
 			if err := waitReady(nctx, client, containerName, baseProbes, rd.interval, watcher); err != nil {
-				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 
 			// The node's IPs and ID do not depend on its setup, so the
@@ -726,11 +716,10 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			}()
 
 			hostKey, err := setupNode(nctx, client, containerName, nc, sshPubKey)
+			ir := <-inspected // on a failed setup too: no inspect outlives setupNodes
 			if err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
-
-			ir := <-inspected
 			if ir.err != nil {
 				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, ir.err)
 			}
@@ -740,21 +729,6 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 		})
 	}
 	return results, g.Wait()
-}
-
-// registerMesh writes DNS records and known hosts for all nodes in batch,
-// and builds the Cluster result.
-func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurmVersion string, nodeConfigs []RunConfig, results []nodeResult) (*Cluster, error) {
-	nodes, err := registerNodes(ctx, meshMgr, clusterName, nodeConfigs, results)
-	if err != nil {
-		return nil, err
-	}
-	return &Cluster{
-		Name:         clusterName,
-		SlurmVersion: slurmVersion,
-		State:        StateRunning,
-		Nodes:        nodes,
-	}, nil
 }
 
 // registerNodes registers DNS records and known_hosts entries for all nodes
@@ -863,7 +837,9 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		err := enableDBNode(dbCtxs[i], client, containerName, nc.ShortName, nc.StoragePass)
 		if err == nil {
 			slurmdbdProbe := probe.ForService(probe.ServiceSlurmdbd)
-			err = waitReady(dbCtxs[i], client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher)
+			if err = waitReady(dbCtxs[i], client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher); err != nil {
+				err = fmt.Errorf("node %s: %w", nc.ShortName, err)
+			}
 		}
 		endSpan(ctx, dbTargets[i], err)
 		if err != nil {
@@ -886,12 +862,15 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 				return err
 			}
 			if err := waitReady(ctxs[i], client, containerName, []probe.Probe{slurmProbe}, interval, watcher); err != nil {
-				return err
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 			if !nc.Monitoring || service != probe.ServiceSlurmctld {
 				return nil
 			}
-			return waitReady(ctxs[i], client, containerName, []probe.Probe{slurmctldHTTPProbe(nc.ShortName)}, interval, watcher)
+			if err := waitReady(ctxs[i], client, containerName, []probe.Probe{slurmctldHTTPProbe(nc.ShortName)}, interval, watcher); err != nil {
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
+			}
+			return nil
 		})
 	}
 	return g.Wait()

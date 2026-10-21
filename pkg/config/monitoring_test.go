@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,8 +57,7 @@ func TestValidate_Monitoring(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 		})
 	}
 }
@@ -81,15 +79,14 @@ func TestValidate_MonitoringNeedsManagedController(t *testing.T) {
 			Kind:       "Cluster",
 			Name:       "default",
 			Monitoring: true,
-			Nodes:      []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleWorker}},
+			Nodes:      []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleWorker}},
 		}
 		cfg.ApplyDefaults()
 		return cfg
 	}
 
 	err := unmanaged().Validate()
-	require.Error(t, err)
-	assert.Equal(t, "monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", err.Error())
+	require.EqualError(t, err, "monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster")
 
 	// The rejections of an unmanaged cluster that Validate checks earlier
 	// win: identity first, then the slurm sections.
@@ -102,8 +99,7 @@ func TestValidate_MonitoringNeedsManagedController(t *testing.T) {
 	cfg = unmanaged()
 	cfg.Slurm.Main = Section{Content: "MetricsType=metrics/none\n"}
 	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Equal(t, "slurm main requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", err.Error())
+	require.EqualError(t, err, "slurm main requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster")
 
 	// Unmanaged workers and db nodes of a managed cluster stay allowed.
 	cfg = &Cluster{
@@ -112,8 +108,8 @@ func TestValidate_MonitoringNeedsManagedController(t *testing.T) {
 		Monitoring: true,
 		Nodes: []Node{
 			{Role: RoleController},
-			{Role: RoleDB, Managed: testutil.Ptr(false)},
-			{Role: RoleWorker, Managed: testutil.Ptr(false)},
+			{Role: RoleDB, Managed: new(false)},
+			{Role: RoleWorker, Managed: new(false)},
 		},
 	}
 	cfg.ApplyDefaults()

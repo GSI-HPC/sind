@@ -5,7 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -61,13 +61,8 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 	)
 	err := concurrently(
 		func() (err error) {
-			res.Containers, err = client.ListContainers(ctx,
-				"label="+LabelRealm+"="+realm,
-				"label="+LabelCluster+"="+clusterName)
-			if err != nil {
-				return fmt.Errorf("listing containers: %w", err)
-			}
-			return nil
+			res.Containers, err = clusterContainers(ctx, client, realm, clusterName)
+			return err
 		},
 		func() (err error) {
 			netLabels, netExists, err = client.NetworkLabels(ctx, res.Network)
@@ -151,7 +146,7 @@ func ownedBy(labels docker.Labels, realm, clusterName string) bool {
 // Filters on both the realm and cluster labels so mesh resources (which carry
 // only the realm label) are skipped, and resources from other realms can't
 // match even when names collide. The network and volume listings run
-// concurrently.
+// concurrently. The names come back sorted, and nil when there are none.
 func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm string) ([]string, error) {
 	filters := []string{
 		"label=" + LabelRealm + "=" + realm,
@@ -180,24 +175,21 @@ func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm stri
 		return nil, err
 	}
 
-	seen := make(map[string]struct{})
+	var names []string
 	for _, n := range nets {
-		if cluster := n.Labels[LabelCluster]; cluster != "" {
-			seen[cluster] = struct{}{}
-		}
+		names = append(names, n.Labels[LabelCluster])
 	}
 	for _, v := range vols {
-		if cluster := v.Labels[LabelCluster]; cluster != "" {
-			seen[cluster] = struct{}{}
-		}
+		names = append(names, v.Labels[LabelCluster])
 	}
+	return sortedClusterNames(names), nil
+}
 
-	names := make([]string, 0, len(seen))
-	for name := range seen {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names, nil
+// sortedClusterNames returns names sorted, without duplicates and empty
+// names.
+func sortedClusterNames(names []string) []string {
+	slices.Sort(names)
+	return slices.DeleteFunc(slices.Compact(names), func(n string) bool { return n == "" })
 }
 
 // HasOtherClusters checks whether any sind cluster containers exist besides

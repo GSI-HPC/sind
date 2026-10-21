@@ -30,13 +30,13 @@ func TestWrapExitError_CarriesStderr(t *testing.T) {
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 1, exitErr.ExitCode())
 	assert.Equal(t, "Error response from daemon: No such container: x\n", exitErr.Stderr)
-	assert.Equal(t, "exit status 1: Error response from daemon: No such container: x", err.Error())
+	assert.EqualError(t, err, "exit status 1: Error response from daemon: No such container: x")
 	assert.ErrorIs(t, err, inner, "the *exec.ExitError stays reachable")
 }
 
 func TestWrapExitError_EmptyStderr(t *testing.T) {
 	err := cmdexec.WrapExitError(exitError(t, 2), " \n")
-	assert.Equal(t, "exit status 2", err.Error())
+	assert.EqualError(t, err, "exit status 2")
 }
 
 func TestWrapExitError_OtherErrorsUnchanged(t *testing.T) {

@@ -21,7 +21,7 @@ When a step is done, the tree leaves one line for it above itself, such as `✓ 
 
   ```text
   sind: ✗ create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
-  12:00:00.000 ERRO cluster dev not ready within 12s: ...
+  12:00:00.000 ERRO cluster "dev" not ready within 12s: ...
   ```
 
 The tree draws nothing in the first second, so a command done by then leaves nothing on the terminal, as before. A step that ends at once leaves no line, and `mesh` and `preflight`, which sind usually finishes quickly, show only once they have run for a second, and leave a line only when they took that long or failed. Each docker command shows under the step or node it runs for once it has taken a second, such as `worker-1  12.0s  docker exec`.
@@ -98,16 +98,16 @@ $ sind create cluster --config dev.yaml --wait 12s
 ✓ preflight  10s
 12:00:31.605 ERRO cleaning up partial resources, please wait
 ✗ nodes  12s  3 ok, 1 failed, 2 canceled
-  ✗ worker-2  timeout: waiting for {}: node sind-dev-{} not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
+  ✗ worker-2  timeout: node {}: timed out; last probe error: probe munge: munge not ready: activating
 ✓ rollback  3.1s
 sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
-12:00:34.839 ERRO cluster dev not ready within 12s: waiting for worker-2: node sind-dev-worker-2 not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
+12:00:34.839 ERRO cluster "dev" not ready within 12s: node worker-2: timed out; last probe error: probe munge: munge not ready: activating
 ```
 
 The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
 
 ```text
-$ sind power reboot worker-[0-23]
+$ sind power reboot 'worker-[0-23]'
 power reboot · 0:07.3
   stopping  9/24 · 8 running · 7 queued
     ▸ worker-8  4.2s  docker stop
@@ -123,7 +123,7 @@ power reboot · 0:07.3
 and once it is done:
 
 ```text
-$ sind power reboot worker-[0-23]
+$ sind power reboot 'worker-[0-23]'
 ✓ stopping  14s  24 ok
 ✓ starting  2.2s  24 ok
 ```

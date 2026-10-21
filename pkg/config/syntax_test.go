@@ -3,8 +3,6 @@
 package config
 
 import (
-	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,14 +30,17 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"cpus a boolean", "kind: Cluster\ndefaults:\n  cpus: true\n", "defaults.cpus: expected a whole number, got a boolean"},
 		{"image an object", "kind: Cluster\ndefaults:\n  image: {a: b}\n", "defaults.image: expected a string, got an object"},
 		{"limits a list", "kind: Cluster\naccounts:\n  - name: a\n    limits: [x]\n", "expected an object, got a list"},
-		{"memory number in full node", "kind: Cluster\nnodes:\n  - role: worker\n    memory: 1024\n", `"memory" must be a string, got a number (quote it)`},
+		{"managed a number", "kind: Cluster\nnodes:\n  - role: worker\n    managed: 1\n", "line 4: nodes[0].managed: expected true or false, got a number"},
+		{"section a list", "kind: Cluster\nslurm:\n  main: [a]\n", "line 3: slurm.main: expected an object, got a list"},
+		{"fragment a list", "kind: Cluster\nslurm:\n  cgroup:\n    a.conf: [b]\n", "line 4: slurm.cgroup.a.conf: expected a string, got a list"},
+		{"duplicate limit", "kind: Cluster\naccounts:\n  - name: a\n    limits: {MaxJobs: 1, MaxJobs: 2}\n", `mapping key "MaxJobs" already defined`},
+		{"duplicate fragment", "kind: Cluster\nslurm:\n  cgroup: {a: b, a: c}\n", `mapping key "a" already defined`},
 		{"count a string", "kind: Cluster\nnodes:\n  - role: worker\n    count: many\n", "nodes[0].count: expected a whole number, got a string"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.want)
+			require.ErrorContains(t, err, tt.want)
 			assert.NotContains(t, err.Error(), "JSON")
 			assert.NotContains(t, err.Error(), "Go ")
 		})
@@ -62,57 +63,18 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 	_, err = Parse([]byte("kind: Cluster\ndefaults:\nnodes:\n"))
 	require.NoError(t, err)
 
+	// A string field takes any scalar as written; YAML 1.2 has no yes/no
+	// booleans, but bool fields still take them.
+	c, err = Parse([]byte("kind: Cluster\nname: 123\nrealm: no\nnodes:\n  - role: worker\n    memory: 1024\n    managed: yes\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "123", c.Name)
+	assert.Equal(t, "no", c.Realm)
+	assert.Equal(t, "1024", c.Nodes[0].Memory)
+	assert.True(t, *c.Nodes[0].Managed)
+
 	// An alias of a node is followed.
 	_, err = Parse([]byte("kind: Cluster\nnodes:\n  - &n {role: worker, cpu: 1}\n  - *n\n"))
 	require.ErrorContains(t, err, "nodes[0].cpu: unknown key")
 	_, err = Parse([]byte("kind: Cluster\nname: &n x\nrealm: *n\n"))
 	require.NoError(t, err)
-}
-
-func TestFriendlyType(t *testing.T) {
-	assert.Equal(t, "a list or an object", friendlyType("[]string"))
-	assert.Equal(t, "a list or an object", friendlyType("map[string]string"))
-	assert.Equal(t, "a string", friendlyType("string"))
-	assert.Equal(t, "a whole number", friendlyType("int"))
-	assert.Equal(t, "a whole number", friendlyType("uint16"))
-	assert.Equal(t, "true or false", friendlyType("bool"))
-	assert.Equal(t, "an object", friendlyType("config.Node"))
-	assert.Equal(t, "a list", jsonKind("array"))
-	assert.Equal(t, "a boolean", jsonKind("bool"))
-}
-
-func TestPlainError(t *testing.T) {
-	err := plainError(errors.New("error unmarshaling JSON: while decoding JSON: json: cannot unmarshal object into Go struct field .nodes of type []config.Node"))
-	assert.EqualError(t, err, `"nodes" must be a list or an object, got an object`)
-
-	err = plainError(errors.New("json: cannot unmarshal string into Go value of type int"))
-	assert.EqualError(t, err, "expected a whole number, got a string")
-
-	err = plainError(errors.New("json: unknown field \"x\""))
-	assert.EqualError(t, err, `unknown field "x"`)
-}
-
-// The decoders keep their own errors for callers that decode a value
-// without Parse, which checks the syntax first.
-func TestUnmarshalJSON_Errors(t *testing.T) {
-	tests := []struct {
-		name string
-		into json.Unmarshaler
-		data string
-		want string
-	}{
-		{"node", &Node{}, `[1]`, "node must be a string"},
-		{"node unknown field", &Node{}, `{"role":"worker","x":1}`, "unknown field"},
-		{"shorthand keys", &Node{}, `{"a":1,"b":2}`, "exactly one key"},
-		{"shorthand count", &Node{}, `{"worker":"x"}`, "shorthand node count"},
-		{"limits", &Limits{}, `[1]`, "limits must be a map"},
-		{"identity", &Identity{}, `[1]`, "identity must be"},
-		{"user", &User{}, `[1]`, "user must be"},
-		{"group", &Group{}, `[1]`, "group must be"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.ErrorContains(t, tt.into.UnmarshalJSON([]byte(tt.data)), tt.want)
-		})
-	}
 }

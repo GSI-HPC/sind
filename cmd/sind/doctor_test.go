@@ -91,38 +91,21 @@ func TestDoctorCommand_AllPass(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtx(t, &m, nil))
-
-	err := cmd.Execute()
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
 	require.NoError(t, err)
 
-	output := out.String()
-	assert.Contains(t, output, "Docker Engine")
-	assert.Contains(t, output, "29.0.0")
+	assert.Contains(t, out, "Docker Engine")
+	assert.Contains(t, out, "29.0.0")
 }
 
 func TestDoctorCommand_DockerTooOld(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("27.5.0"), "", nil) // docker info
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtx(t, &m, nil))
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
+	require.ErrorContains(t, err, "Docker Engine")
 
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Docker Engine")
-
-	output := out.String()
-	assert.Contains(t, output, "27.5.0")
+	assert.Contains(t, out, "27.5.0")
 }
 
 func TestDoctorCommand_DockerNotReachable(t *testing.T) {
@@ -131,89 +114,46 @@ func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 		return mock.Result{Stderr: "Cannot connect to the Docker daemon", Err: assert.AnError}
 	}
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtx(t, &m, nil))
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
+	require.ErrorContains(t, err, "Docker Engine")
 
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Docker Engine")
-
-	output := out.String()
-	assert.Contains(t, output, "Docker Engine")
+	assert.Contains(t, out, "Docker Engine")
 }
 
 func TestDoctorCommand_UnparseableVersion(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("bogus"), "", nil)
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtx(t, &m, nil))
-
-	err := cmd.Execute()
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
 	require.Error(t, err)
-	assert.Contains(t, out.String(), "unable to parse")
+	assert.Contains(t, out, "unable to parse")
 }
 
 func TestDoctorCommand_CgroupMissing(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtxWithMounts(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
-
-	err := cmd.Execute()
+	out, err := executeDoctor(hermeticDoctorCtxWithMounts(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"), t)
 	require.EqualError(t, err, "checks failed: cgroupv2")
-	assert.Contains(t, out.String(), "cgroupv2: not mounted")
+	assert.Contains(t, out, "cgroupv2: not mounted")
 }
 
 func TestDoctorCommand_CgroupNsdelegateMissing(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtxWithMounts(t, &m, nil,
-		"cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n"))
-
-	err := cmd.Execute()
+	out, err := executeDoctor(hermeticDoctorCtxWithMounts(t, &m, nil,
+		"cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n"), t)
 	require.EqualError(t, err, "checks failed: cgroupv2")
-	assert.Contains(t, out.String(), "nsdelegate not found")
+	assert.Contains(t, out, "nsdelegate not found")
 }
 
 func TestDoctorCommand_DNSPolicyShown(t *testing.T) {
-	var sys mock.Executor
-	sys.AddResult("", "", nil) // systemctl is-active → resolved running
-	sys.AddResult("", "", nil) // pkcheck x3
-	sys.AddResult("", "", nil)
-	sys.AddResult("", "", nil)
-
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{"doctor"})
-	cmd.SetContext(hermeticDoctorCtx(t, &m, &sys))
-
-	_ = cmd.Execute()
-	assert.Contains(t, out.String(), "DNS policy")
+	out, _ := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(true)), t)
+	assert.Contains(t, out, "DNS policy")
 }
 
 // resolvedWithPolkit returns a mesh executor for which systemd-resolved is
@@ -236,14 +176,8 @@ func resolvedWithPolkit(authorized bool) *mock.Executor {
 // wrote to its output stream.
 func executeDoctor(ctx context.Context, t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs(append([]string{"doctor"}, args...))
-	cmd.SetContext(ctx)
-	err := cmd.Execute()
-	return out.String(), err
+	out, _, err := execute(ctx, nil, append([]string{"doctor"}, args...)...)
+	return out, err
 }
 
 // captureStdout runs fn with os.Stdout redirected to a file and returns what
@@ -531,7 +465,7 @@ func TestDoctorCommand_InvalidOutput(t *testing.T) {
 	var m mock.Executor
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t, "-o", "yaml")
-	require.EqualError(t, err, `invalid --output value "yaml": must be "human" or "json"`)
+	require.EqualError(t, err, `invalid --output value "yaml": want human or json`)
 	assert.Empty(t, out)
 	assert.Empty(t, m.Calls, "no check runs")
 }

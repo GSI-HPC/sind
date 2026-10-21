@@ -72,12 +72,12 @@ var addressPoolsExhausted = []string{
 	"could not find an available, non-overlapping IPv4 address pool",
 }
 
-// createNetwork runs docker network create with the given IPAM flags. When
-// the default address pools are used up, the error wraps
-// ErrAddressPoolsExhausted and says how to get more.
-func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Labels, ipamArgs []string) (NetworkID, error) {
+// createNetwork runs docker network create with the given extra flags
+// (IPAM, --config-only). When the default address pools are used up, the
+// error wraps ErrAddressPoolsExhausted and says how to get more.
+func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Labels, flags []string) (NetworkID, error) {
 	args := []string{"network", "create"}
-	args = append(args, ipamArgs...)
+	args = append(args, flags...)
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
 	stdout, _, err := c.run(ctx, args...)
@@ -96,8 +96,7 @@ func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Lab
 
 // RemoveNetwork removes a Docker network.
 func (c *Client) RemoveNetwork(ctx context.Context, name NetworkName) error {
-	_, _, err := c.run(ctx, "network", "rm", string(name))
-	return err
+	return c.do(ctx, "network", "rm", string(name))
 }
 
 // CreateConfigOnlyNetwork creates a configuration-only network (docker
@@ -106,22 +105,14 @@ func (c *Client) RemoveNetwork(ctx context.Context, name NetworkName) error {
 // bridge device, and attaches no container to it. Like every network create,
 // it fails when another network has the name (see IsAlreadyExists).
 func (c *Client) CreateConfigOnlyNetwork(ctx context.Context, name NetworkName, labels Labels) (NetworkID, error) {
-	args := []string{"network", "create", "--config-only"}
-	args = append(args, SortedLabelFlags(labels)...)
-	args = append(args, string(name))
-	stdout, _, err := c.run(ctx, args...)
-	if err != nil {
-		return "", err
-	}
-	return NetworkID(strings.TrimSpace(stdout)), nil
+	return c.createNetwork(ctx, name, labels, []string{"--config-only"})
 }
 
 // RemoveNetworkByID removes the network with the given ID. Unlike a name,
 // an ID never comes to stand for another network, so a caller that
 // inspected a network removes that one and no other.
 func (c *Client) RemoveNetworkByID(ctx context.Context, id NetworkID) error {
-	_, _, err := c.run(ctx, "network", "rm", string(id))
-	return err
+	return c.do(ctx, "network", "rm", string(id))
 }
 
 // NetworkMeta is a network's ID, name, creation time and labels.
@@ -161,14 +152,12 @@ func (c *Client) InspectNetworkMeta(ctx context.Context, name NetworkName) (*Net
 
 // ConnectNetwork connects a container to a network.
 func (c *Client) ConnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
-	_, _, err := c.run(ctx, "network", "connect", string(network), string(container))
-	return err
+	return c.do(ctx, "network", "connect", string(network), string(container))
 }
 
 // DisconnectNetwork disconnects a container from a network.
 func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
-	_, _, err := c.run(ctx, "network", "disconnect", string(network), string(container))
-	return err
+	return c.do(ctx, "network", "disconnect", string(network), string(container))
 }
 
 // NetworkContainers returns the names of the containers attached to a
@@ -209,7 +198,7 @@ func (c *Client) DisconnectAll(ctx context.Context, name NetworkName) error {
 		return err
 	}
 	for _, ctr := range containers {
-		if err := c.DisconnectNetwork(ctx, name, ctr); err != nil && !IsNotFound(err) {
+		if err := IgnoreNotFound(c.DisconnectNetwork(ctx, name, ctr)); err != nil {
 			return fmt.Errorf("disconnecting %s: %w", ctr, err)
 		}
 	}
@@ -300,34 +289,15 @@ type NetworkListEntry struct {
 	Labels Labels
 }
 
-// networkLsEntry maps the docker network ls --format json output.
-type networkLsEntry struct {
-	Name   string `json:"Name"`
-	Driver string `json:"Driver"`
-	Labels string `json:"Labels"`
-}
-
 // ListNetworks returns networks matching the given filters.
 // Each filter is passed as a --filter flag (e.g. "name=sind").
 func (c *Client) ListNetworks(ctx context.Context, filters ...string) ([]NetworkListEntry, error) {
-	args := []string{"network", "ls", "--format", "json"}
-	for _, f := range filters {
-		args = append(args, "--filter", f)
-	}
-	stdout, _, err := c.run(ctx, args...)
+	ls, err := listJSON[lsEntry](ctx, c, "network ls", filters, "network", "ls")
 	if err != nil {
 		return nil, err
 	}
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
-		return nil, nil
-	}
 	var entries []NetworkListEntry
-	for _, line := range strings.Split(stdout, "\n") {
-		var n networkLsEntry
-		if err := json.Unmarshal([]byte(line), &n); err != nil {
-			return nil, fmt.Errorf("parsing network ls output: %w", err)
-		}
+	for _, n := range ls {
 		entries = append(entries, NetworkListEntry{
 			Name:   NetworkName(n.Name),
 			Driver: n.Driver,

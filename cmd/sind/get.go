@@ -4,12 +4,13 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -17,8 +18,9 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -33,33 +35,62 @@ func newGetCommand() *cobra.Command {
 	registerOutputCompletion(cmd)
 
 	cmd.AddCommand(newGetClusterCommand())
-	cmd.AddCommand(newGetClustersCommand())
 	cmd.AddCommand(newGetNodeCommand())
 	cmd.AddCommand(newGetNodesCommand())
-	cmd.AddCommand(newGetNetworksCommand())
-	cmd.AddCommand(newGetRealmsCommand())
-	cmd.AddCommand(newGetVolumesCommand())
 	cmd.AddCommand(newGetAuthKeyCommand())
-	cmd.AddCommand(newGetDNSCommand())
-	cmd.AddCommand(newGetSSHConfigCommand())
-	cmd.AddCommand(newGetMeshCommand())
-	cmd.AddCommand(newGetCoreDNSConfigCommand())
-	cmd.AddCommand(newGetMonitoringCommand())
-	cmd.AddCommand(newGetSSHPrivateKeyCommand())
-	cmd.AddCommand(newGetSSHPublicKeyCommand())
-	cmd.AddCommand(newGetSSHKnownHostsCommand())
+	// The subcommands that take no argument.
+	for _, c := range []struct {
+		use, short string
+		run        func(*cobra.Command, []string) error
+	}{
+		{"clusters", "List all clusters", runGetClusters},
+		{"networks", "List sind networks", runGetNetworks},
+		{"realms", "List all realms", runGetRealms},
+		{"volumes", "List sind volumes", runGetVolumes},
+		{"dns", "List mesh DNS records", runGetDNS},
+		{"ssh-config", "Show SSH config path for the current realm", runGetSSHConfig},
+		{"mesh", "Show mesh infrastructure info", runGetMesh},
+		{"coredns-config", "Output a CoreDNS server block that forwards the realm's zone to the mesh DNS server", runGetCoreDNSConfig},
+		{"monitoring", "Show the realm's monitoring stack", runGetMonitoring},
+		{"ssh-private-key", "Output SSH private key", getSSHKey("private_key", (*mesh.Manager).GetSSHPrivateKey)},
+		{"ssh-public-key", "Output SSH public key", getSSHKey("public_key", (*mesh.Manager).GetSSHPublicKey)},
+		{"ssh-known-hosts", "Output SSH known_hosts", getSSHKey("known_hosts", (*mesh.Manager).GetSSHKnownHosts)},
+	} {
+		cmd.AddCommand(&cobra.Command{Use: c.use, Short: c.short, Args: noArgs, RunE: c.run})
+	}
 
 	return cmd
 }
 
-func newGetClustersCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "clusters",
-		Short: "List all clusters",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetClusters(cmd)
-		},
+// fetchFunc fetches what a get subcommand prints, from the realm's resources.
+type fetchFunc[T any] func(ctx context.Context, client *docker.Client, realm string) (T, error)
+
+// runGet runs a get subcommand: it checks --output, resolves the realm and
+// fetches the resource, which it prints as JSON with -o json and with human
+// otherwise.
+func runGet[T any](cmd *cobra.Command, fetch fetchFunc[T], human func(cmd *cobra.Command, v T, realm string) error) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	v, err := fetch(cmd.Context(), clientFrom(cmd.Context()), realm)
+	if err != nil {
+		return err
+	}
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), v)
+	}
+	return human(cmd, v, realm)
+}
+
+// fromMesh adapts a getter of the realm's mesh.Manager, such as
+// (*mesh.Manager).GetInfo, to runGet.
+func fromMesh[T any](get func(*mesh.Manager, context.Context) (T, error)) fetchFunc[T] {
+	return func(ctx context.Context, client *docker.Client, realm string) (T, error) {
+		return get(meshMgrFrom(ctx, client, realm), ctx)
 	}
 }
 
@@ -78,88 +109,39 @@ func newGetNodesCommand() *cobra.Command {
 	}
 }
 
-func newGetNetworksCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "networks",
-		Short: "List sind networks",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetNetworks(cmd)
-		},
-	}
+func runGetClusters(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, cluster.GetClusters, func(cmd *cobra.Command, clusters []*cluster.Summary, realm string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/A/W)\tSLURM\tSTATUS")
+		for _, c := range clusters {
+			_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d/%d)\t%s\t%s\n",
+				cell(c.Name),
+				c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.APIs, c.Workers,
+				formatSlurmVersion(c.SlurmVersion),
+				c.State,
+			)
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		noteNone(cmd, len(clusters), "clusters", realm)
+		return nil
+	})
 }
 
-func newGetVolumesCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "volumes",
-		Short: "List sind volumes",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetVolumes(cmd)
-		},
-	}
-}
-
-func runGetClusters(cmd *cobra.Command) error {
+// runGetRealms lists every realm, so unlike runGet it resolves none: a
+// SIND_REALM that names no valid realm does not stop it.
+func runGetRealms(cmd *cobra.Command, _ []string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
+	realms, err := cluster.GetRealms(cmd.Context(), clientFrom(cmd.Context()))
 	if err != nil {
 		return err
 	}
-	clusters, err := cluster.GetClusters(cmd.Context(), client, realm)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), clusters)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/A/W)\tSLURM\tSTATUS")
-	for _, c := range clusters {
-		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d/%d)\t%s\t%s\n",
-			cell(c.Name),
-			c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.APIs, c.Workers,
-			formatSlurmVersion(c.SlurmVersion),
-			c.State,
-		)
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	noteNone(cmd, len(clusters), "clusters", realm)
-	return nil
-}
-
-func newGetRealmsCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "realms",
-		Short: "List all realms",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetRealms(cmd)
-		},
-	}
-}
-
-func runGetRealms(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realms, err := cluster.GetRealms(cmd.Context(), client)
-	if err != nil {
-		return err
-	}
-
 	if isJSONOutput(cmd) {
 		return writeJSON(cmd.OutOrStdout(), realms)
 	}
-
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tCLUSTERS")
 	for _, r := range realms {
@@ -174,10 +156,11 @@ func runGetRealms(cmd *cobra.Command) error {
 
 func newGetNodeCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "node NODE[.CLUSTER]",
-		Short:             "Show node health status (accepts bare name or NODE.CLUSTER)",
+		Use:               "node NODE",
+		Short:             "Show node health status",
+		Long:              "Show node health status.\n\n" + nodeHelp,
 		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: completeNodeNames,
+		ValidArgsFunction: completeNodeName,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGetNode(cmd, args[0])
 		},
@@ -185,39 +168,35 @@ func newGetNodeCommand() *cobra.Command {
 }
 
 func runGetNode(cmd *cobra.Command, arg string) error {
+	// A bad -o is reported before a bad node name.
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
-	target, err := parseNodeName(arg)
+	target, err := parseOneNode("get node", arg)
 	if err != nil {
 		return err
 	}
 	shortName, clusterName := target.ShortName, target.Cluster
-
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	containerName := string(cluster.ContainerName(realm, clusterName, shortName))
-
-	info, err := client.InspectContainer(cmd.Context(), docker.ContainerName(containerName))
-	if docker.IsNotFound(err) {
-		return fmt.Errorf("node %q not found in cluster %q", shortName, clusterName)
-	}
-	if err != nil {
-		return fmt.Errorf("inspecting container: %w", err)
-	}
-
-	role := config.Role(info.Labels[cluster.LabelRole])
-	health, err := cluster.GetNodeHealth(cmd.Context(), client, info, role, realm, clusterName)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), cluster.NodeDetail{
-			Container: containerName,
+	getNode := func(ctx context.Context, client *docker.Client, realm string) (*cluster.NodeDetail, error) {
+		containerName := cluster.ContainerName(realm, clusterName, shortName)
+		info, err := client.InspectContainer(ctx, containerName)
+		if docker.IsNotFound(err) {
+			// Tell a missing cluster from a missing node, as logs and ssh do.
+			if err := cluster.CheckNode(ctx, client, realm, clusterName, shortName); err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("node %q not found in cluster %q", shortName, clusterName)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("inspecting container: %w", err)
+		}
+		role := config.Role(info.Labels[cluster.LabelRole])
+		health, err := cluster.GetNodeHealth(ctx, client, info, role, realm, clusterName)
+		if err != nil {
+			return nil, err
+		}
+		return &cluster.NodeDetail{
+			Container: string(containerName),
 			Cluster:   clusterName,
 			Role:      role,
 			Managed:   cluster.IsManaged(info.Labels),
@@ -226,189 +205,93 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			Status:    health.State,
 			Services:  health.Services,
 			HA:        health.HA,
-		})
+		}, nil
 	}
+	return runGet(cmd, getNode, func(cmd *cobra.Command, n *cluster.NodeDetail, _ string) error {
+		out := cmd.OutOrStdout()
+		w := newTabWriter(out)
+		if n.HA != nil {
+			_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tHA\tFQDN\tIP\tSTATUS")
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", n.Container, cell(n.Role), formatHA(n.HA), n.FQDN, cell(n.IP), cell(n.Status))
+		} else {
+			_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", n.Container, cell(n.Role), n.FQDN, cell(n.IP), cell(n.Status))
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
 
-	out := cmd.OutOrStdout()
-	fqdn := cluster.DNSName(shortName, clusterName, realm)
-
-	w := newTabWriter(out)
-	if health.HA != nil {
-		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tHA\tFQDN\tIP\tSTATUS")
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", containerName, cell(role), formatHA(health.HA), fqdn, cell(health.IP), cell(health.State))
-	} else {
-		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, cell(role), fqdn, cell(health.IP), cell(health.State))
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "SERVICES")
-	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "NAME\tSTATUS")
-	for _, name := range sortedServiceNames(health.Services) {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(health.Services[probe.Service(name)]))
-	}
-	return w.Flush()
-}
-
-// sortedServiceNames returns service names sorted alphabetically.
-func sortedServiceNames(services cluster.ServiceHealth) []string {
-	names := make([]string, 0, len(services))
-	for name := range services {
-		names = append(names, string(name))
-	}
-	sort.Strings(names)
-	return names
+		_, _ = fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, "SERVICES")
+		w = newTabWriter(out)
+		_, _ = fmt.Fprintln(w, "NAME\tSTATUS")
+		for _, name := range slices.Sorted(maps.Keys(n.Services)) {
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(n.Services[name]))
+		}
+		return w.Flush()
+	})
 }
 
 func runGetAllNodes(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	nodes, err := cluster.GetAllNodes(cmd.Context(), client, realm)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), nodes)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "CONTAINER\tCLUSTER\tROLE\tFQDN\tIP\tSTATUS")
-	for _, n := range nodes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	noteNone(cmd, len(nodes), "nodes", realm)
-	return nil
+	return runGet(cmd, cluster.GetAllNodes, func(cmd *cobra.Command, nodes []*cluster.NodeSummary, realm string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "CONTAINER\tCLUSTER\tROLE\tFQDN\tIP\tSTATUS")
+		for _, n := range nodes {
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		noteNone(cmd, len(nodes), "nodes", realm)
+		return nil
+	})
 }
 
 func runGetNodes(cmd *cobra.Command, name string) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
+	getNodes := func(ctx context.Context, client *docker.Client, realm string) ([]*cluster.NodeSummary, error) {
+		return cluster.GetNodes(ctx, client, realm, name)
 	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	nodes, err := cluster.GetNodes(cmd.Context(), client, realm, name)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), nodes)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
-	for _, n := range nodes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
-	}
-	return w.Flush()
+	return runGet(cmd, getNodes, func(cmd *cobra.Command, nodes []*cluster.NodeSummary, _ string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
+		for _, n := range nodes {
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
+		}
+		return w.Flush()
+	})
 }
 
-func runGetNetworks(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	networks, err := cluster.GetNetworks(cmd.Context(), client, realm)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), networks)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
-	for _, n := range networks {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(n.Name), cell(n.Driver), cell(n.Subnet), cell(n.Gateway))
-	}
-	return w.Flush()
+func runGetNetworks(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, cluster.GetNetworks, func(cmd *cobra.Command, networks []*cluster.NetworkSummary, _ string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
+		for _, n := range networks {
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(n.Name), cell(n.Driver), cell(n.Subnet), cell(n.Gateway))
+		}
+		return w.Flush()
+	})
 }
 
-func runGetVolumes(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	volumes, err := cluster.GetVolumes(cmd.Context(), client, realm)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), volumes)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tDRIVER")
-	for _, v := range volumes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(v.Name), cell(v.Driver))
-	}
-	return w.Flush()
+func runGetVolumes(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, cluster.GetVolumes, func(cmd *cobra.Command, volumes []*cluster.VolumeSummary, _ string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "NAME\tDRIVER")
+		for _, v := range volumes {
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(v.Name), cell(v.Driver))
+		}
+		return w.Flush()
+	})
 }
 
-func newGetDNSCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "dns",
-		Short: "List mesh DNS records",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetDNS(cmd)
-		},
-	}
-}
-
-func runGetDNS(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	mgr := meshMgrFrom(cmd.Context(), client, realm)
-
-	records, err := mgr.GetDNSRecords(cmd.Context())
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), records)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "HOSTNAME\tIP")
-	for _, r := range records {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(r.Hostname), cell(r.IP))
-	}
-	return w.Flush()
+func runGetDNS(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, fromMesh((*mesh.Manager).GetDNSRecords), func(cmd *cobra.Command, records []mesh.DNSRecord, _ string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "HOSTNAME\tIP")
+		for _, r := range records {
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(r.Hostname), cell(r.IP))
+		}
+		return w.Flush()
+	})
 }
 
 func newGetAuthKeyCommand() *cobra.Command {
@@ -421,15 +304,13 @@ func newGetAuthKeyCommand() *cobra.Command {
 slurm (auth/slurm, identity clientIds) or jwt (auth/jwt, which signs the
 REST API tokens of a cluster with an api node). Without it, the key of the
 cluster's AuthType: slurm.key with identity clientIds, the munge key
-otherwise.`,
+otherwise.
+
+` + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runGetAuthKey(cmd, name)
+			return runGetAuthKey(cmd, clusterArg(args))
 		},
 	}
 	cmd.Flags().String("type", "", "authentication plugin of the key: munge, slurm or jwt (default: the cluster's AuthType)")
@@ -447,191 +328,104 @@ func authTypeNames() []string {
 }
 
 func runGetAuthKey(cmd *cobra.Command, name string) error {
+	// A bad -o is reported before a bad --type.
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
 	authType, _ := cmd.Flags().GetString("type")
 	if authType != "" && !slices.Contains(cluster.AuthTypes, cluster.AuthType(authType)) {
-		return usagef("invalid --type value %q: must be %s", authType, strings.Join(authTypeNames(), ", "))
+		return invalidFlagValue("type", authType, authTypeNames()...)
 	}
-	client := clientFrom(cmd.Context())
+	type output struct {
+		Type cluster.AuthType `json:"type"`
+		Key  string           `json:"key"`
+	}
+	getKey := func(ctx context.Context, client *docker.Client, realm string) (output, error) {
+		key, err := cluster.GetAuthKey(ctx, client, realm, name, cluster.AuthType(authType))
+		if err != nil {
+			return output{}, err
+		}
+		return output{Type: key.Type, Key: base64.StdEncoding.EncodeToString(key.Key)}, nil
+	}
+	return runGet(cmd, getKey, func(cmd *cobra.Command, key output, _ string) error {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), key.Key)
+		return nil
+	})
+}
+
+func runGetSSHConfig(cmd *cobra.Command, _ []string) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
 	}
-	key, err := cluster.GetAuthKey(cmd.Context(), client, realm, name, cluster.AuthType(authType))
+	dir, err := state.RealmDir(realm)
 	if err != nil {
 		return err
 	}
-	encoded := base64.StdEncoding.EncodeToString(key.Key)
+	p := filepath.Join(dir, "ssh_config")
+	// The path is also right before the file exists, for an
+	// Include; a script that reads the file needs to know.
+	exists, _ := afero.Exists(fsFrom(cmd.Context()), p)
 	if isJSONOutput(cmd) {
 		return writeJSON(cmd.OutOrStdout(), struct {
-			Type cluster.AuthType `json:"type"`
-			Key  string           `json:"key"`
-		}{Type: key.Type, Key: encoded})
+			Path   string `json:"path"`
+			Exists bool   `json:"exists"`
+		}{Path: p, Exists: exists})
 	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), encoded)
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
+	if !exists {
+		cmd.PrintErrln("Note: the file does not exist yet; sind writes it when a cluster is created in this realm")
+	}
 	return nil
 }
 
-func newGetSSHConfigCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ssh-config",
-		Short: "Show SSH config path for the current realm",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := validateOutputFlag(cmd); err != nil {
-				return err
-			}
-			realm, err := realmFromFlag(cmd)
-			if err != nil {
-				return err
-			}
-			dir, err := sindStateDir(realm)
-			if err != nil {
-				return err
-			}
-			p := filepath.Join(dir, "ssh_config")
-			// The path is also right before the file exists, for an
-			// Include; a script that reads the file needs to know.
-			exists, _ := afero.Exists(fsFrom(cmd.Context()), p)
-			if isJSONOutput(cmd) {
-				return writeJSON(cmd.OutOrStdout(), struct {
-					Path   string `json:"path"`
-					Exists bool   `json:"exists"`
-				}{Path: p, Exists: exists})
-			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
-			if !exists {
-				cmd.PrintErrln("Note: the file does not exist yet; sind writes it when a cluster is created in this realm")
-			}
-			return nil
-		},
-	}
+func runGetMesh(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, fromMesh((*mesh.Manager).GetInfo), func(cmd *cobra.Command, info *mesh.Info, _ string) error {
+		w := newTabWriter(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(w, "PROPERTY\tVALUE")
+		_, _ = fmt.Fprintf(w, "network\t%s\n", cell(info.Network))
+		_, _ = fmt.Fprintf(w, "dns-container\t%s\n", cell(info.DNSContainer))
+		_, _ = fmt.Fprintf(w, "dns-ip\t%s\n", cell(info.DNSIP))
+		_, _ = fmt.Fprintf(w, "dns-zone\t%s\n", cell(info.DNSZone))
+		_, _ = fmt.Fprintf(w, "dns-image\t%s\n", cell(info.DNSImage))
+		_, _ = fmt.Fprintf(w, "ssh-container\t%s\n", cell(info.SSHContainer))
+		_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", cell(info.SSHVolume))
+		_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", cell(info.SSHImage))
+		return w.Flush()
+	})
 }
 
-func newGetMeshCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "mesh",
-		Short: "Show mesh infrastructure info",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetMesh(cmd)
-		},
-	}
+func runGetCoreDNSConfig(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, fromMesh((*mesh.Manager).GetCoreDNSStub), func(cmd *cobra.Command, stub *mesh.CoreDNSStub, _ string) error {
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), stub.Corefile)
+		return nil
+	})
 }
 
-func runGetMesh(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	mgr := meshMgrFrom(cmd.Context(), client, realm)
+func runGetMonitoring(cmd *cobra.Command, _ []string) error {
+	return runGet(cmd, cluster.GetMonitoring, func(cmd *cobra.Command, m *cluster.Monitoring, _ string) error {
+		out := cmd.OutOrStdout()
+		w := newTabWriter(out)
+		_, _ = fmt.Fprintln(w, "SERVICE\tCONTAINER\tADDRESS\tSTATUS")
+		for _, s := range m.Services {
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(cmp.Or(s.URL, "-")), formatServiceState(s))
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
 
-	info, err := mgr.GetInfo(cmd.Context())
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), info)
-	}
-
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "PROPERTY\tVALUE")
-	_, _ = fmt.Fprintf(w, "network\t%s\n", cell(info.Network))
-	_, _ = fmt.Fprintf(w, "dns-container\t%s\n", cell(info.DNSContainer))
-	_, _ = fmt.Fprintf(w, "dns-ip\t%s\n", cell(info.DNSIP))
-	_, _ = fmt.Fprintf(w, "dns-zone\t%s\n", cell(info.DNSZone))
-	_, _ = fmt.Fprintf(w, "dns-image\t%s\n", cell(info.DNSImage))
-	_, _ = fmt.Fprintf(w, "ssh-container\t%s\n", cell(info.SSHContainer))
-	_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", cell(info.SSHVolume))
-	_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", cell(info.SSHImage))
-	return w.Flush()
-}
-
-func newGetCoreDNSConfigCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "coredns-config",
-		Short: "Output a CoreDNS server block that forwards the realm's zone to the mesh DNS server",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetCoreDNSConfig(cmd)
-		},
-	}
-}
-
-func runGetCoreDNSConfig(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	stub, err := meshMgrFrom(cmd.Context(), client, realm).GetCoreDNSStub(cmd.Context())
-	if err != nil {
-		return err
-	}
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), stub)
-	}
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), stub.Corefile)
-	return nil
-}
-
-func newGetMonitoringCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "monitoring",
-		Short: "Show the realm's monitoring stack",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetMonitoring(cmd)
-		},
-	}
-}
-
-func runGetMonitoring(cmd *cobra.Command) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	m, err := cluster.GetMonitoring(cmd.Context(), client, realm)
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), m)
-	}
-
-	out := cmd.OutOrStdout()
-	w := newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "SERVICE\tCONTAINER\tADDRESS\tSTATUS")
-	for _, s := range m.Services {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(cmp.Or(s.URL, "-")), formatServiceState(s))
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "CLUSTERS")
-	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "NAME\tNODES\tSLURM")
-	for _, c := range m.Clusters {
-		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n", cell(c.Name), c.Nodes, formatSlurmVersion(c.SlurmVersion))
-	}
-	return w.Flush()
+		_, _ = fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, "CLUSTERS")
+		w = newTabWriter(out)
+		_, _ = fmt.Fprintln(w, "NAME\tNODES\tSLURM")
+		for _, c := range m.Clusters {
+			_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n", cell(c.Name), c.Nodes, formatSlurmVersion(c.SlurmVersion))
+		}
+		return w.Flush()
+	})
 }
 
 // formatServiceState renders a monitoring service's state in words, as the
@@ -655,36 +449,24 @@ func newGetClusterCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "cluster [NAME]",
 		Short:             "Show cluster health status",
+		Long:              "Show cluster health status.\n\n" + defaultClusterHelp("NAME"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runGetCluster(cmd, name)
+			return runGetCluster(cmd, clusterArg(args))
 		},
 	}
 }
 
 func runGetCluster(cmd *cobra.Command, name string) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
+	getStatus := func(ctx context.Context, client *docker.Client, realm string) (*cluster.Status, error) {
+		return cluster.GetStatus(ctx, client, realm, name)
 	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	status, err := cluster.GetStatus(cmd.Context(), client, realm, name)
-	if err != nil {
-		return err
-	}
+	return runGet(cmd, getStatus, printStatus)
+}
 
-	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), status)
-	}
-
+// printStatus prints get cluster's tables.
+func printStatus(cmd *cobra.Command, status *cluster.Status, realm string) error {
 	out := cmd.OutOrStdout()
 
 	// Header table
@@ -837,96 +619,26 @@ func noteNone(cmd *cobra.Command, n int, what, realm string) {
 }
 
 func formatServices(services cluster.ServiceHealth) string {
-	if len(services) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(services))
-	for name := range services {
-		names = append(names, string(name))
-	}
-	sort.Strings(names)
-	var parts []string
-	for _, name := range names {
-		parts = append(parts, name+" "+checkmark(services[probe.Service(name)]))
+	parts := make([]string, 0, len(services))
+	for _, name := range slices.Sorted(maps.Keys(services)) {
+		parts = append(parts, string(name)+" "+checkmark(services[name]))
 	}
 	return strings.Join(parts, " ")
 }
 
-func newGetSSHPrivateKeyCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ssh-private-key",
-		Short: "Output SSH private key",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetSSHKey(cmd, "private")
-		},
-	}
-}
-
-func newGetSSHPublicKeyCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ssh-public-key",
-		Short: "Output SSH public key",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetSSHKey(cmd, "public")
-		},
-	}
-}
-
-func newGetSSHKnownHostsCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ssh-known-hosts",
-		Short: "Output SSH known_hosts",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGetSSHKey(cmd, "known-hosts")
-		},
-	}
-}
-
-func runGetSSHKey(cmd *cobra.Command, kind string) error {
-	if err := validateOutputFlag(cmd); err != nil {
-		return err
-	}
-	client := clientFrom(cmd.Context())
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	mgr := meshMgrFrom(cmd.Context(), client, realm)
-
-	var content string
-	switch kind {
-	case "private":
-		content, err = mgr.GetSSHPrivateKey(cmd.Context())
-	case "public":
-		content, err = mgr.GetSSHPublicKey(cmd.Context())
-	case "known-hosts":
-		content, err = mgr.GetSSHKnownHosts(cmd.Context())
-	}
-	if err != nil {
-		return err
-	}
-
-	if isJSONOutput(cmd) {
-		switch kind {
-		case "private":
-			return writeJSON(cmd.OutOrStdout(), struct {
-				PrivateKey string `json:"private_key"`
-			}{PrivateKey: content})
-		case "public":
-			return writeJSON(cmd.OutOrStdout(), struct {
-				PublicKey string `json:"public_key"`
-			}{PublicKey: content})
-		case "known-hosts":
-			return writeJSON(cmd.OutOrStdout(), struct {
-				KnownHosts string `json:"known_hosts"`
-			}{KnownHosts: content})
+// getSSHKey returns the run function of a get subcommand that prints a
+// file of the realm's SSH setup, under jsonKey with -o json.
+func getSSHKey(jsonKey string, get func(*mesh.Manager, context.Context) (string, error)) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, _ []string) error {
+		getKey := func(ctx context.Context, client *docker.Client, realm string) (map[string]string, error) {
+			content, err := get(meshMgrFrom(ctx, client, realm), ctx)
+			return map[string]string{jsonKey: content}, err
 		}
+		return runGet(cmd, getKey, func(cmd *cobra.Command, v map[string]string, _ string) error {
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), v[jsonKey])
+			return nil
+		})
 	}
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), content)
-	return nil
 }
 
 func newTabWriter(out io.Writer) *tabwriter.Writer {

@@ -41,75 +41,6 @@ func TestDeleteContainers(t *testing.T) {
 	assert.ElementsMatch(t, []string{"sind-dev-controller", "sind-dev-worker-0"}, names)
 }
 
-func TestDeleteContainers_RemoveError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("container in use")) // rm -f fails
-	c := docker.NewClient(&m)
-
-	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller"},
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing container sind-dev-controller")
-}
-
-// TestDeleteContainers_TriesEvery checks that a failed removal does not
-// keep the other containers from being removed, and that every failure is
-// returned.
-func TestDeleteContainers_TriesEvery(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[len(args)-1] == "sind-dev-worker-1" {
-			return mock.Result{Stderr: "removal already in progress\n", Err: testutil.ExitCode1(t)}
-		}
-		if args[len(args)-1] == "sind-dev-worker-3" {
-			return mock.Result{Err: fmt.Errorf("daemon gone")}
-		}
-		return mock.Result{}
-	}
-	c := docker.NewClient(&m)
-
-	var containers []docker.ContainerListEntry
-	for i := range 40 {
-		containers = append(containers, docker.ContainerListEntry{Name: docker.ContainerName(fmt.Sprintf("sind-dev-worker-%d", i))})
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing container sind-dev-worker-1")
-	assert.Contains(t, err.Error(), "removing container sind-dev-worker-3: daemon gone")
-	assert.Len(t, m.Calls, 40, "every container is tried")
-}
-
-// TestDeleteContainers_AlreadyGone covers the manual-cleanup case: the user
-// `docker rm`'d a cluster container, then ran `sind delete cluster`. The
-// removal must succeed with a warning instead of aborting.
-func TestDeleteContainers_AlreadyGone(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container\n", testutil.ExitCode1(t))
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller"},
-		{Name: "sind-dev-worker-0"},
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-	require.NoError(t, err)
-}
-
-func TestDeleteContainers_Empty(t *testing.T) {
-	var m mock.Executor
-	c := docker.NewClient(&m)
-
-	err := DeleteContainers(t.Context(), c, nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
-}
-
 // --- DeleteNetwork ---
 
 func TestDeleteNetwork(t *testing.T) {
@@ -122,27 +53,6 @@ func TestDeleteNetwork(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"network", "rm", "sind-dev-net"}, m.Calls[0].Args)
-}
-
-func TestDeleteNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("network has active endpoints"))
-	c := docker.NewClient(&m)
-
-	err := DeleteNetwork(t.Context(), c, docker.NetworkName("sind-dev-net"))
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing network sind-dev-net")
-}
-
-// TestDeleteNetwork_AlreadyGone covers a network that was manually removed.
-func TestDeleteNetwork_AlreadyGone(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such network\n", testutil.ExitCode1(t))
-	c := docker.NewClient(&m)
-
-	err := DeleteNetwork(t.Context(), c, docker.NetworkName("sind-dev-net"))
-	require.NoError(t, err)
 }
 
 // --- DeleteVolumes ---
@@ -176,56 +86,42 @@ func volumeRmOnCall(results map[string]mock.Result) func([]string, string) mock.
 	}
 }
 
-// TestDeleteVolumes_Error checks that a failed removal does not stop the
-// others and that every failure is reported.
-func TestDeleteVolumes_Error(t *testing.T) {
+// TestRemoveEach checks what DeleteContainers, DeleteNetwork and
+// DeleteVolumes share: every removal is tried, also past the docker call
+// slots, a resource that is already gone is a success, and the other
+// failures are joined in argument order, each naming its kind.
+func TestRemoveEach(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = volumeRmOnCall(map[string]mock.Result{
-		"sind-dev-munge": {Err: fmt.Errorf("permission denied")},
-		"sind-dev-data":  {Err: fmt.Errorf("device busy")},
+		"v-1": {Stderr: testutil.NoSuchVolume("v-1"), Err: testutil.ExitCode1(t)},
+		"v-2": {Err: fmt.Errorf("permission denied")},
+		"v-7": {Err: fmt.Errorf("device busy")},
 	})
-	c := docker.NewClient(&m)
+	var volumes []docker.VolumeName
+	for i := range 40 {
+		volumes = append(volumes, docker.VolumeName(fmt.Sprintf("v-%d", i)))
+	}
 
-	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
-	err := DeleteVolumes(t.Context(), c, volumes)
+	err := DeleteVolumes(t.Context(), docker.NewClient(&m), volumes)
 
-	require.Error(t, err)
-	assert.Equal(t, "removing volume sind-dev-munge: permission denied\nremoving volume sind-dev-data: device busy", err.Error())
-	assert.Len(t, m.Calls, 3, "every volume is attempted")
-}
+	require.EqualError(t, err, "removing volume v-2: permission denied\nremoving volume v-7: device busy")
+	assert.Len(t, m.Calls, 40, "every volume is tried")
 
-// TestDeleteVolumes_AlreadyGone covers volumes that were manually removed.
-func TestDeleteVolumes_AlreadyGone(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = volumeRmOnCall(map[string]mock.Result{
-		"sind-dev-munge": {Stderr: testutil.NoSuchVolume("sind-dev-munge"), Err: testutil.ExitCode1(t)},
-	})
-	c := docker.NewClient(&m)
+	var none mock.Executor
+	require.NoError(t, DeleteVolumes(t.Context(), docker.NewClient(&none), nil))
+	assert.Empty(t, none.Calls)
 
-	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
-	err := DeleteVolumes(t.Context(), c, volumes)
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 3)
+	failing := docker.NewClient(&mock.Executor{OnCall: func([]string, string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("daemon gone")}
+	}})
+	assert.EqualError(t, DeleteContainers(t.Context(), failing, []docker.ContainerListEntry{{Name: "sind-dev-controller"}}),
+		"removing container sind-dev-controller: daemon gone")
+	assert.EqualError(t, DeleteNetwork(t.Context(), failing, "sind-dev-net"), "removing network sind-dev-net: daemon gone")
 }
 
 // volumeInUse is what docker writes to stderr, with exit code 1, when a
 // volume is still mounted by a container.
 const volumeInUse = "Error response from daemon: remove sind-dev-munge: volume is in use - [0123456789ab]\n"
-
-// TestDeleteVolumes_InUseRetried checks that a volume still held by a
-// container that is going away is retried until the removal succeeds.
-func TestDeleteVolumes_InUseRetried(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var m mock.Executor
-		m.AddResult("", volumeInUse, testutil.ExitCode1(t)) // munge still in use
-		m.AddResult("", "", nil)                            // munge removed on retry
-		c := docker.NewClient(&m)
-
-		err := DeleteVolumes(t.Context(), c, []docker.VolumeName{"sind-dev-munge"})
-		require.NoError(t, err)
-		assert.Len(t, m.Calls, 2)
-	})
-}
 
 // TestDeleteVolumes_StillInUse checks that a volume that stays in use is
 // reported, not mistaken for one that is already gone and leaked. docker
@@ -239,20 +135,9 @@ func TestDeleteVolumes_StillInUse(t *testing.T) {
 		c := docker.NewClient(&m)
 
 		err := DeleteVolumes(t.Context(), c, []docker.VolumeName{"sind-dev-munge"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "removing volume sind-dev-munge: exit status 1: Error response from daemon: remove sind-dev-munge: volume is in use")
+		require.ErrorContains(t, err, "removing volume sind-dev-munge: exit status 1: Error response from daemon: remove sind-dev-munge: volume is in use")
 		assert.Len(t, m.Calls, 6)
 	})
-}
-
-func TestDeleteVolumes_Empty(t *testing.T) {
-	var m mock.Executor
-	c := docker.NewClient(&m)
-
-	err := DeleteVolumes(t.Context(), c, nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
 }
 
 // --- DeregisterMesh ---
@@ -269,9 +154,7 @@ func TestDeregisterMesh(t *testing.T) {
 		{Name: "sind-dev-controller"},
 		{Name: "sind-dev-worker-0"},
 	}
-	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
-
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", containers)
 }
 
 func TestDeregisterMesh_Empty(t *testing.T) {
@@ -279,9 +162,7 @@ func TestDeregisterMesh_Empty(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
-	err := DeregisterMesh(t.Context(), mgr, "dev", nil)
-
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", nil)
 	assert.Empty(t, m.Calls)
 }
 
@@ -304,8 +185,7 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", containers)
 }
 
 func TestDeregisterMesh_KnownHostError(t *testing.T) {
@@ -343,8 +223,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", containers)
 }
 
 // TestDeregisterMesh_StartsStoppedMesh covers a delete after a host
@@ -385,9 +264,7 @@ func TestDeregisterMesh_StartsStoppedMesh(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	err := DeregisterMesh(t.Context(), mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
-
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
 	assert.True(t, started["sind-ssh"], "relay started")
 	var written []string
 	for _, call := range m.Calls {
@@ -413,9 +290,7 @@ func TestDeregisterMesh_StartMeshError(t *testing.T) {
 	var logs strings.Builder
 	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 
-	err := DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
-
-	require.NoError(t, err)
+	DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
 	assert.Contains(t, logs.String(), "starting the mesh failed, continuing")
 	assert.Contains(t, logs.String(), "inspecting SSH container: daemon gone")
 	assert.Equal(t, 1, countCalls(m.Calls, "exec", "-i", "sind-ssh"), "known_hosts written")
@@ -426,7 +301,7 @@ func TestDeregisterMesh_StartMeshError(t *testing.T) {
 
 func TestDelete_FullCluster(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -447,7 +322,7 @@ func TestDelete_FullCluster(t *testing.T) {
 
 func TestDelete_NonExistent(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "gone", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: false,
@@ -464,7 +339,7 @@ func TestDelete_NonExistent(t *testing.T) {
 func TestDelete_Partial(t *testing.T) {
 	// Partial cluster: containers gone, but network and some volumes remain
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: true,
@@ -482,7 +357,7 @@ func TestDelete_Partial(t *testing.T) {
 func TestDelete_PreserveMesh(t *testing.T) {
 	// Other clusters exist, mesh should be preserved
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -510,8 +385,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 // TestDelete_DeregisterMeshFailureContinues verifies that a failure during
@@ -520,7 +394,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 // network and volumes.
 func TestDelete_DeregisterMeshFailureContinues(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -553,7 +427,7 @@ func TestDelete_DeregisterMeshFailureContinues(t *testing.T) {
 
 func TestDelete_ContainerRemoveError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -568,13 +442,12 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing container")
+	require.ErrorContains(t, err, "removing container")
 }
 
 func TestDelete_NetworkRemoveError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:        nil,
 		networkExists:     true,
@@ -586,8 +459,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing network")
+	require.ErrorContains(t, err, "removing network")
 }
 
 // TestDelete_DetachesForeignContainers covers containers outside sind, such
@@ -595,7 +467,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 // the network can go, and they are not removed.
 func TestDelete_DetachesForeignContainers(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
@@ -626,7 +498,7 @@ func TestDelete_DetachesForeignContainers(t *testing.T) {
 
 func TestDelete_DetachError(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		networkExists:     true,
 		otherClusters:     true,
 		networkContainers: []string{"kind-control-plane"},
@@ -641,7 +513,7 @@ func TestDelete_DetachError(t *testing.T) {
 
 func TestDelete_HasOtherClustersError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: false,
@@ -665,13 +537,12 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 func TestDelete_VolumeRemoveError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:       nil,
 		networkExists:    false,
@@ -683,14 +554,13 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing volume")
+	require.ErrorContains(t, err, "removing volume")
 }
 
 func TestDelete_CleanupMeshError(t *testing.T) {
 	// No other clusters → CleanupMesh runs and fails.
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: false,
@@ -711,8 +581,7 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH keygen container")
+	require.ErrorContains(t, err, "removing SSH keygen container")
 }
 
 // meshUpdates returns the recorded calls that update the realm's Corefile
@@ -732,7 +601,7 @@ func meshUpdates(m *mock.Executor) []string {
 // realm: the mesh goes with it, so its nodes are not deregistered first.
 func TestDelete_LastClusterSkipsDeregistration(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
@@ -759,7 +628,7 @@ func TestDelete_LastClusterSkipsDeregistration(t *testing.T) {
 // nodes leave the Corefile and known_hosts.
 func TestDelete_OtherClusterDeregisters(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
@@ -801,7 +670,7 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}
 	}
 	joined := strings.Join(args, " ")
-	notFound := mock.Result{Stderr: "Error: No such object\n", Err: notFoundErr(f.t)}
+	notFound := mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(f.t)}
 	lsEntries := func() string {
 		var lines []string
 		for name := range f.clusters {
@@ -936,8 +805,7 @@ func TestDeleteAll_ClusterFails(t *testing.T) {
 
 	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "deleting cluster test")
+	require.ErrorContains(t, err, "deleting cluster test")
 	got := removed(&m)
 	assert.Contains(t, got, "sind-dev-controller")
 	assert.NotContains(t, got, "sind-dns", "mesh kept for test")
@@ -966,8 +834,7 @@ func TestDeleteAll_ListError(t *testing.T) {
 
 	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "deleting cluster dev: listing containers")
+	require.ErrorContains(t, err, "deleting cluster dev: listing containers")
 }
 
 func TestDeleteAll_DiscoveryErrors(t *testing.T) {
@@ -987,24 +854,13 @@ func TestDeleteAll_DiscoveryErrors(t *testing.T) {
 
 			err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 			assert.Empty(t, removed(&m))
 		})
 	}
 }
 
 // --- helpers ---
-
-// indexOf returns the index of s in slice, or -1 if not found.
-func indexOf(slice []string, s string) int {
-	for i, v := range slice {
-		if v == s {
-			return i
-		}
-	}
-	return -1
-}
 
 // dnsRunningInspectJSON is a mock docker inspect result reporting the
 // sind-dns container as running. Used by DeregisterMesh tests to satisfy the
@@ -1016,8 +872,8 @@ const dnsRunningInspectJSON = `[{"Id":"dns123","Name":"/sind-dns","State":{"Stat
 // deregistration.
 const sshRunningInspectJSON = `[{"Id":"ssh123","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
 
-// meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
-// and RemoveKnownHost operations for DeregisterMesh tests.
+// meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecords
+// and RemoveKnownHosts operations for DeregisterMesh tests.
 func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.Result {
 	return func(args []string, _ string) mock.Result {
 		if len(args) == 0 {

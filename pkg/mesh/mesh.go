@@ -11,13 +11,11 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/retry"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -227,25 +225,8 @@ func (m *Manager) ensureHostDNS(ctx context.Context) {
 // the realm has a DNS container. A relay created with another DNS address is
 // reported with Warn (see WarnStaleDNS).
 func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err error) {
-	var dns, relay *docker.ContainerInfo
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, m.DNSContainerName())
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dns = info
-		return nil
-	})
-	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, m.SSHContainerName())
-		if err != nil {
-			return fmt.Errorf("inspecting SSH container: %w", err)
-		}
-		relay = info
-		return nil
-	})
-	if err := g.Wait(); err != nil {
+	dns, relay, err := m.inspectMesh(ctx)
+	if err != nil {
 		return "", false, err
 	}
 
@@ -266,6 +247,28 @@ func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err 
 		m.WarnStaleDNS(ctx, dnsIP, relay)
 	}
 	return dnsIP, dns != nil, nil
+}
+
+// inspectMesh inspects the DNS and the SSH relay container at once; a
+// container that does not exist is nil.
+func (m *Manager) inspectMesh(ctx context.Context) (dns, relay *docker.ContainerInfo, err error) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() (err error) {
+		if dns, err = docker.IfExists(m.Docker.InspectContainer(gctx, m.DNSContainerName())); err != nil {
+			return fmt.Errorf("inspecting DNS container: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() (err error) {
+		if relay, err = docker.IfExists(m.Docker.InspectContainer(gctx, m.SSHContainerName())); err != nil {
+			return fmt.Errorf("inspecting SSH container: %w", err)
+		}
+		return nil
+	})
+	// Not `return dns, relay, g.Wait()`: Go may read dns and relay before
+	// it calls g.Wait.
+	err = g.Wait()
+	return dns, relay, err
 }
 
 // WarnStaleDNS warns about the containers in infos that were created to
@@ -302,19 +305,6 @@ func (m *Manager) WarnStaleDNS(ctx context.Context, dnsIP string, infos ...*dock
 	m.Warn(ctx, msg)
 }
 
-// inspectIfExists inspects a container, returning nil without error when
-// it does not exist.
-func (m *Manager) inspectIfExists(ctx context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
-	info, err := m.Docker.InspectContainer(ctx, name)
-	if err != nil {
-		if docker.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return info, nil
-}
-
 // CleanupMesh removes all global infrastructure resources. This should only
 // be called when the last cluster is deleted.
 func (m *Manager) CleanupMesh(ctx context.Context) error {
@@ -340,7 +330,7 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		{m.DNSContainerName(), "DNS"},
 	} {
 		g.Go(func() error {
-			if err := m.removeContainerIfExists(gctx, c.name); err != nil {
+			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(gctx, c.name)); err != nil {
 				return fmt.Errorf("removing %s container: %w", c.what, err)
 			}
 			return nil
@@ -355,46 +345,14 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 	if err := m.Docker.DisconnectAll(ctx, m.NetworkName()); err != nil {
 		return fmt.Errorf("detaching containers from mesh network: %w", err)
 	}
-	if err := m.removeNetworkIfExists(ctx, m.NetworkName()); err != nil {
+	if err := docker.IgnoreNotFound(m.Docker.RemoveNetwork(ctx, m.NetworkName())); err != nil {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}
 
-	if err := m.removeVolumeIfExists(ctx, m.SSHVolumeName()); err != nil {
+	if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, m.SSHVolumeName())); err != nil {
 		return fmt.Errorf("removing SSH volume: %w", err)
 	}
 
-	return nil
-}
-
-// removeContainerIfExists removes a container, treating "not found" as
-// success so the delete path survives a TOCTOU race or a user-driven manual
-// removal.
-func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.ContainerName) error {
-	if err := m.Docker.RemoveContainer(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-// removeNetworkIfExists removes a network, treating "not found" as success.
-func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.NetworkName) error {
-	if err := m.Docker.RemoveNetwork(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-// removeVolumeIfExists removes a volume, retrying past the dockerd
-// async-cleanup race that follows `docker rm -f`, and treating "not found"
-// as success.
-func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
-	err := retry.Do(ctx,
-		func() error { return m.Docker.RemoveVolume(ctx, name) },
-		docker.IsVolumeInUse,
-		6, 100*time.Millisecond)
-	if err != nil && !docker.IsNotFound(err) {
-		return err
-	}
 	return nil
 }
 
@@ -461,7 +419,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 	}
 	for attempt := 1; ; attempt++ {
 		if _, err := m.Docker.CreateNetwork(ctx, name, labels); err != nil {
-			if isAlreadyExists(err) {
+			if docker.IsAlreadyExists(err) {
 				return "", nil
 			}
 			return "", fmt.Errorf("creating mesh network: %w", err)
@@ -493,7 +451,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 			m.created = true
 			log.DebugContext(ctx, "mesh network created", "subnet", ipam.Subnet, "ip-range", ipam.IPRange, "dns", dnsIP)
 			return dnsIP, nil
-		case isAlreadyExists(err):
+		case docker.IsAlreadyExists(err):
 			return "", nil
 		case !isSubnetTaken(err):
 			return "", fmt.Errorf("creating mesh network: %w", err)
@@ -541,12 +499,6 @@ func pinnedLayout(subnet, gateway string) (docker.NetworkIPAM, string, bool) {
 	}, dnsIP.String(), true
 }
 
-// isAlreadyExists reports whether err is Docker's error for a network name
-// that is taken ("network with name X already exists").
-func isAlreadyExists(err error) bool {
-	return strings.Contains(err.Error(), "already exists")
-}
-
 // isSubnetTaken reports whether err is Docker's error for a configured
 // subnet that overlaps another network's. With an --ip-range, Docker's
 // address allocator does not check the subnet for overlaps (moby#46756): it
@@ -567,7 +519,7 @@ func isSubnetTaken(err error) bool {
 // serving <realm>.sind records from inline hosts entries in the Corefile. A
 // new container gets the address pinnedIP, unless it is empty.
 func (m *Manager) ensureDNS(ctx context.Context, pinnedIP string) (string, bool, error) {
-	info, err := m.inspectIfExists(ctx, m.DNSContainerName())
+	info, err := docker.IfExists(m.Docker.InspectContainer(ctx, m.DNSContainerName()))
 	if err != nil {
 		return "", false, fmt.Errorf("checking DNS container: %w", err)
 	}
@@ -632,13 +584,6 @@ func (m *Manager) startDNS(ctx context.Context, info *docker.ContainerInfo) (*do
 	return started, nil
 }
 
-// AddDNSRecord adds an A record to the mesh DNS Corefile and reloads CoreDNS.
-// The hostname should be a fully qualified sind DNS name (e.g. "controller.dev.sind.sind").
-// An existing entry for the hostname is replaced, as AddDNSRecords does.
-func (m *Manager) AddDNSRecord(ctx context.Context, hostname, ip string) error {
-	return m.AddDNSRecords(ctx, []DNSRecord{{Hostname: hostname, IP: ip}})
-}
-
 // AddDNSRecords adds multiple A records to the mesh DNS Corefile and reloads
 // CoreDNS once. Existing entries for the same hostnames are replaced,
 // making the operation idempotent on retry.
@@ -651,11 +596,10 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 		return err
 	}
 
-	// Build set of hostnames being added for dedup.
-	newHostnames := make(map[string]bool, len(records))
+	hostnames := make([]string, len(records))
 	newEntries := make(map[string]bool, len(records))
-	for _, r := range records {
-		newHostnames[r.Hostname] = true
+	for i, r := range records {
+		hostnames[i] = r.Hostname
 		newEntries[r.IP+" "+r.Hostname] = true
 	}
 
@@ -664,7 +608,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	present, stale := 0, false
 	for _, entry := range entries {
 		fields := strings.Fields(entry)
-		if len(fields) < 2 || !newHostnames[fields[1]] {
+		if len(fields) < 2 || !slices.Contains(hostnames, fields[1]) {
 			continue
 		}
 		if newEntries[fields[0]+" "+fields[1]] {
@@ -678,25 +622,12 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	}
 
 	// Keep existing entries that don't conflict with new ones.
-	kept := make([]string, 0, len(entries)+len(records))
-	for _, entry := range entries {
-		fields := strings.Fields(entry)
-		if len(fields) >= 2 && newHostnames[fields[1]] {
-			continue
-		}
-		kept = append(kept, entry)
-	}
+	kept := withoutNames(entries, 1, hostnames)
 	for _, r := range records {
 		kept = append(kept, r.IP+" "+r.Hostname)
 	}
 
 	return m.writeDNSEntries(ctx, kept)
-}
-
-// RemoveDNSRecord removes all A records for the given hostname from the mesh DNS
-// Corefile and reloads CoreDNS.
-func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
-	return m.RemoveDNSRecords(ctx, []string{hostname})
 }
 
 // RemoveDNSRecords removes all A records for the given hostnames from the
@@ -710,21 +641,7 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 		return err
 	}
 
-	remove := make(map[string]bool, len(hostnames))
-	for _, h := range hostnames {
-		remove[h] = true
-	}
-
-	kept := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		fields := strings.Fields(entry)
-		if len(fields) >= 2 && remove[fields[1]] {
-			continue
-		}
-		kept = append(kept, entry)
-	}
-
-	return m.writeDNSEntries(ctx, kept)
+	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames))
 }
 
 // Info holds information about the mesh infrastructure for a realm.
@@ -767,25 +684,8 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	dnsName := m.DNSContainerName()
 	netName := m.NetworkName()
 
-	var dnsInfo, sshInfo *docker.ContainerInfo
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, dnsName)
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dnsInfo = info
-		return nil
-	})
-	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, m.SSHContainerName())
-		if err != nil {
-			return fmt.Errorf("inspecting SSH container: %w", err)
-		}
-		sshInfo = info
-		return nil
-	})
-	if err := g.Wait(); err != nil {
+	dnsInfo, sshInfo, err := m.inspectMesh(ctx)
+	if err != nil {
 		return nil, err
 	}
 	if dnsInfo == nil {
@@ -942,4 +842,14 @@ func parseEntries(corefile string) []string {
 		}
 	}
 	return entries
+}
+
+// withoutNames returns lines without the blank ones and those whose field i
+// is one of names: a host name in a known_hosts line (0) or a hosts entry
+// of the Corefile (1). It filters lines in place.
+func withoutNames(lines []string, i int, names []string) []string {
+	return slices.DeleteFunc(lines, func(line string) bool {
+		fields := strings.Fields(line)
+		return len(fields) == 0 || len(fields) > i && slices.Contains(names, fields[i])
+	})
 }

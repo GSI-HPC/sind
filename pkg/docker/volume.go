@@ -5,20 +5,13 @@ package docker
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
-	"fmt"
 	"strings"
+	"time"
 )
 
 // VolumeExists returns true if the given volume exists.
 func (c *Client) VolumeExists(ctx context.Context, name VolumeName) (bool, error) {
 	return c.exists(ctx, "volume", "inspect", string(name))
-}
-
-// VolumeLabels returns the labels of the given volume, and whether it
-// exists.
-func (c *Client) VolumeLabels(ctx context.Context, name VolumeName) (Labels, bool, error) {
-	return c.labels(ctx, "volume", "inspect", string(name), "--format", "{{json .Labels}}")
 }
 
 // CreateVolume creates a Docker volume.
@@ -27,21 +20,33 @@ func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels Label
 	args := []string{"volume", "create"}
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
-	_, _, err := c.run(ctx, args...)
-	return err
+	return c.do(ctx, args...)
 }
 
-// RemoveVolume removes a Docker volume.
+// RemoveVolume removes a Docker volume, retrying past the dockerd
+// async-cleanup race that follows `docker rm -f` (see isVolumeInUse): six
+// attempts in all, 100ms apart at first and twice as long after each.
 func (c *Client) RemoveVolume(ctx context.Context, name VolumeName) error {
-	_, _, err := c.run(ctx, "volume", "rm", string(name))
-	return err
+	delay := 100 * time.Millisecond
+	for try := 1; ; try++ {
+		err := c.do(ctx, "volume", "rm", string(name))
+		if try == 6 || !isVolumeInUse(err) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		delay *= 2
+	}
 }
 
-// IsVolumeInUse reports whether err indicates the volume is still held by a
+// isVolumeInUse reports whether err indicates the volume is still held by a
 // just-removed container. dockerd releases volume mounts asynchronously after
-// `docker rm -f`, so callers tearing down a cluster race the daemon and can
-// retry this specific error.
-func IsVolumeInUse(err error) bool {
+// `docker rm -f`, so a removal that tears down a cluster races the daemon and
+// retries this specific error.
+func isVolumeInUse(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "volume is in use")
 }
 
@@ -52,34 +57,15 @@ type VolumeListEntry struct {
 	Labels Labels
 }
 
-// volumeLsEntry maps the docker volume ls --format json output.
-type volumeLsEntry struct {
-	Name   string `json:"Name"`
-	Driver string `json:"Driver"`
-	Labels string `json:"Labels"`
-}
-
 // ListVolumes returns volumes matching the given filters.
 // Each filter is passed as a --filter flag (e.g. "name=sind-dev").
 func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeListEntry, error) {
-	args := []string{"volume", "ls", "--format", "json"}
-	for _, f := range filters {
-		args = append(args, "--filter", f)
-	}
-	stdout, _, err := c.run(ctx, args...)
+	ls, err := listJSON[lsEntry](ctx, c, "volume ls", filters, "volume", "ls")
 	if err != nil {
 		return nil, err
 	}
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
-		return nil, nil
-	}
 	var entries []VolumeListEntry
-	for _, line := range strings.Split(stdout, "\n") {
-		var v volumeLsEntry
-		if err := json.Unmarshal([]byte(line), &v); err != nil {
-			return nil, fmt.Errorf("parsing volume ls output: %w", err)
-		}
+	for _, v := range ls {
 		entries = append(entries, VolumeListEntry{
 			Name:   VolumeName(v.Name),
 			Driver: v.Driver,

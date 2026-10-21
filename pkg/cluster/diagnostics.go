@@ -47,13 +47,7 @@ func logContainerDiagnostics(ctx context.Context, client *docker.Client, name do
 // logClusterDiagnostics logs diagnostics for all non-running containers in a
 // cluster. Called before cleanup removes them so that failures can be diagnosed.
 func logClusterDiagnostics(ctx context.Context, client *docker.Client, realm, clusterName string) {
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName,
-	)
-	if err != nil {
-		return
-	}
+	containers, _ := clusterContainers(ctx, client, realm, clusterName)
 	for _, c := range containers {
 		logContainerDiagnostics(ctx, client, c.Name)
 	}

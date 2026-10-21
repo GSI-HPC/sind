@@ -6,12 +6,17 @@ package testutil
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"encoding/json"
-	"iter"
+	"io"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,26 +52,49 @@ func TarArchive(name, content string) string {
 	return buf.String()
 }
 
-// Ptr returns a pointer to the given value.
-func Ptr[T any](v T) *T { return &v }
-
-// Pairs yields adjacent pairs from a string slice.
-func Pairs(s []string) iter.Seq2[string, string] {
-	return func(yield func(string, string) bool) {
-		for i := range len(s) - 1 {
-			if !yield(s[i], s[i+1]) {
-				return
-			}
+// TarModes returns the mode of each file in a tar archive, as docker cp
+// receives it on stdin.
+func TarModes(t *testing.T, archive string) map[string]int64 {
+	t.Helper()
+	modes := map[string]int64{}
+	tr := tar.NewReader(strings.NewReader(archive))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return modes
 		}
+		require.NoError(t, err)
+		modes[hdr.Name] = hdr.Mode
 	}
+}
+
+// WithoutCalls draws the spans of events as progresstest.Capture.Tree
+// does, leaving out the calls and what is under them: the docker commands,
+// which the tests of the docker package cover, and of which a wait that
+// polls runs as many as its rounds take.
+func WithoutCalls(events []progress.Event) string {
+	var c progresstest.Capture
+	calls := map[progress.SpanID]bool{}
+	for _, e := range events {
+		if e.Kind == progress.KindCall || calls[e.Parent] {
+			calls[e.Span] = true
+			continue
+		}
+		c.Handle(e)
+	}
+	return c.Tree()
+}
+
+// Image returns the sind-node image the tests run: SIND_TEST_IMAGE, or
+// ghcr.io/gsi-hpc/sind-node:latest when it is unset.
+func Image() string {
+	return cmp.Or(os.Getenv("SIND_TEST_IMAGE"), "ghcr.io/gsi-hpc/sind-node:latest")
 }
 
 // ArgValue returns the value following the first occurrence of flag in args.
 func ArgValue(args []string, flag string) (string, bool) {
-	for key, val := range Pairs(args) {
-		if key == flag {
-			return val, true
-		}
+	if i := slices.Index(args, flag); i >= 0 && i+1 < len(args) {
+		return args[i+1], true
 	}
 	return "", false
 }
@@ -74,9 +102,9 @@ func ArgValue(args []string, flag string) (string, bool) {
 // ArgValues returns all values following each occurrence of flag in args.
 func ArgValues(args []string, flag string) []string {
 	var values []string
-	for key, val := range Pairs(args) {
-		if key == flag {
-			values = append(values, val)
+	for i := 1; i < len(args); i++ {
+		if args[i-1] == flag {
+			values = append(values, args[i])
 		}
 	}
 	return values

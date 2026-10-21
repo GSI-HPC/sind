@@ -12,13 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateWorker_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"create", "worker"})
-	require.NoError(t, err)
-	assert.Equal(t, "worker [CLUSTER]", c.Use)
-}
-
 func TestCreateWorker_Flags(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"create", "worker"})
@@ -43,7 +36,11 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 		{[]string{"--pull"}, "--pull needs --image"},
 		{[]string{"--cap-add", "BOGUS"}, `unknown capability "BOGUS" in --cap-add`},
 		{[]string{"--cap-drop", "net_raw"}, `unknown capability "net_raw" in --cap-drop`},
-		{[]string{"--device", "relative/dev"}, `device path must be absolute, got "relative/dev"`},
+		{[]string{"--device", "relative/dev"}, `device "relative/dev" in --device: host path must be absolute`},
+		// An unset variable in --image "$IMAGE" is not the default.
+		{[]string{"--image", ""}, "--image must not be empty: leave it out for the default"},
+		{[]string{"--memory="}, "--memory must not be empty: leave it out for the default"},
+		{[]string{"--tmp-size", ""}, "--tmp-size must not be empty: leave it out for the default"},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
@@ -51,8 +48,7 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 
 			_, _, err := executeWithMock(&m, append([]string{"create", "worker"}, tt.args...)...)
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.True(t, isUsageError(err), "exits 2")
 			assert.Empty(t, m.Calls, "no docker call")
 		})
@@ -126,21 +122,4 @@ func TestCreateWorker_FlagHelpNamesDefaults(t *testing.T) {
 	assert.Equal(t, "memory limit per node (default: the newest worker's, else 512m)", c.Flags().Lookup("memory").Usage)
 	assert.Equal(t, "/tmp tmpfs size (default: the newest worker's, else 256m)", c.Flags().Lookup("tmp-size").Usage)
 	assert.Contains(t, c.Flags().Lookup("image").Usage, "the newest worker's, else the controller's")
-}
-
-func TestCreateWorker_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("create", "worker", "a", "b")
-	assert.Error(t, err)
-}
-
-func TestDeleteWorker_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"delete", "worker"})
-	require.NoError(t, err)
-	assert.Equal(t, "worker NODES", c.Use)
-}
-
-func TestDeleteWorker_RequiresArgs(t *testing.T) {
-	_, _, err := executeCommand("delete", "worker")
-	assert.Error(t, err)
 }

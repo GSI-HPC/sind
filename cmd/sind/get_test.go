@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,18 +24,6 @@ import (
 // nodeInspectJSON returns mock docker inspect output for a container with the given IP on the given network.
 func nodeInspectJSON(name, ip, network string) string {
 	return fmt.Sprintf(`[{"Id":"id","Name":"/%s","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"%s":{"IPAddress":"%s"}}}}]`, name, network, ip)
-}
-
-func TestGetSSHConfig_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "ssh-config"})
-	require.NoError(t, err)
-	assert.Equal(t, "ssh-config", c.Use)
-}
-
-func TestGetSSHConfig_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "ssh-config", "extra")
-	assert.Error(t, err)
 }
 
 func TestGetSSHConfig_Output(t *testing.T) {
@@ -59,18 +46,6 @@ func TestGetSSHConfig_XDGFallback(t *testing.T) {
 	stdout, _, err := executeCommand("get", "ssh-config")
 	require.NoError(t, err)
 	assert.Equal(t, "/home/user/.local/state/sind/sind/ssh_config\n", stdout)
-}
-
-func TestGetClusters_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "clusters"})
-	require.NoError(t, err)
-	assert.Equal(t, "clusters", c.Use)
-}
-
-func TestGetClusters_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "clusters", "extra")
-	assert.Error(t, err)
 }
 
 func TestGetClusters_Output(t *testing.T) {
@@ -146,18 +121,6 @@ func TestCell(t *testing.T) {
 	assert.Equal(t, "worker", cell(config.RoleWorker))
 }
 
-func TestGetNodes_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "nodes"})
-	require.NoError(t, err)
-	assert.Equal(t, "nodes [CLUSTER]", c.Use)
-}
-
-func TestGetNodes_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "nodes", "a", "b")
-	assert.Error(t, err)
-}
-
 func TestGetNodes_Output(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
@@ -230,34 +193,8 @@ func TestGetNodes_AllClusters(t *testing.T) {
 	assert.Contains(t, stdout, "prod")
 }
 
-func TestGetNetworks_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "networks"})
-	require.NoError(t, err)
-	assert.Equal(t, "networks", c.Use)
-}
-
-func TestGetVolumes_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "volumes"})
-	require.NoError(t, err)
-	assert.Equal(t, "volumes", c.Use)
-}
-
-func TestGetAuthKey_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "auth-key"})
-	require.NoError(t, err)
-	assert.Equal(t, "auth-key [CLUSTER]", c.Use)
-}
-
 func TestGetMungeKey_Removed(t *testing.T) {
 	_, _, err := executeCommand("get", "munge-key")
-	assert.Error(t, err)
-}
-
-func TestGetAuthKey_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "auth-key", "a", "b")
 	assert.Error(t, err)
 }
 
@@ -310,18 +247,6 @@ func TestGetAuthKey_TypeCompletion(t *testing.T) {
 	stdout, _, err := executeCommand("__complete", "get", "auth-key", "--type", "")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"munge", "slurm", "jwt", ":4"}, strings.Fields(stdout)[:4])
-}
-
-func TestGetDNS_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "dns"})
-	require.NoError(t, err)
-	assert.Equal(t, "dns", c.Use)
-}
-
-func TestGetDNS_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "dns", "extra")
-	assert.Error(t, err)
 }
 
 func TestGetDNS_Output(t *testing.T) {
@@ -416,18 +341,6 @@ func TestGetClusters_JSONEmpty(t *testing.T) {
 }
 
 // --- Realms ---
-
-func TestGetRealms_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "realms"})
-	require.NoError(t, err)
-	assert.Equal(t, "realms", c.Use)
-}
-
-func TestGetRealms_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "realms", "extra")
-	assert.Error(t, err)
-}
 
 func TestGetRealms_Output(t *testing.T) {
 	var m mock.Executor
@@ -573,18 +486,6 @@ func TestGetSSHConfig_JSON(t *testing.T) {
 
 // --- Mesh ---
 
-func TestGetMesh_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "mesh"})
-	require.NoError(t, err)
-	assert.Equal(t, "mesh", c.Use)
-}
-
-func TestGetMesh_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "mesh", "extra")
-	assert.Error(t, err)
-}
-
 // meshInspectCall answers the inspects of get mesh for a running mesh.
 func meshInspectCall(args []string, _ string) mock.Result {
 	switch {
@@ -643,11 +544,6 @@ func TestGetMesh_Error(t *testing.T) {
 
 // --- CoreDNS config ---
 
-func TestGetCoreDNSConfig_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "coredns-config", "extra")
-	assert.Error(t, err)
-}
-
 func TestGetCoreDNSConfig_Output(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = meshInspectCall
@@ -687,18 +583,6 @@ func TestGetCoreDNSConfig_BadOutput(t *testing.T) {
 }
 
 // --- SSH keys ---
-
-func TestGetSSHPrivateKey_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "ssh-private-key"})
-	require.NoError(t, err)
-	assert.Equal(t, "ssh-private-key", c.Use)
-}
-
-func TestGetSSHPrivateKey_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "ssh-private-key", "extra")
-	assert.Error(t, err)
-}
 
 func TestGetSSHPrivateKey_Output(t *testing.T) {
 	pemData := "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
@@ -791,18 +675,6 @@ func TestGetSSHPrivateKey_Error(t *testing.T) {
 
 // --- Cluster (status) ---
 
-func TestGetCluster_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "cluster"})
-	require.NoError(t, err)
-	assert.Equal(t, "cluster [NAME]", c.Use)
-}
-
-func TestGetCluster_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "cluster", "a", "b")
-	assert.Error(t, err)
-}
-
 func TestCheckmark(t *testing.T) {
 	assert.Equal(t, "\u2713", checkmark(true))
 	assert.Equal(t, "\u2717", checkmark(false))
@@ -870,22 +742,9 @@ func TestFormatServices_Multiple(t *testing.T) {
 
 // --- Node (single) ---
 
-func TestGetNode_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "node"})
-	require.NoError(t, err)
-	assert.Equal(t, "node NODE[.CLUSTER]", c.Use)
-}
-
-func TestGetNode_RequiresArg(t *testing.T) {
-	_, _, err := executeCommand("get", "node")
-	assert.Error(t, err)
-}
-
 func TestGetNode_RejectsFQDN(t *testing.T) {
 	_, _, err := executeCommand("get", "node", "worker-0.dev.sind.sind")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "NODE[.CLUSTER]")
+	require.ErrorContains(t, err, "NODE[.CLUSTER]")
 	assert.Contains(t, err.Error(), "worker-0.dev.sind.sind")
 }
 
@@ -894,10 +753,11 @@ func TestGetNode_RejectsFQDN(t *testing.T) {
 func TestGetNode_ClusterNamedSind(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error: No such container: sind-sind-controller\n", testutil.ExitCode1(t))
+	m.AddResult(`{"Names":"sind-sind-worker-0","Labels":"sind.role=worker"}`+"\n", "", nil)
 
 	_, _, err := executeWithMock(&m, "get", "node", "controller.sind")
 	require.EqualError(t, err, `node "controller" not found in cluster "sind"`)
-	require.Len(t, m.Calls, 1)
+	require.Len(t, m.Calls, 2)
 	assert.Contains(t, m.Calls[0].Args, "sind-sind-controller")
 }
 
@@ -906,23 +766,47 @@ func TestGetNode_ClusterNamedSind(t *testing.T) {
 // "node %q not found in cluster %q" error rather than leak the raw docker
 // exit status.
 func TestGetNode_NotFound(t *testing.T) {
-	runErr := exec.Command("sh", "-c", "exit 1").Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, runErr, &exitErr, "sanity: sh -c 'exit 1' produced an ExitError")
-
 	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-dev-ghost\n", exitErr)
+	m.AddResult("", "Error: No such container: sind-dev-ghost\n", testutil.ExitCode1(t))
+	m.AddResult(`{"Names":"sind-dev-controller","Labels":"sind.role=controller"}`+"\n", "", nil)
 
 	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `node "ghost" not found in cluster "dev"`)
+	require.ErrorContains(t, err, `node "ghost" not found in cluster "dev"`)
 	assert.NotContains(t, err.Error(), "exit status")
 }
 
-func TestGetNode_Output(t *testing.T) {
-	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
+// TestGetNode_ClusterNotFound checks that a node of a missing cluster is
+// reported as a missing cluster, with the realm, as logs and ssh do.
+func TestGetNode_ClusterNotFound(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stderr: "Error: No such container: sind-nope-worker-0\n", Err: testutil.ExitCode1(t)}
+		}
+		return mock.Result{}
+	}}
 
-	m := &mock.Executor{
+	_, _, err := executeWithMock(m, "get", "node", "worker-0.nope")
+	require.EqualError(t, err, `cluster "nope" not found in realm "sind"`)
+	assert.ErrorIs(t, err, cluster.ErrClusterNotFound)
+}
+
+// TestGetNode_NotFoundRace checks the fallback when the node exists by the
+// time the cluster is listed: it is still reported as not found.
+func TestGetNode_NotFoundRace(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-dev-ghost\n", testutil.ExitCode1(t))
+	m.AddResult(`{"Names":"sind-dev-ghost","Labels":"sind.role=worker"}`+"\n", "", nil)
+
+	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
+	require.EqualError(t, err, `node "ghost" not found in cluster "dev"`)
+}
+
+// nodeHealthMock answers get node for a running controller of cluster dev
+// whose services are all active, with no backup controller.
+func nodeHealthMock(t *testing.T) *mock.Executor {
+	t.Helper()
+	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
+	return &mock.Executor{
 		OnCall: func(args []string, _ string) mock.Result {
 			if len(args) >= 2 && args[0] == "inspect" && args[1] == "sind-dev-controller-backup" {
 				return mock.Result{Stderr: "Error: No such object: sind-dev-controller-backup\n", Err: testutil.ExitCode1(t)}
@@ -945,6 +829,10 @@ func TestGetNode_Output(t *testing.T) {
 			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
 		},
 	}
+}
+
+func TestGetNode_Output(t *testing.T) {
+	m := nodeHealthMock(t)
 
 	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev")
 	require.NoError(t, err)
@@ -971,29 +859,7 @@ func TestGetNode_Output(t *testing.T) {
 }
 
 func TestGetNode_JSON(t *testing.T) {
-	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
-
-	m := &mock.Executor{
-		OnCall: func(args []string, _ string) mock.Result {
-			if len(args) >= 2 && args[0] == "inspect" && args[1] == "sind-dev-controller-backup" {
-				return mock.Result{Stderr: "Error: No such object: sind-dev-controller-backup\n", Err: testutil.ExitCode1(t)}
-			}
-			if len(args) >= 2 && args[0] == "inspect" {
-				return mock.Result{Stdout: inspectWithLabels}
-			}
-			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				var b strings.Builder
-				for range args[4:] {
-					b.WriteString("active\n")
-				}
-				return mock.Result{Stdout: b.String()}
-			}
-			if len(args) >= 3 && args[2] == "scontrol" {
-				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
-			}
-			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
-		},
-	}
+	m := nodeHealthMock(t)
 
 	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev", "--output", "json")
 	require.NoError(t, err)

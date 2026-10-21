@@ -134,8 +134,7 @@ func TestListClusterResources_ListContainersError(t *testing.T) {
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 func TestListClusterResources_NetworkCheckError(t *testing.T) {
@@ -145,8 +144,7 @@ func TestListClusterResources_NetworkCheckError(t *testing.T) {
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking network sind-dev-net: network inspect failed")
+	require.ErrorContains(t, err, "checking network sind-dev-net: network inspect failed")
 }
 
 func TestListClusterResources_VolumeListError(t *testing.T) {
@@ -156,8 +154,7 @@ func TestListClusterResources_VolumeListError(t *testing.T) {
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing volumes: daemon gone")
+	require.ErrorContains(t, err, "listing volumes: daemon gone")
 }
 
 // TestListClusterResources_ErrorOrder checks that when every lookup fails,
@@ -173,8 +170,7 @@ func TestListClusterResources_ErrorOrder(t *testing.T) {
 
 		_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-		require.Error(t, err)
-		assert.Equal(t, "listing containers: daemon gone", err.Error())
+		require.EqualError(t, err, "listing containers: daemon gone")
 	}
 }
 
@@ -257,45 +253,50 @@ func TestOwnedBy(t *testing.T) {
 
 // --- HasOtherClusters ---
 
-func TestHasOtherClusters_True(t *testing.T) {
-	var m mock.Executor
-	// ListContainers returns containers from two clusters
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
-		testutil.PsEntry{ID: "b", Names: "sind-prod-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=prod"},
-	), "", nil)
-	c := docker.NewClient(&m)
+func TestHasOtherClusters(t *testing.T) {
+	entry := func(name, labels string) testutil.PsEntry {
+		return testutil.PsEntry{ID: name, Names: name, State: "running", Image: "img", Labels: labels}
+	}
+	for _, tt := range []struct {
+		name string
+		ps   []testutil.PsEntry
+		want bool
+	}{
+		{"two clusters", []testutil.PsEntry{
+			entry("sind-dev-controller", "sind.realm=sind,sind.cluster=dev"),
+			entry("sind-prod-controller", "sind.realm=sind,sind.cluster=prod"),
+		}, true},
+		{"only this cluster", []testutil.PsEntry{
+			entry("sind-dev-controller", "sind.realm=sind,sind.cluster=dev"),
+			entry("sind-dev-worker-0", "sind.realm=sind,sind.cluster=dev"),
+		}, false},
+		{"no containers", nil, false},
+		// Cluster "dev" must not match container "sind-dev2-controller".
+		{"prefix ambiguity", []testutil.PsEntry{
+			entry("sind-dev-controller", "sind.realm=sind,sind.cluster=dev"),
+			entry("sind-dev2-controller", "sind.realm=sind,sind.cluster=dev2"),
+		}, true},
+		// After "sind delete cluster dev", the containers of cluster "dev-2"
+		// share the name prefix "sind-dev-" but are another cluster: the
+		// mesh must stay.
+		{"hyphenated sibling", []testutil.PsEntry{
+			entry("sind-dev-2-controller", "sind.realm=sind,sind.cluster=dev-2"),
+			entry("sind-dev-2-worker-0", "sind.realm=sind,sind.cluster=dev-2"),
+		}, true},
+		// A realm container sind cannot attribute to a cluster keeps the mesh.
+		{"container without cluster label", []testutil.PsEntry{entry("sind-dev-controller", "sind.realm=sind")}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(testutil.NDJSON(tt.ps...), "", nil)
 
-	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
+			has, err := HasOtherClusters(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
-	require.NoError(t, err)
-	assert.True(t, has)
-}
-
-func TestHasOtherClusters_False(t *testing.T) {
-	var m mock.Executor
-	// Only containers from the same cluster
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
-		testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.False(t, has)
-}
-
-func TestHasOtherClusters_NoContainers(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil) // empty list
-	c := docker.NewClient(&m)
-
-	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.False(t, has)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, has)
+			assert.Equal(t, []string{"label=" + LabelRealm + "=" + mesh.DefaultRealm}, testutil.ArgValues(m.Calls[0].Args, "--filter"))
+		})
+	}
 }
 
 func TestHasOtherClusters_Error(t *testing.T) {
@@ -305,68 +306,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 
 	_, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
-}
-
-func TestHasOtherClusters_LabelFilter(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	_, _ = HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Len(t, m.Calls, 1)
-	args := m.Calls[0].Args
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label="+LabelRealm+"="+mesh.DefaultRealm, args[filterIdx+1])
-}
-
-func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
-	// Cluster "dev" must not match container "sind-dev2-controller".
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
-		testutil.PsEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev2"},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.True(t, has, "sind-dev2-controller should not match cluster dev")
-}
-
-func TestHasOtherClusters_HyphenatedSibling(t *testing.T) {
-	// After "sind delete cluster dev", the containers of cluster "dev-2"
-	// share the name prefix "sind-dev-" but are another cluster: the mesh
-	// must stay.
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-2-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev-2"},
-		testutil.PsEntry{ID: "b", Names: "sind-dev-2-worker-0", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev-2"},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.True(t, has)
-}
-
-func TestHasOtherClusters_ContainerWithoutClusterLabel(t *testing.T) {
-	// A realm container sind cannot attribute to a cluster keeps the mesh.
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind"},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.True(t, has)
+	require.ErrorContains(t, err, "listing containers")
 }
 
 // --- DiscoverClusterNames ---
@@ -385,87 +325,43 @@ func listsOnCall(networks, volumes mock.Result) func([]string, string) mock.Resu
 	}
 }
 
-func TestDiscoverClusterNames_FromNetworks(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = listsOnCall(
-		// ListNetworks: filter excludes mesh (no sind.cluster label); returns cluster network only.
-		mock.Result{Stdout: `{"Name":"sind-default-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=default"}`},
-		// ListVolumes: empty
-		mock.Result{},
-	)
-	c := docker.NewClient(&m)
-
-	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{"default"}, names)
-}
-
-func TestDiscoverClusterNames_FromVolumes(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = listsOnCall(
-		// ListNetworks: empty
-		mock.Result{},
-		// ListVolumes: cluster-scoped volumes carry the cluster label; mesh
-		// volumes are excluded by the filter.
-		mock.Result{Stdout: `{"Name":"sind-default-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=default"}
+func TestDiscoverClusterNames(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		networks, volumes mock.Result
+		want              []string
+		wantErr           string
+	}{
+		// The filter leaves out the mesh network, which has no cluster label.
+		{name: "from networks", networks: mock.Result{Stdout: `{"Name":"sind-default-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=default"}`},
+			want: []string{"default"}},
+		// Cluster-scoped volumes carry the cluster label; the filter leaves
+		// out the mesh volumes.
+		{name: "from volumes", volumes: mock.Result{Stdout: `{"Name":"sind-default-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=default"}
 {"Name":"sind-default-munge","Driver":"local","Labels":"sind.realm=sind,sind.cluster=default"}`},
-	)
-	c := docker.NewClient(&m)
-
-	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{"default"}, names)
-}
-
-func TestDiscoverClusterNames_MultipleClusters(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = listsOnCall(
-		// ListNetworks: two cluster networks (mesh excluded by filter).
-		mock.Result{Stdout: `{"Name":"sind-dev-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=dev"}
+			want: []string{"default"}},
+		// Two cluster networks, volumes of dev and an orphaned one of test.
+		{name: "multiple clusters", networks: mock.Result{Stdout: `{"Name":"sind-dev-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=dev"}
 {"Name":"sind-prod-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=prod"}`},
-		// ListVolumes: volumes for dev and an orphaned one of test.
-		mock.Result{Stdout: `{"Name":"sind-dev-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=dev"}
+			volumes: mock.Result{Stdout: `{"Name":"sind-dev-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=dev"}
 {"Name":"sind-test-data","Driver":"local","Labels":"sind.realm=sind,sind.cluster=test"}`},
-	)
-	c := docker.NewClient(&m)
+			want: []string{"dev", "prod", "test"}},
+		{name: "empty"},
+		{name: "network error", networks: mock.Result{Err: fmt.Errorf("docker daemon unreachable")}, wantErr: "listing networks"},
+		{name: "volume error", volumes: mock.Result{Err: fmt.Errorf("docker daemon unreachable")}, wantErr: "listing volumes"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.OnCall = listsOnCall(tt.networks, tt.volumes)
 
-	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+			names, err := DiscoverClusterNames(t.Context(), docker.NewClient(&m), mesh.DefaultRealm)
 
-	require.NoError(t, err)
-	assert.Equal(t, []string{"dev", "prod", "test"}, names)
-}
-
-func TestDiscoverClusterNames_Empty(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = listsOnCall(mock.Result{}, mock.Result{})
-	c := docker.NewClient(&m)
-
-	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	assert.Empty(t, names)
-}
-
-func TestDiscoverClusterNames_NetworkError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = listsOnCall(mock.Result{Err: fmt.Errorf("docker daemon unreachable")}, mock.Result{})
-	c := docker.NewClient(&m)
-
-	_, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing networks")
-}
-
-func TestDiscoverClusterNames_VolumeError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = listsOnCall(mock.Result{}, mock.Result{Err: fmt.Errorf("docker daemon unreachable")})
-	c := docker.NewClient(&m)
-
-	_, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing volumes")
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, names)
+		})
+	}
 }

@@ -5,7 +5,6 @@ package doctor
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"testing"
 
@@ -58,14 +57,12 @@ func TestCheckDockerVersion(t *testing.T) {
 
 func TestCheckDockerVersion_TooOld(t *testing.T) {
 	err := CheckDockerVersion("27.5.0")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "requires >= 28.0")
+	require.ErrorContains(t, err, "requires >= 28.0")
 }
 
 func TestCheckDockerVersion_Invalid(t *testing.T) {
 	err := CheckDockerVersion("bogus")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unable to parse version")
+	require.ErrorContains(t, err, "unable to parse version")
 }
 
 func TestCgroupInfo_MemFs(t *testing.T) {
@@ -86,61 +83,35 @@ func TestCgroupInfo_ReadError(t *testing.T) {
 	assert.False(t, hasNsd)
 }
 
-func TestParseCgroupInfo_WithNsdelegate(t *testing.T) {
-	mounts := "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup", path)
-	assert.True(t, hasV2)
-	assert.True(t, hasNsd)
-}
-
-func TestParseCgroupInfo_WithoutNsdelegate(t *testing.T) {
-	mounts := "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup", path)
-	assert.True(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-func TestParseCgroupInfo_NoCgroup2(t *testing.T) {
-	mounts := "tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Empty(t, path)
-	assert.False(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-// TestParseCgroupInfo_Hybrid checks that a systemd host in hybrid mode,
-// whose cgroup2 mount at /sys/fs/cgroup/unified has nsdelegate, does not
-// pass: Docker runs containers on cgroup v1 there.
-func TestParseCgroupInfo_Hybrid(t *testing.T) {
-	mounts := "tmpfs /sys/fs/cgroup tmpfs ro,nosuid,nodev,noexec,mode=755 0 0\n" +
-		"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n" +
-		"cgroup /sys/fs/cgroup/systemd cgroup rw,nosuid,nodev,noexec,relatime,xattr,name=systemd 0 0\n" +
-		"cgroup /sys/fs/cgroup/memory cgroup rw,nosuid,nodev,noexec,relatime,memory 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup/unified", path)
-	assert.False(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-// TestParseCgroupInfo_RootAfterOther checks that the mount at
-// /sys/fs/cgroup counts wherever it is in the table, and that an option
-// that only contains "nsdelegate" is not taken for it.
-func TestParseCgroupInfo_RootAfterOther(t *testing.T) {
-	mounts := "cgroup2 /run/other cgroup2 rw,nsdelegate 0 0\n" +
-		"cgroup2 /sys/fs/cgroup cgroup2 rw,nonsdelegate 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup", path)
-	assert.True(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-func TestParseCgroupInfo_Empty(t *testing.T) {
-	path, hasV2, hasNsd := parseCgroupInfo("")
-	assert.Empty(t, path)
-	assert.False(t, hasV2)
-	assert.False(t, hasNsd)
+func TestParseCgroupInfo(t *testing.T) {
+	tests := []struct {
+		name, mounts, path string
+		hasV2, hasNsd      bool
+	}{
+		{"with nsdelegate", "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n", "/sys/fs/cgroup", true, true},
+		{"without nsdelegate", "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0\n", "/sys/fs/cgroup", true, false},
+		{"no cgroup2", "tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n", "", false, false},
+		// A systemd host in hybrid mode, whose cgroup2 mount at
+		// /sys/fs/cgroup/unified has nsdelegate, does not pass: Docker runs
+		// containers on cgroup v1 there.
+		{"hybrid", "tmpfs /sys/fs/cgroup tmpfs ro,nosuid,nodev,noexec,mode=755 0 0\n" +
+			"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n" +
+			"cgroup /sys/fs/cgroup/systemd cgroup rw,nosuid,nodev,noexec,relatime,xattr,name=systemd 0 0\n" +
+			"cgroup /sys/fs/cgroup/memory cgroup rw,nosuid,nodev,noexec,relatime,memory 0 0\n", "/sys/fs/cgroup/unified", false, false},
+		// The mount at /sys/fs/cgroup counts wherever it is in the table,
+		// and an option that only contains "nsdelegate" is not taken for it.
+		{"root after other", "cgroup2 /run/other cgroup2 rw,nsdelegate 0 0\n" +
+			"cgroup2 /sys/fs/cgroup cgroup2 rw,nonsdelegate 0 0\n", "/sys/fs/cgroup", true, false},
+		{"empty", "", "", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, hasV2, hasNsd := parseCgroupInfo(tt.mounts)
+			assert.Equal(t, tt.path, path)
+			assert.Equal(t, tt.hasV2, hasV2)
+			assert.Equal(t, tt.hasNsd, hasNsd)
+		})
+	}
 }
 
 func TestInotifyInstances(t *testing.T) {
@@ -162,9 +133,7 @@ func TestInotifyInstances(t *testing.T) {
 // writing stderr.
 func exitError(t *testing.T, stderr string) error {
 	t.Helper()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, exec.Command("sh", "-c", "exit 1").Run(), &exitErr)
-	return &cmdexec.ExitError{Err: exitErr, Stderr: stderr}
+	return &cmdexec.ExitError{Err: testutil.ExitCode1(t), Stderr: stderr}
 }
 
 func TestDockerUnreachable(t *testing.T) {
@@ -204,14 +173,6 @@ func TestErrorLine(t *testing.T) {
 	assert.Equal(t, "context canceled", ErrorLine(fmt.Errorf("%s\n%s", "context canceled", "second line")))
 }
 
-// probeImage is the image the probe tests run: the image under test in CI.
-func probeImage() string {
-	if image := os.Getenv("SIND_TEST_IMAGE"); image != "" {
-		return image
-	}
-	return "ghcr.io/gsi-hpc/sind-node:latest"
-}
-
 // TestProbeCgroupInfoLifecycle probes a real daemon in integration mode,
 // which runs on the machine the tests run on: the container shows the
 // nsdelegate option of this machine's own cgroup2 mount, which the CI
@@ -228,7 +189,7 @@ func TestProbeCgroupInfoLifecycle(t *testing.T) {
 			"cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n", "", nil)
 	}
 
-	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), c, probeImage())
+	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), c, testutil.Image())
 	require.NoError(t, err)
 	assert.Equal(t, CgroupRoot, mountPath)
 	assert.True(t, hasV2)

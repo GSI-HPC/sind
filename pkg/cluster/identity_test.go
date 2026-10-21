@@ -3,12 +3,10 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -121,7 +119,7 @@ func identityCfg(identity config.Identity) *config.Cluster {
 	db.Role = config.RoleDB
 	worker.Role = config.RoleWorker
 	unmanaged.Role = config.RoleWorker
-	unmanaged.Managed = testutil.Ptr(false)
+	unmanaged.Managed = new(false)
 	cfg.Nodes = []config.Node{controller, submitter, db, worker, unmanaged}
 	return cfg
 }
@@ -200,7 +198,7 @@ func TestNodeRunConfigs_APIUsers(t *testing.T) {
 		{config.IdentityLocal, nil, true},
 		{config.IdentityNSSSlurm, nil, true},
 		{config.IdentityClientIDs, nil, false},
-		{config.IdentityClientIDs, testutil.Ptr(false), true},
+		{config.IdentityClientIDs, new(false), true},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s/managed=%v", tt.mode, tt.managed), func(t *testing.T) {
@@ -233,7 +231,7 @@ func TestCheckIdentityImage(t *testing.T) {
 		result  mock.Result
 		wantErr string
 	}{
-		{"not local", "img:1", mock.Result{Stderr: "Error: No such image: img:1\n", Err: notFoundErr(t)}, ""},
+		{"not local", "img:1", mock.Result{Stderr: "Error: No such image: img:1\n", Err: testutil.ExitCode1(t)}, ""},
 		{"current sind-node", "img:1", mock.Result{Stdout: currentSindNodeLabels}, ""},
 		{"other image", "img:1", mock.Result{Stdout: `{"org.opencontainers.image.title":"site-node"}`}, ""},
 		{"no labels", "img:1", mock.Result{Stdout: "null\n"}, ""},
@@ -258,8 +256,7 @@ func TestCheckIdentityImage(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 		})
 	}
 }
@@ -308,8 +305,7 @@ func TestCheckIdentityImages_Old(t *testing.T) {
 
 	err := checkIdentityImages(t.Context(), docker.NewClient(&m), identityCfg(config.Identity{Mode: config.IdentityClientIDs}))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "image img:1 is a sind-node image from before identity modes")
+	require.ErrorContains(t, err, "image img:1 is a sind-node image from before identity modes")
 	assert.Len(t, m.Calls, 1)
 }
 
@@ -353,7 +349,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	assert.Contains(t, cpStdin, "slurm.key")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nCredType=cred/slurm\nAuthInfo=use_client_ids\nLaunchParameters=enable_nss_slurm\n")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nAuthInfo=use_client_ids\nDbdHost=db\n")
-	modes := tarModes(t, cpStdin)
+	modes := testutil.TarModes(t, cpStdin)
 	assert.Equal(t, int64(0o600), modes["slurm.key"])
 	assert.Equal(t, int64(0o600), modes["slurmdbd.conf"])
 	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm", "/etc/slurm/slurmdbd.conf", "/etc/slurm/slurm.key"}, m.Calls[2].Args)
@@ -383,8 +379,7 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 
 			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 			assert.Equal(t, "run", m.Calls[0].Args[0], "helper runs to fix ownership")
 		})
 	}
@@ -444,18 +439,7 @@ func collectIdentityCalls(calls []mock.Call) *identityCalls {
 // its calls.
 func createIdentityCluster(t *testing.T, cfg *config.Cluster) *identityCalls {
 	t.Helper()
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), imageLabels(currentSindNodeLabels))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, imageLabels(currentSindNodeLabels))
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "img:1"), "image checked once")
 	return collectIdentityCalls(m.Calls)
@@ -475,15 +459,9 @@ func imageLabels(labels string) func([]string, string) (mock.Result, bool) {
 func TestCreate_IdentityOldImage(t *testing.T) {
 	// A cached sind-node image from before identity modes is refused
 	// before anything is created.
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), imageLabels(oldSindNodeLabels))
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	m, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
 
-	_, err := Create(t.Context(), client, meshMgr, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "image img:1 is a sind-node image from before identity modes")
+	require.ErrorContains(t, err, "image img:1 is a sind-node image from before identity modes")
 	assert.Zero(t, countCalls(m.Calls, "create"), "no node")
 	assert.Zero(t, countCalls(m.Calls, "network", "create"), "no network")
 	assert.Zero(t, countCalls(m.Calls, "volume", "create"), "no volume")
@@ -518,23 +496,15 @@ func TestCreate_ClientIDs(t *testing.T) {
 }
 
 func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, stdin string) (mock.Result, bool) {
+	_, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, func(args []string, stdin string) (mock.Result, bool) {
 		if _, steps, ok := setupCall(args); ok && steps["nss_slurm"] != "" {
 			return failedSetup(t, 1, "", "nss_slurm"), true
 		}
 		// A custom image: only the check on the node finds what it lacks.
 		return imageLabels("{}")(args, stdin)
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1")
+	require.ErrorContains(t, err, "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1")
 }
 
 func TestWorkerAdd_Identity(t *testing.T) {
@@ -549,13 +519,8 @@ func TestWorkerAdd_Identity(t *testing.T) {
 		{"clientIds", true, false, true},
 	} {
 		t.Run(fmt.Sprintf("%s/unmanaged=%v", tt.mode, tt.unmanaged), func(t *testing.T) {
-			var m mock.Executor
-			m.OnCall = psWithLabels(workerAddOnCall(t), "sind.identity="+tt.mode+",sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice")
-			client := docker.NewClient(&m)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
-			_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Unmanaged: tt.unmanaged}, time.Millisecond)
+			m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.identity="+tt.mode+",sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice"),
+				WorkerAddOptions{ClusterName: "dev", Count: 1, Unmanaged: tt.unmanaged})
 			require.NoError(t, err)
 
 			ic := collectIdentityCalls(m.Calls)
@@ -586,27 +551,21 @@ func TestWorkerAdd_IdentityImage(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			base := psWithLabels(workerAddOnCall(t), "sind.identity=nssSlurm")
-			var m mock.Executor
-			m.OnCall = func(args []string, stdin string) mock.Result {
+			tt.opts.ClusterName, tt.opts.Count = "dev", 1
+
+			m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 				if args[0] == "image" {
 					return tt.result
 				}
 				return base(args, stdin)
-			}
-			client := docker.NewClient(&m)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			tt.opts.ClusterName, tt.opts.Count = "dev", 1
-
-			_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), tt.opts, time.Millisecond)
+			}, tt.opts)
 
 			assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", tt.checked))
 			if tt.wantErr == "" {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 			assert.Zero(t, countCalls(m.Calls, "create"))
 		})
 	}
@@ -616,18 +575,12 @@ func TestWorkerAdd_IdentityImagePulled(t *testing.T) {
 	// --pull pulls an explicit image once, before anything checks it; the
 	// pulled image is then checked like a local one.
 	base := psWithLabels(workerAddOnCall(t), "sind.identity=nssSlurm")
-	var m mock.Executor
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if args[0] == "inspect" && args[1] == "sind-dev-controller" {
 			return mock.Result{Stdout: nodeInspectJSON(t, args[1], nodeInspect{Image: testControllerImageID, Labels: docker.Labels{LabelIdentity: "nssSlurm"}})}
 		}
 		return base(args, stdin)
-	}
-	client := docker.NewClient(&m)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "img:2", Pull: true}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "img:2", Pull: true})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "pull", "img:2"))
@@ -712,6 +665,5 @@ func TestGetAuthKey_ClientIDsCopyError(t *testing.T) {
 
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
-	require.Error(t, err)
-	assert.Equal(t, "reading slurm key: cp failed", err.Error())
+	require.EqualError(t, err, "reading slurm key: cp failed")
 }

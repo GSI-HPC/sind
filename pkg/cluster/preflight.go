@@ -36,13 +36,16 @@ var (
 
 // doctorHint ends the errors of CheckDaemon: `sind doctor` shows the commands
 // that fix what the daemon lacks.
-const doctorHint = "; run `sind doctor` for the fix"
+const doctorHint = docker.DoctorHint
 
 // CheckDaemon asks the Docker daemon what it is and returns DaemonSupport's
 // verdict, with a pointer to `sind doctor`. Call it before mesh.Manager.EnsureMesh and Create, so that an
 // unsupported daemon fails before anything is pulled or created.
 func CheckDaemon(ctx context.Context, client *docker.Client) error {
 	info, err := client.Info(ctx)
+	if errors.Is(err, docker.ErrUnreachable) {
+		return err // it points to sind doctor itself
+	}
 	if err != nil {
 		return fmt.Errorf("querying the Docker daemon: %w%s", err, doctorHint)
 	}

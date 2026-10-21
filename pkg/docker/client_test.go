@@ -4,6 +4,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -80,6 +81,21 @@ func TestIsNotFound_Nil(t *testing.T) {
 
 func TestIsNotFound_OtherError(t *testing.T) {
 	assert.False(t, IsNotFound(fmt.Errorf("connection refused")))
+}
+
+func TestIgnoreNotFound(t *testing.T) {
+	other := errors.New("boom")
+	assert.NoError(t, IgnoreNotFound(exitError(t, 1, "Error: No such container: x\n")))
+	assert.Equal(t, other, IgnoreNotFound(other))
+}
+
+func TestIfExists(t *testing.T) {
+	v, err := IfExists(&ContainerInfo{}, exitError(t, 1, "Error: No such container: x\n"))
+	assert.NoError(t, err)
+	assert.Nil(t, v)
+	n, err := IfExists(1, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, n)
 }
 
 func TestIsAlreadyExists(t *testing.T) {
@@ -230,9 +246,9 @@ func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
 	m.AddResult("27.0.0\n", "", nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	v, err := NewClient(&m).ServerVersion(ctx)
+	v, _, err := NewClient(&m).run(ctx, "version")
 	require.NoError(t, err)
-	assert.Equal(t, "27.0.0", v)
+	assert.Equal(t, "27.0.0\n", v)
 }
 
 func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
@@ -248,4 +264,100 @@ func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
 	close(e.release)
 	wg.Wait()
 	assert.Equal(t, MaxConcurrentCalls+1, e.peak)
+}
+
+// TestCommands checks the methods that run one docker command for its
+// effect: the arguments they pass, and that they return docker's error.
+func TestCommands(t *testing.T) {
+	const n, net = testContainerName, testNetworkName
+	tests := []struct {
+		call func(context.Context, *Client) error
+		args []string
+	}{
+		{func(ctx context.Context, c *Client) error { return c.StartContainer(ctx, n) }, []string{"start", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.StopContainer(ctx, n) }, []string{"stop", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveContainer(ctx, n) }, []string{"rm", "-f", "-v", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.PauseContainer(ctx, n) }, []string{"pause", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.UnpauseContainer(ctx, n) }, []string{"unpause", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.KillContainer(ctx, n) }, []string{"kill", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.SignalContainer(ctx, n, "HUP") }, []string{"kill", "-s", "HUP", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveNetwork(ctx, net) }, []string{"network", "rm", string(net)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveNetworkByID(ctx, "net-id") }, []string{"network", "rm", "net-id"}},
+		{func(ctx context.Context, c *Client) error { return c.ConnectNetwork(ctx, net, n) }, []string{"network", "connect", string(net), string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.DisconnectNetwork(ctx, net, n) }, []string{"network", "disconnect", string(net), string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveVolume(ctx, testVolumeName) }, []string{"volume", "rm", string(testVolumeName)}},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", "", nil)
+			m.AddResult("", "Error response from daemon: failed\n", errors.New("exit status 1"))
+			c := NewClient(&m)
+			require.NoError(t, tt.call(t.Context(), c))
+			assert.Equal(t, tt.args, m.Calls[0].Args)
+			assert.Error(t, tt.call(t.Context(), c))
+		})
+	}
+}
+
+// TestClient_Unreachable checks that a call whose docker CLI is missing or
+// cannot reach the daemon fails with an *UnreachableError, whose message
+// leaves out the exit status and the command, and which still unwraps to
+// the command's error.
+func TestClient_Unreachable(t *testing.T) {
+	for _, tt := range []struct {
+		name, stderr, want string
+	}{
+		{"daemon down", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+			"Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix"},
+		{"docker run prefix", "docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n\nRun 'docker run --help' for more information\n",
+			"Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix"},
+		{"docker API", "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory\n",
+			"Docker is not reachable: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory; run `sind doctor` for the fix"},
+		{"permission", "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: dial unix /var/run/docker.sock: connect: permission denied\n",
+			"Docker is not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: dial unix /var/run/docker.sock: connect: permission denied; run `sind doctor` for the fix"},
+		{"error during connect", "error during connect: Get \"http://h:2375/v1.47/info\": dial tcp: lookup h: no such host\n",
+			"Docker is not reachable: error during connect: Get \"http://h:2375/v1.47/info\": dial tcp: lookup h: no such host; run `sind doctor` for the fix"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", tt.stderr, exitError(t, 1, tt.stderr))
+			_, err := NewClient(&m).ListContainers(t.Context())
+			require.ErrorIs(t, err, ErrUnreachable)
+			assert.EqualError(t, err, tt.want)
+			_, ok := errors.AsType[*cmdexec.ExitError](err)
+			assert.True(t, ok)
+			assert.False(t, IsNotFound(err))
+		})
+	}
+}
+
+func TestClient_DockerMissing(t *testing.T) {
+	var m mock.Executor
+	missing := &exec.Error{Name: "docker", Err: exec.ErrNotFound}
+	m.AddResult("", "", missing)
+	err := NewClient(&m).do(t.Context(), "info")
+	require.ErrorIs(t, err, ErrUnreachable)
+	require.ErrorIs(t, err, exec.ErrNotFound)
+	assert.EqualError(t, err, "Docker is not reachable: docker CLI not found in PATH; run `sind doctor` for the fix")
+}
+
+// TestClient_OtherErrorsReachable checks that failures that do not say the
+// daemon is unreachable keep their error, even when a container's output
+// mentions the daemon.
+func TestClient_OtherErrorsReachable(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: No such container: sind-dev-controller\n",
+		"some tool: Cannot connect to the Docker daemon\n",
+		"",
+	} {
+		var m mock.Executor
+		m.AddResult("", stderr, exitError(t, 1, stderr))
+		err := NewClient(&m).do(t.Context(), "inspect", "x")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrUnreachable)
+	}
+	var m mock.Executor
+	m.AddResult("", "", context.Canceled)
+	assert.NotErrorIs(t, NewClient(&m).do(t.Context(), "info"), ErrUnreachable)
 }

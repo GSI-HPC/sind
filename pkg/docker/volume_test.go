@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"testing"
+	"testing/synctest"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -125,22 +126,38 @@ func TestIsVolumeInUse(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, IsVolumeInUse(tc.err))
+			assert.Equal(t, tc.want, isVolumeInUse(tc.err))
 		})
 	}
 }
 
-func TestVolumeLabels(t *testing.T) {
+// volumeInUse is what docker writes to stderr, with exit code 1, when a
+// volume is still mounted by a container.
+const volumeInUse = "Error response from daemon: remove sind-dev-config: volume is in use - [abc123]\n"
+
+// TestRemoveVolume_InUseRetried checks that a volume still held by a
+// container that is going away is removed on a later attempt.
+func TestRemoveVolume_InUseRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var m mock.Executor
+		m.AddResult("", volumeInUse, &exec.ExitError{ProcessState: exitCode1(t)})
+		m.AddResult("", "", nil)
+
+		require.NoError(t, NewClient(&m).RemoveVolume(t.Context(), testVolumeName))
+		assert.Len(t, m.Calls, 2)
+	})
+}
+
+// TestRemoveVolume_CanceledWhileInUse checks that the retry stops when
+// the context ends.
+func TestRemoveVolume_CanceledWhileInUse(t *testing.T) {
 	var m mock.Executor
-	m.AddResult(`{"sind.cluster":"dev","sind.realm":"sind"}`+"\n", "", nil)
-	c := NewClient(&m)
+	m.AddResult("", volumeInUse, &exec.ExitError{ProcessState: exitCode1(t)})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
 
-	labels, exists, err := c.VolumeLabels(t.Context(), testVolumeName)
-
-	require.NoError(t, err)
-	assert.True(t, exists)
-	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.realm": "sind"}, labels)
-	assert.Equal(t, []string{"volume", "inspect", string(testVolumeName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+	require.ErrorIs(t, NewClient(&m).RemoveVolume(ctx, testVolumeName), context.Canceled)
+	assert.Len(t, m.Calls, 1)
 }
 
 func TestVolumeExists_True(t *testing.T) {
@@ -198,27 +215,6 @@ func TestCreateVolume_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestRemoveVolume(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testVolumeName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.RemoveVolume(t.Context(), testVolumeName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"volume", "rm", string(testVolumeName)}, m.Calls[0].Args)
-}
-
-func TestRemoveVolume_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.RemoveVolume(t.Context(), testVolumeName)
-	assert.Error(t, err)
-}
-
 const volumeLsJSON = `{"Name":"sind-dev-config","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-config/_data","Scope":"local"}
 {"Name":"sind-dev-munge","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-munge/_data","Scope":"local"}
 {"Name":"sind-dev-data","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-data/_data","Scope":"local"}`
@@ -239,27 +235,6 @@ func TestListVolumes(t *testing.T) {
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"volume", "ls", "--format", "json", "--filter", "name=sind-dev"}, m.Calls[0].Args)
-}
-
-func TestListVolumes_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListVolumes(t.Context(), "name=nonexistent")
-	require.NoError(t, err)
-	assert.Nil(t, entries)
-}
-
-func TestListVolumes_InvalidJSON(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("not json\n", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListVolumes(t.Context())
-	assert.Error(t, err)
-	assert.Nil(t, entries)
-	assert.Contains(t, err.Error(), "parsing volume ls output")
 }
 
 func TestListVolumes_Error(t *testing.T) {

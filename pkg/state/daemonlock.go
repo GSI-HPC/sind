@@ -3,6 +3,7 @@
 package state
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -75,14 +76,9 @@ type LockHolder struct {
 // String describes the holder for a message: its command, process and host,
 // and since when it holds the lock, in local time.
 func (h *LockHolder) String() string {
-	command, host := h.Command, h.Host
-	if command == "" {
-		command = "an unknown command"
-	}
-	if host == "" {
-		host = "an unknown host"
-	}
-	return fmt.Sprintf("%s (pid %d on %s, since %s)", command, h.PID, host, h.Since.Local().Format(time.DateTime))
+	return fmt.Sprintf("%s (pid %d on %s, since %s)",
+		cmp.Or(h.Command, "an unknown command"), h.PID,
+		cmp.Or(h.Host, "an unknown host"), h.Since.Local().Format(time.DateTime))
 }
 
 // holderOf reads the holder of a lock from its network.
@@ -186,11 +182,7 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 	name := LockNetworkName(realm)
 	me := self(o.procRoot)
 	token := rand.Text()
-	command := o.Command
-	if command == "" {
-		command = commandLine(os.Args)
-	}
-	labels := me.labels(realm, token, command)
+	labels := me.labels(realm, token, cmp.Or(o.Command, commandLine(os.Args)))
 
 	delay := o.pollFirst
 	var waitStart time.Time
@@ -222,7 +214,7 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 			return nil, fmt.Errorf("network %s exists but is not a sind realm lock: remove or rename it", name)
 		case me.sees(h) && !o.alive(h.PID):
 			o.warn(ctx, fmt.Sprintf("removing the realm lock of %s, which no longer runs", h))
-			if err := client.RemoveNetworkByID(ctx, h.id); err != nil && !docker.IsNotFound(err) {
+			if err := docker.IgnoreNotFound(client.RemoveNetworkByID(ctx, h.id)); err != nil {
 				return nil, fmt.Errorf("removing %s: %w", name, err)
 			}
 			continue

@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,14 +54,13 @@ func TestValidate_SlurmdbdParameters(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 
 	// Only a managed db node runs sind's accounting setup; the slurmdbd
 	// section then is an error of its own.
 	unmanaged := dbCluster("", Section{Content: "StorageUser=slurmdbd\n"})
-	unmanaged.Nodes[1].Managed = testutil.Ptr(false)
+	unmanaged.Nodes[1].Managed = new(false)
 	require.EqualError(t, unmanaged.Validate(), "slurm slurmdbd requires a managed db node: sind writes no slurmdbd.conf for an unmanaged one")
 }

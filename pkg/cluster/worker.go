@@ -71,7 +71,7 @@ func (o WorkerAddOptions) Check() error {
 	if err := config.CheckCapabilities("--cap-drop", o.CapDrop); err != nil {
 		return err
 	}
-	if err := config.CheckDevices(o.Devices); err != nil {
+	if err := config.CheckDevices("--device", o.Devices); err != nil {
 		return err
 	}
 	return config.CheckSecurityOpts("--security-opt", o.SecurityOpt)
@@ -122,15 +122,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	// List cluster containers once for validation, index and the newest
 	// worker.
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+opts.ClusterName)
+	containers, err := existingClusterContainers(ctx, client, realm, opts.ClusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
-	}
-
-	if len(containers) == 0 {
-		return nil, clusterNotFound(ctx, client, realm, opts.ClusterName)
+		return nil, err
 	}
 	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {
@@ -300,7 +294,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	confUpdated := false
 	defer func() {
 		if retErr != nil && rd.expired() {
-			retErr = fmt.Errorf("workers %w within %s: %w", ErrNotReady, rd.wait, retErr)
+			retErr = fmt.Errorf("workers of cluster %q %w within %s: %w", opts.ClusterName, ErrNotReady, rd.wait, retErr)
 		}
 		if retErr != nil && needsCleanup {
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
@@ -320,7 +314,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 				failed(err)
 			}
 			if monitored {
-				forgetMonitoredNodes(cleanupCtx, client, meshMgr, opts.ClusterName, workerNames(nodeConfigs)...)
+				forgetMonitoredNodes(cleanupCtx, client, meshMgr, opts.ClusterName, shortNames(nodeConfigs)...)
 			}
 			endRollback(errors.Join(rollbackErrs...))
 		}
@@ -401,11 +395,11 @@ func prepareMonitoredWorkers(ctx context.Context, client *docker.Client, meshMgr
 	if err := registerStackDNS(ctx, client, meshMgr); err != nil {
 		return err
 	}
-	return observability.NewManager(client, meshMgr.Realm).ResetJournals(ctx, clusterName, workerNames(nodeConfigs)...)
+	return observability.NewManager(client, meshMgr.Realm).ResetJournals(ctx, clusterName, shortNames(nodeConfigs)...)
 }
 
-// workerNames returns the short names of nodes.
-func workerNames(nodeConfigs []RunConfig) []string {
+// shortNames returns the short names of nodes.
+func shortNames(nodeConfigs []RunConfig) []string {
 	names := make([]string, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		names[i] = nc.ShortName
@@ -557,7 +551,7 @@ func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAdd
 func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, slurmConf config.Section, nodeConfigs []RunConfig) error {
 	var entries []slurm.NodeEntry
 	for _, nc := range nodeConfigs {
-		memMB, err := slurm.ParseMemoryMB(nc.Memory)
+		memMB, err := config.MemoryMB(nc.Memory)
 		if err != nil {
 			return fmt.Errorf("parsing memory %q for %s: %w", nc.Memory, nc.ShortName, err)
 		}
@@ -850,7 +844,7 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 	for _, nc := range nodeConfigs {
 		containerName := ContainerName(realm, clusterName, nc.ShortName)
 		logContainerDiagnostics(ctx, client, containerName)
-		if err := client.RemoveContainer(ctx, containerName); err != nil && !docker.IsNotFound(err) {
+		if err := docker.IgnoreNotFound(client.RemoveContainer(ctx, containerName)); err != nil {
 			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
 			errs = append(errs, fmt.Errorf("removing container %s: %w", containerName, err))
 		}

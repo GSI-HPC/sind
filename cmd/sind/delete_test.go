@@ -19,11 +19,6 @@ func TestDeleteCluster_DefaultName(t *testing.T) {
 	assert.Equal(t, "cluster [NAME]", deleteCmd.Use)
 }
 
-func TestDeleteCluster_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("delete", "cluster", "a", "b")
-	assert.Error(t, err)
-}
-
 func TestDeleteCluster_HasAllFlag(t *testing.T) {
 	cmd := NewRootCommand()
 	deleteCmd, _, err := cmd.Find([]string{"delete", "cluster"})
@@ -35,11 +30,6 @@ func TestDeleteCluster_HasAllFlag(t *testing.T) {
 
 func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 	_, _, err := executeCommand("delete", "cluster", "--all", "extra")
-	assert.Error(t, err)
-}
-
-func TestDeleteRealm_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("delete", "realm", "extra")
 	assert.Error(t, err)
 }
 
@@ -106,4 +96,20 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	exists, err = c.VolumeExists(ctx, volConfig)
 	require.NoError(t, err)
 	assert.False(t, exists, "config volume should be removed")
+}
+
+// TestDeleteRealmAndAll_Help verifies that delete realm and delete cluster
+// --all, which run the same code, describe the same scope and name each
+// other.
+func TestDeleteRealmAndAll_Help(t *testing.T) {
+	const scope = "every cluster of the realm, its mesh, its monitoring stack"
+	stdout, _, err := executeCommand("delete", "cluster", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "--all deletes "+scope)
+	assert.Contains(t, stdout, "as delete realm does")
+
+	stdout, _, err = executeCommand("delete", "realm", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "Delete "+scope)
+	assert.Contains(t, stdout, "as delete cluster --all does")
 }

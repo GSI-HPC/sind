@@ -59,11 +59,11 @@ A command joins its node arguments with a space, which is a union, so these name
 
 ```bash
 sind power on 'worker-[0-3]!worker-2'
-sind power on worker-[0-3] '!worker-2'
+sind power on 'worker-[0-3]' '!worker-2'
 sind power on worker-0 worker-1 worker-3
 ```
 
-Quote an expression with `!`, `&` or `^`, which the shell would otherwise read itself.
+Quote an expression with `[`, `!`, `&` or `^`, which the shell would otherwise read itself: it expands `worker-[0-3]` to the names of the files in the working directory that match it, such as a job's output file `worker-1`, and sind then acts on those nodes only.
 
 The operators compare the names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing, because `worker-2.default` is not one of the names `worker-[0-3]` gives. Write the suffix the same way throughout an expression.
 
@@ -98,6 +98,8 @@ sind rejects these before it acts on any node, with exit status 2:
 - a name with more than one `.`, such as `a.b.c`, and the FQDN that `sind get nodes` prints, `worker-0.dev.sind.sind`: use `worker-0.dev`. The node commands act in the realm of `--realm`, so they take no realm in the name
 - names that differ only in the zero padding of their cluster, which a node set takes for one node: `worker-0.dev1,worker-0.dev01`
 
+An error about a name quotes the part of the argument that named it, as you typed it: `sind power on 'Worker-[0-1]'` fails with `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`.
+
 ## Commands that accept node sets
 
 | Command | Accepts node sets |
@@ -106,3 +108,6 @@ sind rejects these before it acts on any node, with exit status 2:
 | `sind delete worker` | Yes — one or more nodes |
 | `sind ssh` | No — exactly one node |
 | `sind logs` | No — exactly one node |
+| `sind get node` | No — exactly one node |
+
+The commands that take one node fail alike for a node set of more than one: `sind logs 'worker-[0-1]'` fails with `logs requires exactly one node, got 2`.

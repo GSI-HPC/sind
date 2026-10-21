@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -12,6 +13,16 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/cobra"
 )
+
+// noArgs is the argument check of a command that takes no argument. It
+// says so in the words of cobra's other arity checks, where cobra.NoArgs
+// reports the first argument as an unknown command.
+func noArgs(_ *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("accepts no arguments, received %d", len(args))
+	}
+	return nil
+}
 
 // optionalCluster is the argument check of a command whose only, optional
 // argument is a cluster name.
@@ -23,6 +34,40 @@ func optionalCluster(cmd *cobra.Command, args []string) error {
 		return config.CheckName("cluster", args[0])
 	}
 	return nil
+}
+
+// defaultClusterHelp is the line of the Long of a command that names the
+// optional cluster argument arg.
+func defaultClusterHelp(arg string) string {
+	return arg + ` defaults to "` + config.DefaultClusterName + `".`
+}
+
+// nodesHelp describes the NODES argument of the commands that take node
+// sets, power and delete worker.
+const nodesHelp = `NODES is one or more node arguments: a node (worker-0), a node of a cluster
+(worker-0.dev) or a node set (worker-[0-3], worker-[0-3].dev). The cluster
+defaults to "default". Quote a node set from the shell, which would
+otherwise expand worker-[0-3] to the files in the working directory that
+match it.`
+
+// nodeHelp describes the NODE argument of the commands that act on one
+// node, ssh, logs and get node.
+const nodeHelp = `NODE is a node (worker-0) or a node of a cluster (worker-0.dev). The
+cluster defaults to "default".`
+
+// nodesExample returns the Example of a command that takes node sets: a
+// quoted node set, and node, a node of another cluster.
+func nodesExample(command, node string) string {
+	return "  " + command + " 'worker-[0-3]'\n  " + command + " " + node
+}
+
+// clusterArg returns the cluster named by the argument of a command that
+// optionalCluster checks, the default cluster without one.
+func clusterArg(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return config.DefaultClusterName
 }
 
 // nodeTarget is a resolved node with its short name and cluster.
@@ -54,21 +99,21 @@ func (noGroups) All(string) (string, error)             { return "", errNoGroups
 func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	set, err := nodeset.ParseWith(expr, noGroups{})
 	if err != nil {
-		return nil, usagef("expanding nodes: %w", err)
+		return nil, argsErrorf("expanding nodes: %w", err)
 	}
 	if first, second, found := paddingClash(expr); found {
-		return nil, usagef("expanding nodes: %s and %s differ only in zero padding, so a node set takes them for one node, "+
+		return nil, argsErrorf("expanding nodes: %s and %s differ only in zero padding, so a node set takes them for one node, "+
 			"but they are in two clusters, %s and %s; name the nodes of each cluster in a command of its own",
 			first, second, clusterOf(first), clusterOf(second))
 	}
 	names := set.Expand()
 	if len(names) == 0 {
-		return nil, usagef("expanding nodes: %q names no node", expr)
+		return nil, argsErrorf("expanding nodes: %q names no node", expr)
 	}
 
 	targets := make([]nodeTarget, 0, len(names))
 	for _, name := range names {
-		t, err := parseNodeName(name)
+		t, err := parseNodeName(name, typedTerm(expr, name))
 		if err != nil {
 			return nil, err
 		}
@@ -77,29 +122,60 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	return targets, nil
 }
 
+// parseOneNode parses the node argument of a command that acts on one node,
+// such as ssh, logs and get node, named command in the error: a node set
+// that names any other number of nodes is a usage error.
+func parseOneNode(command, arg string) (nodeTarget, error) {
+	targets, err := parseNodeArgs(arg)
+	if err != nil {
+		return nodeTarget{}, err
+	}
+	if len(targets) != 1 {
+		return nodeTarget{}, argsErrorf("%s requires exactly one node, got %d", command, len(targets))
+	}
+	return targets[0], nil
+}
+
+// typedTerm returns the term of the node set expression expr that names
+// name, as the user typed it, such as worker-[0-1].dev for worker-0.dev,
+// for the errors about name. Without one, it returns name.
+func typedTerm(expr, name string) string {
+	for _, term := range nodeTerms(expr) {
+		if set, err := nodeset.Parse(term); err == nil && slices.Contains(set.Expand(), name) {
+			return term
+		}
+	}
+	return name
+}
+
 // parseNodeName splits one node name into <shortName>.<cluster>, the cluster
 // defaulting to "default", and checks both parts. A name with more dots is
 // not NODE[.CLUSTER]: the FQDN that get nodes prints is NODE.CLUSTER.REALM.sind,
 // which the node commands do not take, as they act in the realm of --realm.
-func parseNodeName(name string) (nodeTarget, error) {
+// The errors quote typed, the term of the node argument that named name.
+func parseNodeName(name, typed string) (nodeTarget, error) {
 	t := nodeTarget{ShortName: name, Cluster: clusterOf(name)}
 	if i := strings.LastIndex(name, "."); i >= 0 {
 		t.ShortName = name[:i]
 	}
 	if t.ShortName == "" || t.Cluster == "" {
-		return nodeTarget{}, usagef("invalid node name %q", name)
+		return nodeTarget{}, argsErrorf("invalid node name %q", typed)
 	}
 	if strings.Contains(t.ShortName, ".") {
 		if strings.HasSuffix(name, "."+cluster.DNSSuffix) {
-			return nodeTarget{}, usagef("use NODE[.CLUSTER], not the FQDN %q", name)
+			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", typed)
 		}
-		return nodeTarget{}, usagef("invalid node name %q: want NODE[.CLUSTER]", name)
+		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", typed)
 	}
 	if err := config.CheckName("node", t.ShortName); err != nil {
-		return nodeTarget{}, usage(err)
+		if t.ShortName == typed {
+			return nodeTarget{}, argsError(err)
+		}
+		// The short name of a name with a cluster, or of a node set.
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, config.CheckName("short", t.ShortName))
 	}
 	if err := config.CheckName("cluster", t.Cluster); err != nil {
-		return nodeTarget{}, usagef("invalid node name %q: %w", name, err)
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, err)
 	}
 	return t, nil
 }
@@ -131,7 +207,7 @@ func paddingClash(expr string) (first, second string, found bool) {
 	}) {
 		return "", "", false
 	}
-	seen := make(map[string]string)
+	seen := nodeset.New()
 	for _, term := range terms {
 		set, err := nodeset.Parse(term)
 		if err != nil {
@@ -140,11 +216,10 @@ func paddingClash(expr string) (first, second string, found bool) {
 			continue
 		}
 		for _, name := range set.Expand() {
-			key := withoutPadding(name)
-			prev, ok := seen[key]
+			prev, ok := seen.Canonical(name)
 			switch {
 			case !ok:
-				seen[key] = name
+				_ = seen.Add(name) // a name Expand returned parses
 			case clusterOf(prev) != clusterOf(name):
 				return prev, name, true
 			}
@@ -178,31 +253,6 @@ func nodeTerms(expr string) []string {
 	}
 	end(len(expr))
 	return terms
-}
-
-// withoutPadding returns name with the leading zeros of each of its
-// numbers taken off, the form go-nodeset compares names in: worker-01.dev02
-// is worker-1.dev2.
-func withoutPadding(name string) string {
-	var b strings.Builder
-	for i := 0; i < len(name); {
-		j := i
-		for j < len(name) && name[j] >= '0' && name[j] <= '9' {
-			j++
-		}
-		if j == i {
-			b.WriteByte(name[i])
-			i++
-			continue
-		}
-		digits := strings.TrimLeft(name[i:j], "0")
-		if digits == "" {
-			digits = "0"
-		}
-		b.WriteString(digits)
-		i = j
-	}
-	return b.String()
 }
 
 // clusterNodes is the short names of the targets in one cluster.

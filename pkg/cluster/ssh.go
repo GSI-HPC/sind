@@ -37,14 +37,9 @@ func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string
 // does not know which controller is in control, so the running one is
 // picked, preferring "controller".
 func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName string) (target, workDir string, err error) {
-	entries, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	entries, err := existingClusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return "", "", fmt.Errorf("listing containers: %w", err)
-	}
-	if len(entries) == 0 {
-		return "", "", clusterNotFound(ctx, client, realm, clusterName)
+		return "", "", err
 	}
 
 	target, node, err := enterTarget(ctx, client, realm, clusterName, entries)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -69,30 +68,19 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 	}
 
 	services := nodeServices(role, info.Labels)
-
-	// If container is not running, skip all service checks.
-	if info.Status != docker.StateRunning {
-		for _, svc := range services {
-			health.Services[svc] = false
+	// A stopped container or a failed probe leaves snap nil: every
+	// service reads unhealthy. One fused readiness exec per node (plus
+	// scontrol ping for controllers) instead of serial docker execs.
+	var snap map[probe.Service]bool
+	if info.Status == docker.StateRunning {
+		var err error
+		if snap, err = probe.Snapshot(ctx, client, info.Name, services); err != nil {
+			sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
 		}
-		return health
 	}
-
-	// One fused readiness exec per node (plus scontrol ping for
-	// controllers) instead of three or four serial docker execs.
-	snap, err := probe.Snapshot(ctx, client, info.Name, services)
-	if err != nil {
-		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
-		for _, svc := range services {
-			health.Services[svc] = false
-		}
-		return health
-	}
-
 	for _, svc := range services {
 		health.Services[svc] = snap[svc]
 	}
-
 	return health
 }
 
@@ -232,19 +220,13 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	// Primary/backup controller pairs share the slurmctld state volume.
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
-	for _, c := range containers {
-		if c.Name == backup {
-			mounts = append(mounts, MountPoint{Path: slurm.StateSaveLocation, Source: string(VolumeName(realm, clusterName, VolumeState)), Type: config.StorageVolume})
-			break
-		}
+	if slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool { return c.Name == backup }) {
+		mounts = append(mounts, MountPoint{Path: slurm.StateSaveLocation, Source: string(VolumeName(realm, clusterName, VolumeState)), Type: config.StorageVolume})
 	}
 
 	// Clusters with users mount the home volume.
-	for _, c := range containers {
-		if c.Labels[LabelUsers] != "" {
-			mounts = append(mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume})
-			break
-		}
+	if slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool { return c.Labels[LabelUsers] != "" }) {
+		mounts = append(mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume})
 	}
 
 	// Check existence of Docker volumes, with one listing for all of them.
@@ -352,12 +334,9 @@ type Status struct {
 // GetStatus returns the full status of a cluster, aggregating node, network,
 // and volume health information.
 func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*Status, error) {
-	// List all containers in this cluster.
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	containers, err := clusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
+		return nil, err
 	}
 
 	if err := checkClusterExists(ctx, client, realm, clusterName, containers); err != nil {
@@ -368,19 +347,16 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	// per-node probe loop below has status + IP without additional round
 	// trips. One docker CLI fork instead of one per node.
 	infoByName := make(map[docker.ContainerName]*docker.ContainerInfo, len(containers))
-	var infos []*docker.ContainerInfo
-	if len(containers) > 0 {
-		names := make([]docker.ContainerName, len(containers))
-		for i, c := range containers {
-			names[i] = c.Name
-		}
-		infos, err = client.InspectContainers(ctx, names...)
-		if err != nil {
-			return nil, fmt.Errorf("inspecting cluster containers: %w", err)
-		}
-		for _, info := range infos {
-			infoByName[info.Name] = info
-		}
+	names := make([]docker.ContainerName, len(containers))
+	for i, c := range containers {
+		names[i] = c.Name
+	}
+	infos, err := client.InspectContainers(ctx, names...)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting cluster containers: %w", err)
+	}
+	for _, info := range infos {
+		infoByName[info.Name] = info
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
@@ -428,9 +404,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	// synchronisation barrier.
 	_ = g.Wait()
 
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
-	})
+	slices.SortFunc(nodes, func(a, b *NodeStatus) int { return strings.Compare(nodeStatusOrder(a), nodeStatusOrder(b)) })
 
 	// sind cannot tell which controller of an unmanaged pair is in control.
 	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok && clusterManaged(containers, realm, clusterName) {
@@ -468,7 +442,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 // first).
 func nodeStatusOrder(n *NodeStatus) string {
 	shortName, _, _ := strings.Cut(n.Name, ".")
-	return rolePrefix(n.Role) + naturalSortKey(shortName)
+	return nodeOrder(n.Role, shortName)
 }
 
 // nodeServices returns the services checked on a node, from its labels:

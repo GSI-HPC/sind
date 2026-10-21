@@ -15,7 +15,7 @@ cmd/sind/          CLI commands (cobra)
   ├── context.go   Dependency injection via context
   ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
-  ├── lock.go      Realm lock for mutating commands (pkg/state)
+  ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
@@ -34,10 +34,12 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
 
+internal/atomicfile/ Replaces a file in one step, through a temporary file and a rename (editor configurations, the MCP stream's token)
+
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
 internal/testutil/ Shared test helpers
-  ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T]
+  ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE), TarModes, WithoutCalls
   ├── client.go    NewClient, Realm (unit test variants)
   └── client_integration.go NewClient, Realm (integration test variants)
 
@@ -49,7 +51,7 @@ pkg/cmdexec/       Command executor abstraction
   └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper
-  ├── client.go    Client type, run/exists helpers, each docker command a hidden progress call
+  ├── client.go    Client type, run/do/output/exists helpers, each docker command a hidden progress call
   ├── container.go Container operations
   ├── network.go   Network operations
   ├── volume.go    Volume operations
@@ -101,7 +103,6 @@ pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
                    configuration, Alloy config generation, dashboards
 pkg/probe/         Node readiness probes
-pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
                    discovery, munge key, slurm.key and jwt_hs256.key generation, sacctmgr
                    account commands
@@ -123,7 +124,6 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                      → pkg/cmdexec
                                      → pkg/config
                                      → pkg/log
-                                     → pkg/retry
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
                                      → pkg/log
@@ -132,12 +132,10 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                            → pkg/log
                                            → pkg/mesh
                                            → pkg/probe
-                                           → pkg/retry
                        → pkg/probe   → pkg/docker
                                      → pkg/config
                                      → pkg/log
                                      → pkg/monitor
-                       → pkg/retry
                        → pkg/slurm   → pkg/docker
                                      → pkg/config
                        → pkg/ssh     → pkg/docker
@@ -153,7 +151,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
 
 `cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
 The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
@@ -184,7 +182,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 ## Adding a Docker operation
 
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
-2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both report the command as a hidden progress call named after its subcommand, and both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
+2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output; `c.do()` runs a command for its effect alone and `c.output()` returns its stdout. They all report the command as a hidden progress call named after its subcommand, and each waits for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
 4. **Write unit tests** using `mock.Executor`
 

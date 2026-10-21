@@ -64,7 +64,7 @@ sind uses a minimal set of dependencies:
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
 | `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
-| `sigs.k8s.io/yaml` | YAML configuration parsing |
+| `go.yaml.in/yaml/v3` | YAML configuration parsing (YAML 1.2) |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
@@ -72,6 +72,7 @@ sind uses a minimal set of dependencies:
 | `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
+| `golang.org/x/crypto` | The OpenSSH encoding of the SSH relay's ed25519 keypair (`ssh`) |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
 | `github.com/stretchr/testify` | Test assertions (test only) |

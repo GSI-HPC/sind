@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -35,35 +36,6 @@ func powerContainers() string {
 		testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker"},
 	)
-}
-
-// --- PowerShutdown ---
-
-func TestPower_Shutdown(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "stop" {
-			return mock.Result{}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
-	client := docker.NewClient(&m)
-
-	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
-
-	require.NoError(t, err)
-
-	// Verify docker stop was called for each node.
-	var stops []string
-	for _, c := range m.Calls {
-		if c.Args[0] == "stop" {
-			stops = append(stops, c.Args[1])
-		}
-	}
-	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-worker-1"}, stops)
 }
 
 func TestPower_Shutdown_NodeNotFound(t *testing.T) {
@@ -113,44 +85,6 @@ func TestCheckNode(t *testing.T) {
 	require.ErrorIs(t, err, ErrClusterNotFound)
 }
 
-func TestPower_Shutdown_StopError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "stop" {
-			return mock.Result{Err: fmt.Errorf("container already stopped")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "stopping")
-}
-
-func TestPower_Shutdown_EmptyNodes(t *testing.T) {
-	var m mock.Executor
-	client := docker.NewClient(&m)
-
-	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
-}
-
-func TestPower_Shutdown_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
-
-	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
 // TestPower_LabelFilter asserts resolveTargets scopes the container list by
 // both realm and cluster labels so parallel realms with identically-named
 // clusters do not see each other's nodes.
@@ -173,70 +107,56 @@ func TestPower_LabelFilter(t *testing.T) {
 	assert.Contains(t, psArgs, "label=sind.cluster=dev")
 }
 
-// --- PowerCut ---
+// TestPower_ContainerOps covers the power commands that run one docker
+// command on each node.
+func TestPower_ContainerOps(t *testing.T) {
+	for _, op := range []struct {
+		name, docker, verb string
+		run                func(context.Context, *docker.Client, string, string, []string) error
+	}{
+		{"shutdown", "stop", "stopping", PowerShutdown},
+		{"cut", "kill", "killing", PowerCut},
+		{"freeze", "pause", "pausing", PowerFreeze},
+		{"unfreeze", "unpause", "unpausing", PowerUnfreeze},
+	} {
+		t.Run(op.name, func(t *testing.T) {
+			run := func(onCall func([]string, string) mock.Result, nodes ...string) (*mock.Executor, error) {
+				m := &mock.Executor{OnCall: onCall}
+				return m, op.run(t.Context(), docker.NewClient(m), mesh.DefaultRealm, "dev", nodes)
+			}
+			opResult := func(r mock.Result) func([]string, string) mock.Result {
+				return func(args []string, _ string) mock.Result {
+					switch args[0] {
+					case "ps":
+						return mock.Result{Stdout: powerContainers()}
+					case op.docker:
+						return r
+					}
+					return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+				}
+			}
 
-func TestPower_Cut(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "kill" {
-			return mock.Result{}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+			m, err := run(opResult(mock.Result{}), "worker-0", "controller")
+			require.NoError(t, err)
+			var done []string
+			for _, c := range m.Calls {
+				if c.Args[0] == op.docker {
+					done = append(done, c.Args[1])
+				}
+			}
+			assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-controller"}, done)
+
+			_, err = run(opResult(mock.Result{Err: fmt.Errorf("docker failed")}), "worker-0")
+			assert.EqualError(t, err, op.verb+" sind-dev-worker-0: docker failed")
+
+			_, err = run(listErrorMock().OnCall, "worker-0")
+			assert.ErrorContains(t, err, "listing")
+
+			m, err = run(nil)
+			require.NoError(t, err)
+			assert.Empty(t, m.Calls)
+		})
 	}
-	client := docker.NewClient(&m)
-
-	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "controller"})
-
-	require.NoError(t, err)
-
-	var kills []string
-	for _, c := range m.Calls {
-		if c.Args[0] == "kill" {
-			kills = append(kills, c.Args[1])
-		}
-	}
-	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-controller"}, kills)
-}
-
-func TestPower_Cut_EmptyNodes(t *testing.T) {
-	var m mock.Executor
-	client := docker.NewClient(&m)
-
-	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
-}
-
-func TestPower_Cut_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
-
-	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
-func TestPower_Cut_KillError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "kill" {
-			return mock.Result{Err: fmt.Errorf("container not running")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "killing")
 }
 
 // --- PowerOn ---
@@ -459,8 +379,7 @@ func TestPower_On_MeshErrors(t *testing.T) {
 			client := docker.NewClient(&m)
 
 			err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 		})
 	}
 }
@@ -480,8 +399,7 @@ func TestPower_On_ListError(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
+	require.ErrorContains(t, err, "listing")
 }
 
 // TestPower_On_StartError covers one node that does not start: the other
@@ -498,8 +416,7 @@ func TestPower_On_StartError(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting sind-dev-worker-0")
+	require.ErrorContains(t, err, "starting sind-dev-worker-0")
 	assert.NotContains(t, err.Error(), "worker-1")
 	assert.Len(t, m.Calls, 1+2+2, "ps, two mesh inspects, both starts")
 }
@@ -519,8 +436,7 @@ func TestPower_On_NothingStarted(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting sind-dev-worker-0")
+	require.ErrorContains(t, err, "starting sind-dev-worker-0")
 	assert.Empty(t, written)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "cp", c.Args[0], "no Corefile read")
@@ -541,254 +457,55 @@ func powerOps(m *mock.Executor) []string {
 	return ops
 }
 
-func TestPower_Reboot(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, nil)
-	client := docker.NewClient(&m)
+// TestPower_Restart covers PowerReboot and PowerCycle, which stop or kill
+// their nodes and then start them.
+func TestPower_Restart(t *testing.T) {
+	for _, op := range []struct {
+		name, docker, verb string
+		run                func(context.Context, *docker.Client, *mesh.Manager, string, []string) error
+	}{
+		{"reboot", "stop", "stopping", PowerReboot},
+		{"cycle", "kill", "killing", PowerCycle},
+	} {
+		t.Run(op.name, func(t *testing.T) {
+			// run restarts nodes, with the calls for which fail is true failing.
+			run := func(fail func(args []string) bool, nodes ...string) (*mock.Executor, error) {
+				m := &mock.Executor{OnCall: powerOnCall(t, func(args []string, _ string) (mock.Result, bool) {
+					return mock.Result{Err: errors.New(args[0] + " failed")}, fail(args)
+				})}
+				client := docker.NewClient(m)
+				return m, op.run(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", nodes)
+			}
 
-	err := PowerReboot(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"})
+			// Every node goes down before any comes back up.
+			m, err := run(func([]string) bool { return false }, "worker-0", "worker-1")
+			require.NoError(t, err)
+			ops := powerOps(m)
+			require.Len(t, ops, 4)
+			assert.ElementsMatch(t, []string{op.docker + "=sind-dev-worker-0", op.docker + "=sind-dev-worker-1"}, ops[:2])
+			assert.ElementsMatch(t, []string{"start=sind-dev-worker-0", "start=sind-dev-worker-1"}, ops[2:])
 
-	require.NoError(t, err)
+			client := docker.NewClient(listErrorMock())
+			err = op.run(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
+			assert.ErrorContains(t, err, "listing")
 
-	// Every node goes down before any comes back up.
-	ops := powerOps(&m)
-	require.Len(t, ops, 4)
-	assert.ElementsMatch(t, []string{"stop=sind-dev-worker-0", "stop=sind-dev-worker-1"}, ops[:2])
-	assert.ElementsMatch(t, []string{"start=sind-dev-worker-0", "start=sind-dev-worker-1"}, ops[2:])
-}
+			// A node that does not go down is not started, the other node
+			// restarts, and the error names the failing node.
+			m, err = run(func(args []string) bool { return args[0] == op.docker && args[1] == "sind-dev-worker-0" }, "worker-0", "worker-1")
+			assert.ErrorContains(t, err, op.verb+" sind-dev-worker-0: "+op.docker+" failed")
+			ops = powerOps(m)
+			assert.Contains(t, ops, "start=sind-dev-worker-1")
+			assert.NotContains(t, ops, "start=sind-dev-worker-0")
 
-func TestPower_Reboot_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
+			// Nodes that all fail to go down: no start, and no mesh call.
+			m, err = run(func(args []string) bool { return args[0] == op.docker }, "worker-0")
+			require.Error(t, err)
+			assert.Len(t, m.Calls, 2, "ps and "+op.docker)
 
-	err := PowerReboot(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
-// TestPower_Reboot_StopError covers a node that does not stop: it is not
-// started, the other node reboots, and the error names the failing node.
-func TestPower_Reboot_StopError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "stop" && args[1] == "sind-dev-worker-0" {
-			return mock.Result{Err: fmt.Errorf("stop failed")}, true
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-
-	err := PowerReboot(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "stopping sind-dev-worker-0")
-	ops := powerOps(&m)
-	assert.Contains(t, ops, "start=sind-dev-worker-1")
-	assert.NotContains(t, ops, "start=sind-dev-worker-0")
-}
-
-func TestPower_Reboot_StartError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "start" {
-			return mock.Result{Err: fmt.Errorf("start failed")}, true
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-
-	err := PowerReboot(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting")
-}
-
-// TestPower_Reboot_NothingStopped covers nodes that all fail to stop: no
-// start, and no mesh call.
-func TestPower_Reboot_NothingStopped(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "stop" {
-			return mock.Result{Err: fmt.Errorf("stop failed")}, true
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-
-	err := PowerReboot(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Len(t, m.Calls, 2, "ps and stop")
-}
-
-// --- PowerCycle ---
-
-func TestPower_Cycle(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, nil)
-	client := docker.NewClient(&m)
-
-	err := PowerCycle(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"})
-
-	require.NoError(t, err)
-
-	ops := powerOps(&m)
-	require.Len(t, ops, 4)
-	assert.ElementsMatch(t, []string{"kill=sind-dev-worker-0", "kill=sind-dev-worker-1"}, ops[:2])
-	assert.ElementsMatch(t, []string{"start=sind-dev-worker-0", "start=sind-dev-worker-1"}, ops[2:])
-}
-
-func TestPower_Cycle_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
-
-	err := PowerCycle(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
-func TestPower_Cycle_KillError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "kill" {
-			return mock.Result{Err: fmt.Errorf("kill failed")}, true
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-
-	err := PowerCycle(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "killing")
-}
-
-func TestPower_Cycle_StartError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = powerOnCall(t, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "start" {
-			return mock.Result{Err: fmt.Errorf("start failed")}, true
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-
-	err := PowerCycle(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting")
-}
-
-// --- PowerFreeze ---
-
-func TestPower_Freeze(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "pause" {
-			return mock.Result{}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+			_, err = run(func(args []string) bool { return args[0] == "start" }, "worker-0")
+			assert.ErrorContains(t, err, "starting")
+		})
 	}
-	client := docker.NewClient(&m)
-
-	err := PowerFreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
-
-	require.NoError(t, err)
-
-	var pauses []string
-	for _, c := range m.Calls {
-		if c.Args[0] == "pause" {
-			pauses = append(pauses, c.Args[1])
-		}
-	}
-	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-worker-1"}, pauses)
-}
-
-func TestPower_Freeze_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
-
-	err := PowerFreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
-func TestPower_Freeze_PauseError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "pause" {
-			return mock.Result{Err: fmt.Errorf("container is not running")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := PowerFreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pausing")
-}
-
-// --- PowerUnfreeze ---
-
-func TestPower_Unfreeze(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "unpause" {
-			return mock.Result{}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
-	client := docker.NewClient(&m)
-
-	err := PowerUnfreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.NoError(t, err)
-
-	var unpauses []string
-	for _, c := range m.Calls {
-		if c.Args[0] == "unpause" {
-			unpauses = append(unpauses, c.Args[1])
-		}
-	}
-	assert.Equal(t, []string{"sind-dev-worker-0"}, unpauses)
-}
-
-func TestPower_Unfreeze_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
-
-	err := PowerUnfreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
-func TestPower_Unfreeze_UnpauseError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: powerContainers()}
-		}
-		if args[0] == "unpause" {
-			return mock.Result{Err: fmt.Errorf("container is not paused")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := PowerUnfreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unpausing")
 }
 
 // --- Lifecycle ---

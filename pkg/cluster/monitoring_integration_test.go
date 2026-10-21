@@ -9,13 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
@@ -68,11 +66,7 @@ func TestMonitoring(t *testing.T) {
 	ctx := t.Context()
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-	version, err := slurm.DiscoverVersion(ctx, c, img)
+	version, err := slurm.DiscoverVersion(ctx, c, testutil.Image())
 	require.NoError(t, err)
 
 	name := "it-mon"
@@ -85,10 +79,7 @@ func TestMonitoring(t *testing.T) {
 	})
 	require.NoError(t, meshMgr.EnsureMesh(ctx))
 
-	cfg, err := config.Parse([]byte(fmt.Sprintf("kind: Cluster\nname: %s\nmonitoring: true\ndefaults:\n  image: %s\nnodes: [controller, db, worker]\n", name, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+	cfg := testConfig(t, name, "monitoring: true\nnodes: [controller, db, worker]\n")
 
 	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
 	if strings.HasPrefix(version, "25.") {

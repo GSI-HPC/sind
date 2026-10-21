@@ -115,8 +115,7 @@ func TestContainerExecAndFiles(t *testing.T) {
 		rec.AddResult("abc123\n", "", nil)                 // run
 		rec.AddResult("hello\n", "", nil)                  // exec echo
 		rec.AddResult("", "", nil)                         // write
-		rec.AddResult("", "", nil)                         // append
-		rec.AddResult("line1\nline2\n", "", nil)           // read
+		rec.AddResult("line1\n", "", nil)                  // read
 		rec.AddResult("", "", nil)                         // replace
 		rec.AddResult("", "", errors.New("exit status 1")) // short replace
 		rec.AddResult("new\n", "", nil)                    // read
@@ -140,16 +139,13 @@ func TestContainerExecAndFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", stdout)
 
-	// Write + Append + Read.
+	// Write + Read.
 	err = c.WriteFile(ctx, name, "/tmp/test.txt", "line1\n")
-	require.NoError(t, err)
-
-	err = c.AppendFile(ctx, name, "/tmp/test.txt", "line2\n")
 	require.NoError(t, err)
 
 	content, err := c.ReadFile(ctx, name, "/tmp/test.txt")
 	require.NoError(t, err)
-	assert.Equal(t, "line1\nline2\n", content)
+	assert.Equal(t, "line1\n", content)
 
 	// Replace, and a replace whose input ends early, as when the docker
 	// CLI dies mid-write: the file and its directory stay as they were.
@@ -263,153 +259,6 @@ func TestRunContainer_Error(t *testing.T) {
 	assert.Empty(t, id)
 }
 
-func TestStartContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testContainerName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.StartContainer(t.Context(), testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"start", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestStartContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.StartContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
-}
-
-func TestStopContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testContainerName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.StopContainer(t.Context(), testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"stop", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestStopContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.StopContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
-}
-
-func TestRemoveContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testContainerName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.RemoveContainer(t.Context(), testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"rm", "-f", "-v", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestRemoveContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.RemoveContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
-}
-
-func TestPauseContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testContainerName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.PauseContainer(t.Context(), testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"pause", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestPauseContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: container is not running\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.PauseContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
-}
-
-func TestUnpauseContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testContainerName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.UnpauseContainer(t.Context(), testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"unpause", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestUnpauseContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: container is not paused\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.UnpauseContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
-}
-
-func TestKillContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testContainerName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.KillContainer(t.Context(), testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"kill", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestKillContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.KillContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
-}
-
-func TestSignalContainer(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.SignalContainer(t.Context(), testContainerName, "HUP")
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"kill", "-s", "HUP", string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestSignalContainer_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.SignalContainer(t.Context(), testContainerName, "HUP")
-	assert.Error(t, err)
-}
-
 const inspectJSON = `[{
   "Id": "94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca",
   "Name": "/sind-dev-controller",
@@ -515,9 +364,8 @@ func TestInspectContainer_InvalidJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	info, err := c.InspectContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "parsing inspect output")
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "parsing inspect output")
 }
 
 func TestInspectContainer_EmptyResult(t *testing.T) {
@@ -526,9 +374,8 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	c := NewClient(&m)
 
 	info, err := c.InspectContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "no results")
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "no results")
 }
 
 func TestInspectContainers_Multiple(t *testing.T) {
@@ -762,9 +609,8 @@ func TestListContainers_InvalidJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	entries, err := c.ListContainers(t.Context())
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "parsing ps output")
 	assert.Nil(t, entries)
-	assert.Contains(t, err.Error(), "parsing ps output")
 }
 
 func TestListContainers_Error(t *testing.T) {
@@ -837,8 +683,7 @@ func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
 			c := NewClient(&m)
 
 			_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), strings.TrimSpace(stderr))
+			require.ErrorContains(t, err, strings.TrimSpace(stderr))
 		})
 	}
 }
@@ -861,8 +706,7 @@ func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "true")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "daemon")
+	require.ErrorContains(t, err, "daemon")
 }
 
 func TestExecWithStdin(t *testing.T) {
@@ -952,28 +796,6 @@ func TestReplaceFile_Error(t *testing.T) {
 	c := NewClient(&m)
 
 	err := c.ReplaceFile(t.Context(), testContainerName, "/tmp/out", "data")
-	assert.Error(t, err)
-}
-
-func TestAppendFile(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.AppendFile(t.Context(), testContainerName, "/tmp/log", "new line\n")
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat >> /tmp/log"}, m.Calls[0].Args)
-	assert.Equal(t, "new line\n", m.Calls[0].Stdin)
-}
-
-func TestAppendFile_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.AppendFile(t.Context(), testContainerName, "/tmp/log", "data")
 	assert.Error(t, err)
 }
 
@@ -1112,8 +934,7 @@ func TestBuildFilesTar_DirHeaderError(t *testing.T) {
 		"sub/test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing tar header for sub/")
+	require.ErrorContains(t, err, "writing tar header for sub/")
 }
 
 func TestBuildFilesTar_HeaderError(t *testing.T) {
@@ -1123,8 +944,7 @@ func TestBuildFilesTar_HeaderError(t *testing.T) {
 		"test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing tar header")
+	require.ErrorContains(t, err, "writing tar header")
 }
 
 func TestBuildFilesTar_ContentError(t *testing.T) {
@@ -1134,8 +954,7 @@ func TestBuildFilesTar_ContentError(t *testing.T) {
 		"test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing tar content")
+	require.ErrorContains(t, err, "writing tar content")
 }
 
 func TestBuildFilesTar_CloseError(t *testing.T) {
@@ -1145,8 +964,7 @@ func TestBuildFilesTar_CloseError(t *testing.T) {
 		"test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "closing tar writer")
+	require.ErrorContains(t, err, "closing tar writer")
 }
 
 // failWriter is an io.Writer that fails after a configurable number of bytes.
@@ -1240,9 +1058,8 @@ func TestCopyFromContainer_InvalidTar(t *testing.T) {
 	c := NewClient(&m)
 
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "reading tar output")
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "reading tar output")
 }
 
 func TestCopyFromContainer_TruncatedTar(t *testing.T) {
@@ -1259,9 +1076,8 @@ func TestCopyFromContainer_TruncatedTar(t *testing.T) {
 	c := NewClient(&m)
 
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "reading file content")
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "reading file content")
 }
 
 func TestCopyFromContainer_EmptyTar(t *testing.T) {
@@ -1275,7 +1091,6 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	c := NewClient(&m)
 
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/nonexistent")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "file not found in tar output")
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "file not found in tar output")
 }

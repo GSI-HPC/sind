@@ -4,11 +4,9 @@ package slurm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -24,9 +22,6 @@ const (
 // slurmd serve the HTTP endpoints the monitoring stack uses
 // (/metrics/*, /livez, /readyz), in the form major.minor.
 const MonitoringMinVersion = "26.05"
-
-// monitoringMinLine is MonitoringMinVersion as numbers.
-var monitoringMinLine = [2]int{26, 5}
 
 // probeScript lists, for each daemon given after the plugin directory and
 // the MariaDB switch, the version it reports, then the Slurm plugin
@@ -230,7 +225,7 @@ func (i *ImageInfo) MonitoringProblems(req ProbeRequest) []string {
 	if len(problems) > 0 {
 		return problems
 	}
-	if len(req.Daemons) > 0 && !versionAtLeast(i.Version, monitoringMinLine) {
+	if len(req.Daemons) > 0 && !versionAtLeast(i.Version, MonitoringMinVersion) {
 		problems = append(problems, fmt.Sprintf("Slurm %s is older than %s, which monitoring needs", i.Version, MonitoringMinVersion))
 		return problems
 	}
@@ -271,31 +266,14 @@ func (i *ImageInfo) MariaDBWarning() string {
 	return "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file"
 }
 
-// errUnparsableVersion is releaseLine's error for a version that is not of
-// the form major.minor[.patch].
-var errUnparsableVersion = errors.New("unparsable Slurm version")
-
 // versionAtLeast reports whether a Slurm version (25.11.8, 26.05.0-0rc1) is
-// of the release line oldest (major, minor) or a later one. Pre-releases
+// of the release line oldest (major.minor) or a later one. Pre-releases
 // of a line count as the line.
-func versionAtLeast(version string, oldest [2]int) bool {
-	v, err := releaseLine(version)
-	if err != nil {
+func versionAtLeast(version, oldest string) bool {
+	var v, o [2]int
+	if _, err := fmt.Sscanf(version, "%d.%d", &v[0], &v[1]); err != nil {
 		return false
 	}
-	return v[0] > oldest[0] || v[0] == oldest[0] && v[1] >= oldest[1]
-}
-
-// releaseLine returns the major and minor number of a Slurm version.
-func releaseLine(version string) ([2]int, error) {
-	parts := strings.SplitN(version, ".", 3)
-	if len(parts) < 2 {
-		return [2]int{}, errUnparsableVersion
-	}
-	major, err1 := strconv.Atoi(parts[0])
-	minor, err2 := strconv.Atoi(parts[1])
-	if err1 != nil || err2 != nil {
-		return [2]int{}, errUnparsableVersion
-	}
-	return [2]int{major, minor}, nil
+	_, _ = fmt.Sscanf(oldest, "%d.%d", &o[0], &o[1])
+	return slices.Compare(v[:], o[:]) >= 0
 }

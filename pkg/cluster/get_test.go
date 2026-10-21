@@ -3,6 +3,7 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -86,72 +87,6 @@ func TestGetClusters(t *testing.T) {
 	assert.Equal(t, 2, clusters[1].Workers)
 }
 
-func TestGetClusters_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	assert.NotNil(t, clusters, "empty result must be [] not nil so json emits []")
-	assert.Empty(t, clusters)
-}
-
-func TestGetClusters_MixedStatus(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{
-			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=controller",
-		},
-		testutil.PsEntry{
-			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=worker",
-		},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	require.Len(t, clusters, 1)
-	// Mixed states result in mixed status.
-	assert.Equal(t, StateMixed, clusters[0].State)
-}
-
-func TestGetClusters_AllStopped(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{
-			ID: "a", Names: "sind-dev-controller", State: "exited", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=controller",
-		},
-		testutil.PsEntry{
-			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=worker",
-		},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	require.Len(t, clusters, 1)
-	assert.Equal(t, StateStopped, clusters[0].State)
-}
-
-func TestGetClusters_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
-
-	_, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
-}
-
 func TestGetClusters_LabelFilter(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
@@ -160,10 +95,7 @@ func TestGetClusters_LabelFilter(t *testing.T) {
 	_, _ = GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.Len(t, m.Calls, 1)
-	args := m.Calls[0].Args
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label="+LabelRealm+"="+mesh.DefaultRealm, args[filterIdx+1])
+	assert.Equal(t, []string{"label=" + LabelRealm + "=" + mesh.DefaultRealm}, testutil.ArgValues(m.Calls[0].Args, "--filter"))
 }
 
 func TestGetClusters_NoSlurmVersion(t *testing.T) {
@@ -223,10 +155,10 @@ func TestGetNodes(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}},
-		inspectEntry{Name: "sind-dev-worker-1", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.4"}},
-		inspectEntry{Name: "sind-dev-worker-0", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.3"}},
+	m.AddResult(inspectBatch(
+		statusInspectJSON(t, "sind-dev-controller", "running", "10.0.0.2", nil),
+		statusInspectJSON(t, "sind-dev-worker-1", "running", "10.0.0.4", nil),
+		statusInspectJSON(t, "sind-dev-worker-0", "running", "10.0.0.3", nil),
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -269,10 +201,10 @@ func TestGetNodes_WithStatus(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-worker-0", Status: "exited", Networks: net},
-		inspectEntry{Name: "sind-dev-worker-1", Status: "paused", Networks: net},
+	m.AddResult(inspectBatch(
+		inspectJSON(t, "sind-dev-controller", "running", net),
+		inspectJSON(t, "sind-dev-worker-0", "exited", net),
+		inspectJSON(t, "sind-dev-worker-1", "paused", net),
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -321,17 +253,6 @@ func TestGetNodes_NetworkError(t *testing.T) {
 	require.ErrorContains(t, err, "checking cluster network")
 }
 
-func TestGetNodes_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker ps failed"))
-	c := docker.NewClient(&m)
-
-	_, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
-}
-
 func TestGetNodes_LabelFilter(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(psLine("sind", "myCluster", "controller"), "", nil)
@@ -343,80 +264,6 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 	args := m.Calls[0].Args
 	assert.Contains(t, args, "label=sind.realm=sind")
 	assert.Contains(t, args, "label=sind.cluster=myCluster")
-}
-
-func TestGetNodes_SortOrder(t *testing.T) {
-	net := map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{
-			ID: "a", Names: "sind-dev-worker-0", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=worker",
-		},
-		testutil.PsEntry{
-			ID: "b", Names: "sind-dev-submitter", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=submitter",
-		},
-		testutil.PsEntry{
-			ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=controller",
-		},
-		testutil.PsEntry{
-			ID: "e", Names: "sind-dev-api", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=api",
-		},
-		testutil.PsEntry{
-			ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=db",
-		},
-	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-worker-0", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-submitter", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-api", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-db", Status: "running", Networks: net},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	require.Len(t, nodes, 5)
-	// Order: controller, db, api, submitter, worker
-	assert.Equal(t, config.RoleController, nodes[0].Role)
-	assert.Equal(t, config.RoleDB, nodes[1].Role)
-	assert.Equal(t, config.RoleAPI, nodes[2].Role)
-	assert.Equal(t, config.RoleSubmitter, nodes[3].Role)
-	assert.Equal(t, config.RoleWorker, nodes[4].Role)
-}
-
-func TestGetNodes_UnknownRole(t *testing.T) {
-	net := map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}
-	var m mock.Executor
-	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{
-			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=controller",
-		},
-		testutil.PsEntry{
-			ID: "b", Names: "sind-dev-mystery", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=mystery",
-		},
-	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-mystery", Status: "running", Networks: net},
-	), "", nil)
-	c := docker.NewClient(&m)
-
-	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	require.Len(t, nodes, 2)
-	// controller (prefix "0") sorts before unknown role (prefix "9").
-	assert.Equal(t, config.RoleController, nodes[0].Role)
-	assert.Equal(t, config.Role("mystery"), nodes[1].Role)
 }
 
 // TestGetNodes_InspectError verifies that a failed batched inspect degrades
@@ -456,9 +303,9 @@ func TestGetAllNodes(t *testing.T) {
 			Labels: "sind.cluster=prod,sind.role=controller",
 		},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}},
-		inspectEntry{Name: "sind-prod-controller", Status: "running", Networks: map[docker.NetworkName]string{"sind-prod-net": "10.1.0.2"}},
+	m.AddResult(inspectBatch(
+		statusInspectJSON(t, "sind-dev-controller", "running", "10.0.0.2", nil),
+		inspectJSON(t, "sind-prod-controller", "running", map[docker.NetworkName]string{"sind-prod-net": "10.1.0.2"}),
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -483,32 +330,40 @@ func TestGetAllNodes_SortOrder(t *testing.T) {
 			Labels: "sind.cluster=prod,sind.role=controller"},
 		testutil.PsEntry{ID: "e", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "f", Names: "sind-dev-mystery", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=mystery"},
+		testutil.PsEntry{ID: "g", Names: "sind-dev-submitter", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=submitter"},
+		testutil.PsEntry{ID: "h", Names: "sind-dev-api", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=api"},
+		testutil.PsEntry{ID: "i", Names: "sind-dev-db", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=db"},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-prod-worker-10", Status: "running"},
-		inspectEntry{Name: "sind-prod-worker-2", Status: "running"},
-		inspectEntry{Name: "sind-dev-worker-0", Status: "running"},
-		inspectEntry{Name: "sind-prod-controller", Status: "running"},
-		inspectEntry{Name: "sind-dev-controller", Status: "running"},
-	), "", nil)
+	m.AddResult("[]", "", nil) // inspect: IPs are not under test
 	c := docker.NewClient(&m)
 
 	nodes, err := GetAllNodes(t.Context(), c, mesh.DefaultRealm)
 	require.NoError(t, err)
-	require.Len(t, nodes, 5)
+	require.Len(t, nodes, 9)
 
-	// Expected order: dev cluster first (alphabetically), controllers before
-	// workers within a cluster, and worker-2 before worker-10 (natural order).
+	// Expected order: dev cluster first (alphabetically), within a cluster
+	// controller, db, api, submitter, worker, then unknown roles, and
+	// worker-2 before worker-10 (natural order). Each node has the role of
+	// its label, an unknown one too.
 	got := make([]string, len(nodes))
 	for i, n := range nodes {
-		got[i] = n.Container
+		got[i] = n.Container + " " + string(n.Role)
 	}
 	assert.Equal(t, []string{
-		"sind-dev-controller",
-		"sind-dev-worker-0",
-		"sind-prod-controller",
-		"sind-prod-worker-2",
-		"sind-prod-worker-10",
+		"sind-dev-controller controller",
+		"sind-dev-db db",
+		"sind-dev-api api",
+		"sind-dev-submitter submitter",
+		"sind-dev-worker-0 worker",
+		"sind-dev-mystery mystery",
+		"sind-prod-controller controller",
+		"sind-prod-worker-2 worker",
+		"sind-prod-worker-10 worker",
 	}, got)
 }
 
@@ -526,17 +381,6 @@ func TestGetAllNodes_OnlyOrphanContainers(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, nodes, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, nodes)
-}
-
-func TestGetAllNodes_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
-
-	_, err := GetAllNodes(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
 }
 
 // --- GetNodeNames ---
@@ -581,26 +425,21 @@ func TestGetNodeNames(t *testing.T) {
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.realm=sind"}, m.Calls[0].Args)
 }
 
-func TestGetNodeNames_Empty(t *testing.T) {
+func TestGetNodeNames_Roles(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-worker-0", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=submitter"},
+	), "", nil)
 
-	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+	names, err := GetNodeNames(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, config.RoleWorker, config.RoleSubmitter)
 
 	require.NoError(t, err)
-	assert.Empty(t, names)
-}
-
-func TestGetNodeNames_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
-
-	_, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	assert.Equal(t, []string{"submitter.dev", "worker-0.dev"}, names)
 }
 
 func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
@@ -681,14 +520,6 @@ func TestContainerStateToState(t *testing.T) {
 	}
 }
 
-func TestAggregateState_Empty(t *testing.T) {
-	assert.Equal(t, StateEmpty, aggregateState(nil))
-}
-
-func TestAggregateState_Single(t *testing.T) {
-	assert.Equal(t, StateRunning, aggregateState([]docker.ContainerState{docker.StateRunning}))
-}
-
 // --- GetNetworks ---
 
 type networkEntry struct {
@@ -766,29 +597,6 @@ func TestGetNetworks_InspectError(t *testing.T) {
 	assert.Equal(t, []*NetworkSummary{{Name: "sind-dev-net", Driver: "bridge"}}, networks)
 }
 
-func TestGetNetworks_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	assert.NotNil(t, networks, "empty result must be [] not nil so json emits []")
-	assert.Empty(t, networks)
-}
-
-func TestGetNetworks_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing networks")
-}
-
 // --- GetVolumes ---
 
 type volumeEntry struct {
@@ -817,29 +625,6 @@ func TestGetVolumes(t *testing.T) {
 	assert.Equal(t, "sind-dev-data", volumes[1].Name)
 	assert.Equal(t, "sind-dev-munge", volumes[2].Name)
 	assert.Equal(t, "sind-ssh-config", volumes[3].Name)
-}
-
-func TestGetVolumes_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	volumes, err := GetVolumes(t.Context(), c, mesh.DefaultRealm)
-
-	require.NoError(t, err)
-	assert.NotNil(t, volumes, "empty result must be [] not nil so json emits []")
-	assert.Empty(t, volumes)
-}
-
-func TestGetVolumes_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
-
-	_, err := GetVolumes(t.Context(), c, mesh.DefaultRealm)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing volumes")
 }
 
 // --- GetAuthKey ---
@@ -874,17 +659,6 @@ func TestGetAuthKey_NoContainers(t *testing.T) {
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
-func TestGetAuthKey_ListError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
-
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
-}
-
 func TestGetAuthKey_CopyError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
@@ -896,8 +670,7 @@ func TestGetAuthKey_CopyError(t *testing.T) {
 
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reading munge key")
+	require.ErrorContains(t, err, "reading munge key")
 }
 
 // --- GetRealms ---
@@ -934,18 +707,6 @@ func TestGetRealms(t *testing.T) {
 	assert.Equal(t, 2, realms[1].Clusters)
 }
 
-func TestGetRealms_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	realms, err := GetRealms(t.Context(), c)
-
-	require.NoError(t, err)
-	assert.NotNil(t, realms, "empty result must be [] not nil so json emits []")
-	assert.Empty(t, realms)
-}
-
 func TestGetRealms_LabelFilter(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
@@ -954,10 +715,7 @@ func TestGetRealms_LabelFilter(t *testing.T) {
 	_, _ = GetRealms(t.Context(), c)
 
 	require.Len(t, m.Calls, 1)
-	args := m.Calls[0].Args
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label="+LabelRealm, args[filterIdx+1])
+	assert.Equal(t, []string{"label=" + LabelRealm}, testutil.ArgValues(m.Calls[0].Args, "--filter"))
 }
 
 func TestGetRealms_SkipsEmptyRealmLabel(t *testing.T) {
@@ -981,13 +739,49 @@ func TestGetRealms_SkipsEmptyRealmLabel(t *testing.T) {
 	assert.Equal(t, "sind", realms[0].Name)
 }
 
-func TestGetRealms_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
+// TestGet_Listing checks that each Get fails with the error of its docker
+// listing, and that an empty listing gives [] rather than nil, so that
+// JSON emits [].
+func TestGet_Listing(t *testing.T) {
+	realm := mesh.DefaultRealm
+	tests := []struct {
+		name  string
+		get   func(context.Context, *docker.Client) (any, error)
+		want  string // error of a failed listing
+		empty bool   // whether an empty listing is a result
+	}{
+		{"GetClusters", func(ctx context.Context, c *docker.Client) (any, error) { return GetClusters(ctx, c, realm) }, "listing containers", true},
+		{"GetAllNodes", func(ctx context.Context, c *docker.Client) (any, error) { return GetAllNodes(ctx, c, realm) }, "listing containers", true},
+		{"GetNodeNames", func(ctx context.Context, c *docker.Client) (any, error) { return GetNodeNames(ctx, c, realm) }, "listing containers", true},
+		{"GetNetworks", func(ctx context.Context, c *docker.Client) (any, error) { return GetNetworks(ctx, c, realm) }, "listing networks", true},
+		{"GetVolumes", func(ctx context.Context, c *docker.Client) (any, error) { return GetVolumes(ctx, c, realm) }, "listing volumes", true},
+		{"GetRealms", func(ctx context.Context, c *docker.Client) (any, error) { return GetRealms(ctx, c) }, "listing containers", true},
+		{"GetNodes", func(ctx context.Context, c *docker.Client) (any, error) { return GetNodes(ctx, c, realm, "dev") }, "listing containers", false},
+		{"GetAuthKey", func(ctx context.Context, c *docker.Client) (any, error) { return GetAuthKey(ctx, c, realm, "dev", "") }, "listing containers", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+			_, err := tt.get(t.Context(), docker.NewClient(&m))
+			require.ErrorContains(t, err, tt.want)
+			if !tt.empty {
+				return
+			}
+			m = mock.Executor{}
+			m.AddResult("", "", nil)
+			got, err := tt.get(t.Context(), docker.NewClient(&m))
+			require.NoError(t, err)
+			assert.NotNil(t, got)
+			assert.Empty(t, got)
+		})
+	}
+}
 
-	_, err := GetRealms(t.Context(), c)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+func TestAggregateState(t *testing.T) {
+	running, exited := docker.StateRunning, docker.StateExited
+	assert.Equal(t, StateEmpty, aggregateState(nil))
+	assert.Equal(t, StateRunning, aggregateState([]docker.ContainerState{running}))
+	assert.Equal(t, StateStopped, aggregateState([]docker.ContainerState{exited, exited}))
+	assert.Equal(t, StateMixed, aggregateState([]docker.ContainerState{running, exited}))
 }

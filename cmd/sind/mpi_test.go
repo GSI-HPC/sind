@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,22 +20,14 @@ func TestMPI(t *testing.T) {
 	dataDir := t.TempDir()
 	c := realClient(t)
 	checkPrerequisites(t, c)
-	image := testImage(t)
+	image := testutil.Image()
 
 	realm := "it-mpi-" + testID
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		names, _ := cluster.DiscoverClusterNames(bg, c, realm)
-		for _, name := range names {
-			_ = cluster.Delete(bg, c, meshMgr, name)
-		}
-		_ = meshMgr.CleanupMesh(bg)
-	})
+	cleanupRealm(t, c, realm)
 
 	// Create a cluster with 3 workers for multi-node MPI.
 	cfg := "kind: Cluster\ndefaults:\n  image: " + image + "\nnodes:\n  - controller\n  - worker: 3\n"

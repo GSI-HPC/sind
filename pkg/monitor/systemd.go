@@ -3,15 +3,14 @@
 package monitor
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
-	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // busctlSignal is the JSON structure emitted by busctl monitor --json=short
@@ -38,42 +37,16 @@ func NewSystemdMonitor(node string, container docker.ContainerName) *SystemdMoni
 	return &SystemdMonitor{node: node, container: container}
 }
 
-// Run reads from r (the stdout of docker exec CONTAINER busctl monitor ...)
-// and sends parsed events to ch. It blocks on scanner.Scan(), which is
-// not interruptible by context cancellation alone — to unblock Run on
-// ctx.Done(), the caller must also close r (e.g. by killing the
-// underlying process or closing the stdout pipe). The caller is
-// responsible for closing ch after Run returns.
+// Run reads busctl monitor --json=short from r and sends the unit state
+// changes it reports to ch (see scanEvents).
 func (m *SystemdMonitor) Run(ctx context.Context, r io.Reader, ch chan<- Event) error {
-	log := sindlog.From(ctx)
-	scanner := bufio.NewScanner(r)
 	// busctl JSON lines can be very long.
-	scanner.Buffer(make([]byte, 0, 64*1024), 512*1024)
-
-	for scanner.Scan() {
-		var sig busctlSignal
-		if err := json.Unmarshal(scanner.Bytes(), &sig); err != nil {
-			log.Log(ctx, sindlog.LevelTrace, "systemd monitor: skipping unparseable line", "err", err)
-			continue
-		}
-
+	return scanEvents(ctx, r, ch, "systemd monitor", 512*1024, func(sig busctlSignal) (Event, bool) {
 		if sig.Type != "signal" || sig.Member != "PropertiesChanged" {
-			continue
+			return Event{}, false
 		}
-
-		ev, ok := m.parsePropertiesChanged(sig)
-		if !ok {
-			continue
-		}
-
-		select {
-		case ch <- ev:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return scanner.Err()
+		return m.parsePropertiesChanged(sig)
+	})
 }
 
 // parsePropertiesChanged extracts an Event from a PropertiesChanged signal.
@@ -156,11 +129,10 @@ func parseChangedProperties(raw json.RawMessage) (map[string]string, error) {
 // unitNameFromPath extracts a systemd unit name from a D-Bus object path.
 // For example, /org/freedesktop/systemd1/unit/munge_2eservice becomes munge.service.
 func unitNameFromPath(path string) string {
-	const prefix = "/org/freedesktop/systemd1/unit/"
-	if !strings.HasPrefix(path, prefix) {
+	encoded, ok := strings.CutPrefix(path, "/org/freedesktop/systemd1/unit/")
+	if !ok {
 		return ""
 	}
-	encoded := strings.TrimPrefix(path, prefix)
 	return dbusPathUnescape(encoded)
 }
 
@@ -172,10 +144,8 @@ func dbusPathUnescape(s string) string {
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		if s[i] == '_' && i+2 < len(s) {
-			hi := unhex(s[i+1])
-			lo := unhex(s[i+2])
-			if hi >= 0 && lo >= 0 {
-				b.WriteByte(byte(hi<<4 | lo))
+			if c, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				b.WriteByte(byte(c))
 				i += 2
 				continue
 			}
@@ -183,19 +153,6 @@ func dbusPathUnescape(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
-}
-
-func unhex(c byte) int {
-	switch {
-	case '0' <= c && c <= '9':
-		return int(c - '0')
-	case 'a' <= c && c <= 'f':
-		return int(c - 'a' + 10)
-	case 'A' <= c && c <= 'F':
-		return int(c - 'A' + 10)
-	default:
-		return -1
-	}
 }
 
 // SystemdMonitorArgs returns the docker CLI arguments for streaming

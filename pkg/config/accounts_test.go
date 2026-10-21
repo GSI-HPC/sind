@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,8 +36,9 @@ users:
 }
 
 func TestParse_LimitNumbers(t *testing.T) {
-	// YAML 1.1 reads unquoted numbers first; sind passes them in plain
-	// decimal form. Quoted values stay as written.
+	// The YAML parser reads unquoted numbers first; sind passes them in
+	// plain decimal form. Quoted values stay as written, and an empty value
+	// stays empty for Validate to report.
 	input := `kind: Cluster
 accounts:
   - name: physics
@@ -46,15 +46,18 @@ accounts:
       MaxJobs: 010
       MaxSubmitJobs: 0x10
       GrpJobs: 1e3
+      GrpTRESRunMins: 1.5e10
       Fairshare: 1.10
+      GrpTRESMins: 18446744073709551615
       Description: "1.10"
-      Organization: "007"`
+      Organization: "007"
+      Comment: ~`
 
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
 	assert.Equal(t, Limits{
-		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "Fairshare": "1.1",
-		"Description": "1.10", "Organization": "007",
+		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "GrpTRESRunMins": "15000000000", "Fairshare": "1.1",
+		"GrpTRESMins": "18446744073709551615", "Description": "1.10", "Organization": "007", "Comment": "",
 	}, cfg.Accounts[0].Limits)
 }
 
@@ -87,14 +90,13 @@ func TestParse_AccountsErrors(t *testing.T) {
 		{
 			name:    "limit is a map",
 			input:   "kind: Cluster\naccounts:\n  - name: physics\n    limits:\n      GrpTRES: {cpu: 4}",
-			wantErr: `limit GrpTRES must be a string or a number, got {"cpu":4}`,
+			wantErr: "line 5: accounts[0].limits.GrpTRES: expected a string, got an object",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -142,9 +144,9 @@ func TestValidate_Accounts(t *testing.T) {
 		}},
 		{name: "no db node", nodes: []Node{{Role: RoleController}, {Role: RoleWorker}}, accounts: []Account{{Name: "physics"}},
 			wantErr: "accounts, and the users' accounts, coordinator and adminLevel, require a managed db node: sind creates Slurm accounts with sacctmgr, which needs slurmdbd"},
-		{name: "unmanaged db node", nodes: []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, users: []User{{Name: "alice", AdminLevel: AdminAdmin}},
+		{name: "unmanaged db node", nodes: []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(false)}, {Role: RoleWorker}}, users: []User{{Name: "alice", AdminLevel: AdminAdmin}},
 			wantErr: "require a managed db node"},
-		{name: "unmanaged cluster", nodes: []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleDB}, {Role: RoleWorker}}, accounts: []Account{{Name: "physics"}},
+		{name: "unmanaged cluster", nodes: []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleDB}, {Role: RoleWorker}}, accounts: []Account{{Name: "physics"}},
 			wantErr: "require a managed db node"},
 		{name: "uppercase name", accounts: []Account{{Name: "Physics"}},
 			wantErr: `invalid account name "Physics": it must contain only lowercase letters, digits, underscores and hyphens, not start with a hyphen, and have at most 64 characters`},
@@ -200,8 +202,7 @@ func TestValidate_Accounts(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }

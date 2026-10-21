@@ -3,8 +3,9 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // IdentityMode is where a cluster's nodes look up the users, and how Slurm
@@ -30,30 +31,19 @@ const (
 
 // Identity selects the identity mode (identity) of a cluster.
 type Identity struct {
-	Mode IdentityMode `json:"mode,omitempty"`
+	Mode IdentityMode `yaml:"mode,omitempty"`
 	// ControllerUsers also creates the users and groups on the controllers
 	// with IdentityClientIDs, which a partition with AllowGroups needs:
 	// slurmctld checks AllowGroups with local lookups.
-	ControllerUsers bool `json:"controllerUsers,omitempty"`
+	ControllerUsers bool `yaml:"controllerUsers,omitempty"`
 }
 
-// UnmarshalJSON supports two YAML forms:
+// UnmarshalYAML supports two YAML forms:
 //   - bare string: "nssSlurm"  (the mode)
 //   - full object: "mode: clientIds\n  controllerUsers: true"
-func (i *Identity) UnmarshalJSON(data []byte) error {
-	var mode string
-	if err := json.Unmarshal(data, &mode); err == nil {
-		i.Mode = IdentityMode(mode)
-		return nil
-	}
-
-	type identityAlias Identity // prevents infinite recursion
-	var alias identityAlias
-	if err := decodeStrict(data, &alias); err != nil {
-		return fmt.Errorf("identity must be a mode or an object with mode and controllerUsers: %w", err)
-	}
-	*i = Identity(alias)
-	return nil
+func (i *Identity) UnmarshalYAML(v *yaml.Node) error {
+	type alias Identity // prevents infinite recursion
+	return nameOrObject(v, (*string)(&i.Mode), (*alias)(i))
 }
 
 // UsesNSSSlurm reports whether managed workers resolve users with nss_slurm.

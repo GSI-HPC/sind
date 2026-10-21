@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -70,85 +71,51 @@ func TestReadiness_ParentCancelledIsNotExpiry(t *testing.T) {
 	assert.False(t, rd.expired())
 }
 
-// neverReadyOnCall is happyOnCall with munge never active on worker-0.
-func neverReadyOnCall(t *testing.T) func([]string, string) mock.Result {
-	return happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && args[1] == "sind-dev-worker-0" && strings.HasSuffix(strings.Join(args, " "), "is-active munge") {
-			return mock.Result{Stdout: "activating\n", Err: notFoundErr(t)}, true
-		}
-		return mock.Result{}, false
-	})
+// neverReady is a happyOnCall override under which munge never gets
+// active on worker-0.
+func neverReady(t *testing.T) func([]string, string) (mock.Result, bool) {
+	return func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Stdout: "activating\n", Err: testutil.ExitCode1(t)},
+			args[0] == "exec" && args[1] == "sind-dev-worker-0" && strings.HasSuffix(strings.Join(args, " "), "is-active munge")
+	}
 }
 
 func TestCreate_WaitLimit(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = neverReadyOnCall(t)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
 	cfg := createCfg()
 	cfg.Wait = 500 * time.Millisecond
-	_, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, neverReady(t))
 
 	require.ErrorIs(t, err, ErrNotReady)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Contains(t, err.Error(), "cluster dev not ready within 500ms: waiting for worker-0")
+	assert.Contains(t, err.Error(), "cluster \"dev\" not ready within 500ms: node worker-0: timed out; last probe error")
 	assert.Contains(t, err.Error(), "last probe error: probe munge: munge not ready: activating")
 	// The rollback ran: preflight (twice: the cluster's containers and
 	// those on the mesh and the cluster network), the connect of external
 	// containers, diagnostics and deletion list the containers.
-	var psCalls int
-	for _, c := range m.Calls {
-		if c.Args[0] == "ps" {
-			psCalls++
-		}
-	}
-	assert.Equal(t, 5, psCalls)
+	assert.Equal(t, 5, countCalls(m.Calls, "ps"))
 }
 
 func TestCreate_WaitLimitAfterNodes(t *testing.T) {
 	// The steps after the nodes are ready share the limit.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	cfg := createCfg()
+	cfg.Wait = 500 * time.Millisecond
+	_, _, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is DOWN\n"}, true
 		}
 		return mock.Result{}, false
 	})
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cfg := createCfg()
-	cfg.Wait = 500 * time.Millisecond
-	_, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
 
 	require.ErrorIs(t, err, ErrNotReady)
 	assert.Contains(t, err.Error(), "controller is DOWN")
 }
 
 func TestCreate_InterruptIsNotWaitLimit(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = neverReadyOnCall(t)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	cfg := createCfg()
 	cfg.Wait = time.Hour
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	_, _, err := runCreate(ctx, t, cfg, false, neverReady(t))
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrNotReady)
@@ -178,7 +145,7 @@ func TestCreate_WaitLimitExcludesContainerCreation(t *testing.T) {
 	defer pipes.CloseAll()
 
 	m := &mock.Executor{}
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(slowCreate{Executor: m, name: "sind-dev-worker-0", delay: 1500 * time.Millisecond})
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -190,30 +157,14 @@ func TestCreate_WaitLimitExcludesContainerCreation(t *testing.T) {
 }
 
 func TestWorkerAdd_WaitLimit(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if args[0] == "exec" && args[1] == "sind-dev-worker-1" && strings.HasSuffix(strings.Join(args, " "), "is-active munge") {
-			return mock.Result{Stdout: "activating\n", Err: notFoundErr(t)}
+			return mock.Result{Stdout: "activating\n", Err: testutil.ExitCode1(t)}
 		}
 		return onCall(args, stdin)
-	}
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1, Wait: 200 * time.Millisecond}, time.Millisecond)
-
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1, Wait: 200 * time.Millisecond})
 	require.ErrorIs(t, err, ErrNotReady)
-	assert.Contains(t, err.Error(), "workers not ready within 200ms: waiting for worker-1")
-	var removed bool
-	for _, c := range m.Calls {
-		if c.Args[0] == "rm" && strings.Contains(strings.Join(c.Args, " "), "sind-dev-worker-1") {
-			removed = true
-		}
-	}
-	assert.True(t, removed, "the new worker should be removed")
+	assert.Contains(t, err.Error(), "workers of cluster \"dev\" not ready within 200ms: node worker-1: timed out; last probe error")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker should be removed")
 }

@@ -76,28 +76,6 @@ func TestImageExists(t *testing.T) {
 	require.ErrorContains(t, err, "Cannot connect to the Docker daemon")
 }
 
-func TestServerVersion(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("29.3.0\n", "", nil)
-	c := NewClient(&m)
-
-	v, err := c.ServerVersion(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, "29.3.0", v)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"version", "--format", "{{.Server.Version}}"}, m.Calls[0].Args)
-}
-
-func TestServerVersion_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Cannot connect", fmt.Errorf("connection refused"))
-	c := NewClient(&m)
-
-	_, err := c.ServerVersion(t.Context())
-	assert.Error(t, err)
-}
-
 func TestRunEphemeral(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("slurm 25.11.0\n", "", nil)
@@ -121,8 +99,7 @@ func TestPullImage(t *testing.T) {
 	assert.Equal(t, []string{"pull", "ghcr.io/gsi-hpc/sind-node:latest"}, m.Calls[0].Args)
 
 	err := c.PullImage(t.Context(), "ghcr.io/gsi-hpc/sind-node:nope")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "manifest unknown")
+	require.ErrorContains(t, err, "manifest unknown")
 }
 
 func TestRunEphemeralWith(t *testing.T) {

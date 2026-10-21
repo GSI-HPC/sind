@@ -47,6 +47,25 @@ func clusterNotFound(ctx context.Context, client *docker.Client, realm, clusterN
 	return fmt.Errorf("%w (%s)", err, strings.Join(hints, "; "))
 }
 
+// clusterContainers lists the node containers of a cluster.
+func clusterContainers(ctx context.Context, client *docker.Client, realm, clusterName string) ([]docker.ContainerListEntry, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm, "label="+LabelCluster+"="+clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	return containers, nil
+}
+
+// existingClusterContainers is clusterContainers for a cluster that must
+// exist: a cluster without containers fails with clusterNotFound.
+func existingClusterContainers(ctx context.Context, client *docker.Client, realm, clusterName string) ([]docker.ContainerListEntry, error) {
+	containers, err := clusterContainers(ctx, client, realm, clusterName)
+	if err == nil && len(containers) == 0 {
+		return nil, clusterNotFound(ctx, client, realm, clusterName)
+	}
+	return containers, err
+}
+
 // checkClusterExists fails with clusterNotFound for a cluster that has no
 // containers, the ones its caller listed, and no network. The network tells
 // "no such cluster" from "partial teardown" (e.g. a failed delete that left

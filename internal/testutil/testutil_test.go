@@ -8,6 +8,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,48 +40,30 @@ func TestTarArchive(t *testing.T) {
 	assert.Equal(t, "world", string(content))
 }
 
-func TestPtr(t *testing.T) {
-	b := Ptr(true)
-	require.NotNil(t, b)
-	assert.True(t, *b)
-
-	s := Ptr("hello")
-	assert.Equal(t, "hello", *s)
+func TestTarModes(t *testing.T) {
+	assert.Equal(t, map[string]int64{"hello": 0644}, TarModes(t, TarArchive("hello", "world")))
 }
 
-func TestPairs(t *testing.T) {
-	var got []string
-	for k, v := range Pairs([]string{"a", "b", "c"}) {
-		got = append(got, k+":"+v)
-	}
-	assert.Equal(t, []string{"a:b", "b:c"}, got)
+func TestWithoutCalls(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, step := progress.Start(ctx, progress.KindStep, "create")
+	callCtx, call := progress.Start(ctx, progress.KindCall, "docker")
+	_, inner := progress.Start(callCtx, progress.KindWait, "retry")
+	inner.End(nil)
+	call.End(nil)
+	_, target := progress.Start(ctx, progress.KindTarget, "node")
+	target.End(nil)
+	step.End(nil)
+
+	assert.Equal(t, "step create: ok\n  target node: ok\n", WithoutCalls(w.Events()))
+	assert.Contains(t, w.Finish(), "call docker")
 }
 
-func TestPairs_Empty(t *testing.T) {
-	count := 0
-	for range Pairs(nil) {
-		count++
-	}
-	assert.Zero(t, count)
-}
-
-func TestPairs_Single(t *testing.T) {
-	count := 0
-	for range Pairs([]string{"a"}) {
-		count++
-	}
-	assert.Zero(t, count)
-}
-
-func TestPairs_EarlyBreak(t *testing.T) {
-	var got []string
-	for k, v := range Pairs([]string{"a", "b", "c", "d"}) {
-		got = append(got, k+":"+v)
-		if k == "b" {
-			break
-		}
-	}
-	assert.Equal(t, []string{"a:b", "b:c"}, got)
+func TestImage(t *testing.T) {
+	t.Setenv("SIND_TEST_IMAGE", "")
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", Image())
+	t.Setenv("SIND_TEST_IMAGE", "local/sind-node:ci")
+	assert.Equal(t, "local/sind-node:ci", Image())
 }
 
 func TestArgValue(t *testing.T) {

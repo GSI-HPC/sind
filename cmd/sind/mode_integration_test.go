@@ -5,17 +5,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/doctor"
@@ -28,10 +26,6 @@ var testID = func() string {
 	_, _ = rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }()
-
-// testRealm is a per-process unique realm so parallel integration test
-// runs don't collide on Docker resource names.
-var testRealm = "it-cmd-" + testID
 
 // executeWithDocker runs a CLI command backed by a real Docker client.
 // Uses context.Background(); for commands needing a deadline use executeWithDockerCtx.
@@ -63,22 +57,7 @@ func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, 
 // executeWithDockerIn is executeWithDockerCtx with stdin as the command's
 // input; nil leaves it at os.Stdin.
 func executeWithDockerIn(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
-	cmd := NewRootCommand()
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
-	if stdin != nil {
-		cmd.SetIn(stdin)
-	}
-
-	client := docker.NewClient(&cmdexec.OSExecutor{})
-	ctx = withClient(ctx, client)
-	cmd.SetContext(ctx)
-
-	err := cmd.Execute()
-	return stdout.String(), stderr.String(), err
+	return execute(withClient(ctx, docker.NewClient(&cmdexec.OSExecutor{})), stdin, args...)
 }
 
 // executeWithStdin runs a CLI command with the given string as its input.
@@ -91,15 +70,8 @@ func executeWithStdin(ctx context.Context, stdin string, args ...string) (string
 // realClient returns a docker.Client backed by a real executor.
 func realClient(t *testing.T) *docker.Client {
 	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not found in PATH")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker daemon not running")
-	}
-	return docker.NewClient(&cmdexec.OSExecutor{})
+	c, _ := testutil.NewClient(t)
+	return c
 }
 
 // checkPrerequisites skips the test if the host does not meet sind
@@ -108,26 +80,15 @@ func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	version, err := c.ServerVersion(ctx)
+	info, err := c.Info(ctx)
 	if err != nil {
 		t.Skipf("cannot query Docker version: %v", err)
 	}
-	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+	if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
 		t.Skipf("%v", vErr)
 	}
 	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())
 	if !hasNsd {
 		t.Skip("host cgroup mount lacks nsdelegate")
 	}
-}
-
-// testImage returns the sind-node image to use for integration tests.
-// Docker pulls the image automatically during container creation.
-func testImage(t *testing.T) string {
-	t.Helper()
-	image := os.Getenv("SIND_TEST_IMAGE")
-	if image == "" {
-		image = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-	return image
 }

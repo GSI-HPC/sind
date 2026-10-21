@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -73,8 +75,7 @@ func TestLoadConfig_FromFile(t *testing.T) {
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
 	_, err := loadConfig(noStdin(t), io.Discard, "/nonexistent/config.yaml")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reading config")
+	assert.ErrorContains(t, err, "reading config")
 }
 
 func TestLoadConfig_InvalidYAML(t *testing.T) {
@@ -208,9 +209,8 @@ func TestCreate_WaitFlag(t *testing.T) {
 
 			// A negative limit is a usage error, reported before sind acts.
 			_, _, err = executeCommand("create", sub, "--wait", "-1s")
-			require.Error(t, err)
+			require.EqualError(t, err, "--wait must not be negative, got -1s")
 			assert.True(t, isUsageError(err))
-			assert.Equal(t, "--wait must not be negative, got -1s", err.Error())
 		})
 	}
 }
@@ -367,11 +367,6 @@ func TestCreateCluster_MonitoringFlag(t *testing.T) {
 	assert.NotContains(t, err.Error(), "monitoring")
 }
 
-func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("create", "cluster", "name", "extra")
-	assert.Error(t, err)
-}
-
 func TestLoadConfig_PreservesName(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -385,13 +380,27 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 
 // --- Integration ---
 
+// cleanupRealm deletes, when the test ends, the clusters of realm and its
+// mesh: whatever the test left behind, as far as it got.
+func cleanupRealm(t *testing.T, c *docker.Client, realm string) {
+	t.Cleanup(func() {
+		bg := context.Background()
+		meshMgr := mesh.NewManager(c, realm)
+		names, _ := cluster.DiscoverClusterNames(bg, c, realm)
+		for _, name := range names {
+			_ = cluster.Delete(bg, c, meshMgr, name)
+		}
+		_ = meshMgr.CleanupMesh(bg)
+	})
+}
+
 // TestClusterLifecycle exercises the full user workflow via CLI commands:
 // create cluster → get/status → power ops → add worker → delete worker → delete cluster.
 func TestClusterLifecycle(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
 	checkPrerequisites(t, c)
-	image := testImage(t)
+	image := testutil.Image()
 	dataDir := t.TempDir()
 
 	realm := "it-e2e-" + testID
@@ -399,21 +408,7 @@ func TestClusterLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		// Best-effort cleanup in case test fails partway.
-		for _, name := range []string{"controller", "worker-0", "worker-1"} {
-			cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
-			_ = c.KillContainer(bg, cn)
-			_ = c.RemoveContainer(bg, cn)
-		}
-		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
-		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
-		_ = meshMgr.CleanupMesh(bg)
-	})
+	cleanupRealm(t, c, realm)
 
 	// Write a config file.
 	cfgDir := t.TempDir()

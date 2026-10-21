@@ -44,6 +44,23 @@ func ExternalContainers(ctx context.Context, client *docker.Client, meshMgr *mes
 	return names, nil
 }
 
+// ConnectableContainers returns the containers outside sind that are not
+// attached to the realm's mesh network, sorted: those Connect can attach.
+func ConnectableContainers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) ([]docker.ContainerName, error) {
+	entries, err := client.ListContainers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	var names []docker.ContainerName
+	for _, e := range entries {
+		if !ownContainer(e.Labels, meshMgr) && !slices.Contains(e.Networks, meshMgr.NetworkName()) {
+			names = append(names, e.Name)
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
 // realmNetworks returns the realm's mesh and cluster networks, the mesh
 // first, then the cluster networks sorted. It leaves out the realm lock.
 func realmNetworks(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) ([]docker.NetworkName, error) {
@@ -151,7 +168,7 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			if _, ok := info.IPs[net]; !ok {
 				continue
 			}
-			if err := client.DisconnectNetwork(ctx, net, info.Name); err != nil && !docker.IsNotFound(err) {
+			if err := docker.IgnoreNotFound(client.DisconnectNetwork(ctx, net, info.Name)); err != nil {
 				return fmt.Errorf("disconnecting %s from %s: %w", info.Name, net, err)
 			}
 		}

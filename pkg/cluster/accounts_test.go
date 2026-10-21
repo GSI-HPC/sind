@@ -196,8 +196,7 @@ func TestCreateSlurmAccounts_NotRegistered(t *testing.T) {
 
 	err := createSlurmAccounts(ctx, docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "waiting for slurmdbd to register the cluster: node sind-dev-controller not ready")
+	require.ErrorContains(t, err, "waiting for slurmdbd to register the cluster: timed out; last probe error: probe registration:")
 	assert.Contains(t, err.Error(), "cluster dev not registered with slurmdbd yet")
 	assert.Empty(t, accountsScripts(t, m.Calls))
 }
@@ -216,8 +215,7 @@ func TestCreateSlurmAccounts_SacctmgrFails(t *testing.T) {
 
 	err := createSlurmAccounts(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Equal(t, "creating Slurm accounts: exit status 1", err.Error())
+	require.EqualError(t, err, "creating Slurm accounts: exit status 1")
 	assert.Len(t, accountsScripts(t, m.Calls), 1)
 }
 
@@ -258,19 +256,9 @@ func TestCreateSlurmAccounts_Timeout(t *testing.T) {
 }
 
 func TestCreate_Accounts(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
 	var registered atomic.Int32
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), accountsOnCall(&registered, mock.Result{}))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, accountsCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 	require.NoError(t, err)
 
 	require.Equal(t, []string{accountsScript(wantAccountCommands)}, accountsScripts(t, m.Calls))
@@ -294,21 +282,10 @@ func TestCreate_Accounts(t *testing.T) {
 
 func TestCreate_NoAccounts(t *testing.T) {
 	// Without accounts, sind runs no sacctmgr, even with a db node.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := accountsCfg()
 	cfg.Accounts = nil
 	cfg.Users = nil
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	for _, c := range m.Calls {
@@ -319,18 +296,11 @@ func TestCreate_NoAccounts(t *testing.T) {
 
 func TestCreate_AccountsFail(t *testing.T) {
 	var registered atomic.Int32
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), accountsOnCall(&registered, mock.Result{
+
+	_, _, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{
 		Stderr: "sacctmgr add account physics:  Nothing new added.\n",
 		Err:    fmt.Errorf("exit status 1"),
 	}))
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, accountsCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating Slurm accounts: exit status 1")
+	require.ErrorContains(t, err, "creating Slurm accounts: exit status 1")
 }

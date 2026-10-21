@@ -3,13 +3,11 @@
 package cluster
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -116,13 +114,11 @@ func TestLinuxUsersFromLabels(t *testing.T) {
 
 	for _, value := range []string{"alice", "alice:1000", "alice:1000:1000:x", ":1000:1000", "Alice:1000:1000", "alice:x:1000", "alice:1000:x", "alice:1000:1000,bob:2001:2001"} {
 		_, err := LinuxUsersFromLabels(docker.Labels{LabelUsers: value})
-		require.Error(t, err, value)
-		assert.Equal(t, `invalid sind.users label "`+value+`": want name:uid:gid entries`, err.Error())
+		require.EqualError(t, err, `invalid sind.users label "`+value+`": want name:uid:gid entries`, value)
 	}
 	for _, value := range []string{"hpc", "hpc:3000:alice:bob", "-hpc:3000", "hpc:x", "hpc:3000:", "hpc:3000:alice+", "hpc:3000:Alice"} {
 		_, err := LinuxUsersFromLabels(docker.Labels{LabelGroups: value})
-		require.Error(t, err, value)
-		assert.Equal(t, `invalid sind.groups label "`+value+`": want name:gid[:member+...] entries`, err.Error())
+		require.EqualError(t, err, `invalid sind.groups label "`+value+`": want name:gid[:member+...] entries`, value)
 	}
 }
 
@@ -169,8 +165,7 @@ func TestCreateHomes_Error(t *testing.T) {
 
 	err := createHomes(t.Context(), docker.NewClient(&m), "sind-dev-controller", testUsers.Users, "ssh-ed25519 AAAA-key")
 
-	require.Error(t, err)
-	assert.Equal(t, "creating home directories: exit status 1", err.Error())
+	require.EqualError(t, err, "creating home directories: exit status 1")
 }
 
 func TestBuildRunArgs_Users(t *testing.T) {
@@ -270,8 +265,7 @@ func TestPreflightCheck_HomeVolume(t *testing.T) {
 	cfg.Users = []config.User{{Name: "alice", UID: 1000}}
 	err := PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "volume sind-dev-home")
+	require.ErrorContains(t, err, "volume sind-dev-home")
 }
 
 // userCalls sorts the calls of a Create or WorkerAdd run that concern
@@ -326,18 +320,7 @@ func collectUserCalls(calls []mock.Call) *userCalls {
 }
 
 func TestCreate_Users(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, usersCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -358,38 +341,16 @@ func TestCreate_Users(t *testing.T) {
 func TestCreate_TaskAffinity(t *testing.T) {
 	// With task/affinity in slurm.main, the worker binds tasks and gets
 	// CAP_SYS_NICE; the controller does not.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := createCfg()
 	cfg.Slurm.Main = config.Section{Content: "TaskPlugin=task/cgroup,task/affinity\n"}
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{"sind-dev-worker-0": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestCreate_NoUsers(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -405,41 +366,25 @@ func TestCreate_NoUsers(t *testing.T) {
 }
 
 func TestCreate_AddUsersFails(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if container, steps, ok := setupCall(args); ok && container == "sind-dev-worker-0" && steps["users"] != "" {
 			return failedSetup(t, 1, "useradd: cannot lock /etc/passwd\n", "users"), true
 		}
 		return mock.Result{}, false
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node worker-0: adding users: exit status 1: useradd: cannot lock /etc/passwd")
+	require.ErrorContains(t, err, "node worker-0: adding users: exit status 1: useradd: cannot lock /etc/passwd")
 }
 
 func TestCreate_CreateHomesFails(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 4 && args[4] == createHomesScript {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}, true
 		}
 		return mock.Result{}, false
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating home directories: exit status 1")
+	require.ErrorContains(t, err, "creating home directories: exit status 1")
 }
 
 // psWithLabels returns an OnCall function that lists a running controller
@@ -473,15 +418,7 @@ func psWithLabels(base func([]string, string) mock.Result, labels string) func([
 func TestWorkerAdd_InheritsUsers(t *testing.T) {
 	// New workers get the cluster's users and groups and mount the home
 	// volume; the homes on it exist already.
-	var m mock.Executor
-	m.OnCall = psWithLabels(workerAddOnCall(t), "sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice")
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice"), WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -496,9 +433,8 @@ func TestWorkerAdd_InheritsUsers(t *testing.T) {
 func TestWorkerAdd_TaskAffinity(t *testing.T) {
 	// A worker added to a cluster whose slurm.conf enables task/affinity
 	// gets CAP_SYS_NICE; sind reads it from the config volume.
-	var m mock.Executor
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}) {
 			return mock.Result{Stdout: "ClusterName=dev\ninclude /etc/slurm/slurm.conf.d/tasks.conf\n"}
 		}
@@ -506,48 +442,28 @@ func TestWorkerAdd_TaskAffinity(t *testing.T) {
 			return mock.Result{Stdout: "TaskPlugin=task/cgroup,task/affinity\n"}
 		}
 		return inner(args, stdin)
-	}
-	client := docker.NewClient(&m)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{"sind-dev-worker-1": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestWorkerAdd_ReadSlurmConfError(t *testing.T) {
-	var m mock.Executor
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}) {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}
 		}
 		return inner(args, stdin)
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
-
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.EqualError(t, err, "reading /etc/slurm/slurm.conf: exit status 1")
-	for _, c := range m.Calls {
-		assert.NotEqual(t, "create", c.Args[0], "no worker container")
-	}
+	assert.Zero(t, countCalls(m.Calls, "create"), "no worker container")
 }
 
 func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice")
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
-
-	require.Error(t, err)
-	assert.Equal(t, `invalid sind.users label "alice": want name:uid:gid entries`, err.Error())
-	for _, c := range m.Calls {
-		assert.NotEqual(t, "create", c.Args[0], "no worker container")
-	}
+	m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice"), WorkerAddOptions{ClusterName: "dev", Count: 1})
+	require.EqualError(t, err, `invalid sind.users label "alice": want name:uid:gid entries`)
+	assert.Zero(t, countCalls(m.Calls, "create"), "no worker container")
 }
 
 func TestGetMountPoints_Home(t *testing.T) {

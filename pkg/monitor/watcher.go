@@ -13,19 +13,6 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
-// closeOnce wraps an io.ReadCloser so that Close can be called multiple
-// times safely. Only the first call actually closes the underlying reader.
-type closeOnce struct {
-	io.ReadCloser
-	once sync.Once
-	err  error
-}
-
-func (c *closeOnce) Close() error {
-	c.once.Do(func() { c.err = c.ReadCloser.Close() })
-	return c.err
-}
-
 // Watcher monitors a sind cluster for state changes across all nodes.
 // It manages the lifecycle of docker events and per-node systemd monitors,
 // and broadcasts events to subscribers.
@@ -122,40 +109,14 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 	}
 	w.ctx = ctx
 
-	dm := NewDockerMonitor(w.prefix)
-
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-		defer func() { _ = proc.Close() }()
-		stdout := &closeOnce{ReadCloser: proc.Stdout}
-		runDone := make(chan struct{})
-		w.wg.Add(1)
-		go func() {
-			defer w.wg.Done()
-			select {
-			case <-ctx.Done():
-			case <-runDone:
-			}
-			_ = stdout.Close()
-		}()
-		if detail, err := streamEnd("docker events", dm.Run(ctx, stdout, w.internalCh)); ctx.Err() == nil {
-			w.emit(ctx, Event{Kind: EventMonitorError, Err: err, Detail: detail})
-		}
-		close(runDone)
-	}()
+	w.runMonitor(ctx, proc, "docker events", NewDockerMonitor(w.prefix).Run, Event{Kind: EventMonitorError})
 
 	// Start systemd monitors for pre-existing nodes.
 	for _, node := range nodes {
 		w.startSystemdMonitor(ctx, node)
 	}
 
-	// Start broadcast loop.
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-		w.broadcastLoop(ctx)
-	}()
+	w.wg.Go(func() { w.broadcastLoop(ctx) })
 
 	return nil
 }
@@ -206,34 +167,25 @@ func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 		return
 	}
 
-	sm := NewSystemdMonitor(node.ShortName, node.Container)
+	w.runMonitor(ctx, proc, "systemd monitor", NewSystemdMonitor(node.ShortName, node.Container).Run,
+		Event{Kind: EventMonitorError, Node: node.ShortName, Container: node.Container})
+}
 
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+// runMonitor runs a monitor on proc's stdout until its stream ends or ctx
+// is cancelled, which closes the stream to unblock it. A stream that ends
+// while ctx runs is a monitor error: fail, with the stream's end.
+func (w *Watcher) runMonitor(ctx context.Context, proc *cmdexec.Process, source string,
+	run func(context.Context, io.Reader, chan<- Event) error, fail Event) {
+	w.wg.Go(func() {
 		defer func() { _ = proc.Close() }()
-		stdout := &closeOnce{ReadCloser: proc.Stdout}
-		runDone := make(chan struct{})
-		w.wg.Add(1)
-		go func() {
-			defer w.wg.Done()
-			select {
-			case <-ctx.Done():
-			case <-runDone:
-			}
-			_ = stdout.Close()
-		}()
-		if detail, err := streamEnd("systemd monitor", sm.Run(ctx, stdout, w.internalCh)); ctx.Err() == nil {
-			w.emit(ctx, Event{
-				Kind:      EventMonitorError,
-				Node:      node.ShortName,
-				Container: node.Container,
-				Err:       err,
-				Detail:    detail,
-			})
+		stop := context.AfterFunc(ctx, func() { _ = proc.Stdout.Close() })
+		defer stop()
+		err := run(ctx, proc.Stdout, w.internalCh)
+		if ctx.Err() == nil {
+			fail.Detail, fail.Err = streamEnd(source, err)
+			w.emit(ctx, fail)
 		}
-		close(runDone)
-	}()
+	})
 }
 
 // errStreamEnded is the error of a monitor stream that ended without one,

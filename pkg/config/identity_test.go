@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,8 +39,7 @@ func TestParse_IdentityErrors(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -111,7 +109,7 @@ func TestIdentityMode_SlurmParameters(t *testing.T) {
 }
 
 func TestValidate_Identity(t *testing.T) {
-	unmanaged := []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}
+	unmanaged := []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleWorker}}
 	tests := []struct {
 		name     string
 		identity Identity
@@ -140,8 +138,7 @@ func TestValidate_Identity(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }

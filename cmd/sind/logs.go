@@ -14,7 +14,9 @@ func newLogsCommand() *cobra.Command {
 		Long: `Show container logs (stdout/stderr) or service journal logs.
 
 Without a SERVICE argument, shows container logs.
-With a SERVICE argument, shows journalctl output for that systemd unit.`,
+With a SERVICE argument, shows journalctl output for that systemd unit.
+
+` + nodeHelp,
 		Args:              cobra.RangeArgs(1, 2),
 		ValidArgsFunction: completeLogsArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -23,18 +25,15 @@ With a SERVICE argument, shows journalctl output for that systemd unit.`,
 	}
 
 	cmd.Flags().BoolP("follow", "f", false, "follow log output")
-	cmd.Flags().IntP("tail", "n", 0, "show only the last N lines (0 shows none)")
+	cmd.Flags().IntP("tail", "n", 0, "show only the last N lines (default: all lines; 0 shows none)")
 
 	return cmd
 }
 
 func runLogs(cmd *cobra.Command, args []string) error {
-	targets, err := parseNodeArgs(args[0])
+	node, err := parseOneNode("logs", args[0])
 	if err != nil {
 		return err
-	}
-	if len(targets) != 1 {
-		return usagef("logs requires exactly one node, got %d", len(targets))
 	}
 
 	opts := cluster.LogOptions{}
@@ -47,7 +46,6 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		opts.Tail = &tail
 	}
 
-	node := targets[0]
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err

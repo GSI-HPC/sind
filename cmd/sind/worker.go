@@ -3,13 +3,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/spf13/afero"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -17,14 +18,11 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "worker [CLUSTER]",
 		Short:             "Add worker nodes to a cluster",
+		Long:              "Add worker nodes to a cluster.\n\n" + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runCreateWorker(cmd, name)
+			return runCreateWorker(cmd, clusterArg(args))
 		}),
 	}
 
@@ -73,6 +71,9 @@ func createWorkerOptions(cmd *cobra.Command, clusterName string) (cluster.Worker
 	if err != nil {
 		return cluster.WorkerAddOptions{}, err
 	}
+	if err := checkNotEmpty(cmd, "image", "memory", "tmp-size"); err != nil {
+		return cluster.WorkerAddOptions{}, err
+	}
 	count, _ := cmd.Flags().GetInt("count")
 	image, _ := cmd.Flags().GetString("image")
 	cpus, _ := cmd.Flags().GetInt("cpus")
@@ -111,41 +112,23 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		return err
 	}
 
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	_, err = cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval)
-	if err != nil {
-		return err
-	}
-
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		if _, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval); err != nil {
+			return err
 		}
-	}
-
-	return nil
+		updateSSHExport(cmd, client, meshMgr)
+		return nil
+	})
 }
 
 func newDeleteWorkerCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "worker NODES",
 		Short:             "Remove worker nodes from a cluster",
+		Long:              "Remove worker nodes from a cluster.\n\n" + nodesHelp,
+		Example:           nodesExample("sind delete worker", "worker-0.dev"),
 		Args:              cobra.MinimumNArgs(1),
-		ValidArgsFunction: completeNodeNames,
+		ValidArgsFunction: completeWorkerNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			return runDeleteWorker(cmd, strings.Join(args, " "))
 		}),
@@ -158,32 +141,13 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 		return err
 	}
 
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	unlock, lockErr := acquireRealmLock(ctx, realm, "")
-	if lockErr != nil {
-		return lockErr
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	for _, g := range groupByCluster(targets) {
-		if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
-			return err
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		for _, g := range groupByCluster(targets) {
+			if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
+				return err
+			}
 		}
-	}
-
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
-		}
-	}
-
-	return nil
+		updateSSHExport(cmd, client, meshMgr)
+		return nil
+	})
 }

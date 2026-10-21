@@ -6,17 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
-	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/retry"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -170,12 +166,9 @@ func realmClusterNames(ctx context.Context, client *docker.Client, realm string)
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	for _, c := range containers {
-		if name := c.Labels[LabelCluster]; name != "" && !slices.Contains(names, name) {
-			names = append(names, name)
-		}
+		names = append(names, c.Labels[LabelCluster])
 	}
-	sort.Strings(names)
-	return names, nil
+	return sortedClusterNames(names), nil
 }
 
 // deleteClusterResources removes containers, network, and volumes for a
@@ -225,7 +218,7 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	// cluster is told by its containers, so before they go.
 	monitored := false
 	if deregister {
-		_ = DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 		var err error
 		if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
 			return err
@@ -267,38 +260,17 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // one fails, so that one failure does not cancel the removals still waiting
 // for a docker call slot, and returns every failure.
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
-	log := sindlog.From(ctx)
-	errs := make([]error, len(containers))
-	var wg sync.WaitGroup
+	names := make([]docker.ContainerName, len(containers))
 	for i, c := range containers {
-		wg.Go(func() {
-			err := client.RemoveContainer(ctx, c.Name)
-			switch {
-			case err == nil:
-			case docker.IsNotFound(err):
-				log.WarnContext(ctx, "container already gone, skipping", "name", string(c.Name))
-			default:
-				errs[i] = fmt.Errorf("removing container %s: %w", c.Name, err)
-			}
-		})
+		names[i] = c.Name
 	}
-	wg.Wait()
-	return errors.Join(errs...)
+	return removeEach(ctx, "container", names, client.RemoveContainer)
 }
 
 // DeleteNetwork removes the cluster network. A network that is already gone
 // is logged and treated as success.
 func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
-	err := client.RemoveNetwork(ctx, name)
-	if err == nil {
-		return nil
-	}
-	if docker.IsNotFound(err) {
-		sindlog.From(ctx).WarnContext(ctx, "network already gone, skipping",
-			"name", string(name))
-		return nil
-	}
-	return fmt.Errorf("removing network %s: %w", name, err)
+	return removeEach(ctx, "network", []docker.NetworkName{name}, client.RemoveNetwork)
 }
 
 // DeleteVolumes removes the given cluster volumes in parallel. Each removal
@@ -307,21 +279,25 @@ func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.Netwo
 // volume is attempted; the errors of those that could not be removed are
 // joined in argument order.
 func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
+	return removeEach(ctx, "volume", volumes, client.RemoveVolume)
+}
+
+// removeEach removes the named resources of a kind in parallel. A resource
+// that is already gone is logged and treated as success; the errors of the
+// others are joined in argument order.
+func removeEach[N ~string](ctx context.Context, kind string, names []N, remove func(context.Context, N) error) error {
 	log := sindlog.From(ctx)
-	errs := make([]error, len(volumes))
+	errs := make([]error, len(names))
 	var wg sync.WaitGroup
-	for i, v := range volumes {
+	for i, name := range names {
 		wg.Go(func() {
-			err := retry.Do(ctx,
-				func() error { return client.RemoveVolume(ctx, v) },
-				docker.IsVolumeInUse,
-				6, 100*time.Millisecond)
+			err := remove(ctx, name)
 			switch {
 			case err == nil:
 			case docker.IsNotFound(err):
-				log.WarnContext(ctx, "volume already gone, skipping", "name", string(v))
+				log.WarnContext(ctx, kind+" already gone, skipping", "name", string(name))
 			default:
-				errs[i] = fmt.Errorf("removing volume %s: %w", v, err)
+				errs[i] = fmt.Errorf("removing %s %s: %w", kind, name, err)
 			}
 		})
 	}
@@ -331,14 +307,13 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 
 // DeregisterMesh removes DNS records and known_hosts entries for all
 // containers in batch, starting a stopped mesh first (see
-// deregisterHostnames). This is the inverse of registerMesh during cluster
+// deregisterHostnames). This is the inverse of registerNodes during cluster
 // creation. Failures are logged and swallowed: the cluster is being torn
 // down, and stale entries in a mesh helper that's already unreachable will
 // be overwritten on next register or cleared when the mesh itself is torn
 // down.
-func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
+func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) {
 	deregisterHostnames(ctx, meshMgr, meshHostnames(meshMgr.Realm, clusterName, containers))
-	return nil
 }
 
 // meshHostnames returns the mesh DNS names of a cluster's node containers.

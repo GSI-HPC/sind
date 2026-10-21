@@ -118,7 +118,7 @@ While systemd boots, a round then costs one `docker exec`, the systemd check, in
 
 A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
 
-`--wait DURATION` (default `5m`, `0` for no limit) bounds how long `sind create cluster` and `sind create worker` wait for the nodes and Slurm: the node checks above, the Slurm daemons, and with `accounts` the cluster's registration with slurmdbd and the `sacctmgr` commands. Each node's limit counts from when its container has started, so image pulls do not count; the steps after the nodes are ready (Phase 4) end the limit after the last node container started. When a node or check is not ready in time, the command fails with status `1`, not `130`, with an error that names the node and its last failing check (`cluster dev not ready within 5m0s: waiting for worker-0: ... last probe error: probe munge: ...`). The library returns that error wrapping `cluster.ErrNotReady`; `config.Cluster.Wait` and `WorkerAddOptions.Wait` set the limit, and zero sets none.
+`--wait DURATION` (default `5m`, `0` for no limit) bounds how long `sind create cluster` and `sind create worker` wait for the nodes and Slurm: the node checks above, the Slurm daemons, and with `accounts` the cluster's registration with slurmdbd and the `sacctmgr` commands. Each node's limit counts from when its container has started, so image pulls do not count; the steps after the nodes are ready (Phase 4) end the limit after the last node container started. When a node or check is not ready in time, the command fails with status `1`, not `130`, with an error that names the node and its last failing check (`cluster "dev" not ready within 5m0s: node worker-0: timed out; last probe error: probe munge: ...`; `sind create worker` says `workers of cluster "dev" not ready within …`). The library returns that error wrapping `cluster.ErrNotReady`; `config.Cluster.Wait` and `WorkerAddOptions.Wait` set the limit, and zero sets none.
 
 When a check fails for good, or the limit runs out, `sind create cluster` removes the resources it created, and the mesh if this invocation set it up and no other cluster uses it (a library caller can reuse one `mesh.Manager` for several creates). If that cleanup fails too, `sind delete cluster` removes what is left.
 
@@ -161,7 +161,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
 | `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
-| `sigs.k8s.io/yaml` | YAML configuration parsing |
+| `go.yaml.in/yaml/v3` | YAML configuration parsing (YAML 1.2) |
 | `log/slog` (stdlib) | Structured logging interface |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the log lines a progress display carries and for the progress theme |
@@ -172,6 +172,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
+| `golang.org/x/crypto` | The OpenSSH encoding of the SSH relay's ed25519 keypair (`ssh`) |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
 | `github.com/GSI-HPC/go-nodeset` | Node arguments: ClusterShell node set expressions (ranges, steps, set operators) |
@@ -237,7 +238,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 - Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
-- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2); `NewRootCommand` applies this to every group, including ones added later
+- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2), with `--help` too (`sind get bogus --help`): a group's help flag (`groupHelp`) reads as unset to cobra, which would print the help before it checks the arguments, and the group's `RunE` prints it once the check has passed; `NewRootCommand` applies this to every group, including ones added later
 - cobra's built-in `help` and `completion` commands follow the same rule: `sind completion fish-typo` fails like any group, and `sind help TOPIC` fails unless TOPIC names a command in full (`sind help bogus`, `sind help get bogus`)
 
 ### Argument Conventions
@@ -253,7 +254,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 Rules:
 - Cluster names are **always positional**, never flags
 - Node targets are node set expressions; a command joins its node arguments with a space, which is a union
-- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
+- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, read with `clusterArg` (the default cluster without one), `cobra.MinimumNArgs(1)` for required nodes, and `noArgs` for none: it says `accepts no arguments, received N` in the words of cobra's other arity checks, where `cobra.NoArgs` calls the argument an unknown command
 
 ### Flag Conventions
 
@@ -262,7 +263,7 @@ Rules:
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
 - **Three persistent root flags**: `--realm`, `--progress` and `--progress-log` (inherited by every subcommand). `PersistentPreRunE` checks `--realm` and `--progress` for every command before it acts (`checkRealmFlag`, `checkProgressFlag`), so a value that is not valid is a usage error even for a command that does not use it; `--progress-log` is opened only by the commands that show progress, as opening it creates the file
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
-- `ssh` passes its arguments through to SSH, so the root flags and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`
+- `ssh` passes its arguments through to SSH, so the root flags and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`. Their usage lines put `[flags]` where the flags go (`DisableFlagsInUseLine`): `sind exec [flags] [CLUSTER] -- COMMAND [ARGS...]`, and none for `ssh`, whose help says that sind's flags go before it
 
 ### Output Conventions
 
@@ -280,6 +281,7 @@ Rules:
 Rules:
 - Mutations are silent where stderr is not a terminal, unless `--progress plain` asks for lines — `exit 0` is the confirmation; use `-v` for logs. On a terminal they draw their progress, which leaves one line for each step they finished and, when they fail, a summary line (see Progress Display); without a display, stderr carries byte for byte what it would without progress
 - Errors are always visible (slog error level is always enabled, even without `-v`), except that `ssh`, `exec`, `enter` and `logs` add none when the program they run fails: it writes its own
+- A docker CLI that is missing or cannot reach the daemon fails every command with the same line, which names no step and no exit status: `Docker is not reachable: ` and the line of docker's error that says so (`docker CLI not found in PATH` for a missing CLI), then ``; run `sind doctor` for the fix`` (`docker.UnreachableError`, matched by `errors.Is(err, docker.ErrUnreachable)`; every `docker.Client` call classifies its error)
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. The cells of `get` tables (`cell`), whose text comes from labels, containers and docker, and the details of `doctor` checks are escaped the same way; a table cell also shows tab and newline as `\t` and `\n`, which would otherwise start a column or a row. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
@@ -288,7 +290,7 @@ Rules:
 
 Exit status and signals:
 - `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT or SIGTERM interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered
-- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments (the message ends with `(usage: sind power on NODES)`, and the removed `sind status` points to `get cluster`). That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
+- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments (the removed `sind status` points to `get cluster`). An error in the arguments of a command, the wrong number of them or one that is not valid, ends with the command's usage line, `(usage: sind power on NODES)`: `usageArgs` adds it to every `Args` check and, through `withUsageLine`, to the errors a command's `RunE` marks with `argsError` (node arguments, the arguments `ssh` and `exec` parse themselves, `delete cluster --all NAME`). An error in a flag value does not get it, as the usage line does not show the flags. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. A flag value outside the words a flag takes reads `invalid --output value "yaml": want human or json` (`invalidFlagValue`, for `-o`, `--type` and `--progress`), and one pflag cannot parse as the flag's type reads the same, with what it wants instead of Go's parser error (`invalid --wait value "5": want a duration with a unit, such as 90s, 5m or 1h30m`; `flagError`, the root's `FlagErrorFunc`, for int, count, bool and duration flags). A value the CLI checks like a config setting names the flag (`device "dev/fuse" in --device: host path must be absolute`). `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
 - `ssh`, `exec`, `enter` and `logs` exit with the status of the docker command they run, which `docker exec` takes from the command it ran (for `ssh`, from `ssh` and the remote command), and print no error line. A docker killed by signal N exits 128 + N, as a shell reports it, except SIGINT and SIGTERM, which exit `130` like an interrupted sind: they reach docker when sent to sind's process group, and the status must not depend on which process ends first
 - SIGTERM exits `130`, not `143`, so that callers check one status for "interrupted", as in clusterctl
 - A `--wait` limit that runs out is a failure, not an interrupt: `create cluster` and `create worker` exit `1`
@@ -355,11 +357,14 @@ Rules:
 All commands that accept cluster names or node names must set `ValidArgsFunction`:
 
 - **Cluster name commands** → `completeClusterNames`
-- **Node name commands** → `completeNodeNames`
+- **Node name commands** → `completeNodeNames`; `completeNodeName` for a command that takes one node (`get node`), which completes nothing after it, and `completeWorkerNames` for `delete worker`, which removes workers only
 - **Commands with DisableFlagParsing** (ssh, exec) → `ValidArgsFunction` with heuristics (best-effort despite cobra limitations)
+- **External containers** → `completeContainers`: `connect container` offers the containers outside sind that are not on the mesh yet (`cluster.ConnectableContainers`), `disconnect container` those that are (`cluster.ExternalContainers`), each but the ones already named
+- **Commands without arguments** complete nothing: `NewRootCommand` gives every leaf without a `ValidArgsFunction` `cobra.NoFileCompletions` (`noFileCompletions`), where the shell would offer file names
+- **Aliases**: cobra completes none, so the `power` group completes `off` once a prefix of it is typed (`completeAliases`)
 
 When adding a `get` subcommand with positional arg completion for a second argument
-(like `logs NODE SERVICE`), write a dedicated completion function that switches on `len(args)`.
+(like `logs NODE SERVICE`), write a dedicated completion function that switches on `len(args)`. `logs NODE SERVICE` offers the services of the node's role, those `get node` checks (`cluster.NodeServices`).
 
 ### New Command Checklist
 
@@ -404,7 +409,7 @@ sind connect container CONTAINER...
 sind disconnect container CONTAINER...
 sind get cluster [NAME]
 sind get clusters
-sind get node NODE[.CLUSTER]
+sind get node NODE
 sind get nodes [CLUSTER]
 sind get networks
 sind get realms
@@ -424,7 +429,7 @@ All `get` subcommands accept `--output|-o {human,json}`. The default is `human` 
 
 NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
 
-`sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. Without `--config` it creates the default cluster (1 controller + 1 worker). Reading a stdin that is not a terminal without `--config -` is deprecated in v0.11.0 and will be removed: until then sind still reads it, but first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
+`sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. An empty `--config ""` is a usage error, as is an empty `--data`: an unset variable in `--config "$CFG"` would otherwise create the default cluster, or read a piped stdin. Without `--config` it creates the default cluster (1 controller + 1 worker). Reading a stdin that is not a terminal without `--config -` is deprecated in v0.11.0 and will be removed: until then sind still reads it, but first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
 
 `--monitoring` collects the cluster's metrics and logs in the realm's monitoring stack (see Monitoring). It is ORed into the config's `monitoring` key before validation: either turns monitoring on, and `--monitoring=false` does not turn off a config's `monitoring: true`. With an unmanaged config it fails like the key does, with exit status 1, as the conflict is with the config file.
 
@@ -439,9 +444,9 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - Before it removes a network, it disconnects every container still attached: the SSH relay, and containers outside sind that were attached with `docker network connect`, such as kind nodes. Those are detached, not removed, as Docker does not remove a network with active endpoints
 - The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
 
-`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
+`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh, the monitoring stack and the exported SSH configuration, as `sind delete realm` does. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
-`sind delete realm` deletes everything sind made for the realm: every cluster, the mesh, the monitoring stack and the exported SSH configuration, as `sind delete cluster --all` does, and fails the same way. It takes the realm from `--realm`, `SIND_REALM` or the default, as every command does, and no arguments. Containers outside sind attached to the realm's networks are detached, not removed.
+`sind delete realm` deletes everything sind made for the realm: every cluster, the mesh, the monitoring stack and the exported SSH configuration, as `sind delete cluster --all` does, and fails the same way. It takes the realm from `--realm`, `SIND_REALM` or the default, as every command does, and no arguments: `sind delete realm ci-42` is a usage error that points to `sind --realm ci-42 delete realm`. Containers outside sind attached to the realm's networks are detached, not removed.
 
 `sind connect container` and `sind disconnect container` manage external containers, see External Containers.
 
@@ -655,7 +660,7 @@ Without `--image`, the workers run the newest worker's (or controller's) image b
 
 Before it creates a worker container, sind checks that the Docker host mounts cgroup2 with `nsdelegate`, as `sind create cluster` does (`cluster.CheckNsdelegate`; see Container Startup): a host that has lost it since the cluster was created, as by a reboot after a temporary remount, fails here with the commands that enable it. The check runs the controller's image by its ID, which the daemon has, and runs while sind reads the cluster's configuration and checks an explicit `--image`.
 
-`--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container. Once it has found the cluster's controller, and before it starts a stopped mesh or creates a worker, sind refuses workers that would not fit on the realm's mesh or the cluster network (see Limits under Networking), with exit status 1.
+`--count` must be at least 1 and `--cpus` must not be negative; `--image`, `--memory` and `--tmp-size` must not be given empty, which would quietly stand for the default. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container. Once it has found the cluster's controller, and before it starts a stopped mesh or creates a worker, sind refuses workers that would not fit on the realm's mesh or the cluster network (see Limits under Networking), with exit status 1.
 
 With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: a mutation writes nothing on success but, on a terminal, what its progress display leaves.
 
@@ -705,6 +710,8 @@ sind power unfreeze NODES               # resume frozen node
 | cycle | `docker kill`, then as `on` |
 | freeze | `docker pause` (cgroup freezer) |
 | unfreeze | `docker unpause` |
+
+A docker verb in place of the power command, such as `sind power stop`, is an unknown command whose error suggests the power command that runs it (`shutdown`); `restart` suggests `reboot`, and `resume` `unfreeze`. Shell completion offers `off` once a prefix of it is typed.
 
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
@@ -800,7 +807,7 @@ The editor commands are sind's own (`cmd/sind/mcpeditor.go`, `internal/mcpconfig
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `power on`, `power unfreeze`, `connect container`) or destructive (`destructiveHint: true`: `create`, `delete`, `disconnect container`, `exec`, and the other `power` actions). `create cluster` and `create worker` count as destructive because their flags choose the image a node runs as root, capabilities, devices, security options, a config file and a host directory mounted read-write: one call can run code with host-root power. A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument), `logs --follow` (it never ends, and a tool returns its output only when the command exits), and `--progress` and `--progress-log` (a tool's output is no terminal, and holds no progress and no events).
-- `sind mcp start` and `sind mcp stream` set `SIND_PROGRESS=none` and unset `SIND_PROGRESS_LOG` for the sind processes they run (`withoutProgress`), which inherit the server's environment: a `SIND_PROGRESS=plain` set for the user's shell would add its lines to every tool's output, a `SIND_PROGRESS_LOG` of `/dev/stderr` its events, and one that cannot be opened a note.
+- `sind mcp start` and `sind mcp stream` set `SIND_PROGRESS=none` and unset `SIND_PROGRESS_LOG` for the sind processes they run (`asMCPServer`), which inherit the server's environment: a `SIND_PROGRESS=plain` set for the user's shell would add its lines to every tool's output, a `SIND_PROGRESS_LOG` of `/dev/stderr` its events, and one that cannot be opened a note.
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
 - A cancelled call (`notifications/cancelled`) or a client that disconnects ends the call's context, and ophis then ends the tool's sind process with SIGKILL, which would skip the rollback of a failed `create` and leave partial resources, the realm lock and orphaned docker children behind. The tools that change state (`create`, `delete`, `connect`, `disconnect` and `power`) therefore run to completion on a context that ignores the cancellation (`mcpRunsToCompletion`): a cancelled create finishes, or rolls back, on its own, bounded by `--wait`, and the client gets no result. Read-only tools and `exec` stay cancellable. `sind mcp stream` waits at most `mcpShutdownTimeout` (5 s) for the MCP server to stop, so a call still running does not hold up its shutdown; the sind process it started goes on to finish or roll back.
 - A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`).
@@ -816,7 +823,7 @@ Commands accepting node arguments use DNS-style names, written as a node set exp
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name.
+The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name. Its errors quote the term of the argument that named the node, as typed (`typedTerm`): `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`. `ssh`, `logs` and `get node` act on one node and parse their argument the same way (`parseOneNode`): a node set that names another number of nodes is the usage error `<command> requires exactly one node, got N`.
 
 ### Node Sets
 
@@ -838,7 +845,7 @@ Node arguments are node set expressions in ClusterShell's syntax, which Slurm an
 Rules:
 - Every run of digits in a name is a number, the cluster's included; a bracket may stand for any of them, and the padding and order rules below apply to each.
 - The operators have no precedence: an expression is evaluated left to right, so `worker-[0-9]!worker-[0-4]&worker-[3-6]` is worker-5 and worker-6. `!`, `&` and `^` need an operand on each side; an empty operand of a union is nothing, so `worker-0,` is worker-0.
-- A command joins its node arguments with a space, which is a union, so `sind power on worker-[0-3] '!worker-2'` is one expression. Quote an expression with `!`, `&` or `^` from the shell.
+- A command joins its node arguments with a space, which is a union, so `sind power on 'worker-[0-3]' '!worker-2'` is one expression. Quote an expression with `[`, `!`, `&` or `^` from the shell: the shell reads `!` itself, and expands `worker-[0-3]` to the files in the working directory that match it, such as a job's output file `worker-1`.
 - Zero padding is not part of a node's identity: `worker-1,worker-01` is one node, and `worker-[1-3]!worker-02` is worker-1 and worker-3. A node keeps the spelling it was first given, and sind looks it up by that spelling. sind names its workers without padding, so `worker-[00-03]` names none of them.
 - The padding of the cluster suffix's numbers is no part of the identity either, but clusters `dev1` and `dev01` are two: an expression whose names differ only in the padding of their cluster (`worker-0.dev1,worker-0.dev01`), which would act on one of the two nodes, is a usage error (`paddingClash` expands each term on its own to see every spelling).
 - The operators compare names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing. Write the suffix the same way throughout an expression.
@@ -850,12 +857,12 @@ sind acts on the nodes in go-nodeset's order: sorted by the name with each numbe
 ### Examples
 
 ```bash
-sind power shutdown controller                    # controller.default
-sind power cycle worker-0                        # worker-0.default
-sind power freeze worker-[0-3].dev               # 4 nodes in dev cluster
-sind power reboot controller,worker-[0-1]        # multiple nodes in default
-sind power on worker-[0-3] '!worker-2'           # 3 nodes in default
-sind delete worker worker-[0-1].dev worker-3.prod  # nodes in two clusters
+sind power shutdown controller                       # controller.default
+sind power cycle worker-0                            # worker-0.default
+sind power freeze 'worker-[0-3].dev'                 # 4 nodes in dev cluster
+sind power reboot 'controller,worker-[0-1]'          # multiple nodes in default
+sind power on 'worker-[0-3]' '!worker-2'             # 3 nodes in default
+sind delete worker 'worker-[0-1].dev' worker-3.prod  # nodes in two clusters
 ```
 
 ## Configuration Schema
@@ -1097,6 +1104,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `monitoring` - requires a managed controller; `slurm.main` must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers` (the collector has no token), and with `PrivateData` it must set `MetricsParameters=ignore_private_data` (see Monitoring)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
+- the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`
 
 Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as
 trusted as a script run with Docker access: `image` runs any image's services as root,
@@ -1118,7 +1126,7 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 
-The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when a command does not find a cluster in its realm, the error names the clusters the realm holds and the other realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`). Every command that takes a cluster or a node reports a missing cluster this way (`ErrClusterNotFound`, `clusterNotFound`), `get nodes CLUSTER` included, which fails with exit status 1 instead of listing no nodes, and `logs` and `ssh` check the node first (`cluster.CheckNode`), so docker's error with an internal container name never reaches the user. A node missing from an existing cluster is `node "x" not found in cluster "dev"` (`ErrNodeNotFound`).
+The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when a command does not find a cluster in its realm, the error names the clusters the realm holds and the other realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`). Every command that takes a cluster or a node reports a missing cluster this way (`ErrClusterNotFound`, `clusterNotFound`), `get nodes CLUSTER` included, which fails with exit status 1 instead of listing no nodes, and `logs` and `ssh` check the node first (`cluster.CheckNode`), as `get node` does when docker finds no container, so docker's error with an internal container name never reaches the user. A node missing from an existing cluster is `node "x" not found in cluster "dev"` (`ErrNodeNotFound`).
 
 Resource names join realm and cluster with `-`, so realm `ci` with cluster `42-dev` and realm `ci-42` with cluster `dev` share the names `ci-42-dev-*`. The second `sind create cluster` fails its preflight check, and `sind delete cluster` only removes a network or volume whose `sind.realm` and `sind.cluster` labels, if present, name the cluster being deleted.
 
@@ -1252,7 +1260,7 @@ sacctmgr -i add user carol account=physics defaultaccount=physics adminlevel=ope
 sacctmgr -i add coordinator account=physics names=bob
 ```
 
-- Accounts are created in list order, so a parent is declared before its children. `limits` are passed as `key=value`, in key order. Numbers are passed in plain decimal form, as YAML 1.1 reads them before sind sees them: `MaxJobs: 1` becomes `MaxJobs=1`, but `010` is octal and becomes `8`, `0x10` becomes `16`, `1e3` `1000` and `1.10` `1.1`, also for options that take text, such as `Description: 1.0`. A quoted value is passed as written.
+- Accounts are created in list order, so a parent is declared before its children. `limits` are passed as `key=value`, in key order. Numbers are passed in plain decimal form, as the YAML parser reads them before sind sees them: `MaxJobs: 1` becomes `MaxJobs=1`, but `010` is octal and becomes `8`, `0x10` becomes `16`, `1e3` `1000` and `1.10` `1.1`, also for options that take text, such as `Description: 1.0`. A quoted value is passed as written.
 - `limits` take these `sacctmgr add account` options, matched case-insensitively: `Description`, `Organization` and `Flags` of the account, and `Comment`, `DefaultQOS`, `Fairshare` (or `Shares`), `GrpJobs`, `GrpJobsAccrue`, `GrpSubmitJobs`, `GrpTRES`, `GrpTRESMins`, `GrpTRESRunMins`, `GrpWall`, `MaxJobs`, `MaxJobsAccrue`, `MaxSubmitJobs`, `MaxTRES` (or `MaxTRESPerJob`), `MaxTRESMins` (or `MaxTRESMinsPerJob`), `MaxTRESPerNode`, `MaxTRESRunMins`, `MaxWall` (or `MaxWallDurationPerJob`), `MinPrioThresh`, `Priority` and `QOS` (or `QosLevel`) of its association. It is an allow list because sacctmgr accepts any prefix of an option name: a deny list could not keep `A`, `Acct`, `N`, `C` or `Pa` off the name, cluster and parent sind sets, and `Where` makes `sacctmgr add account` loop forever.
 - Every account a user names must be declared in `accounts`: a typo fails validation instead of creating a new account.
 - The Linux users exist on the controller before `sacctmgr` runs (setupNodes), so slurmctld resolves the uids of the new associations right away; it would otherwise retry only once an hour. slurmdbd pushes the associations to slurmctld before `sacctmgr` returns, so jobs can use them as soon as `sind create cluster` returns.

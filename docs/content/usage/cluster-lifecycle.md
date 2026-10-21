@@ -15,7 +15,7 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--moni
 | Argument/Flag | Default | Description |
 |---------------|---------|-------------|
 | `NAME` | `default` | Cluster name (positional, optional) |
-| `--config` | — | Path to YAML configuration file, or `-` to read it from stdin |
+| `--config` | — | Path to YAML configuration file, or `-` to read it from stdin; an empty value is a usage error |
 | `--pull` | `false` | Pull each image of the cluster once before creating containers |
 | `--data` | `.` | Host directory to mount at `/data` on all nodes, or `volume` to use a Docker volume; an empty value is a usage error. Ignored if the config sets `storage.dataStorage.type` or `hostPath`. |
 | `--monitoring` | `false` | Collect the cluster's metrics and logs in the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}); adds to the config's `monitoring`, which `--monitoring=false` does not turn off |
@@ -65,7 +65,7 @@ On a terminal, sind shows these steps as it goes, and leaves a line for each one
 If a node is not ready within `--wait`, or a check fails for good, the command fails with exit status 1 and names the node and the last check that failed, for example:
 
 ```text
-12:00:00.000 ERRO cluster dev not ready within 5m0s: waiting for worker-0: node sind-dev-worker-0 not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
+12:00:00.000 ERRO cluster "dev" not ready within 5m0s: node worker-0: timed out; last probe error: probe munge: munge not ready: activating
 ```
 
 sind then removes the resources it created, including a mesh that this invocation set up and no other cluster uses, which a progress display shows as the step `rollback`. If that cleanup fails too, the error says so after the original one; use `sind delete cluster` to remove what is left. On a slow host or CI runner, raise the limit, e.g. `--wait 15m`, or use `--wait 0` to wait until interrupted.
@@ -117,7 +117,7 @@ sind delete cluster --all
 
 When the last cluster is deleted, sind also removes the shared mesh infrastructure (DNS, SSH, mesh network).
 
-`--all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the labels of their containers, networks and volumes, and also removes a mesh that no cluster is left in, as after a create that was killed. A cluster that fails to delete does not stop the others: sind deletes the rest, keeps the mesh, and exits non-zero naming the failed cluster. So does a cluster whose deletion hits a bug in sind: its error says `sind panicked; this is a bug, please report it`, with the details on stderr, and the command exits 1. sind deletes at most four clusters at a time, and after Ctrl-C it starts no further one. On a terminal, the [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}) shows them as the step `clusters`.
+`--all` deletes every cluster of the realm in parallel, then the mesh, the monitoring stack and the exported SSH configuration, as [`sind delete realm`](#delete-a-realm) does. It finds the clusters by the labels of their containers, networks and volumes, and also removes a mesh that no cluster is left in, as after a create that was killed. A cluster that fails to delete does not stop the others: sind deletes the rest, keeps the mesh, and exits non-zero naming the failed cluster. So does a cluster whose deletion hits a bug in sind: its error says `sind panicked; this is a bug, please report it`, with the details on stderr, and the command exits 1. sind deletes at most four clusters at a time, and after Ctrl-C it starts no further one. On a terminal, the [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}) shows them as the step `clusters`.
 
 ## Delete a realm
 
@@ -126,7 +126,7 @@ sind delete realm
 sind --realm ci-42 delete realm
 ```
 
-Deletes everything sind made for the realm, as `sind delete cluster --all` does: every cluster, the mesh, the [monitoring stack]({{< relref "/guides/monitoring" >}}) and the exported SSH configuration. The realm is the one `--realm`, `SIND_REALM` or the default names. External containers attached to the realm's networks are detached, not removed.
+Deletes everything sind made for the realm, as `sind delete cluster --all` does: every cluster, the mesh, the [monitoring stack]({{< relref "/guides/monitoring" >}}) and the exported SSH configuration. The realm is the one `--realm`, `SIND_REALM` or the default names; `sind delete realm ci-42` is a usage error that points to `--realm`. External containers attached to the realm's networks are detached, not removed.
 
 ## Connect containers outside sind
 

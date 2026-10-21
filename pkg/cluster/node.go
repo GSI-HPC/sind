@@ -3,6 +3,7 @@
 package cluster
 
 import (
+	"cmp"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -72,19 +72,13 @@ const (
 // IdentityFromLabels returns the identity mode a node container's
 // LabelIdentity records, local without one.
 func IdentityFromLabels(labels docker.Labels) config.IdentityMode {
-	if mode := labels[LabelIdentity]; mode != "" {
-		return config.IdentityMode(mode)
-	}
-	return config.IdentityLocal
+	return cmp.Or(config.IdentityMode(labels[LabelIdentity]), config.IdentityLocal)
 }
 
 // DataMountPath returns where a node container mounts the cluster's data:
 // its LabelDataMountPath, or DefaultDataMountPath without one.
 func DataMountPath(labels docker.Labels) string {
-	if p := labels[LabelDataMountPath]; p != "" {
-		return p
-	}
-	return DefaultDataMountPath
+	return cmp.Or(labels[LabelDataMountPath], DefaultDataMountPath)
 }
 
 // ComposeProject returns the Docker Compose project name for a cluster.
@@ -247,10 +241,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	}
 
 	// Data volume
-	dataMountPath := cfg.DataMountPath
-	if dataMountPath == "" {
-		dataMountPath = DefaultDataMountPath
-	}
+	dataMountPath := cmp.Or(cfg.DataMountPath, DefaultDataMountPath)
 	if cfg.DataHostPath != "" {
 		args = append(args, "--mount", bindMount(cfg.DataHostPath, dataMountPath))
 	} else {
@@ -296,7 +287,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--memory", cfg.Memory,
 		"--memory-swap", cfg.Memory,
 	)
-	if memMB, err := slurm.ParseMemoryMB(cfg.Memory); err == nil {
+	if memMB, err := config.MemoryMB(cfg.Memory); err == nil {
 		args = append(args, "--shm-size", strconv.Itoa(memMB/2)+"m")
 	}
 
@@ -333,20 +324,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 	labels[LabelDataMountPath] = dataMountPath
 	labels[LabelCVMFS] = string(cfg.CVMFS)
 	maps.Copy(labels, cfg.Users.Labels())
-	identity := cfg.Identity
-	if identity == "" {
-		identity = config.IdentityLocal
-	}
-	labels[LabelIdentity] = string(identity)
+	labels[LabelIdentity] = string(cmp.Or(cfg.Identity, config.IdentityLocal))
 	labels[LabelMonitoring] = strconv.FormatBool(cfg.Monitoring)
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		args = append(args, "--label", k+"="+labels[k])
-	}
+	args = append(args, docker.SortedLabelFlags(labels)...)
 
 	// Entrypoint: delegate the cgroup controllers, then start systemd
 	args = append(args, "--entrypoint", "/bin/sh")
@@ -447,12 +427,36 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 	taskAffinity := slurm.TaskAffinity(cfg.Slurm.Main)
 
 	dataHostPath := ""
-	dataMountPath := ""
 	if cfg.Storage.DataStorage.UsesHostPath() {
 		dataHostPath = absDataHostPath(cfg.Storage.DataStorage.HostPath)
 	}
-	if cfg.Storage.DataStorage.MountPath != "" {
-		dataMountPath = cfg.Storage.DataStorage.MountPath
+	// runConfig returns the RunConfig of one node of n.
+	runConfig := func(n config.Node, shortName string, containerNumber int, managed bool) RunConfig {
+		return RunConfig{
+			Realm:           realm,
+			ClusterName:     cfg.Name,
+			ShortName:       shortName,
+			Role:            n.Role,
+			Image:           n.Image,
+			CPUs:            n.CPUs,
+			Memory:          n.Memory,
+			TmpSize:         n.TmpSize,
+			SlurmVersion:    slurmVersion,
+			DNSIP:           dnsIP,
+			DataHostPath:    dataHostPath,
+			DataMountPath:   cfg.Storage.DataStorage.MountPath,
+			Managed:         managed,
+			ContainerNumber: containerNumber,
+			CapAdd:          n.CapAdd,
+			CapDrop:         n.CapDrop,
+			Devices:         n.Devices,
+			SecurityOpt:     n.SecurityOpt,
+			CVMFS:           cvmfs,
+			Users:           users,
+			AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, managed, hasSubmitter),
+			Identity:        cfg.Identity.Mode,
+			Monitoring:      cfg.Monitoring,
+		}
 	}
 
 	for _, n := range cfg.Nodes {
@@ -462,33 +466,9 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 			if (n.Role == config.RoleDB || n.Role == config.RoleAPI) && n.Managed != nil && !*n.Managed {
 				nodeManaged = false
 			}
-			base := RunConfig{
-				Realm:           realm,
-				ClusterName:     cfg.Name,
-				ShortName:       string(n.Role),
-				Role:            n.Role,
-				Image:           n.Image,
-				CPUs:            n.CPUs,
-				Memory:          n.Memory,
-				TmpSize:         n.TmpSize,
-				SlurmVersion:    slurmVersion,
-				DNSIP:           dnsIP,
-				DataHostPath:    dataHostPath,
-				DataMountPath:   dataMountPath,
-				Managed:         nodeManaged,
-				ContainerNumber: 1,
-				CapAdd:          n.CapAdd,
-				CapDrop:         n.CapDrop,
-				Devices:         n.Devices,
-				SecurityOpt:     n.SecurityOpt,
-				CVMFS:           cvmfs,
-				Users:           users,
-				AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, nodeManaged, hasSubmitter),
-				Identity:        cfg.Identity.Mode,
-				Monitoring:      cfg.Monitoring,
-			}
+			base := runConfig(n, string(n.Role), 1, nodeManaged)
 			if n.Role == config.RoleDB && nodeManaged {
-				base.StoragePass = slurmdbdStoragePass(cfg.Slurm.Slurmdbd)
+				base.StoragePass, _ = cfg.Slurm.Slurmdbd.Parameter("StoragePass")
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)
@@ -502,39 +482,12 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 			backup.ContainerNumber = 2
 			configs = append(configs, base, backup)
 		case config.RoleWorker:
-			count := n.Count
-			if count <= 0 {
-				count = 1
-			}
 			isManaged := clusterManaged && (n.Managed == nil || *n.Managed)
-			for i := 0; i < count; i++ {
-				configs = append(configs, RunConfig{
-					Realm:           realm,
-					ClusterName:     cfg.Name,
-					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
-					Role:            config.RoleWorker,
-					Image:           n.Image,
-					CPUs:            n.CPUs,
-					Memory:          n.Memory,
-					TmpSize:         n.TmpSize,
-					SlurmVersion:    slurmVersion,
-					DNSIP:           dnsIP,
-					DataHostPath:    dataHostPath,
-					DataMountPath:   dataMountPath,
-					Managed:         isManaged,
-					ContainerNumber: workerIdx + 1,
-					CapAdd:          n.CapAdd,
-					CapDrop:         n.CapDrop,
-					Devices:         n.Devices,
-					SecurityOpt:     n.SecurityOpt,
-					CVMFS:           cvmfs,
-					Users:           users,
-					AddUsers:        nodeGetsUsers(cfg.Identity, config.RoleWorker, isManaged, hasSubmitter),
-					Identity:        cfg.Identity.Mode,
-					NSSSlurm:        isManaged && cfg.Identity.UsesNSSSlurm(),
-					TaskAffinity:    isManaged && taskAffinity,
-					Monitoring:      cfg.Monitoring,
-				})
+			for range max(n.Count, 1) {
+				rc := runConfig(n, fmt.Sprintf("worker-%d", workerIdx), workerIdx+1, isManaged)
+				rc.NSSSlurm = isManaged && cfg.Identity.UsesNSSSlurm()
+				rc.TaskAffinity = isManaged && taskAffinity
+				configs = append(configs, rc)
 				workerIdx++
 			}
 		}

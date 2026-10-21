@@ -5,13 +5,12 @@ package probe
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/monitor"
@@ -20,17 +19,6 @@ import (
 )
 
 const testContainer docker.ContainerName = "sind-dev-controller"
-
-// exitCode1 runs a command that exits with code 1 and returns its
-// ProcessState so tests can construct a realistic *exec.ExitError.
-func exitCode1(t *testing.T) *os.ProcessState {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr.ProcessState
-}
 
 func inspectJSON(status string) string {
 	return inspectJSONFull(status, 0, false)
@@ -66,8 +54,7 @@ func TestContainerRunning_NotRunning(t *testing.T) {
 			c := docker.NewClient(&m)
 
 			err := ContainerRunning(t.Context(), c, testContainer)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), status)
+			require.ErrorContains(t, err, status)
 			assert.Contains(t, err.Error(), "expected running")
 		})
 	}
@@ -81,8 +68,7 @@ func TestContainerRunning_Terminal(t *testing.T) {
 			c := docker.NewClient(&m)
 
 			err := ContainerRunning(t.Context(), c, testContainer)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), status)
+			require.ErrorContains(t, err, status)
 
 			var te *TerminalError
 			assert.ErrorAs(t, err, &te)
@@ -96,8 +82,7 @@ func TestContainerRunning_InspectError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ContainerRunning(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting container")
+	require.ErrorContains(t, err, "inspecting container")
 }
 
 func TestSystemdReady_Running(t *testing.T) {
@@ -132,8 +117,7 @@ func TestSystemdReady_NotReady(t *testing.T) {
 			c := docker.NewClient(&m)
 
 			err := SystemdReady(t.Context(), c, testContainer)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), state)
+			require.ErrorContains(t, err, state)
 		})
 	}
 }
@@ -144,8 +128,7 @@ func TestSystemdReady_ExecError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SystemdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking systemd state")
+	require.ErrorContains(t, err, "checking systemd state")
 }
 
 func TestSSHDReady(t *testing.T) {
@@ -168,8 +151,7 @@ func TestSSHDReady_UnexpectedBanner(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SSHDReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected banner")
+	require.ErrorContains(t, err, "unexpected banner")
 }
 
 func TestSSHDReady_EmptyBanner(t *testing.T) {
@@ -178,8 +160,7 @@ func TestSSHDReady_EmptyBanner(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SSHDReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected banner")
+	require.ErrorContains(t, err, "unexpected banner")
 }
 
 func TestSSHDReady_ConnectionRefused(t *testing.T) {
@@ -188,8 +169,7 @@ func TestSSHDReady_ConnectionRefused(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SSHDReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sshd not ready")
+	require.ErrorContains(t, err, "sshd not ready")
 }
 
 func TestSlurmctldReady(t *testing.T) {
@@ -208,12 +188,11 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "slurm_persist_conn_open_without_init: failed to open persistent connection\n",
 		fmt.Errorf("exit status 1"))
-	m.AddResult("activating\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("activating\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	err := SlurmctldReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmctld not ready")
+	require.ErrorContains(t, err, "slurmctld not ready")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te)
 	require.Len(t, m.Calls, 2)
@@ -227,8 +206,7 @@ func TestSlurmctldReady_UnitStateUnknown(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SlurmctldReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "slurmctld not ready: exit status 1", err.Error())
+	require.EqualError(t, err, "slurmctld not ready: exit status 1")
 }
 
 func TestSlurmctldReady_Failed(t *testing.T) {
@@ -236,7 +214,7 @@ func TestSlurmctldReady_Failed(t *testing.T) {
 	// slurm.conf line it rejects: the wait ends at once with its journal.
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
-	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("failed\n", "", testutil.ExitCode1(t))
 	m.AddResult("slurmctld: fatal: Unable to process configuration file\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -268,8 +246,7 @@ func TestSlurmctldReady_BackupController(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -291,68 +268,6 @@ func TestParseSlurmctldPing(t *testing.T) {
 	assert.Empty(t, ParseSlurmctldPing(""))
 }
 
-func TestMungeReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := MungeReady(t.Context(), c, testContainer)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "munge"}, m.Calls[0].Args)
-}
-
-func TestMungeReady_NotReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	err := MungeReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "munge not ready")
-}
-
-func TestSlurmdReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := SlurmdReady(t.Context(), c, testContainer)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmd"}, m.Calls[0].Args)
-}
-
-func TestSlurmdReady_NotReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	err := SlurmdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmd not ready")
-}
-
-func TestSackdReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	m.AddResult("", "", fmt.Errorf("exit status 3"))
-	c := docker.NewClient(&m)
-
-	require.NoError(t, SackdReady(t.Context(), c, testContainer))
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "sackd"}, m.Calls[0].Args)
-
-	err := SackdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "sackd not ready: exit status 3", err.Error())
-
-	p := ForService(ServiceSackd)
-	assert.Equal(t, "sackd", p.Name)
-	assert.NotNil(t, p.Check)
-}
-
 func TestSlurmrestdReady(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\n", "", nil) // systemctl is-active
@@ -372,8 +287,7 @@ func TestSlurmrestdReady_NotListening(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SlurmrestdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmrestd not listening on port 6820")
+	require.ErrorContains(t, err, "slurmrestd not listening on port 6820")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te, "slurmrestd may still be starting")
 }
@@ -407,8 +321,7 @@ func TestClusterRegistered_NotYet(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ClusterRegistered("dev")(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "cluster dev not registered with slurmdbd yet", err.Error())
+	require.EqualError(t, err, "cluster dev not registered with slurmdbd yet")
 }
 
 func TestClusterRegistered_Error(t *testing.T) {
@@ -417,8 +330,7 @@ func TestClusterRegistered_Error(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ClusterRegistered("dev")(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "listing clusters: exit status 1", err.Error())
+	require.EqualError(t, err, "listing clusters: exit status 1")
 }
 
 func TestUnitJournal(t *testing.T) {
@@ -433,100 +345,50 @@ func TestUnitJournal(t *testing.T) {
 		m.Calls[0].Args)
 }
 
-func TestUnitProbes_Failed(t *testing.T) {
-	for _, tt := range []struct {
-		unit  string
-		check Func
-	}{
-		{"munge", MungeReady},
-		{"slurmd", SlurmdReady},
-		{"sackd", SackdReady},
-		{"slurmdbd", SlurmdbdReady},
-	} {
-		t.Run(tt.unit, func(t *testing.T) {
+// TestUnitProbes checks the probes of the services whose unit decides:
+// active passes, a failed unit is a TerminalError with its journal tail,
+// and any other state or a failed exec is an error to retry.
+func TestUnitProbes(t *testing.T) {
+	for _, svc := range []Service{ServiceMunge, ServiceSlurmd, ServiceSackd, ServiceSlurmdbd} {
+		unit := string(svc)
+		isActive := []string{"exec", string(testContainer), "systemctl", "is-active", unit}
+		check := ForService(svc).Check
+		t.Run(unit, func(t *testing.T) {
 			var m mock.Executor
-			m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+			m.AddResult("active\n", "", nil)
+			m.AddResult("activating\n", "", testutil.ExitCode1(t))
+			m.AddResult("", "", fmt.Errorf("daemon unreachable"))
+			m.AddResult("failed\n", "", testutil.ExitCode1(t))
 			m.AddResult("fatal: something\n", "", nil)
 			c := docker.NewClient(&m)
 
-			err := tt.check(t.Context(), c, testContainer)
+			require.NoError(t, check(t.Context(), c, testContainer))
+			assert.Equal(t, isActive, m.Calls[0].Args)
 			var te *TerminalError
+			err := check(t.Context(), c, testContainer)
+			require.EqualError(t, err, unit+" not ready: activating")
+			assert.NotErrorAs(t, err, &te)
+			err = check(t.Context(), c, testContainer)
+			require.EqualError(t, err, unit+" not ready: daemon unreachable")
+			assert.NotErrorAs(t, err, &te)
+			err = check(t.Context(), c, testContainer)
 			require.ErrorAs(t, err, &te)
-			assert.Equal(t, tt.unit+" failed:\nfatal: something", te.Msg)
-			require.Len(t, m.Calls, 2)
-			assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", tt.unit}, m.Calls[0].Args)
-			assert.Equal(t,
-				[]string{"exec", string(testContainer), "journalctl", "-u", tt.unit, "-n", "20", "--no-pager", "-o", "cat"},
-				m.Calls[1].Args)
+			assert.Equal(t, unit+" failed:\nfatal: something", te.Msg)
+			require.Len(t, m.Calls, 5)
+			assert.Equal(t, []string{"exec", string(testContainer), "journalctl", "-u", unit, "-n", "20", "--no-pager", "-o", "cat"}, m.Calls[4].Args)
 		})
 	}
 }
 
 func TestUnitActive_Inactive(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("inactive\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("inactive\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	err := UnitActive(t.Context(), c, testContainer, "munge")
 	require.EqualError(t, err, "munge not ready: inactive")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te)
-}
-
-func TestSlurmdbdReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmdbd"}, m.Calls[0].Args)
-}
-
-func TestSlurmdbdReady_ExecError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmdbd not ready")
-	var te *TerminalError
-	assert.NotErrorAs(t, err, &te)
-}
-
-func TestSlurmdbdReady_Activating(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("activating\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmdbd not ready: activating")
-	var te *TerminalError
-	assert.NotErrorAs(t, err, &te)
-	assert.Len(t, m.Calls, 1)
-}
-
-func TestSlurmdbdReady_Failed(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
-	m.AddResult("slurmdbd: fatal: mysql_real_connect failed\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	var te *TerminalError
-	require.ErrorAs(t, err, &te)
-	assert.Equal(t, "slurmdbd failed:\nslurmdbd: fatal: mysql_real_connect failed", te.Msg)
-
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t,
-		[]string{"exec", string(testContainer), "journalctl", "-u", "slurmdbd", "-n", "20", "--no-pager", "-o", "cat"},
-		m.Calls[1].Args,
-	)
 }
 
 func TestForService(t *testing.T) {
@@ -641,8 +503,7 @@ func TestUntilReady_Timeout(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "timed out; last probe error: probe container")
 	assert.Contains(t, err.Error(), "probe container")
 }
 
@@ -704,8 +565,7 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 		{Name: "systemd", Check: SystemdReady},
 	}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.Contains(t, err.Error(), "probe systemd")
 }
 
@@ -747,8 +607,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "context canceled; last probe error")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -763,8 +622,7 @@ func TestUntilReady_TerminalError(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "probe container: container "+string(testContainer))
 	assert.Contains(t, err.Error(), "exited")
 	// Only one call — no retries for terminal state.
 	assert.Len(t, m.Calls, 1)
@@ -776,8 +634,7 @@ func TestContainerRunning_OOMKilled(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ContainerRunning(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "OOM killed")
+	require.ErrorContains(t, err, "OOM killed")
 	assert.Contains(t, err.Error(), "137")
 
 	var te *TerminalError
@@ -839,11 +696,10 @@ func TestUntilReadyWithEvents_ContainerDie(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "container "+string(testContainer)+" died")
 
 	var te *TerminalError
 	assert.ErrorAs(t, err, &te)
-	assert.Contains(t, err.Error(), "not ready")
 	assert.Contains(t, err.Error(), "died")
 }
 
@@ -958,8 +814,7 @@ func TestUntilReadyWithEvents_ContextCanceled(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "context canceled; last probe error")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -976,8 +831,7 @@ func TestUntilReadyWithEvents_Timeout(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "timed out; last probe error")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "last probe error: probe container")
 }
@@ -993,8 +847,7 @@ func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exited")
+	require.ErrorContains(t, err, "exited")
 	assert.Len(t, m.Calls, 1)
 }
 
@@ -1115,7 +968,7 @@ func TestUntilReadyWithEvents_FailedUnitEndsTheWait(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\n", "", nil)
 	m.AddResult("", "", fmt.Errorf("connection refused"))
-	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("failed\n", "", testutil.ExitCode1(t))
 	m.AddResult("munge: fatal: bad key\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -1307,7 +1160,7 @@ func TestSnapshot_WorkerOneInactive(t *testing.T) {
 	var m mock.Executor
 	// systemctl exits non-zero when any unit is inactive but still prints
 	// the per-unit states. ExecAllowNonZero surfaces that stdout.
-	m.AddResult("active\nactive\nfailed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("active\nactive\nfailed\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	snap, err := Snapshot(t.Context(), c, testContainer, workerServices)
@@ -1402,8 +1255,7 @@ func TestSnapshot_ExecDaemonError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl is-active")
+	require.ErrorContains(t, err, "systemctl is-active")
 }
 
 func TestSnapshot_MalformedOutput(t *testing.T) {
@@ -1413,17 +1265,26 @@ func TestSnapshot_MalformedOutput(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "got 2 lines")
+	require.ErrorContains(t, err, "got 2 lines")
 }
 
 func TestWaitEnded_NoProbeFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := waitEnded(ctx, testContainer, nil)
+	err := waitEnded(ctx, nil)
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled", err.Error())
+	assert.EqualError(t, err, "context canceled")
+}
+
+func TestWaitEnded_TimedOut(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now())
+	defer cancel()
+	<-ctx.Done()
+
+	err := waitEnded(ctx, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.EqualError(t, err, "timed out")
 }
 
 func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
@@ -1431,11 +1292,11 @@ func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
 	cancel()
 	probeErr := &TerminalError{Msg: "boom"}
 
-	err := waitEnded(ctx, testContainer, probeErr)
+	err := waitEnded(ctx, probeErr)
 	require.ErrorIs(t, err, context.Canceled)
 	var te *TerminalError
 	require.ErrorAs(t, err, &te)
-	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom", err.Error())
+	assert.EqualError(t, err, "context canceled; last probe error: boom")
 }
 
 // endsOnDemand is a wait whose deadline passes when end is called, not at
@@ -1491,5 +1352,5 @@ func TestUntilReady_EndReportsTheProbeThatHangs(t *testing.T) {
 	err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Equal(t, "node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed", err.Error())
+	assert.EqualError(t, err, "timed out; last probe error: probe munge: signal: killed")
 }

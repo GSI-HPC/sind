@@ -3,12 +3,12 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
 	"slices"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // ID range of cluster users and groups. The IDs below MinUID belong to the
@@ -26,79 +26,61 @@ var ReservedIDs = []int{65534, 65535}
 // User is a Linux user account that sind creates on the nodes of the
 // cluster, with a home directory under /home.
 type User struct {
-	Name string `json:"name"`
+	Name string `yaml:"name"`
 	// UID is the ID of the user and, without Group, of its private group.
 	// Zero assigns the lowest free ID from MinUID up (see
 	// Cluster.ApplyDefaults).
-	UID int `json:"uid,omitempty"`
+	UID int `yaml:"uid,omitempty"`
 	// Group is the user's primary group, one of the cluster's groups.
 	// Empty gives the user a private group of its own name, with gid = uid.
-	Group string `json:"group,omitempty"`
+	Group string `yaml:"group,omitempty"`
 	// Groups are the user's supplementary groups, all among the cluster's
 	// groups.
-	Groups []string `json:"groups,omitempty"`
+	Groups []string `yaml:"groups,omitempty"`
 	// Accounts are the Slurm accounts the user gets associations with,
 	// all among the cluster's accounts. The first is the default account.
-	Accounts []string `json:"accounts,omitempty"`
+	Accounts []string `yaml:"accounts,omitempty"`
 	// Coordinator are the accounts the user coordinates: the user may
 	// manage them and their sub-accounts.
-	Coordinator []string `json:"coordinator,omitempty"`
+	Coordinator []string `yaml:"coordinator,omitempty"`
 	// AdminLevel is the user's Slurm admin level, none by default.
-	AdminLevel AdminLevel `json:"adminLevel,omitempty"`
+	AdminLevel AdminLevel `yaml:"adminLevel,omitempty"`
 }
 
-// UnmarshalJSON supports two YAML forms:
+// UnmarshalYAML supports two YAML forms:
 //   - bare string: "alice"
 //   - full object: "name: alice\n  uid: 2001"
-func (u *User) UnmarshalJSON(data []byte) error {
-	var name string
-	if err := json.Unmarshal(data, &name); err == nil {
-		u.Name = name
-		return nil
-	}
-
-	type userAlias User // prevents infinite recursion
-	var alias userAlias
-	if err := decodeStrict(data, &alias); err != nil {
-		return fmt.Errorf("user must be a name or an object: %w", err)
-	}
-	*u = User(alias)
-	return nil
+func (u *User) UnmarshalYAML(v *yaml.Node) error {
+	type alias User // prevents infinite recursion
+	return nameOrObject(v, &u.Name, (*alias)(u))
 }
 
 // Group is a Linux group that sind creates on the nodes that get the
 // cluster users, as a primary or supplementary group of the users.
 type Group struct {
-	Name string `json:"name"`
+	Name string `yaml:"name"`
 	// GID is the ID of the group. Zero assigns the lowest ID from MinUID up
 	// that no user or group has (see Cluster.ApplyDefaults).
-	GID int `json:"gid,omitempty"`
+	GID int `yaml:"gid,omitempty"`
 }
 
-// UnmarshalJSON supports two YAML forms:
+// UnmarshalYAML supports two YAML forms:
 //   - bare string: "hpc"
 //   - full object: "name: hpc\n  gid: 3000"
-func (g *Group) UnmarshalJSON(data []byte) error {
-	var name string
-	if err := json.Unmarshal(data, &name); err == nil {
-		g.Name = name
-		return nil
-	}
-
-	type groupAlias Group // prevents infinite recursion
-	var alias groupAlias
-	if err := decodeStrict(data, &alias); err != nil {
-		return fmt.Errorf("group must be a name or an object with name and gid: %w", err)
-	}
-	*g = Group(alias)
-	return nil
+func (g *Group) UnmarshalYAML(v *yaml.Node) error {
+	type alias Group // prevents infinite recursion
+	return nameOrObject(v, &g.Name, (*alias)(g))
 }
 
-// decodeStrict decodes a JSON object into v, rejecting unknown fields.
-func decodeStrict(data []byte, v any) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	return dec.Decode(v)
+// nameOrObject decodes the scalar form of a type that is a name or an
+// object into name, and the object form into obj. checkSyntax has checked
+// which form it is.
+func nameOrObject(v *yaml.Node, name *string, obj any) error {
+	if v.Kind == yaml.ScalarNode {
+		*name = v.Value
+		return nil
+	}
+	return v.Decode(obj)
 }
 
 // userNamePattern is the portable subset of Linux user and group names that

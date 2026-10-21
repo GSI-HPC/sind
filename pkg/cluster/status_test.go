@@ -3,8 +3,11 @@
 package cluster
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,58 +21,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func statusInspectJSON(name, status, ip string) string {
-	return "[" + statusInspectEntry(name, status, ip) + "]"
-}
-
-func statusInspectEntry(name, status, ip string) string {
-	return statusInspectEntryLabels(name, status, ip, docker.Labels{})
-}
-
-func statusInspectEntryLabels(name, status, ip string, labels docker.Labels) string {
-	labelsJSON, _ := json.Marshal(labels)
-	return fmt.Sprintf(`{
-  "Id": "abc123",
-  "Name": "/%s",
-  "State": {"Status": %q},
-  "Config": {"Labels": %s},
-  "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": %q}}}
-}`, name, status, labelsJSON, ip)
+// statusInspectJSON builds the docker inspect output of a container with
+// address ip on sind-dev-net.
+func statusInspectJSON(t *testing.T, name, status, ip string, labels docker.Labels) string {
+	t.Helper()
+	return nodeInspectJSON(t, name, nodeInspect{Status: status, Labels: labels, Networks: map[docker.NetworkName]string{"sind-dev-net": ip}})
 }
 
 // statusInspectJSONBatch builds a docker inspect JSON response covering every
 // container name in inspectArgs[1:]. resolver maps each name to (status, ip).
 // Used by mock dispatchers when GetStatus issues a batched inspect.
-func statusInspectJSONBatch(inspectArgs []string, resolver func(name string) (status, ip string)) string {
+func statusInspectJSONBatch(t *testing.T, inspectArgs []string, resolver func(name string) (status, ip string)) string {
+	t.Helper()
 	entries := make([]string, 0, len(inspectArgs)-1)
 	for _, name := range inspectArgs[1:] {
 		status, ip := resolver(name)
-		entries = append(entries, statusInspectEntry(name, status, ip))
+		entries = append(entries, statusInspectJSON(t, name, status, ip, nil))
 	}
-	return "[" + strings.Join(entries, ",") + "]"
-}
-
-// healthyOnCall returns a mock dispatcher where all checks pass.
-// Failed checks can be overridden by wrapping this function.
-func healthyOnCall(containerName, ip string) func([]string, string) mock.Result {
-	return func(args []string, _ string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSON(containerName, "running", ip)}
-		}
-		// probe.Snapshot uses a fused "systemctl is-active <units...>"
-		// call whose stdout is one state line per unit.
-		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			var b strings.Builder
-			for range args[4:] {
-				b.WriteString("active\n")
-			}
-			return mock.Result{Stdout: b.String()}
-		}
-		if len(args) >= 3 && args[2] == "scontrol" {
-			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
+	return inspectBatch(entries...)
 }
 
 // fusedIsActiveResponse emits one state line per unit in args[4:].
@@ -108,272 +77,99 @@ func inspectedNodeHealth(t *testing.T, c *docker.Client, containerName string, r
 	return GetNodeHealth(t.Context(), c, info, role, mesh.DefaultRealm, "dev")
 }
 
-func TestGetNodeHealth_Controller(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = healthyOnCall("sind-dev-controller", "172.18.0.2")
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.Equal(t, "172.18.0.2", health.IP)
-	assert.True(t, health.Services[probe.ServiceMunge])
-	assert.True(t, health.Services[probe.ServiceSSHD])
-	require.Contains(t, health.Services, probe.ServiceSlurmctld)
-	assert.True(t, health.Services[probe.ServiceSlurmctld])
-}
-
-func TestGetNodeHealth_Compute(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = healthyOnCall("sind-dev-worker-0", "172.18.0.3")
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.Equal(t, "172.18.0.3", health.IP)
-	assert.True(t, health.Services[probe.ServiceMunge])
-	assert.True(t, health.Services[probe.ServiceSSHD])
-	require.Contains(t, health.Services, probe.ServiceSlurmd)
-	assert.True(t, health.Services[probe.ServiceSlurmd])
-}
-
-func TestGetNodeHealth_Submitter(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-submitter", config.RoleSubmitter)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Services[probe.ServiceMunge])
-	assert.True(t, health.Services[probe.ServiceSSHD])
-	// Submitters have no role-specific Slurm service (only munge + sshd).
-	assert.NotContains(t, health.Services, probe.ServiceSlurmctld)
-	assert.NotContains(t, health.Services, probe.ServiceSlurmd)
-}
-
-func TestGetNodeHealth_UnmanagedWorker(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: "[" + statusInspectEntryLabels("sind-dev-worker-0", "running", "172.18.0.3",
-				docker.Labels{LabelRole: "worker", LabelManaged: "false"}) + "]"}
+// nodeHealthOnCall returns a mock dispatcher for GetNodeHealth: docker
+// inspect answers inspect, and every other call is a docker exec, which
+// fails with execErr when it is set. systemctl is-active reports the
+// services in down inactive, the others active, and scontrol ping
+// succeeds unless slurmctld is down.
+func nodeHealthOnCall(t *testing.T, inspect string, down []string, execErr error) func([]string, string) mock.Result {
+	return func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "inspect":
+			return mock.Result{Stdout: inspect}
+		case execErr != nil:
+			return mock.Result{Err: execErr}
+		case args[2] == "systemctl":
+			return fusedIsActiveResponse(t, args, down...)
+		case args[2] == "scontrol" && !slices.Contains(down, "slurmctld"):
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
 		}
-		return base(args, stdin)
+		return mock.Result{Err: fmt.Errorf("exit status 1")}
 	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
-
-	require.NoError(t, err)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services,
-		"slurmd is not sind's on an unmanaged worker")
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "systemctl", "is-active", "munge", "sshd"}, m.Calls[1].Args)
 }
 
-func TestGetNodeHealth_DB(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = healthyOnCall("sind-dev-db", "172.18.0.5")
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-db", config.RoleDB)
-
-	require.NoError(t, err)
-	assert.Equal(t, ServiceHealth{
-		probe.ServiceMunge: true, probe.ServiceSSHD: true,
-		probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true,
-	}, health.Services)
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "is-active", "munge", "sshd", "mariadb", "slurmdbd"}, m.Calls[1].Args)
-}
-
-func TestGetNodeHealth_UnmanagedDB(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-db", "172.18.0.5")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: "[" + statusInspectEntryLabels("sind-dev-db", "running", "172.18.0.5",
-				docker.Labels{LabelRole: "db", LabelManaged: "false"}) + "]"}
-		}
-		return base(args, stdin)
+func TestGetNodeHealth(t *testing.T) {
+	unmanaged := docker.Labels{LabelManaged: "false"}
+	munge, sshd := probe.ServiceMunge, probe.ServiceSSHD
+	tests := []struct {
+		name    string
+		node    string // in cluster dev
+		role    config.Role
+		status  string // of the container; running when empty
+		labels  docker.Labels
+		down    []string // services that are down
+		execErr error    // of every docker exec
+		want    ServiceHealth
+		wantRun []string // the readiness exec, when set
+	}{
+		{name: "controller", node: "controller", role: config.RoleController,
+			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmctld: true}},
+		{name: "worker", node: "worker-0", role: config.RoleWorker,
+			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmd: true}},
+		// Submitters have no role-specific Slurm service.
+		{name: "submitter", node: "submitter", role: config.RoleSubmitter, want: ServiceHealth{munge: true, sshd: true}},
+		{name: "db", node: "db", role: config.RoleDB,
+			want:    ServiceHealth{munge: true, sshd: true, probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true},
+			wantRun: []string{"exec", "sind-dev-db", "systemctl", "is-active", "munge", "sshd", "mariadb", "slurmdbd"}},
+		// slurmd, mariadb and slurmdbd are not sind's on unmanaged nodes.
+		{name: "unmanaged worker", node: "worker-0", role: config.RoleWorker, labels: unmanaged,
+			want:    ServiceHealth{munge: true, sshd: true},
+			wantRun: []string{"exec", "sind-dev-worker-0", "systemctl", "is-active", "munge", "sshd"}},
+		{name: "unmanaged db", node: "db", role: config.RoleDB, labels: unmanaged, want: ServiceHealth{munge: true, sshd: true}},
+		{name: "unmanaged not running", node: "worker-0", role: config.RoleWorker, status: "exited", labels: unmanaged,
+			want: ServiceHealth{munge: false, sshd: false}},
+		{name: "controller not running", node: "controller", role: config.RoleController, status: "exited",
+			want: ServiceHealth{munge: false, sshd: false, probe.ServiceSlurmctld: false}},
+		{name: "worker not running", node: "worker-0", role: config.RoleWorker, status: "exited",
+			want: ServiceHealth{munge: false, sshd: false, probe.ServiceSlurmd: false}},
+		{name: "slurmd failing", node: "worker-0", role: config.RoleWorker, down: []string{"slurmd"},
+			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmd: false}},
+		{name: "slurmctld failing", node: "controller", role: config.RoleController, down: []string{"slurmctld"},
+			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmctld: false}},
+		{name: "munge failing", node: "controller", role: config.RoleController, down: []string{"munge"},
+			want: ServiceHealth{munge: false, sshd: true, probe.ServiceSlurmctld: true}},
+		{name: "sshd failing", node: "controller", role: config.RoleController, down: []string{"sshd"},
+			want: ServiceHealth{munge: true, sshd: false, probe.ServiceSlurmctld: true}},
+		// A readiness exec that fails outright, e.g. when docker cannot
+		// reach the daemon: every service reads unhealthy.
+		{name: "probe error", node: "worker-0", role: config.RoleWorker, execErr: fmt.Errorf("docker daemon unreachable"),
+			want: ServiceHealth{munge: false, sshd: false, probe.ServiceSlurmd: false}},
 	}
-	c := docker.NewClient(&m)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			container := "sind-dev-" + tt.node
+			status := cmp.Or(tt.status, "running")
+			inspect := statusInspectJSON(t, container, status, "172.18.0.2", tt.labels)
+			var m mock.Executor
+			m.OnCall = nodeHealthOnCall(t, inspect, tt.down, tt.execErr)
 
-	health, err := inspectedNodeHealth(t, c, "sind-dev-db", config.RoleDB)
+			health, err := inspectedNodeHealth(t, docker.NewClient(&m), container, tt.role)
 
-	require.NoError(t, err)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services,
-		"mariadb and slurmdbd are not sind's on an unmanaged db node")
-}
-
-func TestGetNodeHealth_UnmanagedNotRunning(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: "[" + statusInspectEntryLabels("sind-dev-worker-0", "exited", "",
-				docker.Labels{LabelManaged: "false"}) + "]"}
-		}
-		return mock.Result{Err: fmt.Errorf("container not running")}
+			require.NoError(t, err)
+			assert.Equal(t, docker.ContainerState(status), health.State)
+			assert.Equal(t, "172.18.0.2", health.IP)
+			assert.Equal(t, tt.want, health.Services)
+			if tt.wantRun != nil {
+				require.Len(t, m.Calls, 2)
+				assert.Equal(t, tt.wantRun, m.Calls[1].Args)
+			}
+		})
 	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
-
-	require.NoError(t, err)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: false, probe.ServiceSSHD: false}, health.Services)
-}
-
-func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSON("sind-dev-controller", "exited", "")}
-		}
-		return mock.Result{Err: fmt.Errorf("container not running")}
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateExited, health.State)
-	assert.False(t, health.Services[probe.ServiceMunge])
-	assert.False(t, health.Services[probe.ServiceSSHD])
-	assert.False(t, health.Services[probe.ServiceSlurmctld])
-}
-
-func TestGetNodeHealth_ServiceFailing(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			return fusedIsActiveResponse(t, args, "slurmd")
-		}
-		return base(args, stdin)
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Services[probe.ServiceMunge])
-	assert.True(t, health.Services[probe.ServiceSSHD])
-	assert.False(t, health.Services[probe.ServiceSlurmd])
-}
-
-func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		// scontrol ping fails
-		if len(args) >= 3 && args[2] == "scontrol" {
-			return mock.Result{Err: fmt.Errorf("exit status 1")}
-		}
-		return base(args, stdin)
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Services[probe.ServiceMunge])
-	assert.True(t, health.Services[probe.ServiceSSHD])
-	assert.False(t, health.Services[probe.ServiceSlurmctld])
-}
-
-func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSON("sind-dev-worker-0", "exited", "")}
-		}
-		return mock.Result{Err: fmt.Errorf("container not running")}
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateExited, health.State)
-	assert.False(t, health.Services[probe.ServiceMunge])
-	assert.False(t, health.Services[probe.ServiceSSHD])
-	require.Contains(t, health.Services, probe.ServiceSlurmd)
-	assert.False(t, health.Services[probe.ServiceSlurmd])
-}
-
-func TestGetNodeHealth_MungeFailing(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			return fusedIsActiveResponse(t, args, "munge")
-		}
-		return base(args, stdin)
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.False(t, health.Services[probe.ServiceMunge])
-	assert.True(t, health.Services[probe.ServiceSSHD])
-	assert.True(t, health.Services[probe.ServiceSlurmctld])
-}
-
-func TestGetNodeHealth_SSHDFailing(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			return fusedIsActiveResponse(t, args, "sshd")
-		}
-		return base(args, stdin)
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Services[probe.ServiceMunge])
-	assert.False(t, health.Services[probe.ServiceSSHD])
-	assert.True(t, health.Services[probe.ServiceSlurmctld])
-}
-
-// TestGetNodeHealth_ProbeError covers a readiness exec that fails outright,
-// e.g. when docker cannot reach the daemon: every service reads unhealthy.
-func TestGetNodeHealth_ProbeError(t *testing.T) {
-	var m mock.Executor
-	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "exec" {
-			return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
-		}
-		return base(args, stdin)
-	}
-	c := docker.NewClient(&m)
-
-	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
-
-	require.NoError(t, err)
-	assert.Equal(t, docker.StateRunning, health.State)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: false, probe.ServiceSSHD: false, probe.ServiceSlurmd: false}, health.Services)
 }
 
 func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 2 && args[0] == "inspect" {
-			return mock.Result{Stdout: `[{
+	m.OnCall = nodeHealthOnCall(t, `[{
   "Id": "abc123",
   "Name": "/sind-dev-controller",
   "State": {"Status": "running"},
@@ -382,10 +178,7 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
     "sind-dev-net": {"IPAddress": "172.18.0.2"},
     "sind-mesh": {"IPAddress": "172.19.0.5"}
   }}
-}]`}
-		}
-		return healthyOnCall("sind-dev-controller", "")(args, stdin)
-	}
+}]`, nil, nil)
 	c := docker.NewClient(&m)
 
 	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
@@ -495,54 +288,27 @@ func TestGetNetworkHealth_MeshStopped(t *testing.T) {
 	assert.False(t, health.SSH)
 }
 
-func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
+// TestGetNetworkHealth_CheckError fails each inspect in turn, after the
+// ones before it succeed.
+func TestGetNetworkHealth_CheckError(t *testing.T) {
+	ok := []string{
+		netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"),
+		meshContainerInspect("sind-dns", "running"),
+		meshContainerInspect("sind-ssh", "running"),
+	}
+	for i, want := range []string{"checking mesh network", "checking DNS container", "checking SSH container", "checking cluster network"} {
+		t.Run(want, func(t *testing.T) {
+			var m mock.Executor
+			for _, out := range ok[:i] {
+				m.AddResult(out, "", nil)
+			}
+			m.AddResult("", "", fmt.Errorf("docker daemon error"))
 
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+			_, err := GetNetworkHealth(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
-}
-
-func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // dns error
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking DNS container")
-}
-
-func TestGetNetworkHealth_SSHCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // ssh error
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking SSH container")
-}
-
-func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
-	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)            // inspect ssh
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // cluster net error
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking cluster network")
+			require.ErrorContains(t, err, want)
+		})
+	}
 }
 
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
@@ -744,8 +510,7 @@ func TestGetMountPoints_CheckError(t *testing.T) {
 
 	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
 
-	require.Error(t, err)
-	assert.Equal(t, "checking volumes: docker daemon error", err.Error())
+	require.EqualError(t, err, "checking volumes: docker daemon error")
 }
 
 func TestGetMountPoints_HostPathWithComma(t *testing.T) {
@@ -808,9 +573,9 @@ func TestGetStatus_UnmanagedNodes(t *testing.T) {
 		case "inspect":
 			entries := make([]string, 0, len(args)-1)
 			for _, name := range args[1:] {
-				entries = append(entries, statusInspectEntryLabels(name, "running", "172.18.0.9", labels[name]))
+				entries = append(entries, statusInspectJSON(t, name, "running", "172.18.0.9", labels[name]))
 			}
-			return mock.Result{Stdout: "[" + strings.Join(entries, ",") + "]"}
+			return mock.Result{Stdout: inspectBatch(entries...)}
 		}
 		return base(args, stdin)
 	}
@@ -829,66 +594,34 @@ func TestGetStatus_UnmanagedNodes(t *testing.T) {
 // fullStatusOnCall returns a mock dispatcher for GetStatus with all healthy nodes.
 func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 	t.Helper()
+	ips := map[string]string{"sind-dev-controller": "172.18.0.2", "sind-dev-worker-0": "172.18.0.3", "sind-dev-worker-1": "172.18.0.4"}
+	return statusOnCall(t, []testutil.PsEntry{
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.8"},
+		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8"},
+		{ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8"},
+	}, func(name string) (string, string) { return "running", ips[name] })
+}
+
+// statusOnCall returns a mock dispatcher for GetStatus of the cluster that
+// docker ps lists as ps, whose containers have the state and IP resolve
+// gives, and whose services, networks and volumes are all healthy.
+func statusOnCall(t *testing.T, ps []testutil.PsEntry, resolve func(name string) (status, ip string)) func([]string, string) mock.Result {
+	t.Helper()
 	return func(args []string, _ string) mock.Result {
-		if len(args) == 0 {
-			return mock.Result{Err: fmt.Errorf("empty args")}
-		}
-
-		// docker ps (ListContainers)
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{
-					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.8",
-				},
-				testutil.PsEntry{
-					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8",
-				},
-				testutil.PsEntry{
-					ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8",
-				},
-			)}
-		}
-
-		// docker inspect (container) — batched across all containers.
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
-				switch name {
-				case "sind-dev-controller":
-					return "running", "172.18.0.2"
-				case "sind-dev-worker-0":
-					return "running", "172.18.0.3"
-				case "sind-dev-worker-1":
-					return "running", "172.18.0.4"
-				}
-				return "running", ""
-			})}
-		}
-
-		// docker exec: service checks (all pass)
-		if args[0] == "exec" {
-			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				var b strings.Builder
-				for range args[4:] {
-					b.WriteString("active\n")
-				}
-				return mock.Result{Stdout: b.String()}
-			}
-			if len(args) >= 3 && args[2] == "scontrol" {
-				return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
-			}
-		}
-
-		// docker network inspect / volume ls
-		if args[0] == "network" && args[1] == "inspect" {
+		switch {
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(ps...)}
+		case args[0] == "inspect":
+			return mock.Result{Stdout: statusInspectJSONBatch(t, args, resolve)}
+		case args[0] == "exec" && args[2] == "systemctl":
+			return mock.Result{Stdout: strings.Repeat("active\n", len(args)-4)}
+		case args[0] == "exec" && args[2] == "scontrol":
+			return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
+		case args[0] == "network" && args[1] == "inspect":
 			return mock.Result{Stdout: "[{}]\n"}
-		}
-		if args[0] == "volume" && args[1] == "ls" {
+		case args[0] == "volume" && args[1] == "ls":
 			return volumeLs("sind-dev-config", "sind-dev-munge", "sind-dev-data")
 		}
-
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 }
@@ -1000,7 +733,7 @@ func TestGetStatus_EmptyButClusterNetworkExists(t *testing.T) {
 // containers exist AND the cluster network is absent. GetStatus must return
 // a clear error rather than synthesize a plausible-looking empty report.
 func TestGetStatus_ClusterNotFound(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if args[0] == "ps" {
@@ -1039,8 +772,7 @@ func TestGetStatus_NetworkInspectError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking cluster network")
+	require.ErrorContains(t, err, "checking cluster network")
 	assert.Contains(t, err.Error(), "docker daemon not running")
 }
 
@@ -1051,8 +783,7 @@ func TestGetStatus_ListError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 func TestGetStatus_NodeHealthError(t *testing.T) {
@@ -1076,8 +807,7 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting cluster containers")
+	require.ErrorContains(t, err, "inspecting cluster containers")
 }
 
 func TestGetStatus_NetworkHealthError(t *testing.T) {
@@ -1094,8 +824,7 @@ func TestGetStatus_NetworkHealthError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
+	require.ErrorContains(t, err, "checking mesh network")
 }
 
 func TestGetStatus_VolumeHealthError(t *testing.T) {
@@ -1112,8 +841,7 @@ func TestGetStatus_VolumeHealthError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volumes")
+	require.ErrorContains(t, err, "checking volumes")
 }
 
 // TestGetStatus_NetworkErrorBeforeVolumeError checks that when both
@@ -1132,52 +860,17 @@ func TestGetStatus_NetworkErrorBeforeVolumeError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
+	require.ErrorContains(t, err, "checking mesh network")
 }
 
 func TestGetStatus_SortOrder(t *testing.T) {
 	var m mock.Executor
-	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		// Return nodes in non-sorted order including submitter.
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{
-					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker",
-				},
-				testutil.PsEntry{
-					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=submitter",
-				},
-				testutil.PsEntry{
-					ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=db",
-				},
-				testutil.PsEntry{
-					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller",
-				},
-			)}
-		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
-				switch name {
-				case "sind-dev-controller":
-					return "running", "172.18.0.2"
-				case "sind-dev-db":
-					return "running", "172.18.0.5"
-				case "sind-dev-submitter":
-					return "running", "172.18.0.4"
-				case "sind-dev-worker-0":
-					return "running", "172.18.0.3"
-				}
-				return "running", ""
-			})}
-		}
-		return base(args, stdin)
-	}
+	m.OnCall = statusOnCall(t, []testutil.PsEntry{
+		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+		{ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=submitter"},
+		{ID: "d", Names: "sind-dev-db", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=db"},
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+	}, func(string) (string, string) { return "running", "172.18.0.2" })
 	c := docker.NewClient(&m)
 
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -1192,33 +885,15 @@ func TestGetStatus_SortOrder(t *testing.T) {
 
 func TestGetStatus_MixedStates(t *testing.T) {
 	var m mock.Executor
-	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{
-					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller",
-				},
-				testutil.PsEntry{
-					ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker",
-				},
-			)}
+	m.OnCall = statusOnCall(t, []testutil.PsEntry{
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+		{ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+	}, func(name string) (string, string) {
+		if name == "sind-dev-worker-0" {
+			return "exited", ""
 		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
-				switch name {
-				case "sind-dev-controller":
-					return "running", "172.18.0.2"
-				case "sind-dev-worker-0":
-					return "exited", ""
-				}
-				return "running", ""
-			})}
-		}
-		return base(args, stdin)
-	}
+		return "running", "172.18.0.2"
+	})
 	c := docker.NewClient(&m)
 
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -1238,52 +913,13 @@ func TestGetStatus_Parallelism(t *testing.T) {
 	const nodeCount = statusNodeConcurrency + 4 // force at least one queued batch
 
 	// Build a stable list of worker containers; one controller at the head.
-	pss := make([]testutil.PsEntry, 0, nodeCount)
-	pss = append(pss, testutil.PsEntry{
-		ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
-		Labels: "sind.cluster=dev,sind.role=controller",
-	})
-	for i := 0; i < nodeCount-1; i++ {
-		pss = append(pss, testutil.PsEntry{
-			ID:     fmt.Sprintf("w%d", i),
-			Names:  fmt.Sprintf("sind-dev-worker-%d", i),
-			State:  "running",
-			Image:  "img",
-			Labels: "sind.cluster=dev,sind.role=worker",
-		})
+	pss := []testutil.PsEntry{{ID: "c", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"}}
+	for i := range nodeCount - 1 {
+		pss = append(pss, testutil.PsEntry{ID: fmt.Sprintf("w%d", i), Names: fmt.Sprintf("sind-dev-worker-%d", i), State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker"})
 	}
-
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(pss...)}
-		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(string) (string, string) {
-				return "running", "172.18.0.1"
-			})}
-		}
-		if args[0] == "exec" && len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			var b strings.Builder
-			for range args[4:] {
-				b.WriteString("active\n")
-			}
-			return mock.Result{Stdout: b.String()}
-		}
-		if args[0] == "exec" && len(args) >= 3 && args[2] == "scontrol" {
-			return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
-		}
-		if args[0] == "network" && args[1] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
-		}
-		if args[0] == "volume" && args[1] == "ls" {
-			return mock.Result{}
-		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
-	}
+	m.OnCall = statusOnCall(t, pss, func(string) (string, string) { return "running", "172.18.0.1" })
 	c := docker.NewClient(&m)
 
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -1318,7 +954,7 @@ func TestGetStatus_InspectMissingEntry(t *testing.T) {
 		}
 		// Return only the controller, omitting worker-0 entirely.
 		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSON("sind-dev-controller", "running", "172.18.0.2")}
+			return mock.Result{Stdout: statusInspectJSON(t, "sind-dev-controller", "running", "172.18.0.2", nil)}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
 	}
@@ -1326,8 +962,7 @@ func TestGetStatus_InspectMissingEntry(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspect returned no entry")
+	require.ErrorContains(t, err, "inspect returned no entry")
 	assert.Len(t, m.Calls, 2, "no probe or check starts")
 }
 
@@ -1362,7 +997,7 @@ func TestNodeHealth_JSONServicesMap(t *testing.T) {
 	// munge/sshd keys at the top level.
 	var top map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &top))
-	assert.ElementsMatch(t, []string{"status", "ip", "services"}, keys(top))
+	assert.ElementsMatch(t, []string{"status", "ip", "services"}, slices.Collect(maps.Keys(top)))
 
 	// And that munge/sshd live under services.
 	var svc map[string]bool
@@ -1378,13 +1013,4 @@ func TestNodeStatus_JSONManaged(t *testing.T) {
 	data, err := json.Marshal(NodeStatus{Name: "worker-0.dev", Role: config.RoleWorker})
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"managed":false`)
-}
-
-// keys returns the keys of a map sorted for stable assertion errors.
-func keys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

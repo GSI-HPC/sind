@@ -13,7 +13,7 @@ import (
 // On a pseudo-terminal, standard error is a terminal that is no pipe. The
 // size and the foreground the display reads from it are the kit's.
 func TestAPseudoTerminalIsATerminal(t *testing.T) {
-	_, tty := openPTYPair(t)
+	tty := openPTY(t)
 
 	assert.True(t, onTerminal(tty))
 	assert.False(t, intoPipe(tty))

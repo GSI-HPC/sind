@@ -3,11 +3,10 @@
 package cluster
 
 import (
-	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -68,19 +67,11 @@ func monitoredController(t *testing.T, base func([]string, string) mock.Result) 
 // around the cluster's.
 func addMonitoredWorker(t *testing.T, f *stackFake, wrap func(func([]string, string) mock.Result) func([]string, string) mock.Result) (*mock.Executor, error) {
 	t.Helper()
-	pipes := &mock.Pipes{}
-	t.Cleanup(pipes.CloseAll)
 	base := monitoredController(t, stackFirst(f, workerAddOnCall(t)))
 	if wrap != nil {
 		base = wrap(base)
 	}
-	m := &mock.Executor{OnCall: base, OnStart: pipes.OnStart}
-	client := docker.NewClient(m)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
-		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
-	}, time.Millisecond)
+	m, _, err := addWorkers(t, base, WorkerAddOptions{ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g"})
 	return m, err
 }
 
@@ -203,8 +194,8 @@ func TestCleanupRealm(t *testing.T) {
 	require.NoError(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
 	assert.Empty(t, f.containers)
 	assert.Empty(t, f.volumes)
-	assert.Less(t, indexOf(removed(m), "sind-grafana"), indexOf(removed(m), "sind-mesh"))
-	assert.Less(t, indexOf(removed(m), "sind-mesh"), indexOf(removed(m), "sind-journal"))
+	assert.Less(t, slices.Index(removed(m), "sind-grafana"), slices.Index(removed(m), "sind-mesh"))
+	assert.Less(t, slices.Index(removed(m), "sind-mesh"), slices.Index(removed(m), "sind-journal"))
 
 	for _, prefix := range []string{"ps -a --no-trunc --format json --filter label=com.docker.compose.project", "volume ls --format json --filter label=com.docker.compose.project"} {
 		f := newStackFake(t).withStack()
@@ -226,7 +217,7 @@ func TestCleanupRealm(t *testing.T) {
 func TestDelete_Monitored(t *testing.T) {
 	f := newStackFake(t).withStack()
 	f.nodes = []docker.ContainerListEntry{monitoredNode("dev", "controller", "controller")}
-	base := deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	base := deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers:    []testutil.PsEntry{{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"}},
 		networkExists: true,
 		volumes:       []string{"config", "munge", "data"},

@@ -24,12 +24,6 @@ func checkPrerequisites(t *testing.T, _ *docker.Client) {
 	t.Skip("integration test")
 }
 
-func testImage(t *testing.T) string {
-	t.Helper()
-	t.Skip("integration test")
-	return ""
-}
-
 func executeWithRealm(_ string, _ ...string) (string, string, error) {
 	panic("executeWithRealm called in unit mode")
 }

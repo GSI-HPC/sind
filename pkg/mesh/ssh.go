@@ -6,8 +6,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/pem"
 	"fmt"
 	"strings"
@@ -15,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"golang.org/x/crypto/ssh"
 )
 
 // knownHostsPath is the path to the known_hosts file inside the SSH container.
@@ -62,7 +61,7 @@ func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
 // it starts.
 func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (bool, error) {
 	name := m.SSHContainerName()
-	info, err := m.inspectIfExists(ctx, name)
+	info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 	if err != nil {
 		return false, fmt.Errorf("checking SSH container: %w", err)
 	}
@@ -131,54 +130,35 @@ func (m *Manager) startSSH(ctx context.Context, info *docker.ContainerInfo) erro
 // privateKeyPath is the path to the private key inside the SSH container.
 const privateKeyPath = "/root/.ssh/id_ed25519"
 
-// publicKeyPath is the path to the public key inside the SSH container.
-const publicKeyPath = "/root/.ssh/id_ed25519.pub"
+// PublicKeyPath is the path to the public key inside the SSH container.
+const PublicKeyPath = "/root/.ssh/id_ed25519.pub"
 
 // GetSSHPrivateKey reads the SSH private key from the SSH container.
 func (m *Manager) GetSSHPrivateKey(ctx context.Context) (string, error) {
-	sshName := m.SSHContainerName()
-	if err := m.requireMeshContainer(ctx, sshName); err != nil {
-		return "", err
-	}
-	content, err := m.Docker.ReadFile(ctx, sshName, privateKeyPath)
-	if err != nil {
-		return "", fmt.Errorf("reading SSH private key: %w", err)
-	}
-	return content, nil
+	return m.readSSHFile(ctx, privateKeyPath, "SSH private key")
 }
 
 // GetSSHPublicKey reads the SSH public key from the SSH container.
 func (m *Manager) GetSSHPublicKey(ctx context.Context) (string, error) {
-	sshName := m.SSHContainerName()
-	if err := m.requireMeshContainer(ctx, sshName); err != nil {
-		return "", err
-	}
-	content, err := m.Docker.ReadFile(ctx, sshName, publicKeyPath)
-	if err != nil {
-		return "", fmt.Errorf("reading SSH public key: %w", err)
-	}
-	return content, nil
+	return m.readSSHFile(ctx, PublicKeyPath, "SSH public key")
 }
 
 // GetSSHKnownHosts reads the known_hosts file from the SSH container.
 func (m *Manager) GetSSHKnownHosts(ctx context.Context) (string, error) {
-	sshName := m.SSHContainerName()
-	if err := m.requireMeshContainer(ctx, sshName); err != nil {
-		return "", err
-	}
-	content, err := m.Docker.ReadFile(ctx, sshName, knownHostsPath)
-	if err != nil {
-		return "", fmt.Errorf("reading SSH known_hosts: %w", err)
-	}
-	return content, nil
+	return m.readSSHFile(ctx, knownHostsPath, "SSH known_hosts")
 }
 
-// AddKnownHost adds a host key entry to the known_hosts file in the SSH
-// container, replacing an existing entry for the hostname, as AddKnownHosts
-// does. The hostKey should be the full key type and data (e.g.
-// "ssh-ed25519 AAAA...").
-func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) error {
-	return m.AddKnownHosts(ctx, []KnownHostEntry{{Hostname: hostname, HostKey: hostKey}})
+// readSSHFile reads the file at path, which holds what, from the SSH
+// container.
+func (m *Manager) readSSHFile(ctx context.Context, path, what string) (string, error) {
+	if err := m.requireMeshContainer(ctx, m.SSHContainerName()); err != nil {
+		return "", err
+	}
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), path)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", what, err)
+	}
+	return content, nil
 }
 
 // KnownHostEntry holds a hostname and its SSH host key for batch registration.
@@ -191,44 +171,36 @@ type KnownHostEntry struct {
 // entries for the same hostnames are replaced, making the operation
 // idempotent on retry.
 func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) error {
-	if len(entries) == 0 {
+	hostnames := make([]string, len(entries))
+	lines := make([]string, len(entries))
+	for i, e := range entries {
+		hostnames[i], lines[i] = e.Hostname, e.Hostname+" "+e.HostKey
+	}
+	return m.editKnownHosts(ctx, hostnames, lines)
+}
+
+// RemoveKnownHosts removes all entries for the given hostnames from the
+// known_hosts file in a single operation.
+func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
+	return m.editKnownHosts(ctx, hostnames, nil)
+}
+
+// editKnownHosts drops the known_hosts lines of hostnames and appends add.
+// It does nothing without hostnames.
+func (m *Manager) editKnownHosts(ctx context.Context, hostnames, add []string) error {
+	if len(hostnames) == 0 {
 		return nil
 	}
-	name := m.SSHContainerName()
-	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
 	if err != nil {
 		return fmt.Errorf("reading known_hosts: %w", err)
 	}
-
-	// Build set of hostnames being added for dedup.
-	newHostnames := make(map[string]bool, len(entries))
-	for _, e := range entries {
-		newHostnames[e.Hostname] = true
+	lines := append(withoutNames(strings.Split(content, "\n"), 0, hostnames), add...)
+	var result string
+	if len(lines) > 0 {
+		result = strings.Join(lines, "\n") + "\n"
 	}
-
-	// Keep existing lines that don't conflict with new entries.
-	lines := strings.Split(content, "\n")
-	var buf strings.Builder
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 1 && newHostnames[fields[0]] {
-			continue
-		}
-		buf.WriteString(line)
-		buf.WriteByte('\n')
-	}
-	for _, e := range entries {
-		buf.WriteString(e.Hostname)
-		buf.WriteByte(' ')
-		buf.WriteString(e.HostKey)
-		buf.WriteByte('\n')
-	}
-
-	err = m.writeKnownHosts(ctx, buf.String())
-	if err != nil {
+	if err := m.writeKnownHosts(ctx, result); err != nil {
 		return fmt.Errorf("writing known_hosts: %w", err)
 	}
 	return nil
@@ -241,122 +213,11 @@ func (m *Manager) writeKnownHosts(ctx context.Context, content string) error {
 	return m.Docker.WriteFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
 }
 
-// RemoveKnownHosts removes all entries for the given hostnames from the
-// known_hosts file in a single operation.
-func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
-	if len(hostnames) == 0 {
-		return nil
-	}
-	name := m.SSHContainerName()
-	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
-	if err != nil {
-		return fmt.Errorf("reading known_hosts: %w", err)
-	}
-
-	remove := make(map[string]bool, len(hostnames))
-	for _, h := range hostnames {
-		remove[h] = true
-	}
-
-	lines := strings.Split(content, "\n")
-	kept := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 1 && remove[fields[0]] {
-			continue
-		}
-		kept = append(kept, line)
-	}
-
-	var result string
-	if len(kept) > 0 {
-		result = strings.Join(kept, "\n") + "\n"
-	}
-
-	err = m.writeKnownHosts(ctx, result)
-	if err != nil {
-		return fmt.Errorf("writing known_hosts: %w", err)
-	}
-
-	return nil
-}
-
-// RemoveKnownHost removes all entries for the given hostname from the
-// known_hosts file in the SSH container.
-func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
-	return m.RemoveKnownHosts(ctx, []string{hostname})
-}
-
 // generateKeypair creates a new ed25519 keypair and returns the private key
 // in OpenSSH PEM format and the public key in authorized_keys format.
 func generateKeypair() (privateKey, publicKey []byte) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	return marshalOpenSSHPrivateKey(priv, pub), marshalOpenSSHPublicKey(pub)
-}
-
-// marshalOpenSSHPublicKey encodes an ed25519 public key in the authorized_keys
-// one-line format: "ssh-ed25519 <base64>\n".
-func marshalOpenSSHPublicKey(pub ed25519.PublicKey) []byte {
-	blob := sshString([]byte("ssh-ed25519"))
-	blob = append(blob, sshString([]byte(pub))...)
-	return []byte("ssh-ed25519 " + base64.StdEncoding.EncodeToString(blob) + "\n")
-}
-
-// marshalOpenSSHPrivateKey encodes an ed25519 key pair in OpenSSH's private
-// key format (openssh-key-v1).
-func marshalOpenSSHPrivateKey(priv ed25519.PrivateKey, pub ed25519.PublicKey) []byte {
-	// Public key section (same wire format as the public key blob).
-	pubSection := sshString([]byte("ssh-ed25519"))
-	pubSection = append(pubSection, sshString([]byte(pub))...)
-
-	// Private key section with matching check integers.
-	check := make([]byte, 4)
-	_, _ = rand.Read(check)
-	checkInt := binary.BigEndian.Uint32(check)
-
-	var privSection []byte
-	privSection = sshUint32(privSection, checkInt)
-	privSection = sshUint32(privSection, checkInt)
-	privSection = append(privSection, sshString([]byte("ssh-ed25519"))...)
-	privSection = append(privSection, sshString([]byte(pub))...)
-	privSection = append(privSection, sshString([]byte(priv))...) // full 64-byte key
-	privSection = append(privSection, sshString([]byte(""))...)   // comment
-
-	// Pad to block size (8 bytes for "none" cipher).
-	for i := byte(1); len(privSection)%8 != 0; i++ {
-		privSection = append(privSection, i)
-	}
-
-	// Assemble the full binary blob.
-	var blob []byte
-	blob = append(blob, "openssh-key-v1\x00"...)      // AUTH_MAGIC
-	blob = append(blob, sshString([]byte("none"))...) // cipher
-	blob = append(blob, sshString([]byte("none"))...) // kdf
-	blob = append(blob, sshString([]byte(""))...)     // kdf options
-	blob = sshUint32(blob, 1)                         // number of keys
-	blob = append(blob, sshString(pubSection)...)     // public key
-	blob = append(blob, sshString(privSection)...)    // private key
-
-	return pem.EncodeToMemory(&pem.Block{
-		Type:  "OPENSSH PRIVATE KEY",
-		Bytes: blob,
-	})
-}
-
-// sshString encodes data as an SSH wire string (uint32 length prefix + data).
-func sshString(data []byte) []byte {
-	buf := make([]byte, 4+len(data))
-	binary.BigEndian.PutUint32(buf, uint32(len(data)))
-	copy(buf[4:], data)
-	return buf
-}
-
-// sshUint32 appends a big-endian uint32 to buf.
-func sshUint32(buf []byte, v uint32) []byte {
-	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, v)
-	return append(buf, b...)
+	block, _ := ssh.MarshalPrivateKey(priv, "")
+	sshPub, _ := ssh.NewPublicKey(pub)
+	return pem.EncodeToMemory(block), ssh.MarshalAuthorizedKey(sshPub)
 }

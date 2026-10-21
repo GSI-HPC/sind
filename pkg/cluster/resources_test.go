@@ -3,11 +3,8 @@
 package cluster
 
 import (
-	"archive/tar"
 	"context"
 	"fmt"
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -135,8 +132,7 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 
 	err := CreateClusterNetwork(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating cluster network")
+	require.ErrorContains(t, err, "creating cluster network")
 }
 
 // --- CreateClusterVolume ---
@@ -167,8 +163,7 @@ func TestCreateClusterVolume_Error(t *testing.T) {
 
 	err := CreateClusterVolume(t.Context(), c, mesh.DefaultRealm, "dev", VolumeMunge)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "munge")
+	require.ErrorContains(t, err, "munge")
 }
 
 // --- WriteClusterConfig ---
@@ -311,8 +306,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating config helper")
+	require.ErrorContains(t, err, "creating config helper")
 }
 
 func TestWriteClusterConfig_DefMemPerCPU(t *testing.T) {
@@ -326,7 +320,7 @@ func TestWriteClusterConfig_DefMemPerCPU(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{
 		{Role: config.RoleController, CPUs: 1, Memory: "64m"},
 		{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "1g"},
-		{Role: config.RoleWorker, CPUs: 4, Memory: "64m", Managed: testutil.Ptr(false)},
+		{Role: config.RoleWorker, CPUs: 4, Memory: "64m", Managed: new(false)},
 	}}
 	require.NoError(t, WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest"))
 
@@ -342,8 +336,7 @@ func TestWriteClusterConfig_InvalidMemory(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "2x"}}}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
+	require.ErrorContains(t, err, `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
 	assert.Empty(t, m.Calls)
 }
 
@@ -357,28 +350,11 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing slurm config")
+	require.ErrorContains(t, err, "writing slurm config")
 	assert.Len(t, m.Calls, 3) // defer still runs
 }
 
 // --- WriteMungeKey ---
-
-// tarModes returns the mode of each file in a tar archive, as docker cp
-// receives it on stdin.
-func tarModes(t *testing.T, archive string) map[string]int64 {
-	t.Helper()
-	modes := map[string]int64{}
-	tr := tar.NewReader(strings.NewReader(archive))
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return modes
-		}
-		require.NoError(t, err)
-		modes[hdr.Name] = hdr.Mode
-	}
-}
 
 func TestWriteClusterConfig_WithDB(t *testing.T) {
 	var m mock.Executor
@@ -421,7 +397,7 @@ func TestWriteClusterConfig_WithDB(t *testing.T) {
 	// slurmdbd.conf and its fragments, which may hold a StoragePass, are
 	// written 0600, never readable by others, and given to slurm with
 	// their directory.
-	modes := tarModes(t, cpStdin)
+	modes := testutil.TarModes(t, cpStdin)
 	assert.Equal(t, int64(0o600), modes["slurmdbd.conf"])
 	assert.Equal(t, int64(0o600), modes["slurmdbd.conf.d/archive.conf"])
 	assert.Equal(t, int64(0o644), modes["slurm.conf"])
@@ -461,7 +437,7 @@ func TestWriteClusterConfig_UnmanagedDB(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: config.RoleController},
-			{Role: config.RoleDB, Managed: testutil.Ptr(false)},
+			{Role: config.RoleDB, Managed: new(false)},
 			{Role: config.RoleWorker, CPUs: 1, Memory: "512m"},
 		},
 	}
@@ -505,8 +481,7 @@ func TestWriteClusterConfig_DBErrors(t *testing.T) {
 
 			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, tt.cfg, "busybox:latest")
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			if tt.name != "run" {
 				assert.Equal(t, "rm", m.Calls[len(m.Calls)-1].Args[0], "helper removed")
 			}
@@ -536,7 +511,7 @@ func TestWriteMungeKey(t *testing.T) {
 	// CopyToContainer with mode 0400, so that the key is never readable by
 	// others, then chown
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
-	assert.Equal(t, map[string]int64{"munge.key": 0o400}, tarModes(t, m.Calls[1].Stdin))
+	assert.Equal(t, map[string]int64{"munge.key": 0o400}, testutil.TarModes(t, m.Calls[1].Stdin))
 	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chown", "munge:munge", "/etc/munge/munge.key"}, m.Calls[2].Args)
 	assert.Equal(t, []string{"rm", "-f", "-v", "sind-dev-munge-helper"}, m.Calls[3].Args)
 }
@@ -548,8 +523,7 @@ func TestWriteMungeKey_RunError(t *testing.T) {
 
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating munge helper")
+	require.ErrorContains(t, err, "creating munge helper")
 }
 
 func TestWriteMungeKey_CopyError(t *testing.T) {
@@ -561,8 +535,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing munge key")
+	require.ErrorContains(t, err, "writing munge key")
 	assert.Len(t, m.Calls, 3) // defer runs rm
 }
 
@@ -576,6 +549,5 @@ func TestWriteMungeKey_SecureError(t *testing.T) {
 
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fixing munge key ownership")
+	require.ErrorContains(t, err, "fixing munge key ownership")
 }

@@ -94,14 +94,9 @@ func TestDnsPolkitAuthorized_SecondFails(t *testing.T) {
 // --- findBridgeInterface ---
 
 func TestFindBridgeInterface(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-
-	networkID := "abcdef012345extra"
 	bridgeName := "br-abcdef012345"
-	require.NoError(t, os.Mkdir(filepath.Join(dir, bridgeName), 0o755))
+	fakeBridges(t, bridgeName)
+	networkID := "abcdef012345extra"
 
 	iface, err := findBridgeInterface(networkID)
 	require.NoError(t, err)
@@ -109,20 +104,15 @@ func TestFindBridgeInterface(t *testing.T) {
 }
 
 func TestFindBridgeInterface_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
+	fakeBridges(t)
 
 	_, err := findBridgeInterface("abcdef012345extra")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+	assert.ErrorContains(t, err, "not found")
 }
 
 func TestFindBridgeInterface_IDTooShort(t *testing.T) {
 	_, err := findBridgeInterface("short")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "too short")
+	assert.ErrorContains(t, err, "too short")
 }
 
 // --- configureDNS ---
@@ -149,8 +139,7 @@ func TestConfigureDNS_DnsError(t *testing.T) {
 	mgr := &Manager{Exec: &m, Realm: DefaultRealm}
 
 	err := mgr.configureDNS(t.Context(), "br-abc", "172.18.0.2")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "setting DNS server")
+	assert.ErrorContains(t, err, "setting DNS server")
 }
 
 func TestConfigureDNS_DomainError(t *testing.T) {
@@ -160,8 +149,7 @@ func TestConfigureDNS_DomainError(t *testing.T) {
 	mgr := &Manager{Exec: &m, Realm: DefaultRealm}
 
 	err := mgr.configureDNS(t.Context(), "br-abc", "172.18.0.2")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "setting DNS domains")
+	assert.ErrorContains(t, err, "setting DNS domains")
 }
 
 func TestConfigureDNS_CustomRealm(t *testing.T) {
@@ -196,8 +184,7 @@ func TestRevertDNS_Error(t *testing.T) {
 	mgr := &Manager{Exec: &m}
 
 	err := mgr.revertDNS(t.Context(), "br-gone")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reverting DNS")
+	assert.ErrorContains(t, err, "reverting DNS")
 }
 
 // --- configureHostDNS ---
@@ -207,11 +194,7 @@ const inspectNetworkJSON = `[{"Name":"sind-mesh","Driver":"bridge","ID":"abcdef0
 const inspectDNSContainerJSON = `[{"Name":"sind-dns","State":{"Status":"running","Running":true},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"172.18.0.2"}}}}]`
 
 func TestConfigureHostDNS_Success(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl is-active
@@ -266,10 +249,7 @@ func TestConfigureHostDNS_InspectNetworkFails(t *testing.T) {
 }
 
 func TestConfigureHostDNS_BridgeNotFound(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
+	fakeBridges(t)
 	// No bridge directory created.
 
 	var sys mock.Executor
@@ -286,11 +266,7 @@ func TestConfigureHostDNS_BridgeNotFound(t *testing.T) {
 }
 
 func TestConfigureHostDNS_InspectContainerFails(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl
@@ -307,11 +283,7 @@ func TestConfigureHostDNS_InspectContainerFails(t *testing.T) {
 }
 
 func TestConfigureHostDNS_ConfigureDNSFails(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil)                  // systemctl
@@ -332,11 +304,7 @@ func TestConfigureHostDNS_ConfigureDNSFails(t *testing.T) {
 // --- revertHostDNS ---
 
 func TestRevertHostDNS_Success(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl is-active
@@ -370,10 +338,7 @@ func TestRevertHostDNS_InspectNetworkFails(t *testing.T) {
 }
 
 func TestRevertHostDNS_BridgeNotFound(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
+	fakeBridges(t)
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl ok
@@ -384,11 +349,7 @@ func TestRevertHostDNS_BridgeNotFound(t *testing.T) {
 }
 
 func TestRevertHostDNS_RevertError(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil)                         // systemctl ok
@@ -398,4 +359,17 @@ func TestRevertHostDNS_RevertError(t *testing.T) {
 	dockerMock.AddResult(inspectNetworkJSON, "", nil)
 
 	mgr.revertHostDNS(t.Context()) // logs error but doesn't panic
+}
+
+// fakeBridges points sysClassNet at a new directory with the given bridge
+// interfaces.
+func fakeBridges(t *testing.T, names ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	old := sysClassNet
+	sysClassNet = dir
+	t.Cleanup(func() { sysClassNet = old })
+	for _, name := range names {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, name), 0o755))
+	}
 }

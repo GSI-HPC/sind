@@ -213,8 +213,13 @@ func TestMCPServer_VersionAndTools(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	served := make(chan error, 1)
-	go func() { served <- root.ExecuteContext(ctx) }()
+	// The server ends with nil or context.Canceled, whichever of the
+	// session's close and the cancel it sees first.
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		_ = root.ExecuteContext(ctx)
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
@@ -255,8 +260,7 @@ func TestRefuseFlagArgs(t *testing.T) {
 	assert.Equal(t, []string{"worker-0.dev"}, called.Args)
 	for _, args := range [][]string{{"-v"}, {"worker-0", "--follow"}, {"--", "-x"}} {
 		err := call(plain, "sind_logs", args...)
-		require.Error(t, err, args)
-		assert.Contains(t, err.Error(), "is a flag")
+		require.ErrorContains(t, err, "is a flag", args)
 	}
 
 	// exec's command after "--" may hold flags; its own arguments may not.
@@ -495,13 +499,6 @@ func TestRefuseFlagArgs_RunsToCompletion(t *testing.T) {
 	}
 }
 
-func TestWaitUntil(*testing.T) {
-	done := make(chan struct{})
-	close(done)
-	waitUntil(done, time.Hour)
-	waitUntil(make(chan struct{}), time.Millisecond)
-}
-
 func TestMCPStream_TokenFromEnv(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
@@ -624,9 +621,9 @@ func TestMCPStreamToken(t *testing.T) {
 	})
 }
 
-// TestWithMCPRealm checks that a server command hands the root's --realm
-// to the sind processes of its tool calls through SIND_REALM.
-func TestWithMCPRealm(t *testing.T) {
+// TestAsMCPServer_Realm checks that a server command hands the root's
+// --realm to the sind processes of its tool calls through SIND_REALM.
+func TestAsMCPServer_Realm(t *testing.T) {
 	t.Setenv("SIND_REALM", "env")
 	root := &cobra.Command{Use: "sind"}
 	root.PersistentFlags().String("realm", "", "")
@@ -636,7 +633,7 @@ func TestWithMCPRealm(t *testing.T) {
 		return nil
 	}}
 	root.AddCommand(server)
-	withMCPRealm(server)
+	asMCPServer(server)
 
 	root.SetArgs([]string{"start"})
 	require.NoError(t, root.Execute())
@@ -656,5 +653,22 @@ func TestStreamURL(t *testing.T) {
 		tcp, err := net.ResolveTCPAddr("tcp", addr)
 		require.NoError(t, err)
 		assert.Equal(t, want, streamURL(tcp), addr)
+	}
+}
+
+// TestMCPCommand_HelpStrings verifies that sind words the help of ophis's
+// commands as its own: imperative Shorts and lowercase flag usages.
+func TestMCPCommand_HelpStrings(t *testing.T) {
+	stdout, _, err := executeCommand("--help")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "mcp         Serve sind's commands as MCP tools\n")
+
+	for _, sub := range []string{"start", "stream", "tools"} {
+		t.Run(sub, func(t *testing.T) {
+			stdout, _, err := executeCommand("mcp", sub, "--help")
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "--log-level string   log level of the MCP server (debug, info, warn, error)\n")
+			assert.NotContains(t, stdout, "Log level")
+		})
 	}
 }

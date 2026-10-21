@@ -4,6 +4,7 @@ package observability
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -42,19 +43,22 @@ func TestEnsureStack_Creates(t *testing.T) {
 		assert.Equal(t, string(s), c.labels[docker.ComposeServiceLabel])
 		assert.NotContains(t, c.labels, labelRealm, "a container with sind.realm would count as a cluster's")
 		mem, _ := testutil.ArgValue(c.args, "--memory")
-		assert.Equal(t, s.memoryLimit(), mem)
+		assert.Equal(t, specs[s].memoryLimit, mem)
 
 		labels := f.volumes[string(VolumeName("sind", s))]
 		assert.Equal(t, map[string]string{labelRealm: "sind", docker.ComposeProjectLabel: "sind-mesh", docker.ComposeVolumeLabel: string(s)}, labels)
 	}
-	ip := func(s Service) string {
-		v, _ := testutil.ArgValue(f.containers[string(ContainerName("sind", s))].args, "--ip")
+	arg := func(s Service, flag string) string {
+		v, _ := testutil.ArgValue(f.containers[string(ContainerName("sind", s))].args, flag)
 		return v
 	}
-	assert.Equal(t, "172.30.255.253", ip(ServiceGrafana))
-	assert.Equal(t, "172.30.255.252", ip(ServicePrometheus))
-	assert.Equal(t, "172.30.255.251", ip(ServiceLoki))
-	assert.Empty(t, ip(ServiceAlloy))
+	assert.Equal(t, "172.30.255.253", arg(ServiceGrafana, "--ip"))
+	assert.Equal(t, "172.30.255.252", arg(ServicePrometheus, "--ip"))
+	assert.Equal(t, "172.30.255.251", arg(ServiceLoki, "--ip"))
+	assert.Empty(t, arg(ServiceAlloy, "--ip"))
+	assert.Equal(t, "type=volume,source=sind-grafana,target=/var/lib/grafana", arg(ServiceGrafana, "--mount"))
+	assert.Equal(t, "type=volume,source=sind-prometheus,target=/prometheus", arg(ServicePrometheus, "--mount"))
+	assert.Equal(t, "type=volume,source=sind-loki,target=/loki", arg(ServiceLoki, "--mount"))
 
 	alloy := f.containers["sind-alloy"]
 	assert.Equal(t, "// alloy\n", alloy.files[AlloyConfigPath])
@@ -168,8 +172,7 @@ func TestEnsureStack_Errors(t *testing.T) {
 			}
 			f.fail[tt.fail] = exit(t)
 			_, err := m.EnsureStack(t.Context(), "", "")
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -179,8 +182,7 @@ func TestEnsureStack_NotReady(t *testing.T) {
 	f.down["http://sind-loki:3100/ready"] = true
 
 	_, err := m.EnsureStack(t.Context(), "", "")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "waiting for the monitoring stack: ")
+	require.ErrorContains(t, err, "waiting for the monitoring stack: ")
 	assert.Contains(t, err.Error(), "loki not ready")
 }
 
@@ -216,13 +218,11 @@ func TestSync(t *testing.T) {
 
 	f.down["http://sind-alloy:12345/-/reload"] = true
 	err = m.Sync(t.Context(), "third\n")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reloading Alloy configuration: ")
+	require.ErrorContains(t, err, "reloading Alloy configuration: ")
 
 	f.fail["cp - sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.Sync(t.Context(), "fourth\n")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing Alloy configuration: ")
+	require.ErrorContains(t, err, "writing Alloy configuration: ")
 }
 
 func TestJournals(t *testing.T) {
@@ -241,11 +241,9 @@ func TestJournals(t *testing.T) {
 
 	f.containers["sind-alloy"].state = docker.StateExited
 	err = m.ResetJournals(t.Context(), "dev", "worker-0")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "resetting journal directories: ")
+	require.ErrorContains(t, err, "resetting journal directories: ")
 	err = m.RemoveJournals(t.Context(), "dev")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing journal directories: ")
+	require.ErrorContains(t, err, "removing journal directories: ")
 }
 
 func TestRemove(t *testing.T) {
@@ -258,12 +256,12 @@ func TestRemove(t *testing.T) {
 	f.volumes["sind-ssh-config"] = map[string]string{docker.ComposeProjectLabel: "sind-mesh"}
 
 	require.NoError(t, m.Remove(t.Context()))
-	assert.Equal(t, []string{"sind-dns"}, keys(f.containers), "the mesh's containers stay")
+	assert.Equal(t, []string{"sind-dns"}, slices.Sorted(maps.Keys(f.containers)), "the mesh's containers stay")
 	assert.Len(t, f.volumes, 6, "Remove keeps the volumes")
 
 	delete(f.volumes, "sind-loki")
 	require.NoError(t, m.RemoveVolumes(t.Context()))
-	assert.Equal(t, []string{"sind-ssh-config"}, keys(f.volumes), "the mesh's volumes stay")
+	assert.Equal(t, []string{"sind-ssh-config"}, slices.Sorted(maps.Keys(f.volumes)), "the mesh's volumes stay")
 }
 
 func TestRemove_Gone(t *testing.T) {
@@ -279,39 +277,25 @@ func TestRemove_Gone(t *testing.T) {
 	require.NoError(t, m.RemoveVolumes(t.Context()))
 }
 
-// keys returns the sorted keys of a map.
-func keys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
-}
-
 func TestRemove_Errors(t *testing.T) {
 	m, f := newTestManager(t)
 	_, err := m.EnsureStack(t.Context(), "", "")
 	require.NoError(t, err)
 	f.fail["rm -f -v sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.Remove(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing alloy container: ")
+	require.ErrorContains(t, err, "removing alloy container: ")
 
 	f.fail["volume rm sind-grafana"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.RemoveVolumes(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing volume sind-grafana: ")
+	require.ErrorContains(t, err, "removing volume sind-grafana: ")
 
 	f.fail["ps"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.Remove(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing the monitoring containers: ")
+	require.ErrorContains(t, err, "listing the monitoring containers: ")
 
 	f.fail["volume ls"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.RemoveVolumes(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing the monitoring volumes: ")
+	require.ErrorContains(t, err, "listing the monitoring volumes: ")
 }
 
 func TestStatus(t *testing.T) {
@@ -404,19 +388,16 @@ func TestStart_Errors(t *testing.T) {
 
 	delete(f.containers, "sind-loki")
 	found, err := m.Start(t.Context())
-	require.Error(t, err)
+	require.EqualError(t, err, "the monitoring stack lacks sind-loki: creating a monitored cluster creates it again")
 	assert.True(t, found)
-	assert.Equal(t, "the monitoring stack lacks sind-loki: creating a monitored cluster creates it again", err.Error())
 
 	f.fail["inspect sind-prometheus"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking prometheus container: ")
+	require.ErrorContains(t, err, "checking prometheus container: ")
 	delete(f.fail, "inspect sind-prometheus")
 
 	f.containers["sind-alloy"].state = docker.StateExited
 	f.fail["start sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting alloy container: ")
+	require.ErrorContains(t, err, "starting alloy container: ")
 }

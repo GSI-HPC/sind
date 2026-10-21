@@ -56,8 +56,7 @@ func TestMemoryMB_Invalid(t *testing.T) {
 		"8192p":   "too large",
 	} {
 		_, err := MemoryMB(in)
-		require.Error(t, err, in)
-		assert.Contains(t, err.Error(), wantErr, in)
+		require.ErrorContains(t, err, wantErr, in)
 	}
 }
 
@@ -103,9 +102,7 @@ func TestValidate_Resources(t *testing.T) {
 		c := valid()
 		tt.change(c)
 		c.ApplyDefaults()
-		err := c.Validate()
-		require.Error(t, err, tt.name)
-		assert.Contains(t, err.Error(), tt.wantErr, tt.name)
+		require.ErrorContains(t, c.Validate(), tt.wantErr, tt.name)
 	}
 
 	// Docker's other spellings are valid.

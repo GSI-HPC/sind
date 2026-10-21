@@ -66,8 +66,7 @@ func TestProbeImage_RunFails(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	_, err := ProbeImage(t.Context(), c, "img", ProbeRequest{Daemons: []string{Slurmctld}})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "probing image img: ")
+	require.ErrorContains(t, err, "probing image img: ")
 }
 
 func TestProbeImage_BadOutput(t *testing.T) {
@@ -76,8 +75,7 @@ func TestProbeImage_BadOutput(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	_, err := ProbeImage(t.Context(), c, "img", ProbeRequest{Daemons: []string{Slurmctld}})
-	require.Error(t, err)
-	assert.Equal(t, `probing image img: unexpected probe output: "hello"`, err.Error())
+	require.EqualError(t, err, `probing image img: unexpected probe output: "hello"`)
 }
 
 func TestParseProbe_Rejects(t *testing.T) {
@@ -109,8 +107,7 @@ func TestParseProbe_Rejects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parseProbe(tt.out, tt.req)
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 		})
 	}
 }
@@ -178,10 +175,4 @@ func TestMariaDBWarning(t *testing.T) {
 	} {
 		assert.Equal(t, want, (&ImageInfo{MariaDBLogError: opt}).MariaDBWarning(), opt)
 	}
-}
-
-func TestMonitoringMinLine(t *testing.T) {
-	line, err := releaseLine(MonitoringMinVersion)
-	require.NoError(t, err)
-	assert.Equal(t, monitoringMinLine, line)
 }

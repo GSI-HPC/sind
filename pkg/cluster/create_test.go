@@ -5,13 +5,12 @@ package cluster
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,70 +49,10 @@ func TestControllerImage_Fallback(t *testing.T) {
 
 // --- Create (end-to-end) ---
 
-// inspectJSONLabels builds docker inspect JSON output with custom labels.
-func inspectJSONLabels(t *testing.T, name, status string, networks map[docker.NetworkName]string, labels docker.Labels) string {
-	t.Helper()
-	type netInfo struct {
-		IPAddress string `json:"IPAddress"`
-	}
-	type result struct {
-		ID    string `json:"Id"`
-		Name  string `json:"Name"`
-		State struct {
-			Status string `json:"Status"`
-		} `json:"State"`
-		Config struct {
-			Labels map[string]string `json:"Labels"`
-		} `json:"Config"`
-		NetworkSettings struct {
-			Networks map[string]netInfo `json:"Networks"`
-		} `json:"NetworkSettings"`
-	}
-	r := result{ID: "id-" + name, Name: "/" + name}
-	r.State.Status = status
-	r.Config.Labels = labels
-	nets := make(map[string]netInfo)
-	for n, ip := range networks {
-		nets[string(n)] = netInfo{IPAddress: ip}
-	}
-	r.NetworkSettings.Networks = nets
-	data, err := json.Marshal([]result{r})
-	require.NoError(t, err)
-	return string(data)
-}
-
 // inspectJSON builds the JSON output that docker inspect returns for a container.
 func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkName]string) string {
 	t.Helper()
-	return inspectJSONLabels(t, name, status, networks, docker.Labels{})
-}
-
-// inspectEntry describes one entry for inspectJSONBatch.
-type inspectEntry struct {
-	Name     string
-	Status   string
-	Networks map[docker.NetworkName]string
-}
-
-// inspectJSONBatch builds a JSON array for docker inspect with multiple
-// containers, matching the format of a single batched inspect call.
-func inspectJSONBatch(t *testing.T, entries ...inspectEntry) string {
-	t.Helper()
-	parts := make([]string, 0, len(entries))
-	for _, e := range entries {
-		parts = append(parts, strings.TrimPrefix(strings.TrimSuffix(inspectJSON(t, e.Name, e.Status, e.Networks), "]"), "["))
-	}
-	return "[" + strings.Join(parts, ",") + "]"
-}
-
-// notFoundErr returns an exec.ExitError with exit code 1 for "not found" mocking.
-func notFoundErr(t *testing.T) *exec.ExitError {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr
+	return nodeInspectJSON(t, name, nodeInspect{Status: status, Networks: networks})
 }
 
 // emptyCorefileContent returns a Corefile with no host entries.
@@ -130,8 +69,9 @@ func emptyCorefileTar() string {
 // for a cluster with controller + 1 managed worker. The optional override
 // function can intercept specific calls; returning (result, true) uses the
 // override result, returning (_, false) falls through to the default.
-func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []string, stdin string) (mock.Result, bool)) func([]string, string) mock.Result {
+func happyOnCall(t *testing.T, override func(args []string, stdin string) (mock.Result, bool)) func([]string, string) mock.Result {
 	t.Helper()
+	exitErr := testutil.ExitCode1(t)
 	return func(args []string, stdin string) mock.Result {
 		if override != nil {
 			if r, ok := override(args, stdin); ok {
@@ -265,31 +205,54 @@ func createCfg() *config.Cluster {
 	}
 }
 
-func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	client := docker.NewClient(&m)
+// runCreate runs Create of cfg under ctx against happyOnCall with override,
+// with docker events, and returns the executor and Create's result. With
+// freshMesh the mesh manager creates the mesh network first, as in a realm
+// without one.
+func runCreate(ctx context.Context, t *testing.T, cfg *config.Cluster, freshMesh bool, override func([]string, string) (mock.Result, bool)) (*mock.Executor, *Cluster, error) {
+	t.Helper()
+	pipes := &mock.Pipes{}
+	t.Cleanup(pipes.CloseAll)
+	m := &mock.Executor{OnCall: happyOnCall(t, override), OnStart: pipes.OnStart}
+	client := docker.NewClient(m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	if freshMesh {
+		_ = meshMgr.EnsureMeshNetwork(context.WithoutCancel(ctx))
+		require.True(t, meshMgr.Created())
+	}
+	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	return m, cluster, err
+}
 
+// isSystemctlEnable reports whether args enable a unit on a node.
+func isSystemctlEnable(args []string) bool {
+	return args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable"
+}
+
+// failEnable is a happyOnCall override under which enabling a unit fails,
+// after the nodes are up.
+func failEnable(args []string, _ string) (mock.Result, bool) {
+	return mock.Result{Err: errors.New("systemctl failed")}, isSystemctlEnable(args)
+}
+
+// isMeshRm reports whether args remove a mesh container.
+func isMeshRm(args []string) bool {
+	return len(args) == 4 && args[0] == "rm" && (args[3] == "sind-ssh" || args[3] == "sind-dns")
+}
+
+func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	require.NoError(t, createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, startPull(t.Context(), nil, client, nil, false)))
-
-	var created []string
-	for _, c := range m.Calls {
-		if len(c.Args) > 2 && c.Args[0] == "volume" && c.Args[1] == "create" {
-			created = append(created, c.Args[len(c.Args)-1])
-		}
-	}
-	assert.Contains(t, created, "sind-dev-state")
+	assert.Contains(t, createdVolumes(t, cfg), "sind-dev-state")
 }
 
 // createdVolumes runs createResources for cfg and returns the volumes it
 // created.
 func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	t.Helper()
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.NewManager(docker.NewClient(&m), mesh.DefaultRealm), cfg, startPull(t.Context(), nil, docker.NewClient(&m), nil, false)))
+	m := &mock.Executor{OnCall: happyOnCall(t, nil)}
+	client := docker.NewClient(m)
+	require.NoError(t, createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, startPull(t.Context(), nil, client, nil, false)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -329,21 +292,7 @@ func TestCreateResources_DataVolume(t *testing.T) {
 }
 
 func TestCreate_FullCluster(t *testing.T) {
-	exitErr := notFoundErr(t)
-
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, nil)
-	m.OnStart = pipes.OnStart
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, createCfg(), 1*time.Millisecond)
+	_, cluster, err := runCreate(t.Context(), t, createCfg(), false, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, cluster)
@@ -366,7 +315,7 @@ func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, nil)
 	m.OnStart = pipes.OnStart
 
 	client := docker.NewClient(&m)
@@ -407,42 +356,25 @@ func TestCreate_RealmMismatch(t *testing.T) {
 }
 
 func TestCreate_ConfigRealmMatches(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
 	cfg := createCfg()
 	cfg.Realm = mesh.DefaultRealm
-	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	_, _, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 }
 
+// scontrolPing is a happyOnCall override under which scontrol ping prints
+// out.
+func scontrolPing(out string) func([]string, string) (mock.Result, bool) {
+	return func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Stdout: out}, args[0] == "exec" && len(args) > 2 && args[2] == "scontrol"
+	}
+}
+
 func TestCreate_BackupController(t *testing.T) {
-	exitErr := notFoundErr(t)
-
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
-			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}, true
-		}
-		return mock.Result{}, false
-	})
-	m.OnStart = pipes.OnStart
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	cluster, err := Create(ctx, client, meshMgr, cfg, 1*time.Millisecond)
+	m, cluster, err := runCreate(t.Context(), t, cfg, false,
+		scontrolPing("Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"))
 
 	require.NoError(t, err)
 	require.Len(t, cluster.Nodes, 3)
@@ -455,7 +387,7 @@ func TestCreate_BackupController(t *testing.T) {
 	stateMounts := map[string]bool{}
 	for _, c := range m.Calls {
 		a := c.Args
-		if a[0] == "exec" && len(a) > 5 && a[2] == "systemctl" && a[3] == "enable" && a[5] == "slurmctld" {
+		if isSystemctlEnable(a) && a[5] == "slurmctld" {
 			enabled[a[1]] = true
 		}
 		if a[0] == "create" && slices.Contains(a, "sind-dev-state:/var/spool/slurmctld:rw") {
@@ -467,31 +399,14 @@ func TestCreate_BackupController(t *testing.T) {
 }
 
 func TestCreate_BackupControllerNotReady(t *testing.T) {
-	exitErr := notFoundErr(t)
-
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
-			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is DOWN\n"}, true
-		}
-		return mock.Result{}, false
-	})
-	m.OnStart = pipes.OnStart
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	_, err := Create(ctx, client, meshMgr, cfg, 1*time.Millisecond)
+	_, _, err := runCreate(ctx, t, cfg, false,
+		scontrolPing("Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is DOWN\n"))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "controller-backup is DOWN")
+	require.ErrorContains(t, err, "controller-backup is DOWN")
 }
 
 func TestCreate_CVMFS(t *testing.T) {
@@ -507,26 +422,11 @@ func TestCreate_CVMFS(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipes := &mock.Pipes{}
-			defer pipes.CloseAll()
-
-			var m mock.Executor
-			m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-				if args[0] == "plugin" {
-					return mock.Result{Stdout: tt.plugins}, true
-				}
-				return mock.Result{}, false
-			})
-			m.OnStart = pipes.OnStart
-
-			client := docker.NewClient(&m)
-			meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
 			cfg := createCfg()
 			cfg.Storage.CVMFS = true
-			_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+			m, _, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
+				return mock.Result{Stdout: tt.plugins}, args[0] == "plugin"
+			})
 			require.NoError(t, err)
 
 			var probed bool
@@ -548,11 +448,20 @@ func TestCreate_CVMFS(t *testing.T) {
 	}
 }
 
+// assertNoNodeCreated fails for a docker create of a node container in m.
+func assertNoNodeCreated(t *testing.T, m *mock.Executor) {
+	t.Helper()
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
+	}
+}
+
 func TestCreate_CVMFSUnavailable(t *testing.T) {
 	// Neither the plugin nor the host's /cvmfs: creation fails and cleans
 	// up whatever the other preparation branches created.
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	cfg := createCfg()
+	cfg.Storage.CVMFS = true
+	m, cluster, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
@@ -561,43 +470,26 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 		}
 		return mock.Result{}, false
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
-	cfg := createCfg()
-	cfg.Storage.CVMFS = true
-	cluster, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "storage.cvmfs")
+	require.ErrorContains(t, err, "storage.cvmfs")
 	assert.Nil(t, cluster)
-	for _, c := range m.Calls {
-		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
-	}
+	assertNoNodeCreated(t, m)
 }
 
 func TestCreate_NoNsdelegate(t *testing.T) {
 	// A Docker host without nsdelegate fails creation before any node
 	// container, with the commands that enable it, and the rollback
 	// removes what the other preparation branches created.
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if isNsdelegateProbe(args) {
-			return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}, true
-		}
-		return mock.Result{}, false
+	m, cluster, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}, isNsdelegateProbe(args)
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.ErrorIs(t, err, ErrNoNsdelegate)
 	assert.Contains(t, err.Error(), "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
 	assert.Nil(t, cluster)
+	assertNoNodeCreated(t, m)
 	var probes [][]string
 	for _, c := range m.Calls {
-		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
 		if isNsdelegateProbe(c.Args) {
 			probes = append(probes, c.Args)
 		}
@@ -609,18 +501,7 @@ func TestCreate_NoNsdelegate(t *testing.T) {
 func TestCreate_NoCVMFS(t *testing.T) {
 	// Without storage.cvmfs, sind neither looks for the plugin nor probes
 	// the host.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
@@ -629,332 +510,78 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	}
 }
 
-func TestCreate_PreflightFails(t *testing.T) {
-	// Network already exists → preflight returns conflict error.
-	// resolveInfra runs in parallel, so its happy-path responses are supplied
-	// too; otherwise the race could surface a resolveInfra error instead.
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
-			return mock.Result{}, true // network exists → preflight conflict
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+// preflightConflict is a happyOnCall override under which the cluster
+// network exists, so that the preflight check fails. resolveInfra runs in
+// parallel, and gets its happy-path answers.
+func preflightConflict(args []string, _ string) (mock.Result, bool) {
+	return mock.Result{}, len(args) > 2 && args[0] == "network" && args[1] == "inspect" && args[2] == "sind-dev-net"
+}
 
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+// dnsInspectFails is a happyOnCall override under which resolveInfra
+// cannot inspect the DNS container.
+func dnsInspectFails(args []string, _ string) (mock.Result, bool) {
+	return mock.Result{Err: fmt.Errorf("container not running")}, args[0] == "inspect" && args[1] == "sind-dns"
+}
+
+func TestCreate_Fails(t *testing.T) {
+	connects := 0
+	for _, tt := range []struct {
+		name     string
+		override func([]string, string) (mock.Result, bool)
+		wantErr  string
+	}{
+		{"preflight", preflightConflict, "conflicting resources"},
+		{"resolveInfra", dnsInspectFails, "inspecting DNS container"},
+		{"network create", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: fmt.Errorf("network quota exceeded")}, args[0] == "network" && args[1] == "create"
+		}, "creating cluster network"},
+		{"volume create", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: fmt.Errorf("volume quota exceeded")}, args[0] == "volume" && args[1] == "create"
+		}, "volume"},
+		// The first network connect is the SSH relay's to the cluster network.
+		{"SSH relay connect", func(args []string, _ string) (mock.Result, bool) {
+			if args[0] == "network" && args[1] == "connect" {
+				connects++
+				return mock.Result{Err: fmt.Errorf("network connect denied")}, connects == 1
+			}
+			return mock.Result{}, false
+		}, "connecting SSH relay"},
+		// The helper containers succeed, the node containers fail.
+		{"node creation", func(args []string, _ string) (mock.Result, bool) {
+			joined := strings.Join(args, " ")
+			return mock.Result{Err: fmt.Errorf("image not found")},
+				args[0] == "create" && !strings.Contains(joined, "helper") && !strings.Contains(joined, "busybox")
+		}, "node"},
+		// The nodes stay "created", which fails the ContainerRunning probe.
+		{"node not running", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Stdout: inspectJSON(t, args[1], "created", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})},
+				args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-")
+		}, ": timed out; last probe error: probe container:"},
+		// Reading the Corefile fails.
+		{"mesh registration", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: fmt.Errorf("dns container stopped")},
+				args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns")
+		}, "registering DNS"},
+		{"enable slurm", failEnable, "enabling"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+			defer cancel()
+
+			_, cluster, err := runCreate(ctx, t, createCfg(), false, tt.override)
+
+			require.ErrorContains(t, err, tt.wantErr)
+			assert.Nil(t, cluster)
+		})
+	}
+}
+
+func TestCreate_PreflightFailsWithoutCleanup(t *testing.T) {
+	// The preflight check fails before resourcesCreated=true: no cluster
+	// cleanup runs, so there are no network or volume rm calls.
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, preflightConflict)
 
 	require.ErrorIs(t, err, ErrClusterExists)
-	assert.Contains(t, err.Error(), "conflicting resources")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_ResolveInfraFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return mock.Result{Err: fmt.Errorf("container not running")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_CreateResourcesFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "network" && args[1] == "create" {
-			return mock.Result{Err: fmt.Errorf("network quota exceeded")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating cluster network")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_VolumeCreateFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "volume" && args[1] == "create" {
-			return mock.Result{Err: fmt.Errorf("volume quota exceeded")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "volume")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_SSHRelayConnectFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	connectCount := 0
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		// First network connect is SSH relay → cluster network; fail it.
-		if args[0] == "network" && args[1] == "connect" {
-			connectCount++
-			if connectCount == 1 {
-				return mock.Result{Err: fmt.Errorf("network connect denied")}, true
-			}
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "connecting SSH relay")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_NodeCreationFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		// Let helper containers succeed, fail node containers
-		if args[0] == "create" && !strings.Contains(strings.Join(args, " "), "helper") && !strings.Contains(strings.Join(args, " "), "busybox") {
-			return mock.Result{Err: fmt.Errorf("image not found")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_SetupNodesFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		// Probes inspect the node: return "created" instead of "running" to fail ContainerRunning
-		if args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-") {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "created", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.1.1",
-			})}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, createCfg(), 10*time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "waiting for")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_RegisterMeshFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		// CopyFromContainer for Corefile fails
-		if args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns") {
-			return mock.Result{Err: fmt.Errorf("dns container stopped")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "registering DNS")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_EnableSlurmFails(t *testing.T) {
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enabling")
-	assert.Nil(t, cluster)
-}
-
-func TestCreate_CleansUpOnFailure(t *testing.T) {
-	// When enableSlurm fails (after resources + nodes exist), cleanup should run.
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
-	// deleteClusterResources. Preflight calls ps twice, for conflicts and
-	// bridge ports, and createResources once, for the external containers
-	// to connect, hence 5 total.
-	var psCalls int
-	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			psCalls++
-		}
-	}
-	assert.Equal(t, 5, psCalls, "preflight (2) + external containers + diagnostics + deletion each call ListContainers")
-}
-
-func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
-	// When mesh was freshly created and Create fails, mesh should also be cleaned up.
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	// Simulate freshly created mesh by calling EnsureMeshNetwork on a "new" network.
-	// The happyOnCall mock returns "not found" for network inspect, triggering creation.
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
-	require.True(t, meshMgr.Created())
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	// Verify mesh cleanup ran: CleanupMesh issues `rm -f` for the mesh
-	// helpers after the cluster cleanup's "docker ps" call.
-	var meshRmAfterPs int
-	seenPs := false
-	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			seenPs = true
-		}
-		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
-			meshRmAfterPs++
-		}
-	}
-	assert.GreaterOrEqual(t, meshRmAfterPs, 1, "mesh cleanup should remove mesh containers")
-}
-
-func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
-	// When mesh already existed, cleanup should NOT remove it.
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	// Don't call EnsureMeshNetwork → Created() stays false (pre-existing mesh).
-	require.False(t, meshMgr.Created())
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	// After the "docker ps" cleanup call, there should be NO mesh-helper
-	// `rm -f` calls.
-	seenPs := false
-	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			seenPs = true
-			continue
-		}
-		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
-			require.Fail(t, "mesh cleanup should not run when mesh was pre-existing")
-		}
-	}
-}
-
-func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
-	// When preflight fails (before resourcesCreated=true), cluster cleanup
-	// should NOT run. resolveInfra is allowed to succeed in parallel; the
-	// absence of network/volume rm calls proves no cluster cleanup happened.
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
-			return mock.Result{}, true // network exists → preflight conflict
-		}
-		return mock.Result{}, false
-	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
 	for _, call := range m.Calls {
 		if len(call.Args) >= 2 && call.Args[1] == "rm" &&
 			(call.Args[0] == "network" || call.Args[0] == "volume") {
@@ -963,44 +590,39 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	}
 }
 
-func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
-	// When resolveInfra fails and mesh was freshly created, mesh should be cleaned up.
-	exitErr := notFoundErr(t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return mock.Result{Err: fmt.Errorf("container not running")}, true
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
-	require.True(t, meshMgr.Created())
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+func TestCreate_CleansUpOnFailure(t *testing.T) {
+	// When enableSlurm fails (after resources + nodes exist), cleanup runs,
+	// and keeps the mesh, which existed before.
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, failEnable)
 
 	require.Error(t, err)
-	// Mesh cleanup should run: `rm -f` for mesh containers.
-	var meshRm int
-	for _, call := range m.Calls {
-		if len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
-			meshRm++
-		}
+	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
+	// deleteClusterResources. Preflight calls ps twice, for conflicts and
+	// bridge ports, and createResources once, for the external containers
+	// to connect, hence 5 total.
+	assert.Equal(t, 5, countCalls(m.Calls, "ps"), "preflight (2) + external containers + diagnostics + deletion each call ListContainers")
+	assert.False(t, meshRemoved(m), "mesh cleanup should not run when mesh was pre-existing")
+}
+
+func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
+	// When the mesh was freshly created and Create fails, after the nodes
+	// or before the resources, the mesh is cleaned up too.
+	for name, override := range map[string]func([]string, string) (mock.Result, bool){
+		"enableSlurm":  failEnable,
+		"resolveInfra": dnsInspectFails,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m, _, err := runCreate(t.Context(), t, createCfg(), true, override)
+
+			require.Error(t, err)
+			assert.True(t, meshRemoved(m), "mesh cleanup should remove mesh containers")
+		})
 	}
-	assert.GreaterOrEqual(t, meshRm, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
 // meshRemoved reports whether m removed a mesh container.
 func meshRemoved(m *mock.Executor) bool {
-	for _, call := range m.Calls {
-		if len(call.Args) >= 4 && call.Args[0] == "rm" && (call.Args[3] == "sind-ssh" || call.Args[3] == "sind-dns") {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(m.Calls, func(c mock.Call) bool { return isMeshRm(c.Args) })
 }
 
 // isRealmListing reports whether args list every container of the realm,
@@ -1013,76 +635,46 @@ func isRealmListing(args []string) bool {
 // for an earlier cluster and then serves a create that fails: the mesh stays
 // for the earlier cluster.
 func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
+	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if isRealmListing(args) {
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "x", Names: "sind-first-controller",
 				State: "running", Image: "img", Labels: "sind.cluster=first,sind.realm=sind"})}, true
 		}
-		return mock.Result{}, false
+		return failEnable(args, stdin)
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
-	require.True(t, meshMgr.Created())
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	assert.False(t, meshRemoved(&m), "mesh kept for cluster first")
+	assert.False(t, meshRemoved(m), "mesh kept for cluster first")
 }
 
 // TestCreate_KeepsMeshOnDuplicateName covers a create of a cluster that
 // exists: the preflight check fails, and the existing cluster keeps its
 // mesh.
 func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" && args[2] == "sind-dev-net" {
-			return mock.Result{}, true // network exists → preflight conflict
-		}
+	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if isRealmListing(args) {
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "x", Names: "sind-dev-controller",
 				State: "running", Image: "img", Labels: "sind.cluster=dev,sind.realm=sind"})}, true
 		}
-		return mock.Result{}, false
+		return preflightConflict(args, stdin)
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
-	require.True(t, meshMgr.Created())
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	assert.False(t, meshRemoved(&m), "mesh kept for the existing cluster dev")
+	assert.False(t, meshRemoved(m), "mesh kept for the existing cluster dev")
 }
 
 // TestCreate_KeepsMeshWhenUsageUnknown covers a rollback that cannot tell
 // whether clusters use the mesh: it keeps the mesh.
 func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
+	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if isRealmListing(args) {
 			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
 		}
-		return mock.Result{}, false
+		return failEnable(args, stdin)
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
 
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl failed")
-	assert.False(t, meshRemoved(&m))
+	require.ErrorContains(t, err, "systemctl failed")
+	assert.False(t, meshRemoved(m))
 }
 
 // TestCreate_RollbackSkipsDeregistrationOfRemovedMesh covers the rollback
@@ -1090,26 +682,18 @@ func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
 // deregistered from it first.
 func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
 	failed := false
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			failed = true
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
+	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if failed && args[0] == "ps" && args[len(args)-1] == "label=sind.cluster=dev" {
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "a", Names: "sind-dev-controller",
 				State: "running", Image: "img", Labels: "sind.cluster=dev,sind.realm=sind"})}, true
 		}
-		return mock.Result{}, false
+		r, ok := failEnable(args, stdin)
+		failed = failed || ok
+		return r, ok
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	assert.True(t, meshRemoved(&m))
+	assert.True(t, meshRemoved(m))
 	var reads int
 	for _, call := range m.Calls {
 		if call.Args[0] == "exec" && call.Args[1] == "sind-ssh" && len(call.Args) > 3 && call.Args[3] == "/root/.ssh/known_hosts" {
@@ -1123,7 +707,7 @@ func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if args[0] == "inspect" {
-			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: notFoundErr(t)}
+			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: testutil.ExitCode1(t)}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
@@ -1131,8 +715,7 @@ func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
 
 	_, _, err := resolveMeshInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container: sind-dns not found")
+	require.ErrorContains(t, err, "inspecting DNS container: sind-dns not found")
 }
 
 // TestResolveMeshInfra_StartsStoppedMesh covers a create after a host
@@ -1172,102 +755,55 @@ func TestResolveMeshInfra_StartsStoppedMesh(t *testing.T) {
 	assert.True(t, started["sind-ssh"])
 }
 
-func TestCreate_CleanupResourcesError(t *testing.T) {
+func TestCreate_CleanupErrors(t *testing.T) {
 	// When Create fails and the cleanup itself fails, the error carries the
 	// original failure and the cleanup's, so the caller learns that
 	// resources were left behind.
-	exitErr := notFoundErr(t)
-	inCleanup := false
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		// Make enableSlurm fail to trigger cleanup.
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			inCleanup = true
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
-		// Make deleteClusterResources fail: ListContainers errors during cleanup.
-		if inCleanup && args[0] == "ps" {
-			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
-		}
-		return mock.Result{}, false
-	})
+	for _, tt := range []struct {
+		name    string
+		fresh   bool                     // the create made the mesh
+		cleanup func(args []string) bool // the calls of the cleanup that fail
+		wantErr string
+	}{
+		{"resources", false, func(args []string) bool { return args[0] == "ps" },
+			"\nrolling back: removing cluster resources (sind delete cluster removes what is left): "},
+		// A failure other than IsNotFound, as of a daemon that is gone.
+		{"mesh", true, isMeshRm, "\nrolling back: removing the mesh: "},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			inCleanup := false
+			_, _, err := runCreate(t.Context(), t, createCfg(), tt.fresh, func(args []string, stdin string) (mock.Result, bool) {
+				if inCleanup && tt.cleanup(args) {
+					return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
+				}
+				r, ok := failEnable(args, stdin)
+				inCleanup = inCleanup || ok
+				return r, ok
+			})
 
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl failed")
-	assert.Contains(t, err.Error(), "\nrolling back: removing cluster resources (sind delete cluster removes what is left): ")
-	assert.Contains(t, err.Error(), "docker daemon unavailable")
+			require.ErrorContains(t, err, "systemctl failed")
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Contains(t, err.Error(), "docker daemon unavailable")
+		})
+	}
 }
 
-func TestCreate_CleanupMeshError(t *testing.T) {
-	// When Create fails with freshly-created mesh and mesh cleanup also fails,
-	// the error carries the original failure and the mesh cleanup's.
-	exitErr := notFoundErr(t)
-	inCleanup := false
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		// Make enableSlurm fail to trigger cleanup.
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			inCleanup = true
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
-		}
-		// Make mesh cleanup fail: rm -f on a mesh container errors with a
-		// non-IsNotFound failure (real docker daemon issue).
-		if inCleanup && args[0] == "rm" && len(args) >= 3 && args[1] == "-f" &&
-			(strings.Contains(args[len(args)-1], "sind-ssh") || strings.Contains(args[len(args)-1], "sind-dns")) {
-			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
+// enabledOn is a happyOnCall override that records the containers that a
+// unit is enabled on.
+func enabledOn(containers *[]string) func([]string, string) (mock.Result, bool) {
+	return func(args []string, _ string) (mock.Result, bool) {
+		if isSystemctlEnable(args) {
+			*containers = append(*containers, args[1])
 		}
 		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_ = meshMgr.EnsureMeshNetwork(t.Context())
-	require.True(t, meshMgr.Created())
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl failed")
-	assert.Contains(t, err.Error(), "\nrolling back: removing the mesh: ")
+	}
 }
 
 func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
-	exitErr := notFoundErr(t)
-
-	cfg := &config.Cluster{
-		Name: "dev",
-		Nodes: []config.Node{
-			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: testutil.Ptr(false)},
-		},
-	}
-
+	cfg := createCfg()
+	cfg.Nodes[1].Managed = new(false)
 	var slurmCmds []string
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			slurmCmds = append(slurmCmds, args[1])
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	_, cluster, err := runCreate(t.Context(), t, cfg, false, enabledOn(&slurmCmds))
 
 	require.NoError(t, err)
 	require.Len(t, cluster.Nodes, 2)
@@ -1276,31 +812,17 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 }
 
 func TestCreate_UnmanagedCluster(t *testing.T) {
-	exitErr := notFoundErr(t)
-
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: config.RoleController, Managed: testutil.Ptr(false), BackupController: true,
+			{Role: config.RoleController, Managed: new(false), BackupController: true,
 				Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, nil)
-	m.OnStart = pipes.OnStart
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, cluster, err := runCreate(t.Context(), t, cfg, false, nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, cluster.SlurmVersion, "no version discovered")
@@ -1323,8 +845,7 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 			labels := testutil.ArgValues(args, "--label")
 			assert.Contains(t, labels, LabelManaged+"=false", name)
 			assert.Contains(t, labels, LabelSlurmVersion+"=", name)
-		case args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable",
-			args[0] == "exec" && len(args) > 2 && args[2] == "scontrol":
+		case isSystemctlEnable(args), args[0] == "exec" && len(args) > 2 && args[2] == "scontrol":
 			assert.Failf(t, "Slurm daemon touched", "%v", args)
 		}
 	}
@@ -1336,32 +857,10 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 }
 
 func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
-	exitErr := notFoundErr(t)
-
-	cfg := &config.Cluster{
-		Name: "dev",
-		Nodes: []config.Node{
-			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: config.RoleWorker, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		},
-	}
-
+	cfg := createCfg()
+	cfg.Nodes = slices.Insert(cfg.Nodes, 1, config.Node{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"})
 	var slurmCmds []string
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			slurmCmds = append(slurmCmds, args[1])
-		}
-		return mock.Result{}, false
-	})
-
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	_, cluster, err := runCreate(t.Context(), t, cfg, false, enabledOn(&slurmCmds))
 
 	require.NoError(t, err)
 	require.Len(t, cluster.Nodes, 3)
@@ -1374,216 +873,120 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 
 // --- Direct tests for unexported helpers ---
 
-func TestResolveInfra_SSHKeyError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh") {
-			return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.0.2",
-			})}
-		}
-		if args[0] == "exec" && args[1] == "sind-ssh" {
-			return mock.Result{Err: fmt.Errorf("ssh container crashed")}
-		}
-		if args[0] == "run" && args[1] == "--rm" {
-			return mock.Result{Stdout: "slurm 25.11.0\n"}
-		}
-		return mock.Result{}
+func TestResolveInfra_Errors(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		key, version  mock.Result
+		wantErrSubstr string
+	}{
+		{"SSH key", mock.Result{Err: fmt.Errorf("ssh container crashed")}, mock.Result{Stdout: "slurm 25.11.0\n"}, "reading SSH public key"},
+		{"Slurm version", mock.Result{Stdout: "ssh-ed25519 AAAA-key\n"}, mock.Result{Err: fmt.Errorf("image pull failed")}, "discovering Slurm version"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.OnCall = func(args []string, _ string) mock.Result {
+				switch {
+				case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
+					return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"})}
+				case args[0] == "exec" && args[1] == "sind-ssh":
+					return tt.key
+				case args[0] == "run" && args[1] == "--rm":
+					return tt.version
+				}
+				return mock.Result{}
+			}
+			client := docker.NewClient(&m)
+
+			_, _, _, err := resolveInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), nil, client, nil, false))
+
+			require.ErrorContains(t, err, tt.wantErrSubstr)
+		})
 	}
-	client := docker.NewClient(&m)
-	cfg := createCfg()
-
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, cfg, startPull(t.Context(), nil, client, nil, false))
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reading SSH public key")
 }
 
-func TestResolveInfra_SlurmVersionError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh") {
-			return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.0.2",
-			})}
-		}
-		if args[0] == "exec" && args[1] == "sind-ssh" {
-			return mock.Result{Stdout: "ssh-ed25519 AAAA-key\n"}
-		}
-		if args[0] == "run" && args[1] == "--rm" {
-			return mock.Result{Err: fmt.Errorf("image pull failed")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, createCfg(), startPull(t.Context(), nil, client, nil, false))
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "discovering Slurm version")
+// setupNodesWith runs setupNodes for configs under ctx, polling every
+// millisecond, against nodesOnCall with override.
+func setupNodesWith(ctx context.Context, t *testing.T, override func([]string) (mock.Result, bool), configs ...RunConfig) (*mock.Executor, []nodeResult, error) {
+	t.Helper()
+	m := &mock.Executor{OnCall: nodesOnCall(t, override)}
+	client := docker.NewClient(m)
+	results, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	return m, results, err
 }
+
+// controllerConfig is the run config of the controller of cluster dev.
+var controllerConfig = RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}
 
 func TestSetupNodes_InspectError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
+	// After the probes pass, the inspect for the node's addresses fails.
+	inspects := 0
+	_, _, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
 		if args[0] == "inspect" {
-			// First call: ContainerRunning probe → running
-			name := args[1]
-			return mock.Result{Stdout: inspectJSON(t, name, "running", nil)}
+			inspects++
+			return mock.Result{Err: fmt.Errorf("inspect network error")}, inspects > 1
 		}
-		if args[0] == "exec" {
-			joined := strings.Join(args, " ")
-			if strings.Contains(joined, "is-system-running") {
-				return mock.Result{Stdout: "running\n"}
-			}
-			if strings.Contains(joined, "/dev/tcp") {
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			}
-			if strings.Contains(joined, "is-active") {
-				return mock.Result{Stdout: "active\n"}
-			}
-			if strings.Contains(joined, "ssh-keyscan") {
-				return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
-			}
+		return mock.Result{}, false
+	}, controllerConfig)
+
+	require.ErrorContains(t, err, "inspecting node controller")
+}
+
+// A node whose setup fails waits for the inspect that runs alongside the
+// setup, so that no docker call outlives setupNodes.
+func TestSetupNodes_SetupErrorWaitsForTheInspect(t *testing.T) {
+	var inspects atomic.Int32
+	var inspected atomic.Bool
+	_, _, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
+		switch {
+		case args[0] == "inspect" && inspects.Add(1) > 1: // the inspect after the probes
+			time.Sleep(50 * time.Millisecond)
+			inspected.Store(true)
+		case strings.Contains(strings.Join(args, " "), "ssh-keyscan"):
+			return failedSetup(t, 1, "", "ssh"), true
 		}
-		return mock.Result{}
-	}
+		return mock.Result{}, false
+	}, controllerConfig)
 
-	// Override: after probes pass, the second inspect (for IP collection) fails.
-	callCount := 0
-	origOnCall := m.OnCall
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-") {
-			callCount++
-			if callCount > 1 {
-				return mock.Result{Err: fmt.Errorf("inspect network error")}
-			}
-		}
-		return origOnCall(args, stdin)
-	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting node controller")
+	require.ErrorContains(t, err, "node controller: setting up SSH")
+	assert.True(t, inspected.Load(), "setupNodes returned before the inspect finished")
 }
 
 func TestSetupNodes_WaitsForMunge(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", nil)}
-		}
-		if args[0] == "exec" {
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "is-system-running"):
-				return mock.Result{Stdout: "running\n"}
-			case strings.Contains(joined, "/dev/tcp"):
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case strings.HasSuffix(joined, "systemctl is-active munge"):
-				return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")}
-			}
-		}
-		return mock.Result{}
-	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
-
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
+		return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")},
+			strings.HasSuffix(strings.Join(args, " "), "systemctl is-active munge")
+	}, workerConfigs("worker-0")...)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "probe munge")
+	require.ErrorContains(t, err, "probe munge")
 }
 
-func TestSetupNodes_InjectKeyError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.1.1",
-			})}
-		}
-		if args[0] == "exec" {
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "is-system-running"):
-				return mock.Result{Stdout: "running\n"}
-			case strings.Contains(joined, "/dev/tcp"):
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case strings.Contains(joined, "is-active"):
-				return mock.Result{Stdout: "active\n"}
-			case strings.Contains(joined, "ssh-keyscan"):
-				return failedSetup(t, 1, "mkdir: cannot create directory '/root/.ssh': Permission denied\n", "ssh")
-			}
-		}
-		return mock.Result{}
+func TestSetupNodes_SSHSetupError(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		result func(t *testing.T) mock.Result
+		want   string
+	}{
+		{"inject key", func(t *testing.T) mock.Result {
+			return failedSetup(t, 1, "mkdir: cannot create directory '/root/.ssh': Permission denied\n", "ssh")
+		}, "node controller: setting up SSH: injecting SSH key and scanning host key: exit status 1: mkdir: cannot create directory '/root/.ssh': Permission denied"},
+		{"host key", func(*testing.T) mock.Result {
+			return mock.Result{Stdout: "# localhost:22 SSH-2.0-OpenSSH_9.0\n"}
+		}, "node controller: setting up SSH: no ed25519 host key found"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.result(t)
+			_, _, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
+				return r, strings.Contains(strings.Join(args, " "), "ssh-keyscan")
+			}, controllerConfig)
+
+			require.ErrorContains(t, err, tt.want)
+		})
 	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node controller: setting up SSH: injecting SSH key and scanning host key: exit status 1: mkdir: cannot create directory '/root/.ssh': Permission denied")
 }
 
-func TestSetupNodes_HostKeyError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.1.1",
-			})}
-		}
-		if args[0] == "exec" {
-			if args[1] == "-i" {
-				return mock.Result{}
-			}
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "is-system-running"):
-				return mock.Result{Stdout: "running\n"}
-			case strings.Contains(joined, "/dev/tcp"):
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case strings.Contains(joined, "is-active"):
-				return mock.Result{Stdout: "active\n"}
-			case strings.Contains(joined, "ssh-keyscan"):
-				return mock.Result{Stdout: "# localhost:22 SSH-2.0-OpenSSH_9.0\n"}
-			}
-		}
-		return mock.Result{}
-	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node controller: setting up SSH: no ed25519 host key found")
-}
-
-func TestRegisterMesh_DNSError(t *testing.T) {
+func TestRegisterNodes_DNSError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		// CopyFromContainer (read Corefile) fails
@@ -1601,13 +1004,12 @@ func TestRegisterMesh_DNSError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerMesh(t.Context(), meshMgr, "dev", "25.11.0", configs, results)
+	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "registering DNS")
+	require.ErrorContains(t, err, "registering DNS")
 }
 
-func TestRegisterMesh_KnownHostError(t *testing.T) {
+func TestRegisterNodes_KnownHostError(t *testing.T) {
 	var m mock.Executor
 	callIdx := 0
 	m.OnCall = func(args []string, _ string) mock.Result {
@@ -1627,7 +1029,7 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 		if args[0] == "kill" || args[0] == "start" {
 			return mock.Result{}
 		}
-		// AppendFile → ExecWithStdin (exec -i)
+		// WriteFile of known_hosts → ExecWithStdin (exec -i)
 		if args[0] == "exec" && args[1] == "-i" {
 			callIdx++
 			if callIdx == 1 {
@@ -1646,10 +1048,9 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerMesh(t.Context(), meshMgr, "dev", "25.11.0", configs, results)
+	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "registering host key")
+	require.ErrorContains(t, err, "registering host key")
 }
 
 func TestLogExtraPrivileges(t *testing.T) {
@@ -1709,8 +1110,33 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	defer cancel()
 	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld: ")
+}
+
+// TestEnableSlurm_HTTPProbeTimeout checks that a monitored controller whose
+// slurmctld serves no HTTP is named in the error of its wait.
+func TestEnableSlurm_HTTPProbeTimeout(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+		}
+		if args[0] == "exec" && len(args) > 2 && args[2] == "systemctl" {
+			return mock.Result{}
+		}
+		return mock.Result{Err: fmt.Errorf("connection refused")}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true, Monitoring: true}}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld HTTP: ")
 }
 
 func TestEnableSlurm_DBFirst(t *testing.T) {
@@ -1750,7 +1176,7 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 }
 
 func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if len(args) > 4 && args[2] == "systemctl" && args[3] == "is-active" && args[4] == "slurmdbd" {
@@ -1771,8 +1197,7 @@ func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
 	// No deadline: a failed slurmdbd unit must end the wait on its own.
 	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmdbd failed:\nslurmdbd: fatal: example")
+	require.ErrorContains(t, err, "slurmdbd failed:\nslurmdbd: fatal: example")
 	for _, call := range m.Calls {
 		assert.NotEqual(t, "sind-dev-controller", call.Args[1], "controller untouched after the db failed")
 	}
@@ -1789,8 +1214,7 @@ func TestEnableSlurm_DBEnableError(t *testing.T) {
 
 	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enabling mariadb on db")
+	require.ErrorContains(t, err, "enabling mariadb on db")
 	require.Len(t, m.Calls, 2, "enable, then the journal; the controller is untouched")
 	assert.Equal(t, "journalctl", m.Calls[1].Args[2])
 }
@@ -1905,26 +1329,13 @@ func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
 			booting := 3
 			var m mock.Executor
 			m.OnStart = pipes.OnStart
-			m.OnCall = func(args []string, _ string) mock.Result {
-				joined := strings.Join(args, " ")
-				switch {
-				case args[0] == "inspect":
-					return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})}
-				case strings.Contains(joined, "is-system-running"):
-					if booting > 0 {
-						booting--
-						return mock.Result{Stdout: "starting\n"}
-					}
-					return mock.Result{Stdout: "running\n"}
-				case strings.Contains(joined, "/dev/tcp"):
-					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.9\n"}
-				case strings.Contains(joined, "is-active"):
-					return mock.Result{Stdout: "active\n"}
-				case strings.Contains(joined, "ssh-keyscan"):
-					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
+			m.OnCall = nodesOnCall(t, func(args []string) (mock.Result, bool) {
+				if booting > 0 && strings.Contains(strings.Join(args, " "), "is-system-running") {
+					booting--
+					return mock.Result{Stdout: "starting\n"}, true
 				}
-				return mock.Result{}
-			}
+				return mock.Result{}, false
+			})
 			client := docker.NewClient(&m)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
@@ -1971,8 +1382,7 @@ func TestEnableService_FailureCarriesJournal(t *testing.T) {
 
 	err := enableService(t.Context(), c, "sind-dev-worker-0", "worker-0", probe.ServiceSlurmd)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enabling slurmd on worker-0: ")
+	require.ErrorContains(t, err, "enabling slurmd on worker-0: ")
 	assert.Contains(t, err.Error(), "\nslurmd journal:\nslurmd: error: memory cgroup controller is not available.")
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t,

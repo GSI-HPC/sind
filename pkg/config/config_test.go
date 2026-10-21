@@ -5,9 +5,9 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestParse_MinimalYAML(t *testing.T) {
@@ -293,8 +293,7 @@ func TestValidate_DataStorage(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -343,8 +342,7 @@ func TestValidate_DataMountPath(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -352,16 +350,12 @@ func TestValidate_DataMountPath(t *testing.T) {
 func TestCheckCapabilities(t *testing.T) {
 	require.NoError(t, CheckCapabilities("capAdd", []string{"SYS_ADMIN", "ALL"}))
 	require.NoError(t, CheckCapabilities("capAdd", nil))
-	err := CheckCapabilities("--cap-add", []string{"SYS_ADMIN", "BOGUS"})
-	require.Error(t, err)
-	assert.Equal(t, `unknown capability "BOGUS" in --cap-add`, err.Error())
+	require.EqualError(t, CheckCapabilities("--cap-add", []string{"SYS_ADMIN", "BOGUS"}), `unknown capability "BOGUS" in --cap-add`)
 }
 
 func TestCheckDevices(t *testing.T) {
-	require.NoError(t, CheckDevices([]string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
-	err := CheckDevices([]string{"/dev/fuse", "fuse:/dev/fuse"})
-	require.Error(t, err)
-	assert.Equal(t, `device path must be absolute, got "fuse:/dev/fuse"`, err.Error())
+	require.NoError(t, CheckDevices("devices", []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
+	require.EqualError(t, CheckDevices("devices", []string{"/dev/fuse", "fuse:/dev/fuse"}), `device "fuse:/dev/fuse" in devices: host path must be absolute`)
 }
 
 func TestApplyDefaults_MinimalConfig(t *testing.T) {
@@ -478,7 +472,7 @@ func TestValidate_Valid(t *testing.T) {
 			name: "unmanaged api in a managed cluster",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleAPI, Managed: testutil.Ptr(false)},
+				{Role: RoleAPI, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 		},
@@ -486,14 +480,14 @@ func TestValidate_Valid(t *testing.T) {
 			name: "managed: true on api",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleAPI, Managed: testutil.Ptr(true)},
+				{Role: RoleAPI, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "api in an unmanaged cluster",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
 				{Role: RoleAPI},
 				{Role: RoleWorker},
 			},
@@ -502,7 +496,7 @@ func TestValidate_Valid(t *testing.T) {
 			name: "unmanaged db in a managed cluster",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleDB, Managed: testutil.Ptr(false)},
+				{Role: RoleDB, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 		},
@@ -510,22 +504,22 @@ func TestValidate_Valid(t *testing.T) {
 			name: "managed: true on db",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleDB, Managed: testutil.Ptr(true)},
+				{Role: RoleDB, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "unmanaged db in an unmanaged cluster",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleDB, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleDB, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "db in an unmanaged cluster",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
 				{Role: RoleDB},
 				{Role: RoleWorker},
 			},
@@ -540,14 +534,14 @@ func TestValidate_Valid(t *testing.T) {
 		{
 			name: "managed true on controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(true)},
-				{Role: RoleWorker, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(true)},
+				{Role: RoleWorker, Managed: new(true)},
 			},
 		},
 		{
 			name: "unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
 				{Role: RoleSubmitter},
 				{Role: RoleWorker, Count: 2},
 			},
@@ -555,14 +549,14 @@ func TestValidate_Valid(t *testing.T) {
 		{
 			name: "unmanaged controller with explicitly unmanaged worker",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleWorker, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleWorker, Managed: new(false)},
 			},
 		},
 		{
 			name: "unmanaged controller with backupController",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false), BackupController: true},
+				{Role: RoleController, Managed: new(false), BackupController: true},
 				{Role: RoleWorker},
 			},
 		},
@@ -580,7 +574,7 @@ func TestValidate_Valid(t *testing.T) {
 	}
 }
 
-func TestValidate_RequiredFields(t *testing.T) {
+func TestValidate_Constraints(t *testing.T) {
 	tests := []struct {
 		name    string
 		nodes   []Node
@@ -614,28 +608,6 @@ func TestValidate_RequiredFields(t *testing.T) {
 			nodes:   []Node{},
 			wantErr: "exactly one controller",
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Cluster{
-				Kind:  "Cluster",
-				Name:  "default",
-				Nodes: tt.nodes,
-			}
-			err := cfg.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
-		})
-	}
-}
-
-func TestValidate_Constraints(t *testing.T) {
-	tests := []struct {
-		name    string
-		nodes   []Node
-		wantErr string
-	}{
 		{
 			name: "multiple dbs",
 			nodes: []Node{
@@ -686,8 +658,8 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed api under unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleAPI, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleAPI, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 			wantErr: "api managed: true requires a managed controller",
@@ -695,8 +667,8 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed db under unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleDB, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleDB, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 			wantErr: "db managed: true requires a managed controller",
@@ -750,7 +722,7 @@ func TestValidate_Constraints(t *testing.T) {
 			name: "managed false on submitter",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleSubmitter, Managed: testutil.Ptr(false)},
+				{Role: RoleSubmitter, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 			wantErr: `managed is only valid for controller, db, api and worker nodes, not "submitter"`,
@@ -759,7 +731,7 @@ func TestValidate_Constraints(t *testing.T) {
 			name: "managed true on submitter",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleSubmitter, Managed: testutil.Ptr(true)},
+				{Role: RoleSubmitter, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 			wantErr: `managed is only valid for controller, db, api and worker nodes, not "submitter"`,
@@ -767,9 +739,9 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed worker under unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleWorker, Managed: testutil.Ptr(false)},
-				{Role: RoleWorker, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleWorker, Managed: new(false)},
+				{Role: RoleWorker, Managed: new(true)},
 			},
 			wantErr: "worker managed: true requires a managed controller",
 		},
@@ -815,9 +787,7 @@ func TestValidate_Constraints(t *testing.T) {
 				Name:  "default",
 				Nodes: tt.nodes,
 			}
-			err := cfg.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, cfg.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -896,8 +866,7 @@ nodes:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -966,37 +935,20 @@ func TestParse_Realm(t *testing.T) {
 
 // --- Section type ---
 
-func TestSection_UnmarshalJSON(t *testing.T) {
-	t.Run("string form", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`"SchedulerType=sched/backfill\n"`))
-		require.NoError(t, err)
-		assert.Equal(t, "SchedulerType=sched/backfill\n", s.Content)
-		assert.Nil(t, s.Fragments)
-	})
+func TestSection_UnmarshalYAML(t *testing.T) {
+	var s Section
+	require.NoError(t, yaml.Unmarshal([]byte("|\n  SchedulerType=sched/backfill\n"), &s))
+	assert.Equal(t, "SchedulerType=sched/backfill\n", s.Content)
+	assert.Nil(t, s.Fragments)
 
-	t.Run("map form", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`{"scheduling":"SchedulerType=sched/backfill\n","resources":"SelectType=select/cons_tres\n"}`))
-		require.NoError(t, err)
-		assert.Empty(t, s.Content)
-		require.Len(t, s.Fragments, 2)
-		assert.Equal(t, "SchedulerType=sched/backfill\n", s.Fragments["scheduling"])
-		assert.Equal(t, "SelectType=select/cons_tres\n", s.Fragments["resources"])
-	})
+	s = Section{}
+	require.NoError(t, yaml.Unmarshal([]byte("{scheduling: a, resources: b}"), &s))
+	assert.Empty(t, s.Content)
+	assert.Equal(t, map[string]string{"scheduling": "a", "resources": "b"}, s.Fragments)
 
-	t.Run("null", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`null`))
-		require.NoError(t, err)
-		assert.True(t, s.IsEmpty())
-	})
-
-	t.Run("invalid type", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`42`))
-		require.Error(t, err)
-	})
+	s = Section{}
+	require.NoError(t, yaml.Unmarshal([]byte("~"), &s))
+	assert.True(t, s.IsEmpty())
 }
 
 func TestSection_IsEmpty(t *testing.T) {
@@ -1166,9 +1118,7 @@ func TestValidate_SlurmSections(t *testing.T) {
 		cfg.Slurm.Main = Section{Fragments: map[string]string{
 			"": "content",
 		}}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must not be empty")
+		require.ErrorContains(t, cfg.Validate(), "must not be empty")
 	})
 
 	t.Run("fragment name with path separator", func(t *testing.T) {
@@ -1176,9 +1126,7 @@ func TestValidate_SlurmSections(t *testing.T) {
 		cfg.Slurm.Cgroup = Section{Fragments: map[string]string{
 			"../escape": "content",
 		}}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "plain filename")
+		require.ErrorContains(t, cfg.Validate(), "plain filename")
 	})
 
 	t.Run("empty fragment content", func(t *testing.T) {
@@ -1186,9 +1134,7 @@ func TestValidate_SlurmSections(t *testing.T) {
 		cfg.Slurm.Gres = Section{Fragments: map[string]string{
 			"gpu": "",
 		}}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must not be empty")
+		require.ErrorContains(t, cfg.Validate(), "must not be empty")
 	})
 
 	t.Run("all sections valid", func(t *testing.T) {
@@ -1221,16 +1167,12 @@ func TestValidate_BackupControllerSlurmMain(t *testing.T) {
 
 	for _, key := range []string{"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation"} {
 		t.Run("rejects "+key, func(t *testing.T) {
-			err := base(Section{Content: key + "=x\n"}).Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "must not set "+key)
+			require.ErrorContains(t, base(Section{Content: key + "=x\n"}).Validate(), "must not set "+key)
 		})
 	}
 
 	t.Run("rejects key in fragment", func(t *testing.T) {
-		err := base(Section{Fragments: map[string]string{"ha": "  slurmctldhost=x\n"}}).Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must not set SlurmctldHost")
+		require.ErrorContains(t, base(Section{Fragments: map[string]string{"ha": "  slurmctldhost=x\n"}}).Validate(), "must not set SlurmctldHost")
 	})
 
 	t.Run("allows SlurmctldTimeout", func(t *testing.T) {
@@ -1259,24 +1201,22 @@ func TestValidate_UnmanagedSlurmSections(t *testing.T) {
 				Kind: "Cluster",
 				Name: "default",
 				Nodes: []Node{
-					{Role: RoleController, Managed: testutil.Ptr(false), BackupController: true},
+					{Role: RoleController, Managed: new(false), BackupController: true},
 					{Role: RoleWorker},
 				},
 			}
 			set(&cfg.Slurm)
-			err := cfg.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "slurm "+name+" requires a managed controller")
+			require.ErrorContains(t, cfg.Validate(), "slurm "+name+" requires a managed controller")
 		})
 	}
 }
 
 func TestCluster_Managed(t *testing.T) {
-	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker, Managed: testutil.Ptr(false)}}}
+	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker, Managed: new(false)}}}
 	assert.True(t, c.Managed(), "controller without managed")
-	c.Nodes[0].Managed = testutil.Ptr(true)
+	c.Nodes[0].Managed = new(true)
 	assert.True(t, c.Managed(), "managed: true")
-	c.Nodes[0].Managed = testutil.Ptr(false)
+	c.Nodes[0].Managed = new(false)
 	assert.False(t, c.Managed(), "managed: false")
 	assert.True(t, (&Cluster{}).Managed(), "no controller")
 }
@@ -1302,7 +1242,7 @@ func TestValidate_SlurmdbdSection(t *testing.T) {
 	err := cfg.Validate()
 	require.EqualError(t, err, wantErr)
 
-	cfg.Nodes = append(cfg.Nodes, Node{Role: RoleDB, Managed: testutil.Ptr(false)})
+	cfg.Nodes = append(cfg.Nodes, Node{Role: RoleDB, Managed: new(false)})
 	require.EqualError(t, cfg.Validate(), wantErr)
 
 	cfg.Nodes[2].Managed = nil
@@ -1321,9 +1261,9 @@ func TestCluster_HasManagedDB(t *testing.T) {
 	}{
 		{"no db", []Node{{Role: RoleController}, {Role: RoleWorker}}, false},
 		{"db", []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}}, true},
-		{"managed: true db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(true)}, {Role: RoleWorker}}, true},
-		{"unmanaged db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, false},
-		{"db in an unmanaged cluster", []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleDB}, {Role: RoleWorker}}, false},
+		{"managed: true db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(true)}, {Role: RoleWorker}}, true},
+		{"unmanaged db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(false)}, {Role: RoleWorker}}, false},
+		{"db in an unmanaged cluster", []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleDB}, {Role: RoleWorker}}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1341,9 +1281,9 @@ func TestCluster_HasManagedAPI(t *testing.T) {
 	}{
 		{"no api", []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}}, false},
 		{"api", []Node{{Role: RoleController}, {Role: RoleAPI}, {Role: RoleWorker}}, true},
-		{"managed: true api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: testutil.Ptr(true)}, {Role: RoleWorker}}, true},
-		{"unmanaged api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, false},
-		{"api in an unmanaged cluster", []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleAPI}, {Role: RoleWorker}}, false},
+		{"managed: true api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: new(true)}, {Role: RoleWorker}}, true},
+		{"unmanaged api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: new(false)}, {Role: RoleWorker}}, false},
+		{"api in an unmanaged cluster", []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleAPI}, {Role: RoleWorker}}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1514,17 +1454,13 @@ func TestValidate_SecurityFields(t *testing.T) {
 	t.Run("invalid capAdd", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].CapAdd = []string{"INVALID_CAP"}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `unknown capability "INVALID_CAP" in capAdd`)
+		require.ErrorContains(t, cfg.Validate(), `unknown capability "INVALID_CAP" in capAdd`)
 	})
 
 	t.Run("invalid capDrop", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].CapDrop = []string{"NOT_A_CAP"}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `unknown capability "NOT_A_CAP" in capDrop`)
+		require.ErrorContains(t, cfg.Validate(), `unknown capability "NOT_A_CAP" in capDrop`)
 	})
 
 	t.Run("valid devices", func(t *testing.T) {
@@ -1536,9 +1472,7 @@ func TestValidate_SecurityFields(t *testing.T) {
 	t.Run("device path not absolute", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].Devices = []string{"dev/fuse"}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "device path must be absolute")
+		require.ErrorContains(t, cfg.Validate(), "in devices: host path must be absolute")
 	})
 
 	t.Run("valid security opts", func(t *testing.T) {

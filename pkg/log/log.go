@@ -25,10 +25,8 @@ func With(ctx context.Context, l *slog.Logger) context.Context {
 	return context.WithValue(ctx, contextKey{}, l)
 }
 
-// Nop returns a no-op logger that discards all output.
-func Nop() *slog.Logger {
-	return slog.New(discardHandler{})
-}
+// nop is the logger From returns when the context has none.
+var nop = slog.New(slog.DiscardHandler)
 
 // From extracts the logger from the context.
 // Returns a no-op logger if none is set.
@@ -36,13 +34,5 @@ func From(ctx context.Context) *slog.Logger {
 	if l, ok := ctx.Value(contextKey{}).(*slog.Logger); ok {
 		return l
 	}
-	return Nop()
+	return nop
 }
-
-// discardHandler is a slog.Handler that silently drops all log records.
-type discardHandler struct{}
-
-func (discardHandler) Enabled(context.Context, slog.Level) bool  { return false }
-func (discardHandler) Handle(context.Context, slog.Record) error { return nil }
-func (d discardHandler) WithAttrs([]slog.Attr) slog.Handler      { return d }
-func (d discardHandler) WithGroup(string) slog.Handler           { return d }

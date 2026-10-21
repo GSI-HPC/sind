@@ -73,7 +73,7 @@ assert.Contains(t, m.Calls[0].Args, "--name")
 
 The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr.
 
-Docker exits 1 for many failures, so `docker.IsNotFound` and `docker.IsVolumeInUse` read docker's message, not only the exit code. Queue a real `*exec.ExitError` with exit code 1 together with the stderr docker prints:
+Docker exits 1 for many failures, so `docker.IsNotFound` and the in-use retry of `RemoveVolume` read docker's message, not only the exit code. Queue a real `*exec.ExitError` with exit code 1 together with the stderr docker prints:
 
 ```go
 m.AddResult("", testutil.NoSuchContainer("sind-dev-controller"), testutil.ExitCode1(t))
@@ -115,12 +115,12 @@ step nodes total=2 [fold]: ok
 step slurm total=2 [fold]: ok
   target worker-[1-2] role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 ```
 
 - `Watch` gives the test a context with a Bus of its own. `Finish` runs `progresstest.Check` on the events, closes the Bus and returns the spans as a tree that does not depend on the order in which concurrent work ran; a test that does not call `Finish` is checked when it ends. `Check` fails the test for every promise the spans break: each span starts and ends once, under a parent that is still open; the targets of a counted step are all announced queued before the first of them runs, and as many end as its `Total`; no more run at once than its `Limit`; no text holds what a terminal would act on.
 - In `cmd/sind`, pass `progresstest.Classify(progressClass(ctx))`, so that the spans get the classes sind's own Bus gives them.
-- Every docker command is a call in the tree. `withoutCalls`, a helper in the progress tests of `cmd/sind`, `pkg/cluster` and `pkg/mesh`, draws the tree without the calls and what is under them, for a test whose point is not how often a wait polls.
+- Every docker command is a call in the tree. `testutil.WithoutCalls` (from `internal/testutil`) draws the tree without the calls and what is under them, for a test whose point is not how often a wait polls.
 - Without `Watch` the context has no Bus, every span does nothing, and a test sees what it saw before sind reported progress.
 
 The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets `SIND_PROGRESS` and `SIND_PROGRESS_LOG`, so that a developer's own settings reach no test.

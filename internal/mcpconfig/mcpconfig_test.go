@@ -18,15 +18,8 @@ import (
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 )
 
-type entry struct {
-	Type    string            `json:"type,omitempty"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env,omitempty"`
-}
-
 var (
-	sindEntry = entry{Command: "/usr/bin/sind", Args: []string{"mcp", "start"}}
+	sindEntry = mcpconfig.Server{Name: "sind", Command: "/usr/bin/sind", Args: []string{"mcp", "start"}}
 	now       = time.Date(2026, 10, 19, 16, 30, 5, 0, time.Local)
 )
 
@@ -50,7 +43,19 @@ func read(t *testing.T, fsys afero.Fs, path string) string {
 	return string(data)
 }
 
-func ptr(s string) *string { return &s }
+// newServers is the configuration Set makes of an empty one.
+const newServers = `{
+  "mcpServers": {
+    "sind": {
+      "command": "/usr/bin/sind",
+      "args": [
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}
+`
 
 func TestSet(t *testing.T) {
 	tests := []struct {
@@ -59,42 +64,11 @@ func TestSet(t *testing.T) {
 		key  string
 		want string
 	}{
-		{
-			name: "no file",
-			key:  "mcpServers",
-			want: `{
-  "mcpServers": {
-    "sind": {
-      "command": "/usr/bin/sind",
-      "args": [
-        "mcp",
-        "start"
-      ]
-    }
-  }
-}
-`,
-		},
-		{
-			name: "whitespace only",
-			in:   ptr(" \n"),
-			key:  "mcpServers",
-			want: `{
-  "mcpServers": {
-    "sind": {
-      "command": "/usr/bin/sind",
-      "args": [
-        "mcp",
-        "start"
-      ]
-    }
-  }
-}
-`,
-		},
+		{name: "no file", key: "mcpServers", want: newServers},
+		{name: "whitespace only", in: new(" \n"), key: "mcpServers", want: newServers},
 		{
 			name: "keeps other settings and servers",
-			in: ptr(`{
+			in: new(`{
 	"globalShortcut": "Ctrl+Space",
 	"mcpServers": {
 		"other": {"command": "x", "cwd": "/w", "disabled": true, "autoApprove": ["t"]}
@@ -119,7 +93,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "jsonc with comments and trailing commas",
-			in: ptr(`{
+			in: new(`{
   // inputs
   "inputs": [],
   "servers": {
@@ -146,7 +120,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "comment after the last entry",
-			in: ptr(`{
+			in: new(`{
     "servers": {
         "other": {
             "command": "x"
@@ -171,7 +145,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "no servers yet",
-			in:   ptr("{\n  \"preferences\": {\"x\": 1}\n}\n"),
+			in:   new("{\n  \"preferences\": {\"x\": 1}\n}\n"),
 			key:  "mcpServers",
 			want: `{
   "preferences": {"x": 1},
@@ -189,7 +163,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "empty servers",
-			in:   ptr("{\n  \"servers\": {}\n}\n"),
+			in:   new("{\n  \"servers\": {}\n}\n"),
 			key:  "servers",
 			want: `{
   "servers": {
@@ -206,19 +180,19 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "one-line file",
-			in:   ptr(`{"a":1,"mcpServers":{"b":{"command":"y"}}}`),
+			in:   new(`{"a":1,"mcpServers":{"b":{"command":"y"}}}`),
 			key:  "mcpServers",
 			want: `{"a":1,"mcpServers":{"b":{"command":"y"},"sind":{"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
 		},
 		{
 			name: "one-line file without servers",
-			in:   ptr(`{"a": 1}`),
+			in:   new(`{"a": 1}`),
 			key:  "mcpServers",
 			want: `{"a": 1,"mcpServers": {"sind": {"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
 		},
 		{
 			name: "replaces the entry and keeps its comments",
-			in: ptr(`{
+			in: new(`{
   "mcpServers": {
     // ours
     "sind": {"command": "old", "args": ["x"]}, // was old
@@ -246,19 +220,12 @@ func TestSet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fsys, f := load(t, tt.in, tt.key)
-			require.NoError(t, f.Set("sind", sindEntry))
+			f.Set(sindEntry)
 			_, err := f.Save(now)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, read(t, fsys, "/cfg/c.json"))
 		})
 	}
-}
-
-func TestSet_MarshalError(t *testing.T) {
-	_, f := load(t, nil, "mcpServers")
-	err := f.Set("sind", make(chan int))
-	require.ErrorContains(t, err, "editing /cfg/c.json: json: unsupported type: chan int")
-	assert.False(t, f.Has("sind"))
 }
 
 func TestRemove(t *testing.T) {
@@ -319,7 +286,6 @@ func TestRemove(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fsys, f := load(t, &tt.in, "servers")
 			assert.True(t, f.Remove("sind"))
-			assert.False(t, f.Has("sind"))
 			_, err := f.Save(now)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, read(t, fsys, "/cfg/c.json"))
@@ -328,14 +294,14 @@ func TestRemove(t *testing.T) {
 }
 
 func TestRemove_Missing(t *testing.T) {
-	_, f := load(t, ptr(`{"servers": {"a": {}}}`), "servers")
+	_, f := load(t, new(`{"servers": {"a": {}}}`), "servers")
 	assert.False(t, f.Remove("sind"))
 	_, f = load(t, nil, "servers")
 	assert.False(t, f.Remove("sind"))
 }
 
 func TestServers(t *testing.T) {
-	_, f := load(t, ptr(`{
+	_, f := load(t, new(`{
   "mcpServers": {
     "z": {"type": "stdio", "command": "/bin/z", "args": ["a", "b"], "env": {"K": "secret"}},
     "web": {"type": "http", "url": "https://example.com/mcp", /* auth */ "headers": {}},
@@ -344,17 +310,15 @@ func TestServers(t *testing.T) {
   }
 }`), "mcpServers")
 	assert.Equal(t, []mcpconfig.Server{
-		{Name: "z", Type: "stdio", Command: "/bin/z", Args: []string{"a", "b"}},
+		{Name: "z", Type: "stdio", Command: "/bin/z", Args: []string{"a", "b"}, Env: map[string]string{"K": "secret"}},
 		{Name: "web", Type: "http", URL: "https://example.com/mcp"},
 		{Name: "bad"},
 		{Name: "odd"},
 	}, f.Servers())
-	assert.True(t, f.Has("bad"))
 	assert.Equal(t, "/cfg/c.json", f.Path())
 
 	_, f = load(t, nil, "mcpServers")
 	assert.Empty(t, f.Servers())
-	assert.False(t, f.Has("z"))
 }
 
 func TestLoad_Errors(t *testing.T) {
@@ -404,7 +368,7 @@ func TestLoad_FollowsSymlinks(t *testing.T) {
 	f, err := mcpconfig.Load(afero.NewOsFs(), filepath.Join(dir, "abs.json"), "mcpServers")
 	require.NoError(t, err)
 	assert.Equal(t, target, f.Path())
-	require.NoError(t, f.Set("sind", sindEntry))
+	f.Set(sindEntry)
 	backup, err := f.Save(now)
 	require.NoError(t, err)
 	assert.Equal(t, target+".20261019-163005.bak", backup)
@@ -439,14 +403,14 @@ func TestLoad_SymlinkErrors(t *testing.T) {
 }
 
 func TestSave_Backups(t *testing.T) {
-	fsys, f := load(t, ptr("{}\n"), "mcpServers")
+	fsys, f := load(t, new("{}\n"), "mcpServers")
 
 	// Nothing changed, nothing written.
 	backup, err := f.Save(now)
 	require.NoError(t, err)
 	assert.Empty(t, backup)
 
-	require.NoError(t, f.Set("sind", sindEntry))
+	f.Set(sindEntry)
 	backup, err = f.Save(now)
 	require.NoError(t, err)
 	assert.Equal(t, "/cfg/c.json.20261019-163005.bak", backup)
@@ -454,7 +418,7 @@ func TestSave_Backups(t *testing.T) {
 	saved := read(t, fsys, "/cfg/c.json")
 
 	// A second change in the same second keeps the first backup.
-	require.NoError(t, f.Set("sind", entry{Command: "/opt/sind", Args: []string{"mcp", "start"}}))
+	f.Set(mcpconfig.Server{Name: "sind", Command: "/opt/sind", Args: []string{"mcp", "start"}})
 	backup, err = f.Save(now)
 	require.NoError(t, err)
 	assert.Equal(t, "/cfg/c.json.20261019-163005-1.bak", backup)
@@ -468,7 +432,7 @@ func TestSave_Backups(t *testing.T) {
 
 func TestSave_NewFile(t *testing.T) {
 	fsys, f := load(t, nil, "mcpServers")
-	require.NoError(t, f.Set("sind", sindEntry))
+	f.Set(sindEntry)
 	backup, err := f.Save(now)
 	require.NoError(t, err)
 	assert.Empty(t, backup)
@@ -498,10 +462,6 @@ func TestSave_Errors(t *testing.T) {
 		{"backup open", true, "open /cfg/c.json.20261019-163005.bak", "backing up /cfg/c.json: failed"},
 		{"backup write", true, "write /cfg/c.json.20261019-163005.bak", "backing up /cfg/c.json: failed"},
 		{"backup close", true, "close /cfg/c.json.20261019-163005.bak", "backing up /cfg/c.json: failed"},
-		{"temp open", true, "open /cfg/.c.json-", "writing /cfg/c.json: failed"},
-		{"temp write", true, "write /cfg/.c.json-", "writing /cfg/c.json: failed"},
-		{"temp close", true, "close /cfg/.c.json-", "writing /cfg/c.json: failed"},
-		{"chmod", true, "chmod", "writing /cfg/c.json: failed"},
 		{"rename", true, "rename", "writing /cfg/c.json: failed"},
 	}
 	for _, tt := range tests {
@@ -512,7 +472,7 @@ func TestSave_Errors(t *testing.T) {
 			}
 			f, err := mcpconfig.Load(fsys, "/cfg/c.json", "mcpServers")
 			require.NoError(t, err)
-			require.NoError(t, f.Set("sind", sindEntry))
+			f.Set(sindEntry)
 			fsys.fail = map[string]error{tt.fail: failure}
 
 			_, err = f.Save(now)
@@ -528,9 +488,9 @@ func TestSave_Errors(t *testing.T) {
 	}
 }
 
-// failFs fails the operations named in fail: "stat", "mkdir", "chmod",
-// "rename", or "open", "write" or "close" followed by a space and a prefix
-// of the file's name.
+// failFs fails the operations named in fail: "stat", "mkdir", "rename",
+// or "open", "write" or "close" followed by a space and a prefix of the
+// file's name.
 type failFs struct {
 	afero.Fs
 	fail map[string]error
@@ -560,13 +520,6 @@ func (f *failFs) MkdirAll(path string, perm os.FileMode) error {
 		return err
 	}
 	return f.Fs.MkdirAll(path, perm)
-}
-
-func (f *failFs) Chmod(name string, mode os.FileMode) error {
-	if err := f.err("chmod", name); err != nil {
-		return err
-	}
-	return f.Fs.Chmod(name, mode)
 }
 
 func (f *failFs) Rename(oldname, newname string) error {

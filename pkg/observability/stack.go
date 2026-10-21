@@ -7,9 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -19,7 +19,6 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/retry"
 )
 
 // labelRealm is the realm label of the stack's volumes, as pkg/mesh and
@@ -61,34 +60,6 @@ func (m *Manager) composeProject() string {
 	return m.Realm + "-mesh"
 }
 
-// dataDir is where a service keeps its data, on its volume.
-func (s Service) dataDir() string {
-	switch s {
-	case ServiceGrafana:
-		return "/var/lib/grafana"
-	case ServicePrometheus:
-		return "/prometheus"
-	case ServiceLoki:
-		return "/loki"
-	default:
-		return "/var/lib/alloy/data"
-	}
-}
-
-// args are the arguments of a service's command, after its image.
-func (s Service) args() []string {
-	switch s {
-	case ServicePrometheus:
-		return prometheusArgs
-	case ServiceLoki:
-		return lokiArgs
-	case ServiceAlloy:
-		return alloyArgs
-	default:
-		return nil
-	}
-}
-
 // createArgs returns the docker create arguments of a service's container:
 // on the mesh network, at ip unless it is empty, with the Compose labels
 // of the mesh's project, the fingerprint fp, its memory cap and its data
@@ -106,8 +77,8 @@ func (m *Manager) createArgs(s Service, ip, fp string, pull bool) []string {
 	}
 	args = append(args, docker.SortedLabelFlags(labels)...)
 	args = append(args,
-		"--memory", s.memoryLimit(),
-		"--mount", docker.VolumeMount(VolumeName(m.Realm, s), s.dataDir(), "", false, false),
+		"--memory", specs[s].memoryLimit,
+		"--mount", docker.VolumeMount(VolumeName(m.Realm, s), specs[s].dataDir, "", false, false),
 	)
 	switch s {
 	case ServiceGrafana:
@@ -127,7 +98,7 @@ func (m *Manager) createArgs(s Service, ip, fp string, pull bool) []string {
 		args = append(args, "--pull", "always")
 	}
 	args = append(args, s.Image())
-	return append(args, s.args()...)
+	return append(args, specs[s].args...)
 }
 
 // Fingerprint returns the fingerprint of the stack a realm gets from this
@@ -142,12 +113,7 @@ func (m *Manager) Fingerprint() string {
 			_, _ = fmt.Fprintf(h, "%s\x00", a) // a hash never fails a write
 		}
 		dir, files := serviceFiles(m.Realm, s, "")
-		names := make([]string, 0, len(files))
-		for name := range files {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
+		for _, name := range slices.Sorted(maps.Keys(files)) {
 			_, _ = fmt.Fprintf(h, "%s\x00%o\x00%s\x00", path.Join(dir, name), files[name].Mode, files[name].Content)
 		}
 	}
@@ -182,14 +148,14 @@ func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (c
 	}
 	for _, s := range startOrder {
 		name := ContainerName(m.Realm, s)
-		info, err := m.inspectIfExists(ctx, name)
+		info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 		if err != nil {
 			return changed, fmt.Errorf("checking %s container: %w", s, err)
 		}
 		if info != nil && info.Labels[LabelVersion] != fp {
 			log.InfoContext(ctx, "recreating monitoring container", "container", string(name),
 				"fingerprint", info.Labels[LabelVersion], "want", fp)
-			if err := m.removeContainerIfExists(ctx, name); err != nil {
+			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(ctx, name)); err != nil {
 				return changed, fmt.Errorf("removing %s container: %w", s, err)
 			}
 			info = nil
@@ -219,7 +185,7 @@ func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 	var missing []string
 	for _, s := range startOrder {
 		name := ContainerName(m.Realm, s)
-		info, err := m.inspectIfExists(ctx, name)
+		info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 		if err != nil {
 			return found, fmt.Errorf("checking %s container: %w", s, err)
 		}
@@ -249,7 +215,7 @@ func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 // its configuration into it.
 func (m *Manager) create(ctx context.Context, s Service, dnsIP, fp, alloyConfig string) error {
 	ip := ""
-	if n := s.pinnedOffset(); n > 0 && dnsIP != "" {
+	if n := specs[s].pinnedOffset; n > 0 && dnsIP != "" {
 		ip = mesh.ServiceIP(dnsIP, n)
 	}
 	if _, err := m.Docker.CreateContainer(ctx, m.createArgs(s, ip, fp, m.Pull)...); err != nil {
@@ -260,18 +226,6 @@ func (m *Manager) create(ctx context.Context, s Service, dnsIP, fp, alloyConfig 
 		return fmt.Errorf("writing %s configuration: %w", s, err)
 	}
 	return nil
-}
-
-// readyPath is the path of a service's readiness endpoint.
-func (s Service) readyPath() string {
-	switch s {
-	case ServiceGrafana:
-		return "/api/health"
-	case ServiceLoki:
-		return "/ready"
-	default:
-		return "/-/ready"
-	}
 }
 
 // URL returns the address of a service's endpoint path on the mesh
@@ -294,7 +248,7 @@ func (m *Manager) ServiceReady(ctx context.Context, s Service) error {
 	if err := probe.ContainerRunning(ctx, m.Docker, ContainerName(m.Realm, s)); err != nil {
 		return err
 	}
-	if _, err := m.curl(ctx, "-o", "/dev/null", m.URL(s, s.readyPath())); err != nil {
+	if _, err := m.curl(ctx, "-o", "/dev/null", m.URL(s, specs[s].readyPath)); err != nil {
 		return fmt.Errorf("%s not ready: %w", s, err)
 	}
 	return nil
@@ -394,7 +348,7 @@ func (m *Manager) Remove(ctx context.Context) error {
 			continue
 		}
 		g.Go(func() error {
-			if err := m.removeContainerIfExists(gctx, name); err != nil {
+			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(gctx, name)); err != nil {
 				return fmt.Errorf("removing %s container: %w", s, err)
 			}
 			return nil
@@ -430,11 +384,7 @@ func (m *Manager) RemoveVolumes(ctx context.Context) error {
 		if !slices.ContainsFunc(existing, func(e docker.VolumeListEntry) bool { return e.Name == v }) {
 			continue
 		}
-		err := retry.Do(ctx,
-			func() error { return m.Docker.RemoveVolume(ctx, v) },
-			docker.IsVolumeInUse,
-			6, 100*time.Millisecond)
-		if err != nil && !docker.IsNotFound(err) {
+		if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, v)); err != nil {
 			return fmt.Errorf("removing volume %s: %w", v, err)
 		}
 	}
@@ -502,7 +452,7 @@ func (m *Manager) Status(ctx context.Context) ([]ServiceStatus, bool, error) {
 		}
 		g.Go(func() error {
 			s := statuses[i].Service
-			_, err := m.curl(gctx, "-o", "/dev/null", m.URL(s, s.readyPath()))
+			_, err := m.curl(gctx, "-o", "/dev/null", m.URL(s, specs[s].readyPath))
 			statuses[i].Ready = err == nil
 			statuses[i].Checked = true
 			return nil
@@ -510,23 +460,4 @@ func (m *Manager) Status(ctx context.Context) ([]ServiceStatus, bool, error) {
 	}
 	_ = g.Wait() // the checks report through Ready
 	return statuses, true, nil
-}
-
-// inspectIfExists inspects a container, nil without an error when it does
-// not exist.
-func (m *Manager) inspectIfExists(ctx context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
-	info, err := m.Docker.InspectContainer(ctx, name)
-	if docker.IsNotFound(err) {
-		return nil, nil
-	}
-	return info, err
-}
-
-// removeContainerIfExists removes a container, a missing one counting as
-// removed.
-func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.ContainerName) error {
-	if err := m.Docker.RemoveContainer(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
-	return nil
 }

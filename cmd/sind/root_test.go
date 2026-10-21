@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -14,31 +15,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func executeCommand(args ...string) (string, string, error) {
+// execute runs a command line in ctx, with stdin as its input (nil leaves
+// it at os.Stdin), and returns what it wrote to its output and error
+// streams.
+func execute(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	cmd := NewRootCommand()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.SetArgs(args)
+	if stdin != nil {
+		cmd.SetIn(stdin)
+	}
+	cmd.SetContext(ctx)
 	err := cmd.Execute()
 	return stdout.String(), stderr.String(), err
 }
 
+func executeCommand(args ...string) (string, string, error) {
+	return execute(context.Background(), nil, args...)
+}
+
 func executeWithMock(mock *mock.Executor, args ...string) (string, string, error) {
-	cmd := NewRootCommand()
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
-
-	client := docker.NewClient(mock)
-	ctx := withClient(context.Background(), client)
-	cmd.SetContext(ctx)
-
-	err := cmd.Execute()
-	return stdout.String(), stderr.String(), err
+	return execute(withClient(context.Background(), docker.NewClient(mock)), nil, args...)
 }
 
 func TestRootCommand_Help(t *testing.T) {
@@ -85,6 +85,37 @@ func TestUnknownSubcommand(t *testing.T) {
 	}
 }
 
+// TestUnknownSubcommandWithHelp verifies that the help flag does not make
+// an unknown subcommand succeed: a script that probes for one with --help
+// gets the error it gets without.
+func TestUnknownSubcommandWithHelp(t *testing.T) {
+	for _, tt := range []struct {
+		args    []string
+		wantErr string
+	}{
+		{[]string{"get", "bogus", "--help"}, `unknown command "bogus" for "sind get"`},
+		{[]string{"get", "munge-key", "-h"}, `unknown command "munge-key" for "sind get"`},
+		{[]string{"power", "stop", "-h"}, `unknown command "stop" for "sind power" (did you mean "shutdown"?)`},
+		{[]string{"--help", "bogus"}, `unknown command "bogus" for "sind" (did you mean "logs"?)`},
+		{[]string{"get", "--help=bogus"}, `invalid --help value "bogus": want true or false`},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(tt.args...)
+			require.EqualError(t, err, tt.wantErr)
+			assert.True(t, isUsageError(err))
+			assert.Empty(t, stdout)
+		})
+	}
+	for _, args := range [][]string{{"get", "--help"}, {"get", "-h"}, {"-h"}, {"mcp", "claude", "--help"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(args...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "Available Commands:")
+			assert.Contains(t, stdout, "  -h, --help ")
+		})
+	}
+}
+
 // TestHelpTopic verifies that help still prints the help of every command
 // it names in full.
 func TestHelpTopic(t *testing.T) {
@@ -124,4 +155,28 @@ func TestRootCommand_RealmFlagAfterSubcommand(t *testing.T) {
 	stdout, _, err := executeWithMock(&m, "get", "realms", "--realm", "some-realm", "-o", "json")
 	require.NoError(t, err)
 	assert.Equal(t, "[]\n", stdout)
+}
+
+// TestFlagHelpDefaults verifies that the help shows each flag's default
+// once, and in words where pflag would show a misleading one.
+func TestFlagHelpDefaults(t *testing.T) {
+	tests := []struct {
+		args    []string
+		want    string
+		notWant string
+	}{
+		{[]string{"create", "cluster", "--help"}, `"volume" for a Docker volume (default ".")`, "default: the working directory"},
+		{[]string{"logs", "--help"}, "show only the last N lines (default: all lines; 0 shows none)", ""},
+		{[]string{"mcp", "claude", "enable", "--help"}, "-e, --env KEY=VALUE ", "(default [])"},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(tt.args...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, tt.want)
+			if tt.notWant != "" {
+				assert.NotContains(t, stdout, tt.notWant)
+			}
+		})
+	}
 }

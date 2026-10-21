@@ -15,6 +15,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,14 +45,42 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"get", "bogus"}, `unknown command "bogus" for "sind get"`},
 		{[]string{"help", "bogus"}, `unknown help topic "bogus"`},
 		{[]string{"completion", "fishy"}, `unknown command "fishy" for "sind completion"`},
-		{[]string{"version", "extra"}, `unknown command "extra" for "sind version"`},
-		{[]string{"mcp", "tools", "extra"}, `unknown command "extra" for "sind mcp tools"`},
-		{[]string{"mcp", "stream", "extra"}, `unknown command "extra" for "sind mcp stream"`},
-		{[]string{"mcp", "claude", "list", "extra"}, `unknown command "extra" for "sind mcp claude list"`},
+		{[]string{"version", "extra"}, "accepts no arguments, received 1 (usage: sind version)"},
+		{[]string{"mcp", "tools", "extra"}, "accepts no arguments, received 1 (usage: sind mcp tools)"},
+		{[]string{"mcp", "stream", "extra"}, "accepts no arguments, received 1 (usage: sind mcp stream)"},
+		{[]string{"mcp", "claude", "list", "extra"}, "accepts no arguments, received 1 (usage: sind mcp claude list)"},
 		{[]string{"get", "cluster", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"get", "clusters", "extra"}, "accepts no arguments, received 1 (usage: sind get clusters)"},
+		{[]string{"get", "ssh-config", "extra"}, "accepts no arguments, received 1 (usage: sind get ssh-config)"},
+		{[]string{"get", "dns", "extra"}, "accepts no arguments, received 1 (usage: sind get dns)"},
+		{[]string{"get", "realms", "extra"}, "accepts no arguments, received 1 (usage: sind get realms)"},
+		{[]string{"get", "mesh", "extra"}, "accepts no arguments, received 1 (usage: sind get mesh)"},
+		{[]string{"get", "coredns-config", "extra"}, "accepts no arguments, received 1 (usage: sind get coredns-config)"},
+		{[]string{"get", "ssh-private-key", "extra"}, "accepts no arguments, received 1 (usage: sind get ssh-private-key)"},
+		{[]string{"get", "nodes", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"get", "auth-key", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"get", "node"}, "accepts 1 arg(s), received 0"},
+		{[]string{"delete", "cluster", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"delete", "realm", "extra"}, "accepts no arguments, received 1; name the realm with --realm, as in sind --realm extra delete realm (usage: sind delete realm)"},
+		{[]string{"create", "worker", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"delete", "worker"}, "requires at least 1 arg(s), only received 0"},
+		{[]string{"create", "cluster", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"connect", "container"}, "requires at least 1 arg(s), only received 0"},
+		{[]string{"disconnect", "container"}, "requires at least 1 arg(s), only received 0"},
+		{[]string{"logs"}, "accepts between 1 and 2 arg(s), received 0"},
+		{[]string{"logs", "a", "b", "c"}, "accepts between 1 and 2 arg(s), received 3"},
 		{[]string{"get", "cluster", "Not_A_Name"}, `invalid cluster name "Not_A_Name"`},
 		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml"`},
-		{[]string{"get", "auth-key", "--type", "kerberos"}, `invalid --type value "kerberos": must be munge, slurm, jwt`},
+		{[]string{"get", "auth-key", "--type", "kerberos"}, `invalid --type value "kerberos": want munge, slurm or jwt`},
+		{[]string{"get", "cluster", "--progress", "tree"}, `invalid --progress value "tree": want auto, tty, counter, plain or none`},
+		// pflag's parser errors read as the other invalid values do.
+		{[]string{"create", "worker", "--count", "x"}, `invalid --count value "x": want a whole number`},
+		{[]string{"create", "cluster", "--wait", "5"}, `invalid --wait value "5": want a duration with a unit, such as 90s, 5m or 1h30m`},
+		{[]string{"create", "worker", "--pull=maybe"}, `invalid --pull value "maybe": want true or false`},
+		{[]string{"logs", "-n", "x", "controller"}, `invalid --tail value "x": want a whole number`},
+		{[]string{"exec", "-v=x", "--", "true"}, `invalid --verbose value "x": want a whole number`},
+		{[]string{"create", "cluster", "--config", ""}, "--config must not be empty: leave it out for the default"},
+		{[]string{"create", "worker", "--device", "rel/path"}, `device "rel/path" in --device: host path must be absolute`},
 		{[]string{"--realm", "Not_A_Realm", "get", "clusters"}, `--realm: invalid realm name "Not_A_Realm"`},
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},
 		{[]string{"get", "node", "worker-0.Not_A_Name"}, `invalid node name "worker-0.Not_A_Name"`},
@@ -141,7 +170,7 @@ func TestNewChildExitError(t *testing.T) {
 			err := newChildExitError(exitErr)
 
 			assert.Equal(t, tc.want, err.code)
-			assert.Equal(t, exitErr.Error(), err.Error())
+			assert.EqualError(t, err, exitErr.Error())
 			require.ErrorIs(t, err, exitErr)
 		})
 	}
@@ -255,14 +284,48 @@ func TestRun_DockerThatCannotStartExits1(t *testing.T) {
 func TestArityErrorNamesTheUsage(t *testing.T) {
 	_, _, err := executeCommand("power", "on")
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "only received 0 (usage: sind power on NODES)")
 	assert.True(t, isUsageError(err))
-	assert.Contains(t, err.Error(), "only received 0 (usage: sind power on NODES)")
+}
+
+// TestArgumentErrorsNameTheUsage checks that the errors in the arguments
+// that a command finds itself end with its usage line, as cobra's arity
+// errors do, and that those in flag values do not.
+func TestArgumentErrorsNameTheUsage(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"ssh"}, "node argument required (usage: sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]])"},
+		{[]string{"exec", "dev"}, "-- separator and command required (usage: sind exec [flags] [CLUSTER] -- COMMAND [ARGS...])"},
+		{[]string{"exec", "a", "b", "--", "x"}, "expected at most one argument before --, got 2 (usage: sind exec [flags] [CLUSTER] -- COMMAND [ARGS...])"},
+		{[]string{"delete", "cluster", "--all", "x"}, "--all does not accept arguments (usage: sind delete cluster [NAME])"},
+		{[]string{"power", "on", "@compute"}, "expanding nodes: group @compute: sind has no node groups (usage: sind power on NODES)"},
+		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml": want human or json`},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			_, _, err := executeCommand(tt.args...)
+			require.EqualError(t, err, tt.want)
+			assert.True(t, isUsageError(err))
+		})
+	}
+}
+
+func TestWithUsageLine(t *testing.T) {
+	cmd := &cobra.Command{Use: "x ARG"}
+	assert.NoError(t, withUsageLine(cmd, nil))
+	assert.EqualError(t, withUsageLine(cmd, assert.AnError), assert.AnError.Error())
+	assert.EqualError(t, withUsageLine(cmd, usagef("bad flag")), "bad flag")
+
+	err := withUsageLine(cmd, fmt.Errorf("context: %w", argsErrorf("bad arg")))
+	require.EqualError(t, err, "context: bad arg (usage: x ARG)")
+	assert.Equal(t, err, withUsageLine(cmd, err), "a second usage line")
+	assert.NoError(t, argsError(nil))
 }
 
 func TestRemovedStatusCommandPointsToGetCluster(t *testing.T) {
 	_, _, err := executeCommand("status")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `(it is now "get cluster")`)
+	require.ErrorContains(t, err, `(it is now "get cluster")`)
 }

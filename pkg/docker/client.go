@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"os/exec"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
@@ -91,6 +93,22 @@ func (c *Client) run(ctx context.Context, args ...string) (string, string, error
 	})
 }
 
+// do runs a docker command for its effect alone.
+func (c *Client) do(ctx context.Context, args ...string) error {
+	_, _, err := c.run(ctx, args...)
+	return err
+}
+
+// output runs a docker command and returns its standard output, or the
+// error and no output.
+func (c *Client) output(ctx context.Context, args ...string) (string, error) {
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	return stdout, nil
+}
+
 func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
 		return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
@@ -123,6 +141,7 @@ func (c *Client) call(ctx context.Context, args []string, exec func(context.Cont
 		runCtx = cmdexec.WithStdoutAsData(ctx)
 	}
 	stdout, stderr, err := exec(runCtx)
+	err = classifyUnreachable(err)
 	var end []progress.Option
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok {
 		end = append(end, progress.Exit(exitErr.ExitCode()))
@@ -164,21 +183,13 @@ func SortedLabelFlags(labels Labels) []string {
 	if len(labels) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
 	args := make([]string, 0, len(labels)*2)
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(labels)) {
 		args = append(args, "--label", k+"="+labels[k])
 	}
 	return args
 }
 
-// exists runs an inspect-style command and returns true if the resource exists.
-// Docker inspect commands exit with code 1 for missing resources; other errors
-// are propagated.
 // labels runs an inspect command that prints a resource's labels as JSON
 // and reports them, and whether the resource exists.
 func (c *Client) labels(ctx context.Context, args ...string) (Labels, bool, error) {
@@ -198,6 +209,39 @@ func (c *Client) labels(ctx context.Context, args ...string) (Labels, bool, erro
 	return labels, true, nil
 }
 
+// listJSON runs a docker list command (ps, network ls, volume ls) with
+// --format json and the filters as --filter flags, and decodes its output,
+// one JSON object per line, to T. what names the command in the error.
+func listJSON[T any](ctx context.Context, c *Client, what string, filters []string, args ...string) ([]T, error) {
+	args = append(args, "--format", "json")
+	for _, f := range filters {
+		args = append(args, "--filter", f)
+	}
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	var entries []T
+	for dec := json.NewDecoder(strings.NewReader(stdout)); dec.More(); {
+		var e T
+		if err := dec.Decode(&e); err != nil {
+			return nil, fmt.Errorf("parsing %s output: %w", what, err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
+// lsEntry maps the docker network ls and docker volume ls --format json output.
+type lsEntry struct {
+	Name   string `json:"Name"`
+	Driver string `json:"Driver"`
+	Labels string `json:"Labels"`
+}
+
+// exists runs an inspect-style command and returns true if the resource exists.
+// Docker inspect commands exit with code 1 for missing resources; other errors
+// are propagated.
 func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 	_, _, err := c.run(ctx, args...)
 	if err != nil {
@@ -207,6 +251,25 @@ func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// IgnoreNotFound returns err, or nil when IsNotFound reports it: for a
+// remove that counts a missing resource as removed.
+func IgnoreNotFound(err error) error {
+	if IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// IfExists returns v and err, or v's zero value and nil when IsNotFound
+// reports err: for an inspect that counts a missing resource as none.
+func IfExists[T any](v T, err error) (T, error) {
+	if IsNotFound(err) {
+		var zero T
+		return zero, nil
+	}
+	return v, err
 }
 
 // IsNotFound reports whether err is a docker CLI "resource not found" error
@@ -223,16 +286,67 @@ func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 // "get x: no such volume", "No such network: x" or "network x not found".
 func IsNotFound(err error) bool {
 	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
-	if !ok || exitErr.ExitCode() != 1 {
-		return false
+	return ok && exitErr.ExitCode() == 1 && notFound.MatchString(strings.ToLower(exitErr.Stderr))
+}
+
+// ErrUnreachable is matched (errors.Is) by the error of a docker command
+// that could not reach the Docker daemon: the docker CLI is not installed,
+// or the daemon is not running or refuses the user. Every Client call
+// returns such a failure as an *UnreachableError.
+var ErrUnreachable = errors.New("docker is not reachable")
+
+// DoctorHint ends an error whose fix `sind doctor` prints.
+const DoctorHint = "; run `sind doctor` for the fix"
+
+// UnreachableError is the error of a docker command that could not reach
+// the Docker daemon. Its message is the same whatever the command, says
+// why in docker's own words, and points to `sind doctor`, which names the
+// fix; it leaves out the exit status. It matches ErrUnreachable and
+// unwraps to the command's error, an *exec.Error for a missing CLI or an
+// *cmdexec.ExitError.
+type UnreachableError struct {
+	Err    error
+	Reason string // why, such as "docker CLI not found in PATH"
+}
+
+// Error returns the reason with the pointer to `sind doctor`.
+func (e *UnreachableError) Error() string {
+	return "Docker is not reachable: " + e.Reason + DoctorHint
+}
+
+// Is reports whether target is ErrUnreachable.
+func (e *UnreachableError) Is(target error) bool { return target == ErrUnreachable }
+
+// Unwrap returns the command's error.
+func (e *UnreachableError) Unwrap() error { return e.Err }
+
+// unreachable matches, lowercased, the lines of docker CLI errors that say
+// it could not reach the daemon: one that does not run or listen where the
+// CLI looks ("Cannot connect to the Docker daemon at …", or "failed to
+// connect to the docker API at …" from Docker 28.2), one that refuses the
+// user ("permission denied while trying to connect to the Docker daemon
+// socket", or "… the docker API"), and an endpoint the CLI cannot dial
+// ("error during connect: …").
+var unreachable = regexp.MustCompile(`^(docker: )?(cannot connect to the docker daemon|failed to connect to the docker api|permission denied while trying to connect to the docker|error during connect)`)
+
+// classifyUnreachable returns err as an *UnreachableError when it says the
+// docker CLI is missing or could not reach the daemon, and unchanged
+// otherwise.
+func classifyUnreachable(err error) error {
+	if errors.Is(err, exec.ErrNotFound) {
+		return &UnreachableError{Err: err, Reason: "docker CLI not found in PATH"}
 	}
-	msg := strings.ToLower(exitErr.Stderr)
-	for _, form := range notFoundForms {
-		if strings.Contains(msg, form) {
-			return true
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	if !ok {
+		return err
+	}
+	for line := range strings.SplitSeq(exitErr.Stderr, "\n") {
+		line = strings.TrimSpace(line)
+		if unreachable.MatchString(strings.ToLower(line)) {
+			return &UnreachableError{Err: err, Reason: strings.TrimPrefix(line, "docker: ")}
 		}
 	}
-	return networkNotFound.MatchString(msg)
+	return err
 }
 
 // IsAlreadyExists reports whether err is docker's error for a network name
@@ -245,14 +359,5 @@ func IsAlreadyExists(err error) bool {
 	return ok && exitErr.ExitCode() == 1 && strings.Contains(strings.ToLower(exitErr.Stderr), "already exists")
 }
 
-// notFoundForms are docker's messages for a missing resource, lowercased.
-var notFoundForms = []string{
-	"no such container",
-	"no such image",
-	"no such object",
-	"no such volume",
-	"no such network",
-}
-
-// networkNotFound matches the daemon's message for a missing network.
-var networkNotFound = regexp.MustCompile(`\bnetwork \S+ not found\b`)
+// notFound matches docker's messages for a missing resource, lowercased.
+var notFound = regexp.MustCompile(`no such (container|image|object|volume|network)|\bnetwork \S+ not found\b`)

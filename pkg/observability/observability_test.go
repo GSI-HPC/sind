@@ -25,31 +25,6 @@ func TestImages(t *testing.T) {
 	assert.False(t, strings.HasSuffix(GrafanaImage, "-slim"))
 }
 
-func TestServices(t *testing.T) {
-	tests := []struct {
-		s               Service
-		port, mem, data string
-		offset          int
-		ready           string
-		args            []string
-	}{
-		{ServiceGrafana, "3000", "1g", "/var/lib/grafana", 1, "/api/health", nil},
-		{ServicePrometheus, "9090", "1g", "/prometheus", 2, "/-/ready", prometheusArgs},
-		{ServiceLoki, "3100", "1g", "/loki", 3, "/ready", lokiArgs},
-		{ServiceAlloy, "12345", "512m", "/var/lib/alloy/data", 0, "/-/ready", alloyArgs},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.s), func(t *testing.T) {
-			assert.Equal(t, tt.port, tt.s.Port())
-			assert.Equal(t, tt.mem, tt.s.memoryLimit())
-			assert.Equal(t, tt.data, tt.s.dataDir())
-			assert.Equal(t, tt.offset, tt.s.pinnedOffset())
-			assert.Equal(t, tt.ready, tt.s.readyPath())
-			assert.Equal(t, tt.args, tt.s.args())
-		})
-	}
-}
-
 func TestNames(t *testing.T) {
 	assert.Equal(t, "dev-grafana", string(ContainerName("dev", ServiceGrafana)))
 	assert.Equal(t, "dev-loki", string(VolumeName("dev", ServiceLoki)))

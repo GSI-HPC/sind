@@ -4,7 +4,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -24,7 +23,10 @@ func newSSHCommand() *cobra.Command {
 		Long: `SSH into a cluster node.
 
 SSH options, before or after NODE, are passed through to ssh. A remote
-command must follow --: NODE is the only other argument before it.
+command must follow --: NODE is the only other argument before it. sind's
+own flags, such as --realm, go before ssh: sind --realm R ssh NODE.
+
+` + nodeHelp + `
 
 ssh runs in the realm's SSH relay container, so the ports and files that
 options such as -L and -i name are the relay's. To forward a port to this
@@ -32,7 +34,10 @@ machine, use your own ssh with the exported config:
 
   ssh -F "$(sind get ssh-config)" -L 8080:localhost:80 controller.default.sind.sind`,
 		DisableFlagParsing: true,
-		ValidArgsFunction:  completeSSHNodeArg,
+		// Every argument after ssh is passed through: sind's flags go
+		// before it.
+		DisableFlagsInUseLine: true,
+		ValidArgsFunction:     completeSSHNodeArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSSH(cmd, args)
 		},
@@ -57,18 +62,15 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	// USER@NODE logs in as USER, as ssh -l USER NODE does.
 	if user, host, ok := strings.Cut(node, "@"); ok {
 		if err := config.CheckUserName(user); err != nil {
-			return usage(err)
+			return argsError(err)
 		}
 		sshOptions = append(sshOptions, "-l", user)
 		node = host
 	}
 
-	target, err := parseNodeArgs(node)
+	target, err := parseOneNode("ssh", node)
 	if err != nil {
 		return err
-	}
-	if len(target) != 1 {
-		return usagef("ssh requires exactly one node, got %d", len(target))
 	}
 
 	// Through a pseudo-terminal, the remote output would come back with CRLF
@@ -83,11 +85,11 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	// The relay would answer a missing node with ssh's own error, and a
 	// realm without clusters has no relay for docker to exec in.
 	ctx := cmd.Context()
-	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target[0].Cluster, target[0].ShortName); err != nil {
+	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target.Cluster, target.ShortName); err != nil {
 		return err
 	}
 	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
-	dockerArgs := cluster.BuildSSHArgs(sshContainer, target[0].ShortName, target[0].Cluster, realm, isTTY, sshOptions, command)
+	dockerArgs := cluster.BuildSSHArgs(sshContainer, target.ShortName, target.Cluster, realm, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -95,15 +97,12 @@ func runSSH(cmd *cobra.Command, args []string) error {
 func newEnterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "enter [CLUSTER]",
-		Short:             "Interactive shell on submitter or controller",
+		Short:             "Open a shell on the submitter or controller",
+		Long:              "Open an interactive login shell on the submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runEnter(cmd, name)
+			return runEnter(cmd, clusterArg(args))
 		},
 	}
 	addUserFlag(cmd, "shell")
@@ -129,37 +128,40 @@ func userFlag(cmd *cobra.Command) (string, error) {
 }
 
 func runEnter(cmd *cobra.Command, clusterName string) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
+	return execOnEnterTarget(cmd, clusterName, isTerminal(cmd.InOrStdin()), nil)
+}
+
+// execOnEnterTarget runs command, or a login shell when it is nil, as --user
+// on the node enter and exec go to: the submitter or the controller.
+func execOnEnterTarget(cmd *cobra.Command, clusterName string, isTTY bool, command []string) error {
 	user, err := userFlag(cmd)
 	if err != nil {
 		return err
 	}
-
-	target, workDir, err := cluster.EnterTarget(ctx, client, realm, clusterName)
+	ctx := cmd.Context()
+	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
 	}
-
+	target, workDir, err := cluster.EnterTarget(ctx, clientFrom(ctx), realm, clusterName)
+	if err != nil {
+		return err
+	}
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	isTTY := stdinIsTTY(cmd.InOrStdin())
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, isTTY, nil)
-
-	return dockerExec(cmd, dockerArgs)
+	return dockerExec(cmd, cluster.BuildContainerExecArgs(containerName, user, workDir, isTTY, command))
 }
 
 func newExecCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "exec [CLUSTER] -- COMMAND [ARGS...]",
-		Short: "Run a command on submitter or controller",
+		Use:   "exec [flags] [CLUSTER] -- COMMAND [ARGS...]",
+		Short: "Run a command on the submitter or controller",
+		Long:  "Run a command on the submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		// runExec parses the flags itself: with cobra parsing them, shell
 		// completion could not tell whether the -- was typed yet.
 		DisableFlagParsing: true,
-		ValidArgsFunction:  completeExecClusterArg,
+		// The flags go before the --; after it, they are the command's.
+		DisableFlagsInUseLine: true,
+		ValidArgsFunction:     completeExecClusterArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExec(cmd, args)
 		},
@@ -176,7 +178,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 	flags.AddFlagSet(cmd.InheritedFlags()) // --realm, --progress and -v
 	if err := flags.Parse(args); err != nil {
-		return err
+		return cmd.FlagErrorFunc()(cmd, err)
 	}
 	if help, _ := flags.GetBool("help"); help {
 		return cmd.Help()
@@ -191,27 +193,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	user, err := userFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	target, workDir, err := cluster.EnterTarget(ctx, client, realm, clusterName)
-	if err != nil {
-		return err
-	}
-
-	containerName := cluster.ContainerName(realm, clusterName, target)
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, interactive(cmd), command)
-
-	return dockerExec(cmd, dockerArgs)
+	return execOnEnterTarget(cmd, clusterName, interactive(cmd), command)
 }
 
 // interactive reports whether the command talks to a terminal at both ends.
@@ -219,22 +201,11 @@ func runExec(cmd *cobra.Command, args []string) error {
 // output must not come back with CRLF line endings. MCP tool calls have no
 // terminal, so they never get one.
 func interactive(cmd *cobra.Command) bool {
-	return stdinIsTTY(cmd.InOrStdin()) && stdoutIsTTY(cmd.OutOrStdout())
+	return isTerminal(cmd.InOrStdin()) && isTerminal(cmd.OutOrStdout())
 }
 
-// stdinIsTTY reports whether stdin, the command's input, is a terminal. A
-// reader that is not a file, as set with cmd.SetIn, is not.
-func stdinIsTTY(stdin io.Reader) bool {
-	return isTerminal(stdin)
-}
-
-// stdoutIsTTY reports whether stdout, the command's output, is a terminal.
-// A writer that is not a file, as set with cmd.SetOut, is not.
-func stdoutIsTTY(stdout io.Writer) bool {
-	return isTerminal(stdout)
-}
-
-// isTerminal reports whether stream is a file open on a terminal.
+// isTerminal reports whether stream is a file open on a terminal. A reader
+// or writer that is not a file, as set with cmd.SetIn or cmd.SetOut, is not.
 func isTerminal(stream any) bool {
 	f, ok := stream.(*os.File)
 	if !ok {
@@ -262,12 +233,12 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 		a := preArgs[i]
 		switch {
 		case strings.HasPrefix(a, "--"):
-			return nil, "", nil, usagef("ssh has no option %s: sind's own flags go before ssh, as in sind --realm R ssh NODE", a)
+			return nil, "", nil, argsErrorf("ssh has no option %s: sind's own flags go before ssh, as in sind --realm R ssh NODE", a)
 		case isSSHOption(a):
 			sshOptions = append(sshOptions, a)
 			if sshOptionTakesNext(a) {
 				if i+1 == len(preArgs) {
-					return nil, "", nil, usagef("ssh option %s needs a value", a)
+					return nil, "", nil, argsErrorf("ssh option %s needs a value", a)
 				}
 				i++
 				sshOptions = append(sshOptions, preArgs[i])
@@ -275,12 +246,12 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 		case node == "":
 			node = a
 		default:
-			return nil, "", nil, usagef("unexpected argument %q after node %q: a remote command goes after --, as in sind ssh NODE -- COMMAND", a, node)
+			return nil, "", nil, argsErrorf("unexpected argument %q after node %q: a remote command goes after --, as in sind ssh NODE -- COMMAND", a, node)
 		}
 	}
 
 	if node == "" {
-		return nil, "", nil, usagef("node argument required")
+		return nil, "", nil, argsErrorf("node argument required")
 	}
 	return sshOptions, node, command, nil
 }
@@ -291,23 +262,23 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 // when there was none.
 func parseExecArgs(args []string, dashIdx int) (clusterName string, command []string, err error) {
 	if dashIdx < 0 {
-		return "", nil, usagef("-- separator and command required")
+		return "", nil, argsErrorf("-- separator and command required")
 	}
 
 	command = args[dashIdx:]
 	if len(command) == 0 {
-		return "", nil, usagef("command required after --")
+		return "", nil, argsErrorf("command required after --")
 	}
 
 	if dashIdx > 1 {
-		return "", nil, usagef("expected at most one argument before --, got %d", dashIdx)
+		return "", nil, argsErrorf("expected at most one argument before --, got %d", dashIdx)
 	}
 
 	clusterName = "default"
 	if dashIdx == 1 {
 		clusterName = args[0]
 		if err := config.CheckName("cluster", clusterName); err != nil {
-			return "", nil, usage(err)
+			return "", nil, argsError(err)
 		}
 	}
 
@@ -375,10 +346,8 @@ func completeSSHNodeArg(cmd *cobra.Command, args []string, toComplete string) ([
 // completeExecClusterArg provides completion for the CLUSTER argument of the exec command.
 func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// After --, we're in command territory.
-	for _, a := range args {
-		if a == "--" {
-			return nil, cobra.ShellCompDirectiveDefault
-		}
+	if slices.Contains(args, "--") {
+		return nil, cobra.ShellCompDirectiveDefault
 	}
 
 	// Cluster name already provided — wait for --.

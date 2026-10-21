@@ -68,20 +68,8 @@ func ErrorLine(err error) string {
 // ParseVersion extracts the major and minor version numbers from a Docker
 // version string such as "28.0.0" or "29.3.1-beta.1".
 func ParseVersion(s string) (major, minor int, err error) {
-	if idx := strings.IndexByte(s, '-'); idx >= 0 {
-		s = s[:idx]
-	}
-	parts := strings.SplitN(s, ".", 3)
-	if len(parts) < 2 {
+	if _, err := fmt.Sscanf(s, "%d.%d", &major, &minor); err != nil {
 		return 0, 0, fmt.Errorf("invalid version: %s", s)
-	}
-	major, err = strconv.Atoi(parts[0])
-	if err != nil {
-		return 0, 0, err
-	}
-	minor, err = strconv.Atoi(parts[1])
-	if err != nil {
-		return 0, 0, err
 	}
 	return major, minor, nil
 }

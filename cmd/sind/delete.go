@@ -3,10 +3,12 @@
 package main
 
 import (
-	"github.com/GSI-HPC/go-clikit/termtext"
+	"context"
+	"fmt"
+
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/spf13/afero"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -25,27 +27,29 @@ func newDeleteCommand() *cobra.Command {
 
 func newDeleteClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "cluster [NAME]",
-		Short:             "Delete a cluster",
+		Use:   "cluster [NAME]",
+		Short: "Delete a cluster",
+		// delete cluster --all and delete realm run the same code, so their
+		// help says the same.
+		Long: "Delete a cluster.\n\n" + defaultClusterHelp("NAME") + `
+
+--all deletes every cluster of the realm, its mesh, its monitoring stack
+and its exported SSH configuration, as delete realm does.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
 			if all {
 				if len(args) > 0 {
-					return usagef("--all does not accept arguments")
+					return argsErrorf("--all does not accept arguments")
 				}
 				return runDeleteClustersAll(cmd)
 			}
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runDeleteCluster(cmd, name)
+			return runDeleteCluster(cmd, clusterArg(args))
 		}),
 	}
 
-	cmd.Flags().Bool("all", false, "delete all clusters of the realm, and its mesh once the last one is gone")
+	cmd.Flags().Bool("all", false, "delete every cluster of the realm, its mesh, its monitoring stack and its exported SSH configuration, as delete realm does")
 
 	return cmd
 }
@@ -54,9 +58,16 @@ func newDeleteRealmCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "realm",
 		Short: "Delete every cluster of the realm and its mesh",
-		Long: "Delete every cluster of the realm (--realm, SIND_REALM or the default), its mesh, its monitoring stack " +
-			"and its exported SSH configuration. Containers outside sind attached to the realm's networks are detached, not removed.",
-		Args: cobra.NoArgs,
+		Long: `Delete every cluster of the realm, its mesh, its monitoring stack and its
+exported SSH configuration, as delete cluster --all does. The realm is the
+one --realm, SIND_REALM or the default names. Containers outside sind
+attached to the realm's networks are detached, not removed.`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := noArgs(cmd, args); err != nil {
+				return fmt.Errorf("%w; name the realm with --realm, as in sind --realm %s delete realm", err, args[0])
+			}
+			return nil
+		},
 		RunE: withProgress(func(cmd *cobra.Command, _ []string) error {
 			return runDeleteClustersAll(cmd)
 		}),
@@ -64,59 +75,21 @@ func newDeleteRealmCommand() *cobra.Command {
 }
 
 func runDeleteCluster(cmd *cobra.Command, name string) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
-		return err
-	}
-
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
+			return err
 		}
-	}
-
-	return nil
+		updateSSHExport(cmd, client, meshMgr)
+		return nil
+	})
 }
 
 func runDeleteClustersAll(cmd *cobra.Command) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		// The SSH export follows the mesh even when some clusters fail to
+		// delete.
+		err := cluster.DeleteAll(ctx, client, meshMgr)
+		updateSSHExport(cmd, client, meshMgr)
 		return err
-	}
-
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	// The SSH export follows the mesh even when some clusters fail to
-	// delete.
-	err = cluster.DeleteAll(ctx, client, meshMgr)
-
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
-		}
-	}
-
-	return err
+	})
 }

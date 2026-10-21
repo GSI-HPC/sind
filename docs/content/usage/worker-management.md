@@ -29,7 +29,7 @@ sind create worker [CLUSTER] [FLAGS]
 
 ### Defaults from the newest worker
 
-New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list. Give one empty to add workers without any, e.g. `sind create worker --device=` on a cluster whose workers have `/dev/fuse`.
+New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list. Give one empty to add workers without any, e.g. `sind create worker --device=` on a cluster whose workers have `/dev/fuse`. An empty `--image`, `--memory` or `--tmp-size` is a usage error, so that an unset variable in `--image "$IMAGE"` does not quietly add workers like the newest one.
 
 Not inherited:
 
@@ -103,10 +103,10 @@ Deleting a managed worker needs a running controller: with the controller stoppe
 sind delete worker worker-2
 
 # Remove multiple workers
-sind delete worker worker-[2-4]
+sind delete worker 'worker-[2-4]'
 
 # Remove workers from a named cluster
-sind delete worker worker-[0-1].dev
+sind delete worker 'worker-[0-1].dev'
 ```
 
 See [Node Arguments](../node-arguments/) for the full node set syntax, set operators included.

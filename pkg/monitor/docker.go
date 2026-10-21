@@ -3,9 +3,7 @@
 package monitor
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"io"
 	"maps"
 	"slices"
@@ -13,7 +11,6 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
-	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // dockerEvent is the JSON structure emitted by docker events --format '{{json .}}'.
@@ -48,37 +45,23 @@ func NewDockerMonitor(containerPrefix string) *DockerMonitor {
 	return &DockerMonitor{containerPrefix: containerPrefix}
 }
 
-// Run reads from r (the stdout of docker events --format '{{json .}}')
-// and sends parsed events to ch. It blocks on scanner.Scan(), which is
-// not interruptible by context cancellation alone — to unblock Run on
-// ctx.Done(), the caller must also close r (e.g. by killing the
-// underlying process or closing the stdout pipe). The caller is
-// responsible for closing ch after Run returns.
+// Run reads docker events --format '{{json .}}' from r and sends the
+// events of the cluster's containers to ch (see scanEvents).
 func (m *DockerMonitor) Run(ctx context.Context, r io.Reader, ch chan<- Event) error {
-	log := sindlog.From(ctx)
-	scanner := bufio.NewScanner(r)
 	// An event line carries every label of the container, and the
 	// sind.users and sind.groups labels grow with the cluster's users: a
 	// few thousand users exceed bufio's default limit of 64 KiB, which
 	// would end the monitor at a node's first event.
-	scanner.Buffer(make([]byte, 0, 64*1024), maxDockerEventLine)
-
-	for scanner.Scan() {
-		var de dockerEvent
-		if err := json.Unmarshal(scanner.Bytes(), &de); err != nil {
-			log.Log(ctx, sindlog.LevelTrace, "docker monitor: skipping unparseable line", "err", err)
-			continue
-		}
-
+	return scanEvents(ctx, r, ch, "docker monitor", maxDockerEventLine, func(de dockerEvent) (Event, bool) {
 		kind, ok := dockerActionMap[de.Action]
 		if !ok {
-			continue
+			return Event{}, false
 		}
 
 		name := de.Actor.Attributes["name"]
 		shortName, ok := m.extractShortName(name)
 		if !ok {
-			continue
+			return Event{}, false
 		}
 
 		ev := Event{
@@ -91,29 +74,16 @@ func (m *DockerMonitor) Run(ctx context.Context, r io.Reader, ch chan<- Event) e
 		if kind == EventContainerDie {
 			ev.Detail = "exitCode=" + de.Actor.Attributes["exitCode"]
 		}
-
-		select {
-		case ch <- ev:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return scanner.Err()
+		return ev, true
+	})
 }
 
 // extractShortName extracts the short node name from a full container name
 // by stripping the container prefix. Returns false if the name does not
 // belong to this cluster.
 func (m *DockerMonitor) extractShortName(containerName string) (string, bool) {
-	if !strings.HasPrefix(containerName, m.containerPrefix) {
-		return "", false
-	}
-	short := strings.TrimPrefix(containerName, m.containerPrefix)
-	if short == "" {
-		return "", false
-	}
-	return short, true
+	short, ok := strings.CutPrefix(containerName, m.containerPrefix)
+	return short, ok && short != ""
 }
 
 // DockerEventsArgs returns the docker CLI arguments for streaming container

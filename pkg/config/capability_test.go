@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,8 +24,7 @@ func TestCheckSecurityOpts(t *testing.T) {
 
 	for _, opt := range []string{"unconfined", "disable", "privileged=true", "apparmor=", "apparmor:", "=unconfined", "selinux=disable"} {
 		err := CheckSecurityOpts("--security-opt", []string{"apparmor=unconfined", opt})
-		require.Error(t, err, opt)
-		assert.Equal(t, `unknown security option "`+opt+`" in --security-opt: want label=, apparmor=, seccomp=, no-new-privileges, writable-cgroups= or systempaths=`, err.Error())
+		require.EqualError(t, err, `unknown security option "`+opt+`" in --security-opt: want label=, apparmor=, seccomp=, no-new-privileges, writable-cgroups= or systempaths=`, opt)
 	}
 }
 
@@ -39,7 +37,5 @@ func TestValidate_SecurityOpt(t *testing.T) {
 	require.NoError(t, cfg.Validate())
 
 	cfg.Nodes[1].SecurityOpt = []string{"apparmor-unconfined"}
-	err := cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown security option "apparmor-unconfined" in securityOpt`)
+	require.ErrorContains(t, cfg.Validate(), `unknown security option "apparmor-unconfined" in securityOpt`)
 }

@@ -3,6 +3,7 @@
 package state
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -60,21 +61,13 @@ func (o *LockOptions) withDefaults() LockOptions {
 	if r.flock == nil {
 		r.flock = unix.Flock
 	}
-	if r.procRoot == "" {
-		r.procRoot = "/proc"
-	}
 	if r.alive == nil {
 		r.alive = processAlive
 	}
-	if r.pollFirst == 0 {
-		r.pollFirst = lockPollFirst
-	}
-	if r.pollMax == 0 {
-		r.pollMax = lockPollMax
-	}
-	if r.hintAfter == 0 {
-		r.hintAfter = lockHintAfter
-	}
+	r.procRoot = cmp.Or(r.procRoot, "/proc")
+	r.pollFirst = cmp.Or(r.pollFirst, lockPollFirst)
+	r.pollMax = cmp.Or(r.pollMax, lockPollMax)
+	r.hintAfter = cmp.Or(r.hintAfter, lockHintAfter)
 	return r
 }
 

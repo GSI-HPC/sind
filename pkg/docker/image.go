@@ -4,17 +4,7 @@ package docker
 
 import (
 	"context"
-	"strings"
 )
-
-// ServerVersion returns the Docker Engine server version string.
-func (c *Client) ServerVersion(ctx context.Context) (string, error) {
-	stdout, _, err := c.run(ctx, "version", "--format", "{{.Server.Version}}")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(stdout), nil
-}
 
 // ImageLabels returns the labels of a local image, and whether the image is
 // there: false, with no error, when it has not been pulled or built.
@@ -32,8 +22,7 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 // lines, as the targets of the pull images step do, shows the newest of
 // its status lines (one per layer and change, no bars without a terminal).
 func (c *Client) PullImage(ctx context.Context, image string) error {
-	_, _, err := c.run(ctx, "pull", image)
-	return err
+	return c.do(ctx, "pull", image)
 }
 
 // RunEphemeral runs a command in a temporary container and returns its stdout.
@@ -49,9 +38,5 @@ func (c *Client) RunEphemeralWith(ctx context.Context, flags []string, image str
 	args = append(args, flags...)
 	args = append(args, image)
 	args = append(args, command...)
-	stdout, _, err := c.run(ctx, args...)
-	if err != nil {
-		return "", err
-	}
-	return stdout, nil
+	return c.output(ctx, args...)
 }

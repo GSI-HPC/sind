@@ -7,7 +7,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,35 +30,10 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-cluster")
 	clusterName := "it-cluster"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	err := meshMgr.EnsureMesh(ctx)
-	require.NoError(t, err)
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+	cfg := testConfig(t, clusterName, "")
 
 	// Create.
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
@@ -152,8 +126,7 @@ defaults:
 	// not take it out of sind-nodes.conf.
 	require.NoError(t, PowerFreeze(ctx, c, realm, clusterName, []string{"controller"}))
 	err = WorkerRemove(ctx, c, meshMgr, clusterName, []string{"worker-0"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "is not running (paused)")
+	require.ErrorContains(t, err, "is not running (paused)")
 	exists, err := c.ContainerExists(ctx, ContainerName(realm, clusterName, "worker-0"))
 	require.NoError(t, err)
 	assert.True(t, exists)
@@ -187,31 +160,10 @@ func TestSlurmSectionApplied(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-slurm-sect")
 	clusterName := "it-slurm-sect"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	err := meshMgr.EnsureMesh(ctx)
-	require.NoError(t, err)
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 slurm:
   main: |
     MaxNodeCount=10
@@ -221,10 +173,7 @@ slurm:
     PartitionName=debug Nodes=worker-0 Default=YES MaxTime=01:00:00
   cgroup: |
     ConstrainCores=yes
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
@@ -262,31 +211,10 @@ func TestSlurmSectionMapFormApplied(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-slurm-map")
 	clusterName := "it-slurm-map"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	err := meshMgr.EnsureMesh(ctx)
-	require.NoError(t, err)
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 users: [alice]
 slurm:
   main:
@@ -297,10 +225,7 @@ slurm:
       SelectType=select/cons_tres
     tasks: |
       TaskPlugin=task/cgroup,task/affinity
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
@@ -362,31 +287,11 @@ func TestControllerPairFailover(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-ha")
 	clusterName := "it-ha"
-	meshMgr := mesh.NewManager(c, realm)
-
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
 	// A short SlurmctldTimeout keeps the outage takeover quick.
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 nodes:
   - role: controller
     backupController: true
@@ -394,10 +299,7 @@ nodes:
 slurm:
   main: |
     SlurmctldTimeout=10
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
@@ -492,41 +394,14 @@ func TestClusterNamesAroundMesh(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-names")
-	meshMgr := mesh.NewManager(c, realm)
 	clusters := []string{"alpha", "test"}
-
-	t.Cleanup(func() {
-		bg := context.Background()
-		for _, name := range clusters {
-			_ = Delete(bg, c, meshMgr, name)
-		}
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
+	meshMgr, realm := testMesh(ctx, t, c, "it-names", clusters...)
 	require.Less(t, string(NetworkName(realm, "alpha")), string(meshMgr.NetworkName()))
 	require.Greater(t, string(NetworkName(realm, "test")), string(meshMgr.NetworkName()))
 
 	// One create at a time: both rewrite the realm's Corefile.
 	for _, name := range clusters {
-		cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
-`, name, img)))
-		require.NoError(t, err)
-		cfg.ApplyDefaults()
-		require.NoError(t, cfg.Validate())
-		_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+		_, err := Create(ctx, c, meshMgr, testConfig(t, name, ""), probeInterval)
 		require.NoError(t, err, "creating %s", name)
 	}
 
@@ -575,30 +450,10 @@ func TestUnmanagedCluster(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-unmanaged")
 	clusterName := "it-unmanaged"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 nodes:
   - role: controller
     managed: false
@@ -606,10 +461,7 @@ nodes:
   - db
   - submitter
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
@@ -724,30 +576,10 @@ func TestDBNodeAccounting(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-db")
 	clusterName := "it-db"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 slurm:
   slurmdbd:
     debug: |
@@ -756,10 +588,7 @@ nodes:
   - controller
   - db
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
@@ -847,41 +676,18 @@ func TestUnmanagedDBNode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-db-unmanaged")
 	clusterName := "it-db-unmanaged"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 nodes:
   - controller
   - role: db
     managed: false
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	// sind configures no accounting and starts nothing on the db node.
@@ -925,30 +731,10 @@ func TestClusterUsers(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-users")
 	clusterName := "it-users"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 groups:
   - name: hpc
     gid: 3000
@@ -962,12 +748,9 @@ nodes:
   - controller
   - submitter
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1060,30 +843,10 @@ func TestClusterAccounts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-accounts")
 	clusterName := "it-accounts"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 slurm:
   main: |
     AccountingStorageEnforce=associations,limits
@@ -1110,12 +873,9 @@ nodes:
   - db
   - submitter
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1187,30 +947,10 @@ func TestIdentityNSSSlurm(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-nss")
 	clusterName := "it-nss"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 identity: nssSlurm
 groups:
   - name: hpc
@@ -1223,12 +963,9 @@ nodes:
   - controller
   - submitter
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1277,30 +1014,10 @@ func TestIdentityClientIDs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-clientids")
 	clusterName := "it-clientids"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, realm := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 identity: clientIds
 slurm:
   main: |
@@ -1316,12 +1033,9 @@ nodes:
   - db
   - submitter
   - worker
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1399,40 +1113,16 @@ func TestNodeSetupStepFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	checkPrerequisites(t, c)
-
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-
-	realm := testutil.Realm("it-setup")
 	clusterName := "it-setup"
-	meshMgr := mesh.NewManager(c, realm)
+	meshMgr, _ := testMesh(ctx, t, c, clusterName, clusterName)
 
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, clusterName)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf(`
-kind: Cluster
-name: %s
-defaults:
-  image: %s
+	cfg := testConfig(t, clusterName, `
 users:
   - munge
-`, clusterName, img)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
+`)
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), ": adding users: exit status ")
+	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.ErrorContains(t, err, ": adding users: exit status ")
 	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
 	assert.NotContains(t, err.Error(), setupStepMarker)
 
@@ -1480,15 +1170,44 @@ func waitInControl(t *testing.T, c *docker.Client, realm, clusterName, shortName
 	t.Fatalf("%s not in control after 2m; last HA state: %s", shortName, last)
 }
 
+// testMesh checks the prerequisites and sets up the mesh of a new realm
+// named after prefix, which goes when the test ends, with the clusters.
+func testMesh(ctx context.Context, t *testing.T, c *docker.Client, prefix string, clusters ...string) (*mesh.Manager, string) {
+	t.Helper()
+	checkPrerequisites(t, c)
+	realm := testutil.Realm(prefix)
+	meshMgr := mesh.NewManager(c, realm)
+	t.Cleanup(func() {
+		bg := context.Background()
+		for _, name := range clusters {
+			_ = Delete(bg, c, meshMgr, name)
+		}
+		_ = meshMgr.CleanupMesh(bg)
+	})
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+	return meshMgr, realm
+}
+
+// testConfig returns the validated config of cluster name on testutil.Image(),
+// with body after its kind, name and defaults.
+func testConfig(t *testing.T, name, body string) *config.Cluster {
+	t.Helper()
+	cfg, err := config.Parse([]byte(fmt.Sprintf("kind: Cluster\nname: %s\ndefaults:\n  image: %s\n%s", name, testutil.Image(), body)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+	return cfg
+}
+
 func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	version, err := c.ServerVersion(ctx)
+	info, err := c.Info(ctx)
 	if err != nil {
 		t.Skipf("cannot query Docker version: %v", err)
 	}
-	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+	if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
 		t.Skipf("%v", vErr)
 	}
 	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())

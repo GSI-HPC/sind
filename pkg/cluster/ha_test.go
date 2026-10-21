@@ -82,8 +82,9 @@ func TestHeartbeat_InControl(t *testing.T) {
 
 // pairStatusOnCall serves GetStatus for a cluster with a controller pair and
 // one worker. states maps short names to container states (default
-// running); ping is the scontrol ping output; hb the heartbeat read result.
-func pairStatusOnCall(t *testing.T, states map[string]string, ping string, hb mock.Result) func([]string, string) mock.Result {
+// running); ping is the scontrol ping output; hb the heartbeat read result;
+// labels, when set, ends with a comma and goes before each node's role label.
+func pairStatusOnCall(t *testing.T, states map[string]string, labels, ping string, hb mock.Result) func([]string, string) mock.Result {
 	t.Helper()
 	state := func(short string) string {
 		if s, ok := states[short]; ok {
@@ -102,12 +103,12 @@ func pairStatusOnCall(t *testing.T, states map[string]string, ping string, hb mo
 				}
 				entries = append(entries, testutil.PsEntry{
 					ID: short, Names: "sind-dev-" + short, State: state(short), Image: "img",
-					Labels: "sind.cluster=dev,sind.role=" + role,
+					Labels: "sind.cluster=dev," + labels + "sind.role=" + role,
 				})
 			}
 			return mock.Result{Stdout: testutil.NDJSON(entries...)}
 		case args[0] == "inspect":
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
+			return mock.Result{Stdout: statusInspectJSONBatch(t, args, func(name string) (string, string) {
 				return state(strings.TrimPrefix(name, "sind-dev-")), "172.18.0.9"
 			})}
 		case isHeartbeatRead(args):
@@ -140,7 +141,7 @@ func TestGetStatus_ControllerPair(t *testing.T) {
 
 	t.Run("primary in control", func(t *testing.T) {
 		var m mock.Executor
-		m.OnCall = pairStatusOnCall(t, nil, bothUp, fresh(0))
+		m.OnCall = pairStatusOnCall(t, nil, "", bothUp, fresh(0))
 		status, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
 		require.NoError(t, err)
@@ -151,7 +152,7 @@ func TestGetStatus_ControllerPair(t *testing.T) {
 
 	t.Run("backup in control after failover", func(t *testing.T) {
 		var m mock.Executor
-		m.OnCall = pairStatusOnCall(t, map[string]string{"controller": "exited"},
+		m.OnCall = pairStatusOnCall(t, map[string]string{"controller": "exited"}, "",
 			"Slurmctld(primary) at controller is DOWN\nSlurmctld(backup) at controller-backup is UP\n", fresh(1))
 		status, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
@@ -165,7 +166,7 @@ func TestGetStatus_ControllerPair(t *testing.T) {
 	t.Run("no controller running", func(t *testing.T) {
 		var m mock.Executor
 		m.OnCall = pairStatusOnCall(t, map[string]string{"controller": "exited", "controller-backup": "exited"},
-			"", fresh(0))
+			"", "", fresh(0))
 		status, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
 		require.NoError(t, err)
@@ -180,24 +181,7 @@ func TestGetStatus_ControllerPair(t *testing.T) {
 
 func TestGetStatus_UnmanagedPairHasNoHA(t *testing.T) {
 	var m mock.Executor
-	base := pairStatusOnCall(t, nil, "", mock.Result{Stdout: heartbeatOutput(1000, 995, 0)})
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "ps" {
-			var entries []testutil.PsEntry
-			for _, short := range []string{"controller", "controller-backup", "worker-0"} {
-				role := "controller"
-				if short == "worker-0" {
-					role = "worker"
-				}
-				entries = append(entries, testutil.PsEntry{
-					ID: short, Names: "sind-dev-" + short, State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.managed=false,sind.role=" + role,
-				})
-			}
-			return mock.Result{Stdout: testutil.NDJSON(entries...)}
-		}
-		return base(args, stdin)
-	}
+	m.OnCall = pairStatusOnCall(t, nil, "sind.managed=false,", "", mock.Result{Stdout: heartbeatOutput(1000, 995, 0)})
 	status, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
@@ -238,7 +222,7 @@ func nodeHAOnCall(t *testing.T, states map[string]string, inspectErr error, hb m
 			if !ok {
 				return mock.Result{Stderr: "Error: No such object: " + args[1] + "\n", Err: notFound}
 			}
-			return mock.Result{Stdout: statusInspectJSON(args[1], s, "172.18.0.9")}
+			return mock.Result{Stdout: statusInspectJSON(t, args[1], s, "172.18.0.9", nil)}
 		case isHeartbeatRead(args):
 			return hb
 		case args[0] == "exec" && args[2] == "systemctl":
@@ -255,8 +239,7 @@ func TestGetNodeHealth_UnmanagedControllerHasNoHA(t *testing.T) {
 	m.OnCall = func(args []string, _ string) mock.Result {
 		switch {
 		case args[0] == "inspect" && args[1] == "sind-dev-controller-backup":
-			return mock.Result{Stdout: "[" + statusInspectEntryLabels(args[1], "running", "172.18.0.9",
-				docker.Labels{LabelManaged: "false"}) + "]"}
+			return mock.Result{Stdout: statusInspectJSON(t, args[1], "running", "172.18.0.9", docker.Labels{LabelManaged: "false"})}
 		case args[0] == "exec" && args[2] == "systemctl":
 			return fusedIsActiveResponse(t, args)
 		}
@@ -331,8 +314,7 @@ func TestGetNodeHealth_ControllerHA(t *testing.T) {
 
 			health, err := inspectedNodeHealth(t, c, "sind-dev-"+tt.node, config.RoleController)
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)

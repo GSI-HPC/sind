@@ -14,167 +14,81 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSSH_BuildCommand(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, true, nil, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "worker-0.dev.sind.sind",
-	}, args)
+func TestBuildSSHArgs(t *testing.T) {
+	ssh := string(mesh.SSHContainerName)
+	tests := []struct {
+		name          string
+		node, cluster string
+		tty           bool
+		opts, command []string
+		want          []string
+	}{
+		{"interactive", "worker-0", "dev", true, nil, nil, []string{"exec", "-i", "-t", ssh, "ssh", "worker-0.dev.sind.sind"}},
+		{"non-interactive", "worker-0", "dev", false, nil, nil, []string{"exec", "-i", ssh, "ssh", "worker-0.dev.sind.sind"}},
+		{"command", "controller", "default", false, nil, []string{"hostname"},
+			[]string{"exec", "-i", ssh, "ssh", "controller.default.sind.sind", "hostname"}},
+		{"multi-word command", "worker-0", "dev", false, nil, []string{"ls", "-la", "/tmp"},
+			[]string{"exec", "-i", ssh, "ssh", "worker-0.dev.sind.sind", "ls", "-la", "/tmp"}},
+		{"option", "worker-0", "dev", true, []string{"-v"}, nil, []string{"exec", "-i", "-t", ssh, "ssh", "-v", "worker-0.dev.sind.sind"}},
+		{"port forwarding", "controller", "default", true, []string{"-L", "8080:localhost:80"}, nil,
+			[]string{"exec", "-i", "-t", ssh, "ssh", "-L", "8080:localhost:80", "controller.default.sind.sind"}},
+		{"force tty", "worker-0", "dev", true, []string{"-t"}, []string{"top"},
+			[]string{"exec", "-i", "-t", ssh, "ssh", "-t", "worker-0.dev.sind.sind", "top"}},
+		{"options and command", "worker-0", "dev", false, []string{"-v", "-o", "StrictHostKeyChecking=no"}, []string{"uptime"},
+			[]string{"exec", "-i", ssh, "ssh", "-v", "-o", "StrictHostKeyChecking=no", "worker-0.dev.sind.sind", "uptime"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, BuildSSHArgs(mesh.SSHContainerName, tt.node, tt.cluster, mesh.DefaultRealm, tt.tty, tt.opts, tt.command))
+		})
+	}
 }
 
-func TestSSH_BuildCommand_NonInteractive(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, false, nil, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "worker-0.dev.sind.sind",
-	}, args)
-}
-
-func TestSSH_BuildCommand_WithCommand(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", mesh.DefaultRealm, false, nil, []string{"hostname"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "controller.default.sind.sind", "hostname",
-	}, args)
-}
-
-func TestSSH_BuildCommand_WithMultiWordCommand(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, false, nil, []string{"ls", "-la", "/tmp"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "worker-0.dev.sind.sind", "ls", "-la", "/tmp",
-	}, args)
-}
-
-func TestSSH_PassthroughOptions(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, true, []string{"-v"}, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "-v", "worker-0.dev.sind.sind",
-	}, args)
-}
-
-func TestSSH_PassthroughOptions_PortForwarding(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", mesh.DefaultRealm, true,
-		[]string{"-L", "8080:localhost:80"}, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "-L", "8080:localhost:80", "controller.default.sind.sind",
-	}, args)
-}
-
-func TestSSH_PassthroughOptions_ForceTTY(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, true,
-		[]string{"-t"}, []string{"top"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "-t", "worker-0.dev.sind.sind", "top",
-	}, args)
-}
-
-func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, false,
-		[]string{"-v", "-o", "StrictHostKeyChecking=no"},
-		[]string{"uptime"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "-v", "-o", "StrictHostKeyChecking=no",
-		"worker-0.dev.sind.sind", "uptime",
-	}, args)
-}
-
-// --- BuildContainerExecArgs ---
-
-func TestContainerExec_InteractiveShell(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", "", DefaultDataMountPath, true, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-t", "-w", "/data", "sind-dev-controller",
-		"bash", "-l",
-	}, args)
-}
-
-func TestContainerExec_NonInteractiveShell(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", "", DefaultDataMountPath, false, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-w", "/data", "sind-dev-controller",
-		"bash", "-l",
-	}, args)
-}
-
-func TestContainerExec_WithCommand(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", "", DefaultDataMountPath, false, []string{"sinfo"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-w", "/data", "sind-dev-controller",
-		"sinfo",
-	}, args)
-}
-
-func TestContainerExec_WithMultiWordCommand(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-worker-0", "", DefaultDataMountPath, false, []string{"srun", "hostname"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-w", "/data", "sind-dev-worker-0",
-		"srun", "hostname",
-	}, args)
-}
-
-func TestContainerExec_CustomWorkDir(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", "", "/shared", false, []string{"ls"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-w", "/shared", "sind-dev-controller",
-		"ls",
-	}, args)
-}
-
-func TestContainerExec_User(t *testing.T) {
-	// A cluster user starts in its home directory, not the data mount.
-	args := BuildContainerExecArgs("sind-dev-submitter", "alice", DefaultDataMountPath, true, nil)
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-t", "-u", "alice", "-w", "/home/alice", "sind-dev-submitter",
-		"bash", "-l",
-	}, args)
-}
-
-func TestContainerExec_UserRoot(t *testing.T) {
-	// root is the default user; its home is not under /home.
-	args := BuildContainerExecArgs("sind-dev-submitter", "root", DefaultDataMountPath, false, []string{"id"})
-
-	assert.Equal(t, []string{
-		"exec", "-i", "-w", "/data", "sind-dev-submitter",
-		"id",
-	}, args)
+func TestBuildContainerExecArgs(t *testing.T) {
+	tests := []struct {
+		name            string
+		container, user string
+		workDir         string
+		tty             bool
+		command         []string
+		want            []string
+	}{
+		{"interactive shell", "sind-dev-controller", "", DefaultDataMountPath, true, nil,
+			[]string{"exec", "-i", "-t", "-w", "/data", "sind-dev-controller", "bash", "-l"}},
+		{"non-interactive shell", "sind-dev-controller", "", DefaultDataMountPath, false, nil,
+			[]string{"exec", "-i", "-w", "/data", "sind-dev-controller", "bash", "-l"}},
+		{"command", "sind-dev-controller", "", DefaultDataMountPath, false, []string{"sinfo"},
+			[]string{"exec", "-i", "-w", "/data", "sind-dev-controller", "sinfo"}},
+		{"multi-word command", "sind-dev-worker-0", "", DefaultDataMountPath, false, []string{"srun", "hostname"},
+			[]string{"exec", "-i", "-w", "/data", "sind-dev-worker-0", "srun", "hostname"}},
+		{"custom work dir", "sind-dev-controller", "", "/shared", false, []string{"ls"},
+			[]string{"exec", "-i", "-w", "/shared", "sind-dev-controller", "ls"}},
+		// A cluster user starts in its home directory, not the data mount.
+		{"user", "sind-dev-submitter", "alice", DefaultDataMountPath, true, nil,
+			[]string{"exec", "-i", "-t", "-u", "alice", "-w", "/home/alice", "sind-dev-submitter", "bash", "-l"}},
+		// root is the default user; its home is not under /home.
+		{"root", "sind-dev-submitter", "root", DefaultDataMountPath, false, []string{"id"},
+			[]string{"exec", "-i", "-w", "/data", "sind-dev-submitter", "id"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, BuildContainerExecArgs(docker.ContainerName(tt.container), tt.user, tt.workDir, tt.tty, tt.command))
+		})
+	}
 }
 
 // --- EnterTarget ---
 
 func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				testutil.PsEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=submitter"},
-				testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-			)}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=submitter"},
+		testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker"},
+	), "", nil)
 	client := docker.NewClient(&m)
 
 	target, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
@@ -213,17 +127,12 @@ func TestEnter_WorkDir(t *testing.T) {
 
 func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				testutil.PsEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-			)}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker"},
+	), "", nil)
 	client := docker.NewClient(&m)
 
 	target, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
@@ -321,31 +230,20 @@ func TestEnter_TargetSelection_UnmanagedPair(t *testing.T) {
 
 func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "c1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-			)}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "c1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker"},
+	), "", nil)
 	client := docker.NewClient(&m)
 
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no submitter or controller")
+	require.ErrorContains(t, err, "no submitter or controller")
 }
 
 func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: ""}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
+	m.AddResult("", "", nil)
 	client := docker.NewClient(&m)
 
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
@@ -360,6 +258,5 @@ func TestEnter_TargetSelection_ListError(t *testing.T) {
 
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
+	require.ErrorContains(t, err, "listing")
 }

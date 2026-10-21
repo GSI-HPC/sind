@@ -80,15 +80,23 @@ type Probe struct {
 
 // serviceChecks are the readiness checks of the services sind waits for.
 var serviceChecks = map[Service]Func{
-	ServiceMunge:     MungeReady,
+	ServiceMunge:     unitReady(ServiceMunge),
 	ServiceSSHD:      SSHDReady,
 	ServiceSlurmctld: SlurmctldReady,
-	ServiceSlurmd:    SlurmdReady,
-	ServiceSlurmdbd:  SlurmdbdReady,
-	ServiceSackd:     SackdReady,
+	ServiceSlurmd:    unitReady(ServiceSlurmd),
+	ServiceSlurmdbd:  unitReady(ServiceSlurmdbd),
+	ServiceSackd:     unitReady(ServiceSackd),
 	// Its port check follows the unit too: slurmrestd closes the port only
 	// when its unit stops.
 	ServiceSlurmrestd: SlurmrestdReady,
+}
+
+// unitReady returns the check that the service's unit is active; a failed
+// unit is a TerminalError (see UnitActive).
+func unitReady(svc Service) Func {
+	return func(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+		return UnitActive(ctx, client, name, string(svc))
+	}
 }
 
 // ForService returns the readiness probe for a service, which follows the
@@ -129,7 +137,9 @@ const DefaultInterval = 500 * time.Millisecond
 // wait killed the docker call of the probe that failed last, or of one
 // before it that had passed, what the probe that failed last said, not the
 // killed call; a probe after it, which the round reached as that one
-// passed, with its own error.
+// passed, with its own error. A wait that its deadline ended reads "timed
+// out" and wraps context.DeadlineExceeded. The error does not name the
+// node, which the caller knows by a better name than the container's.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
@@ -220,7 +230,7 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 				}
 				lastAt = i
 				if terminal {
-					return fmt.Errorf("node %s not ready: %w", name, lastErr)
+					return lastErr
 				}
 				break
 			}
@@ -233,7 +243,7 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 		for {
 			select {
 			case <-ctx.Done():
-				return waitEnded(ctx, name, lastErr)
+				return waitEnded(ctx, lastErr)
 			case <-ticker.C:
 				// The tick and queued events can be ready at once, and
 				// select picks one at random: take the events first, so
@@ -310,9 +320,9 @@ func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-ch
 		}
 		if concerns(name, ev) {
 			if ev.Kind == monitor.EventContainerDie {
-				p.died = fmt.Errorf("node %s not ready: %w", name, &TerminalError{
+				p.died = &TerminalError{
 					Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
-				})
+				}
 				return true
 			}
 			relevant = true
@@ -378,12 +388,26 @@ func orDefault(interval time.Duration) time.Duration {
 // interrupt or a timeout, not a failed node. It wraps ctx.Err() so callers
 // can tell the two apart with errors.Is, and keeps the last probe failure,
 // if there was one, to say what the node was still waiting for.
-func waitEnded(ctx context.Context, name docker.ContainerName, lastErr error) error {
+func waitEnded(ctx context.Context, lastErr error) error {
+	ended := endedError{ctx.Err()}
 	if lastErr == nil {
-		return fmt.Errorf("node %s not ready: %w", name, ctx.Err())
+		return ended
 	}
-	return fmt.Errorf("node %s not ready: %w; last probe error: %w", name, ctx.Err(), lastErr)
+	return fmt.Errorf("%w; last probe error: %w", ended, lastErr)
 }
+
+// endedError is the context error that ended a wait, which reads "timed
+// out" for a deadline rather than Go's "context deadline exceeded".
+type endedError struct{ err error }
+
+func (e endedError) Error() string {
+	if errors.Is(e.err, context.DeadlineExceeded) {
+		return "timed out"
+	}
+	return e.err.Error()
+}
+
+func (e endedError) Unwrap() error { return e.err }
 
 // ContainerRunning verifies that the container is in the "running" state.
 // Returns a TerminalError for states that cannot recover (exited, dead).
@@ -439,12 +463,6 @@ func SSHDReady(ctx context.Context, client *docker.Client, name docker.Container
 		return fmt.Errorf("sshd not ready: unexpected banner %q", banner)
 	}
 	return nil
-}
-
-// MungeReady verifies that the munge authentication service is active. A
-// failed unit is a TerminalError (see UnitActive).
-func MungeReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceMunge))
 }
 
 // SlurmctldReady verifies that the slurmctld on the given controller node is
@@ -504,12 +522,6 @@ func ParseSlurmctldPing(stdout string) map[string]bool {
 	return result
 }
 
-// SlurmdReady verifies that the slurmd service is active. A failed unit is
-// a TerminalError (see UnitActive).
-func SlurmdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceSlurmd))
-}
-
 // ClusterRegistered returns a check that passes once slurmdbd lists the
 // cluster, which slurmctld registers when it first starts with accounting.
 // Until then, sacctmgr refuses to add users. The registration can land
@@ -527,12 +539,6 @@ func ClusterRegistered(clusterName string) Func {
 		}
 		return fmt.Errorf("cluster %s not registered with slurmdbd yet", clusterName)
 	}
-}
-
-// SackdReady verifies that the sackd service is active. A failed unit is a
-// TerminalError (see UnitActive).
-func SackdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceSackd))
 }
 
 // SlurmrestdPort is the TCP port slurmrestd listens on: SLURMRESTD_LISTEN
@@ -563,12 +569,6 @@ func UnitJournal(ctx context.Context, client *docker.Client, name docker.Contain
 	journal, _ := client.ExecAllowNonZero(ctx, name,
 		"journalctl", "-u", unit, "-n", journalLines, "--no-pager", "-o", "cat")
 	return strings.TrimSpace(journal)
-}
-
-// SlurmdbdReady verifies that the slurmdbd service is active. A failed unit
-// is a TerminalError (see UnitActive).
-func SlurmdbdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceSlurmdbd))
 }
 
 // UnitActive verifies that a systemd unit on the node is active. A failed
@@ -624,17 +624,18 @@ func failedUnit(ctx context.Context, client *docker.Client, name docker.Containe
 func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerName, services []Service) (map[Service]bool, error) {
 	var units []Service
 	var slurmctld bool
+	args := []string{"systemctl", "is-active"}
 	for _, svc := range services {
 		if svc == ServiceSlurmctld {
 			slurmctld = true
 			continue
 		}
 		units = append(units, svc)
+		args = append(args, string(svc))
 	}
 
 	result := make(map[Service]bool, len(services))
 	if len(units) > 0 {
-		args := append([]string{"systemctl", "is-active"}, serviceStrings(units)...)
 		stdout, err := client.ExecAllowNonZero(ctx, name, args...)
 		if err != nil {
 			return nil, fmt.Errorf("systemctl is-active: %w", err)
@@ -655,14 +656,4 @@ func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerN
 	}
 
 	return result, nil
-}
-
-// serviceStrings converts a slice of Service values to plain strings for
-// passing to exec argv.
-func serviceStrings(svcs []Service) []string {
-	out := make([]string, len(svcs))
-	for i, s := range svcs {
-		out[i] = string(s)
-	}
-	return out
 }

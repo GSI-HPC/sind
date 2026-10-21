@@ -199,15 +199,6 @@ func TestCreateConfigOnlyNetwork_Error(t *testing.T) {
 	assert.Empty(t, id)
 }
 
-func TestRemoveNetworkByID(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("net-id\n", "", nil)
-	c := NewClient(&m)
-
-	require.NoError(t, c.RemoveNetworkByID(t.Context(), "net-id"))
-	assert.Equal(t, []string{"network", "rm", "net-id"}, m.Calls[0].Args)
-}
-
 func TestInspectNetworkMeta(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(`{"Name":"sind-lock","Id":"net-id","Created":"2026-10-04T10:02:03.123456789Z","ConfigOnly":true,"Labels":{"sind.realm":"sind"}}`+"\n", "", nil)
@@ -401,8 +392,7 @@ func TestNetworkLabels_BadJSON(t *testing.T) {
 
 	_, _, err := c.NetworkLabels(t.Context(), testNetworkName)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing labels")
+	require.ErrorContains(t, err, "parsing labels")
 }
 
 func TestNetworkExists_True(t *testing.T) {
@@ -526,69 +516,6 @@ func TestCreateNetworkWithSubnet_Error(t *testing.T) {
 	assert.Empty(t, id)
 }
 
-func TestRemoveNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testNetworkName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.RemoveNetwork(t.Context(), testNetworkName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "rm", string(testNetworkName)}, m.Calls[0].Args)
-}
-
-func TestRemoveNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.RemoveNetwork(t.Context(), testNetworkName)
-	assert.Error(t, err)
-}
-
-func TestConnectNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.ConnectNetwork(t.Context(), testNetworkName, testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "connect", string(testNetworkName), string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestConnectNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.ConnectNetwork(t.Context(), testNetworkName, testContainerName)
-	assert.Error(t, err)
-}
-
-func TestDisconnectNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "disconnect", string(testNetworkName), string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestDisconnectNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
-	assert.Error(t, err)
-}
-
 // --- NetworkContainers ---
 
 func TestNetworkContainers(t *testing.T) {
@@ -630,8 +557,7 @@ func TestNetworkContainers_BadJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.NetworkContainers(t.Context(), testNetworkName)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing network inspect output")
+	require.ErrorContains(t, err, "parsing network inspect output")
 }
 
 // --- DisconnectAll ---
@@ -686,8 +612,7 @@ func TestDisconnectAll_DisconnectError(t *testing.T) {
 	c := NewClient(&m)
 
 	err := c.DisconnectAll(t.Context(), testNetworkName)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "disconnecting kind-control-plane")
+	require.ErrorContains(t, err, "disconnecting kind-control-plane")
 }
 
 // --- InspectNetwork ---
@@ -744,8 +669,7 @@ func TestInspectNetwork_EmptyResult(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.InspectNetwork(t.Context(), testNetworkName)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no results")
+	assert.ErrorContains(t, err, "no results")
 }
 
 func TestInspectNetwork_InvalidJSON(t *testing.T) {
@@ -754,8 +678,7 @@ func TestInspectNetwork_InvalidJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.InspectNetwork(t.Context(), testNetworkName)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing")
+	assert.ErrorContains(t, err, "parsing")
 }
 
 // --- InspectNetworks ---
@@ -832,27 +755,6 @@ func TestListNetworks(t *testing.T) {
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"network", "ls", "--format", "json", "--filter", "name=sind-"}, m.Calls[0].Args)
-}
-
-func TestListNetworks_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListNetworks(t.Context(), "name=nonexistent")
-	require.NoError(t, err)
-	assert.Nil(t, entries)
-}
-
-func TestListNetworks_InvalidJSON(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("not json\n", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListNetworks(t.Context())
-	assert.Error(t, err)
-	assert.Nil(t, entries)
-	assert.Contains(t, err.Error(), "parsing network ls output")
 }
 
 func TestListNetworks_Error(t *testing.T) {

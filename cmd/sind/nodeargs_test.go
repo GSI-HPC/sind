@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,11 +94,11 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 		{"empty short name", ".dev", `invalid node name ".dev"`},
 		{"trailing dot", "worker-0.", `invalid node name "worker-0."`},
 		{"fqdn", "controller.default.sind.sind", `use NODE[.CLUSTER], not the FQDN "controller.default.sind.sind"`},
-		{"fqdn in a set", "worker-[0-1].dev.sind.sind", `use NODE[.CLUSTER], not the FQDN "worker-0.dev.sind.sind"`},
+		{"fqdn in a set", "worker-[0-1].dev.sind.sind", `use NODE[.CLUSTER], not the FQDN "worker-[0-1].dev.sind.sind"`},
 		{"too many labels", "a.b.c", `invalid node name "a.b.c": want NODE[.CLUSTER]`},
 		{"uppercase short name", "Worker-0", `invalid node name "Worker-0": it has uppercase letters`},
-		{"underscore in short name", "worker_0.dev", `invalid node name "worker_0"`},
-		{"invalid cluster", "worker-[0-1].my_cluster", `invalid node name "worker-0.my_cluster": invalid cluster name "my_cluster"`},
+		{"underscore in short name", "worker_0.dev", `invalid node name "worker_0.dev": invalid short name "worker_0"`},
+		{"invalid cluster", "worker-[0-1].my_cluster", `invalid node name "worker-[0-1].my_cluster": invalid cluster name "my_cluster"`},
 		// go-nodeset would take each pair for one node, of the cluster
 		// written first, and act on the other cluster's node not at all.
 		{"clusters that differ only in padding", "worker-0.c01 worker-0.c1",
@@ -110,13 +111,49 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			targets, err := parseNodeArgs(tt.expr)
-			require.Error(t, err)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.Nil(t, targets)
-			assert.Contains(t, err.Error(), tt.wantErr)
 			var ue *usageError
 			assert.ErrorAs(t, err, &ue, "a node argument error is a usage error")
 		})
 	}
+}
+
+// TestParseNodeArgs_QuotesTheTypedTerm verifies that the errors about a
+// node name quote the term of the argument that named it, as typed, rather
+// than the name it expanded to.
+func TestParseNodeArgs_QuotesTheTypedTerm(t *testing.T) {
+	for expr, want := range map[string]string{
+		"Worker-[0-1]":          `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`,
+		"worker-0,Worker-1":     `invalid node name "Worker-1": it has uppercase letters`,
+		"worker-[0-1].dev.sind": `use NODE[.CLUSTER], not the FQDN "worker-[0-1].dev.sind"`,
+		"worker-0 Bad.Name":     `invalid node name "Bad.Name": invalid short name "Bad": it has uppercase letters`,
+		"worker-0^a.b.[1-2]":    `invalid node name "a.b.[1-2]": want NODE[.CLUSTER]`,
+	} {
+		t.Run(expr, func(t *testing.T) {
+			_, err := parseNodeArgs(expr)
+			require.EqualError(t, err, want)
+		})
+	}
+	assert.Equal(t, "worker-9", typedTerm("worker-[0-1]", "worker-9"), "a name no term names")
+}
+
+// TestParseOneNode verifies that the commands that act on one node accept
+// a node set of one node, and refuse others alike.
+func TestParseOneNode(t *testing.T) {
+	target, err := parseOneNode("logs", "worker-[0-0].dev")
+	require.NoError(t, err)
+	assert.Equal(t, nodeTarget{ShortName: "worker-0", Cluster: "dev"}, target)
+
+	for _, path := range [][]string{{"get", "node"}, {"logs"}, {"ssh"}} {
+		t.Run(strings.Join(path, " "), func(t *testing.T) {
+			_, _, err := executeCommand(append(path, "worker-[0-1]")...)
+			require.ErrorContains(t, err, strings.Join(path, " ")+" requires exactly one node, got 2 (usage: ")
+		})
+	}
+
+	_, err = parseOneNode("logs", "worker-[")
+	require.ErrorContains(t, err, "expanding nodes: ")
 }
 
 // The terms of an expression are what go-nodeset reads as the operands of
@@ -132,17 +169,6 @@ func TestNodeTerms(t *testing.T) {
 func TestPaddingClash_SkipsATermThatDoesNotParse(t *testing.T) {
 	_, _, found := paddingClash("worker-[.dev1,worker-0.dev01")
 	assert.False(t, found)
-}
-
-func TestWithoutPadding(t *testing.T) {
-	for in, want := range map[string]string{
-		"worker-01.dev002": "worker-1.dev2",
-		"worker-0.dev00":   "worker-0.dev0",
-		"rack10n0010":      "rack10n10",
-		"controller":       "controller",
-	} {
-		assert.Equal(t, want, withoutPadding(in), in)
-	}
 }
 
 func TestNoGroups(t *testing.T) {
@@ -168,4 +194,25 @@ func TestGroupByCluster(t *testing.T) {
 
 func TestGroupByCluster_Empty(t *testing.T) {
 	assert.Empty(t, groupByCluster(nil))
+}
+
+// TestNodeArgumentHelp verifies that the help of every command with an
+// optional cluster says what leaving it out means, and that the commands
+// that take node sets describe them alike.
+func TestNodeArgumentHelp(t *testing.T) {
+	for _, path := range []string{"create cluster", "create worker", "delete cluster", "get cluster", "get auth-key", "enter", "exec"} {
+		t.Run(path, func(t *testing.T) {
+			stdout, _, err := executeCommand(append(strings.Fields(path), "--help")...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, `defaults to "default".`)
+		})
+	}
+	for _, path := range []string{"power on", "delete worker"} {
+		t.Run(path, func(t *testing.T) {
+			stdout, _, err := executeCommand(append(strings.Fields(path), "--help")...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "NODES is one or more node arguments")
+			assert.Contains(t, stdout, "sind "+path+" 'worker-[0-3]'")
+		})
+	}
 }

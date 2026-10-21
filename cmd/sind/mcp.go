@@ -14,7 +14,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // mcpStreamHost is the address `sind mcp stream` listens on unless --host
@@ -116,14 +115,14 @@ func mcpConfig() *ophis.Config {
 				CmdSelector: func(cmd *cobra.Command) bool {
 					return isMCPTool(cmd) && cmd.Flag("output") != nil
 				},
-				LocalFlagSelector:     isMCPFlagNotOutput,
-				InheritedFlagSelector: isMCPFlagNotOutput,
+				LocalFlagSelector:     ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
+				InheritedFlagSelector: ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
 				Middleware:            refuseFlagArgs(forceJSONOutput),
 			},
 			{
 				CmdSelector:           isMCPTool,
-				LocalFlagSelector:     isMCPFlag,
-				InheritedFlagSelector: isMCPFlag,
+				LocalFlagSelector:     ophis.ExcludeFlags(mcpExcludedFlags...),
+				InheritedFlagSelector: ophis.ExcludeFlags(mcpExcludedFlags...),
 				Middleware:            refuseFlagArgs(nil),
 			},
 		},
@@ -138,27 +137,16 @@ func isMCPTool(cmd *cobra.Command) bool {
 }
 
 // mcpExcludedFlags lists the flags that are not offered to MCP tools.
-var mcpExcludedFlags = map[string]bool{
+var mcpExcludedFlags = []string{
 	// A count flag is passed as "--verbose 2", which pflag reads as
 	// --verbose and a stray positional argument: unknown command "2".
-	"verbose": true,
+	"verbose",
 	// logs --follow never ends, and a tool's output is returned only when
 	// the command exits.
-	"follow": true,
+	"follow",
 	// A tool's output is no terminal, and holds no progress and no
-	// events (withoutProgress).
-	"progress":     true,
-	"progress-log": true,
-}
-
-// isMCPFlag reports whether a flag is offered in a tool's input schema.
-func isMCPFlag(f *pflag.Flag) bool {
-	return !mcpExcludedFlags[f.Name]
-}
-
-// isMCPFlagNotOutput is isMCPFlag for a tool whose -o the server sets.
-func isMCPFlagNotOutput(f *pflag.Flag) bool {
-	return isMCPFlag(f) && f.Name != "output"
+	// events (asMCPServer).
+	"progress", "progress-log",
 }
 
 // forceJSONOutput runs a tool with -o json, whatever flags it was given.
@@ -276,16 +264,33 @@ func commandPath(cmd *cobra.Command) string {
 // (newMCPEditorCommand).
 func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	cmd := ophis.Command(cfg)
+	// ophis's help strings are worded unlike sind's own: noun phrases and
+	// capitalized flag usages.
+	cmd.Short = "Serve sind's commands as MCP tools"
+	cmd.Long = `Serve sind's commands as MCP tools to AI assistants, over stdio (start) or
+HTTP (stream), and register the server with an editor.`
 	var start, stream *cobra.Command
 	for _, sub := range cmd.Commands() {
 		switch sub.Name() {
 		case "start":
-			withServerVersion(sub)
+			asMCPServer(sub)
 			start = sub
+			sub.Short = "Serve the MCP tools on stdio"
+			sub.Long = `Serve sind's MCP tools on standard input and output, for an AI assistant
+that starts sind as its MCP server.`
 		case "stream":
 			stream = sub
+			sub.Short = "Serve the MCP tools over HTTP"
+		case "tools":
+			sub.Short = "Write the MCP tool definitions to mcp-tools.json"
+			sub.Long = `Write the definitions of the MCP tools that start and stream serve, with
+their input schemas, to mcp-tools.json in the working directory.`
 		case "claude", "vscode", "cursor":
 			cmd.RemoveCommand(sub)
+			continue
+		}
+		if f := sub.Flags().Lookup("log-level"); f != nil {
+			f.Usage = "log level of the MCP server (debug, info, warn, error)"
 		}
 	}
 	for _, e := range mcpEditors {
@@ -303,65 +308,46 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 	host.DefValue = mcpStreamHost
 	_ = host.Value.Set(mcpStreamHost)
 	host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
-	withMCPRealm(start)
-	withMCPRealm(stream)
-	withoutProgress(start)
-	withoutProgress(stream)
-	noArgs(cmd)
+	refuseArgs(cmd)
 	return cmd
 }
 
-// withMCPRealm passes the root's --realm on to the sind processes a server
-// command runs for its tool calls, through SIND_REALM: each runs with the
-// call's own flags and this process's environment, so `sind --realm ci
-// mcp start` would otherwise serve the default realm.
-func withMCPRealm(cmd *cobra.Command) {
+// asMCPServer prepares `sind mcp start`, which `sind mcp stream` runs too,
+// for the sind processes it runs for its tool calls. They run with the
+// call's own flags and this process's environment, so it sets:
+//   - SIND_REALM to the root's --realm, or `sind --realm ci mcp start`
+//     would serve the default realm;
+//   - SIND_PROGRESS=none and no SIND_PROGRESS_LOG: a SIND_PROGRESS=plain
+//     set for the user's shell would add its lines to every tool's output,
+//     a SIND_PROGRESS_LOG of /dev/stderr its events, and one that cannot be
+//     opened a note. Their stderr is no terminal, so nothing else would
+//     draw;
+//   - the root's Version, which ophis reports to MCP clients, only while
+//     the server runs: set on the root for good, it would give every sind
+//     command a --version flag.
+func asMCPServer(cmd *cobra.Command) {
 	run := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Root().Flags().Changed("realm") {
-			realm, _ := cmd.Root().Flags().GetString("realm")
+		root := cmd.Root()
+		if root.Flags().Changed("realm") {
+			realm, _ := root.Flags().GetString("realm")
 			_ = os.Setenv("SIND_REALM", realm)
 		}
-		return run(cmd, args)
-	}
-}
-
-// withoutProgress has the sind processes a server command runs for its
-// tool calls show no progress and write no event log, through
-// SIND_PROGRESS=none and no SIND_PROGRESS_LOG: they run with this
-// process's environment, and a SIND_PROGRESS=plain set for the user's
-// shell would add its lines to every tool's output, a SIND_PROGRESS_LOG of
-// /dev/stderr its events, and one that cannot be opened a note. Their
-// stderr is no terminal, so nothing else would draw.
-func withoutProgress(cmd *cobra.Command) {
-	run := cmd.RunE
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv(envProgress, cliprogress.ModeNone.String())
 		_ = os.Unsetenv(envProgressLog)
+		root.Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
 	}
 }
 
-// noArgs makes the commands of ophis's tree that take no arguments refuse
+// refuseArgs makes the commands of ophis's tree that take no arguments refuse
 // them, as sind's own commands do (usageArgs then makes that a usage
 // error): ophis leaves Args unset, which accepts any.
-func noArgs(cmd *cobra.Command) {
+func refuseArgs(cmd *cobra.Command) {
 	if cmd.Args == nil && cmd.Runnable() && !cmd.HasSubCommands() {
-		cmd.Args = cobra.NoArgs
+		cmd.Args = noArgs
 	}
 	for _, sub := range cmd.Commands() {
-		noArgs(sub)
-	}
-}
-
-// withServerVersion makes a server command report sind's version to MCP
-// clients. ophis takes the server version from the root command's Version,
-// which is set only while the server runs: set on the root for good, it
-// would give every sind command a --version flag.
-func withServerVersion(cmd *cobra.Command) {
-	run := cmd.RunE
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		cmd.Root().Version = strings.TrimPrefix(resolveVersion(), "v")
-		return run(cmd, args)
+		refuseArgs(sub)
 	}
 }

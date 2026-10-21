@@ -3,11 +3,9 @@
 package cluster
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -92,18 +90,7 @@ func configCopy(t *testing.T, calls []mock.Call) string {
 // and returns its calls and error.
 func createAPICluster(t *testing.T, cfg *config.Cluster, override func([]string, string) (mock.Result, bool)) ([]mock.Call, error) {
 	t.Helper()
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), override)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, override)
 	return m.Calls, err
 }
 
@@ -125,7 +112,7 @@ func TestCreate_APINode(t *testing.T) {
 			assert.Positive(t, countCalls(calls, "exec", "sind-dev-api", "systemctl", "is-active", "slurmrestd"))
 
 			archive := configCopy(t, calls)
-			assert.Equal(t, int64(0o600), tarModes(t, archive)["jwt_hs256.key"])
+			assert.Equal(t, int64(0o600), testutil.TarModes(t, archive)["jwt_hs256.key"])
 			assert.Contains(t, archive, "\nAuthAltTypes=auth/jwt\n"+tt.params)
 			assert.Contains(t, archive, "DbdHost=db\n", "slurmdbd.conf")
 			assert.Equal(t, 2, strings.Count(archive, tt.params), "slurm.conf and slurmdbd.conf")
@@ -138,7 +125,7 @@ func TestCreate_APINode(t *testing.T) {
 }
 
 func TestCreate_UnmanagedAPINode(t *testing.T) {
-	calls, err := createAPICluster(t, apiCfg(config.IdentityLocal, testutil.Ptr(false)), nil)
+	calls, err := createAPICluster(t, apiCfg(config.IdentityLocal, new(false)), nil)
 	require.NoError(t, err)
 
 	ic := collectIdentityCalls(calls)
@@ -158,8 +145,7 @@ func TestCreate_APINodeWithoutSlurmrestd(t *testing.T) {
 		return mock.Result{}, false
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node api: image img:1 has no slurmrestd")
+	require.ErrorContains(t, err, "node api: image img:1 has no slurmrestd")
 	assert.Empty(t, collectIdentityCalls(calls).enabled["sind-dev-api"])
 }
 

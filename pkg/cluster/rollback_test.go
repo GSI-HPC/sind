@@ -81,30 +81,23 @@ func TestCreate_RollbackIsAStep(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			run := func(ctx context.Context) error {
 				inCleanup := false
-				var m mock.Executor
-				m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-					if args[0] == "exec" && len(args) > 3 && args[1] == "sind-dev-controller" && args[2] == "systemctl" && args[3] == "enable" {
-						inCleanup = true
-						return mock.Result{Err: errors.New("systemctl failed")}, true
-					}
+				_, _, err := runCreate(ctx, t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 					if tc.want != "" && inCleanup && args[0] == "rm" && args[len(args)-1] == "sind-dns" {
 						return mock.Result{Err: errors.New("docker daemon unavailable")}, true
 					}
+					if isSystemctlEnable(args) && args[1] == "sind-dev-controller" {
+						inCleanup = true
+						return failEnable(args, stdin)
+					}
 					return mock.Result{}, false
 				})
-				client := docker.NewClient(&m)
-				meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-				_ = meshMgr.EnsureMeshNetwork(context.WithoutCancel(ctx)) // creates the network, and fails on the inspect after
-				require.True(t, meshMgr.Created())
-				_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
 				return err
 			}
 
 			_, plain := underCommand(t, false, run)
 			events, err := underCommand(t, true, run)
 
-			require.Error(t, err)
-			assert.Equal(t, plain.Error(), err.Error())
+			require.EqualError(t, err, plain.Error())
 			end := rollbackStep(t, events)
 			assert.Equal(t, tc.status, end.Status)
 			assert.Equal(t, tc.want, end.Err)
@@ -168,8 +161,7 @@ func TestWorkerAdd_RollbackIsAStep(t *testing.T) {
 			_, plain := underCommand(t, false, run)
 			events, err := underCommand(t, true, run)
 
-			require.Error(t, err)
-			assert.Equal(t, plain.Error(), err.Error())
+			require.EqualError(t, err, plain.Error())
 			end := rollbackStep(t, events)
 			assert.Equal(t, tc.status, end.Status)
 			assert.Equal(t, strings.ReplaceAll(tc.want, "\n", `\n`), end.Err)

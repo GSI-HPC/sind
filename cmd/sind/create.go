@@ -17,7 +17,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +56,7 @@ func newCreateClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster [NAME] [--config FILE]",
 		Short: "Create a Slurm cluster",
+		Long:  "Create a Slurm cluster.\n\nNAME overrides the name in the configuration, which defaults to \"" + config.DefaultClusterName + "\".",
 		Args:  optionalCluster,
 		// The name is new: the existing ones would conflict.
 		ValidArgsFunction: cobra.NoFileCompletions,
@@ -70,7 +70,7 @@ func newCreateClusterCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
-	cmd.Flags().String("data", ".", `host directory to mount read-write as /data on every node (default: the working directory; "volume" for a Docker volume)`)
+	cmd.Flags().String("data", ".", `host directory to mount read-write as /data on every node, or "volume" for a Docker volume`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 	cmd.Flags().Bool("monitoring", false, "collect the cluster's metrics and logs in the realm's monitoring stack (adds to the config's monitoring)")
 	addWaitFlag(cmd)
@@ -81,6 +81,9 @@ func newCreateClusterCommand() *cobra.Command {
 func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	wait, err := waitFlag(cmd)
 	if err != nil {
+		return err
+	}
+	if err := checkNotEmpty(cmd, "config"); err != nil {
 		return err
 	}
 
@@ -171,12 +174,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
-		}
-	}
-
+	updateSSHExport(cmd, client, meshMgr)
 	return nil
 }
 
@@ -198,6 +196,18 @@ func applyDataStorage(cfg *config.Cluster, dataFlag string) error {
 		return fmt.Errorf("resolving data path %q: %w", ds.HostPath, err)
 	}
 	ds.HostPath = abs
+	return nil
+}
+
+// checkNotEmpty rejects each of the flags names that is given but empty,
+// as a usage error: an unset variable in --config "$CFG" would otherwise
+// quietly stand for the flag's default.
+func checkNotEmpty(cmd *cobra.Command, names ...string) error {
+	for _, name := range names {
+		if value, _ := cmd.Flags().GetString(name); value == "" && cmd.Flags().Changed(name) {
+			return usagef("--%s must not be empty: leave it out for the default", name)
+		}
+	}
 	return nil
 }
 

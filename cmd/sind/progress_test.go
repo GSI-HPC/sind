@@ -103,7 +103,7 @@ func (c *displays) shown() string {
 // 160 columns wide and 40 rows high, with sind in their foreground. A
 // stream that is a pipe is one only when pipe says so. Neither progress
 // variable is set: the MCP server tests leave SIND_PROGRESS=none behind
-// (withoutProgress).
+// (asMCPServer).
 func onTerminals(t *testing.T, pipe func(io.Writer) bool, terminals ...io.Writer) {
 	t.Helper()
 	t.Setenv(envProgress, "")
@@ -186,9 +186,9 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 		{"the flag over the variable", true, nil, "xterm", "counter", []string{"--progress", "none"}, false, "", ownErr},
 		{"the flag after the command", true, nil, "xterm", "", []string{"create", "worker", "--progress", "counter"}, false, "counter", ownErr},
 		{"a value it does not know", true, nil, "xterm", "", []string{"--progress", "tree"}, false, "",
-			`--progress is "tree"; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "tree": want auto, tty, counter, plain or none`},
 		{"an empty value", true, nil, "xterm", "", []string{"--progress="}, false, "",
-			`--progress is ""; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "": want auto, tty, counter, plain or none`},
 		{"a variable it does not know", true, nil, "xterm", "fancy", nil, false, "", ownErr},
 		{"a Bus from the context", true, nil, "xterm", "tty", []string{"--progress", "tty"}, true, "", ownErr},
 	} {
@@ -213,9 +213,8 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 			}
 			err := executeOn(ctx, &stdout, &stderr, append(args, "--count", "0")...)
 
-			require.Error(t, err)
+			require.EqualError(t, err, tc.msg)
 			assert.True(t, isUsageError(err), "a usage error: %v", err)
-			assert.Equal(t, tc.msg, err.Error())
 			assert.Equal(t, tc.shown, c.shown(), "displays made")
 			assert.Empty(t, stdout.String())
 			if w != nil {
@@ -238,14 +237,14 @@ func TestEveryCommandChecksTheProgressFlag(t *testing.T) {
 		msg  string
 	}{
 		{"a value it does not know", "", []string{"--progress", "bogus", "version"},
-			`--progress is "bogus"; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "bogus": want auto, tty, counter, plain or none`},
 		{"a tree without a terminal", "", []string{"--progress", "tty", "get", "realms"},
 			"--progress asks for a live tree, but standard error is not a terminal; use none, or auto to draw one only where it can be"},
 		{"a counter without a terminal", "", []string{"get", "realms", "--progress=counter"},
 			"--progress asks for a counter, but standard error is not a terminal; use none, or auto to draw one only where it can be"},
 		// exec parses its flags itself, after PersistentPreRunE.
 		{"a value it does not know after exec", "", []string{"exec", "--progress", "bogus", "--", "true"},
-			`--progress is "bogus"; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "bogus": want auto, tty, counter, plain or none`},
 		{"a tree without a terminal after exec", "", []string{"exec", "--progress=tty", "--", "true"},
 			"--progress asks for a live tree, but standard error is not a terminal; use none, or auto to draw one only where it can be"},
 		{"plain lines", "", []string{"--progress", "plain", "version"}, ""},
@@ -268,9 +267,8 @@ func TestEveryCommandChecksTheProgressFlag(t *testing.T) {
 				assert.Empty(t, stderr.String())
 				return
 			}
-			require.Error(t, err)
+			require.EqualError(t, err, tc.msg)
 			assert.True(t, isUsageError(err), "a usage error: %v", err)
-			assert.Equal(t, tc.msg, err.Error())
 			assert.Empty(t, stdout.String())
 			assert.Zero(t, calls, "nothing runs")
 		})
@@ -340,7 +338,7 @@ func TestProgressLeavesStderrAloneWithoutADisplay(t *testing.T) {
 	wantCode, want := stderrOf(t, "--progress=none")
 	require.Equal(t, exitFailure, wantCode)
 	require.Contains(t, want, "TRAC")
-	require.Contains(t, want, "ERRO listing containers")
+	require.Contains(t, want, "ERRO Docker is not reachable")
 
 	t.Run("auto", func(t *testing.T) {
 		code, got := stderrOf(t)
@@ -415,7 +413,8 @@ func TestTheTreeIsDrawnOnATerminal(t *testing.T) {
 	assert.Equal(t, exitFailure, code)
 	assert.Equal(t, []string{"power cut · 0:01.0\n  docker ps  1.0s\n"}, frames)
 	assert.Equal(t, `sind: power cut: failed in 1.0s
-HH:MM:SS.mmm ERRO listing containers: exit status 1: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
+HH:MM:SS.mmm ERRO Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `+"`sind doctor` "+`
+for the fix
 `, withoutTimestamps(screen.String()))
 }
 
@@ -573,23 +572,7 @@ func TestAcquireRealmLock_WaitIsASpan(t *testing.T) {
 	since := time.Date(2026, 10, 4, 10, 2, 3, 0, time.UTC).Local().Format(time.DateTime)
 	w.Finish()
 	assert.Equal(t, "wait realm lock message=sind create cluster (pid 7 on elsewhere, since "+since+"): canceled (canceled): taking the realm lock on the Docker daemon: context canceled\n",
-		withoutCalls(w.Events()))
-}
-
-// withoutCalls draws the spans of events as progresstest.Capture.Tree
-// does, leaving out the calls and what is under them: the docker commands
-// of a wait that polls, which run as often as the wait takes.
-func withoutCalls(events []progress.Event) string {
-	var c progresstest.Capture
-	calls := map[progress.SpanID]bool{}
-	for _, e := range events {
-		if e.Kind == progress.KindCall || calls[e.Parent] {
-			calls[e.Span] = true
-			continue
-		}
-		c.Handle(e)
-	}
-	return c.Tree()
+		testutil.WithoutCalls(w.Events()))
 }
 
 // The event log is a file of JSON lines readable by its owner alone,
@@ -669,9 +652,8 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 			var stderr bytes.Buffer
 			err := executeOn(powerCutFails(t.Context(), t, func() { calls++ }), io.Discard, &stderr,
 				"--progress-log", path, "power", "cut", "worker-0")
-			require.Error(t, err)
+			require.ErrorContains(t, err, "--progress-log names a progress log that cannot be used: ")
 			assert.True(t, isUsageError(err), "a usage error: %v", err)
-			assert.Contains(t, err.Error(), "--progress-log names a progress log that cannot be used: ")
 			assert.Zero(t, calls, "nothing runs")
 			assert.Empty(t, stderr.String())
 		}
@@ -718,7 +700,7 @@ func TestMCPTools_NoProgress(t *testing.T) {
 		_, logSet = os.LookupEnv(envProgressLog)
 		return nil
 	}}
-	withoutProgress(server)
+	asMCPServer(server)
 	server.SetArgs(nil)
 	require.NoError(t, server.Execute())
 	assert.Equal(t, cliprogress.ModeNone.String(), got)

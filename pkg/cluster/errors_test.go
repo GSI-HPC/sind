@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +18,7 @@ import (
 
 func TestErrorWith(t *testing.T) {
 	err := errorWith(ErrNodeNotFound, "node %q not found in cluster %q", "worker-9", "dev")
-	assert.Equal(t, `node "worker-9" not found in cluster "dev"`, err.Error())
+	assert.EqualError(t, err, `node "worker-9" not found in cluster "dev"`)
 	require.ErrorIs(t, err, ErrNodeNotFound)
 	require.ErrorIs(t, fmt.Errorf("power: %w", err), ErrNodeNotFound)
 	assert.NotErrorIs(t, err, ErrClusterNotFound)
@@ -27,12 +27,8 @@ func TestErrorWith(t *testing.T) {
 func TestWorkerAdd_RollbackFailuresJoined(t *testing.T) {
 	// enable slurmd fails, and so does every step of the rollback but the
 	// removal of a container that is already gone.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	_, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		joined := strings.Join(args, " ")
 		switch {
 		case args[0] == "exec" && strings.HasSuffix(joined, "systemctl enable --now slurmd"):
@@ -40,18 +36,11 @@ func TestWorkerAdd_RollbackFailuresJoined(t *testing.T) {
 		case args[0] == "rm" && strings.HasSuffix(joined, "sind-dev-worker-1"):
 			return mock.Result{Stderr: "Error response from daemon: cannot remove container\n", Err: fmt.Errorf("exit status 2")}
 		case args[0] == "rm" && strings.HasSuffix(joined, "sind-dev-worker-2"):
-			return mock.Result{Stderr: "Error: No such container: sind-dev-worker-2\n", Err: notFoundErr(t)}
+			return mock.Result{Stderr: "Error: No such container: sind-dev-worker-2\n", Err: testutil.ExitCode1(t)}
 		}
 		return onCall(args, stdin)
-	}
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enable failed")
+	}, WorkerAddOptions{ClusterName: "dev", Count: 2})
+	require.ErrorContains(t, err, "enable failed")
 	assert.Contains(t, err.Error(), "\nrolling back: removing container sind-dev-worker-1: ")
 	assert.NotContains(t, err.Error(), "sind-dev-worker-2:")
 }
@@ -70,8 +59,7 @@ func TestCleanupWorkers_MeshFailures(t *testing.T) {
 
 	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []RunConfig{{ShortName: "worker-1"}})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing DNS records: ")
+	require.ErrorContains(t, err, "removing DNS records: ")
 	assert.Contains(t, err.Error(), "removing known hosts: ")
 	var removed bool
 	for _, c := range m.Calls {
