@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -240,7 +241,7 @@ func TestGetAuthKey_TypeMissing(t *testing.T) {
 
 	_, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--type", "jwt")
 	require.EqualError(t, err, `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`)
-	assert.False(t, isUsageError(err))
+	assert.False(t, cobratree.IsUsage(err))
 }
 
 func TestGetAuthKey_TypeCompletion(t *testing.T) {

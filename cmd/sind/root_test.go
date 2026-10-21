@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
@@ -102,7 +103,7 @@ func TestUnknownSubcommandWithHelp(t *testing.T) {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			stdout, _, err := executeCommand(tt.args...)
 			require.EqualError(t, err, tt.wantErr)
-			assert.True(t, isUsageError(err))
+			assert.True(t, cobratree.IsUsage(err))
 			assert.Empty(t, stdout)
 		})
 	}

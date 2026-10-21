@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 			_, _, err := executeWithMock(&m, append([]string{"create", "worker"}, tt.args...)...)
 
 			require.ErrorContains(t, err, tt.wantErr)
-			assert.True(t, isUsageError(err), "exits 2")
+			assert.True(t, cobratree.IsUsage(err), "exits 2")
 			assert.Empty(t, m.Calls, "no docker call")
 		})
 	}

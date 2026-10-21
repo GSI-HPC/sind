@@ -3,11 +3,9 @@
 package main
 
 import (
-	"errors"
-	"fmt"
 	"strconv"
-	"strings"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
@@ -72,9 +70,12 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newMCPCommand(mcpConfig()))
 
-	builtins(cmd)
-	requireKnownSubcommand(cmd)
-	usageArgs(cmd)
+	// Groups refuse an unknown subcommand and help an unknown topic, naming
+	// the command that replaced one sind dropped, and every argument check
+	// returns a usage error that ends with the usage line.
+	cobratree.Strict(cmd, map[string]string{"status": "get cluster"})
+	groupHelpFlags(cmd)
+	usageLines(cmd)
 	annotateMCPTools(cmd)
 	noFileCompletions(cmd)
 
@@ -96,65 +97,22 @@ func checkRealmFlag(cmd *cobra.Command) error {
 	}
 	r, _ := cmd.Root().Flags().GetString("realm")
 	if err := config.CheckName("realm", r); err != nil {
-		return usagef("--realm: %w", err)
+		return cobratree.Usagef("--realm: %w", err)
 	}
 	return nil
 }
 
-// builtins adds cobra's help and completion commands to the tree now,
-// rather than when it runs, so that the argument checks cover them: cobra's
-// completion printed its help and succeeded for a shell it does not know,
-// and its help printed the root help and succeeded for a topic that names
-// no command. completion is a group like any other, so
-// requireKnownSubcommand makes it strict; help gets helpTopic.
-//
-// The completion scripts are written to the output the root has when the
-// command is made, not when it runs.
-//
-// Adapted from GSI-HPC/clusterctl internal/cli/root.go.
-func builtins(cmd *cobra.Command) {
-	cmd.InitDefaultHelpCmd()
-	cmd.InitDefaultCompletionCmd()
+// groupHelpFlags gives every command group, the root among them, the
+// -h, --help flag groupHelp, so that a group refuses an unknown subcommand
+// followed by --help. It runs after cobratree.Strict, which adds the
+// completion group and makes every group print its help when given no
+// argument.
+func groupHelpFlags(cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
-		if sub.Name() == "help" {
-			sub.Args = helpTopic
-		}
+		groupHelpFlags(sub)
 	}
-}
-
-// helpTopic is the argument check of the help command. The topic has to
-// name a command, all of it: cobra's help prints the root help for a topic
-// it cannot find, and the help of the nearest command for one with words
-// left over, and succeeds either way.
-func helpTopic(cmd *cobra.Command, args []string) error {
-	// Find reports a word the root has no subcommand for as an error, but
-	// still returns the root and the words it could not place.
-	found, rest, _ := cmd.Root().Find(args)
-	if len(rest) == 0 {
-		return nil
-	}
-	return fmt.Errorf("unknown help topic %q: %w", strings.Join(args, " "), noUnknownSubcommand(found, rest))
-}
-
-// requireKnownSubcommand makes every command group (a command with
-// subcommands but no run function) print its help when invoked bare and
-// fail on any other argument, with exitUsage. Cobra's default for such
-// groups is to print help and exit 0 even for a mistyped or removed
-// subcommand, so a script calling e.g. `sind status` would silently
-// succeed.
-func requireKnownSubcommand(cmd *cobra.Command) {
-	for _, sub := range cmd.Commands() {
-		requireKnownSubcommand(sub)
-	}
-	if !cmd.HasSubCommands() || cmd.Runnable() {
+	if !cmd.HasSubCommands() {
 		return
-	}
-	if cmd.SuggestionsMinimumDistance <= 0 {
-		cmd.SuggestionsMinimumDistance = 2 // cobra's default, applied lazily only on its own error path
-	}
-	cmd.Args = noUnknownSubcommand
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return cmd.Help()
 	}
 	cmd.Flags().VarP(new(groupHelp), "help", "h", "help for "+cmd.DisplayName())
 	cmd.Flags().Lookup("help").NoOptDefVal = "true"
@@ -179,22 +137,3 @@ func (*groupHelp) Set(s string) error {
 func (*groupHelp) Type() string { return "bool" }
 
 func (*groupHelp) IsBoolFlag() bool { return true }
-
-// removedCommands maps top-level commands that sind dropped to their
-// replacement, for the hint on the error that a script gets.
-var removedCommands = map[string]string{"status": "get cluster"}
-
-// noUnknownSubcommand rejects positional arguments on a command group,
-// suggesting the closest subcommand if there is one.
-func noUnknownSubcommand(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return nil
-	}
-	msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
-	if s := cmd.SuggestionsFor(args[0]); len(s) > 0 {
-		msg += fmt.Sprintf(" (did you mean %q?)", s[0])
-	} else if hint, ok := removedCommands[args[0]]; ok && cmd.Parent() == nil {
-		msg += fmt.Sprintf(" (it is now %q)", hint)
-	}
-	return errors.New(msg)
-}

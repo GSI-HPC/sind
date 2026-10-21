@@ -341,7 +341,7 @@ func asMCPServer(cmd *cobra.Command) {
 }
 
 // refuseArgs makes the commands of ophis's tree that take no arguments refuse
-// them, as sind's own commands do (usageArgs then makes that a usage
+// them, as sind's own commands do (cobratree.Strict then makes that a usage
 // error): ophis leaves Args unset, which accepts any.
 func refuseArgs(cmd *cobra.Command) {
 	if cmd.Args == nil && cmd.Runnable() && !cmd.HasSubCommands() {

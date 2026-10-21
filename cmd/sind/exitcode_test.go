@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/cobra"
@@ -135,19 +136,6 @@ func TestRun_InvalidSindRealmExits1(t *testing.T) {
 
 	assert.Equal(t, exitFailure, code)
 	assert.Contains(t, stderr.String(), `SIND_REALM: invalid realm name "Not_A_Realm"`)
-}
-
-func TestUsage(t *testing.T) {
-	assert.NoError(t, usage(nil))
-
-	err := fmt.Errorf("parsing: %w", usage(assert.AnError))
-	assert.True(t, isUsageError(err))
-	require.ErrorIs(t, err, assert.AnError)
-	assert.EqualError(t, err, "parsing: "+assert.AnError.Error())
-
-	assert.True(t, isUsageError(usagef("bad %s", "arg")))
-	assert.False(t, isUsageError(assert.AnError))
-	assert.False(t, isUsageError(nil))
 }
 
 func TestNewChildExitError(t *testing.T) {
@@ -285,7 +273,7 @@ func TestArityErrorNamesTheUsage(t *testing.T) {
 	_, _, err := executeCommand("power", "on")
 
 	require.ErrorContains(t, err, "only received 0 (usage: sind power on NODES)")
-	assert.True(t, isUsageError(err))
+	assert.True(t, cobratree.IsUsage(err))
 }
 
 // TestArgumentErrorsNameTheUsage checks that the errors in the arguments
@@ -307,7 +295,7 @@ func TestArgumentErrorsNameTheUsage(t *testing.T) {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			_, _, err := executeCommand(tt.args...)
 			require.EqualError(t, err, tt.want)
-			assert.True(t, isUsageError(err))
+			assert.True(t, cobratree.IsUsage(err))
 		})
 	}
 }
@@ -316,7 +304,7 @@ func TestWithUsageLine(t *testing.T) {
 	cmd := &cobra.Command{Use: "x ARG"}
 	assert.NoError(t, withUsageLine(cmd, nil))
 	assert.EqualError(t, withUsageLine(cmd, assert.AnError), assert.AnError.Error())
-	assert.EqualError(t, withUsageLine(cmd, usagef("bad flag")), "bad flag")
+	assert.EqualError(t, withUsageLine(cmd, cobratree.Usagef("bad flag")), "bad flag")
 
 	err := withUsageLine(cmd, fmt.Errorf("context: %w", argsErrorf("bad arg")))
 	require.EqualError(t, err, "context: bad arg (usage: x ARG)")

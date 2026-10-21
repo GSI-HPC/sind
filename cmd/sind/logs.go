@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +42,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("tail") {
 		tail, _ := cmd.Flags().GetInt("tail")
 		if tail < 0 {
-			return usagef("--tail must not be negative, got %d", tail)
+			return cobratree.Usagef("--tail must not be negative, got %d", tail)
 		}
 		opts.Tail = &tail
 	}

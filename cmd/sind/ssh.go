@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -122,7 +123,7 @@ func userFlag(cmd *cobra.Command) (string, error) {
 		return "", nil
 	}
 	if err := config.CheckUserName(user); err != nil {
-		return "", usage(err)
+		return "", cobratree.Usage(err)
 	}
 	return user, nil
 }

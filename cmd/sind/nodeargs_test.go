@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -113,8 +114,7 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 			targets, err := parseNodeArgs(tt.expr)
 			require.ErrorContains(t, err, tt.wantErr)
 			assert.Nil(t, targets)
-			var ue *usageError
-			assert.ErrorAs(t, err, &ue, "a node argument error is a usage error")
+			assert.True(t, cobratree.IsUsage(err), "a node argument error is a usage error")
 		})
 	}
 }

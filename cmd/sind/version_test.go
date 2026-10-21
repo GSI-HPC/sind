@@ -4,9 +4,9 @@ package main
 
 import (
 	"encoding/json"
-	"runtime/debug"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,36 +96,21 @@ func TestResolveVersion_TestBinaryIsDev(t *testing.T) {
 	assert.Equal(t, "dev", resolveVersion())
 }
 
-func TestVersionFromBuildInfo(t *testing.T) {
+func TestShortCommit(t *testing.T) {
 	tests := []struct {
 		name string
-		bi   *debug.BuildInfo
+		bi   cobratree.BuildInfo
 		want string
 	}{
-		{"no build info", nil, "dev"},
-		{"no module version", &debug.BuildInfo{}, "dev"},
-		{"devel", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, "dev"},
-		{"go install @version", &debug.BuildInfo{Main: debug.Module{Version: "v0.9.0"}}, "v0.9.0"},
-		{
-			"go install @version with build settings",
-			&debug.BuildInfo{
-				Main:     debug.Module{Version: "v0.9.0"},
-				Settings: []debug.BuildSetting{{Key: "CGO_ENABLED", Value: "0"}},
-			},
-			"v0.9.0",
-		},
-		{
-			"checkout carrying a tag",
-			&debug.BuildInfo{
-				Main:     debug.Module{Version: "v0.9.0"},
-				Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "abc1234def"}},
-			},
-			"dev",
-		},
+		{"no revision", cobratree.BuildInfo{}, ""},
+		{"no revision, dirty", cobratree.BuildInfo{Dirty: true}, ""},
+		{"full revision", cobratree.BuildInfo{Commit: "abc1234def5678"}, "abc1234"},
+		{"short revision", cobratree.BuildInfo{Commit: "abc"}, "abc"},
+		{"dirty checkout", cobratree.BuildInfo{Commit: "abc1234def5678", Dirty: true}, "abc1234-dirty"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, versionFromBuildInfo(tt.bi))
+			assert.Equal(t, tt.want, shortCommit(tt.bi))
 		})
 	}
 }

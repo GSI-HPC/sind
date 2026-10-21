@@ -3,12 +3,13 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"runtime"
-	"runtime/debug"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/spf13/cobra"
 )
 
@@ -66,69 +67,35 @@ func versionLine() string {
 }
 
 // resolveVersion returns the version set at build time, or, for a binary
-// built without one, the module version the toolchain recorded.
+// built without one, the module version of a binary built by
+// "go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0", whose version the
+// checksum database vouches for, and "dev" for anything else.
 func resolveVersion() string {
 	if version != "dev" {
 		return version
 	}
-	bi, _ := debug.ReadBuildInfo()
-	return versionFromBuildInfo(bi)
+	return cmp.Or(cobratree.ReadBuildInfo().Version, "dev")
 }
 
-// versionFromBuildInfo returns the module version of a binary built by
-// "go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0", whose version the
-// checksum database vouches for, and "dev" for anything else; bi may be nil.
-//
-// A build from a checkout carries VCS stamps. The toolchain derives a
-// module version for it too, from a tag the commit carries or as a
-// pseudo-version, but a local tag is not a release, so that is ignored.
-//
-// Adapted from GSI-HPC/clusterctl internal/version.
-func versionFromBuildInfo(bi *debug.BuildInfo) string {
-	if bi == nil || bi.Main.Version == "" || bi.Main.Version == "(devel)" {
-		return "dev"
-	}
-	for _, s := range bi.Settings {
-		if s.Key == "vcs.revision" {
-			return "dev"
-		}
-	}
-	return bi.Main.Version
-}
-
+// resolveCommit returns the commit set at build time, or, for a binary
+// built without one, the short revision of the checkout it was built
+// from, with "-dirty" for one that held changes not committed.
 func resolveCommit() string {
 	if commit != "" {
 		return commit
 	}
+	return shortCommit(cobratree.ReadBuildInfo())
+}
 
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
+// shortCommit returns the revision bi records, cut to 7 characters, with
+// "-dirty" for a checkout that held changes not committed; "" for none.
+func shortCommit(bi cobratree.BuildInfo) string {
+	if bi.Commit == "" {
 		return ""
 	}
-
-	var rev string
-	var dirty bool
-
-	for _, s := range info.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			rev = s.Value
-		case "vcs.modified":
-			dirty = s.Value == "true"
-		}
-	}
-
-	if rev == "" {
-		return ""
-	}
-
-	if len(rev) > 7 {
-		rev = rev[:7]
-	}
-
-	if dirty {
+	rev := bi.Commit[:min(7, len(bi.Commit))]
+	if bi.Dirty {
 		rev += "-dirty"
 	}
-
 	return rev
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -135,7 +136,7 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 		t.Run(tt.wantErr, func(t *testing.T) {
 			_, _, err := executeCommand(tt.args...)
 			require.ErrorContains(t, err, tt.wantErr)
-			assert.True(t, isUsageError(err))
+			assert.True(t, cobratree.IsUsage(err))
 		})
 	}
 	_, err := os.Stat(path)
@@ -166,7 +167,7 @@ func TestMCPEditor_NoUserConfigDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	_, _, err := executeCommand("mcp", "claude", "list")
 	require.ErrorContains(t, err, "locating the Claude Desktop configuration: ")
-	assert.False(t, isUsageError(err))
+	assert.False(t, cobratree.IsUsage(err))
 }
 
 func TestMCPDisable(t *testing.T) {
@@ -182,7 +183,7 @@ func TestMCPDisable(t *testing.T) {
 
 	_, _, err = executeCommand("mcp", "claude", "disable", "--config-path", path)
 	require.EqualError(t, err, `MCP server "sind" is not registered in `+path)
-	assert.False(t, isUsageError(err))
+	assert.False(t, cobratree.IsUsage(err))
 	assert.Len(t, backups(t, path), 1)
 }
 
