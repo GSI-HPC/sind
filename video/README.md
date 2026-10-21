@@ -183,8 +183,6 @@ Preview an episode on its docs page:
 ```bash
 npm run episode -- publish quickstart      # docs/static/videos/ and docs/data/videos/ (git-ignored)
 cd ../docs
-mkdir -p themes/hugo-geekdoc
-curl -sL https://github.com/thegeeklab/hugo-geekdoc/releases/latest/download/hugo-geekdoc.tar.gz | tar -xz -C themes/hugo-geekdoc
 hugo server                                # http://localhost:1313/sind/getting-started/quickstart/
 ```
 
@@ -302,8 +300,8 @@ Roadblocks met while building this pipeline, and their fixes.
   is about `hyperframes tts`, not `voice/`.
 - **Hugo**: distribution packages are often too old for `hugo.Data` (0.156+);
   use a release binary or `mise use -g hugo@latest` (the standard edition is
-  enough). `hugo server` needs the geekdoc theme in `docs/themes/` and serves
-  under `/sind/`, from the `baseURL`.
+  enough). `hugo server` fetches the Hextra theme, a Hugo module pinned in
+  `docs/go.mod`, with Go, and serves under `/sind/`, from the `baseURL`.
 - **No video on the local docs page**: the shortcode renders nothing until
   `episode publish` or `episode ci` has written the files. That is intended.
 
