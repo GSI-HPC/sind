@@ -25,6 +25,23 @@ func StdoutIsData(ctx context.Context) bool {
 	return data
 }
 
+// stderrMergedKey is the context key of WithStderrMerged.
+type stderrMergedKey struct{}
+
+// WithStderrMerged returns ctx for a long-lived command (Start) whose
+// standard error is read with its standard output, as one stream: docker
+// logs, for one, writes what the container wrote to its standard error to
+// its own.
+func WithStderrMerged(ctx context.Context) context.Context {
+	return context.WithValue(ctx, stderrMergedKey{}, true)
+}
+
+// StderrMerged reports whether ctx is one WithStderrMerged returned.
+func StderrMerged(ctx context.Context) bool {
+	merged, _ := ctx.Value(stderrMergedKey{}).(bool)
+	return merged
+}
+
 // processGroupKey is the context key of WithProcessGroup.
 type processGroupKey struct{}
 

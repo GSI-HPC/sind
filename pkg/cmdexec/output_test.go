@@ -15,6 +15,11 @@ func TestStdoutIsData(t *testing.T) {
 	assert.True(t, StdoutIsData(WithStdoutAsData(t.Context())))
 }
 
+func TestStderrMerged(t *testing.T) {
+	assert.False(t, StderrMerged(t.Context()))
+	assert.True(t, StderrMerged(WithStderrMerged(t.Context())))
+}
+
 func TestInProcessGroup(t *testing.T) {
 	assert.False(t, InProcessGroup(t.Context()))
 	assert.True(t, InProcessGroup(WithProcessGroup(t.Context())))

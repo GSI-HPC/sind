@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
 // The log stream, GET /logs/{realm}/{cluster}?node=&source=&unit=, runs one
@@ -136,7 +137,9 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	proc, err := s.env.Exec.Start(ctx, "docker", logsArgs(src, realm, clusterName, node, unit)...)
+	// What the container or journalctl writes to its standard error is
+	// part of the log.
+	proc, err := s.env.Exec.Start(cmdexec.WithStderrMerged(ctx), "docker", logsArgs(src, realm, clusterName, node, unit)...)
 	if err != nil {
 		s.log.Error("starting the log stream", "node", node, "err", err)
 		http.Error(w, "could not start the log stream", http.StatusBadGateway)
