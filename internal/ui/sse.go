@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -173,7 +174,7 @@ func (s *Server) eventsRequest(r *http.Request) ([]Fragment, *View, error) {
 		return nil, nil, fmt.Errorf("the value of nav is longer than %d bytes: %w", maxParamLen, ErrBadRequest)
 	}
 	v := s.newView(p)
-	v.Nav, v.CSRF = nav, csrfFrom(r.Context())
+	v.Nav, v.CSRF = nav, session.CSRF(r.Context())
 	return frags, v, nil
 }
 

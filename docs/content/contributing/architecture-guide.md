@@ -41,8 +41,8 @@ internal/hostname/ DNS label check behind config.CheckName (cluster and realm na
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
 internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fragments, routes, services)
-  ├── server.go    The handler: go-clikit's localweb checks (headers, Host, same origin) in front of the pages; ui.go: the listener of 127.0.0.1 and localweb.Serve
-  ├── auth.go      Token, session cookie and CSRF; peercred.go: the peer user check (/proc/net/tcp)
+  ├── server.go    The handler: go-clikit's localweb checks and sessions (headers, Host, same origin, token, CSRF) in front of the pages; ui.go: the listener of 127.0.0.1 and localweb.Serve
+  ├── peercred.go  The owner of the listener of a recorded instance (/proc/net/tcp)
   ├── runtime.go   Single instance in $XDG_RUNTIME_DIR/sind, the page that opens the browser
   ├── sse.go       Live updates: Server-Sent Events of the fragments of a page
   ├── pg_*.go, more_*.go, run_*.go Pages: realm, clusters and nodes; mesh, monitoring, topology, doctor; runs

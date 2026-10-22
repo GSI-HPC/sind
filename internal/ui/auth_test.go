@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,10 +44,10 @@ func TestTokenExchangeKeepsQueryAndMethod(t *testing.T) {
 
 func TestSessionsAreIndependent(t *testing.T) {
 	ts := newTestServer(t).login()
-	first := ts.cookie
+	first, firstCSRF := ts.cookie, ts.csrf
 	ts.login()
 	assert.NotEqual(t, first.Value, ts.cookie.Value)
-	assert.NotEqual(t, ts.srv.auth.sessions[first.Value], ts.csrf)
+	assert.NotEqual(t, firstCSRF, ts.csrf)
 }
 
 func TestPostNeedsOriginAndCSRF(t *testing.T) {
@@ -97,21 +98,12 @@ func TestPostFormIsCappedAndChecked(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "dev", w.Body.String(), "the handler finds the form parsed")
 
-	w = ts.post("/changes", "name="+strings.Repeat("a", maxFormBytes+1))
+	w = ts.post("/changes", "name="+strings.Repeat("a", session.DefaultMaxBody+1))
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 
 	w = ts.post("/changes?x=%zz", "name=dev")
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "malformed")
-}
-
-func TestSecretsAreRandomAndCompared(t *testing.T) {
-	a, b := newSecret(), newSecret()
-	assert.NotEqual(t, a, b)
-	assert.Len(t, a, 43)
-	assert.True(t, equalSecret(a, a))
-	assert.False(t, equalSecret(a, b))
-	assert.False(t, equalSecret(a, ""))
 }
 
 func TestForbiddenSaysNothingAboutTheToken(t *testing.T) {

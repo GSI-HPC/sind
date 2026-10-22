@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,10 @@ import (
 )
 
 const testPort = 7878
+
+// csrfPath is the test route that answers with the CSRF token of the
+// request's session, as a page puts it in its forms.
+const csrfPath = "/test/csrf"
 
 // testBound is what the listener of the test servers bound: 127.0.0.1 and
 // testPort.
@@ -184,6 +189,9 @@ func newTestServerFrom(t *testing.T, cfg serverConfig, st *store.Store) *testSer
 	srv, err := newServer(ctx, cfg)
 	require.NoError(t, err)
 	srv.coalesce = 20 * time.Millisecond
+	srv.mux.HandleFunc("GET "+csrfPath, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, session.CSRF(r.Context()))
+	})
 	st.SetRuns([]store.Run{{ID: "x", Title: "create cluster dev"}})
 	return &testServer{t: t, srv: srv, h: srv.Handler(), st: st, cancel: cancel}
 }
@@ -213,7 +221,7 @@ func (ts *testServer) login() *testServer {
 	assert.True(ts.t, ts.cookie.HttpOnly)
 	assert.Equal(ts.t, http.SameSiteStrictMode, ts.cookie.SameSite)
 	assert.Equal(ts.t, "sind_ui_7878", ts.cookie.Name)
-	ts.csrf = ts.srv.auth.sessions[ts.cookie.Value]
+	ts.csrf = ts.get(csrfPath).Body.String()
 	require.NotEmpty(ts.t, ts.csrf)
 	return ts
 }

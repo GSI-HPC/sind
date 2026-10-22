@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/demo"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -129,7 +130,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer func() { _ = b.Close() }()
 	addr := b.Host()
-	token := newSecret()
+	token := session.NewToken()
 	url := "http://" + addr + "/?token=" + token
 
 	ctx, cancel := context.WithCancel(ctx)

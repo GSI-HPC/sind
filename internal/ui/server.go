@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -23,6 +24,17 @@ import (
 // or style, no other origin, no framing.
 const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
 	"font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+
+const (
+	// cookiePrefix starts the name of the session cookie; the port
+	// follows. Cookies do not tell ports apart, so that another sind ui on
+	// another port keeps its own session.
+	cookiePrefix = "sind_ui_"
+	// csrfHeader carries the session's CSRF token on every request that
+	// changes something. app.js adds it to the requests of htmx. A form
+	// that a browser sends without script carries it in the field csrf.
+	csrfHeader = "X-Sind-CSRF"
+)
 
 // openHint is what a refusal adds for the user. It never says what the token
 // is or where to find it, only that the terminal has it.
@@ -40,13 +52,14 @@ const (
 
 // Server serves sind ui's pages and live updates for one store.
 type Server struct {
-	env    *Env
-	reg    *Registry
-	auth   *auth
-	hosts  func(host string) bool
-	tmpl   *templates
-	assets *assets
-	log    *slog.Logger
+	env *Env
+	reg *Registry
+	// sessions lets in the browser that opened the address with the token.
+	sessions *session.Sessions
+	hosts    func(host string) bool
+	tmpl     *templates
+	assets   *assets
+	log      *slog.Logger
 	// ctx ends the live update streams when the server stops.
 	ctx context.Context
 	now func() time.Time
@@ -86,9 +99,14 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		return nil, fmt.Errorf("static files: %w", err)
 	}
 	s := &Server{
-		env: c.Env, reg: reg, auth: newAuth(c.Token, int(c.Bound.Addrs[0].Port())), hosts: c.Bound.Answers, assets: a,
+		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a,
 		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
 		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
+	}
+	if s.sessions, err = session.New(session.Options{
+		Token: c.Token, Cookie: cookiePrefix, Header: csrfHeader, Refuse: s.refuse,
+	}); err != nil {
+		return nil, err
 	}
 	funcs := template.FuncMap{"fragment": s.fragmentHTML}
 	for name, fn := range reg.funcs {
@@ -163,7 +181,7 @@ func (s *Server) routes() (err error) {
 
 // Handler returns the server's handler with every check in front of it.
 func (s *Server) Handler() http.Handler {
-	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(s.auth.middleware(s.mux))
+	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(s.sessions.Middleware(s.mux))
 	return localweb.Headers(contentSecurityPolicy)(localweb.NoStore(localweb.Hosts(s.hosts, s.refuse)(h)))
 }
 
@@ -182,17 +200,6 @@ func (s *Server) refuse(w http.ResponseWriter, r *http.Request, f localweb.Refus
 		f.Message += "\n" + openHint
 	}
 	localweb.Refuse(w, r, f)
-}
-
-// csrf context helpers.
-
-func withCSRF(ctx context.Context, csrf string) context.Context {
-	return context.WithValue(ctx, csrfKey{}, csrf)
-}
-
-func csrfFrom(ctx context.Context) string {
-	s, _ := ctx.Value(csrfKey{}).(string)
-	return s
 }
 
 // Env returns what the server shares with the services.
@@ -220,7 +227,7 @@ func (s *Server) View(r *http.Request, keys ...string) (*View, error) {
 		return nil, err
 	}
 	v := s.newView(p)
-	v.CSRF = csrfFrom(r.Context())
+	v.CSRF = session.CSRF(r.Context())
 	return v, nil
 }
 
@@ -381,7 +388,7 @@ func (s *Server) keys(own, fragments []string) []string {
 // notFound answers with the Not found page.
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	v := s.newView(Params{})
-	v.CSRF = csrfFrom(r.Context())
+	v.CSRF = session.CSRF(r.Context())
 	v.Title, v.Content = "Not found", "page-notfound"
 	v.Events = s.eventsURL(nil, v)
 	if err := s.respond(w, http.StatusNotFound, "layout", v); err != nil {

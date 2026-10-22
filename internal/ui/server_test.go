@@ -56,6 +56,11 @@ func TestRefusalsAreLoggedAndSayWhereTheAddressIs(t *testing.T) {
 	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	assert.Contains(t, logs.String(), "Sec-Fetch-Site is cross-site")
 
+	w = ts.do(request("GET", "/"))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "This browser is not signed in.\n"+openHint+"\n", w.Body.String())
+	assert.Contains(t, logs.String(), "no session cookie")
+
 	// A wrong Host is not told where the address is, nor which Host would do.
 	r = request("GET", "/")
 	r.Host = "rebind.example:7878"
@@ -296,6 +301,9 @@ func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 		"no static files": {func(cfg *serverConfig, _ fstest.MapFS) {
 			cfg.FS = fstest.MapFS{}
 		}, "static files:"},
+		"no token": {func(cfg *serverConfig, _ fstest.MapFS) {
+			cfg.Token = ""
+		}, "needs a Token"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg, _ := testConfig(t)
