@@ -465,32 +465,32 @@ Example output:
 
 ```
 $ sind get clusters
-NAME      NODES (S/C/D/A/W)   SLURM     STATUS
-default   5 (1/1/0/1/2)       26.05.5   running
-dev       4 (0/1/1/0/2)       25.11.8   running
+NAME     NODES (S/C/D/A/W)  SLURM    STATUS
+default  5 (1/1/0/1/2)      26.05.5  running
+dev      4 (0/1/1/0/2)      25.11.8  running
 ```
 
 NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **A**pi / **W**orker; the JSON output has `submitters`, `controllers`, `dbs`, `apis` and `workers`. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
 
 ```
 $ sind get nodes dev
-CONTAINER             ROLE         FQDN                       IP           STATUS
-sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
-sind-dev-db           db           db.dev.sind.sind           172.19.0.5   running
-sind-dev-worker-0     worker       worker-0.dev.sind.sind     172.19.0.3   running
-sind-dev-worker-1     worker       worker-1.dev.sind.sind     172.19.0.4   running
+CONTAINER            ROLE        FQDN                      IP          STATUS
+sind-dev-controller  controller  controller.dev.sind.sind  172.19.0.2  running
+sind-dev-db          db          db.dev.sind.sind          172.19.0.5  running
+sind-dev-worker-0    worker      worker-0.dev.sind.sind    172.19.0.3  running
+sind-dev-worker-1    worker      worker-1.dev.sind.sind    172.19.0.4  running
 ```
 
 Without a cluster argument, `sind get nodes` lists every node in the realm and adds a `CLUSTER` column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`:
 
 ```
 $ sind get nodes
-CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
-sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
-sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
-sind-dev-controller       dev       controller   controller.dev.sind.sind       172.20.0.2   running
-sind-dev-worker-2         dev       worker       worker-2.dev.sind.sind         172.20.0.3   running
-sind-dev-worker-10        dev       worker       worker-10.dev.sind.sind        172.20.0.4   running
+CONTAINER                CLUSTER  ROLE        FQDN                          IP          STATUS
+sind-default-controller  default  controller  controller.default.sind.sind  172.19.0.2  running
+sind-default-worker-0    default  worker      worker-0.default.sind.sind    172.19.0.3  running
+sind-dev-controller      dev      controller  controller.dev.sind.sind      172.20.0.2  running
+sind-dev-worker-2        dev      worker      worker-2.dev.sind.sind        172.20.0.3  running
+sind-dev-worker-10       dev      worker      worker-10.dev.sind.sind       172.20.0.4  running
 ```
 
 ### Cluster Diagnostics
@@ -499,51 +499,51 @@ sind-dev-worker-10        dev       worker       worker-10.dev.sind.sind        
 
 ```
 $ sind get cluster dev
-CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.8   running (4/0/0/4)
+CLUSTER  SLURM    STATUS (R/S/P/T)
+dev      25.11.8  running (4/0/0/4)
 
 NETWORKS
-NAME           DRIVER   SUBNET          GATEWAY      STATUS
-sind-mesh      bridge   172.18.0.0/16   172.18.0.1   ✓
-sind-dev-net   bridge   172.19.0.0/16   172.19.0.1   ✓
+NAME          DRIVER  SUBNET         GATEWAY     STATUS
+sind-mesh     bridge  172.18.0.0/16  172.18.0.1  ✓
+sind-dev-net  bridge  172.19.0.0/16  172.19.0.1  ✓
 
 MESH SERVICES
-NAME   CONTAINER   STATUS
-dns    sind-dns    ✓
-ssh    sind-ssh    ✓
+NAME  CONTAINER  STATUS
+dns   sind-dns   ✓
+ssh   sind-ssh   ✓
 
 MOUNTS
-MOUNT        SOURCE               TYPE       STATUS
-/etc/slurm   sind-dev-config      volume     ✓
-/etc/munge   sind-dev-munge       volume     ✓
-/data        /home/user/project   hostPath   ✓
+MOUNT       SOURCE              TYPE      STATUS
+/etc/slurm  sind-dev-config     volume    ✓
+/etc/munge  sind-dev-munge      volume    ✓
+/data       /home/user/project  hostPath  ✓
 
 NODES
-NAME             ROLE         IP           STATUS    SERVICES
-controller.dev   controller   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
-db.dev           db           172.19.0.5   running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev     worker       172.19.0.3   running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev     worker       172.19.0.4   running   munge ✓ slurmd ✗ sshd ✓
+NAME            ROLE        IP          STATUS   SERVICES
+controller.dev  controller  172.19.0.2  running  munge ✓ slurmctld ✓ sshd ✓
+db.dev          db          172.19.0.5  running  mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev    worker      172.19.0.3  running  munge ✓ slurmd ✓ sshd ✓
+worker-1.dev    worker      172.19.0.4  running  munge ✓ slurmd ✗ sshd ✓
 ```
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
 
 ```
 MESH SERVICES
-NAME         CONTAINER         STATUS
-dns          sind-dns          ✓
-ssh          sind-ssh          ✓
-grafana      sind-grafana      ✓
-prometheus   sind-prometheus   ✓
-loki         sind-loki         ✓
-alloy        sind-alloy        ✓
+NAME        CONTAINER        STATUS
+dns         sind-dns         ✓
+ssh         sind-ssh         ✓
+grafana     sind-grafana     ✓
+prometheus  sind-prometheus  ✓
+loki        sind-loki        ✓
+alloy       sind-alloy       ✓
 
 MOUNTS
-MOUNT              SOURCE                    TYPE       STATUS
-/etc/slurm         sind-dev-config           volume     ✓
-/etc/munge         sind-dev-munge            volume     ✓
-/data              /home/user/project        hostPath   ✓
-/var/log/journal   sind-journal:dev/<node>   volume     ✓
+MOUNT             SOURCE                   TYPE      STATUS
+/etc/slurm        sind-dev-config          volume    ✓
+/etc/munge        sind-dev-munge           volume    ✓
+/data             /home/user/project       hostPath  ✓
+/var/log/journal  sind-journal:dev/<node>  volume    ✓
 ```
 
 A monitored cluster lists the journal mount under `MOUNTS`: the realm's journal volume, and the cluster's directory in it, where each node mounts its own (`subpath` in the JSON output, `dev`). `docker inspect`'s top-level `Mounts` hide a volume's subpath, so sind reads it from the nodes' `HostConfig.Mounts`.
@@ -556,10 +556,10 @@ Clusters with a backup controller add an `HA` column to the `NODES` table: each 
 
 ```
 NODES
-NAME                    ROLE         HA        IP           STATUS    SERVICES
-controller.dev          controller   primary   172.19.0.2   running   munge ✓ slurmctld ✗ sshd ✓
-controller-backup.dev   controller   backup*   172.19.0.3   running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev            worker       -         172.19.0.4   running   munge ✓ slurmd ✓ sshd ✓
+NAME                   ROLE        HA       IP          STATUS   SERVICES
+controller.dev         controller  primary  172.19.0.2  running  munge ✓ slurmctld ✗ sshd ✓
+controller-backup.dev  controller  backup*  172.19.0.3  running  munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev           worker      -        172.19.0.4  running  munge ✓ slurmd ✓ sshd ✓
 ```
 
 The `STATUS` of a node, in `sind get cluster`, `sind get node` and `sind get nodes`, and its JSON `status`, map its container's state (`containerStateToState`): `running`, `stopped` (exited, dead or created), `paused`, or `unknown` for another state, such as `restarting`, which the header counts under `S`. The cluster's state in the header and in `sind get clusters` uses the same words, plus `mixed` and `empty`.
@@ -568,14 +568,14 @@ The `STATUS` of a node, in `sind get cluster`, `sind get node` and `sind get nod
 
 ```
 $ sind get node controller.dev
-CONTAINER             ROLE         FQDN                       IP           STATUS
-sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+CONTAINER            ROLE        FQDN                      IP          STATUS
+sind-dev-controller  controller  controller.dev.sind.sind  172.19.0.2  running
 
 SERVICES
-NAME        STATUS
-munge       ✓
-slurmctld   ✓
-sshd        ✓
+NAME       STATUS
+munge      ✓
+slurmctld  ✓
+sshd       ✓
 ```
 
 A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`primary` or `backup`, with `*` on the controller in control), as in `sind get cluster`.
@@ -586,16 +586,16 @@ A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`pr
 
 ```
 $ sind get monitoring
-SERVICE      CONTAINER         ADDRESS                            STATUS
-grafana      sind-grafana      http://grafana.sind.sind:3000      running
-prometheus   sind-prometheus   http://prometheus.sind.sind:9090   running
-loki         sind-loki         http://loki.sind.sind:3100         running
-alloy        sind-alloy        http://172.18.0.9:12345            running
+SERVICE     CONTAINER        ADDRESS                           STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
+loki        sind-loki        http://loki.sind.sind:3100        running
+alloy       sind-alloy       http://172.18.0.9:12345           running
 
 CLUSTERS
-NAME      NODES   SLURM
-default   3       26.05.5
-dev       5       26.05.5
+NAME     NODES  SLURM
+default  3      26.05.5
+dev      5      26.05.5
 ```
 
 `ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
