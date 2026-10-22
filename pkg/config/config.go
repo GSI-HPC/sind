@@ -190,6 +190,15 @@ func (s *Section) UnmarshalYAML(v *yaml.Node) error {
 	return v.Decode(&s.Fragments)
 }
 
+// MarshalYAML writes the section in the form that UnmarshalYAML reads: the
+// map of fragments, or else the string.
+func (s Section) MarshalYAML() (any, error) {
+	if s.IsMap() {
+		return s.Fragments, nil
+	}
+	return s.Content, nil
+}
+
 // Slurm configures custom Slurm configuration files.
 // Each field maps to a Slurm config file: main → slurm.conf,
 // cgroup → cgroup.conf, gres → gres.conf, etc.

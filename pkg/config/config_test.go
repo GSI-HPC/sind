@@ -956,6 +956,20 @@ func TestSection_UnmarshalYAML(t *testing.T) {
 	assert.True(t, s.IsEmpty())
 }
 
+func TestSection_MarshalYAML(t *testing.T) {
+	out, err := yaml.Marshal(Slurm{
+		Main:   Section{Content: "SelectType=select/cons_tres\nMaxJobCount=100\n"},
+		Cgroup: Section{Fragments: map[string]string{"b": "x=1", "a": "y=2"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "main: |\n    SelectType=select/cons_tres\n    MaxJobCount=100\ncgroup:\n    a: y=2\n    b: x=1\n", string(out))
+
+	var back Slurm
+	require.NoError(t, yaml.Unmarshal(out, &back))
+	assert.Equal(t, "SelectType=select/cons_tres\nMaxJobCount=100\n", back.Main.Content)
+	assert.Equal(t, map[string]string{"a": "y=2", "b": "x=1"}, back.Cgroup.Fragments)
+}
+
 func TestSection_IsEmpty(t *testing.T) {
 	assert.True(t, Section{}.IsEmpty())
 	assert.False(t, Section{Content: "x"}.IsEmpty())
