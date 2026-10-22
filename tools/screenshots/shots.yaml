@@ -35,12 +35,6 @@ shots:
     page: cluster
     sizes: [desktop, phone]
 
-  - name: cluster-nodes
-    alt: "A cluster's Nodes tab: each node with its role, address, state and services"
-    path: /clusters/sind/dev?tab=nodes
-    page: cluster
-    fit: true
-
   - name: cluster-logs
     alt: "A cluster's Logs tab: the log of one node, from Docker or the journal"
     path: /clusters/sind/dev?tab=logs
@@ -48,13 +42,13 @@ shots:
     fit: true
 
   - name: cluster-network
-    alt: "A cluster's Network tab: the mesh, the cluster network and the monitoring stack it uses"
+    alt: "A cluster's Network and storage tab: its networks, and the volumes and mounts of its nodes"
     path: /clusters/sind/dev?tab=network
     page: cluster
     fit: true
 
   - name: cluster-connect
-    alt: "A cluster's Connect tab: the commands that open a shell, run a job or copy files"
+    alt: "A cluster's Connect tab: the commands that open a shell, run a command, log in to a node or follow its log"
     path: /clusters/sind/dev?tab=connect
     page: cluster
     fit: true
@@ -96,12 +90,6 @@ shots:
     alt: "Activity: the runs of sind commands, from this UI and from a terminal"
     path: /activity
     page: activity
-
-  - name: run-ok
-    alt: "A run that ended ok: the steps on a timeline, each node, and the bytes pulled"
-    path: /runs/d3e0000000000002
-    page: run
-    sizes: [desktop, phone]
 
   - name: run-failed
     alt: "A run that failed: a node ran out of time, sind rolled back, and the page says what to try"

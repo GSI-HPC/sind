@@ -199,6 +199,8 @@ sind create worker --count 3
 
 On the page of the cluster, press **Add workers…**, set **How many** to 3, and press **Add**.
 
+{{< uishot "dialog-create-worker" >}}
+
 {{< /ui >}}
 {{< /ways >}}
 

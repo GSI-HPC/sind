@@ -476,6 +476,8 @@ sind get realms
 
 The **Realms** table of the Overview lists each realm with its clusters, nodes and health. The realm switch in the top bar selects the realm that the pages show.
 
+{{< uishot "overview" >}}
+
 {{< /ui >}}
 {{< /ways >}}
 
@@ -501,6 +503,8 @@ sind get volumes
 
 Open the cluster, then the **Network and storage** tab. It lists the volumes and mounts of the cluster.
 
+{{< uishot "cluster-network" >}}
+
 {{< /ui >}}
 {{< /ways >}}
 
@@ -525,6 +529,8 @@ sind get dns
 {{< ui >}}
 
 Open **Mesh and DNS**. It lists the DNS records of the realm.
+
+{{< uishot "mesh" >}}
 
 {{< /ui >}}
 {{< /ways >}}
