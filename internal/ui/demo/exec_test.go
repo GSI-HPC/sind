@@ -87,6 +87,21 @@ func TestExec_Follows(t *testing.T) {
 	assert.Len(t, lines, head+5)
 }
 
+func TestExec_FollowEndsWithItsContext(t *testing.T) {
+	// The next line is an hour away, so only the context ends the stream.
+	ctx, cancel := context.WithCancel(context.Background())
+	p, err := testExec(time.Hour).Start(ctx, "docker", "logs", "--follow", "sind-dev-api")
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+	sc := bufio.NewScanner(p.Stdout)
+	for range head {
+		require.True(t, sc.Scan())
+	}
+	cancel()
+	assert.False(t, sc.Scan())
+	assert.NoError(t, sc.Err())
+}
+
 func TestExec_ReaderGone(t *testing.T) {
 	// A reader that goes ends the stream, in the first lines and later.
 	ctx, cancel := context.WithCancel(context.Background())

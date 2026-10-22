@@ -118,7 +118,7 @@ func TestLockReadsARealmThatAppears(t *testing.T) {
 	})
 }
 
-func TestLockResyncAndDockerDown(t *testing.T) {
+func TestLockReadsNothingWhileDockerIsDown(t *testing.T) {
 	f := newRealmFixture(t, "sind")
 	f.fake.set(func() { f.fake.locks["sind"] = "one" })
 	l := f.lock()
@@ -129,12 +129,23 @@ func TestLockResyncAndDockerDown(t *testing.T) {
 	// While Docker is down nothing is read, not even by the poll.
 	f.st.SetDocker(store.DockerState{Checked: true, Err: "down"})
 	f.fake.settle()
-	f.fake.set(func() { f.fake.locks["sind"] = "two" })
 	n := f.fake.count("network")
 	never(t, "a read while down", 120*time.Millisecond, func() bool { return f.fake.count("network") != n })
+}
 
-	// It answers again: everything is read at once, before the next poll.
-	l.Every = time.Hour
+func TestLockReadsAllWhenDockerAnswersAgain(t *testing.T) {
+	// The poll is an hour away, so only the recovery reads.
+	f := newRealmFixture(t, "sind")
+	f.fake.set(func() { f.fake.locks["sind"] = "one" })
+	start(t, f.lock().Run)
+	waitFor(t, "lock", func() bool { return f.holder("sind") == "one" })
+
+	f.st.SetDocker(store.DockerState{Checked: true, Err: "down"})
+	f.fake.settle()
+	f.fake.set(func() { f.fake.locks["sind"] = "two" })
+	n := f.fake.count("network")
+	never(t, "a read while down", 50*time.Millisecond, func() bool { return f.fake.count("network") != n })
+
 	f.st.SetDocker(store.DockerState{Checked: true})
 	waitFor(t, "read after recovery", func() bool { return f.holder("sind") == "two" })
 
