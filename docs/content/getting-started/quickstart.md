@@ -17,9 +17,31 @@ mkdir sind-demo && cd sind-demo
 
 The simplest command creates a cluster named `default` with one controller and one worker:
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind create cluster
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Start the web UI. It opens in your browser:
+
+   ```bash
+   sind ui
+   ```
+
+2. Press **New cluster…**. The dialog proposes a free name, such as `hpc`, with a controller, a db node, a submitter and two workers. Set the name to `default`, clear **db** and **submitter**, and set **workers** to 1.
+3. Press **Create** when the status at the bottom says `Ready`.
+
+{{< uishot "dialog-create-cluster" >}}
+
+The **Runs** line of the dialog shows the command that it starts. The dialog also saves the config of the cluster, so you can run the same command from a terminal.
+
+{{< /ui >}}
+{{< /ways >}}
 
 This is equivalent to using this configuration:
 
@@ -43,9 +65,24 @@ On a terminal, sind shows its progress while it works and leaves a line for each
 
 ## Check cluster status
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get clusters
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Clusters** in the rail, then the cluster. The **Summary** tab shows each node and its services, such as munge, sshd and slurmctld.
+
+{{< uishot "cluster" >}}
+
+The rest of this section shows the same with `sind get`.
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```
 NAME      NODES (S/C/D/A/W)   SLURM     STATUS
@@ -128,26 +165,63 @@ By default, `sind create cluster` bind-mounts the current directory as `/data` i
 
 ## SSH into a node
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind ssh controller
 sind ssh worker-0
 ```
 
+{{< /cli >}}
+{{< ui >}}
+
+The web UI has no terminal. Open the cluster, then the **Connect** tab, and press **Copy** next to the command for the node. Run it in your terminal.
+
+{{< uishot "cluster-connect" >}}
+
+{{< /ui >}}
+{{< /ways >}}
+
 ## Scale up
 
 Add more workers to the running cluster:
+
+{{< ways >}}
+{{< cli >}}
 
 ```bash
 sind create worker --count 3
 ```
 
+{{< /cli >}}
+{{< ui >}}
+
+On the page of the cluster, press **Add workers…**, set **How many** to 3, and press **Add**.
+
+{{< /ui >}}
+{{< /ways >}}
+
 ## Tear down
 
 Delete the cluster:
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind delete cluster default
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+On the page of the cluster, press **Delete…**. Type the name of the cluster to confirm, and press **Delete**.
+
+{{< uishot "dialog-delete-cluster" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Or delete all clusters at once:
 

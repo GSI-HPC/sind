@@ -25,12 +25,23 @@ Each realm's mesh and each cluster take one Docker network from the daemon's def
 
 Realm is determined by the following precedence (highest first):
 
+{{< ways >}}
+{{< cli >}}
+
 | Source | Example |
 |--------|---------|
 | `--realm` flag | `sind --realm ci-42 create cluster` |
 | `SIND_REALM` environment variable | `export SIND_REALM=ci-42` |
 | Config file (`sind create cluster` only) | `realm: ci-42` in the YAML config |
 | Default | `sind` |
+
+{{< /cli >}}
+{{< ui >}}
+
+The realm switch in the top bar selects the realm that the pages show, or all realms. A dialog acts in the realm of its cluster and says so. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci delete realm`.
+
+{{< /ui >}}
+{{< /ways >}}
 
 Only `sind create cluster` reads a config file, so a `realm` set there applies to that command alone. Pass the same realm to the commands that follow, with `--realm` or `SIND_REALM`, or they look in another realm:
 
@@ -71,9 +82,20 @@ Mutating operations (`create cluster`, `delete cluster`, `delete realm`, `create
 
 If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. For a command of another client the warning names it, for example:
 
+{{< ways >}}
+{{< cli >}}
+
 ```
 Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+A dialog that changes a realm while another command holds its lock names that command. The Overview names it too. Your command waits until the other one ends, and its run page shows the wait as `realm lock`. To stop the other command, press **Stop** on its run if sind ui started it, or Ctrl-C in its terminal.
+
+{{< /ui >}}
+{{< /ways >}}
 
 On a terminal, the [progress display]({{< relref "/usage/progress" >}}) shows the wait as `realm lock`, with how long it has lasted and, for another client's lock, the command it waits for, below the warning, which stays.
 

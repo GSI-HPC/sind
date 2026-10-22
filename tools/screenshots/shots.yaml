@@ -10,7 +10,8 @@
 # open; steps, run on it first (click SELECTOR, dialog ACTION[?QUERY], wait
 # SELECTOR, type TEXT into SELECTOR); crop, the selector of the element to
 # take instead of the window; fit, to shorten the window to a short page;
-# sizes, default desktop; page, the page of the UI guide that shows the shot.
+# sizes, default desktop; page, the page of the UI that the shot shows. The docs
+# show a shot by its name with the shortcode uishot; the docs workflow takes them.
 sizes:
   desktop: {width: 1440, height: 900}
   phone: {width: 390, height: 844}
@@ -150,3 +151,52 @@ shots:
       - wait: "#helppane #help-body > *"
     page: help
     sizes: [desktop, phone]
+
+  # The shots of the docs' steps for the web UI (shortcode uishot).
+  - name: dialog-create-worker
+    alt: "The Add workers dialog: how many workers, their CPUs and memory, and the command it runs"
+    path: /clusters/sind/dev
+    steps:
+      - dialog: create-worker?realm=sind&cluster=dev
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
+  - name: cluster-nodes-selected
+    alt: "A cluster's Nodes tab with three workers selected, and what you can do with them"
+    path: /clusters/sind/dev?tab=nodes
+    steps:
+      - click: 'input[data-pg-sel="worker-2"]'
+      - click: 'input[data-pg-sel="worker-3"]'
+      - click: 'input[data-pg-sel="worker-4"]'
+    page: cluster
+    fit: true
+
+  - name: dialog-delete-worker
+    alt: "The Delete workers dialog: the workers it deletes, and the name of the cluster to type to confirm"
+    path: /clusters/sind/dev?tab=nodes
+    steps:
+      - dialog: delete-worker?realm=sind&cluster=dev&nodes=worker-2,worker-3,worker-4
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
+  - name: dialog-connect
+    alt: "The Connect a container dialog: the container to connect to the realm's mesh, and the command it runs"
+    path: /mesh
+    steps:
+      - dialog: connect?realm=sind&container=kind-control-plane
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
+  - name: dialog-delete-realm
+    alt: "The Delete realm dialog: what it deletes, and the name of the realm to type to confirm"
+    path: /mesh
+    steps:
+      - dialog: delete-realm?realm=sind
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
+  - name: task-dock
+    alt: "The task dock: a card for a run that goes on, with its steps, the current step, Stop and Show progress"
+    path: /
+    crop: "#tasks .task"
+    page: run

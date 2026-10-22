@@ -3,6 +3,8 @@ weight: 360
 title: "Node Arguments"
 description: "DNS-style node naming and node set expressions"
 toc: true
+webui: none
+webuiNote: "The web UI selects nodes with checkboxes, and shows the selection as a node set, such as `worker-[2-4]`. The node sets on this page are for the CLI."
 ---
 
 ## Format

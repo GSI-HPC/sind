@@ -38,7 +38,7 @@ type Shot struct {
 	Crop string `yaml:"crop"`
 	// Fit shortens the window to the page when the page is shorter.
 	Fit bool `yaml:"fit"`
-	// Page tells the docs which page of the UI guide the shot belongs to;
+	// Page names the page of the UI that the shot shows;
 	// the screenshot tool ignores it.
 	Page string `yaml:"page"`
 	// Sizes name the windows to take it in; desktop when empty.

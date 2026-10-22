@@ -1,0 +1,24 @@
+{{- /*
+  A screenshot of sind ui: {{< uishot "dialog-create-worker" >}}, with an
+  optional caption as second argument.
+
+  The name is a shot of tools/screenshots/shots.yaml, which Hugo reads as
+  data (hugo.toml mounts it); its alt text describes the image. The docs
+  workflow renders the images into static/ui-shots. A local build without
+  them shows a box with the alt text; make docs-shots renders them.
+*/ -}}
+{{- $name := .Get 0 -}}
+{{- $shot := index (where hugo.Data.uishots.shots.shots "name" $name) 0 -}}
+{{- if not $shot }}{{ errorf "%s: uishot %q is not in tools/screenshots/shots.yaml" .Position $name }}{{ end -}}
+{{- $light := printf "ui-shots/%s-light.png" $name -}}
+{{- $dark := printf "ui-shots/%s-dark.png" $name -}}
+<figure class="sind-uishot{{ if $shot.crop }} sind-uishot--crop{{ end }}">
+{{- if fileExists (printf "static/%s" $light) }}
+  {{- $cfg := imageConfig (printf "static/%s" $light) }}
+  <a class="sind-uishot--light" href="{{ $light | relURL }}"><img src="{{ $light | relURL }}" alt="{{ $shot.alt }}" width="{{ $cfg.Width }}" height="{{ $cfg.Height }}" loading="lazy"></a>
+  <a class="sind-uishot--dark" href="{{ $dark | relURL }}"><img src="{{ $dark | relURL }}" alt="{{ $shot.alt }}" width="{{ $cfg.Width }}" height="{{ $cfg.Height }}" loading="lazy"></a>
+{{- else }}
+  <div class="sind-uishot__missing" role="img" aria-label="{{ $shot.alt }}"><code>{{ $name }}</code><span>{{ $shot.alt }}</span></div>
+{{- end }}
+  {{- with .Get 1 }}<figcaption>{{ . | markdownify }}</figcaption>{{ end }}
+</figure>

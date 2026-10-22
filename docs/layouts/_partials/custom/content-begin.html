@@ -1,0 +1,16 @@
+{{- /*
+  A page with steps for the CLI and the web UI (shortcode ways) opens with the
+  switch between them. A page with webui: none in its front matter says, in
+  web UI mode only, that its steps are for the CLI (webuiNote, or a default).
+*/ -}}
+{{- if .HasShortcode "ways" -}}
+<div class="sind-via-bar">
+  <span>Show the steps for</span>
+  <div class="sind-via-seg" role="group" aria-label="Interface">
+    <button type="button" data-via-set="cli">{{ partial "sind-via-icon" "cli" }}CLI</button>
+    <button type="button" data-via-set="ui">{{ partial "sind-via-icon" "ui" }}Web UI</button>
+  </div>
+</div>
+{{- else if eq .Params.webui "none" -}}
+<div class="sind-via-note">{{ partial "sind-via-icon" "ui" }}<span>{{ .Params.webuiNote | default "The web UI has no page for this topic. The steps on this page use the CLI." | markdownify }}</span></div>
+{{- end -}}

@@ -25,7 +25,7 @@ FIREJAIL_TEST := firejail --quiet --noprofile \
 	--blacklist=/bin/docker --blacklist=/usr/bin/docker \
 	--blacklist=/bin/ssh --blacklist=/usr/bin/ssh
 
-.PHONY: build install lint lint-docs test test-integration coverage check-coverage image clean help
+.PHONY: build install lint lint-docs docs-shots test test-integration coverage check-coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
@@ -38,6 +38,9 @@ lint: ## Run golangci-lint
 
 lint-docs: ## Lint documentation markdown files
 	npx markdownlint-cli2 "docs/content/**/*.md"
+
+docs-shots: build ## Take the sind ui screenshots of the docs into docs/static/ui-shots (needs Chromium)
+	cd tools/screenshots && go run . -sind ../../$(BINARY) -out ../../docs/static/ui-shots
 
 test: ## Run unit tests (sandboxed with firejail to catch host leaks)
 	$(FIREJAIL_TEST) -- $(GOTEST) -race ./...

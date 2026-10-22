@@ -7,9 +7,32 @@ toc: true
 
 ## Add workers
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind create worker [CLUSTER] [FLAGS]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. On the page of the cluster, press **Add workers…**.
+2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker.
+3. Press **Add**. The task dock shows the progress of the run.
+
+{{< uishot "dialog-create-worker" >}}
+
+| Field | Flag |
+|-------|------|
+| How many | `--count` |
+| CPUs | `--cpus` |
+| Memory | `--memory` |
+
+The dialog sets no other flag. For the other flags, copy the command from the **Runs** line, add the flags, and run it in a terminal.
+
+{{< /ui >}}
+{{< /ways >}}
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -89,9 +112,26 @@ If a new worker is not ready within `--wait`, or its munge or slurmd unit fails,
 
 ## Remove workers
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind delete worker NODES
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Open the cluster, then the **Nodes** tab.
+2. Select the workers. The selection shows as a node set, such as `worker-[2-4]`.
+3. Press **Delete…** in the selection bar. Type the name of the cluster to confirm, and press **Delete**.
+
+{{< uishot "cluster-nodes-selected" >}}
+
+The page of a worker has a **Delete…** button too.
+
+{{< /ui >}}
+{{< /ways >}}
 
 For managed workers, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.
 

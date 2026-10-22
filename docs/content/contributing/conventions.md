@@ -72,6 +72,35 @@ All Go source files include the SPDX header:
 // SPDX-License-Identifier: LGPL-3.0-or-later
 ```
 
+## Documentation
+
+The docs are a Hugo site in `docs/`. A page that tells how to do a task shows its steps for the CLI or for the web UI, as the reader selects at the top of the page. The browser keeps the choice for all pages, and a link with `?via=ui` selects the web UI. Write the two variants of the steps in a `ways` block:
+
+```markdown
+## Add workers
+
+{{</* ways */>}}
+{{</* cli */>}}
+
+    sind create worker [CLUSTER] [FLAGS]
+
+{{</* /cli */>}}
+{{</* ui */>}}
+
+1. On the page of the cluster, press **Add workers…**.
+2. ...
+
+{{</* uishot "dialog-create-worker" */>}}
+
+{{</* /ui */>}}
+{{</* /ways */>}}
+```
+
+- Keep the heading and the text that is true for both outside the block. Only the steps change.
+- A web UI variant has one to four numbered steps, one screenshot and, for a dialog with fields, a table of its fields and their flags.
+- A page that the web UI cannot do sets `webui: none` in its front matter. It then shows a note in web UI mode: `webuiNote`, or a default.
+- `uishot "NAME"` shows a screenshot of `sind ui`, light or dark as the page, with the alt text of the shot. `NAME` is a shot of `tools/screenshots/shots.yaml`; add one there for a new screenshot. The docs workflow takes the screenshots, and `make docs-shots` takes them locally, which needs Chromium. They are not committed.
+
 ## Pull requests
 
 - Target the `next` branch; `main` only moves at release

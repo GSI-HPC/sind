@@ -9,6 +9,23 @@ toc: true
 
 By default sind shows it only on a terminal. Where standard error is not a terminal, in a pipe, a file or a CI log, these commands print nothing on success, as they did before, and their standard error holds exactly what it did: errors, `Warning:` lines and the `-v` logs.
 
+{{< ways >}}
+{{< cli >}}
+
+Run the command on a terminal. sind draws a live tree of its steps and nodes, as [On a terminal](#on-a-terminal) describes. Ctrl-C stops the command, and sind rolls back what it made.
+
+{{< /cli >}}
+{{< ui >}}
+
+Start the command from a dialog of `sind ui`. The task dock at the bottom right shows a card for the run, with its steps and the current step. **Show progress** opens the run page, with a timeline of the steps and a tile for each node. **Stop** stops the command, and sind rolls back what it made. [Runs and Progress]({{< relref "/web-ui/runs" >}}) describes them.
+
+{{< uishot "run-going" >}}
+
+sind ui reads the [activity log](#the-activity-log), so it also shows the runs of the commands that you start in a terminal.
+
+{{< /ui >}}
+{{< /ways >}}
+
 ## On a terminal
 
 On a terminal, sind draws a live tree in the last rows: the command and how long it has run, each step under way with how many of its targets are done, and each target that runs, with how long it has run and what it is doing. The targets that are done fold into one row, such as `✓ worker-[0-7,11]`; those that failed get a row for each error. A row the terminal has no room for is cut, as `… 2 more running`, and the tree takes at most six rows, or a third of a taller terminal's rows.

@@ -7,9 +7,26 @@ toc: true
 
 ## Commands
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind power <action> NODES
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node.
+2. Press the action, such as **Reboot…**. The dialog lists the actions that fit the state of the nodes.
+3. Press the button of the dialog.
+
+{{< uishot "dialog-power" >}}
+
+The dialog names the actions as below: Shut down, Start, Reboot, Power-cycle, Cut power, Freeze and Unfreeze.
+
+{{< /ui >}}
+{{< /ways >}}
 
 | Command | Description | Docker operation |
 |---------|-------------|-----------------|

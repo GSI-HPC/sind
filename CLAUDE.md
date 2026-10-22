@@ -75,6 +75,13 @@ in `docs/go.mod` (`hugo server` in `docs/` fetches it with Go). Use its shortcod
 brand colours and fonts, `docs/layouts/landing.html` the home page, and
 `docs/data/features.yaml` its feature cards.
 
+Task pages show their steps for the CLI or the web UI, as the reader selects: a
+`ways` block with `cli` and `ui` inside, `uishot "NAME"` for a screenshot of a shot in
+`tools/screenshots/shots.yaml`, and `webui: none` in the front matter of a page the UI
+cannot do. When a change to `sind ui` changes such steps, update them in the same PR.
+The docs workflow takes the screenshots (`make docs-shots` locally); never commit them.
+See "Documentation" in `docs/content/contributing/conventions.md`.
+
 Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in
 `video/episodes/<id>/` (see `video/README.md`); the docs workflow renders them, so never
 commit rendered files. When a guide with an episode changes, check the episode

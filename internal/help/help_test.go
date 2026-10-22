@@ -126,6 +126,11 @@ func TestDocURL(t *testing.T) {
 	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/#event-log", DocURL("usage/progress#event-log"))
 }
 
+func TestUIDocURL(t *testing.T) {
+	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/?via=ui", UIDocURL("usage/progress"))
+	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/?via=ui#event-log", UIDocURL("usage/progress#event-log"))
+}
+
 func TestLookups(t *testing.T) {
 	h := Default()
 	w, ok := h.Word("realm")

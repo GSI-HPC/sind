@@ -5,6 +5,21 @@ description: "YAML configuration schema reference"
 toc: true
 ---
 
+{{< ways >}}
+{{< cli >}}
+
+Write the config into a YAML file, and pass it to `sind create cluster --config FILE` (see [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle#create-a-cluster" >}})).
+
+{{< /cli >}}
+{{< ui >}}
+
+The New cluster dialog of `sind ui` writes the config from its form. **Edit YAML**, beside the config in the plan, opens the whole config in an editor, also the fields that the form has no field for. sind ui saves the config in `~/.local/state/sind/ui/configs/`, so you can use it with the CLI too (see [Actions]({{< relref "/web-ui/actions#new-cluster" >}})).
+
+{{< uishot "dialog-create-cluster" >}}
+
+{{< /ui >}}
+{{< /ways >}}
+
 ## Minimal configuration
 
 The simplest valid configuration creates a cluster with one controller and one worker using the default image:

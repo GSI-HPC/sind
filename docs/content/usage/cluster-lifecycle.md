@@ -7,9 +7,26 @@ toc: true
 
 ## Create a cluster
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--monitoring] [--wait DURATION]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Press **New cluster…** on the Overview or on the Clusters page.
+2. Set the name, the image and the nodes. The plan beside the form shows the nodes, the command and the config as you type.
+3. Press **Create** when the status at the bottom says `Ready`.
+
+{{< uishot "dialog-create-cluster" >}}
+
+sind ui saves the config and runs `sind create cluster --config FILE`, with `--pull` when **Pull the image** is on and `--wait` from **Wait for ready**. The data storage and monitoring go into the config. [Actions]({{< relref "/web-ui/actions#new-cluster" >}}) describes each field of the dialog.
+
+{{< /ui >}}
+{{< /ways >}}
 
 | Argument/Flag | Default | Description |
 |---------------|---------|-------------|
@@ -81,9 +98,22 @@ Before it creates a node container, sind checks that the Docker host mounts cgro
 
 ## List clusters
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get clusters
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Clusters** in the rail. Each row is a cluster, with its state, its nodes and its Slurm release.
+
+{{< uishot "clusters" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```
 NAME      NODES (S/C/D/A/W)   SLURM     STATUS
@@ -95,9 +125,22 @@ The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ont
 
 ## Delete a cluster
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind delete cluster [NAME]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+On the page of the cluster, press **Delete…**. Type the name of the cluster to confirm, and press **Delete**. The dialog deletes one cluster. To delete all clusters of a realm, delete the realm.
+
+{{< uishot "dialog-delete-cluster" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Deleting is idempotent — deleting a non-existent cluster is not an error. sind handles partial or broken clusters (e.g., from a failed creation).
 
@@ -120,18 +163,44 @@ When the last cluster is deleted, sind also removes the shared mesh infrastructu
 
 ## Delete a realm
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind delete realm
 sind --realm ci-42 delete realm
 ```
 
+{{< /cli >}}
+{{< ui >}}
+
+Open **Mesh and DNS** and press **Delete realm…** for the realm. Type the name of the realm to confirm, and press **Delete**.
+
+{{< uishot "dialog-delete-realm" >}}
+
+{{< /ui >}}
+{{< /ways >}}
+
 Deletes everything sind made for the realm, as `sind delete cluster --all` does: every cluster, the mesh, the [monitoring stack]({{< relref "/guides/monitoring" >}}) and the exported SSH configuration. The realm is the one `--realm`, `SIND_REALM` or the default names; `sind delete realm ci-42` is a usage error that points to `--realm`. External containers attached to the realm's networks are detached, not removed.
 
 ## Connect containers outside sind
+
+{{< ways >}}
+{{< cli >}}
 
 ```bash
 sind connect container CONTAINER...
 sind disconnect container CONTAINER...
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of the container, and press **Connect**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
+
+{{< uishot "dialog-connect" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 `sind connect container` attaches containers that sind did not make, such as [kind nodes]({{< relref "/guides/kind" >}}), to the realm's mesh network and every cluster network, so that they resolve the realm's names through its DNS server and reach its nodes. Clusters created later are connected to them too, while the realm has a cluster: sind counts every container on the mesh that is not its own as connected. `sind disconnect container` detaches them from every network of the realm. Deleting a cluster or the realm detaches them as well, and never removes them. Both commands fail for a container that does not exist or that sind made. Deleting the realm's last cluster takes the mesh with it, so a cluster created after that is not connected to them: `sind delete cluster` then names them in a `Warning:` on stderr, and `sind connect container` attaches them again.
