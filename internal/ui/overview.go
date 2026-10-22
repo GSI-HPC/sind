@@ -213,7 +213,7 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 		need.Actions = []pgAction{pgDialogAction("Start…", "sm", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", "start"), logs}
 	case cluster.StatePaused:
 		need.Detail = fmt.Sprintf("The container is paused. The cluster %s is %s.", n.Cluster, cs)
-		need.Actions = []pgAction{pgDialogAction("Unpause…", "sm", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", "unpause"), logs}
+		need.Actions = []pgAction{pgDialogAction("Unfreeze…", "sm", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", "unpause"), logs}
 	default:
 		need.Detail = fmt.Sprintf("Docker reports a state that sind does not know. The cluster %s is %s.", n.Cluster, cs)
 		need.Actions = []pgAction{logs}

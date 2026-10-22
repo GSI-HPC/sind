@@ -77,7 +77,7 @@ func TestPgOverview(t *testing.T) {
 	assert.Equal(t, titles[len(titles)-1], "Doctor: inotify", "warnings come last")
 	assert.Contains(t, body, "sind create worker dev (pid 4242 on zeta, since")
 	assert.Contains(t, body, `href="/dialogs/power?cluster=dev&amp;nodes=worker-3&amp;op=start&amp;realm=sind" hx-get="/dialogs/power?cluster=dev&amp;nodes=worker-3&amp;op=start&amp;realm=sind" hx-target="#layer"`)
-	assert.Contains(t, body, `>Unpause…</a>`)
+	assert.Contains(t, body, `>Unfreeze…</a>`)
 	assert.Contains(t, body, `href="/clusters/sind/dev?tab=logs"`)
 	assert.Contains(t, body, `href="/runs/r4"`)
 	assert.Contains(t, body, "node controller: timed out")
@@ -385,10 +385,10 @@ func TestPgClusterNodesTab(t *testing.T) {
 	assert.Contains(t, body, `<tr data-pg-node="worker-3" data-pg-role="worker"><td><input type="checkbox" data-pg-sel="worker-3" aria-label="Select worker-3"></td>`)
 	assert.Contains(t, body, `<div class="pg-selbar" data-pg-selbar hidden>`)
 	assert.Contains(t, body, `<a class="btn sm" href="/dialogs/power?cluster=dev&amp;op=start&amp;realm=sind" data-pg-dialog>Start…</a>`)
-	assert.Contains(t, body, `op=stop&amp;realm=sind" data-pg-dialog>Stop…`)
+	assert.Contains(t, body, `op=stop&amp;realm=sind" data-pg-dialog>Shut down…`)
 	assert.Contains(t, body, `op=reboot&amp;realm=sind" data-pg-dialog>Reboot…`)
-	assert.Contains(t, body, `op=pause&amp;realm=sind" data-pg-dialog>Pause…`)
-	assert.Contains(t, body, `op=unpause&amp;realm=sind" data-pg-dialog>Unpause…`)
+	assert.Contains(t, body, `op=pause&amp;realm=sind" data-pg-dialog>Freeze…`)
+	assert.Contains(t, body, `op=unpause&amp;realm=sind" data-pg-dialog>Unfreeze…`)
 	assert.Contains(t, body, `<a class="btn sm danger" href="/dialogs/delete-worker?cluster=dev&amp;realm=sind" data-pg-dialog data-pg-workers>Delete…</a>`)
 	assert.Contains(t, body, `<span class="pill bad">stopped</span> </td>`)
 	assert.Contains(t, body, `<span class="faint">–</span>`)
@@ -510,9 +510,9 @@ func TestPgNodePage(t *testing.T) {
 	assert.Contains(t, body, `<span class="pill bad">slurmd down</span>`)
 	assert.Contains(t, body, `<dt class="mono">slurmd</dt><dd><span class="pill bad">failed</span></dd>`)
 	assert.Contains(t, body, `<dt class="mono">munge</dt><dd><span class="pill ok">active</span></dd>`)
-	assert.Contains(t, body, `>Stop…</a>`)
+	assert.Contains(t, body, `>Shut down…</a>`)
 	assert.Contains(t, body, `>Reboot…</a>`)
-	assert.Contains(t, body, `>Pause…</a>`)
+	assert.Contains(t, body, `>Freeze…</a>`)
 
 	// A controller: no delete, HA position, its service.
 	body = pgBody(t, ts, "/nodes/sind/dev/controller", 200)
@@ -530,9 +530,9 @@ func TestPgNodePage(t *testing.T) {
 	// A paused node of the default cluster, in another realm.
 	body = pgBody(t, ts, "/nodes/ci/default/worker-0", 200)
 	assert.Contains(t, body, `<span class="pill warn">paused</span>`)
-	assert.Contains(t, body, `>Unpause…</a>`)
+	assert.Contains(t, body, `>Unfreeze…</a>`)
 	assert.Contains(t, body, "<code>sind --realm ci ssh worker-0</code>")
-	assert.NotContains(t, body, ">Stop…</a>")
+	assert.NotContains(t, body, ">Shut down…</a>")
 }
 
 func TestPgNodeWithoutHealthData(t *testing.T) {
