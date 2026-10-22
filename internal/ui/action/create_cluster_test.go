@@ -385,17 +385,18 @@ func TestBuildCreateCluster_ConfigThatSindRefuses(t *testing.T) {
 	defer func(p func([]byte) (*config.Cluster, error)) { parseConfig = p }(parseConfig)
 	parseConfig = func(data []byte) (*config.Cluster, error) {
 		c, err := config.Parse(data)
-		c.Nodes = append(c.Nodes, config.Node{Role: "bogus"})
+		c.Nodes = append(c.Nodes, config.Node{Role: "bogus"}, config.Node{Role: config.RoleController})
 		return c, err
 	}
 
 	cmd, err := build(t, "create-cluster", valid("name", "Bad"))
 
 	require.NoError(t, err)
-	require.Len(t, cmd.Problems, 2)
+	require.Len(t, cmd.Problems, 3)
 	assert.Equal(t, "name", cmd.Problems[0].Field)
 	assert.Equal(t, Problem{Label: "Config", Text: `invalid role "bogus", must be one of: controller, db, api, submitter, worker`}, cmd.Problems[1],
 		"the check takes a valid name in place of the wrong one, and finds the rest")
+	assert.Equal(t, Problem{Label: "Config", Text: "exactly one controller required, got 2"}, cmd.Problems[2], "all of them")
 }
 
 func TestBuildCreateCluster_ContextErrors(t *testing.T) {

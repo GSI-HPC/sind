@@ -109,8 +109,8 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	data := dataStorage(f, c, &ps)
 	cfg.Storage.DataStorage = data.storage
 
-	content, warns, err := renderConfig(cfg, ps.has("name"))
-	if err != nil {
+	content, warns, errs := renderConfig(cfg, ps.has("name"))
+	for _, err := range errs {
 		ps.add("", "Config", false, err)
 	}
 	file := cfg.Name
@@ -398,10 +398,11 @@ func clusterScript(realm, file, content string, dirs, flags []string) string {
 var parseConfig = config.Parse
 
 // renderConfig writes the config as YAML and checks it as sind create
-// cluster will: it parses it, applies the defaults and validates it. The
+// cluster will: it parses it, applies the defaults and validates it. It
+// returns every error of the check, where sind stops at the first. The
 // warnings are those of sind. A name that is wrong already is a problem of
 // its own: the check puts a valid one in its place.
-func renderConfig(cfg config.Cluster, badName bool) (content string, warns []string, err error) {
+func renderConfig(cfg config.Cluster, badName bool) (content string, warns []string, errs []error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -411,14 +412,14 @@ func renderConfig(cfg config.Cluster, badName bool) (content string, warns []str
 	content = buf.String()
 	parsed, err := parseConfig(buf.Bytes())
 	if err != nil {
-		return content, nil, err
+		return content, nil, []error{err}
 	}
 	if badName {
 		parsed.Name = "cluster"
 	}
 	parsed.ApplyDefaults()
-	if err := parsed.Validate(); err != nil {
-		return content, nil, err
+	if errs := parsed.ValidateAll(); len(errs) > 0 {
+		return content, nil, errs
 	}
 	return content, parsed.Warnings(), nil
 }

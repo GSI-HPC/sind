@@ -1486,3 +1486,35 @@ func TestValidate_SecurityFields(t *testing.T) {
 		require.NoError(t, cfg.Validate())
 	})
 }
+
+func TestValidateAll(t *testing.T) {
+	cfg := &Cluster{
+		Name: "Bad Name",
+		Nodes: []Node{
+			{Role: "boss"},
+			{Role: RoleSubmitter, Managed: new(true)},
+			{Role: RoleWorker, CapAdd: []string{"FLY"}},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	errs := cfg.ValidateAll()
+	var texts []string
+	for _, err := range errs {
+		texts = append(texts, err.Error())
+	}
+	require.Len(t, texts, 5, "%q", texts)
+	assert.Contains(t, texts[0], "Bad Name")
+	assert.Contains(t, texts[1], `invalid role "boss"`)
+	assert.Contains(t, texts[2], "managed is only valid")
+	assert.Contains(t, texts[3], "exactly one controller required")
+	assert.Contains(t, texts[4], "FLY")
+	assert.Equal(t, errs[0], cfg.Validate(), "Validate returns the first error")
+}
+
+func TestValidateAll_Valid(t *testing.T) {
+	cfg := &Cluster{Name: "dev", Nodes: []Node{{Role: RoleController}, {Role: RoleWorker}}}
+	cfg.ApplyDefaults()
+	assert.Empty(t, cfg.ValidateAll())
+	assert.NoError(t, cfg.Validate())
+}
