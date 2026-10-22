@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +19,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -236,6 +239,40 @@ func TestLogsStreamStopsWhenClientWriteFails(t *testing.T) {
 	waitFor(t, "start", func() bool { return pipes.Len() == 1 })
 	pipes.Write(0, "line\n")
 	waitDone(t, done)
+}
+
+// A log lasts as long as the client reads it, however short the server's
+// write deadline for an answer is.
+func TestLogsStreamOutlivesTheWriteDeadline(t *testing.T) {
+	ex, pipes := pipeStarter()
+	ts := logsServer(t, ex)
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() {
+		served <- localweb.Serve(ctx, []net.Listener{l}, ts.h, localweb.ServeOptions{WriteTimeout: 100 * time.Millisecond})
+	}()
+	t.Cleanup(func() { cancel(); require.NoError(t, <-served) })
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+l.Addr().String()+"/logs/sind/dev?node=worker-0", nil)
+	require.NoError(t, err)
+	req.Host = "127.0.0.1:7878"
+	req.AddCookie(ts.cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	waitFor(t, "start", func() bool { return pipes.Len() == 1 })
+
+	time.Sleep(300 * time.Millisecond)
+	pipes.Write(0, "late\n")
+	sc := bufio.NewScanner(resp.Body)
+	var got []string
+	for sc.Scan() && !slices.Contains(got, "data: late") {
+		got = append(got, sc.Text())
+	}
+	assert.Contains(t, got, "data: late", "the line arrived after the deadline")
 }
 
 func TestLogsStreamKeepAlive(t *testing.T) {

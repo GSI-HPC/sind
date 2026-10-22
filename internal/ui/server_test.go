@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +41,28 @@ func TestHostHeader(t *testing.T) {
 	r := request("GET", "/?token=the-token")
 	r.Host = "rebind.example:7878"
 	assert.Equal(t, http.StatusMisdirectedRequest, ts.do(r).Code)
+}
+
+func TestRefusalsAreLoggedAndSayWhereTheAddressIs(t *testing.T) {
+	ts := newTestServer(t)
+	var logs bytes.Buffer
+	ts.srv.log = slog.New(slog.NewTextHandler(&logs, nil))
+
+	r := request("GET", "/")
+	r.Header.Set("Sec-Fetch-Site", "cross-site")
+	w := ts.do(r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "The request came from another site.\n"+openHint+"\n", w.Body.String())
+	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	assert.Contains(t, logs.String(), "Sec-Fetch-Site is cross-site")
+
+	// A wrong Host is not told where the address is, nor which Host would do.
+	r = request("GET", "/")
+	r.Host = "rebind.example:7878"
+	w = ts.do(r)
+	assert.Equal(t, http.StatusMisdirectedRequest, w.Code)
+	assert.Equal(t, "This server answers to its loopback address only.\n", w.Body.String())
+	assert.Contains(t, logs.String(), "rebind.example:7878")
 }
 
 func TestSecurityHeaders(t *testing.T) {
@@ -291,7 +315,7 @@ func TestNewServerDefaults(t *testing.T) {
 	st := store.New()
 	env := &Env{Store: st, Log: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), Addr: "127.0.0.1:1"}
 	// The default registry, the embedded files and the system clock.
-	s, err := newServer(context.Background(), serverConfig{Env: env, Token: "t", Port: 1})
+	s, err := newServer(context.Background(), serverConfig{Env: env, Token: "t", Bound: &localweb.Bound{Addrs: []netip.AddrPort{netip.MustParseAddrPort("127.0.0.1:1")}}})
 	require.NoError(t, err)
 	r := request("GET", "/?token=t")
 	r.Host = "127.0.0.1:1"

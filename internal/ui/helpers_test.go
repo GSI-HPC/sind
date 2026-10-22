@@ -11,12 +11,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
@@ -24,6 +26,12 @@ import (
 )
 
 const testPort = 7878
+
+// testBound is what the listener of the test servers bound: 127.0.0.1 and
+// testPort.
+func testBound() *localweb.Bound {
+	return &localweb.Bound{Addrs: []netip.AddrPort{netip.MustParseAddrPort(fmt.Sprintf("127.0.0.1:%d", testPort))}}
+}
 
 // syncBuffer is a bytes.Buffer that goroutines may share.
 type syncBuffer struct {
@@ -147,7 +155,7 @@ func testConfig(t *testing.T) (serverConfig, *store.Store) {
 	st := store.New()
 	env := &Env{Store: st, Exec: &mock.Executor{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Addr: fmt.Sprintf("127.0.0.1:%d", testPort)}
 	return serverConfig{
-		Env: env, Token: "the-token", Port: testPort, Registry: testRegistry(),
+		Env: env, Token: "the-token", Bound: testBound(), Registry: testRegistry(),
 		FS: overlay(t, fstest.MapFS{"templates/test.tmpl": {Data: []byte(testTemplates)}}),
 	}, st
 }

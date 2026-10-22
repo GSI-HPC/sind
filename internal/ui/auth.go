@@ -88,9 +88,7 @@ type csrfKey struct{}
 // middleware runs next for requests of a session. A GET with the token in
 // its query starts a session and redirects to the same URL without the
 // token, so that it leaves the address bar and the history. Requests that
-// may change something must come from our own origin and carry the
-// session's CSRF token; no request of a session may come from another site
-// (fetchAllowed), in the header or in the form field; their body is
+// may change something must carry the session's CSRF token, in the header or in the form field; their body is
 // capped at 64 KiB and its form is parsed by the time next runs.
 func (a *auth) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,10 +108,6 @@ func (a *auth) middleware(next http.Handler) http.Handler {
 			forbidden(w, "")
 			return
 		}
-		if !fetchAllowed(r) {
-			forbidden(w, "The request came from another site.")
-			return
-		}
 		if !safeMethod(r.Method) && !checkWrite(w, r, csrf) {
 			return
 		}
@@ -121,39 +115,10 @@ func (a *auth) middleware(next http.Handler) http.Handler {
 	})
 }
 
-// fetchAllowed reports whether the browser's fetch metadata lets in r: its
-// request starts at one of our own pages, or is a navigation of the whole
-// page, as when the user follows a link. The session cookie reaches every
-// port of 127.0.0.1, and a page that another program serves there is the
-// same site, so that SameSite does not keep its requests out. A request
-// without the metadata does not come from a browser that supports it, or
-// is no attack through one, so it passes; a request that changes something
-// has the Origin check besides.
-func fetchAllowed(r *http.Request) bool {
-	site := r.Header.Get("Sec-Fetch-Site")
-	if site == "" || site == "same-origin" || site == "none" {
-		return true
-	}
-	return safeMethod(r.Method) && r.Header.Get("Sec-Fetch-Mode") == "navigate" && r.Header.Get("Sec-Fetch-Dest") == "document"
-}
-
-// sameOriginFetch reports whether r starts at one of our own pages, as the
-// requests of the live parts of a page do. It is stricter than fetchAllowed
-// and guards the requests that start work, so that no navigation from
-// another page starts it.
-func sameOriginFetch(r *http.Request) bool {
-	site := r.Header.Get("Sec-Fetch-Site")
-	return site == "" || site == "same-origin"
-}
-
 // checkWrite lets through a request that may change something only when it
-// comes from our own origin and has the session's CSRF token. It answers
+// has the session's CSRF token. It answers
 // the request itself when it refuses it.
 func checkWrite(w http.ResponseWriter, r *http.Request, csrf string) bool {
-	if r.Header.Get("Origin") != "http://"+r.Host {
-		forbidden(w, "The request came from another site.")
-		return false
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
 		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
@@ -187,5 +152,5 @@ func forbidden(w http.ResponseWriter, why string) {
 	if why != "" {
 		why += "\n"
 	}
-	_, _ = w.Write([]byte(why + "Open the address that sind ui printed in your terminal, or run sind ui again.\n"))
+	_, _ = w.Write([]byte(why + openHint + "\n"))
 }

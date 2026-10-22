@@ -152,6 +152,10 @@ type Route struct {
 	Pattern string
 	// Handle answers the request. Use s.View, s.Write and s.Fail.
 	Handle func(s *Server, w http.ResponseWriter, r *http.Request)
+	// FetchOnly lets in only the requests that a page of this server sent
+	// itself, as its live parts do, and no navigation from another page. Set
+	// it on a route that starts work.
+	FetchOnly bool
 }
 
 // NavCount is the count behind a rail entry.

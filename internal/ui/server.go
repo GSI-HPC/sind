@@ -9,15 +9,13 @@ import (
 	"html/template"
 	"io/fs"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -25,6 +23,10 @@ import (
 // or style, no other origin, no framing.
 const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
 	"font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+
+// openHint is what a refusal adds for the user. It never says what the token
+// is or where to find it, only that the terminal has it.
+const openHint = "Open the address that sind ui printed in your terminal, or run sind ui again."
 
 const (
 	// coalesceEvery is how long changes gather before a page gets them,
@@ -41,7 +43,7 @@ type Server struct {
 	env    *Env
 	reg    *Registry
 	auth   *auth
-	port   int
+	hosts  func(host string) bool
 	tmpl   *templates
 	assets *assets
 	log    *slog.Logger
@@ -58,7 +60,8 @@ type Server struct {
 type serverConfig struct {
 	Env   *Env
 	Token string
-	Port  int
+	// Bound is what the listener bound; the server answers to its names.
+	Bound *localweb.Bound
 	// Registry is what the server serves; nil is the default registry.
 	Registry *Registry
 	// FS holds templates/ and static/; nil is the embedded web/.
@@ -83,7 +86,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		return nil, fmt.Errorf("static files: %w", err)
 	}
 	s := &Server{
-		env: c.Env, reg: reg, auth: newAuth(c.Token, c.Port), port: c.Port, assets: a,
+		env: c.Env, reg: reg, auth: newAuth(c.Token, int(c.Bound.Addrs[0].Port())), hosts: c.Bound.Answers, assets: a,
 		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
 		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
 	}
@@ -143,12 +146,16 @@ func (s *Server) routes() (err error) {
 		}
 	}()
 	s.mux.Handle("GET /static/", s.assets)
-	s.mux.HandleFunc("GET /events", s.events)
+	s.mux.Handle("GET /events", s.fetchOnly(http.HandlerFunc(s.events)))
 	for _, p := range s.reg.pages {
 		s.mux.HandleFunc(p.Pattern, s.pageHandler(p))
 	}
 	for _, rt := range s.reg.routes {
-		s.mux.HandleFunc(rt.Pattern, func(w http.ResponseWriter, r *http.Request) { rt.Handle(s, w, r) })
+		var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { rt.Handle(s, w, r) })
+		if rt.FetchOnly {
+			h = s.fetchOnly(h)
+		}
+		s.mux.Handle(rt.Pattern, h)
 	}
 	s.mux.HandleFunc("/", s.notFound)
 	return nil
@@ -156,40 +163,25 @@ func (s *Server) routes() (err error) {
 
 // Handler returns the server's handler with every check in front of it.
 func (s *Server) Handler() http.Handler {
-	return s.headers(s.checkHostHeader(s.auth.middleware(s.mux)))
+	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(s.auth.middleware(s.mux))
+	return localweb.Headers(contentSecurityPolicy)(localweb.NoStore(localweb.Hosts(s.hosts, s.refuse)(h)))
 }
 
-// headers sets the security headers of every response.
-func (s *Server) headers(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Content-Security-Policy", contentSecurityPolicy)
-		// same-origin, not no-referrer: under no-referrer a browser sends
-		// a form's POST with the origin "null", which the origin check
-		// refuses. Other sites still get no referrer.
-		h.Set("Referrer-Policy", "same-origin")
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		h.Set("Cross-Origin-Resource-Policy", "same-origin")
-		h.Set("Cache-Control", "no-store")
-		next.ServeHTTP(w, r)
-	})
+// fetchOnly lets in only the requests that a page of this server sent
+// itself, as its live parts do, and no navigation from another page. It
+// guards the requests that start work.
+func (s *Server) fetchOnly(next http.Handler) http.Handler {
+	return localweb.SameOrigin(localweb.Origin{Refuse: s.refuse})(next)
 }
 
-// checkHostHeader refuses requests for any host name but ours, so that a
-// web page whose name resolves to 127.0.0.1 (DNS rebinding) cannot read
-// sind ui as its own origin. Not even localhost is ours: a browser may
-// resolve it to ::1, where another user's process can listen on our port.
-func (s *Server) checkHostHeader(next http.Handler) http.Handler {
-	host := "127.0.0.1:" + strconv.Itoa(s.port)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != host {
-			http.Error(w, "sind ui answers only to "+host, http.StatusMisdirectedRequest)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+// refuse answers a request that a check of localweb refuses. A 403 adds the
+// line that says where the address is, and the log says why.
+func (s *Server) refuse(w http.ResponseWriter, r *http.Request, f localweb.Refusal) {
+	s.log.Warn("refused a request", "path", r.URL.Path, "why", f.Reason)
+	if f.Status == http.StatusForbidden {
+		f.Message += "\n" + openHint
+	}
+	localweb.Refuse(w, r, f)
 }
 
 // csrf context helpers.
@@ -413,17 +405,4 @@ func (s *Server) eventsURL(names []string, v *View) string {
 		q.Set("nav", v.Nav)
 	}
 	return "/events?" + q.Encode()
-}
-
-// listen opens sind ui's listener on 127.0.0.1: on port, or a free port if
-// port is 0. Only the user's own processes get through it; procRoot is the
-// /proc that tells whose they are.
-func listen(port int, procRoot string, log *slog.Logger) (net.Listener, error) {
-	l, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
-	if err != nil {
-		return nil, err
-	}
-	return &peerListener{Listener: l, uid: os.Getuid(), owner: procNetTCPOwner(procRoot), refused: func(err error) {
-		log.Warn("closed a connection", "err", err)
-	}}, nil
 }

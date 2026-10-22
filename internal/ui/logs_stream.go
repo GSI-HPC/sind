@@ -55,7 +55,7 @@ func init() {
 }
 
 // logsRoute is the stream.
-var logsRoute = Route{Pattern: "GET /logs/{realm}/{cluster}", Handle: logsHandle}
+var logsRoute = Route{Pattern: "GET /logs/{realm}/{cluster}", Handle: logsHandle, FetchOnly: true}
 
 // logsSource is the kind of log that a stream follows.
 type logsSource string
@@ -118,10 +118,6 @@ func logsCheck(s *Server, r *http.Request) (src logsSource, realm, clusterName, 
 // logsHandle streams the log of one node until the client leaves, the
 // server stops or the child ends.
 func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
-	if !sameOriginFetch(r) {
-		forbidden(w, "The request came from another page.")
-		return
-	}
 	src, realm, clusterName, node, unit, err := logsCheck(s, r)
 	if err != nil {
 		s.Fail(w, r, err)
@@ -162,6 +158,9 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 		<-readerDone
 	}()
 
+	// The server's write deadline is for answers; a log stream lasts as
+	// long as the client reads it.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-store")
