@@ -118,7 +118,7 @@ func TestLockReadsARealmThatAppears(t *testing.T) {
 	})
 }
 
-func TestLockResyncAndDockerDown(t *testing.T) {
+func TestLockReadsNothingWhileDockerIsDown(t *testing.T) {
 	f := newRealmFixture(t, "sind")
 	f.fake.set(func() { f.fake.locks["sind"] = "one" })
 	l := f.lock()
@@ -129,12 +129,23 @@ func TestLockResyncAndDockerDown(t *testing.T) {
 	// While Docker is down nothing is read, not even by the poll.
 	f.st.SetDocker(store.DockerState{Checked: true, Err: "down"})
 	f.fake.settle()
-	f.fake.set(func() { f.fake.locks["sind"] = "two" })
 	n := f.fake.count("network")
 	never(t, "a read while down", 120*time.Millisecond, func() bool { return f.fake.count("network") != n })
+}
 
-	// It answers again: everything is read at once, before the next poll.
-	l.Every = time.Hour
+func TestLockReadsAllWhenDockerAnswersAgain(t *testing.T) {
+	// The poll is an hour away, so only the recovery reads.
+	f := newRealmFixture(t, "sind")
+	f.fake.set(func() { f.fake.locks["sind"] = "one" })
+	start(t, f.lock().Run)
+	waitFor(t, "lock", func() bool { return f.holder("sind") == "one" })
+
+	f.st.SetDocker(store.DockerState{Checked: true, Err: "down"})
+	f.fake.settle()
+	f.fake.set(func() { f.fake.locks["sind"] = "two" })
+	n := f.fake.count("network")
+	never(t, "a read while down", 50*time.Millisecond, func() bool { return f.fake.count("network") != n })
+
 	f.st.SetDocker(store.DockerState{Checked: true})
 	waitFor(t, "read after recovery", func() bool { return f.holder("sind") == "two" })
 
@@ -165,7 +176,7 @@ func TestLockKeepsTheHolderOnAReadError(t *testing.T) {
 }
 
 func (f *realmFixture) monitoringCollector() *Monitoring {
-	return &Monitoring{Store: f.st, Client: f.fake.client(), Bus: f.bus, Log: quietLog(), Every: time.Hour}
+	return &Monitoring{Store: f.st, Client: f.fake.client(), Bus: f.bus, Log: quietLog(), Interval: NewInterval(time.Hour)}
 }
 
 func TestMonitoringReadsAtStartOnEventsAndWhenGone(t *testing.T) {
@@ -212,16 +223,83 @@ func TestMonitoringIgnoresLockEventsAndKeepsOnErrors(t *testing.T) {
 func TestMonitoringPolls(t *testing.T) {
 	f := newRealmFixture(t, "sind")
 	m := f.monitoringCollector()
-	m.Every = 30 * time.Millisecond
+	m.Interval = NewInterval(30 * time.Millisecond)
 	start(t, m.Run)
 	f.fake.set(func() { f.fake.monitoring["sind"] = true })
 	waitFor(t, "found by the poll", func() bool { return f.st.Snapshot().MonitoringOf("sind") != nil })
 }
 
+func TestMonitoringPollsOnlyWhileAPageIsOpen(t *testing.T) {
+	f := newRealmFixture(t, "sind")
+	m := f.monitoringCollector()
+	m.Interval = NewInterval(20 * time.Millisecond)
+	m.Viewers = NewViewers()
+	start(t, m.Run)
+	f.fake.settle()
+	before := f.fake.count("ps")
+
+	// No page is open: the polls wait.
+	never(t, "a poll without a page", 120*time.Millisecond, func() bool { return f.fake.count("ps") != before })
+
+	// A page opens: it reads at once, and polls from then on.
+	release := m.Viewers.Watch(nil)
+	f.fake.set(func() { f.fake.monitoring["sind"] = true })
+	waitFor(t, "read for the page", func() bool { return f.st.Snapshot().MonitoringOf("sind") != nil })
+	f.fake.set(func() { delete(f.fake.monitoring, "sind") })
+	waitFor(t, "polled for the page", func() bool { return f.st.Snapshot().MonitoringOf("sind") == nil })
+
+	// The page closes: the polls wait again.
+	release()
+	release() // once only
+	assert.True(t, m.Viewers.None())
+	f.fake.settle()
+	// A count of its own, as the condition of the first never may still run.
+	after := f.fake.count("ps")
+	never(t, "a poll after the page closed", 120*time.Millisecond, func() bool { return f.fake.count("ps") != after })
+}
+
+func TestMonitoringTakesANewIntervalAtOnce(t *testing.T) {
+	f := newRealmFixture(t, "sind")
+	m := f.monitoringCollector() // every hour
+	start(t, m.Run)
+	f.fake.settle()
+	f.fake.set(func() { f.fake.monitoring["sind"] = true })
+
+	m.Interval.Set(20 * time.Millisecond)
+	m.Interval.Set(20 * time.Millisecond) // a notice is pending already
+	assert.Equal(t, 20*time.Millisecond, m.Interval.Get())
+	waitFor(t, "read at the change", func() bool { return f.st.Snapshot().MonitoringOf("sind") != nil })
+	f.fake.set(func() { delete(f.fake.monitoring, "sind") })
+	waitFor(t, "polled at the new interval", func() bool { return f.st.Snapshot().MonitoringOf("sind") == nil })
+}
+
+func TestCheckInterval(t *testing.T) {
+	assert.NoError(t, CheckInterval(MinInterval))
+	assert.NoError(t, CheckInterval(MaxInterval))
+	assert.EqualError(t, CheckInterval(time.Second), "the interval must be between 5s and 1h, got 1s")
+	assert.Error(t, CheckInterval(2*time.Hour))
+}
+
+func TestViewersCountPages(t *testing.T) {
+	v := NewViewers()
+	assert.True(t, v.None())
+	a, b := v.Watch(nil), v.Watch(nil)
+	assert.False(t, v.None())
+	assert.Len(t, v.arrived, 1, "one notice, for the first page")
+	a()
+	assert.False(t, v.None())
+	b()
+	assert.True(t, v.None())
+	<-v.arrived
+	v.Watch(nil)
+	v.Watch(nil)
+	assert.Len(t, v.arrived, 1, "the first page again")
+}
+
 func TestLockAndMonitoringStartWithDefaultIntervals(t *testing.T) {
 	f := newRealmFixture(t, "sind")
 	l, m := f.lock(), f.monitoringCollector()
-	l.Every, m.Every = 0, 0
+	l.Every, m.Interval = 0, nil
 	stopL := start(t, l.Run)
 	stopM := start(t, m.Run)
 	f.fake.settle()

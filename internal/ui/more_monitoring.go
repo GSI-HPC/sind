@@ -3,8 +3,12 @@
 package ui
 
 import (
+	"fmt"
+	"net/http"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -12,7 +16,34 @@ import (
 	"github.com/GSI-HPC/sind/pkg/observability"
 )
 
+// moreIntervalKey is the Env key of the interval at which the monitoring
+// stacks are read, a moreInterval.
+const moreIntervalKey = "collect.monitoring-interval"
+
+// moreInterval is the interval at which the monitoring stacks are read;
+// Set takes effect at once.
+type moreInterval interface {
+	Get() time.Duration
+	Set(d time.Duration)
+}
+
+// moreIntervalOf returns the interval at which the monitoring stacks are
+// read, nil when no service provides it.
+func moreIntervalOf() moreInterval {
+	env := moreEnv.Load()
+	if env == nil {
+		return nil
+	}
+	iv, _ := env.Get(moreIntervalKey).(moreInterval)
+	return iv
+}
+
+// moreIntervalChoices are the intervals that the Monitoring page offers.
+var moreIntervalChoices = []time.Duration{10 * time.Second, 30 * time.Second, time.Minute, 5 * time.Minute}
+
 func init() {
+	RegisterFragment(Fragment{Name: "more-mon-interval", Load: moreIntervalLoad})
+	RegisterRoute(Route{Pattern: "POST /monitoring/interval", Handle: moreIntervalSet})
 	RegisterFragment(Fragment{
 		Name:     "more-monitoring",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker},
@@ -129,4 +160,82 @@ func moreMonitoringLoad(v *View) error {
 	d.Empty = len(d.Realms) == 0 && len(realms) > 0
 	v.Data = d
 	return nil
+}
+
+// moreIntervalData is the interval picker of the Monitoring page.
+type moreIntervalData struct {
+	Choices []moreIntervalChoice
+}
+
+// moreIntervalChoice is an option of the picker.
+type moreIntervalChoice struct {
+	Value    string
+	Selected bool
+}
+
+// moreIntervalOptions returns the intervals to offer: the choices, and the
+// current one if it is none of them.
+func moreIntervalOptions(current time.Duration) []time.Duration {
+	out := slices.Clone(moreIntervalChoices)
+	if !slices.Contains(out, current) {
+		out = append(out, current)
+		slices.Sort(out)
+	}
+	return out
+}
+
+// moreDuration writes d as "30s", "1m" or "1h30m", without the zero units
+// that time.Duration.String adds.
+func moreDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
+// moreIntervalLoad fills the picker; with no interval to change, it draws
+// nothing.
+func moreIntervalLoad(v *View) error {
+	iv := moreIntervalOf()
+	if iv == nil {
+		return nil
+	}
+	current := iv.Get()
+	var d moreIntervalData
+	for _, c := range moreIntervalOptions(current) {
+		d.Choices = append(d.Choices, moreIntervalChoice{Value: moreDuration(c), Selected: c == current})
+	}
+	v.Data = d
+	return nil
+}
+
+// moreIntervalSet is POST /monitoring/interval: it sets the interval to
+// one that the picker offers, and answers with the picker, or a plain form
+// with a 303 to the page.
+func moreIntervalSet(s *Server, w http.ResponseWriter, r *http.Request) {
+	iv := moreIntervalOf()
+	if iv == nil {
+		s.Fail(w, r, ErrNotFound)
+		return
+	}
+	v, err := s.View(r, "interval")
+	if err != nil {
+		s.Fail(w, r, err)
+		return
+	}
+	d, err := time.ParseDuration(v.Params.Get("interval"))
+	if err != nil || !slices.Contains(moreIntervalOptions(iv.Get()), d) {
+		s.Fail(w, r, fmt.Errorf("interval %q is not offered: %w", v.Params.Get("interval"), ErrBadRequest))
+		return
+	}
+	iv.Set(d)
+	if r.Header.Get("HX-Request") == "" {
+		http.Redirect(w, r, "/monitoring", http.StatusSeeOther)
+		return
+	}
+	s.Fragment(w, r, "more-mon-interval")
 }

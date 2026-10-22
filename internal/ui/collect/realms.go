@@ -24,8 +24,17 @@ import (
 type perRealm struct {
 	store *store.Store
 	bus   *Bus
-	// every is the interval of the full read.
-	every time.Duration
+	// every returns the interval of the full read.
+	every func() time.Duration
+	// retime, when it receives, makes the loop take the interval of every
+	// again, and read every realm.
+	retime <-chan struct{}
+	// paused reports whether the full read every interval waits, as no one
+	// looks at what it reads; nil never waits.
+	paused func() bool
+	// resume, when it receives, reads every realm, for what was not read
+	// while paused.
+	resume <-chan struct{}
 	// wants says whether an event of a realm makes this collector read it.
 	wants func(Event) bool
 	// stale returns the realms that the snapshot holds a value of, which
@@ -56,7 +65,7 @@ func (p *perRealm) run(ctx context.Context) {
 	defer sub.Close()
 	changes, unsubscribe := p.store.Subscribe()
 	defer unsubscribe()
-	tick := time.NewTicker(p.every)
+	tick := time.NewTicker(p.every())
 	defer tick.Stop()
 
 	seen := map[string]bool{}
@@ -82,6 +91,15 @@ func (p *perRealm) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+			if p.paused == nil || !p.paused() {
+				readAll()
+			}
+			continue
+		case <-p.retime:
+			tick.Reset(p.every())
+			readAll()
+			continue
+		case <-p.resume:
 			readAll()
 			continue
 		case <-changes:

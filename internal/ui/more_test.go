@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
@@ -163,6 +164,65 @@ func TestMoreMonitoringCount(t *testing.T) {
 	assert.Equal(t, NavCount{Text: "–"}, moreMonitoringCount(store.Snapshot{}))
 	ts, _ := moreTestServer(t, true, false)
 	assert.Equal(t, NavCount{Text: "4"}, moreMonitoringCount(ts.st.Snapshot()))
+}
+
+func TestMoreMonitoringInterval(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "read every", "nothing reads the stacks")
+
+	iv := collect.NewInterval(45 * time.Second)
+	ts.srv.Env().Put(moreIntervalKey, iv)
+	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	for _, want := range []string{
+		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "read every",
+		`<option value="10s">10s</option><option value="30s">30s</option><option value="45s" selected>45s</option><option value="1m">1m</option><option value="5m">5m</option></select>`,
+	} {
+		assert.Contains(t, body, want)
+	}
+
+	post := func(value string, hx bool) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "http://127.0.0.1:7878/monitoring/interval", strings.NewReader("interval="+value))
+		r.Host = "127.0.0.1:7878"
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Origin", "http://127.0.0.1:7878")
+		r.Header.Set(csrfHeader, ts.csrf)
+		if hx {
+			r.Header.Set("HX-Request", "true")
+		}
+		r.AddCookie(ts.cookie)
+		return ts.do(r)
+	}
+	w := post("5m", true)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 5*time.Minute, iv.Get())
+	assert.Contains(t, w.Body.String(), `<option value="5m" selected>`)
+	assert.NotContains(t, w.Body.String(), "45s", "a choice that is no longer current goes")
+	assert.NotContains(t, w.Body.String(), "<html")
+
+	w = post("10s", false)
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/monitoring", w.Header().Get("Location"))
+	assert.Equal(t, 10*time.Second, iv.Get())
+
+	for _, bad := range []string{"45s", "1s", "x", ""} {
+		assert.Equal(t, http.StatusBadRequest, post(bad, true).Code, bad)
+	}
+	assert.Equal(t, 10*time.Second, iv.Get())
+	assert.Equal(t, http.StatusBadRequest, post(strings.Repeat("1", 5000), true).Code, "a value that is too long")
+
+	ts.srv.Env().Put(moreIntervalKey, nil)
+	assert.Equal(t, http.StatusNotFound, post("30s", true).Code)
+	moreEnv.Store(nil)
+	assert.Nil(t, moreIntervalOf())
+}
+
+func TestMoreDuration(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		10 * time.Second: "10s", time.Minute: "1m", 90 * time.Second: "1m30s", time.Hour: "1h",
+		90 * time.Minute: "1h30m", time.Hour + time.Second: "1h0m1s",
+	} {
+		assert.Equal(t, want, moreDuration(d), d)
+	}
 }
 
 func TestMoreTopologyPage(t *testing.T) {

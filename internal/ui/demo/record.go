@@ -35,11 +35,23 @@ type recording struct {
 	id    string
 	trace progress.TraceContext
 	title string
-	start time.Time
+	// target is what the command works on, as sind names it in the
+	// command span's node; "" for nothing.
+	target string
+	start  time.Time
 	// cancelAfter is when an interrupt ends the run, counted from its
 	// start; zero for none.
 	cancelAfter time.Duration
 	work        func(ctx context.Context, p play) error
+}
+
+// targetOf returns the options that give a command span its target, as
+// sind does.
+func targetOf(target string) []progress.Option {
+	if target == "" {
+		return nil
+	}
+	return []progress.Option{progress.Node(target)}
 }
 
 // record plays the run on a clock that only the script moves, and returns
@@ -54,7 +66,7 @@ func record(r recording) []byte {
 	}
 	log := progress.NewLog(&out, progress.LogOptions{Program: "sind", Version: version, Run: r.id, AdvanceEvery: -1})
 	bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: clk.Now, Trace: r.trace, Program: "sind"})
-	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, r.title)
+	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, r.title, targetOf(r.target)...)
 	command.End(r.work(ctx, play{clk: clk}))
 	bus.Close()
 	// The log writes to a buffer, which does not fail.

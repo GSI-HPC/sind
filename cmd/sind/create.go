@@ -62,7 +62,7 @@ func newCreateClusterCommand() *cobra.Command {
 		Args:  optionalCluster,
 		// The name is new: the existing ones would conflict.
 		ValidArgsFunction: cobra.NoFileCompletions,
-		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+		RunE: withProgressOn(createClusterTarget(&configFile), func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {
 				name = args[0]
@@ -78,6 +78,36 @@ func newCreateClusterCommand() *cobra.Command {
 	addWaitFlag(cmd)
 
 	return cmd
+}
+
+// createClusterTarget returns the target of create cluster, whose
+// configuration is read from *configFile: the cluster that NAME names, else
+// the one the configuration file names, else the default one when the
+// configuration is the default one. A configuration from stdin is read only
+// once, as the command runs, which names the cluster then.
+func createClusterTarget(configFile *string) commandTarget {
+	return func(cmd *cobra.Command, args []string) string {
+		switch {
+		case len(args) > 0:
+			return args[0]
+		case *configFile == configStdin:
+			return ""
+		case *configFile == "":
+			if stdinHasData(cmd.InOrStdin()) {
+				return ""
+			}
+			return config.DefaultClusterName
+		}
+		data, err := os.ReadFile(*configFile)
+		if err != nil {
+			return "" // the command fails on it
+		}
+		cfg, err := config.Parse(data)
+		if err != nil {
+			return ""
+		}
+		return cfg.Name
+	}
 }
 
 func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
@@ -124,6 +154,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	}
 
 	cfg.ApplyDefaults()
+	nameTarget(cmd.Context(), cfg.Name)
 	if err := cfg.Validate(); err != nil {
 		if source != "" {
 			return fmt.Errorf("config %s: %w", source, err)

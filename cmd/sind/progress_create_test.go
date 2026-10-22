@@ -144,7 +144,7 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
 	assert.Empty(t, stdout.String())
 	assert.Empty(t, stderr.String())
 	w.Finish()
-	assert.Equal(t, `command create cluster: ok
+	assert.Equal(t, `command create cluster node=default: ok
   step mesh registration: ok
   step mesh total=4 [hidden,fold,show-lines]: ok
     target dns,relay [hidden,show-lines]: skipped: running

@@ -206,9 +206,8 @@ func runTaskOf(snap store.Snapshot, trace string) (store.Task, bool) {
 	return store.Task{}, false
 }
 
-// runTitle is the title of a run that task t started: the log names the
-// command only, such as "create cluster", so the cluster the task works on
-// is added.
+// runTitle is the title of a run that task t started, with the cluster the
+// task works on, which the log of an older sind does not name.
 func runTitle(run store.Run, t *store.Task) string {
 	if run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) {
 		return run.Title

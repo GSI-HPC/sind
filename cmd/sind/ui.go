@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/GSI-HPC/sind/internal/ui"
+	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/spf13/cobra"
 )
 
@@ -26,10 +27,17 @@ and it refuses other users' connections. A second sind ui opens the
 running one instead. To use it from another machine, forward the port
 with ssh -L and pass --no-open.
 
+The Monitoring page reads the monitoring stacks every
+--monitoring-interval, and only while a page of sind ui is open. Its
+picker changes the interval of the running UI.
+
 --demo serves made-up clusters and plays the commands of the dialogs instead
 of running them: it needs no Docker, starts no process and writes nothing.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := collect.CheckInterval(o.MonitoringInterval); err != nil {
+				return invalidValue("monitoring-interval", o.MonitoringInterval.String(), "a duration from 5s to 1h")
+			}
 			o.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")
 			o.Stderr = cmd.ErrOrStderr()
 			return runUI(cmd.Context(), o)
@@ -39,6 +47,7 @@ of running them: it needs no Docker, starts no process and writes nothing.`,
 	f := cmd.Flags()
 	f.IntVar(&o.Port, "port", 0, "port on 127.0.0.1 to listen on (default: a free one)")
 	f.BoolVar(&o.NoOpen, "no-open", false, "print the URL without opening a browser")
+	f.DurationVar(&o.MonitoringInterval, "monitoring-interval", collect.MonitoringEvery, "how often to read the monitoring stacks while a page is open (5s to 1h)")
 	f.BoolVar(&o.Demo, "demo", false, "serve made-up clusters and play commands instead of running them; no Docker is used")
 	f.BoolVar(&o.Still, "still", false, "with --demo: freeze the clock and play nothing, for screenshots")
 	_ = f.MarkHidden("still")

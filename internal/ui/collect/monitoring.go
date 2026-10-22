@@ -15,29 +15,34 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-// monitoringEvery is how often the monitoring stacks are read when no
-// event says so.
-const monitoringEvery = 30 * time.Second
+// MonitoringEvery is how often the monitoring stacks are read when no
+// event says so, unless the user sets another interval.
+const MonitoringEvery = 30 * time.Second
 
 // Monitoring reads the monitoring stack of each realm (cluster.GetMonitoring)
-// on an event of the realm and every 30 s.
+// on an event of the realm and every Interval, while a page is open.
 type Monitoring struct {
 	Store  *store.Store
 	Client *docker.Client
 	Bus    *Bus
 	Log    *slog.Logger
-	// Every replaces the default interval (30 s) of the full read.
-	Every time.Duration
+	// Interval is the interval of the full read, which the user may change
+	// as it runs; a change reads at once. nil is MonitoringEvery.
+	Interval *Interval
+	// Viewers counts the pages open. Without one the full read every
+	// interval waits, and the first page that opens reads at once. nil
+	// reads always.
+	Viewers *Viewers
 }
 
 // Run reads until ctx ends.
 func (m *Monitoring) Run(ctx context.Context) {
-	every := m.Every
-	if every <= 0 {
-		every = monitoringEvery
+	interval := m.Interval
+	if interval == nil {
+		interval = NewInterval(MonitoringEvery)
 	}
 	p := perRealm{
-		store: m.Store, bus: m.Bus, every: every,
+		store: m.Store, bus: m.Bus, every: interval.Get, retime: interval.changed,
 		wants: func(ev Event) bool { return ev.Kind != KindLock },
 		stale: func(sn store.Snapshot) []string { return slices.Collect(maps.Keys(sn.Monitorings)) },
 		read: func(ctx context.Context, realm string) {
@@ -53,6 +58,9 @@ func (m *Monitoring) Run(ctx context.Context) {
 				m.Store.SetMonitoring(realm, mon)
 			}
 		},
+	}
+	if m.Viewers != nil {
+		p.paused, p.resume = m.Viewers.None, m.Viewers.arrived
 	}
 	p.run(ctx)
 }

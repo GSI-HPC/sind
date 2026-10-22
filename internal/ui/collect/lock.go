@@ -36,7 +36,7 @@ func (l *Lock) Run(ctx context.Context) {
 		every = lockEvery
 	}
 	p := perRealm{
-		store: l.Store, bus: l.Bus, every: every,
+		store: l.Store, bus: l.Bus, every: func() time.Duration { return every },
 		wants: func(ev Event) bool { return ev.Kind == KindLock || ev.Kind == KindRefresh },
 		stale: func(sn store.Snapshot) []string { return slices.Collect(maps.Keys(sn.Locks)) },
 		read: func(ctx context.Context, realm string) {
