@@ -293,22 +293,12 @@ func progressOptions(interrupt context.Context, cmd *cobra.Command) cliprogress.
 }
 
 // progressTheme returns the Theme the displays and the summary draw on
-// stderr: Classic on a terminal that is not a dumb one, in the 256 colours
-// it is designed in, in the terminal's own 16 where it shows no more, and
-// in its marks alone where it shows none or NO_COLOR is set. Elsewhere,
-// where plain lines go to a log, it is the zero Theme, plain text.
+// stderr: Classic in the colours the terminal shows, as cliprogress.ThemeFor
+// reads them from NO_COLOR, TERM and COLORTERM, and the zero Theme, plain
+// text, where stderr is not a terminal or TERM is dumb, as plain lines go
+// to a log there.
 func progressTheme(stderr io.Writer) display.Theme {
-	if !onTerminal(stderr) || os.Getenv("TERM") == "dumb" {
-		return display.Theme{}
-	}
-	switch colourProfile(stderr) {
-	case termenv.TrueColor, termenv.ANSI256:
-		return display.Classic.In(display.Colours256)
-	case termenv.ANSI:
-		return display.Classic.In(display.Colours16)
-	default:
-		return display.Classic.In(display.NoColours)
-	}
+	return cliprogress.ThemeFor(display.Classic, onTerminal(stderr), os.Getenv)
 }
 
 // throughDisplay returns the context of cmd under the Run p, and what puts

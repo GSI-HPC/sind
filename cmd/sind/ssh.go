@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -212,7 +212,7 @@ func isTerminal(stream any) bool {
 	if !ok {
 		return false
 	}
-	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
+	return cliprogress.IsTerminal(f)
 }
 
 // parseSSHArgs separates SSH options, node target, and remote command.
