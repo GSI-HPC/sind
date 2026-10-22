@@ -90,6 +90,8 @@ func TestPageShell(t *testing.T) {
 	assert.Contains(t, body, `<script src="`+a.url("app.js")+`"></script>`)
 	assert.Contains(t, body, `<script src="`+a.url("htmx.min.js")+`" defer></script>`)
 	assert.Contains(t, body, `<script src="`+a.url("htmx-ext-sse.js")+`" defer></script>`)
+	assert.Contains(t, body, `<script src="`+a.url("idiomorph-ext.min.js")+`" defer></script>`)
+	assert.Contains(t, body, `hx-ext="sse,morph"`)
 	assert.Contains(t, body, `<script src="`+a.url("js/demo.js")+`" defer></script>`)
 	assert.Contains(t, body, "127.0.0.1:7878</span>", "the address in the top bar")
 

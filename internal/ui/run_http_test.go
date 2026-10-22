@@ -42,7 +42,7 @@ func TestRunPageRenders(t *testing.T) {
 		`name="csrf" value="` + ts.csrf + `"`,
 		"nodes 0/3 · controller ready munge",
 		`data-doc-title="▸ nodes 0/3 · sind ui"`,
-		`<details class="grow-details" data-open-id="0000000000000007">`,
+		`<details class="grow-details" id="step-0000000000000007">`,
 		`class="ntile role-controller running"`,
 		`stroke-dasharray="3.5 69.1"`,
 		"101 MB / 101 MB",

@@ -2,8 +2,8 @@
 
 {{/* page-clusters and page-nodes are the list pages. The whole content is one
 fragment, so that the head follows the realm that the page shows. */}}
-{{define "page-clusters"}}<div sse-swap="pg-clusters-table">{{fragment "pg-clusters-table" .}}</div>{{end}}
-{{define "page-nodes"}}<div sse-swap="pg-nodes-table">{{fragment "pg-nodes-table" .}}</div>{{end}}
+{{define "page-clusters"}}<div hx-swap="morph:innerHTML" sse-swap="pg-clusters-table">{{fragment "pg-clusters-table" .}}</div>{{end}}
+{{define "page-nodes"}}<div hx-swap="morph:innerHTML" sse-swap="pg-nodes-table">{{fragment "pg-nodes-table" .}}</div>{{end}}
 
 {{define "pg-clusters-table"}}{{with .Data}}{{$d := .}}
 <div class="head"><div class="t"><h1>Clusters</h1><div class="sub">Every cluster of {{if .Realm}}realm <b class="mono">{{.Realm}}</b>{{else}}every realm{{end}}. sind finds them by their Docker labels.</div></div>

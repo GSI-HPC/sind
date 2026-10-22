@@ -5,7 +5,7 @@
 <div class="head"><div class="t"><h1>Monitoring</h1>
   <div class="sub"><span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals.</span></div></div>
   <div class="actions">{{fragment "more-mon-interval" .}}</div></div>
-<div class="stack" id="more-monitoring" sse-swap="more-monitoring">{{fragment "more-monitoring" .}}</div>
+<div class="stack" id="more-monitoring" hx-swap="morph:innerHTML" sse-swap="more-monitoring">{{fragment "more-monitoring" .}}</div>
 {{end}}
 
 {{/* more-mon-interval picks how often sind ui reads the stacks while a page

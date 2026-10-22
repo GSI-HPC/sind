@@ -4,7 +4,7 @@
 {{define "page-run-activity"}}
 <div class="head"><div class="t"><h1>Activity</h1>
   <div class="sub"><span>What sind did, from here or from a terminal that writes the same event log. Open a run for its steps.</span></div></div></div>
-<div sse-swap="run-list">{{fragment "run-list" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-list">{{fragment "run-list" .}}</div>
 {{end}}
 
 {{define "run-list"}}{{with .Data}}<div class="tabs" role="navigation" aria-label="Filter by status">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.Href}}">{{.Label}}<span class="n">{{.N}}</span></a>{{end}}</div>

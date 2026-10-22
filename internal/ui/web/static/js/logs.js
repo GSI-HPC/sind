@@ -158,6 +158,13 @@
     }
   }
 
+  // A live update of the page morphs the tab in again: the panel that this
+  // script runs stays as it is, with its stream and its lines.
+  if (window.Idiomorph) {
+    Idiomorph.defaults.callbacks.beforeNodeMorphed = old =>
+      !(old instanceof Element && old.hasAttribute('data-logs-ready'));
+  }
+
   document.addEventListener('DOMContentLoaded', () => scan(document));
   // htmx swaps in a tab body after the page has loaded.
   document.addEventListener('htmx:afterSwap', ev => scan(ev.target));

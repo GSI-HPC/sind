@@ -3,9 +3,9 @@
 // Script of the progress display. The server draws every page and fragment;
 // this file does three small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
-// milliseconds since 1970), it keeps the rows of the timeline that the user
-// opened open when a fragment is swapped in, and it puts the progress of the
-// run in the title of the tab. It evaluates no text and needs no inline script.
+// milliseconds since 1970), it keeps the details that the user opened open
+// when a fragment is morphed in, and it puts the progress of the run in the
+// title of the tab. It evaluates no text and needs no inline script.
 (() => {
   'use strict';
 
@@ -35,21 +35,12 @@
     });
   }
 
-  // The rows of the timeline that are open, by span id. A fragment that
-  // /events swaps in brings them back closed.
-  const open = new Set();
-
-  document.addEventListener('toggle', ev => {
-    const el = ev.target;
-    if (!(el instanceof HTMLDetailsElement) || !el.dataset.openId) return;
-    if (el.open) open.add(el.dataset.openId);
-    else open.delete(el.dataset.openId);
-  }, true);
-
-  function restore() {
-    document.querySelectorAll('details[data-open-id]').forEach(el => {
-      if (open.has(el.dataset.openId) && !el.open) el.open = true;
-    });
+  // A fragment that /events morphs in brings its details closed, as the
+  // server draws them; the user opens and closes them, so the morph leaves
+  // their open attribute alone.
+  if (window.Idiomorph) {
+    Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) =>
+      !(name === 'open' && el instanceof HTMLDetailsElement);
   }
 
   function title() {
@@ -58,16 +49,19 @@
   }
 
   function update() {
-    restore();
     title();
     tick();
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     const main = document.getElementById('main');
-    if (main) new MutationObserver(update).observe(main, { childList: true, subtree: true });
+    // A morph changes text and attributes in place, so the observers
+    // watch those too: a clock the server drew is counted again before the
+    // browser paints it.
+    const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title'], subtree: true };
+    if (main) new MutationObserver(update).observe(main, what);
     const dock = document.getElementById('tasks');
-    if (dock) new MutationObserver(tick).observe(dock, { childList: true, subtree: true });
+    if (dock) new MutationObserver(tick).observe(dock, what);
     update();
     setInterval(tick, 250);
   });

@@ -17,7 +17,7 @@ logs.js, which opens the stream GET /logs/{realm}/{cluster}. */}}
 {{range $nodes}}{{if and (eq .Cluster $cl) (ge (len .Container) (len $prefix))}}{{$short := slice .Container (len $prefix)}}{{if eq $first ""}}{{$first = $short}}{{end}}{{if eq $short $sel}}{{$found = true}}{{end}}{{end}}{{end}}
 {{if not $found}}{{$sel = $first}}{{end}}
 {{if $first}}
-<section class="panel logs" data-logs data-realm="{{$realm}}" data-cluster="{{$cl}}" data-cmd-prefix="{{$cmd}}">
+<section class="panel logs" id="logs-panel" data-logs data-realm="{{$realm}}" data-cluster="{{$cl}}" data-cmd-prefix="{{$cmd}}">
   <div class="ph logs-bar">
     <div class="fld logs-fld"><label for="logs-node">Node</label>
       <select id="logs-node" data-logs-node>

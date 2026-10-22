@@ -3,11 +3,11 @@
 {{/* page-overview is the Overview page: the realms, a card for each cluster,
 what needs the user, and the latest runs. Each part is a fragment. */}}
 {{define "page-overview"}}
-<div sse-swap="pg-overview-head">{{fragment "pg-overview-head" .}}</div>
-<div class="pg-block" sse-swap="pg-overview-cards">{{fragment "pg-overview-cards" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="pg-overview-head">{{fragment "pg-overview-head" .}}</div>
+<div class="pg-block" hx-swap="morph:innerHTML" sse-swap="pg-overview-cards">{{fragment "pg-overview-cards" .}}</div>
 <div class="grid g2 pg-block">
-  <div sse-swap="pg-overview-needs">{{fragment "pg-overview-needs" .}}</div>
-  <div sse-swap="pg-overview-recent">{{fragment "pg-overview-recent" .}}</div>
+  <div hx-swap="morph:innerHTML" sse-swap="pg-overview-needs">{{fragment "pg-overview-needs" .}}</div>
+  <div hx-swap="morph:innerHTML" sse-swap="pg-overview-recent">{{fragment "pg-overview-recent" .}}</div>
 </div>
 {{end}}
 

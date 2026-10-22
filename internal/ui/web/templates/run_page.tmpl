@@ -7,13 +7,13 @@ part is a fragment that /events sends again when the run changes. */}}
 {{define "page-run"}}
 <div class="crumbs"><a href="/activity">Activity</a> / <span class="mono">{{.Params.Get "id"}}</span></div>
 <div class="rp">
-<div sse-swap="run-head">{{fragment "run-head" .}}</div>
-<div sse-swap="run-summary">{{fragment "run-summary" .}}</div>
-<div sse-swap="run-failed">{{fragment "run-failed" .}}</div>
-<div sse-swap="run-timeline">{{fragment "run-timeline" .}}</div>
-<div sse-swap="run-nodes">{{fragment "run-nodes" .}}</div>
-<div sse-swap="run-more">{{fragment "run-more" .}}</div>
-<div sse-swap="run-facts">{{fragment "run-facts" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-head">{{fragment "run-head" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-summary">{{fragment "run-summary" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-failed">{{fragment "run-failed" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-timeline">{{fragment "run-timeline" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-nodes">{{fragment "run-nodes" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-more">{{fragment "run-more" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-facts">{{fragment "run-facts" .}}</div>
 </div>
 {{end}}
 
@@ -46,7 +46,7 @@ part is a fragment that /events sends again when the run changes. */}}
 
 {{define "run-rowcells"}}<span class="lbl" title="{{.Name}}"><span class="mark {{.Class}}">{{.Mark}}</span>{{.Name}}{{if .Total}} <span class="faint">{{.Total}}</span>{{end}}</span><span class="trk">{{if .Bar}}<span class="bar {{.Class}} l{{.Left}} w{{.Width}}"></span>{{end}}</span><span class="res">{{.Result}}</span>{{end}}
 
-{{define "run-row"}}{{if .Children}}<details class="grow-details" data-open-id="{{.ID}}"><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
+{{define "run-row"}}{{if .Children}}<details class="grow-details" id="step-{{.ID}}"><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
 
 {{define "run-nodes"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">Each node goes from left to right. The ring is the part of the wait limit it used.</span></div><div class="pb nodegrid">
 {{range .Tiles}}<div class="ntile {{.RoleClass}} {{.Class}}"><div class="nt"><span class="mark {{.Class}}">{{.Mark}}</span><b>{{.Name}}</b>{{if .Role}}<small>{{.Role}}</small>{{end}}</div>
@@ -64,6 +64,6 @@ part is a fragment that /events sends again when the run changes. */}}
 {{end}}</dl></div></section>{{end}}
 </div>{{end}}{{end}}
 
-{{define "run-facts"}}{{with .Data}}<section class="panel"><details class="raw" data-open-id="facts"><summary>What the event log says about this run</summary><div class="pb"><dl class="kv">
+{{define "run-facts"}}{{with .Data}}<section class="panel"><details class="raw" id="run-facts-raw"><summary>What the event log says about this run</summary><div class="pb"><dl class="kv">
 {{range .Facts}}<dt>{{.Key}}</dt><dd{{if .Mono}} class="mono"{{end}}>{{.Val}}</dd>
 {{end}}</dl></div></details></section>{{end}}{{end}}

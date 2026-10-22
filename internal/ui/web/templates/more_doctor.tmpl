@@ -4,7 +4,7 @@
 {{define "page-more-doctor"}}
 <div class="head"><div class="t"><h1>Doctor</h1>
   <div class="sub"><span>sind doctor on this host: what sind needs from Docker and the kernel, and how to fix what fails.</span></div></div></div>
-<div class="stack" id="more-doctor" sse-swap="more-doctor">{{fragment "more-doctor" .}}</div>
+<div class="stack" id="more-doctor" hx-swap="morph:innerHTML" sse-swap="more-doctor">{{fragment "more-doctor" .}}</div>
 {{end}}
 
 {{/* more-doctor is the live body of the page; .Data is moreDoctorData. */}}

@@ -24,7 +24,8 @@ type runTick struct {
 
 // runRow is a row of the timeline: a span and its bar.
 type runRow struct {
-	// ID names the row for run.js, which keeps the open rows open.
+	// ID names the row, so that a live update morphs it into the same
+	// element and a row that the user opened stays open.
 	ID    string
 	Label string
 	Name  string
