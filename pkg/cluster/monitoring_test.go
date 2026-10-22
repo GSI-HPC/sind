@@ -449,7 +449,7 @@ func TestEnsureMonitoring_Creates(t *testing.T) {
 	}
 	assert.Equal(t, mesh.ServiceIP(f.dnsIP, 1), f.containers["sind-grafana"].ip)
 	assert.True(t, f.called("cp - sind-alloy:"))
-	assert.True(t, f.called("exec sind-grafana curl -fsS --max-time 5 -X POST -o /dev/null http://sind-alloy:12345/-/reload"))
+	assert.True(t, f.called("exec sind-grafana curl -fsS --max-time 30 -X POST -o /dev/null http://sind-alloy:12345/-/reload"))
 }
 
 func TestEnsureMonitoring_Existing(t *testing.T) {

@@ -234,10 +234,17 @@ func (m *Manager) URL(s Service, p string) string {
 	return "http://" + string(ContainerName(m.Realm, s)) + ":" + s.Port() + p
 }
 
+// Timeouts of curl in seconds. A reload parses the configuration and can
+// take long on a busy host.
+const (
+	probeTimeout  = "5"
+	reloadTimeout = "30"
+)
+
 // curl runs curl in the Grafana container, the one image of the four with
 // curl, which reaches the others by container name.
-func (m *Manager) curl(ctx context.Context, args ...string) (string, error) {
-	cmd := append([]string{"curl", "-fsS", "--max-time", "5"}, args...)
+func (m *Manager) curl(ctx context.Context, maxTime string, args ...string) (string, error) {
+	cmd := append([]string{"curl", "-fsS", "--max-time", maxTime}, args...)
 	return m.Docker.Exec(ctx, ContainerName(m.Realm, ServiceGrafana), cmd...)
 }
 
@@ -248,7 +255,7 @@ func (m *Manager) ServiceReady(ctx context.Context, s Service) error {
 	if err := probe.ContainerRunning(ctx, m.Docker, ContainerName(m.Realm, s)); err != nil {
 		return err
 	}
-	if _, err := m.curl(ctx, "-o", "/dev/null", m.URL(s, specs[s].readyPath)); err != nil {
+	if _, err := m.curl(ctx, probeTimeout, "-o", "/dev/null", m.URL(s, specs[s].readyPath)); err != nil {
 		return fmt.Errorf("%s not ready: %w", s, err)
 	}
 	return nil
@@ -284,7 +291,7 @@ func (m *Manager) Sync(ctx context.Context, alloyConfig string) error {
 	if err := m.Docker.CopyFilesToContainer(ctx, ContainerName(m.Realm, ServiceAlloy), dir, files); err != nil {
 		return fmt.Errorf("writing Alloy configuration: %w", err)
 	}
-	if _, err := m.curl(ctx, "-X", "POST", "-o", "/dev/null", m.URL(ServiceAlloy, "/-/reload")); err != nil {
+	if _, err := m.curl(ctx, reloadTimeout, "-X", "POST", "-o", "/dev/null", m.URL(ServiceAlloy, "/-/reload")); err != nil {
 		return fmt.Errorf("reloading Alloy configuration: %w", err)
 	}
 	return nil

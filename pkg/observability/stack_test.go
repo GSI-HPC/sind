@@ -214,7 +214,7 @@ func TestSync(t *testing.T) {
 	require.NoError(t, m.Sync(t.Context(), "second\n"))
 	assert.Equal(t, "second\n", f.containers["sind-alloy"].files[AlloyConfigPath])
 	last := f.execs[len(f.execs)-1]
-	assert.Equal(t, []string{"sind-grafana", "curl", "-fsS", "--max-time", "5", "-X", "POST", "-o", "/dev/null", "http://sind-alloy:12345/-/reload"}, last)
+	assert.Equal(t, []string{"sind-grafana", "curl", "-fsS", "--max-time", "30", "-X", "POST", "-o", "/dev/null", "http://sind-alloy:12345/-/reload"}, last)
 
 	f.down["http://sind-alloy:12345/-/reload"] = true
 	err = m.Sync(t.Context(), "third\n")
