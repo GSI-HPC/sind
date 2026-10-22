@@ -18,6 +18,7 @@ package demo
 
 import (
 	"context"
+	"io/fs"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/run"
@@ -80,6 +81,13 @@ func (d *Demo) Starter() run.Starter { return d.sim }
 // SaveFile keeps the config a dialog saves, in memory.
 func (d *Demo) SaveFile(path string, data []byte) error { return d.sim.SaveFile(path, data) }
 
+// MkdirAll makes no directory: the clusters of the demo keep no data.
+func (d *Demo) MkdirAll(string) error { return nil }
+
+// Stat finds no file, so that a dialog offers to create a data directory
+// as it does for a new one.
+func Stat(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist }
+
 // Exec returns the executor that answers the log streams.
 func (d *Demo) Exec() cmdexec.Executor {
 	e := &Exec{Now: d.Now}
@@ -120,7 +128,7 @@ func (d *Demo) startMidRun(now time.Time) {
 	d.sim.Feed(midRun(now))
 	d.st.AddTask(store.Task{
 		ID: midRunTask, Action: "create-cluster", Realm: "ci", Cluster: "nightly",
-		Display: "sind --realm ci create cluster --config " + ConfigDir + "/nightly.yaml --data volume",
+		Display: "sind --realm ci create cluster --config " + ConfigDir + "/nightly.yaml",
 		Trace:   traceHex(traceID(midRunIndex)), Start: now.Add(-midRunAge), Status: store.TaskRunning,
 	})
 	d.st.SetLock("ci", &state.LockHolder{Command: "sind --realm ci create cluster", Host: "demo", PID: 4242, Since: now.Add(-midRunAge)})

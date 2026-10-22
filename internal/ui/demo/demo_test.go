@@ -4,6 +4,7 @@ package demo
 
 import (
 	"context"
+	"io/fs"
 	"testing"
 	"time"
 
@@ -94,6 +95,13 @@ func TestDemo_SaveFile(t *testing.T) {
 	d := New(store.New(), false)
 	require.NoError(t, d.SaveFile("/x.yaml", []byte("data")))
 	assert.Equal(t, []byte("data"), d.sim.files["/x.yaml"])
+}
+
+func TestDemo_DataDirectories(t *testing.T) {
+	d := New(store.New(), false)
+	_, err := Stat("/home/demo/sind/hpc")
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	assert.NoError(t, d.MkdirAll("/home/demo/sind/hpc"))
 }
 
 func TestDemo_Refresh(t *testing.T) {

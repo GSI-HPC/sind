@@ -3,6 +3,7 @@
 package action
 
 import (
+	"io/fs"
 	"net/url"
 	"strings"
 	"testing"
@@ -45,8 +46,28 @@ func testStore() *testStoreT {
 type testStoreT struct{ *store.Store }
 
 func (s *testStoreT) ctx() Context {
-	return Context{Snap: s.Snapshot(), Home: "/home/ada", ConfigDir: "/state/sind/ui/configs"}
+	return Context{Snap: s.Snapshot(), Home: "/home/ada", ConfigDir: "/state/sind/ui/configs", Stat: testStat}
 }
+
+// testStat finds a directory at every path, but those with missing, file
+// or denied in them.
+func testStat(name string) (fs.FileInfo, error) {
+	switch {
+	case strings.Contains(name, "missing"):
+		return nil, fs.ErrNotExist
+	case strings.Contains(name, "denied"):
+		return nil, fs.ErrPermission
+	}
+	return testFileInfo{dir: !strings.Contains(name, "file")}, nil
+}
+
+// testFileInfo is a file that testStat finds.
+type testFileInfo struct {
+	fs.FileInfo
+	dir bool
+}
+
+func (fi testFileInfo) IsDir() bool { return fi.dir }
 
 func form(kv ...string) Form {
 	f := url.Values{}

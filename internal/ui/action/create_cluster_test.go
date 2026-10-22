@@ -26,6 +26,10 @@ const wantMinimalConfig = `kind: Cluster
 name: hpc
 defaults:
   cpus: 1
+storage:
+  dataStorage:
+    type: hostPath
+    hostPath: /scratch/hpc
 nodes:
   - role: controller
   - role: worker
@@ -36,8 +40,8 @@ func TestBuildCreateCluster_Minimal(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"sind", "create", "cluster", "--config", "/state/sind/ui/configs/hpc.yaml", "--data", "/scratch/hpc"}, cmd.Argv)
-	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc", cmd.Display)
+	assert.Equal(t, []string{"sind", "create", "cluster", "--config", "/state/sind/ui/configs/hpc.yaml"}, cmd.Argv)
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)
 	require.NotNil(t, cmd.Config)
 	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", cmd.Config.Path)
 	assert.Equal(t, wantMinimalConfig, cmd.Config.Content)
@@ -55,7 +59,7 @@ func TestBuildCreateCluster_Everything(t *testing.T) {
 		"monitoring", "on", "pull", "on", "wait", "10m", "dtype", "hostPath", "dir", "~/sind/hpc"))
 	require.NoError(t, err)
 
-	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --data /home/ada/sind/hpc --pull --wait 10m", cmd.Display)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --pull --wait 10m", cmd.Display)
 	assert.Equal(t, `kind: Cluster
 name: hpc
 realm: ci
@@ -63,6 +67,10 @@ defaults:
   image: ghcr.io/gsi-hpc/sind-node:26.05.4
   cpus: 2
   memory: 1g
+storage:
+  dataStorage:
+    type: hostPath
+    hostPath: /home/ada/sind/hpc
 users:
   - name: alice
   - name: bob
@@ -86,23 +94,67 @@ monitoring: true
 }
 
 func TestBuildCreateCluster_Variants(t *testing.T) {
+	const cmdLine = "sind create cluster --config /state/sind/ui/configs/hpc.yaml"
+	const hostPath = "storage:\n  dataStorage:\n    type: hostPath\n    hostPath: /scratch/hpc\n"
 	for _, tc := range []struct {
-		name string
-		f    Form
-		want string
+		name          string
+		f             Form
+		want, storage string
 	}{
-		{"volume", valid("dtype", "volume", "dir", ""), "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data volume"},
-		{"wait default", valid("wait", "5m"), "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc"},
-		{"wait none", valid("wait", "0"), "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc --wait 0"},
-		{"dir cleaned", valid("dir", "/scratch//a/../hpc/"), "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc"},
-		{"hostPath implied", valid("dtype", ""), "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc"},
+		{"volume", valid("dtype", "volume", "dir", ""), cmdLine, "storage:\n  dataStorage:\n    type: volume\n"},
+		{"volume at a path", valid("dtype", "volume", "mount", "/work/"), cmdLine, "storage:\n  dataStorage:\n    type: volume\n    mountPath: /work\n"},
+		{"mount path", valid("mount", "/scratch"), cmdLine, "    hostPath: /scratch/hpc\n    mountPath: /scratch\n"},
+		{"wait default", valid("wait", "5m"), cmdLine, hostPath},
+		{"wait none", valid("wait", "0"), cmdLine + " --wait 0", hostPath},
+		{"dir cleaned", valid("dir", "/scratch//a/../hpc/"), cmdLine, hostPath},
+		{"hostPath implied", valid("dtype", ""), cmdLine, hostPath},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd, err := build(t, "create-cluster", tc.f)
 			require.NoError(t, err)
+			assert.Empty(t, cmd.Problems)
 			assert.Equal(t, tc.want, cmd.Display)
+			assert.Contains(t, cmd.Config.Content, tc.storage)
 		})
 	}
+}
+
+func TestBuildCreateCluster_DataDirectory(t *testing.T) {
+	cmd, err := build(t, "create-cluster", valid("dir", "/scratch/missing", "mkdir", "on"))
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Problems)
+	assert.Equal(t, []string{"/scratch/missing"}, cmd.Dirs)
+	assert.Contains(t, cmd.Notes, "sind ui creates the directory /scratch/missing first. It stays if the create fails.")
+
+	cmd, err = build(t, "create-cluster", valid("dir", "/scratch/missing"))
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Dirs)
+	assert.Equal(t, []Problem{{Field: "dir", Label: "Directory", Text: "/scratch/missing does not exist; tick Create the directory, or make it first"}}, cmd.Problems)
+
+	cmd, err = build(t, "create-cluster", valid("dir", "/scratch/file", "mkdir", "on"))
+	require.NoError(t, err)
+	assert.Equal(t, []Problem{{Field: "dir", Label: "Directory", Text: "/scratch/file is not a directory"}}, cmd.Problems)
+
+	cmd, err = build(t, "create-cluster", valid("dir", "/scratch/denied", "mkdir", "on"))
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Problems)
+	assert.Empty(t, cmd.Dirs)
+	assert.Equal(t, []string{"sind ui cannot check the directory /scratch/denied: permission denied. Docker needs it to exist."}, cmd.Warns)
+
+	ctx := testContext()
+	ctx.Stat = nil
+	a, _ := Lookup("create-cluster")
+	cmd, err = a.Build(valid("dir", "/scratch/missing", "mkdir", "on"), ctx)
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Dirs, "without Stat, nothing is checked or made")
+	assert.Empty(t, cmd.Problems)
+}
+
+func TestCommand_FingerprintCoversTheDirs(t *testing.T) {
+	cmd := NewCommand("sind")
+	with := cmd
+	with.Dirs = []string{"/x"}
+	assert.NotEqual(t, cmd.Fingerprint(), with.Fingerprint())
 }
 
 func TestBuildCreateCluster_HomeDirectoryWarns(t *testing.T) {
@@ -174,6 +226,9 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"dir empty", valid("dir", ""), "dir", "say which directory", false},
 		{"dir relative", valid("dir", "data"), "dir", "write the path in full, starting with / or ~", false},
 		{"dir control", valid("dir", "/a\x01b"), "dir", "the path holds control characters", false},
+		{"mkdir", valid("mkdir", "yes"), "mkdir", "tick the box", true},
+		{"mount relative", valid("mount", "data"), "mount", "write a path in the nodes that starts with /", true},
+		{"mount comma", valid("mount", "/a,b"), "mount", "write a path in the nodes", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd, err := build(t, "create-cluster", tc.f)
@@ -195,11 +250,15 @@ func TestBuildCreateCluster_PlanTakesTheDefaultsOfWrongFields(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "workers", "x", "image", "bad image", "wait", "7m", "users", "ada Bad"))
 	require.NoError(t, err)
 
-	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc", cmd.Display)
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)
 	assert.Equal(t, `kind: Cluster
 name: hpc
 defaults:
   cpus: 1
+storage:
+  dataStorage:
+    type: hostPath
+    hostPath: /scratch/hpc
 users:
   - name: ada
 nodes:

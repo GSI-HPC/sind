@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -65,6 +66,8 @@ type actFixture struct {
 	starter *actFakeStarter
 	state   *actState
 	saved   map[string]string
+	// made are the directories that the actions made.
+	made []string
 }
 
 func actNode(clusterName, short string, role config.Role) cluster.NodeSummary {
@@ -84,6 +87,13 @@ func newActFixture(t *testing.T) *actFixture {
 	f.state = &actState{
 		starter: f.starter, home: "/home/ada", configDir: "/state/sind/ui/configs",
 		writeFile: func(path string, data []byte) error { f.saved[path] = string(data); return nil },
+		stat: func(name string) (fs.FileInfo, error) {
+			if strings.Contains(name, "missing") {
+				return nil, fs.ErrNotExist
+			}
+			return os.Stat("/")
+		},
+		mkdirAll: func(path string) error { f.made = append(f.made, path); return nil },
 	}
 	cfg.Env.Put(actKey{}, f.state)
 	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}})
@@ -293,7 +303,7 @@ func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
-	assert.Contains(t, body, `--config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc`)
+	assert.Contains(t, body, `<code>sind create cluster --config /state/sind/ui/configs/hpc.yaml</code>`)
 	assert.Contains(t, body, `<div class="act-tiles"><span class="act-tile controller">controller</span><span class="act-tile worker">worker-0</span><span class="act-tile worker">worker-1</span></div>`)
 	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/hpc.yaml</span>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
@@ -360,9 +370,44 @@ func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, mapKeys(f.saved))
 	assert.Contains(t, f.saved["/state/sind/ui/configs/hpc.yaml"], "name: hpc\nrealm: ci\n")
 	require.Len(t, f.starter.specs, 1)
-	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc --wait 2m", f.starter.specs[0].Display)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --wait 2m", f.starter.specs[0].Display)
 	assert.Equal(t, "ci", f.starter.specs[0].Realm)
 	assert.Equal(t, "hpc", f.starter.specs[0].Cluster)
+}
+
+func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "workers", "1", "dir", "/scratch/missing", "mkdir", "on")
+	form += "&shown=" + f.shown(t, "create-cluster", form)
+
+	w := f.post("/actions/create-cluster/run", form)
+
+	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
+	assert.Equal(t, []string{"/scratch/missing"}, f.made)
+
+	// A directory that cannot be made stops the run before the config.
+	f.state.mkdirAll = func(string) error { return errors.New("read-only file system") }
+	f.saved, f.starter.specs = map[string]string{}, nil
+	w = f.post("/actions/create-cluster/run", form)
+	assert.Contains(t, w.Body.String(), "creating the directory /scratch/missing: read-only file system")
+	assert.Empty(t, f.saved)
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActPreview_NewClusterSumsUpTheSections(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dir", "~/sind/missing", "mkdir", "on", "mount", "/work")).Body.String()
+	assert.Contains(t, body, `<span class="act-ss" id="act-sum-data" hx-swap-oob="innerHTML">~/sind/missing, created, at /work</span>`)
+	assert.Contains(t, body, `<span class="act-sb" id="act-bad-data" hx-swap-oob="innerHTML"></span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dtype", "volume", "mount", "work,x")).Body.String()
+	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">Docker volume, at work,x</span>`)
+	assert.Contains(t, body, `id="act-bad-data" hx-swap-oob="innerHTML">1 problem</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dir", "rel", "dtype", "nfs")).Body.String()
+	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">rel</span>`)
+	assert.Contains(t, body, `id="act-bad-data" hx-swap-oob="innerHTML">2 problems</span>`)
 }
 
 func mapKeys(m map[string]string) []string {
@@ -648,6 +693,17 @@ func TestActActivityLog(t *testing.T) {
 	path, err = activityLogForChildren()
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(blocker, "sind", "activity.jsonl"), path)
+}
+
+func TestActMkdirAll(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sind", "hpc")
+
+	require.NoError(t, actMkdirAll(path))
+	require.NoError(t, actMkdirAll(path), "a directory that exists is fine")
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
 }
 
 func TestActSaveFile(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"regexp"
 	"slices"
@@ -46,6 +47,9 @@ type Command struct {
 	// Config is a file that the command reads and that sind ui saves
 	// first, if the action has one.
 	Config *File
+	// Dirs are directories that sind ui creates before it runs the
+	// command.
+	Dirs []string
 	// Nodes are the nodes the command will make, for the preview.
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.
@@ -99,6 +103,10 @@ func (c Command) Fingerprint() string {
 		h.Write([]byte{0})
 		h.Write([]byte(c.Config.Content))
 	}
+	for _, d := range c.Dirs {
+		h.Write([]byte{1})
+		h.Write([]byte(d))
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -129,6 +137,8 @@ type Context struct {
 	// ConfigDir is where sind ui saves the configs of the clusters it
 	// creates.
 	ConfigDir string
+	// Stat looks at a file of the host, as os.Stat; nil checks none.
+	Stat func(name string) (fs.FileInfo, error)
 }
 
 // Action is a change that a dialog makes by running one command.

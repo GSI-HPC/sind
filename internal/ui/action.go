@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,6 +38,9 @@ type actState struct {
 	home, configDir string
 	// writeFile saves a file of a command, readable by its owner alone.
 	writeFile func(path string, data []byte) error
+	// stat looks at a directory that a command needs; mkdirAll makes it.
+	stat     func(name string) (fs.FileInfo, error)
+	mkdirAll func(path string) error
 }
 
 // The seams of Setup; tests replace them.
@@ -71,6 +75,10 @@ func actSaveFile(path string, data []byte) error {
 	return atomicfile.Write(afero.NewOsFs(), path, data, 0o600)
 }
 
+// actMkdirAll makes a directory that a command needs, such as the data
+// directory of a new cluster, as mkdir -p does.
+func actMkdirAll(path string) error { return os.MkdirAll(path, 0o755) }
+
 func init() { defaultRegistry.AddService(actService()) }
 
 // actService makes the runner of the actions. The commands run in the
@@ -101,6 +109,7 @@ func actService() Service {
 			})
 			env.Put(actKey{}, &actState{
 				starter: r, home: home, configDir: filepath.Join(stateDir, "ui", "configs"), writeFile: actSaveFile,
+				stat: os.Stat, mkdirAll: actMkdirAll,
 			})
 			return nil
 		},

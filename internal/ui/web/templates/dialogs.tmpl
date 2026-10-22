@@ -54,6 +54,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{end}}
 <button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" hx-swap-oob="true"{{if .Blocked}} disabled{{end}}>{{.Spec.OK}}</button>
 {{range .Spec.Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
+{{if .Spec.Plan}}{{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
 {{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
 {{end}}{{end}}
 
@@ -110,14 +111,21 @@ the nodes, the command and the config also while a field is wrong. */}}
   <div class="fld"><label for="act-users">Users</label><input type="text" id="act-users" name="users" value="{{.Val "users"}}" placeholder="none" autocapitalize="off" spellcheck="false" aria-describedby="act-err-users act-hint-users">
     <span class="err" id="act-err-users"></span><span class="hint" id="act-hint-users">sind creates them on every node, with a home.</span></div>
 </div>
-<div class="row">
-  <div class="fld"><span class="lbl" id="act-dtype-lbl">Data at /data</span>
-    <div class="seg act-seg" role="radiogroup" aria-labelledby="act-dtype-lbl">
+<details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>
+  <div class="act-sbody">
+    <div class="seg act-seg" role="radiogroup" aria-label="Data storage">
       <label><input type="radio" id="act-dtype" name="dtype" value="hostPath"{{if ne (.Val "dtype") "volume"}} checked{{end}}><span>Host directory</span></label><label><input type="radio" id="act-dtype-volume" name="dtype" value="volume"{{if eq (.Val "dtype") "volume"}} checked{{end}}><span>Docker volume</span></label></div>
-    <span class="err" id="act-err-dtype"></span></div>
-  <div class="fld act-wide"><label for="act-dir">Directory</label><input type="text" id="act-dir" name="dir" value="{{.Val "dir"}}" autocapitalize="off" spellcheck="false"{{if .DirFollows}} data-act-follow{{end}}{{if eq (.Val "dtype") "volume"}} readonly{{end}} aria-describedby="act-err-dir act-hint-dir">
-    <span class="err" id="act-err-dir"></span><span class="hint" id="act-hint-dir">It must exist. Jobs write here as root.</span></div>
-</div>
+    <span class="err" id="act-err-dtype"></span>
+    <div class="row">
+      <div class="fld act-wide"><label for="act-dir">Directory</label><input type="text" id="act-dir" name="dir" value="{{.Val "dir"}}" autocapitalize="off" spellcheck="false"{{if .DirFollows}} data-act-follow{{end}}{{if eq (.Val "dtype") "volume"}} readonly{{end}} aria-describedby="act-err-dir act-hint-dir">
+        <span class="err" id="act-err-dir"></span><span class="hint" id="act-hint-dir">On the host. Jobs write here as root.</span></div>
+      <div class="fld"><label for="act-mount">Mount path</label><input type="text" id="act-mount" name="mount" value="{{.Val "mount"}}" placeholder="/data" autocapitalize="off" spellcheck="false" aria-describedby="act-err-mount act-hint-mount">
+        <span class="err" id="act-err-mount"></span><span class="hint" id="act-hint-mount">In the nodes.</span></div>
+    </div>
+    <label class="act-nr act-box"><input type="checkbox" id="act-mkdir" name="mkdir"{{if .On "mkdir"}} checked{{end}} aria-describedby="act-err-mkdir"><span class="act-lab"><b>Create the directory if it is missing</b><span class="hint">Docker mounts only a directory that exists.</span><span class="err" id="act-err-mkdir"></span></span></label>
+    <span class="hint">sind ui writes the data storage into the config, so the saved file alone makes the same cluster again.</span>
+  </div>
+</details>
 <div class="row">
   <div class="fld"><label for="act-wait">Wait for ready</label><select id="act-wait" name="wait" aria-describedby="act-err-wait">{{range .Waits}}<option value="{{.Value}}"{{if $.Is "wait" .Value}} selected{{end}}>{{.Label}}</option>{{end}}</select><span class="err" id="act-err-wait"></span></div>
   <label class="act-nr act-box act-wide"><input type="checkbox" id="act-pull" name="pull"{{if .On "pull"}} checked{{end}} aria-describedby="act-err-pull"><span class="act-lab"><b>Pull the image</b><span class="hint">Gets the newest image first, even if Docker has one.</span><span class="err" id="act-err-pull"></span></span></label>

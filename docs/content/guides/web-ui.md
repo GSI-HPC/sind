@@ -84,7 +84,7 @@ The actions are:
 
 | Action | Command | Undo |
 |--------|---------|------|
-| New cluster | `sind create cluster --config FILE --data DIR` | Delete the cluster |
+| New cluster | `sind create cluster --config FILE` | Delete the cluster |
 | Add workers | `sind create worker CLUSTER --count N` | Delete the workers |
 | Delete cluster | `sind delete cluster NAME` | Cannot be undone |
 | Delete workers | `sind delete worker NODES` | Cannot be undone |
@@ -94,7 +94,7 @@ The actions are:
 
 Notes on specific actions:
 
-- **New cluster** takes the name, the image, the nodes, the CPUs and memory per node, the users, the data storage, the wait for ready and whether to pull the image. Every cluster has one controller. A checkbox adds each of the other roles (backup controller, db, api, submitter), and a field with − and + sets the number of workers. The name is a free one of the realm, such as `hpc` or `hpc-2`, and the data directory follows the name until you change it. The wait is 1, 2, 5 or 10 minutes, or no limit. The data storage is a directory on the host or a Docker volume. sind ui always passes `--data`, so the cluster never uses the directory you started the UI in by accident. The UI saves the cluster config in `~/.local/state/sind/ui/configs/`, with mode `0600`, so you can run the same command again from a terminal.
+- **New cluster** takes the name, the image, the nodes, the CPUs and memory per node, the users, the data storage, the wait for ready and whether to pull the image. Every cluster has one controller. A checkbox adds each of the other roles (backup controller, db, api, submitter), and a field with − and + sets the number of workers. The name is a free one of the realm, such as `hpc` or `hpc-2`, and the data directory follows the name until you change it. The wait is 1, 2, 5 or 10 minutes, or no limit. The data storage, in the Data section, is a directory on the host or a Docker volume, mounted at `/data` or at the path you give. sind ui writes it into the config, so the cluster never uses the directory you started the UI in by accident. Docker mounts only a directory that exists: sind ui creates a missing one first, unless you clear **Create the directory if it is missing**; the directory stays if the create fails. The UI saves the cluster config in `~/.local/state/sind/ui/configs/`, with mode `0600`, so you can run the same command again from a terminal.
 - The plan beside the form shows the nodes, the command and the config as you type. A wrong field gets its message below it and a line in the plan, which links to the field. The plan then takes the default for that field, so it never goes blank, and the status at the bottom says `Not ready` with the number of problems. Create works only when it says `Ready`.
 - **Power** offers the verbs that fit the state of the chosen nodes. Power-cycle and cut power kill the containers at once. Run them only when you need to.
 - **Delete cluster**, **Delete workers** and **Delete realm** ask you to type the name of the cluster or realm to confirm.

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -129,7 +130,8 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		ps.add("wait", "Wait for ready", true, fmt.Errorf("pick one of %s", strings.Join(Waits, ", ")))
 		wait = DefaultWait
 	}
-	data, dir, home := dataStorage(f, c, &ps)
+	data := dataStorage(f, c, &ps)
+	cfg.Storage.DataStorage = data.storage
 
 	content, warns, err := renderConfig(cfg, ps.has("name"))
 	if err != nil {
@@ -141,7 +143,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		file = "NAME"
 	}
 	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(a.Field) - fieldOrder(b.Field) })
-	argv := sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file), "--data", data)
+	argv := sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file))
 	if pull {
 		argv = append(argv, "--pull")
 	}
@@ -154,11 +156,18 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s each.", len(planned), cfg.Defaults.CPUs*len(planned), memoryLabel(cfg.Defaults.Memory))
 	cmd.Warns = warns
 	cmd.Problems = ps
-	if home {
+	if data.home {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("%s is your home directory. Jobs write their output files there as root. Pick a scratch directory such as %s.",
-			dir, path.Join(dir, "sind", cfg.Name)))
+			data.dir, path.Join(data.dir, "sind", cfg.Name)))
+	}
+	if data.warn != "" {
+		cmd.Warns = append(cmd.Warns, data.warn)
 	}
 	cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui saves the config to %s (mode 0600) and keeps it. Copy gives the command; the config is next to it.", cmd.Config.Path))
+	if data.mkdir {
+		cmd.Dirs = []string{data.dir}
+		cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui creates the directory %s first. It stays if the create fails.", data.dir))
+	}
 	if cfg.Monitoring {
 		cmd.Notes = append(cmd.Notes, "Monitoring needs Slurm 26.05 or later in the image. sind checks the image when it runs, and stops with an error if it is older.")
 	}
@@ -173,7 +182,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 
 // ClusterFields are the fields of the New cluster dialog in the order it shows
 // them, which its problems follow.
-var ClusterFields = []string{"name", "image", "backup", "db", "api", "submitter", "workers", "monitoring", "cpus", "memory", "users", "dtype", "dir", "wait", "pull"}
+var ClusterFields = []string{"name", "image", "backup", "db", "api", "submitter", "workers", "monitoring", "cpus", "memory", "users", "dtype", "dir", "mkdir", "mount", "wait", "pull"}
 
 // fieldOrder is the place of field in the dialog; the config as a whole
 // comes last.
@@ -272,23 +281,40 @@ func clusterUsers(f Form, ps *problems) []config.User {
 	return users
 }
 
-// dataStorage reads the fields "dtype" and "dir" into the value of --data,
-// and says whether the directory is the user's home. A wrong directory
-// stays in the command as it is.
-func dataStorage(f Form, c Context, ps *problems) (data, dir string, home bool) {
+// clusterData is the data storage of a new cluster.
+type clusterData struct {
+	storage config.DataStorage
+	// dir is the host directory, mkdir set if sind ui makes it first.
+	dir   string
+	mkdir bool
+	// home says that dir is the user's home; warn is a check of dir that
+	// did not work.
+	home bool
+	warn string
+}
+
+// dataStorage reads the fields "dtype", "dir", "mkdir" and "mount" into the
+// data storage of the config. A wrong directory stays in the config as it
+// is, where the config can take it.
+func dataStorage(f Form, c Context, ps *problems) clusterData {
+	var d clusterData
+	d.storage.MountPath = mountPath(f, ps)
 	switch dtype := f.Get("dtype"); dtype {
 	case "volume":
-		return "volume", "", false
+		d.storage.Type = config.StorageVolume
+		return d
 	case "", "hostPath":
 	default:
 		ps.add("dtype", "Data", false, fmt.Errorf("pick a directory or a Docker volume, not %q", dtype))
 	}
-	dir = strings.TrimSpace(f.Get("dir"))
+	d.storage.Type = config.StorageHostPath
+	dir := strings.TrimSpace(f.Get("dir"))
 	var err error
 	switch {
 	case !plainText(dir):
 		ps.add("dir", "Directory", false, errors.New("the path holds control characters"))
-		return "", "", false
+		d.storage.Type = ""
+		return d
 	case dir == "":
 		err = errors.New("say which directory")
 	case dir == "~" || strings.HasPrefix(dir, "~/"):
@@ -300,12 +326,46 @@ func dataStorage(f Form, c Context, ps *problems) (data, dir string, home bool) 
 	case !path.IsAbs(dir):
 		err = errors.New("write the path in full, starting with / or ~")
 	}
+	d.storage.HostPath = dir
 	if err != nil {
 		ps.add("dir", "Directory", false, err)
-		return dir, dir, false
+		if dir == "" {
+			d.storage.Type = ""
+		}
+		return d
 	}
-	dir = path.Clean(dir)
-	return dir, dir, c.Home != "" && dir == path.Clean(c.Home)
+	d.dir = path.Clean(dir)
+	d.storage.HostPath = d.dir
+	d.home = c.Home != "" && d.dir == path.Clean(c.Home)
+	mkdir := checkbox(f, "mkdir", "Create the directory", ps)
+	if c.Stat == nil {
+		return d
+	}
+	switch fi, err := c.Stat(d.dir); {
+	case errors.Is(err, fs.ErrNotExist) && mkdir:
+		d.mkdir = true
+	case errors.Is(err, fs.ErrNotExist):
+		ps.add("dir", "Directory", false, fmt.Errorf("%s does not exist; tick Create the directory, or make it first", d.dir))
+	case err != nil:
+		d.warn = fmt.Sprintf("sind ui cannot check the directory %s: %v. Docker needs it to exist.", d.dir, err)
+	case !fi.IsDir():
+		ps.add("dir", "Directory", false, fmt.Errorf("%s is not a directory", d.dir))
+	}
+	return d
+}
+
+// mountPath reads the field "mount": where the nodes mount the data, or ""
+// for /data.
+func mountPath(f Form, ps *problems) string {
+	m := strings.TrimSpace(f.Get("mount"))
+	switch {
+	case m == "":
+		return ""
+	case !plainText(m) || !path.IsAbs(m) || strings.Contains(m, ","):
+		ps.add("mount", "Mount path", true, errors.New("write a path in the nodes that starts with / and has no comma, such as /data"))
+		return ""
+	}
+	return path.Clean(m)
 }
 
 // parseConfig is config.Parse; tests replace it.

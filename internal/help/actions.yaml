@@ -5,7 +5,7 @@
 - id: create-cluster
   title: New cluster
   summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again.
-  command: sind create cluster --config FILE --data DIR
+  command: sind create cluster --config FILE
   undo: Delete the cluster
   doc: usage/cluster-lifecycle
   words: [cluster, wait, rollback]

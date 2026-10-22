@@ -22,7 +22,7 @@ var actDialogKeys = []string{
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "cpus", "memory", "users",
-	"dtype", "dir", "monitoring", "pull",
+	"dtype", "dir", "mkdir", "mount", "monitoring", "pull",
 }
 
 const (
@@ -65,6 +65,9 @@ type actSpec struct {
 	Plan bool
 	// Fields are the fields that show their own problem.
 	Fields []string
+	// Sections are the parts of the form that fold, each with a line
+	// that sums it up.
+	Sections []actSection
 	// Title and Lead are the heading and the line below it.
 	Title func(d *actDialog) string
 	Lead  func(d *actDialog) string
@@ -75,7 +78,7 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFields,
+		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFields, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
 		Lead: func(d *actDialog) string {
 			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
@@ -91,6 +94,7 @@ var actSpecs = map[string]actSpec{
 			d.def("memory", "512m")
 			d.def("dtype", "hostPath")
 			d.def("dir", actDefaultDir(d.Form.Get("name")))
+			d.def("mkdir", "on")
 			d.def("pull", "on")
 		},
 	},
@@ -153,6 +157,60 @@ var actSpecs = map[string]actSpec{
 			return fmt.Sprintf("Deletes all %d clusters of realm %s, its mesh, DNS server, SSH relay, monitoring stack and the exported SSH config. Connected containers stay; sind only detaches them.", r.Clusters, d.Realm)
 		},
 	},
+}
+
+// actSection is a part of a form that folds.
+type actSection struct {
+	ID string
+	// Fields are those in the section, whose problems it counts.
+	Fields []string
+	// Sum is the line that sums the section up.
+	Sum func(p actPreview) string
+}
+
+// actClusterSections are the sections of the New cluster dialog.
+var actClusterSections = []actSection{
+	{ID: "data", Fields: []string{"dtype", "dir", "mkdir", "mount"}, Sum: func(p actPreview) string {
+		if p.Form.Get("dtype") == "volume" {
+			return actWithMount("Docker volume", p.Form)
+		}
+		sum := strings.TrimSpace(p.Form.Get("dir"))
+		if len(p.Cmd.Dirs) > 0 {
+			sum += ", created"
+		}
+		return actWithMount(sum, p.Form)
+	}},
+}
+
+// actWithMount adds the mount path of the data to sum, if it is not the
+// default.
+func actWithMount(sum string, f url.Values) string {
+	if m := strings.TrimSpace(f.Get("mount")); m != "" {
+		return sum + ", at " + m
+	}
+	return sum
+}
+
+// actSectionView is a section as a preview shows it.
+type actSectionView struct {
+	ID, Summary string
+	// Bad is how many problems the section has.
+	Bad int
+}
+
+// Sections sum up the sections of the dialog.
+func (p actPreview) Sections() []actSectionView {
+	var out []actSectionView
+	for _, sec := range p.Spec.Sections {
+		v := actSectionView{ID: sec.ID, Summary: sec.Sum(p)}
+		for _, pr := range p.Cmd.Problems {
+			if slices.Contains(sec.Fields, pr.Field) {
+				v.Bad++
+			}
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 // actDialog is what the dialog's templates render from.
@@ -341,6 +399,8 @@ type actPreview struct {
 	*View
 	ID   string
 	Spec actSpec
+	// Form is the form that the preview is of.
+	Form action.Form
 	Cmd  action.Command
 	Err  string
 	Warn string
@@ -403,7 +463,7 @@ func (p actPreview) Defaulted() string {
 
 // actEvaluate builds the command of the form and decides whether it may run.
 func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) actPreview {
-	p := actPreview{View: v, ID: a.ID, Spec: actSpecs[a.ID]}
+	p := actPreview{View: v, ID: a.ID, Spec: actSpecs[a.ID], Form: f}
 	p.Danger = p.Spec.Danger
 	if op, ok := action.PowerOpOf(f.Get("op")); a.ID == "power" && ok && op.Danger {
 		p.Danger = true
@@ -424,7 +484,7 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 
 // actContext returns what the actions check a form against.
 func actContext(v *View, st *actState) action.Context {
-	return action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir}
+	return action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir, Stat: st.stat}
 }
 
 // actFormView returns the view of a request that posts a dialog's form,
@@ -496,9 +556,14 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	actRejected(s, w, r, v, p)
 }
 
-// actStart saves the command's file, if it has one, and starts the command
-// as a task. It returns the task's ID.
+// actStart creates the command's directories, saves its file, if it has
+// one, and starts the command as a task. It returns the task's ID.
 func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) (string, error) {
+	for _, dir := range cmd.Dirs {
+		if err := st.mkdirAll(dir); err != nil {
+			return "", fmt.Errorf("creating the directory %s: %w", dir, err)
+		}
+	}
 	if cmd.Config != nil {
 		if err := st.writeFile(cmd.Config.Path, []byte(cmd.Config.Content)); err != nil {
 			return "", fmt.Errorf("saving the config: %w", err)

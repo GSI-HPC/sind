@@ -122,6 +122,19 @@ func TestSim_CreateCluster_HostPathAndOldSlurm(t *testing.T) {
 	assert.Equal(t, "/scratch/hp", sn.Status("sind", "hp").Mounts[2].Source)
 }
 
+func TestSim_CreateCluster_DataOfTheConfig(t *testing.T) {
+	s, st := newSim(t)
+	for name, storage := range map[string]string{"vol": "  dataStorage:\n    type: volume\n", "dir": "  dataStorage:\n    type: hostPath\n    hostPath: /scratch/dir\n"} {
+		cfg := "kind: Cluster\nname: " + name + "\nstorage:\n" + storage + "nodes:\n  - controller\n  - worker\n"
+		require.NoError(t, s.SaveFile("/c/"+name+".yaml", []byte(cfg)))
+		task := s.startWait(t, st, "create", "cluster", "--config", "/c/"+name+".yaml")
+		require.Equal(t, store.TaskOK, task.Status, task.Err)
+	}
+	sn := st.Snapshot()
+	assert.Equal(t, "sind-vol-data", sn.Status("sind", "vol").Mounts[2].Source)
+	assert.Equal(t, "/scratch/dir", sn.Status("sind", "dir").Mounts[2].Source)
+}
+
 func TestSim_CreateCluster_PullFails(t *testing.T) {
 	s, st := newSim(t)
 	cfg := "kind: Cluster\nname: bad\ndefaults:\n  image: example.org/none:broken\nnodes:\n  - controller\n"

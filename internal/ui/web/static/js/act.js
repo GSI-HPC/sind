@@ -53,7 +53,10 @@
     if (jump) {
       ev.preventDefault();
       const el = field(jump.closest('form'), jump.dataset.actJump);
-      if (el) el.focus();
+      if (!el) return;
+      // A field in a folded section: open the section first.
+      for (let d = el.closest('details'); d; d = d.parentElement.closest('details')) d.open = true;
+      el.focus();
       return;
     }
 
