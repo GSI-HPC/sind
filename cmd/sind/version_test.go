@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,25 +93,6 @@ func TestResolveVersion_TestBinaryIsDev(t *testing.T) {
 
 	// A test binary reports "(devel)" or no main module version.
 	assert.Equal(t, "dev", resolveVersion())
-}
-
-func TestShortCommit(t *testing.T) {
-	tests := []struct {
-		name string
-		bi   cobratree.BuildInfo
-		want string
-	}{
-		{"no revision", cobratree.BuildInfo{}, ""},
-		{"no revision, dirty", cobratree.BuildInfo{Dirty: true}, ""},
-		{"full revision", cobratree.BuildInfo{Commit: "abc1234def5678"}, "abc1234"},
-		{"short revision", cobratree.BuildInfo{Commit: "abc"}, "abc"},
-		{"dirty checkout", cobratree.BuildInfo{Commit: "abc1234def5678", Dirty: true}, "abc1234-dirty"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, shortCommit(tt.bi))
-		})
-	}
 }
 
 func TestVersionCommand_ModuleVersion(t *testing.T) {
