@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/GSI-HPC/go-clikit/cliout"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -76,7 +77,7 @@ func runGet[T any](cmd *cobra.Command, fetch fetchFunc[T], human func(cmd *cobra
 		return err
 	}
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), v)
+		return cliout.WriteJSON(cmd.OutOrStdout(), v)
 	}
 	return human(cmd, v, realm)
 }
@@ -135,7 +136,7 @@ func runGetRealms(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), realms)
+		return cliout.WriteJSON(cmd.OutOrStdout(), realms)
 	}
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tCLUSTERS")
@@ -346,7 +347,7 @@ func runGetSSHConfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), conf)
+		return cliout.WriteJSON(cmd.OutOrStdout(), conf)
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), conf.Path)
 	if !conf.Exists {
