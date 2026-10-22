@@ -4,11 +4,11 @@
 # the action uses.
 - id: create-cluster
   title: New cluster
-  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again.
+  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. The dialog writes the config, which Edit YAML lets you change as a whole.
   command: sind create cluster --config FILE
   undo: Delete the cluster
   doc: usage/cluster-lifecycle
-  words: [cluster, wait, rollback]
+  words: [cluster, node-roles, managed, data, identity, wait, rollback]
 - id: create-worker
   title: Add workers
   summary: Adds worker nodes to a running cluster and tells slurmctld.
