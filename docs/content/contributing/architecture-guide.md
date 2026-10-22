@@ -44,9 +44,9 @@ internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fra
   ├── server.go    The handler: go-clikit's localweb checks and sessions (headers, Host, same origin, token, CSRF) in front of the pages; ui.go: the listener of 127.0.0.1 and localweb.Serve
   ├── peercred.go  The owner of the listener of a recorded instance (/proc/net/tcp)
   ├── runtime.go   Single instance in $XDG_RUNTIME_DIR/sind, the page that opens the browser
-  ├── sse.go       Live updates: Server-Sent Events of the fragments of a page
+  ├── sse.go       Live updates: renders the fragments of a page for go-clikit's localweb/sse
   ├── pg_*.go, more_*.go, run_*.go Pages: realm, clusters and nodes; mesh, monitoring, topology, doctor; runs
-  ├── store/       Immutable snapshots and their change topics
+  ├── store/       Immutable snapshots and their change topics (a localweb/sse Notifier)
   ├── collect/     Collectors: Docker events, realms, clusters, statuses, lock, monitoring, doctor
   ├── activity/    Reads the activity log into runs (Tail, Reducer, Follow)
   ├── action/      The actions of the dialogs: forms to argv, validated against the snapshot

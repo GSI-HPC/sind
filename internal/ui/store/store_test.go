@@ -12,12 +12,11 @@ import (
 
 func TestRuns(t *testing.T) {
 	s := New()
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 
 	s.SetRuns([]Run{{ID: "b", Trace: "t2"}, {ID: "a", Trace: "t1"}}, "b")
-	assert.Equal(t, TopicRuns, <-ch)
-	assert.Equal(t, RunTopic("b"), <-ch)
+	assert.Equal(t, []Topic{TopicRuns, RunTopic("b")}, sub.Take())
 
 	sn := s.Snapshot()
 	r, ok := sn.Run("a")
@@ -59,26 +58,25 @@ func TestTasks(t *testing.T) {
 	assert.Len(t, s.Snapshot().Tasks, 1)
 }
 
-func TestSlowSubscriberGetsTopicAllForWhatDidNotFit(t *testing.T) {
+func TestSlowSubscriberLosesNoTopic(t *testing.T) {
 	s := New()
-	ch, done := s.Subscribe()
+	sub := s.Subscribe()
 	for range 20 {
 		s.AddTask(Task{})
 	}
-	s.SetRuns(nil, "x") // did not fit either
-	require.Len(t, ch, cap(ch))
-	for range cap(ch) - 1 {
-		assert.Equal(t, TopicTasks, <-ch)
-	}
-	assert.Equal(t, TopicAll, <-ch, "the last place stands for the rest")
-
-	// With room again, the notices are exact.
 	s.SetRuns(nil, "x")
-	assert.Equal(t, TopicRuns, <-ch)
-	assert.Equal(t, RunTopic("x"), <-ch)
-	done()
 	s.AddTask(Task{})
-	assert.Len(t, s.Snapshot().Tasks, 21)
+	assert.Equal(t, []Topic{TopicTasks, TopicRuns, RunTopic("x")}, sub.Take(), "each topic once, in the order of its first change")
+
+	// Taken topics are forgotten, and a change wakes the subscriber again.
+	assert.Empty(t, sub.Take())
+	s.SetRuns(nil, "y")
+	<-sub.Changed()
+	assert.Equal(t, []Topic{TopicRuns, RunTopic("y")}, sub.Take())
+	sub.Close()
+	s.AddTask(Task{})
+	assert.Len(t, s.Snapshot().Tasks, 22)
+	assert.Empty(t, sub.Take(), "a closed subscription hears nothing")
 }
 
 func TestSpanDone(t *testing.T) {
@@ -101,12 +99,12 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 		{ID: "c", Trace: "tr3", Start: start, End: &start, Status: StatusOK},
 		{ID: "d", Start: start},
 	})
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 
 	// The task of a ends, killed: its run, which the log never ended, ends.
 	s.UpdateTask("t1", func(t *Task) { t.End, t.Status, t.Err = &end, TaskFailed, "sind signal: killed" })
-	assert.Equal(t, []Topic{TopicTasks, RunTopic("a"), TopicRuns}, drain(ch))
+	assert.Equal(t, []Topic{TopicTasks, RunTopic("a"), TopicRuns}, sub.Take())
 	a, _ := s.Snapshot().Run("a")
 	require.True(t, a.Done())
 	assert.True(t, a.Unfinished)
@@ -120,7 +118,7 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 	s.UpdateTask("t4", func(t *Task) { t.End, t.Status = &end, TaskOK })
 	s.UpdateTask("t2", func(t *Task) { t.Canceling = true })
 	s.UpdateTask("gone", func(t *Task) { t.End = &end })
-	assert.Equal(t, []Topic{TopicTasks, TopicTasks, TopicTasks, TopicTasks}, drain(ch))
+	assert.Equal(t, []Topic{TopicTasks}, sub.Take())
 	c, _ := s.Snapshot().Run("c")
 	assert.False(t, c.Unfinished)
 
@@ -144,14 +142,11 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 }
 
 // drain returns the notices pending on ch.
-func drain(ch <-chan Topic) []Topic {
-	var out []Topic
-	for {
-		select {
-		case t := <-ch:
-			out = append(out, t)
-		default:
-			return out
-		}
-	}
+
+func TestNotifierIsTheStoresOwn(t *testing.T) {
+	s := New()
+	sub := s.Notifier().Subscribe()
+	defer sub.Close()
+	s.AddTask(Task{})
+	assert.Equal(t, []Topic{TopicTasks}, sub.Take(), "a stream subscribes to what the store notifies")
 }

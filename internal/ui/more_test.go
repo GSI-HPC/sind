@@ -413,13 +413,13 @@ func TestMoreFragmentsAreLive(t *testing.T) {
 	} {
 		f, ok := reg.fragments[name]
 		require.True(t, ok, name)
-		assert.True(t, f.depends(map[store.Topic]bool{topic: true}, nil), name)
-		assert.True(t, f.depends(map[store.Topic]bool{store.TopicDocker: true}, nil), name)
-		assert.False(t, f.depends(map[store.Topic]bool{store.TopicTasks: true}, nil), name)
+		assert.True(t, f.depends([]store.Topic{topic}, nil), name)
+		assert.True(t, f.depends([]store.Topic{store.TopicDocker}, nil), name)
+		assert.False(t, f.depends([]store.Topic{store.TopicTasks}, nil), name)
 	}
 	f := reg.fragments["more-topology"]
 	for _, topic := range []store.Topic{store.ClustersTopic("a"), store.NetworksTopic("a"), store.MeshTopic("a"), store.MonitoringTopic("a")} {
-		assert.True(t, f.depends(map[store.Topic]bool{topic: true}, nil), string(topic))
+		assert.True(t, f.depends([]store.Topic{topic}, nil), string(topic))
 	}
 	// A page names its fragment and the realm it reads.
 	for _, p := range reg.pages {

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb/localwebtest"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -274,7 +275,7 @@ func TestEventsSkipAFragmentThatFails(t *testing.T) {
 }
 
 // failingWriter is a streaming response writer whose writes fail from the
-// failAfter'th on.
+// failAfter'th on, and whose flush then reports it, as net/http's does.
 type failingWriter struct {
 	mu        sync.Mutex
 	header    http.Header
@@ -285,6 +286,14 @@ type failingWriter struct {
 func (w *failingWriter) Header() http.Header { return w.header }
 func (w *failingWriter) WriteHeader(int)     {}
 func (w *failingWriter) Flush()              {}
+func (w *failingWriter) FlushError() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.writes >= w.failAfter {
+		return errors.New("broken pipe")
+	}
+	return nil
+}
 func (w *failingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -328,11 +337,22 @@ func TestEventsEndWhenAWriteFails(t *testing.T) {
 	}
 }
 
-func TestWriteEvent(t *testing.T) {
-	var b strings.Builder
-	require.NoError(t, writeEvent(&b, "rail", "<a>\r\nevent: forged\rdata: x</a>\n"))
-	want := "event: rail\ndata: <a>&#13;\ndata: event: forged&#13;data: x</a>\ndata: \n\n"
-	assert.Equal(t, want, b.String())
+func TestLiveEvents(t *testing.T) {
+	ts, base := liveServer(t)
+	c := localwebtest.Login(t, base, "the-token")
+	r := c.Events(t, "/events?f=count&f=same")
+	assert.Equal(t, sseEvent{"count", "tasks=0"}, readEvent(t, r))
+	assert.Equal(t, sseEvent{"same", "always the same"}, readEvent(t, r))
+	assert.Equal(t, "2000", r.Retry)
 
-	assert.Error(t, writeEvent(&failingWriter{failAfter: 1}, "x", "y"))
+	ts.st.AddTask(store.Task{ID: "t1"})
+	assert.Equal(t, sseEvent{"count", "tasks=1"}, readEvent(t, r))
+}
+
+// readEvent returns the next event of r.
+func readEvent(t *testing.T, r *localwebtest.Reader) sseEvent {
+	t.Helper()
+	e, err := r.Next()
+	require.NoError(t, err)
+	return sseEvent{e.Name, e.Data}
 }

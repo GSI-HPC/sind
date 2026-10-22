@@ -124,12 +124,9 @@ type Fragment struct {
 	Load func(v *View) error
 }
 
-// depends reports whether a change of any topic in pending makes f stale.
-func (f Fragment) depends(pending map[store.Topic]bool, p Params) bool {
-	if pending[store.TopicAll] {
-		return true
-	}
-	for t := range pending {
+// depends reports whether a change of any topic in changed makes f stale.
+func (f Fragment) depends(changed []store.Topic, p Params) bool {
+	for _, t := range changed {
 		if slices.Contains(f.Topics, t) {
 			return true
 		}
@@ -142,7 +139,7 @@ func (f Fragment) depends(pending map[store.Topic]bool, p Params) bool {
 	if f.Watch == nil {
 		return false
 	}
-	return slices.ContainsFunc(f.Watch(p), func(t store.Topic) bool { return pending[t] })
+	return slices.ContainsFunc(f.Watch(p), func(t store.Topic) bool { return slices.Contains(changed, t) })
 }
 
 // A Route is a handler for the paths that no page serves.

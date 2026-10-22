@@ -3,15 +3,12 @@
 package ui
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
-	"strings"
-	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb/session"
+	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -28,96 +25,50 @@ const maxFragments = 32
 // before a change the stream does not hear of. Then changes gather for
 // coalesceEvery, and each fragment that depends on a changed topic is
 // rendered, and sent when its HTML differs from what the stream sent last.
+// localweb/sse does the streaming; this renders the fragments.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
-	// Subscribe before the baseline snapshot, so that no change falls
-	// between them.
-	changes, unsubscribe := s.env.Store.Subscribe()
-	defer unsubscribe()
 	frags, v, err := s.eventsRequest(r)
 	if err != nil {
 		s.Fail(w, r, err)
 		return
 	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 	defer s.env.watch(fragmentTopics(frags, v.Params))()
-	sent := map[string][sha256.Size]byte{}
-	first := make([]string, len(frags))
-	for i, f := range frags {
-		html, err := s.renderFragment(f, v)
-		if err != nil {
-			s.Fail(w, r, err)
-			return
-		}
-		first[i] = html
-		sent[f.Name] = sha256.Sum256([]byte(html))
+	err = sse.Serve(w, r, s.env.Store.Notifier(), func(changed []store.Topic) ([]sse.Event, error) {
+		return s.renderEvents(frags, v, changed)
+	}, sse.Options{Coalesce: s.coalesce, KeepAlive: s.keepAlive, Done: s.ctx.Done()})
+	if err != nil {
+		s.Fail(w, r, err)
 	}
+}
 
-	h := w.Header()
-	h.Set("Content-Type", "text/event-stream")
-	h.Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	// The browser reconnects after this long when the stream breaks.
-	_, _ = io.WriteString(w, "retry: 2000\n\n")
-	for i, f := range frags {
-		if err := writeEvent(w, f.Name, first[i]); err != nil {
-			return
+// renderEvents renders the fragments of a stream from the current snapshot:
+// all of them when changed is nil, else those that depend on a topic in
+// changed. A fragment that fails to render after the first time is skipped
+// and logged, so that the others go on.
+func (s *Server) renderEvents(frags []Fragment, v *View, changed []store.Topic) ([]sse.Event, error) {
+	snap := s.env.Store.Snapshot()
+	var events []sse.Event
+	for _, f := range frags {
+		if changed != nil && !f.depends(changed, v.Params) {
+			continue
+		}
+		fv := *v
+		fv.Snap, fv.Now = snap, s.now()
+		html, err := s.renderFragment(f, &fv)
+		switch {
+		case err == nil:
+			events = append(events, sse.Event{Name: f.Name, Data: html})
+		case changed == nil:
+			return nil, err
+		default:
+			s.log.Error("rendering fragment", "fragment", f.Name, "err", err)
 		}
 	}
-	flusher.Flush()
-
-	pending := map[store.Topic]bool{}
-	var timer <-chan time.Time
-	keepAlive := time.NewTicker(s.keepAlive)
-	defer keepAlive.Stop()
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-s.ctx.Done():
-			return
-		case t := <-changes:
-			pending[t] = true
-			if timer == nil {
-				timer = time.After(s.coalesce)
-			}
-			continue
-		case <-keepAlive.C:
-			if _, err := io.WriteString(w, ": keep-alive\n\n"); err != nil {
-				return
-			}
-			flusher.Flush()
-			continue
-		case <-timer:
-		}
-		timer = nil
-		snap := s.env.Store.Snapshot()
-		for _, f := range frags {
-			if !f.depends(pending, v.Params) {
-				continue
-			}
-			fv := *v
-			fv.Snap, fv.Now = snap, s.now()
-			html, err := s.renderFragment(f, &fv)
-			if err != nil {
-				s.log.Error("rendering fragment", "fragment", f.Name, "err", err)
-				continue
-			}
-			sum := sha256.Sum256([]byte(html))
-			if sum == sent[f.Name] {
-				continue
-			}
-			sent[f.Name] = sum
-			if err := writeEvent(w, f.Name, html); err != nil {
-				return
-			}
-		}
-		clear(pending)
-		flusher.Flush()
-	}
+	return events, nil
 }
 
 // fragmentTopics returns the exact topics that frags depend on for the
@@ -185,20 +136,4 @@ func (s *Server) renderFragment(f Fragment, v *View) (string, error) {
 		return "", err
 	}
 	return s.tmpl.render(f.Name, &fv)
-}
-
-// writeEvent writes one Server-Sent Event, a data line for each line of
-// the HTML in data. A carriage return also ends a line of the stream, so it
-// is written as a character reference, which HTML reads the same.
-func writeEvent(w io.Writer, name, data string) error {
-	var b strings.Builder
-	fmt.Fprintf(&b, "event: %s\n", name)
-	for _, line := range strings.Split(strings.ReplaceAll(data, "\r", "&#13;"), "\n") {
-		b.WriteString("data: ")
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	b.WriteByte('\n')
-	_, err := io.WriteString(w, b.String())
-	return err
 }
