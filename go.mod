@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.27.3
 
 require (
-	github.com/GSI-HPC/go-clikit v0.4.0
+	github.com/GSI-HPC/go-clikit v0.5.0
 	github.com/GSI-HPC/go-nodeset v1.1.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v1.0.0
