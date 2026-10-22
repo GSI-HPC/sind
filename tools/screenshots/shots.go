@@ -36,6 +36,9 @@ type Shot struct {
 	Steps []Step `yaml:"steps"`
 	// Crop is the selector of the element to take instead of the window.
 	Crop string `yaml:"crop"`
+	// Hide is the selector of the elements to hide before the shot, such as
+	// the task dock, which would cover the bottom of a page.
+	Hide string `yaml:"hide"`
 	// Fit shortens the window to the page when the page is shorter.
 	Fit bool `yaml:"fit"`
 	// Page names the page of the UI that the shot shows;

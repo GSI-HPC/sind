@@ -91,9 +91,9 @@ func pgLoadNode(v *View) *pgNodeView {
 	}
 	switch n.State {
 	case cluster.StateRunning:
-		d.Actions = []pgAction{power("Stop…", "", "stop"), power("Reboot…", "", "reboot"), power("Pause…", "", "pause")}
+		d.Actions = []pgAction{power("Shut down…", "", "stop"), power("Reboot…", "", "reboot"), power("Freeze…", "", "pause")}
 	case cluster.StatePaused:
-		d.Actions = []pgAction{power("Unpause…", "", "unpause")}
+		d.Actions = []pgAction{power("Unfreeze…", "", "unpause")}
 	default:
 		d.Actions = []pgAction{power("Start…", "primary", "start")}
 	}

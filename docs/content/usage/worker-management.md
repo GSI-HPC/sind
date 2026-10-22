@@ -126,7 +126,7 @@ sind delete worker NODES
 2. Select the workers. The selection shows as a node set, such as `worker-[2-4]`.
 3. Press **Delete…** in the selection bar. Type the name of the cluster to confirm, and press **Delete**.
 
-{{< uishot "cluster-nodes-selected" >}}
+{{< uishot "dialog-delete-worker" >}}
 
 The page of a worker has a **Delete…** button too.
 

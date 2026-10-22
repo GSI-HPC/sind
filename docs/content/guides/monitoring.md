@@ -36,6 +36,8 @@ sind create cluster --monitoring
 
 In the New cluster dialog of `sind ui`, tick **Monitoring**. The dialog writes `monitoring: true` into the config. It needs Slurm 26.05 or later in the images, and the plan says so for an older image.
 
+{{< uishot "dialog-create-cluster" >}}
+
 {{< /ui >}}
 {{< /ways >}}
 
@@ -71,7 +73,9 @@ http://grafana.sind.sind:3000
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows the address of Grafana, Prometheus and Loki as links.
+Open **Monitoring**. It shows the address of Grafana, Prometheus and Loki. Press **Open** next to one to open it.
+
+{{< uishot "monitoring" >}}
 
 {{< /ui >}}
 {{< /ways >}}

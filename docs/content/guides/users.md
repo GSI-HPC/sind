@@ -9,6 +9,9 @@ sind runs everything as root unless the cluster config declares users. With [`us
 
 ## Users and accounts
 
+{{< ways >}}
+{{< cli >}}
+
 ```yaml
 kind: Cluster
 defaults:
@@ -45,6 +48,19 @@ users:
   - name: dave
     uid: 2004
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Press **New cluster…**, keep **db** and **submitter**, and set **workers** to 3.
+2. Open **Users and accounts**. Press **+ Add group**, **+ Add account** and **+ Add user**, and fill in their rows. **+ Add limit** adds a limit to an account, and **More: groups, coordinator, admin level** of a user sets its groups, coordinator and admin level.
+3. Open **Slurm config** and add `AccountingStorageEnforce=associations,limits` to `main`.
+4. Press **Create**.
+
+**Identity** in the same dialog sets the identity mode.
+
+{{< /ui >}}
+{{< /ways >}}
 
 Every node gets the users and groups with the same IDs, and each user a home directory on the shared home volume, `/home/<user>`. Once slurmctld has registered the cluster, sind creates the account tree with `sacctmgr`:
 

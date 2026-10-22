@@ -242,8 +242,8 @@ func pgNodesTab(d *pgClusterView) {
 		return pgDialogAction(label, class, "power", "realm", d.Realm, "cluster", d.Name, "op", op)
 	}
 	d.Selection = []pgAction{
-		power("Start…", "", "start"), power("Stop…", "", "stop"), power("Reboot…", "", "reboot"),
-		power("Pause…", "", "pause"), power("Unpause…", "", "unpause"),
+		power("Start…", "", "start"), power("Shut down…", "", "stop"), power("Reboot…", "", "reboot"),
+		power("Freeze…", "", "pause"), power("Unfreeze…", "", "unpause"),
 	}
 	d.Delete = pgDialogAction("Delete…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
 }

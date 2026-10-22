@@ -12,6 +12,9 @@ toc: true
 
 ## Mount CVMFS on the nodes
 
+{{< ways >}}
+{{< cli >}}
+
 ```yaml
 kind: Cluster
 name: dev
@@ -27,6 +30,18 @@ nodes:
 sind create cluster --config cluster.yaml
 sind exec dev -- ls /cvmfs/sft.cern.ch
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Press **New cluster…**.
+2. Open **Data** and tick **CVMFS**.
+3. Press **Create**.
+
+The web UI has no terminal. Run `sind exec dev -- ls /cvmfs/sft.cern.ch` in your terminal to check the mount.
+
+{{< /ui >}}
+{{< /ways >}}
 
 Every node mounts CVMFS read-only at `/cvmfs`, and so do workers added later with `sind create worker`. Repositories mount on demand when first accessed, as on a bare-metal client with autofs, so there is no list of repositories to configure.
 

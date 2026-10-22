@@ -44,6 +44,8 @@ The **Activity** page lists the runs, from this UI and from a terminal.
 
 Press **Stop** on the task card or on the run page. sind ui sends SIGINT to the command, the same signal as Ctrl-C in a terminal. The command then rolls back what it has made, and the run ends as canceled. The button shows **Stopping…** until the rollback ends. Steps that have not started do not start.
 
+{{< uishot "run-canceled" "A run that was stopped. The page says what stopped and that the rollback removed everything." >}}
+
 **Stop** asks you to confirm first.
 
 **Stop** sends SIGINT only, never SIGKILL. If you stop the UI while a command runs, sind ui interrupts the command and waits up to 60 seconds for the rollback. Only after that does it kill the command. A command that runs from a terminal is not stopped by the UI at all.

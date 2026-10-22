@@ -2,6 +2,8 @@
 weight: 352
 title: "MCP Integration"
 description: "Using sind with AI assistants via the Model Context Protocol"
+webui: none
+webuiNote: "The MCP server runs the commands of the CLI. The steps on this page are for the CLI."
 ---
 
 sind includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes its CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.

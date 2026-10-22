@@ -14,7 +14,7 @@ Action buttons open a dialog. The dialog shows:
 - a **Copy** button for that command;
 - whether you can undo the action.
 
-Press the button of the dialog, such as **Create**, **Add**, **Power** or **Delete**, to start the command. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
+Press the button of the dialog, such as **Create**, **Add**, **Run** or **Delete**, to start the command. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
 
 You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. In the New cluster dialog, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm`, as `SIND_REALM` in your shell would otherwise take the place of the config's realm.
 
@@ -48,9 +48,9 @@ The plan lists the images of the nodes with their Slurm release, which sind ui r
 
 ## Power
 
-**Power** offers the verbs that fit the state of the chosen nodes. Power-cycle and cut power kill the containers at once. Run them only when you need to.
+The power buttons of a page, such as **Reboot…**, open the Power dialog. It lists every verb and selects the one of the button. Power-cycle and cut power kill the containers at once. Run them only when you need to.
 
-{{< uishot "dialog-power" "The Power dialog offers the verbs that fit the nodes." >}}
+{{< uishot "dialog-power" "The Power dialog lists every verb, and the command of the one that you selected." >}}
 
 ## Delete
 

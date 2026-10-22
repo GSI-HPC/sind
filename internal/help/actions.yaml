@@ -7,14 +7,14 @@
   summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. The dialog writes the config, which Edit YAML lets you change as a whole.
   command: sind create cluster --config FILE
   undo: Delete the cluster
-  doc: usage/cluster-lifecycle
+  doc: usage/cluster-lifecycle#create-a-cluster
   words: [cluster, node-roles, managed, data, identity, wait, rollback]
 - id: create-worker
   title: Add workers
   summary: Adds worker nodes to a running cluster and tells slurmctld.
   command: sind create worker CLUSTER --count N
   undo: Delete the workers
-  doc: usage/worker-management
+  doc: usage/worker-management#add-workers
   words: [worker, managed]
 - id: delete-cluster
   title: Delete cluster
@@ -22,7 +22,7 @@
   command: sind delete cluster NAME
   undo: Cannot be undone
   irreversible: true
-  doc: usage/cluster-lifecycle
+  doc: usage/cluster-lifecycle#delete-a-cluster
   words: [cluster]
 - id: delete-worker
   title: Delete workers
@@ -30,28 +30,28 @@
   command: sind delete worker NODES
   undo: Cannot be undone
   irreversible: true
-  doc: usage/worker-management
+  doc: usage/worker-management#remove-workers
   words: [worker, nodeset]
 - id: power
   title: Power
-  summary: Starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog offers each verb that fits the state of the nodes.
+  summary: Starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog lists every verb and selects the one of the button that opened it.
   command: sind power reboot NODES
   undo: Use the opposite verb
-  doc: usage/power-control
+  doc: usage/power-control#commands
   words: [nodeset]
 - id: connect
   title: Connect a container
   summary: Attaches a container that sind did not make to the networks of the realm.
   command: sind connect container NAME
   undo: Disconnect it
-  doc: architecture/networking#external-containers
+  doc: usage/cluster-lifecycle#connect-containers-outside-sind
   words: [external, mesh]
 - id: disconnect
   title: Disconnect a container
   summary: Detaches a container that sind did not make from the networks of the realm. The container keeps running.
   command: sind disconnect container NAME
   undo: Connect it again
-  doc: architecture/networking#external-containers
+  doc: usage/cluster-lifecycle#connect-containers-outside-sind
   words: [external, mesh]
 - id: delete-realm
   title: Delete realm
@@ -59,5 +59,5 @@
   command: sind delete realm
   undo: Cannot be undone
   irreversible: true
-  doc: configuration/realms
+  doc: usage/cluster-lifecycle#delete-a-realm
   words: [realm, mesh]

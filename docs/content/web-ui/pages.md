@@ -9,7 +9,7 @@ The rail on the left lists the pages. The pages update by themselves. A cluster 
 
 ## Overview
 
-A card for each cluster, the things that need you, and the recent activity. An empty realm says so and offers **New cluster**.
+A card for each cluster, the things that need you, and the recent activity. An empty realm says so and offers **New cluster…**.
 
 {{< uishot "overview" >}}
 
