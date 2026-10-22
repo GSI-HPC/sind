@@ -34,8 +34,8 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	// Subscribe before the baseline snapshot, so that no change falls
 	// between them.
-	changes, unsubscribe := s.env.Store.Subscribe()
-	defer unsubscribe()
+	changes := s.env.Store.Subscribe()
+	defer changes.Close()
 	frags, v, err := s.eventsRequest(r)
 	if err != nil {
 		s.Fail(w, r, err)
@@ -82,8 +82,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-s.ctx.Done():
 			return
-		case t := <-changes:
-			pending[t] = true
+		case <-changes.C():
+			for _, t := range changes.Topics() {
+				pending[t] = true
+			}
 			if timer == nil {
 				timer = time.After(s.coalesce)
 			}

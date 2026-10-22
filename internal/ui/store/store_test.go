@@ -12,12 +12,11 @@ import (
 
 func TestRuns(t *testing.T) {
 	s := New()
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 
 	s.SetRuns([]Run{{ID: "b", Trace: "t2"}, {ID: "a", Trace: "t1"}}, "b")
-	assert.Equal(t, TopicRuns, <-ch)
-	assert.Equal(t, RunTopic("b"), <-ch)
+	assert.Equal(t, []Topic{TopicRuns, RunTopic("b")}, sub.Topics())
 
 	sn := s.Snapshot()
 	r, ok := sn.Run("a")
@@ -59,25 +58,33 @@ func TestTasks(t *testing.T) {
 	assert.Len(t, s.Snapshot().Tasks, 1)
 }
 
-func TestSlowSubscriberGetsTopicAllForWhatDidNotFit(t *testing.T) {
+func TestSlowSubscriberLosesNoTopic(t *testing.T) {
 	s := New()
-	ch, done := s.Subscribe()
-	for range 20 {
+	sub := s.Subscribe()
+	for i := range 20 {
 		s.AddTask(Task{})
+		s.SetRuns(nil, string(rune('a'+i)))
 	}
-	s.SetRuns(nil, "x") // did not fit either
-	require.Len(t, ch, cap(ch))
-	for range cap(ch) - 1 {
-		assert.Equal(t, TopicTasks, <-ch)
+	// Each topic once, in the order of its first change, however many
+	// changes there were and however few places a queue would have had.
+	want := []Topic{TopicTasks, TopicRuns}
+	for i := range 20 {
+		want = append(want, RunTopic(string(rune('a'+i))))
 	}
-	assert.Equal(t, TopicAll, <-ch, "the last place stands for the rest")
+	assert.Len(t, sub.C(), 1, "one wake-up stands for them all")
+	<-sub.C()
+	assert.Equal(t, want, sub.Topics())
+	assert.Empty(t, sub.Topics())
+	assert.Empty(t, sub.C())
 
-	// With room again, the notices are exact.
+	// A change after the take wakes the subscriber again; after Close it
+	// does not.
 	s.SetRuns(nil, "x")
-	assert.Equal(t, TopicRuns, <-ch)
-	assert.Equal(t, RunTopic("x"), <-ch)
-	done()
+	<-sub.C()
+	assert.Equal(t, []Topic{TopicRuns, RunTopic("x")}, sub.Topics())
+	sub.Close()
 	s.AddTask(Task{})
+	assert.Empty(t, sub.C())
 	assert.Len(t, s.Snapshot().Tasks, 21)
 }
 
@@ -101,12 +108,12 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 		{ID: "c", Trace: "tr3", Start: start, End: &start, Status: StatusOK},
 		{ID: "d", Start: start},
 	})
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 
 	// The task of a ends, killed: its run, which the log never ended, ends.
 	s.UpdateTask("t1", func(t *Task) { t.End, t.Status, t.Err = &end, TaskFailed, "sind signal: killed" })
-	assert.Equal(t, []Topic{TopicTasks, RunTopic("a"), TopicRuns}, drain(ch))
+	assert.Equal(t, []Topic{TopicTasks, RunTopic("a"), TopicRuns}, sub.Topics())
 	a, _ := s.Snapshot().Run("a")
 	require.True(t, a.Done())
 	assert.True(t, a.Unfinished)
@@ -120,7 +127,7 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 	s.UpdateTask("t4", func(t *Task) { t.End, t.Status = &end, TaskOK })
 	s.UpdateTask("t2", func(t *Task) { t.Canceling = true })
 	s.UpdateTask("gone", func(t *Task) { t.End = &end })
-	assert.Equal(t, []Topic{TopicTasks, TopicTasks, TopicTasks, TopicTasks}, drain(ch))
+	assert.Equal(t, []Topic{TopicTasks}, sub.Topics())
 	c, _ := s.Snapshot().Run("c")
 	assert.False(t, c.Unfinished)
 
@@ -141,17 +148,4 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 	s.UpdateTask("t5", func(t *Task) { t.End, t.Status = &end, TaskOK })
 	e, _ := s.Snapshot().Run("e")
 	assert.Equal(t, StatusOK, e.Status)
-}
-
-// drain returns the notices pending on ch.
-func drain(ch <-chan Topic) []Topic {
-	var out []Topic
-	for {
-		select {
-		case t := <-ch:
-			out = append(out, t)
-		default:
-			return out
-		}
-	}
 }

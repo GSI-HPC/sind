@@ -49,6 +49,27 @@ func next(t *testing.T, ch <-chan store.Topic) store.Topic {
 	}
 }
 
+// subscribe returns a channel of the topics that st notifies, in the order
+// the subscription reports them, and a function that ends it.
+func subscribe(st *store.Store) (<-chan store.Topic, func()) {
+	sub := st.Subscribe()
+	out := make(chan store.Topic, 64)
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-sub.C():
+				for _, t := range sub.Topics() {
+					out <- t
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return out, func() { close(stop); sub.Close() }
+}
+
 // quiet fails when a notification comes within d.
 func quiet(t *testing.T, ch <-chan store.Topic, d time.Duration) {
 	t.Helper()
@@ -62,7 +83,7 @@ func quiet(t *testing.T, ch <-chan store.Topic, d time.Duration) {
 func TestFollowSetsTheChangedRuns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "activity.jsonl")
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
+	ch, unsubscribe := subscribe(st)
 	defer unsubscribe()
 
 	// A log that is not there is empty: nothing to set.
@@ -104,7 +125,7 @@ func TestFollowReadsLessOftenWhenNoRunGoesOn(t *testing.T) {
 	appendTo(t, path, ev("start", runA, "2026-01-01T00:00:00Z", `"span":"r","kind":"command","name":"one"`))
 	appendTo(t, path, []byte("\n"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
+	ch, unsubscribe := subscribe(st)
 	defer unsubscribe()
 	// The idle interval is an hour, so only the active one reads again.
 	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour, forever)
@@ -130,7 +151,7 @@ func TestFollow(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "activity.jsonl")
 	appendTo(t, path, logLines(runA, "one"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
+	ch, unsubscribe := subscribe(st)
 	defer unsubscribe()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -164,7 +185,7 @@ func TestFollowEndsAStaleRun(t *testing.T) {
 	appendTo(t, path, []byte("\n"))
 	appendTo(t, path, logLines("bbbbbbbbbbbbbbbb", "two"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
+	ch, unsubscribe := subscribe(st)
 	defer unsubscribe()
 	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour, time.Hour)
 	defer stop()
@@ -208,7 +229,7 @@ func TestFollowEndsARunThatFallsSilent(t *testing.T) {
 	appendTo(t, path, ev("start", runA, now, `"span":"r","kind":"command","name":"one"`))
 	appendTo(t, path, []byte("\n"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
+	ch, unsubscribe := subscribe(st)
 	defer unsubscribe()
 	stop := runFollow(t, st, path, 5*time.Millisecond, 5*time.Millisecond, 300*time.Millisecond)
 	defer stop()

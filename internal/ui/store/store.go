@@ -27,8 +27,7 @@ const (
 	TopicRuns Topic = "runs"
 	// TopicTasks changes when a task starts, ends or is dismissed.
 	TopicTasks Topic = "tasks"
-	// TopicAll stands for every topic. A subscriber gets it in place of
-	// the notices that did not fit its channel.
+	// TopicAll stands for every topic.
 	TopicAll Topic = "*"
 )
 
@@ -67,7 +66,7 @@ type Snapshot struct {
 type Store struct {
 	mu   sync.Mutex
 	snap Snapshot
-	subs map[chan Topic]struct{}
+	subs map[*Subscription]struct{}
 	// logRuns are the runs as the log tells them, before ended.
 	logRuns []Run
 	// ended holds the tasks that have ended, by their trace, so that their
@@ -77,7 +76,7 @@ type Store struct {
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{subs: map[chan Topic]struct{}{}, ended: map[string]Task{}}
+	return &Store{subs: map[*Subscription]struct{}{}, ended: map[string]Task{}}
 }
 
 // Snapshot returns the current snapshot.
@@ -87,23 +86,61 @@ func (s *Store) Snapshot() Snapshot {
 	return s.snap
 }
 
-// subscriberQueue is how many notices a subscriber can have pending.
-const subscriberQueue = 8
+// Subscription tells a subscriber which topics changed. It keeps the set
+// of topics that changed since the subscriber last asked, so that a slow
+// subscriber loses no change and learns the exact topics, however many
+// changes it missed.
+type Subscription struct {
+	store *Store
+	// wake holds one token while pending is not empty.
+	wake chan struct{}
 
-// Subscribe returns a channel that receives the topic of each change, and
-// a function that ends the subscription. A subscriber that falls behind
-// gets TopicAll in the last place of its channel, for the notices that did
-// not fit, and then renders all from the snapshot it reads, which holds
-// every change.
-func (s *Store) Subscribe() (<-chan Topic, func()) {
-	ch := make(chan Topic, subscriberQueue)
+	mu      sync.Mutex
+	pending []Topic
+}
+
+// Subscribe returns a subscription to the changes from now on. The caller
+// ends it with Close.
+func (s *Store) Subscribe() *Subscription {
+	sub := &Subscription{store: s, wake: make(chan struct{}, 1)}
 	s.mu.Lock()
-	s.subs[ch] = struct{}{}
+	s.subs[sub] = struct{}{}
 	s.mu.Unlock()
-	return ch, func() {
-		s.mu.Lock()
-		delete(s.subs, ch)
-		s.mu.Unlock()
+	return sub
+}
+
+// C returns a channel that receives when topics have changed since the
+// last call of Topics.
+func (sub *Subscription) C() <-chan struct{} { return sub.wake }
+
+// Topics returns the topics that changed since the last call, each once, in
+// the order of their first change, and clears them. It has the topics of a
+// receive from C, and may have none after one that an earlier call took.
+func (sub *Subscription) Topics() []Topic {
+	sub.mu.Lock()
+	defer sub.mu.Unlock()
+	out := sub.pending
+	sub.pending = nil
+	return out
+}
+
+// Close ends the subscription.
+func (sub *Subscription) Close() {
+	sub.store.mu.Lock()
+	delete(sub.store.subs, sub)
+	sub.store.mu.Unlock()
+}
+
+// add records that t changed and wakes the subscriber.
+func (sub *Subscription) add(t Topic) {
+	sub.mu.Lock()
+	if !slices.Contains(sub.pending, t) {
+		sub.pending = append(sub.pending, t)
+	}
+	sub.mu.Unlock()
+	select {
+	case sub.wake <- struct{}{}:
+	default: // a wake-up is pending already
 	}
 }
 
@@ -125,17 +162,8 @@ func (s *Store) updateTopics(fn func(*Snapshot) []Topic) {
 
 // notify tells the subscribers that t changed. The caller holds the lock.
 func (s *Store) notify(t Topic) {
-	for ch := range s.subs {
-		// Only this function sends, under the lock, so the channel cannot
-		// fill between the length and the send.
-		switch len(ch) {
-		case cap(ch):
-			// TopicAll is pending already.
-		case cap(ch) - 1:
-			ch <- TopicAll
-		default:
-			ch <- t
-		}
+	for sub := range s.subs {
+		sub.add(t)
 	}
 }
 
