@@ -28,6 +28,10 @@ const maxFragments = 32
 // coalesceEvery, and each fragment that depends on a changed topic is
 // rendered, and sent when its HTML differs from what the stream sent last.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
+	if !sameOriginFetch(r) {
+		forbidden(w, "The request came from another page.")
+		return
+	}
 	// Subscribe before the baseline snapshot, so that no change falls
 	// between them.
 	changes, unsubscribe := s.env.Store.Subscribe()
