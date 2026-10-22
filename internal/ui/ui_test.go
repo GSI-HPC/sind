@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -289,14 +291,18 @@ func TestRunTwiceOnAFixedPort(t *testing.T) {
 }
 
 func TestRunRefusesConnectionsOfOtherUsers(t *testing.T) {
-	// A /proc without the table cannot name the owner of a connection, and
-	// the connection is closed before a request is read.
-	r := startRun(t, Options{NoOpen: true, procRoot: t.TempDir()})
+	// A listener for another user than ours closes the connection before a
+	// request is read.
+	r := startRun(t, Options{NoOpen: true, listen: func(ctx context.Context, port int, log *slog.Logger) (*localweb.Bound, error) {
+		return openListener(ctx, port, func(l net.Listener, refused func(error)) (net.Listener, error) {
+			return localweb.PeerListener(l, os.Getuid()+1, refused)
+		}, log)
+	}})
 	defer func() { require.NoError(t, r.stop()) }()
 	c := &http.Client{Timeout: 3 * time.Second}
 	_, err := c.Get(r.url)
 	require.Error(t, err)
-	assert.Eventually(t, func() bool { return strings.Contains(r.stderr.String(), "closed a connection") },
+	assert.Eventually(t, func() bool { return strings.Contains(r.stderr.String(), "closed the connection") },
 		2*time.Second, time.Millisecond, "the refusal is logged")
 }
 
@@ -326,9 +332,22 @@ func TestRunErrors(t *testing.T) {
 	t.Run("cannot listen", func(t *testing.T) {
 		err := Run(context.Background(), Options{
 			NoOpen: true, registry: runRegistry(),
-			listen: func(int, string, *slog.Logger) (net.Listener, error) { return nil, errors.New("no sockets") },
+			listen: func(context.Context, int, *slog.Logger) (*localweb.Bound, error) {
+				return nil, errors.New("no sockets")
+			},
 		})
 		assert.EqualError(t, err, "no sockets")
+	})
+	t.Run("the peer check is not supported", func(t *testing.T) {
+		err := Run(context.Background(), Options{
+			NoOpen: true, registry: runRegistry(),
+			listen: func(ctx context.Context, port int, log *slog.Logger) (*localweb.Bound, error) {
+				return openListener(ctx, port, func(net.Listener, func(error)) (net.Listener, error) {
+					return nil, errors.ErrUnsupported
+				}, log)
+			},
+		})
+		assert.ErrorIs(t, err, errors.ErrUnsupported)
 	})
 	t.Run("setup fails", func(t *testing.T) {
 		reg := runRegistry()
@@ -354,9 +373,11 @@ func TestRunErrors(t *testing.T) {
 	t.Run("the server fails", func(t *testing.T) {
 		err := Run(context.Background(), Options{
 			NoOpen: true, registry: runRegistry(),
-			listen: func(int, string, *slog.Logger) (net.Listener, error) { return brokenListener{}, nil },
+			listen: func(context.Context, int, *slog.Logger) (*localweb.Bound, error) {
+				return &localweb.Bound{Listeners: []net.Listener{brokenListener{}}, Addrs: []netip.AddrPort{netip.MustParseAddrPort("127.0.0.1:1")}}, nil
+			},
 		})
-		assert.EqualError(t, err, "accept: broken")
+		assert.EqualError(t, err, "serve: accept: broken")
 	})
 }
 

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -27,9 +28,6 @@ const (
 	TopicRuns Topic = "runs"
 	// TopicTasks changes when a task starts, ends or is dismissed.
 	TopicTasks Topic = "tasks"
-	// TopicAll stands for every topic. A subscriber gets it in place of
-	// the notices that did not fit its channel.
-	TopicAll Topic = "*"
 )
 
 // RunTopic is the topic of one run, which changes with every event of it,
@@ -67,7 +65,8 @@ type Snapshot struct {
 type Store struct {
 	mu   sync.Mutex
 	snap Snapshot
-	subs map[chan Topic]struct{}
+	// changes tells the subscribers which topics changed.
+	changes sse.Notifier[Topic]
 	// logRuns are the runs as the log tells them, before ended.
 	logRuns []Run
 	// ended holds the tasks that have ended, by their trace, so that their
@@ -77,7 +76,7 @@ type Store struct {
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{subs: map[chan Topic]struct{}{}, ended: map[string]Task{}}
+	return &Store{ended: map[string]Task{}}
 }
 
 // Snapshot returns the current snapshot.
@@ -87,25 +86,15 @@ func (s *Store) Snapshot() Snapshot {
 	return s.snap
 }
 
-// subscriberQueue is how many notices a subscriber can have pending.
-const subscriberQueue = 8
+// Notifier returns what tells of the topics that change, for a live update
+// stream to subscribe to.
+func (s *Store) Notifier() *sse.Notifier[Topic] { return &s.changes }
 
-// Subscribe returns a channel that receives the topic of each change, and
-// a function that ends the subscription. A subscriber that falls behind
-// gets TopicAll in the last place of its channel, for the notices that did
-// not fit, and then renders all from the snapshot it reads, which holds
-// every change.
-func (s *Store) Subscribe() (<-chan Topic, func()) {
-	ch := make(chan Topic, subscriberQueue)
-	s.mu.Lock()
-	s.subs[ch] = struct{}{}
-	s.mu.Unlock()
-	return ch, func() {
-		s.mu.Lock()
-		delete(s.subs, ch)
-		s.mu.Unlock()
-	}
-}
+// Subscribe returns a subscription to the topics that change from now on.
+// A subscriber that falls behind loses none: it takes the topics that
+// changed since it last took them, each once, and then reads the snapshot,
+// which holds every change. Close ends the subscription.
+func (s *Store) Subscribe() *sse.Subscription[Topic] { return s.changes.Subscribe() }
 
 // update changes the snapshot with fn under the lock and notifies the
 // subscribers of each of ts.
@@ -118,25 +107,7 @@ func (s *Store) update(fn func(*Snapshot), ts ...Topic) {
 func (s *Store) updateTopics(fn func(*Snapshot) []Topic) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, t := range fn(&s.snap) {
-		s.notify(t)
-	}
-}
-
-// notify tells the subscribers that t changed. The caller holds the lock.
-func (s *Store) notify(t Topic) {
-	for ch := range s.subs {
-		// Only this function sends, under the lock, so the channel cannot
-		// fill between the length and the send.
-		switch len(ch) {
-		case cap(ch):
-			// TopicAll is pending already.
-		case cap(ch) - 1:
-			ch <- TopicAll
-		default:
-			ch <- t
-		}
-	}
+	s.changes.Notify(fn(&s.snap)...)
 }
 
 // SetRuns replaces the runs and notifies TopicRuns and the topic of each

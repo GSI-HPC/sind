@@ -44,7 +44,7 @@ func pgServer(t *testing.T) *testServer {
 	})
 	env := &Env{Store: st, Exec: &mock.Executor{}, Log: slog.New(slog.NewTextHandler(logs, nil)), Addr: fmt.Sprintf("127.0.0.1:%d", testPort)}
 	ts := newTestServerFrom(t, serverConfig{
-		Env: env, Token: "the-token", Port: testPort, Registry: pgRegistry(), Now: func() time.Time { return pgNow },
+		Env: env, Token: "the-token", Bound: testBound(), Registry: pgRegistry(), Now: func() time.Time { return pgNow },
 	}, st)
 	st.SetRuns(nil)
 	return ts.login()

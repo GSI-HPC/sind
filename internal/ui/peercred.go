@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -17,100 +16,37 @@ import (
 	"strings"
 )
 
-// peerListener accepts only connections from processes of one user. Other
-// users can reach 127.0.0.1 too; they lack the token, and this closes their
-// connections before a request is read.
-type peerListener struct {
-	net.Listener
-	uid int
-	// owner returns the user that owns the socket at local connected to
-	// remote, as the kernel tells it.
-	owner func(local, remote netip.AddrPort) (int, error)
-	// refused is told about each connection closed, for the log.
-	refused func(err error)
-}
-
-// Accept returns the next connection of the user, and closes the others.
-func (l *peerListener) Accept() (net.Conn, error) {
-	for {
-		c, err := l.Listener.Accept()
-		if err != nil {
-			return nil, err
-		}
-		err = l.check(c)
-		if err == nil {
-			return c, nil
-		}
-		_ = c.Close()
-		if l.refused != nil {
-			l.refused(err)
-		}
-	}
-}
-
-// check looks up the owner of the client's end of c.
-func (l *peerListener) check(c net.Conn) error {
-	client, err1 := netip.ParseAddrPort(c.RemoteAddr().String())
-	server, err2 := netip.ParseAddrPort(c.LocalAddr().String())
-	if err := errors.Join(err1, err2); err != nil {
-		return err
-	}
-	uid, err := l.owner(client, server)
-	if err != nil {
-		return fmt.Errorf("connection from %s: %w", client, err)
-	}
-	if uid != l.uid {
-		return fmt.Errorf("connection from %s: refused a process of user %d", client, uid)
-	}
-	return nil
-}
-
-// procNetTCPOwner returns a function that finds the owner of a loopback
-// socket in the table net/tcp below procRoot, which is /proc on a host.
-func procNetTCPOwner(procRoot string) func(local, remote netip.AddrPort) (int, error) {
-	return func(local, remote netip.AddrPort) (int, error) {
-		f, err := os.Open(filepath.Join(procRoot, "net", "tcp"))
-		if err != nil {
-			return 0, err
-		}
-		defer func() { _ = f.Close() }()
-		return socketOwner(f, tcpEstablished, local, remote)
-	}
-}
-
 // procNetTCPListener returns the owner of the socket that listens at addr,
-// from the table net/tcp below procRoot.
+// from the table net/tcp below procRoot, which is /proc on a host. The
+// listener of a recorded sind ui must be the user's.
 func procNetTCPListener(procRoot string, addr netip.AddrPort) (int, error) {
 	f, err := os.Open(filepath.Join(procRoot, "net", "tcp"))
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = f.Close() }()
-	return socketOwner(f, tcpListen, addr, netip.AddrPortFrom(netip.IPv4Unspecified(), 0))
+	return listenerOwner(f, addr)
 }
 
-// The states of a socket in /proc/net/tcp.
-const (
-	tcpEstablished = "01"
-	tcpListen      = "0A"
-)
+// tcpListen is the state of a listening socket in /proc/net/tcp.
+const tcpListen = "0A"
 
-// socketOwner reads a table in the format of /proc/net/tcp and returns the
-// uid of the socket in state that is bound to local and connected to remote
-// (0.0.0.0:0 for a listener). Only a socket with an inode counts: a socket
-// in TIME_WAIT, or one that no process has accepted yet, has none, and its
-// uid is not that of a process.
-func socketOwner(r io.Reader, state string, local, remote netip.AddrPort) (int, error) {
+// listenerOwner reads a table in the format of /proc/net/tcp and returns the
+// uid of the socket that listens at addr. Only a socket with an inode
+// counts: one that no process has accepted yet has none, and its uid is not
+// that of a process.
+func listenerOwner(r io.Reader, addr netip.AddrPort) (int, error) {
+	any4 := netip.AddrPortFrom(netip.IPv4Unspecified(), 0)
 	sc := bufio.NewScanner(r)
 	sc.Scan() // the header
 	for sc.Scan() {
 		f := strings.Fields(sc.Text())
-		if len(f) < 10 || f[3] != state || f[9] == "0" {
+		if len(f) < 10 || f[3] != tcpListen || f[9] == "0" {
 			continue
 		}
 		l, err1 := parseProcAddr(f[1])
 		r, err2 := parseProcAddr(f[2])
-		if err1 != nil || err2 != nil || l != local || r != remote {
+		if err1 != nil || err2 != nil || l != addr || r != any4 {
 			continue
 		}
 		return strconv.Atoi(f[7])

@@ -9,13 +9,14 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/demo"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -52,11 +53,11 @@ type Options struct {
 
 	// registry is what is served; nil is the default registry.
 	registry *Registry
-	// procRoot is the /proc that names the owners of connections; empty
-	// is /proc.
+	// procRoot is the /proc that names the owner of the listener of a
+	// recorded sind ui; empty is /proc.
 	procRoot string
-	// listen opens the listener; nil is listen.
-	listen func(port int, procRoot string, log *slog.Logger) (net.Listener, error)
+	// listen opens the listeners; nil is listen.
+	listen func(ctx context.Context, port int, log *slog.Logger) (*localweb.Bound, error)
 	// flock takes the lock of the runtime directory; nil is flock(2).
 	flock func(fd, how int) error
 }
@@ -120,17 +121,16 @@ func Run(ctx context.Context, o Options) error {
 		}
 	}
 
-	l, err := o.listen(o.Port, o.procRoot, log)
+	b, err := o.listen(ctx, o.Port, log)
 	if errors.Is(err, syscall.EADDRINUSE) {
 		return fmt.Errorf("port %d is in use; pick another with --port, or leave it out", o.Port)
 	}
 	if err != nil {
 		return err
 	}
-	defer func() { _ = l.Close() }()
-	port := l.Addr().(*net.TCPAddr).Port
-	addr := "127.0.0.1:" + strconv.Itoa(port)
-	token := newSecret()
+	defer func() { _ = b.Close() }()
+	addr := b.Host()
+	token := session.NewToken()
 	url := "http://" + addr + "/?token=" + token
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -142,7 +142,7 @@ func Run(ctx context.Context, o Options) error {
 
 	env := &Env{Store: store.New(), Exec: o.Exec, Log: log, Opts: o, Addr: addr}
 	services := o.registry.snapshot().services
-	cfg := serverConfig{Env: env, Token: token, Port: port, Registry: o.registry}
+	cfg := serverConfig{Env: env, Token: token, Bound: b, Registry: o.registry}
 	if o.Demo {
 		d := demo.New(env.Store, o.Still)
 		env.Exec = d.Exec()
@@ -162,11 +162,6 @@ func Run(ctx context.Context, o Options) error {
 	srv, err := newServer(ctx, cfg)
 	if err != nil {
 		return err
-	}
-	hs := &http.Server{
-		Handler:           srv.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
 	for _, svc := range services {
 		if svc.Run == nil {
@@ -205,18 +200,39 @@ func Run(ctx context.Context, o Options) error {
 		}
 	}
 
-	errc := make(chan error, 1)
-	go func() { errc <- hs.Serve(l) }()
-	select {
-	case err := <-errc:
-		return err
-	case <-ctx.Done():
-	}
 	// The live update streams end with ctx; then the rest drains.
-	cancel()
-	sctx, scancel := context.WithTimeout(context.Background(), shutdownGrace)
-	defer scancel()
-	return hs.Shutdown(sctx)
+	return localweb.Serve(ctx, b.Listeners, srv.Handler(), localweb.ServeOptions{
+		Grace:    shutdownGrace,
+		ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	})
+}
+
+// listen opens sind ui's listener on 127.0.0.1: on port, or a free port if
+// port is 0. Only the user's own processes get through it.
+func listen(ctx context.Context, port int, log *slog.Logger) (*localweb.Bound, error) {
+	return openListener(ctx, port, func(l net.Listener, refused func(error)) (net.Listener, error) {
+		return localweb.PeerListener(l, os.Getuid(), refused)
+	}, log)
+}
+
+// openListener binds 127.0.0.1:port and puts the listener that peer makes
+// of each of its listeners in front of the server. A connection that peer
+// refuses is logged.
+func openListener(ctx context.Context, port int, peer func(l net.Listener, refused func(error)) (net.Listener, error), log *slog.Logger) (*localweb.Bound, error) {
+	b, err := localweb.Listen(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), localweb.ListenOptions{})
+	if err != nil {
+		return nil, err
+	}
+	refused := func(err error) { log.Warn("closed a connection", "err", err) }
+	for i, l := range b.Listeners {
+		guarded, err := peer(l, refused)
+		if err != nil {
+			_ = b.Close()
+			return nil, err
+		}
+		b.Listeners[i] = guarded
+	}
+	return b, nil
 }
 
 // openWait is how long a second sind ui waits for xdg-open before it

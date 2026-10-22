@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,10 +44,10 @@ func TestTokenExchangeKeepsQueryAndMethod(t *testing.T) {
 
 func TestSessionsAreIndependent(t *testing.T) {
 	ts := newTestServer(t).login()
-	first := ts.cookie
+	first, firstCSRF := ts.cookie, ts.csrf
 	ts.login()
 	assert.NotEqual(t, first.Value, ts.cookie.Value)
-	assert.NotEqual(t, ts.srv.auth.sessions[first.Value], ts.csrf)
+	assert.NotEqual(t, firstCSRF, ts.csrf)
 }
 
 func TestPostNeedsOriginAndCSRF(t *testing.T) {
@@ -97,21 +98,12 @@ func TestPostFormIsCappedAndChecked(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "dev", w.Body.String(), "the handler finds the form parsed")
 
-	w = ts.post("/changes", "name="+strings.Repeat("a", maxFormBytes+1))
+	w = ts.post("/changes", "name="+strings.Repeat("a", session.DefaultMaxBody+1))
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 
 	w = ts.post("/changes?x=%zz", "name=dev")
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "malformed")
-}
-
-func TestSecretsAreRandomAndCompared(t *testing.T) {
-	a, b := newSecret(), newSecret()
-	assert.NotEqual(t, a, b)
-	assert.Len(t, a, 43)
-	assert.True(t, equalSecret(a, a))
-	assert.False(t, equalSecret(a, b))
-	assert.False(t, equalSecret(a, ""))
 }
 
 func TestForbiddenSaysNothingAboutTheToken(t *testing.T) {
@@ -137,6 +129,7 @@ func TestFetchMetadata(t *testing.T) {
 		{"typed address", "GET", "/demo/x", "none", "navigate", "document", http.StatusOK},
 		{"link from another port", "GET", "/demo/x", "same-site", "navigate", "document", http.StatusOK},
 		{"link from another site", "GET", "/demo/x", "cross-site", "navigate", "document", http.StatusOK},
+		{"typed address, fetched", "GET", "/demo/x", "none", "cors", "empty", http.StatusForbidden},
 		{"image of another port", "GET", "/demo/x", "same-site", "no-cors", "image", http.StatusForbidden},
 		{"fetch of another site", "GET", "/demo/x", "cross-site", "cors", "empty", http.StatusForbidden},
 		{"form post of another port", "POST", "/changes", "same-site", "navigate", "document", http.StatusForbidden},
@@ -155,4 +148,21 @@ func TestFetchMetadata(t *testing.T) {
 		assert.Equal(t, c.want, ts.do(r).Code, c.name)
 	}
 	assert.Equal(t, 1, reached, "only the post of an own page reached the handler")
+}
+
+// A page that another program serves sends its Origin along with a fetch;
+// a plain navigation has none.
+func TestPageGetWithAnotherOriginIsRefused(t *testing.T) {
+	ts := newTestServer(t).login()
+	for origin, want := range map[string]int{
+		"http://127.0.0.1:7878": http.StatusOK,
+		"http://127.0.0.1:7879": http.StatusForbidden,
+		"http://evil.example":   http.StatusForbidden,
+		"null":                  http.StatusForbidden,
+	} {
+		r := request("GET", "/demo/x")
+		r.AddCookie(ts.cookie)
+		r.Header.Set("Origin", origin)
+		assert.Equal(t, want, ts.do(r).Code, origin)
+	}
 }

@@ -118,31 +118,28 @@ func TestSettersNotifyOnlyOnChange(t *testing.T) {
 	for _, tc := range setters() {
 		t.Run(tc.name, func(t *testing.T) {
 			s := New()
-			ch, done := s.Subscribe()
-			defer done()
+			sub := s.Subscribe()
+			defer sub.Close()
 
 			tc.empty(s)
-			assert.Empty(t, ch, "removing what is not there")
+			assert.Empty(t, sub.Take(), "removing what is not there")
 
 			tc.a(s)
-			require.Len(t, ch, 1)
-			assert.Equal(t, tc.topic, <-ch)
+			assert.Equal(t, []Topic{tc.topic}, sub.Take())
 			first := tc.view(s.Snapshot())
 
 			tc.a(s)
-			assert.Empty(t, ch, "an equal value")
+			assert.Empty(t, sub.Take(), "an equal value")
 
 			tc.b(s)
-			require.Len(t, ch, 1)
-			assert.Equal(t, tc.topic, <-ch)
+			assert.Equal(t, []Topic{tc.topic}, sub.Take())
 			assert.NotEqual(t, first, tc.view(s.Snapshot()))
 			assert.Equal(t, first, tc.view(snapshotAfter(tc.a)), "same input, same value")
 
 			tc.empty(s)
-			require.Len(t, ch, 1)
-			assert.Equal(t, tc.topic, <-ch)
+			assert.Equal(t, []Topic{tc.topic}, sub.Take())
 			tc.empty(s)
-			assert.Empty(t, ch)
+			assert.Empty(t, sub.Take())
 		})
 	}
 }
@@ -203,10 +200,10 @@ func TestPublishedSnapshotNeverChanges(t *testing.T) {
 
 func TestSetRealmsEmptyIsEqual(t *testing.T) {
 	s := New()
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 	s.SetRealms([]cluster.RealmSummary{})
-	assert.Empty(t, ch)
+	assert.Empty(t, sub.Take())
 }
 
 func TestKeepStatuses(t *testing.T) {
@@ -214,12 +211,12 @@ func TestKeepStatuses(t *testing.T) {
 	s.SetStatus("r", "a", &cluster.Status{Name: "a"})
 	s.SetStatus("r", "b", &cluster.Status{Name: "b"})
 	s.SetStatus("q", "a", &cluster.Status{Name: "qa"})
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 	held := s.Snapshot()
 
 	s.KeepStatuses(StatusKey{"r", "a"}, StatusKey{"q", "a"})
-	assert.Empty(t, ch, "dropping notifies nothing")
+	assert.Empty(t, sub.Take(), "dropping notifies nothing")
 	sn := s.Snapshot()
 	assert.NotNil(t, sn.Status("r", "a"))
 	assert.NotNil(t, sn.Status("q", "a"))
@@ -300,11 +297,11 @@ func TestDockerState(t *testing.T) {
 
 func TestDoctorTimeEqual(t *testing.T) {
 	s := New()
-	ch, done := s.Subscribe()
-	defer done()
+	sub := s.Subscribe()
+	defer sub.Close()
 	now := time.Now()
 	s.SetDoctor(&DoctorReport{Time: now})
-	<-ch
+	assert.Equal(t, []Topic{TopicDoctor}, sub.Take())
 	s.SetDoctor(&DoctorReport{Time: now})
-	assert.Empty(t, ch)
+	assert.Empty(t, sub.Take())
 }

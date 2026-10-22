@@ -63,8 +63,8 @@ func (p *perRealm) realmNames(sn store.Snapshot) []string {
 func (p *perRealm) run(ctx context.Context) {
 	sub := p.bus.Subscribe()
 	defer sub.Close()
-	changes, unsubscribe := p.store.Subscribe()
-	defer unsubscribe()
+	changes := p.store.Subscribe()
+	defer changes.Close()
 	tick := time.NewTicker(p.every())
 	defer tick.Stop()
 
@@ -102,7 +102,9 @@ func (p *perRealm) run(ctx context.Context) {
 		case <-p.resume:
 			readAll()
 			continue
-		case <-changes:
+		case <-changes.Changed():
+			// Which topics changed does not matter; the snapshot says.
+			changes.Take()
 			sn := p.store.Snapshot()
 			if sn.Docker.Err != "" {
 				wasDown = true

@@ -234,11 +234,7 @@ func TestPgFragmentsDependOnWhatTheyShow(t *testing.T) {
 	}
 	p := Params{"realm": {"r"}, "cluster": {"c"}, "node": {"n"}}
 	dep := func(name string, p Params, topics ...store.Topic) bool {
-		pending := map[store.Topic]bool{}
-		for _, t := range topics {
-			pending[t] = true
-		}
-		return frag(name).depends(pending, p)
+		return frag(name).depends(topics, p)
 	}
 	assert.True(t, dep("pg-overview-needs", nil, store.LockTopic("x")))
 	assert.True(t, dep("pg-overview-needs", nil, store.TopicDocker))

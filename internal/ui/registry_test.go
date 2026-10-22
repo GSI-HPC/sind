@@ -32,19 +32,13 @@ func TestRegistryRefusesWrongRegistrations(t *testing.T) {
 }
 
 func TestFragmentDepends(t *testing.T) {
-	pending := func(ts ...store.Topic) map[store.Topic]bool {
-		m := map[store.Topic]bool{}
-		for _, t := range ts {
-			m[t] = true
-		}
-		return m
-	}
+	pending := func(ts ...store.Topic) []store.Topic { return ts }
 	p := Params{"id": {"abc"}}
 	watch := func(p Params) []store.Topic { return []store.Topic{store.RunTopic(p.Get("id"))} }
 	for _, tc := range []struct {
 		name    string
 		f       Fragment
-		pending map[store.Topic]bool
+		pending []store.Topic
 		want    bool
 	}{
 		{"nothing pending", Fragment{Topics: []store.Topic{store.TopicRuns}}, pending(), false},
@@ -56,8 +50,6 @@ func TestFragmentDepends(t *testing.T) {
 		{"watched item", Fragment{Watch: watch}, pending(store.RunTopic("abc")), true},
 		{"another item", Fragment{Watch: watch}, pending(store.RunTopic("def")), false},
 		{"no dependency", Fragment{}, pending(store.TopicTasks), false},
-		{"all topics", Fragment{Topics: []store.Topic{store.TopicRuns}}, pending(store.TopicAll), true},
-		{"all topics, watched", Fragment{Watch: watch}, pending(store.TopicAll), true},
 	} {
 		assert.Equal(t, tc.want, tc.f.depends(tc.pending, p), tc.name)
 	}

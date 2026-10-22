@@ -127,9 +127,7 @@ func (s *Store) change(fn func(*Snapshot) bool, ts ...Topic) {
 	if !fn(&s.snap) {
 		return
 	}
-	for _, t := range ts {
-		s.notify(t)
-	}
+	s.changes.Notify(ts...)
 }
 
 // setEntry sets m[k] to v in a copy of the map, or removes k when v is

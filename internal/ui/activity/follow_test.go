@@ -37,6 +37,29 @@ func runFollow(t *testing.T, st *store.Store, path string, active, idle, staleAf
 // forever is a time after which no run of the tests is stale.
 const forever = 1 << 62
 
+// notices returns a channel of the topics that the store notifies, one by
+// one, until the test ends.
+func notices(t *testing.T, st *store.Store) <-chan store.Topic {
+	t.Helper()
+	sub := st.Subscribe()
+	out := make(chan store.Topic, 64)
+	done := make(chan struct{})
+	t.Cleanup(func() { sub.Close(); close(done) })
+	go func() {
+		for {
+			select {
+			case <-sub.Changed():
+				for _, topic := range sub.Take() {
+					out <- topic
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	return out
+}
+
 // next returns the next notification, or fails after a while.
 func next(t *testing.T, ch <-chan store.Topic) store.Topic {
 	t.Helper()
@@ -62,8 +85,7 @@ func quiet(t *testing.T, ch <-chan store.Topic, d time.Duration) {
 func TestFollowSetsTheChangedRuns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "activity.jsonl")
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
-	defer unsubscribe()
+	ch := notices(t, st)
 
 	// A log that is not there is empty: nothing to set.
 	stop := runFollow(t, st, path, 5*time.Millisecond, 5*time.Millisecond, forever)
@@ -104,8 +126,7 @@ func TestFollowReadsLessOftenWhenNoRunGoesOn(t *testing.T) {
 	appendTo(t, path, ev("start", runA, "2026-01-01T00:00:00Z", `"span":"r","kind":"command","name":"one"`))
 	appendTo(t, path, []byte("\n"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
-	defer unsubscribe()
+	ch := notices(t, st)
 	// The idle interval is an hour, so only the active one reads again.
 	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour, forever)
 	defer stop()
@@ -130,8 +151,7 @@ func TestFollow(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "activity.jsonl")
 	appendTo(t, path, logLines(runA, "one"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
-	defer unsubscribe()
+	ch := notices(t, st)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -164,8 +184,7 @@ func TestFollowEndsAStaleRun(t *testing.T) {
 	appendTo(t, path, []byte("\n"))
 	appendTo(t, path, logLines("bbbbbbbbbbbbbbbb", "two"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
-	defer unsubscribe()
+	ch := notices(t, st)
 	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour, time.Hour)
 	defer stop()
 	got := map[store.Topic]bool{}
@@ -208,8 +227,7 @@ func TestFollowEndsARunThatFallsSilent(t *testing.T) {
 	appendTo(t, path, ev("start", runA, now, `"span":"r","kind":"command","name":"one"`))
 	appendTo(t, path, []byte("\n"))
 	st := store.New()
-	ch, unsubscribe := st.Subscribe()
-	defer unsubscribe()
+	ch := notices(t, st)
 	stop := runFollow(t, st, path, 5*time.Millisecond, 5*time.Millisecond, 300*time.Millisecond)
 	defer stop()
 	next(t, ch)
