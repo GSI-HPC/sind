@@ -55,10 +55,13 @@ func TestBuildCreateCluster_Minimal(t *testing.T) {
 }
 
 func TestBuildCreateCluster_Everything(t *testing.T) {
-	cmd, err := build(t, "create-cluster", valid(
+	f := valid(
 		"realm", "ci", "image", "ghcr.io/gsi-hpc/sind-node:26.05.4", "cpus", "2", "memory", "1g",
-		"backup", "1", "db", "1", "api", "1", "submitter", "1", "w0-count", "3", "users", "alice, bob alice",
-		"monitoring", "on", "pull", "on", "wait", "10m", "dtype", "hostPath", "dir", "~/sind/hpc"))
+		"backup", "1", "db", "1", "api", "1", "submitter", "1", "w0-count", "3",
+		"monitoring", "on", "pull", "on", "wait", "10m", "dtype", "hostPath", "dir", "~/sind/hpc")
+	rows(f, UserRows, "u0", "name", "alice")
+	rows(f, UserRows, "u1", "name", "bob")
+	cmd, err := build(t, "create-cluster", f)
 	require.NoError(t, err)
 
 	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --pull --wait 10m", cmd.Display)
@@ -315,7 +318,6 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"workers missing", valid("w0-count", ""), "w0-count", "write a number from 1 to 1024", true},
 		{"workers many", valid("w0-count", "1025"), "w0-count", "write a number from 1 to 1024", true},
 		{"checkbox", valid("db", "2"), "db", "tick the box or leave it empty", true},
-		{"user", valid("users", "Alice! bob Bad?"), "users", "must start with a lowercase letter", false},
 		{"wait", valid("wait", "soon"), "wait", "write a time such as 15m", true},
 		{"wait negative", valid("wait", "-1m"), "wait", "write a time such as 15m", true},
 		{"wait other empty", valid("wait", "other"), "wait_other", "write a time such as 15m", true},
@@ -345,7 +347,10 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 }
 
 func TestBuildCreateCluster_PlanTakesTheDefaultsOfWrongFields(t *testing.T) {
-	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "w0-count", "x", "image", "bad image", "wait", "7 min", "users", "ada Bad"))
+	f := valid("cpus", "x", "memory", "8 gigs", "w0-count", "x", "image", "bad image", "wait", "7 min")
+	rows(f, UserRows, "u0", "name", "ada")
+	rows(f, UserRows, "u1", "name", "Bad")
+	cmd, err := build(t, "create-cluster", f)
 	require.NoError(t, err)
 
 	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)
@@ -368,7 +373,7 @@ nodes:
 	for _, p := range cmd.Problems {
 		fields = append(fields, p.Field)
 	}
-	assert.Equal(t, []string{"image", "w0-count", "cpus", "memory", "users", "wait"}, fields, "in the order of the dialog")
+	assert.Equal(t, []string{"image", "w0-count", "cpus", "memory", "u1-name", "wait"}, fields, "in the order of the dialog")
 }
 
 func TestBuildCreateCluster_WrongNameKeepsThePlan(t *testing.T) {

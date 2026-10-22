@@ -101,7 +101,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	nodeDefaults(f, &cfg.Defaults, &ps)
 	nodes, planned := clusterNodes(f, &ps)
 	cfg.Nodes = nodes
-	cfg.Users = clusterUsers(f, &ps)
+	clusterUsers(f, &cfg, &ps)
 	cfg.Monitoring = checkbox(f, "monitoring", "Monitoring", &ps)
 	pull := clusterPull(f, cfg.Defaults.Image, &ps)
 	checkClusterName(c, realm, &cfg, &ps)
@@ -260,28 +260,6 @@ func checkbox(f Form, field, label string, ps *problems) bool {
 	}
 	ps.add(field, label, true, errors.New("tick the box or leave it empty"))
 	return false
-}
-
-// clusterUsers reads the field "users": names separated by commas or
-// spaces, each a valid user name, without duplicates. The plan leaves out a
-// wrong name.
-func clusterUsers(f Form, ps *problems) []config.User {
-	var users []config.User
-	var seen []string
-	for _, u := range strings.FieldsFunc(f.Get("users"), func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' }) {
-		if err := config.CheckUserName(u); err != nil {
-			if !ps.has("users") {
-				ps.add("users", "Users", false, err)
-			}
-			continue
-		}
-		if slices.Contains(seen, u) {
-			continue
-		}
-		seen = append(seen, u)
-		users = append(users, config.User{Name: u})
-	}
-	return users
 }
 
 // clusterData is the data storage of a new cluster.

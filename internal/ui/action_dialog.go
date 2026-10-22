@@ -28,11 +28,28 @@ var actDialogKeys = []string{
 	"dtype", "dir", "mkdir", "mount", "monitoring", "pull", "wait_other",
 }
 
+// actRowFieldPattern is a field of a node, a worker group or a row of a
+// user, group or account, which a link may fill in too, as may the lists
+// of the keys of the groups and rows.
+var actRowFieldPattern = regexp.MustCompile(`^(wg|ur|gr|ar|(controller|db|api|submitter|[wuga][0-9a-z]{1,8})-[a-zA-Z]{1,16})$`)
+
+// actLinkKeys are the keys of the query that open a dialog with its fields
+// filled in: actDialogKeys, and the fields of nodes and rows.
+func actLinkKeys(q url.Values) []string {
+	keys := slices.Clone(actDialogKeys)
+	for k := range q {
+		if actRowFieldPattern.MatchString(k) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
 const (
 	// actMaxValue is the longest value of a field a form may post, in
 	// bytes; actMaxValues is the most values.
 	actMaxValue  = 1024
-	actMaxValues = 512
+	actMaxValues = 2048
 )
 
 // actCheckForm refuses a form with a value that is too long, or too many.
@@ -110,6 +127,15 @@ var actSpecs = map[string]actSpec{
 			}
 			d.def("cpus", "1")
 			d.def("memory", "512m")
+			if names := strings.FieldsFunc(d.Form.Get("users"), func(r rune) bool { return r == ',' || r == ' ' }); len(names) > 0 && !d.Form.Has(action.UserRows.List) {
+				// The users of a link become rows.
+				for i, name := range names {
+					key := action.UserRows.Prefix + strconv.Itoa(i)
+					d.Form.Add(action.UserRows.List, key)
+					d.Form.Set(key+"-name", name)
+				}
+			}
+			d.Form.Del("users")
 			d.def("dtype", "hostPath")
 			d.def("dir", actDefaultDir(d.Form.Get("name")))
 			d.def("mkdir", "on")
@@ -187,14 +213,15 @@ var actSpecs = map[string]actSpec{
 type actSection struct {
 	ID string
 	// Fields are those in the section, whose problems it counts.
-	Fields []string
+	Fields func(f url.Values) []string
 	// Sum is the line that sums the section up.
 	Sum func(p actPreview) string
 }
 
 // actClusterSections are the sections of the New cluster dialog.
 var actClusterSections = []actSection{
-	{ID: "data", Fields: []string{"dtype", "dir", "mkdir", "mount"}, Sum: func(p actPreview) string {
+	{ID: "users", Fields: action.UserFieldsOf, Sum: actUsersSum},
+	{ID: "data", Fields: actFields("dtype", "dir", "mkdir", "mount"), Sum: func(p actPreview) string {
 		if p.Form.Get("dtype") == "volume" {
 			return actWithMount("Docker volume", p.Form)
 		}
@@ -204,8 +231,99 @@ var actClusterSections = []actSection{
 		}
 		return actWithMount(sum, p.Form)
 	}},
-	{ID: "run", Fields: []string{"pull", "wait", "wait_other"}, Sum: actRunSum},
+	{ID: "run", Fields: actFields("pull", "wait", "wait_other"), Sum: actRunSum},
 }
+
+// actFields returns the fields of a section that are always the same.
+func actFields(fields ...string) func(url.Values) []string {
+	return func(url.Values) []string { return fields }
+}
+
+// actUsersSum sums up the users, groups and accounts of a new cluster: how
+// many have a name.
+func actUsersSum(p actPreview) string {
+	var parts []string
+	for _, k := range []struct {
+		rows action.Rows
+		what string
+	}{{action.UserRows, "user"}, {action.GroupRows, "group"}, {action.AccountRows, "account"}} {
+		if n := len(actNames(p.Form, k.rows)); n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s%s", n, k.what, map[bool]string{true: "", false: "s"}[n == 1]))
+		}
+	}
+	if len(parts) == 0 {
+		return "No users"
+	}
+	return strings.Join(parts, ", ")
+}
+
+// actNames are the names of the rows of the form, without empty ones.
+func actNames(f url.Values, r action.Rows) []string {
+	var names []string
+	for _, key := range r.Keys(f) {
+		if name := strings.TrimSpace(f.Get(key + "-name")); name != "" && r.Key(key) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// GroupNames are the groups of the form, which the fields of a user
+// suggest.
+func (p actPreview) GroupNames() []string { return actNames(p.Form, action.GroupRows) }
+
+// AccountNames are the accounts of the form, which the fields of a user
+// and of a parent suggest.
+func (p actPreview) AccountNames() []string { return actNames(p.Form, action.AccountRows) }
+
+// actRowView is a row of a user, group or account of the New cluster
+// dialog.
+type actRowView struct {
+	Key  string
+	form url.Values
+}
+
+// Val returns the value of the row's field attr.
+func (r actRowView) Val(attr string) string { return r.form.Get(r.Key + "-" + attr) }
+
+// actLimit is a limit of the account Row, as the dialog shows it.
+type actLimit struct{ Row, Key, Value string }
+
+// Limits are the limits of an account row.
+func (r actRowView) Limits() []actLimit {
+	values := r.form[r.Key+"-lv"]
+	var out []actLimit
+	for i, k := range r.form[r.Key+"-lk"] {
+		l := actLimit{Row: r.Key, Key: k}
+		if i < len(values) {
+			l.Value = values[i]
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+// Blank is a new limit of an account row.
+func (r actRowView) Blank() actLimit { return actLimit{Row: r.Key} }
+
+// Row returns the row key of the dialog.
+func (d *actDialog) Row(key string) actRowView { return actRowView{Key: key, form: d.Form} }
+
+// Rows returns the rows of a kind, "user", "group" or "account", whose keys
+// the dialog made.
+func (d *actDialog) Rows(kind string) []actRowView {
+	r := map[string]action.Rows{"user": action.UserRows, "group": action.GroupRows, "account": action.AccountRows}[kind]
+	var out []actRowView
+	for _, key := range r.Keys(d.Form) {
+		if r.Key(key) {
+			out = append(out, d.Row(key))
+		}
+	}
+	return out
+}
+
+// LimitKeys are the limits that an account may have.
+func (d *actDialog) LimitKeys() []string { return config.LimitKeys }
 
 // actRunSum sums up the run options of a new cluster.
 func actRunSum(p actPreview) string {
@@ -263,8 +381,9 @@ func (p actPreview) Sections() []actSectionView {
 	var out []actSectionView
 	for _, sec := range p.Spec.Sections {
 		v := actSectionView{ID: sec.ID, Summary: sec.Sum(p)}
+		fields := sec.Fields(p.Form)
 		for _, pr := range p.Cmd.Problems {
-			if slices.Contains(sec.Fields, pr.Field) {
+			if slices.Contains(fields, pr.Field) {
 				v.Bad++
 			}
 		}
@@ -543,7 +662,8 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v, err := s.View(r, actDialogKeys...)
+	keys := actLinkKeys(r.URL.Query())
+	v, err := s.View(r, keys...)
 	if err != nil {
 		s.Fail(w, r, err)
 		return
@@ -553,7 +673,7 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
 		Ops: action.PowerOps, Waits: actWaits,
 	}
-	for _, k := range actDialogKeys {
+	for _, k := range keys {
 		if vals := v.Params[k]; len(vals) > 0 {
 			d.Form[k] = slices.Clone(vals)
 		}

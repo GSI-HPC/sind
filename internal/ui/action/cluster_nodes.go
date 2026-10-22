@@ -76,8 +76,9 @@ func ClusterFieldsOf(f Form) []string {
 			fields = append(fields, nodeFields(g)...)
 		}
 	}
-	return append(fields, "monitoring", "size", "cpus", "memory", "tmp", "users",
-		"dtype", "dir", "mkdir", "mount", "pull", "wait", "wait_other")
+	fields = append(fields, "monitoring", "size", "cpus", "memory", "tmp")
+	fields = append(fields, UserFieldsOf(f)...)
+	return append(fields, "dtype", "dir", "mkdir", "mount", "pull", "wait", "wait_other")
 }
 
 // nodeFields are the fields of the node key, but the count of a group.

@@ -302,7 +302,7 @@ func TestActPreview_Warnings(t *testing.T) {
 func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
 	f := newActFixture(t)
 
-	w := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "w0-count", "2", "dir", "/scratch/hpc", "users", "ada"))
+	w := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "w0-count", "2", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "ada"))
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
@@ -558,11 +558,11 @@ func TestActRun_RefusesACommandThatChanged(t *testing.T) {
 
 func TestActRun_ShownCoversTheConfig(t *testing.T) {
 	f := newActFixture(t)
-	form := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "users", "ada")
+	form := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "ada")
 	shown := f.shown(t, "create-cluster", form)
 
 	// The command line is the same; the config is not.
-	w := f.post("/actions/create-cluster/run", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "users", "eve", "shown", shown))
+	w := f.post("/actions/create-cluster/run", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "eve", "shown", shown))
 
 	assert.Contains(t, w.Body.String(), "The command changed while you looked")
 	assert.Empty(t, f.saved)
@@ -871,4 +871,48 @@ func TestActRun_RefusesANewClusterWithProblems(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "realm sind has a cluster dev already")
 	assert.Empty(t, f.saved)
 	assert.Empty(t, f.starter.specs)
+}
+
+func TestActDialog_NewClusterUsers(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<details class="act-sec" id="act-sec-users"><summary>`, "no rows: the section is closed")
+	assert.Contains(t, body, `<template id="act-tpl-user"><div class="act-row" id="act-row-__ROW__" data-act-row><input type="hidden" name="ur" value="__ROW__">`)
+	assert.Contains(t, body, `<template id="act-tpl-limit"><div class="act-rowf act-lim" data-act-row>
+  <input type="text" name="__ROW__-lk" value=""`)
+	assert.Contains(t, body, `<option value="MaxJobs"></option>`)
+
+	body = f.get("/dialogs/create-cluster?users=ada,bob").Body.String()
+	assert.Contains(t, body, `<details class="act-sec" id="act-sec-users" open>`)
+	assert.Contains(t, body, `id="act-u0-name" name="u0-name" value="ada"`)
+	assert.Contains(t, body, `id="act-u1-name" name="u1-name" value="bob"`)
+
+	body = f.get("/dialogs/create-cluster?" + actForm("ar", "a0", "a0-name", "physics", "a0-lk", "MaxJobs", "a0-lv", "4", "a0-lk", "GrpTRES",
+		"ur", "u0", "u0-admin", "operator", "gr", "g0", "gr", "api", "g0-name", "hpc", "evil", "x")).Body.String()
+	assert.Contains(t, body, `name="a0-lk" value="MaxJobs"`)
+	assert.Contains(t, body, `name="a0-lv" value="4"`)
+	assert.Contains(t, body, `name="a0-lk" value="GrpTRES"`, "a limit without its value")
+	assert.Contains(t, body, `id="act-g0-name" name="g0-name" value="hpc"`)
+	assert.NotContains(t, body, `id="act-row-api"`, "a key that the dialog does not make")
+	assert.Contains(t, body, `<option value="operator" selected>Operator</option>`)
+	assert.Contains(t, body, `<details class="act-more" open><summary>More: groups, coordinator, admin level</summary>`)
+}
+
+func TestActPreview_NewClusterUsers(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "db", "on", "ur", "u0", "u0-name", "ada", "ur", "u1", "u1-name", "bob",
+		"gr", "g0", "g0-name", "hpc", "ar", "a0", "a0-name", "physics", "ar", "a1")).Body.String()
+	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">2 users, 1 group, 1 account</span>`)
+	assert.Contains(t, body, `<datalist id="act-dl-groups" hx-swap-oob="true"><option value="hpc"></option></datalist>`)
+	assert.Contains(t, body, `<datalist id="act-dl-accounts" hx-swap-oob="true"><option value="physics"></option></datalist>`)
+	assert.Contains(t, body, `id="act-err-u1-name" hx-swap-oob="innerHTML"></span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "ur", "u0", "u0-name", "Ada")).Body.String()
+	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">1 user</span>`)
+	assert.Contains(t, body, `id="act-bad-users" hx-swap-oob="innerHTML">1 problem</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">No users</span>`)
 }

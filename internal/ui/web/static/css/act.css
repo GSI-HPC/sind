@@ -104,6 +104,17 @@
 .scrim .act-waits input[type=text]{width:120px}
 .scrim .act-waits:not(:has(input[value=other]:checked)) input[type=text]{display:none}
 .scrim .act-sbody{display:grid;gap:10px;padding:10px 10px 12px;border-top:1px solid var(--line-2)}
+.scrim .act-rows{display:grid;gap:6px}
+.scrim .act-rows:empty{display:none}
+.scrim .act-row{display:grid;gap:4px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2)}
+.scrim .act-rowf{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:6px;align-items:center}
+.scrim #act-rows-group .act-rowf,.scrim #act-rows-account>.act-row>.act-rowf,.scrim .act-lim{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+.scrim .act-rowf input,.scrim .act-rowf select{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);font:13px var(--f-mono);width:100%;min-width:0}
+.scrim .act-row .act-more .fld input,.scrim .act-row .act-more .fld select{background:var(--panel)}
+.scrim .act-lims{display:grid;gap:4px;padding-left:14px}
+.scrim .act-lims:empty{display:none}
+.scrim .act-row>.btn.sm{justify-self:start}
+.scrim [aria-invalid=true]{border-color:var(--bad)}
 
 /* The plan pane. */
 .scrim .act-meter{display:grid;gap:2px}
@@ -133,5 +144,7 @@
   .scrim .act-ned{padding-left:12px}
   .scrim .act-nr{grid-template-columns:18px 12px minmax(0,1fr) auto}
   .scrim .act-nr>.act-k,.scrim .act-nr>.act-always{grid-column:3/-1;justify-self:start}
+  .scrim .act-rowf{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+  .scrim .act-rowf>input[name$=-accounts]{grid-column:1/3}
 }
 @media (max-width:520px){.scrim{padding-top:2vh}}

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // The script of the dialogs of the actions: the steppers, the editors of the
-// nodes and the worker groups of a new cluster, the directory that follows
-// the name, the pull that follows the image, the links to a field with a
-// problem, the Copy button, and closing. The dialogs are the server's HTML, which htmx puts into
-// #layer; nothing here evaluates text.
+// nodes, the worker groups and the rows of users, groups and accounts of a
+// new cluster, the directory that follows the name, the pull that follows
+// the image, the links to a field with a problem, the Copy button, and
+// closing. The dialogs are the server's HTML, which htmx puts into #layer;
+// nothing here evaluates text.
 (() => {
   'use strict';
 
@@ -83,6 +84,35 @@
       count.value = '1';
       count.focus();
       count.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+
+    // A new row of a user, group, account or limit: a copy of its
+    // template, with the key of the row, or a new key of its own.
+    const rowAdd = t.closest('[data-act-rowadd]');
+    if (rowAdd) {
+      const tpl = document.getElementById('act-tpl-' + rowAdd.dataset.actRowadd);
+      const box = document.getElementById(rowAdd.dataset.actInto);
+      if (!tpl || !box) return;
+      const key = rowAdd.dataset.actKey || rowAdd.dataset.actPrefix + Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+      box.insertAdjacentHTML('beforeend', tpl.innerHTML.replaceAll('__ROW__', key));
+      const first = box.lastElementChild && box.lastElementChild.querySelector('input:not([type=hidden])');
+      if (first) first.focus();
+      rowAdd.closest('form').dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
+
+    const rowDel = t.closest('[data-act-rowdel]');
+    if (rowDel) {
+      const row = rowDel.closest('[data-act-row]');
+      const form = rowDel.closest('form');
+      if (!row) return;
+      const box = row.parentElement;
+      row.remove();
+      // The button that had the focus is gone.
+      const add = form.querySelector('[data-act-into="' + box.id + '"]');
+      if (add) add.focus();
+      form.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
 

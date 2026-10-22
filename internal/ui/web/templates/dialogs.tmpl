@@ -57,6 +57,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{if .Spec.Plan}}{{range .NodeViews}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}} hx-swap-oob="true">{{.Chip}}</span>{{if .Group}}<span class="hint" id="act-range-{{.Key}}" hx-swap-oob="true">{{$p.RangeOf .Key}}</span>{{end}}{{end}}
 {{with .Eff}}<span id="act-eff" hidden hx-swap-oob="true" data-image="{{.Image}}" data-cpus="{{.CPUs}}" data-memory="{{.Memory}}" data-tmp="{{.TmpSize}}"></span>{{end}}
 <span class="hint" id="act-pull-hint" data-act-pull="{{if .PullOn}}on{{else}}off{{end}}" hx-swap-oob="true">{{.PullHint}}</span>
+<datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
 {{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
 {{end}}{{end}}
@@ -120,6 +121,57 @@ placeholder. */}}
   </details>
 </div>{{end}}
 
+{{/* act-user is a row of a user of a new cluster. */}}
+{{define "act-user"}}<div class="act-row" id="act-row-{{.Key}}" data-act-row><input type="hidden" name="ur" value="{{.Key}}">
+  <div class="act-rowf">
+    <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as alice" aria-label="User name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
+    <input type="number" id="act-{{.Key}}-uid" name="{{.Key}}-uid" value="{{.Val "uid"}}" min="1000" placeholder="UID: auto" aria-label="UID" aria-describedby="act-err-{{.Key}}-uid">
+    <input type="text" id="act-{{.Key}}-accounts" name="{{.Key}}-accounts" value="{{.Val "accounts"}}" list="act-dl-accounts" placeholder="Slurm accounts" aria-label="Slurm accounts, the first is the default" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-accounts">
+    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this user">✕</button>
+  </div>
+  <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-uid"></span><span class="err" id="act-err-{{.Key}}-accounts"></span>
+  <details class="act-more"{{if or (.Val "group") (.Val "groups") (.Val "coordinator") (.Val "admin")}} open{{end}}><summary>More: groups, coordinator, admin level</summary>
+    <div class="act-edg">
+      <div class="fld"><label for="act-{{.Key}}-group">Primary group</label><input type="text" id="act-{{.Key}}-group" name="{{.Key}}-group" value="{{.Val "group"}}" list="act-dl-groups" placeholder="its own" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-group"><span class="err" id="act-err-{{.Key}}-group"></span></div>
+      <div class="fld"><label for="act-{{.Key}}-groups">Groups</label><input type="text" id="act-{{.Key}}-groups" name="{{.Key}}-groups" value="{{.Val "groups"}}" list="act-dl-groups" placeholder="none" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-groups"><span class="err" id="act-err-{{.Key}}-groups"></span></div>
+      <div class="fld"><label for="act-{{.Key}}-coordinator">Coordinator of</label><input type="text" id="act-{{.Key}}-coordinator" name="{{.Key}}-coordinator" value="{{.Val "coordinator"}}" list="act-dl-accounts" placeholder="no account" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-coordinator"><span class="err" id="act-err-{{.Key}}-coordinator"></span></div>
+      <div class="fld"><label for="act-{{.Key}}-admin">Admin level</label><select id="act-{{.Key}}-admin" name="{{.Key}}-admin" aria-describedby="act-err-{{.Key}}-admin">{{$a := .Val "admin"}}<option value=""{{if eq $a ""}} selected{{end}}>None</option><option value="operator"{{if eq $a "operator"}} selected{{end}}>Operator</option><option value="admin"{{if eq $a "admin"}} selected{{end}}>Admin</option></select><span class="err" id="act-err-{{.Key}}-admin"></span></div>
+      <span class="hint act-full">Separate groups and accounts with commas. Coordinator and admin level need an account.</span>
+    </div>
+  </details>
+</div>{{end}}
+
+{{/* act-group-row is a row of a group of a new cluster. */}}
+{{define "act-group-row"}}<div class="act-row" id="act-row-{{.Key}}" data-act-row><input type="hidden" name="gr" value="{{.Key}}">
+  <div class="act-rowf">
+    <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as hpc" aria-label="Group name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
+    <input type="number" id="act-{{.Key}}-gid" name="{{.Key}}-gid" value="{{.Val "gid"}}" min="1000" placeholder="GID: auto" aria-label="GID" aria-describedby="act-err-{{.Key}}-gid">
+    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this group">✕</button>
+  </div>
+  <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-gid"></span>
+</div>{{end}}
+
+{{/* act-account is a row of a Slurm account of a new cluster, with its
+limits as pairs of fields. */}}
+{{define "act-account"}}<div class="act-row" id="act-row-{{.Key}}" data-act-row><input type="hidden" name="ar" value="{{.Key}}">
+  <div class="act-rowf">
+    <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as physics" aria-label="Account name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
+    <input type="text" id="act-{{.Key}}-parent" name="{{.Key}}-parent" value="{{.Val "parent"}}" list="act-dl-accounts" placeholder="parent: root" aria-label="Parent account" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-parent">
+    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this account">✕</button>
+  </div>
+  <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-parent"></span>
+  <div class="act-lims" id="act-lims-{{.Key}}">{{range .Limits}}{{template "act-limit" .}}{{end}}</div>
+  <span class="err" id="act-err-{{.Key}}-lk"></span>
+  <button type="button" class="btn sm" data-act-rowadd="limit" data-act-into="act-lims-{{.Key}}" data-act-key="{{.Key}}">+ Add limit</button>
+</div>{{end}}
+
+{{/* act-limit is a limit of an account: a pair of fields. */}}
+{{define "act-limit"}}<div class="act-rowf act-lim" data-act-row>
+  <input type="text" name="{{.Row}}-lk" value="{{.Key}}" list="act-dl-limits" placeholder="limit, such as MaxJobs" aria-label="Limit" autocapitalize="off" spellcheck="false">
+  <input type="text" name="{{.Row}}-lv" value="{{.Value}}" placeholder="value, such as 4" aria-label="Value of the limit" autocapitalize="off" spellcheck="false">
+  <button type="button" class="act-x" data-act-rowdel aria-label="Remove this limit">✕</button>
+</div>{{end}}
+
 {{/* act-nodes is the picker of the nodes of a cluster. */}}
 {{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
   {{if .Nodes}}<div class="checks act-nodes">{{range .Nodes}}<label><input type="checkbox" name="nodes" value="{{.Short}}"{{if .On}} checked{{end}}> <span class="mono">{{.Short}}</span> <small>{{.Role}}, {{.State}}</small></label>{{end}}</div>
@@ -159,8 +211,25 @@ placeholder. */}}
   <span class="hint">Every node takes these values. The size button of a node changes them for that node or worker group.</span>
   <datalist id="act-memories">{{range .Memories}}<option value="{{.}}"></option>{{end}}</datalist>
 </div>
-<div class="fld"><label for="act-users">Users</label><input type="text" id="act-users" name="users" value="{{.Val "users"}}" placeholder="none" autocapitalize="off" spellcheck="false" aria-describedby="act-err-users act-hint-users">
-  <span class="err" id="act-err-users"></span><span class="hint" id="act-hint-users">sind creates them on every node, with a home.</span></div>
+<details class="act-sec" id="act-sec-users"{{if or (.Rows "user") (.Rows "group") (.Rows "account")}} open{{end}}><summary><span class="act-st">Users and accounts</span><span class="act-ss" id="act-sum-users"></span><span class="act-sb" id="act-bad-users"></span></summary>
+  <div class="act-sbody">
+    <div class="fld"><span class="lbl">Users</span>
+      <div class="act-rows" id="act-rows-user">{{range .Rows "user"}}{{template "act-user" .}}{{end}}</div>
+      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="user" data-act-into="act-rows-user" data-act-prefix="u">+ Add user</button><span class="hint">sind creates them on the nodes, with a home in /home. An empty UID takes the next free one from 1000.</span></div></div>
+    <div class="fld"><span class="lbl">Groups</span>
+      <div class="act-rows" id="act-rows-group">{{range .Rows "group"}}{{template "act-group-row" .}}{{end}}</div>
+      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="group" data-act-into="act-rows-group" data-act-prefix="g">+ Add group</button><span class="hint">For the group and groups of a user. Each user has a private group of its own name too.</span></div></div>
+    <div class="fld"><span class="lbl">Slurm accounts</span>
+      <div class="act-rows" id="act-rows-account">{{range .Rows "account"}}{{template "act-account" .}}{{end}}</div>
+      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children.</span></div></div>
+    <datalist id="act-dl-groups"></datalist><datalist id="act-dl-accounts"></datalist>
+    <datalist id="act-dl-limits">{{range .LimitKeys}}<option value="{{.}}"></option>{{end}}</datalist>
+    <template id="act-tpl-user">{{template "act-user" (.Row "__ROW__")}}</template>
+    <template id="act-tpl-group">{{template "act-group-row" (.Row "__ROW__")}}</template>
+    <template id="act-tpl-account">{{template "act-account" (.Row "__ROW__")}}</template>
+    <template id="act-tpl-limit">{{template "act-limit" (.Row "__ROW__").Blank}}</template>
+  </div>
+</details>
 <details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>
   <div class="act-sbody">
     <div class="seg act-seg" role="radiogroup" aria-label="Data storage">
