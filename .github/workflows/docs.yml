@@ -4,7 +4,9 @@ name: Deploy docs
 # together and deploys them as one Pages artifact, so no gh-pages branch
 # accumulates history. Video episodes (video/README.md) are rendered here into
 # each checkout's docs/ before Hugo runs. Renders are cached by a hash of their
-# inputs, so only new or changed episodes are rendered.
+# inputs, so only new or changed episodes are rendered. The screenshots of
+# sind ui (tools/screenshots) are taken here too, from the sind of each
+# checkout, so they always show its UI.
 
 on:
   push:
@@ -12,6 +14,9 @@ on:
     paths:
       - docs/**
       - video/**
+      - internal/ui/**
+      - internal/help/**
+      - tools/screenshots/**
       - .github/workflows/docs.yml
   workflow_dispatch:
 
@@ -91,6 +96,23 @@ jobs:
           for entry in video-store/*; do
             [ -e "$entry" ] || continue
             grep -qx "$(basename "$entry")" video-used.txt || rm -rf "$entry"
+          done
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: next/go.mod
+          cache: false
+
+      # The runner's Chrome; -no-sandbox as the runner's AppArmor may refuse
+      # the user namespaces of its sandbox.
+      - name: Take the sind ui screenshots
+        run: |
+          for branch in main next; do
+            [ -f "$branch/tools/screenshots/shots.yaml" ] || continue
+            (cd "$branch" && go build -o "$RUNNER_TEMP/sind-$branch" ./cmd/sind)
+            (cd "$branch/tools/screenshots" && go run . -no-sandbox \
+              -sind "$RUNNER_TEMP/sind-$branch" -out "$GITHUB_WORKSPACE/$branch/docs/static/ui-shots")
           done
 
       - name: Install Hugo

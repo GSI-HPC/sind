@@ -29,3 +29,6 @@ dist/
 PLAN*.md
 CLAUDE.local.md
 dockmate-debug.log
+
+# sind ui screenshots of the docs (tools/screenshots, make docs-shots)
+/docs/static/ui-shots/

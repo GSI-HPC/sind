@@ -73,3 +73,13 @@ disablePathToLower = true
   [params.editURL]
     enable = true
     base = "https://github.com/GSI-HPC/sind/edit/next/docs/content"
+
+# The screenshots of sind ui (shortcode uishot) come from the shot list of
+# tools/screenshots, which the docs workflow renders into static/ui-shots.
+[[module.mounts]]
+  source = "data"
+  target = "data"
+[[module.mounts]]
+  source = "../tools/screenshots"
+  target = "data/uishots"
+  files = ["shots.yaml"]

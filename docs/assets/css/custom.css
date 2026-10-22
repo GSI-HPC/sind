@@ -492,6 +492,43 @@ html.dark[data-via="ui"] .sind-via-seg [data-via-set="ui"] {
 .sind-via-note svg { margin-top: 0.2rem; flex: none; }
 html[data-via="ui"] .sind-via-note { display: flex; }
 
+.sind-uishot { margin: 1.25rem 0; }
+
+.sind-uishot a { display: block; }
+
+.sind-uishot img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sind-line);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px -12px rgba(15, 23, 42, 0.35);
+}
+
+/* A cropped dialog keeps its own width, up to the column. */
+.sind-uishot--crop img { width: auto; max-width: 100%; }
+
+.sind-uishot figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--sind-dim);
+}
+
+.sind-uishot .sind-uishot--dark,
+.dark .sind-uishot .sind-uishot--light { display: none; }
+.dark .sind-uishot .sind-uishot--dark { display: block; }
+
+.sind-uishot__missing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--sind-line);
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--sind-muted);
+}
+
 /* A printed page has both variants, each with its name. */
 @media print {
   html .sind-way { display: block !important; }
