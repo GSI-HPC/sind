@@ -3,6 +3,8 @@ weight: 351
 title: "Running MPI Jobs"
 description: "Compile and run multi-node MPI programs with OpenMPI and PMIx"
 toc: true
+webui: none
+webuiNote: "The web UI has no terminal to run jobs in. The steps on this page are for the CLI."
 ---
 
 The default sind-node image ships with a full MPI stack (OpenMPI, PMIx, PRRTE, UCX) and Slurm configured with `MpiDefault=pmix`. This guide walks through compiling and running a simple MPI program across multiple nodes.

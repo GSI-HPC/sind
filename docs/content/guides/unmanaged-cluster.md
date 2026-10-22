@@ -9,6 +9,9 @@ An unmanaged cluster gives you sind's nodes (systemd containers with networking,
 
 ## Create an unmanaged cluster
 
+{{< ways >}}
+{{< cli >}}
+
 Set `managed: false` on the controller:
 
 ```yaml
@@ -25,6 +28,16 @@ nodes:
 ```bash
 sind create cluster --config unmanaged.yaml
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Press **New cluster…**.
+2. Press **defaults** next to the controller. Open **More: managed, capabilities, devices** and tick **Unmanaged**.
+3. Press **Create**.
+
+{{< /ui >}}
+{{< /ways >}}
 
 The flag applies to the whole cluster:
 

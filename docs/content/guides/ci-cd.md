@@ -3,6 +3,8 @@ weight: 353
 title: "CI/CD"
 description: "Using sind in GitHub Actions and other CI systems"
 toc: true
+webui: none
+webuiNote: "A CI job runs sind without a browser. The steps on this page are for the CLI."
 ---
 
 ## GitHub Action

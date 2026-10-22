@@ -9,6 +9,9 @@ sind can run Slurm's active/passive controller setup: a primary `slurmctld` on `
 
 ## Create a cluster with a backup controller
 
+{{< ways >}}
+{{< cli >}}
+
 ```yaml
 kind: Cluster
 name: dev
@@ -22,6 +25,18 @@ nodes:
 ```bash
 sind create cluster --config ha.yaml
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Press **New cluster…**.
+2. Tick **backup** below the controller.
+3. Press **Create**.
+
+{{< uishot "dialog-create-cluster" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 sind then:
 

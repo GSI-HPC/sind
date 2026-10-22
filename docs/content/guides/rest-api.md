@@ -9,6 +9,9 @@ An [`api` node]({{< relref "/configuration/node-definitions#api-node" >}}) runs 
 
 ## Create a cluster with an api node
 
+{{< ways >}}
+{{< cli >}}
+
 ```yaml
 kind: Cluster
 nodes: [controller, db, api, worker: 2]
@@ -17,6 +20,18 @@ nodes: [controller, db, api, worker: 2]
 ```bash
 sind create cluster --config cluster.yaml
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Press **New cluster…**.
+2. Tick **api**.
+3. Press **Create**.
+
+{{< uishot "dialog-create-cluster" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 slurmrestd comes with the Slurm 26.05 images, such as the default image and the `26.05` tag. The 25.11 images have none: `sind create cluster` then fails with the image's name. Without a db node, the API serves only the `/slurm/` endpoints; with a managed one, also the `/slurmdb/` endpoints for accounting.
 
