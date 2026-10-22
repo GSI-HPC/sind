@@ -63,6 +63,7 @@
     const dock = document.getElementById('tasks');
     if (dock) new MutationObserver(tick).observe(dock, what);
     update();
-    setInterval(tick, 250);
+    // Tenths of a second, as the terminal draws them.
+    setInterval(tick, 100);
   });
 })();
