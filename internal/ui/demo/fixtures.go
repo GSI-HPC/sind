@@ -15,6 +15,9 @@ import (
 // Home is the home directory of the demo's user.
 const Home = "/home/demo"
 
+// HostMemory is the memory of the demo's Docker host, in bytes.
+const HostMemory = 32 << 30
+
 // ConfigDir is where the demo's dialogs say they save the configs. Nothing
 // is written there: the demo keeps them in memory.
 const ConfigDir = Home + "/.local/state/sind/ui/configs"

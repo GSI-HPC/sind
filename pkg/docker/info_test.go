@@ -34,7 +34,7 @@ func TestInfo(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(`{"ID":"x","ServerVersion":"29.1.0","CgroupVersion":"2","CgroupDriver":"systemd",`+
 		`"SecurityOptions":["name=seccomp,profile=builtin","name=cgroupns"],"OperatingSystem":"Ubuntu 24.04.3 LTS",`+
-		`"Name":"runner","KernelVersion":"6.8.0-1017-azure","ClientInfo":{"Version":"29.1.0"}}`+"\n", "", nil)
+		`"Name":"runner","KernelVersion":"6.8.0-1017-azure","MemTotal":16766226432,"NCPU":4,"ClientInfo":{"Version":"29.1.0"}}`+"\n", "", nil)
 	c := NewClient(&m)
 
 	info, err := c.Info(t.Context())
@@ -47,6 +47,8 @@ func TestInfo(t *testing.T) {
 		OperatingSystem: "Ubuntu 24.04.3 LTS",
 		Name:            "runner",
 		KernelVersion:   "6.8.0-1017-azure",
+		MemTotal:        16766226432,
+		NCPU:            4,
 	}, info)
 	assert.False(t, info.DockerDesktop())
 	assert.Equal(t, []string{"info", "--format", "{{json .}}"}, m.Calls[0].Args)

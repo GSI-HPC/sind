@@ -33,6 +33,10 @@ func init() {
 // "other" takes the field "wait_other", any time that --wait takes.
 var Waits = []string{"2m", "5m", "10m", "0"}
 
+// HostMemoryWarn is the share of the memory of the Docker host, in
+// percent, above which the plan of a new cluster warns.
+const HostMemoryWarn = 80
+
 // DefaultWait is the --wait of sind create cluster, which the command line
 // leaves out.
 const DefaultWait = "5m"
@@ -128,6 +132,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cmd.Nodes = planned
 	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
+	cmd.MemoryMB = memoryMB
 	cmd.Warns = warns
 	cmd.Problems = ps
 	if data.home {
@@ -136,6 +141,10 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	}
 	if data.warn != "" {
 		cmd.Warns = append(cmd.Warns, data.warn)
+	}
+	if host := int(c.Snap.Docker.MemTotal >> 20); host > 0 && memoryMB*100 > host*HostMemoryWarn {
+		cmd.Warns = append(cmd.Warns, fmt.Sprintf("The nodes may use %s of memory, %d%% of the %s of the Docker host, which then can run out of memory.",
+			MemoryLabel(memoryMB), memoryMB*100/host, MemoryLabel(host)))
 	}
 	cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui saves the config to %s (mode 0600) and keeps it.", cmd.Config.Path))
 	if data.mkdir {

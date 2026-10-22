@@ -57,6 +57,8 @@ type Command struct {
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.
 	Summary string
+	// MemoryMB is the memory that Nodes may use together, in MiB.
+	MemoryMB int
 	// Problems are the fields that the command cannot take as they are.
 	// The command does not run while it has any, but its plan shows.
 	Problems []Problem

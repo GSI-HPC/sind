@@ -678,6 +678,15 @@ func (p actPreview) NodeViews() []actNodeView {
 // actGroupPattern is the key of a worker group, which ends up in ids.
 var actGroupPattern = regexp.MustCompile(`^w[0-9a-z]{1,8}$`)
 
+// HostMB is the memory of the Docker host in MiB, 0 when unknown.
+func (p actPreview) HostMB() int { return int(p.Snap.Docker.MemTotal >> 20) }
+
+// HostHigh is the memory of the host above which the plan warns, in MiB.
+func (p actPreview) HostHigh() int { return p.HostMB() * action.HostMemoryWarn / 100 }
+
+// MemoryLabel writes a size in MiB for people.
+func (p actPreview) MemoryLabel(mb int) string { return action.MemoryLabel(mb) }
+
 // Eff are the node defaults of a new cluster.
 func (p actPreview) Eff() actEff { return actEffOf(p.Form) }
 

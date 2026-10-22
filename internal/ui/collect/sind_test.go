@@ -75,6 +75,24 @@ func TestSindReadsEverythingAtStart(t *testing.T) {
 	assert.Len(t, sn.NodesOf("ci"), 2)
 }
 
+func TestSindReadsTheSizeOfTheHostOnce(t *testing.T) {
+	f := newSindFixture(t)
+	start(t, f.sind.Run)
+	waitFor(t, "first pass", func() bool { return f.st.Snapshot().Docker.Checked })
+	assert.Zero(t, f.st.Snapshot().Docker.MemTotal, "docker info failed: no size yet")
+
+	f.fake.set(func() { f.fake.info = `{"ServerVersion":"29.1.0","MemTotal":17179869184,"NCPU":8}` })
+	f.bus.Publish(Event{})
+	waitFor(t, "the size", func() bool { return f.st.Snapshot().Docker.MemTotal == 16<<30 })
+	assert.Equal(t, 8, f.st.Snapshot().Docker.NCPU)
+	infos := f.fake.count("info")
+
+	f.bus.Publish(Event{})
+	f.fake.settle()
+	assert.Equal(t, infos, f.fake.count("info"), "read once")
+	assert.Equal(t, int64(16<<30), f.st.Snapshot().Docker.MemTotal)
+}
+
 func TestSindReadsOnlyTheRealmOfAnEvent(t *testing.T) {
 	f := newSindFixture(t)
 	f.addCluster("sind", "dev")

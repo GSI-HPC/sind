@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -243,6 +244,25 @@ func TestBuildCreateCluster_HomeDirectoryWarns(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid("dir", "/home/ada/scratch"))
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns)
+}
+
+func TestBuildCreateCluster_HostMemory(t *testing.T) {
+	st := testStore()
+	st.SetDocker(store.DockerState{Checked: true, MemTotal: 4 << 30})
+	a, _ := Lookup("create-cluster")
+
+	cmd, err := a.Build(valid("w0-count", "4", "size", "m"), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, 5*1024, cmd.MemoryMB)
+	assert.Contains(t, cmd.Warns, "The nodes may use 5 GiB of memory, 125% of the 4 GiB of the Docker host, which then can run out of memory.")
+
+	cmd, err = a.Build(valid("w0-count", "2", "size", "m"), st.ctx())
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns, "3 GiB is 75%")
+
+	cmd, err = build(t, "create-cluster", valid("w0-count", "400", "size", "l"))
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns, "a host of unknown size")
 }
 
 func TestBuildCreateCluster_MonitoringStackNote(t *testing.T) {

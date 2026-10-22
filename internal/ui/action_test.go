@@ -470,6 +470,17 @@ func TestActPreview_NewClusterNodes(t *testing.T) {
 	assert.Contains(t, body, `id="act-range-w0" hx-swap-oob="true"></span>`, "no plan, no range")
 }
 
+func TestActPreview_NewClusterMemoryMeter(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "w0-count", "2")
+
+	assert.NotContains(t, f.post("/actions/create-cluster/preview", form).Body.String(), "<meter", "a host of unknown size")
+
+	f.st.SetDocker(store.DockerState{Checked: true, MemTotal: 2 << 30})
+	body := f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<meter min="0" max="2048" value="1536" high="1638" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">1.5 GiB of the 2 GiB of the Docker host</span>`)
+}
+
 func TestActPreview_NewClusterSumsUpTheSections(t *testing.T) {
 	f := newActFixture(t)
 

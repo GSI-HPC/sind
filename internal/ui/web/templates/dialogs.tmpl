@@ -74,13 +74,14 @@ it, and the button and the parts of the dialog that depend on it. */}}
 
 {{/* act-plan is the plan pane of a dialog that makes a cluster: it shows
 the nodes, the command and the config also while a field is wrong. */}}
-{{define "act-plan"}}
+{{define "act-plan"}}{{$p := .}}
 <div class="act-ph"><h3>Plan</h3>{{template "act-pill" .}}</div>
 {{if .Err}}<div class="callout bad">{{.Err}}</div>{{else}}
 {{with .Cmd.Problems}}<div class="callout bad act-probs"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
 {{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
 <p class="hint">{{.Cmd.Summary}}</p>
+{{with .HostMB}}<div class="act-meter"><meter min="0" max="{{.}}" value="{{$p.Cmd.MemoryMB}}" high="{{$p.HostHigh}}" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">{{$p.MemoryLabel $p.Cmd.MemoryMB}} of the {{$p.MemoryLabel .}} of the Docker host</span></div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
 {{template "act-callouts" .}}

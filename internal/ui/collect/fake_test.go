@@ -48,6 +48,8 @@ type fake struct {
 
 	// gate, when set, holds the command `docker info` until it closes.
 	gate chan struct{}
+	// info is the answer of `docker info`; without it, the command fails.
+	info string
 
 	exec  *mock.Executor
 	pipes *mock.Pipes
@@ -125,6 +127,10 @@ func (f *fake) call(args []string, _ string) mock.Result {
 		return "", false
 	}
 	switch args[0] {
+	case "info":
+		if f.info != "" {
+			return mock.Result{Stdout: f.info}
+		}
 	case "ps":
 		if i := slices.IndexFunc(filters, func(s string) bool { return strings.HasPrefix(s, "label=com.docker.compose.project=") }); i >= 0 {
 			// The containers of a monitoring stack.

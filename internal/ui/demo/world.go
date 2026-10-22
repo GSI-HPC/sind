@@ -273,7 +273,7 @@ func (w *World) Publish(st *store.Store) {
 	defer w.mu.Unlock()
 	w.prune()
 	slices.SortFunc(w.realms, func(a, b *realm) int { return strings.Compare(a.name, b.name) })
-	st.SetDocker(store.DockerState{Checked: true})
+	st.SetDocker(store.DockerState{Checked: true, MemTotal: HostMemory, NCPU: 16})
 	var realms []cluster.RealmSummary
 	now := map[string]bool{}
 	var keys []store.StatusKey
