@@ -22,7 +22,7 @@ var actDialogKeys = []string{
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "cpus", "memory", "users",
-	"dtype", "dir", "mkdir", "mount", "monitoring", "pull",
+	"dtype", "dir", "mkdir", "mount", "monitoring", "pull", "wait_other",
 }
 
 const (
@@ -86,6 +86,11 @@ var actSpecs = map[string]actSpec{
 		Defaults: func(d *actDialog) {
 			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
 			d.def("image", config.DefaultImage)
+			if w := d.Form.Get("wait"); w != "" && w != "other" && !slices.Contains(action.Waits, w) {
+				// A time that has no button of its own.
+				d.Form.Set("wait", "other")
+				d.Form.Set("wait_other", w)
+			}
 			d.def("wait", action.DefaultWait)
 			d.def("db", "on")
 			d.def("submitter", "on")
@@ -95,7 +100,13 @@ var actSpecs = map[string]actSpec{
 			d.def("dtype", "hostPath")
 			d.def("dir", actDefaultDir(d.Form.Get("name")))
 			d.def("mkdir", "on")
-			d.def("pull", "on")
+			if !d.Form.Has("pull") {
+				// Pull follows the image until the user ticks the box.
+				d.Form.Set("pull_auto", "1")
+				if pull, _ := action.PullByDefault(d.Form.Get("image")); pull {
+					d.Form.Set("pull", "on")
+				}
+			}
 		},
 	},
 	"create-worker": {
@@ -180,6 +191,42 @@ var actClusterSections = []actSection{
 		}
 		return actWithMount(sum, p.Form)
 	}},
+	{ID: "run", Fields: []string{"pull", "wait", "wait_other"}, Sum: actRunSum},
+}
+
+// actRunSum sums up the run options of a new cluster.
+func actRunSum(p actPreview) string {
+	sum := "No pull"
+	if p.PullOn() {
+		sum = "Pull"
+	}
+	switch wait := p.Form.Get("wait"); wait {
+	case "0":
+		return sum + ", no wait limit"
+	case "other":
+		return sum + ", wait " + strings.TrimSpace(p.Form.Get("wait_other"))
+	case "":
+		return sum + ", wait " + action.DefaultWait
+	default:
+		return sum + ", wait " + wait
+	}
+}
+
+// PullOn reports whether the command of a new cluster pulls the image.
+func (p actPreview) PullOn() bool {
+	return slices.Contains(p.Cmd.Argv, "--pull")
+}
+
+// PullHint says why the command of a new cluster pulls the image, or not.
+func (p actPreview) PullHint() string {
+	if p.Form.Get("pull_auto") == "" {
+		return "Gets the newest image first, even if Docker has one."
+	}
+	pull, why := action.PullByDefault(strings.TrimSpace(p.Form.Get("image")))
+	if pull {
+		return "On, as " + why + ". Create gets the newest image first."
+	}
+	return "Off, as " + why + "."
 }
 
 // actWithMount adds the mount path of the data to sum, if it is not the
@@ -239,10 +286,10 @@ type actDialog struct {
 // actChoice is an option of a select.
 type actChoice struct{ Value, Label string }
 
-// actWaits are the choices of the wait for a new cluster, those of
-// action.Waits.
+// actWaits are the choices of the wait for a new cluster: those of
+// action.Waits, and another time.
 var actWaits = []actChoice{
-	{"1m", "1 minute"}, {"2m", "2 minutes"}, {"5m", "5 minutes"}, {"10m", "10 minutes"}, {"0", "no limit"},
+	{"2m", "2m"}, {"5m", "5m"}, {"10m", "10m"}, {"0", "No limit"}, {"other", "Other"},
 }
 
 // actMemories are the memories of a node that the field suggests.

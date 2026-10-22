@@ -54,7 +54,8 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{end}}
 <button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" hx-swap-oob="true"{{if .Blocked}} disabled{{end}}>{{.Spec.OK}}</button>
 {{range .Spec.Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
-{{if .Spec.Plan}}{{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
+{{if .Spec.Plan}}<span class="hint" id="act-pull-hint" data-act-pull="{{if .PullOn}}on{{else}}off{{end}}" hx-swap-oob="true">{{.PullHint}}</span>
+{{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
 {{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
 {{end}}{{end}}
 
@@ -78,7 +79,8 @@ the nodes, the command and the config also while a field is wrong. */}}
 {{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
 <p class="hint">{{.Cmd.Summary}}</p>
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
+  <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
 {{template "act-callouts" .}}
 <div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre></div>
 {{end}}
@@ -126,10 +128,17 @@ the nodes, the command and the config also while a field is wrong. */}}
     <span class="hint">sind ui writes the data storage into the config, so the saved file alone makes the same cluster again.</span>
   </div>
 </details>
-<div class="row">
-  <div class="fld"><label for="act-wait">Wait for ready</label><select id="act-wait" name="wait" aria-describedby="act-err-wait">{{range .Waits}}<option value="{{.Value}}"{{if $.Is "wait" .Value}} selected{{end}}>{{.Label}}</option>{{end}}</select><span class="err" id="act-err-wait"></span></div>
-  <label class="act-nr act-box act-wide"><input type="checkbox" id="act-pull" name="pull"{{if .On "pull"}} checked{{end}} aria-describedby="act-err-pull"><span class="act-lab"><b>Pull the image</b><span class="hint">Gets the newest image first, even if Docker has one.</span><span class="err" id="act-err-pull"></span></span></label>
-</div>
+<details class="act-sec" id="act-sec-run"><summary><span class="act-st">Run options</span><span class="act-ss" id="act-sum-run"></span><span class="act-sb" id="act-bad-run"></span></summary>
+  <div class="act-sbody">
+    {{if .Val "pull_auto"}}<input type="hidden" id="act-pull-auto" name="pull_auto" value="1">{{end}}
+    <label class="act-nr act-box"><input type="checkbox" id="act-pull" name="pull"{{if .On "pull"}} checked{{end}} aria-describedby="act-err-pull act-pull-hint"><span class="act-lab"><b>Pull the image</b><span class="hint" id="act-pull-hint">Gets the newest image first, even if Docker has one.</span><span class="err" id="act-err-pull"></span></span></label>
+    <div class="fld"><span class="lbl" id="act-wait-lbl">Wait for ready</span>
+      <div class="act-waits"><div class="seg act-seg" role="radiogroup" aria-labelledby="act-wait-lbl">{{range .Waits}}<label><input type="radio" name="wait" value="{{.Value}}"{{if $.Is "wait" .Value}} checked{{end}}{{if eq .Value "2m"}} id="act-wait"{{end}}><span>{{.Label}}</span></label>{{end}}</div>
+      <input type="text" id="act-wait_other" name="wait_other" value="{{.Val "wait_other"}}" placeholder="such as 15m" autocapitalize="off" spellcheck="false" aria-label="Other time to wait" aria-describedby="act-err-wait_other"></div>
+      <span class="err" id="act-err-wait"></span><span class="err" id="act-err-wait_other"></span>
+      <span class="hint">For each node, from the start of its container; pulls do not count. If a node is not ready in time, sind removes the cluster again.</span></div>
+  </div>
+</details>
 {{end}}
 
 {{define "act-dlg-create-worker"}}

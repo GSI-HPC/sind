@@ -50,6 +50,9 @@ type Command struct {
 	// Dirs are directories that sind ui creates before it runs the
 	// command.
 	Dirs []string
+	// Script is a shell script that does what running the command does,
+	// with its file and directories, for Copy; empty where Display does.
+	Script string
 	// Nodes are the nodes the command will make, for the preview.
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.

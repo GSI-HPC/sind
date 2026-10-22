@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -152,7 +153,9 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-cluster", "", []string{"New cluster", `id="act-name" name="name" value="hpc"`, `data-act-step="workers"`, `id="act-workers" name="workers" value="2"`,
 			`id="act-db" name="db" checked`, `id="act-submitter" name="submitter" checked`, `id="act-backup" name="backup" aria-`, `id="act-pull" name="pull" checked`,
 			`<aside class="act-planpane" aria-label="Plan">`, `id="act-status" role="status"`, `value="~/sind/hpc"`, `data-act-follow`,
-			"ghcr.io/gsi-hpc/sind-node", `value="5m" selected`, "In realm sind"}},
+			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`, "In realm sind"}},
+		{"create-cluster", "wait=7m&pull=&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="other" checked`, `name="wait_other" value="7m"`, `id="act-pull" name="pull" aria-`}},
+		{"create-cluster", "wait=0&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="0" checked`, `id="act-pull" name="pull" aria-`, `name="pull_auto"`}},
 		{"create-cluster", "realm=ci&name=big", []string{"In realm ci", `value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`}},
 		{"create-cluster", "name=dev", []string{`value="dev"`}},
 		{"create-cluster", "dir=/scratch", []string{`name="name" value="hpc"`, `value="/scratch"`}},
@@ -394,6 +397,27 @@ func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
 	assert.Empty(t, f.starter.specs)
 }
 
+func TestActPreview_NewClusterPullsAsTheImageSays(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "pull_auto", "1")
+
+	body := f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<span class="hint" id="act-pull-hint" data-act-pull="on" hx-swap-oob="true">On, as the tag latest can move to a newer image. Create gets the newest image first.</span>`)
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">Pull, wait 5m</span>`)
+
+	body = f.post("/actions/create-cluster/preview", form+"&pull=on&image=ghcr.io/gsi-hpc/sind-node:26.05.4&wait=0").Body.String()
+	assert.Contains(t, body, `data-act-pull="off" hx-swap-oob="true">Off, as the tag 26.05.4 is fixed.</span>`)
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">No pull, no wait limit</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "pull", "on", "wait", "other", "wait_other", "20m")).Body.String()
+	assert.Contains(t, body, `data-act-pull="on" hx-swap-oob="true">Gets the newest image first, even if Docker has one.</span>`)
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">Pull, wait 20m</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "wait", "2m")).Body.String()
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">No pull, wait 2m</span>`)
+	assert.Contains(t, body, `data-copy="cfg=`, "Copy gives the script")
+}
+
 func TestActPreview_NewClusterSumsUpTheSections(t *testing.T) {
 	f := newActFixture(t)
 
@@ -551,7 +575,7 @@ func TestActWaits_AreTheOnesTheActionTakes(t *testing.T) {
 		values = append(values, w.Value)
 		assert.NotEmpty(t, w.Label)
 	}
-	assert.Equal(t, action.Waits, values)
+	assert.Equal(t, append(slices.Clone(action.Waits), "other"), values)
 	assert.Contains(t, action.Waits, action.DefaultWait)
 }
 

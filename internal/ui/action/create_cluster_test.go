@@ -119,6 +119,80 @@ func TestBuildCreateCluster_Variants(t *testing.T) {
 	}
 }
 
+func TestBuildCreateCluster_Wait(t *testing.T) {
+	for wait, want := range map[string]string{
+		"": "", "5m": "", "300s": "", "0": " --wait 0", "0s": " --wait 0", "7m": " --wait 7m", "other": "",
+	} {
+		f := valid("wait", wait)
+		if wait == "other" {
+			f = valid("wait", "other", "wait_other", "1h30m")
+			want = " --wait 1h30m"
+		}
+		cmd, err := build(t, "create-cluster", f)
+		require.NoError(t, err)
+		assert.Empty(t, cmd.Problems, wait)
+		assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml"+want, cmd.Display, wait)
+	}
+}
+
+func TestPullByDefault(t *testing.T) {
+	for image, want := range map[string]string{
+		"":                                    "on: the tag latest can move to a newer image",
+		"ghcr.io/gsi-hpc/sind-node":           "on: the tag latest can move to a newer image",
+		"ghcr.io/gsi-hpc/sind-node:26.05":     "on: the tag 26.05 can move to a newer image",
+		"localhost/sind-node:v26":             "on: the tag v26 can move to a newer image",
+		"registry:5000/sind-node:latest":      "on: the tag latest can move to a newer image",
+		"ghcr.io/gsi-hpc/sind-node:26.05.4":   "off: the tag 26.05.4 is fixed",
+		"ghcr.io/gsi-hpc/sind-node:v0.12.0":   "off: the tag v0.12.0 is fixed",
+		"ghcr.io/gsi-hpc/sind-node@sha256:ab": "off: the image names a digest, which is fixed",
+		"sind-node:latest":                    "off: the image names no registry, as an image you built does",
+		"gsi-hpc/sind-node:latest":            "off: the image names no registry, as an image you built does",
+	} {
+		pull, why := PullByDefault(image)
+		got := "off: " + why
+		if pull {
+			got = "on: " + why
+		}
+		assert.Equal(t, want, got, image)
+	}
+}
+
+func TestBuildCreateCluster_PullFollowsTheImage(t *testing.T) {
+	cmd, err := build(t, "create-cluster", valid("pull_auto", "1", "pull", "on", "image", "ghcr.io/gsi-hpc/sind-node:26.05.4"))
+	require.NoError(t, err)
+	assert.NotContains(t, cmd.Display, "--pull", "the fixed tag wins over the box")
+
+	cmd, err = build(t, "create-cluster", valid("pull_auto", "1"))
+	require.NoError(t, err)
+	assert.Contains(t, cmd.Display, "--pull", "the default image is latest")
+
+	cmd, err = build(t, "create-cluster", valid("pull", "on", "image", "ghcr.io/gsi-hpc/sind-node:26.05.4"))
+	require.NoError(t, err)
+	assert.Contains(t, cmd.Display, "--pull", "without pull_auto, the box decides")
+}
+
+func TestBuildCreateCluster_Script(t *testing.T) {
+	cmd, err := build(t, "create-cluster", valid("dir", "/scratch/missing it's", "mkdir", "on", "pull", "on", "wait", "0"))
+	require.NoError(t, err)
+	require.Empty(t, cmd.Problems)
+	lines := strings.Split(cmd.Script, "\n")
+	tag := strings.TrimPrefix(lines[2], `(umask 077 && cat >"$cfg") <<'`)
+	tag = strings.TrimSuffix(tag, "'")
+	assert.Regexp(t, `^SIND_CONFIG_[0-9a-f]{16}$`, tag)
+	assert.Equal(t, `cfg="${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/hpc.yaml"
+mkdir -p "$(dirname "$cfg")"
+(umask 077 && cat >"$cfg") <<'`+tag+`'
+`+cmd.Config.Content+tag+`
+mkdir -p '/scratch/missing it'\''s'
+sind --realm sind create cluster --config "$cfg" --pull --wait 0
+`, cmd.Script)
+
+	cmd, err = build(t, "create-cluster", valid("realm", "ci", "name", "Bad"))
+	require.NoError(t, err)
+	assert.Contains(t, cmd.Script, "/configs/NAME.yaml\"\n")
+	assert.True(t, strings.HasSuffix(cmd.Script, "\nsind --realm ci create cluster --config \"$cfg\"\n"))
+}
+
 func TestBuildCreateCluster_DataDirectory(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid("dir", "/scratch/missing", "mkdir", "on"))
 	require.NoError(t, err)
@@ -221,7 +295,10 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"workers many", valid("workers", "65"), "workers", "write a number from 1 to 64", true},
 		{"checkbox", valid("db", "2"), "db", "tick the box or leave it empty", true},
 		{"user", valid("users", "Alice! bob Bad?"), "users", "must start with a lowercase letter", false},
-		{"wait", valid("wait", "7m"), "wait", "pick one of 1m, 2m, 5m, 10m, 0", true},
+		{"wait", valid("wait", "soon"), "wait", "write a time such as 15m", true},
+		{"wait negative", valid("wait", "-1m"), "wait", "write a time such as 15m", true},
+		{"wait other empty", valid("wait", "other"), "wait_other", "write a time such as 15m", true},
+		{"wait other", valid("wait", "other", "wait_other", "1 hour"), "wait_other", "write a time such as 15m", true},
 		{"data type", valid("dtype", "nfs"), "dtype", `pick a directory or a Docker volume, not "nfs"`, false},
 		{"dir empty", valid("dir", ""), "dir", "say which directory", false},
 		{"dir relative", valid("dir", "data"), "dir", "write the path in full, starting with / or ~", false},
@@ -247,7 +324,7 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 }
 
 func TestBuildCreateCluster_PlanTakesTheDefaultsOfWrongFields(t *testing.T) {
-	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "workers", "x", "image", "bad image", "wait", "7m", "users", "ada Bad"))
+	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "workers", "x", "image", "bad image", "wait", "7 min", "users", "ada Bad"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)

@@ -74,6 +74,9 @@
 .scrim .act-st{font-weight:600;white-space:nowrap}
 .scrim .act-ss{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:12px var(--f-mono)}
 .scrim .act-sb{color:var(--bad);font-size:12px;font-weight:600;white-space:nowrap}
+.scrim .act-waits{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.scrim .act-waits input[type=text]{width:120px}
+.scrim .act-waits:not(:has(input[value=other]:checked)) input[type=text]{display:none}
 .scrim .act-sbody{display:grid;gap:10px;padding:10px 10px 12px;border-top:1px solid var(--line-2)}
 
 /* The plan pane. */

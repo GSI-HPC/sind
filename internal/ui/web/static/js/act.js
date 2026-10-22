@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // The script of the dialogs of the actions: the steppers, the directory that
-// follows the name, the links to a field with a problem, the Copy button,
-// and closing. The dialogs are the server's HTML, which htmx puts into
+// follows the name, the pull that follows the image, the links to a field
+// with a problem, the Copy button, and closing. The dialogs are the server's HTML, which htmx puts into
 // #layer; nothing here evaluates text.
 (() => {
   'use strict';
@@ -86,6 +86,21 @@
     }
   });
 
+  // Pull follows the image until the user ticks or clears the box.
+  document.addEventListener('change', ev => {
+    const auto = document.getElementById('act-pull-auto');
+    if (auto && ev.target instanceof Element && ev.target.id === 'act-pull') auto.remove();
+  });
+
+  // followPull ticks the box as the preview says, while it follows the
+  // image.
+  function followPull() {
+    const auto = document.getElementById('act-pull-auto');
+    const hint = document.getElementById('act-pull-hint');
+    const pull = document.getElementById('act-pull');
+    if (auto && hint && pull && hint.dataset.actPull) pull.checked = hint.dataset.actPull === 'on';
+  }
+
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && document.getElementById('act-dialog')) close();
   });
@@ -109,5 +124,6 @@
       if (first) first.focus();
     }
     markProblems(document);
+    followPull();
   });
 })();

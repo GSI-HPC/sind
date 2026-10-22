@@ -4,6 +4,8 @@ package action
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 
@@ -25,9 +28,10 @@ func init() {
 	register(Action{ID: "create-cluster", Build: buildCreateCluster, Cluster: func(f Form) string { return strings.TrimSpace(f.Get("name")) }})
 }
 
-// Waits are the values of the field "wait" of the New cluster dialog, as
-// sind create cluster --wait takes them.
-var Waits = []string{"1m", "2m", "5m", "10m", "0"}
+// Waits are the values of the field "wait" of the New cluster dialog that
+// it offers as buttons, as sind create cluster --wait takes them; the value
+// "other" takes the field "wait_other", any time that --wait takes.
+var Waits = []string{"2m", "5m", "10m", "0"}
 
 // DefaultWait is the --wait of sind create cluster, which the command line
 // leaves out.
@@ -120,16 +124,9 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cfg.Nodes = nodes
 	cfg.Users = clusterUsers(f, &ps)
 	cfg.Monitoring = checkbox(f, "monitoring", "Monitoring", &ps)
-	pull := checkbox(f, "pull", "Pull the image", &ps)
+	pull := clusterPull(f, cfg.Defaults.Image, &ps)
 	checkClusterName(c, realm, &cfg, &ps)
-	wait := strings.TrimSpace(f.Get("wait"))
-	switch {
-	case wait == "":
-		wait = DefaultWait
-	case !slices.Contains(Waits, wait):
-		ps.add("wait", "Wait for ready", true, fmt.Errorf("pick one of %s", strings.Join(Waits, ", ")))
-		wait = DefaultWait
-	}
+	wait := clusterWait(f, &ps)
 	data := dataStorage(f, c, &ps)
 	cfg.Storage.DataStorage = data.storage
 
@@ -143,14 +140,14 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		file = "NAME"
 	}
 	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(a.Field) - fieldOrder(b.Field) })
-	argv := sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file))
+	var flags []string
 	if pull {
-		argv = append(argv, "--pull")
+		flags = append(flags, "--pull")
 	}
 	if wait != DefaultWait {
-		argv = append(argv, "--wait", wait)
+		flags = append(flags, "--wait", wait)
 	}
-	cmd := NewCommand(argv...)
+	cmd := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
 	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
 	cmd.Nodes = planned
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s each.", len(planned), cfg.Defaults.CPUs*len(planned), memoryLabel(cfg.Defaults.Memory))
@@ -163,11 +160,12 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if data.warn != "" {
 		cmd.Warns = append(cmd.Warns, data.warn)
 	}
-	cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui saves the config to %s (mode 0600) and keeps it. Copy gives the command; the config is next to it.", cmd.Config.Path))
+	cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui saves the config to %s (mode 0600) and keeps it.", cmd.Config.Path))
 	if data.mkdir {
 		cmd.Dirs = []string{data.dir}
 		cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui creates the directory %s first. It stays if the create fails.", data.dir))
 	}
+	cmd.Script = clusterScript(realm, file, content, cmd.Dirs, flags)
 	if cfg.Monitoring {
 		cmd.Notes = append(cmd.Notes, "Monitoring needs Slurm 26.05 or later in the image. sind checks the image when it runs, and stops with an error if it is older.")
 	}
@@ -182,7 +180,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 
 // ClusterFields are the fields of the New cluster dialog in the order it shows
 // them, which its problems follow.
-var ClusterFields = []string{"name", "image", "backup", "db", "api", "submitter", "workers", "monitoring", "cpus", "memory", "users", "dtype", "dir", "mkdir", "mount", "wait", "pull"}
+var ClusterFields = []string{"name", "image", "backup", "db", "api", "submitter", "workers", "monitoring", "cpus", "memory", "users", "dtype", "dir", "mkdir", "mount", "pull", "wait", "wait_other"}
 
 // fieldOrder is the place of field in the dialog; the config as a whole
 // comes last.
@@ -207,6 +205,66 @@ func checkClusterName(c Context, realm string, cfg *config.Cluster, ps *problems
 			ps.add("name", "Name", false, fmt.Errorf("realm %s has a cluster %s already; pick another name, or delete that cluster first", realm, cfg.Name))
 		}
 	}
+}
+
+// clusterPull reads the field "pull", unless the field "pull_auto" says to
+// follow the image: then sind ui pulls as PullByDefault says.
+func clusterPull(f Form, image string, ps *problems) bool {
+	if f.Get("pull_auto") != "" {
+		pull, _ := PullByDefault(image)
+		return pull
+	}
+	return checkbox(f, "pull", "Pull the image", ps)
+}
+
+// movingTag is a tag that a registry moves to newer images: a major or a
+// major and minor version, such as 26 or 26.05.
+var movingTag = regexp.MustCompile(`^v?\d+(\.\d+)?$`)
+
+// PullByDefault reports whether sind ui pulls the image unless told
+// otherwise, and why: it pulls an image of a registry whose tag can move to
+// a newer image, as latest does, so that the cluster gets that image. An
+// empty image is config.DefaultImage.
+func PullByDefault(image string) (bool, string) {
+	if image == "" {
+		image = config.DefaultImage
+	}
+	if strings.Contains(image, "@") {
+		return false, "the image names a digest, which is fixed"
+	}
+	repo, rest, ok := strings.Cut(image, "/")
+	if !ok || !strings.ContainsAny(repo, ".:") && repo != "localhost" {
+		return false, "the image names no registry, as an image you built does"
+	}
+	tag := "latest"
+	if i := strings.LastIndex(rest, ":"); i >= 0 {
+		tag = rest[i+1:]
+	}
+	if tag == "latest" || movingTag.MatchString(tag) {
+		return true, fmt.Sprintf("the tag %s can move to a newer image", tag)
+	}
+	return false, fmt.Sprintf("the tag %s is fixed", tag)
+}
+
+// clusterWait reads the wait for ready: a button of Waits, or "other" with
+// the field "wait_other". Empty is DefaultWait.
+func clusterWait(f Form, ps *problems) string {
+	wait, field := strings.TrimSpace(f.Get("wait")), "wait"
+	if wait == "other" {
+		wait, field = strings.TrimSpace(f.Get("wait_other")), "wait_other"
+	}
+	switch d, err := time.ParseDuration(wait); {
+	case wait == "" && field == "wait":
+		return DefaultWait
+	case err != nil || d < 0:
+		ps.add(field, "Wait for ready", true, errors.New("write a time such as 15m or 1h30m, or pick No limit"))
+		return DefaultWait
+	case d == 0:
+		return "0"
+	case d == 5*time.Minute:
+		return DefaultWait
+	}
+	return wait
 }
 
 // checkbox reads the checkbox field: on, or the 1 of a link, is ticked; off,
@@ -366,6 +424,29 @@ func mountPath(f Form, ps *problems) string {
 		return ""
 	}
 	return path.Clean(m)
+}
+
+// clusterScript is the shell script that does what Create does: it writes
+// the config, readable by its owner alone, creates the directories and
+// runs the command. It always names the realm, as SIND_REALM in the shell
+// would else take the place of the config's.
+func clusterScript(realm, file, content string, dirs, flags []string) string {
+	sum := sha256.Sum256([]byte(content))
+	// The tag of the here-document: a line that the config cannot hold.
+	tag := "SIND_CONFIG_" + hex.EncodeToString(sum[:8])
+	var b strings.Builder
+	fmt.Fprintf(&b, "cfg=\"${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/%s.yaml\"\n", file)
+	b.WriteString("mkdir -p \"$(dirname \"$cfg\")\"\n")
+	fmt.Fprintf(&b, "(umask 077 && cat >\"$cfg\") <<'%s'\n%s%s\n", tag, content, tag)
+	for _, d := range dirs {
+		fmt.Fprintf(&b, "mkdir -p %s\n", quoteWord(d))
+	}
+	fmt.Fprintf(&b, "sind --realm %s create cluster --config \"$cfg\"", quoteWord(realm))
+	if len(flags) > 0 {
+		b.WriteString(" " + Quote(flags))
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 // parseConfig is config.Parse; tests replace it.
