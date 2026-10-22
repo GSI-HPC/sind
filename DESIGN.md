@@ -270,7 +270,7 @@ Rules:
 
 | Command type | Output | Target |
 |-------------|--------|--------|
-| List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
+| List resources (`get`) | table by display width (`cliout.Table`), uppercase headers, 2-space padding | stdout |
 | Single value (`get auth-key`) | raw value, one line | stdout |
 | Checks (`doctor`) | one ✓/✗/! line per check (`!` for an advisory check that did not pass), fix instructions below a check that did not pass | stdout |
 | Mutations (`create`, `delete`, `power`, `connect`, `disconnect`) | nothing on success where stderr is not a terminal; on a terminal, the progress display of the commands that have one (see Progress Display) | stderr |
