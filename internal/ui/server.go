@@ -28,8 +28,9 @@ const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 
 
 const (
 	// coalesceEvery is how long changes gather before a page gets them,
-	// so that a burst of changes costs one render.
-	coalesceEvery = 250 * time.Millisecond
+	// so that a burst of changes costs one render: about two frames, so
+	// that a page moves as soon as a terminal would.
+	coalesceEvery = 30 * time.Millisecond
 	// keepAliveEvery is how often an idle stream sends a comment, so that
 	// nothing between drops it and a gone browser is noticed.
 	keepAliveEvery = 25 * time.Second
