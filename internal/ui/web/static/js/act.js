@@ -43,7 +43,10 @@
       const input = field(step.closest('form'), step.dataset.actStep);
       if (!input) return;
       const now = parseInt(input.value, 10);
-      const next = Math.max(+input.min, Math.min(+input.max, (Number.isNaN(now) ? +input.min : now) + +step.dataset.d));
+      // An absent min or max is no bound; +'' would read as 0.
+      const lo = input.min === '' ? -Infinity : +input.min;
+      const hi = input.max === '' ? Infinity : +input.max;
+      const next = Math.max(lo, Math.min(hi, (Number.isNaN(now) ? (lo === -Infinity ? 0 : lo) : now) + +step.dataset.d));
       input.value = String(next);
       // htmx previews the command on the input event; setting a value does
       // not send one.
