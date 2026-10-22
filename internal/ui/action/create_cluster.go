@@ -102,6 +102,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	nodes, planned := clusterNodes(f, &ps)
 	cfg.Nodes = nodes
 	clusterUsers(f, &cfg, &ps)
+	clusterSlurm(f, &cfg, &ps)
 	cfg.Monitoring = checkbox(f, "monitoring", "Monitoring", &ps)
 	pull := clusterPull(f, cfg.Defaults.Image, &ps)
 	checkClusterName(c, realm, &cfg, &ps)

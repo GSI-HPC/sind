@@ -58,6 +58,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{with .Eff}}<span id="act-eff" hidden hx-swap-oob="true" data-image="{{.Image}}" data-cpus="{{.CPUs}}" data-memory="{{.Memory}}" data-tmp="{{.TmpSize}}"></span>{{end}}
 <span class="hint" id="act-pull-hint" data-act-pull="{{if .PullOn}}on{{else}}off{{end}}" hx-swap-oob="true">{{.PullHint}}</span>
 <datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
+{{range .SlurmFiles}}<span class="act-dot" id="act-dot-{{.ID}}" hx-swap-oob="true">{{if $p.SlurmSet .ID}} •{{end}}</span>{{end}}
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
 {{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
 {{end}}{{end}}
@@ -230,6 +231,22 @@ limits as pairs of fields. */}}
     <template id="act-tpl-limit">{{template "act-limit" (.Row "__ROW__").Blank}}</template>
   </div>
 </details>
+<details class="act-sec" id="act-sec-identity"{{if ne (.Val "identity") "local"}} open{{end}}><summary><span class="act-st">Identity</span><span class="act-ss" id="act-sum-identity"></span><span class="act-sb" id="act-bad-identity"></span></summary>
+  <div class="act-sbody act-ids">
+    <div class="checks" role="radiogroup" aria-label="Identity mode">{{range .Identities}}<label><input type="radio" name="identity" value="{{.Mode}}"{{if $.Is "identity" (print .Mode)}} checked{{end}}{{if eq (print .Mode) "local"}} id="act-identity"{{end}}> <span class="mono">{{.Mode}}</span> <small>{{.Hint}}</small></label>{{end}}</div>
+    <span class="err" id="act-err-identity"></span>
+    <label class="act-nr act-box act-ctlusers"><input type="checkbox" id="act-ctlusers" name="ctlusers"{{if .On "ctlusers"}} checked{{end}} aria-describedby="act-err-ctlusers"><span class="act-lab"><b>Users on the controllers too</b><span class="hint">For a partition with AllowGroups: slurmctld checks the groups on its own node.</span><span class="err" id="act-err-ctlusers"></span></span></label>
+    <span class="hint">Where the nodes find the users, and how Slurm authenticates them. nssSlurm and clientIds need a managed cluster.</span>
+  </div>
+</details>
+<details class="act-sec act-slurm" id="act-sec-slurm"{{range .SlurmFiles}}{{if $.Val (print "slurm-" .ID)}} open{{end}}{{end}}><summary><span class="act-st">Slurm config</span><span class="act-ss" id="act-sum-slurm"></span><span class="act-sb" id="act-bad-slurm"></span></summary>
+  <div class="act-sbody">
+    <div class="seg act-seg act-stabs" role="radiogroup" aria-label="Slurm config file">{{range .SlurmFiles}}<label><input type="radio" name="stab" value="{{.ID}}"{{if $.Is "stab" .ID}} checked{{end}}><span>{{.ID}}<span class="act-dot" id="act-dot-{{.ID}}"></span></span></label>{{end}}</div>
+    {{range .SlurmFiles}}<div class="fld act-sl act-sl-{{.ID}}"><label for="act-slurm-{{.ID}}">Lines to add to <span class="mono">{{.File}}</span></label>
+      <textarea id="act-slurm-{{.ID}}" name="slurm-{{.ID}}" rows="6" placeholder="such as {{.Example}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-slurm-{{.ID}}">{{$.Val (print "slurm-" .ID)}}</textarea><span class="err" id="act-err-slurm-{{.ID}}"></span></div>{{end}}
+    <span class="hint">sind writes these lines after its own, so a parameter here takes the place of sind's. It refuses parameters that the cluster needs as sind sets them.</span>
+  </div>
+</details>
 <details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>
   <div class="act-sbody">
     <div class="seg act-seg" role="radiogroup" aria-label="Data storage">
@@ -242,6 +259,7 @@ limits as pairs of fields. */}}
         <span class="err" id="act-err-mount"></span><span class="hint" id="act-hint-mount">In the nodes.</span></div>
     </div>
     <label class="act-nr act-box"><input type="checkbox" id="act-mkdir" name="mkdir"{{if .On "mkdir"}} checked{{end}} aria-describedby="act-err-mkdir"><span class="act-lab"><b>Create the directory if it is missing</b><span class="hint">Docker mounts only a directory that exists.</span><span class="err" id="act-err-mkdir"></span></span></label>
+    <label class="act-nr act-box"><input type="checkbox" id="act-cvmfs" name="cvmfs"{{if .On "cvmfs"}} checked{{end}} aria-describedby="act-err-cvmfs"><span class="act-lab"><b>CVMFS</b><span class="hint">Mounts CVMFS read-only at /cvmfs on every node, from the cvmfs Docker volume plugin or from /cvmfs of the host.</span><span class="err" id="act-err-cvmfs"></span></span></label>
     <span class="hint">sind ui writes the data storage into the config, so the saved file alone makes the same cluster again.</span>
   </div>
 </details>

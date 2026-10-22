@@ -342,6 +342,8 @@ func TestActPreviewAndRun_RefuseAFormThatIsTooBig(t *testing.T) {
 	}
 	assert.Empty(t, f.starter.specs)
 	assert.NoError(t, actCheckForm(url.Values{"nodes": {strings.Repeat("x", actMaxValue)}}))
+	assert.NoError(t, actCheckForm(url.Values{"slurm-main": {strings.Repeat("x", actMaxText)}}), "a field of text may be longer")
+	assert.ErrorContains(t, actCheckForm(url.Values{"slurm-main": {strings.Repeat("x", actMaxText+1)}}), "longer than 65536 bytes")
 }
 
 func TestActRun_StartsTheCommand(t *testing.T) {
@@ -915,4 +917,35 @@ func TestActPreview_NewClusterUsers(t *testing.T) {
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
 	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">No users</span>`)
+}
+
+func TestActDialog_NewClusterSlurmAndIdentity(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<details class="act-sec" id="act-sec-identity"><summary>`)
+	assert.Contains(t, body, `<input type="radio" name="identity" value="local" checked id="act-identity">`)
+	assert.Contains(t, body, `<details class="act-sec act-slurm" id="act-sec-slurm"><summary>`)
+	assert.Contains(t, body, `<input type="radio" name="stab" value="main" checked>`)
+	assert.Contains(t, body, `<textarea id="act-slurm-gres" name="slurm-gres" rows="6" placeholder="such as Name=gpu File=/dev/null Count=1"`)
+	assert.Contains(t, body, `id="act-cvmfs" name="cvmfs"`)
+}
+
+func TestActPreview_NewClusterSlurmAndIdentity(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "slurm-main", "MaxJobCount=100", "slurm-gres", " ",
+		"identity", "clientIds", "ctlusers", "on", "cvmfs", "on", "dtype", "volume")).Body.String()
+	assert.Contains(t, body, `id="act-sum-slurm" hx-swap-oob="innerHTML">Adds to slurm.conf</span>`)
+	assert.Contains(t, body, `<span class="act-dot" id="act-dot-main" hx-swap-oob="true"> •</span>`)
+	assert.Contains(t, body, `<span class="act-dot" id="act-dot-gres" hx-swap-oob="true"></span>`)
+	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">clientIds, users on the controllers too</span>`)
+	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">Docker volume, CVMFS</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "identity", "nssSlurm", "ctlusers", "on")).Body.String()
+	assert.Contains(t, body, `id="act-sum-slurm" hx-swap-oob="innerHTML">No additions</span>`)
+	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">nssSlurm</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">local</span>`)
 }

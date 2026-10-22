@@ -115,6 +115,19 @@
 .scrim .act-lims:empty{display:none}
 .scrim .act-row>.btn.sm{justify-self:start}
 .scrim [aria-invalid=true]{border-color:var(--bad)}
+.scrim .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:12.5px/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
+.scrim .act-sl{display:none}
+.scrim .act-dot{color:var(--accent);font-weight:700}
+.scrim .act-stabs{max-width:100%;overflow-x:auto}
+.scrim .act-stabs label>span{padding:4px 8px;white-space:nowrap}
+.scrim .act-stabs input:checked+span::before{content:none}
+.scrim .act-slurm:has(input[name=stab][value=main]:checked) .act-sl-main,
+.scrim .act-slurm:has(input[name=stab][value=cgroup]:checked) .act-sl-cgroup,
+.scrim .act-slurm:has(input[name=stab][value=gres]:checked) .act-sl-gres,
+.scrim .act-slurm:has(input[name=stab][value=topology]:checked) .act-sl-topology,
+.scrim .act-slurm:has(input[name=stab][value=plugstack]:checked) .act-sl-plugstack,
+.scrim .act-slurm:has(input[name=stab][value=slurmdbd]:checked) .act-sl-slurmdbd{display:grid}
+.scrim .act-ids:not(:has(input[name=identity][value=clientIds]:checked)) .act-ctlusers{display:none}
 
 /* The plan pane. */
 .scrim .act-meter{display:grid;gap:2px}

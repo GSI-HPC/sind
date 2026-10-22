@@ -47,8 +47,10 @@ func actLinkKeys(q url.Values) []string {
 
 const (
 	// actMaxValue is the longest value of a field a form may post, in
-	// bytes; actMaxValues is the most values.
+	// bytes, but for a field of text, such as the lines of a Slurm config
+	// file, which may have actMaxText; actMaxValues is the most values.
 	actMaxValue  = 1024
+	actMaxText   = 64 << 10
 	actMaxValues = 2048
 )
 
@@ -57,9 +59,13 @@ func actCheckForm(f url.Values) error {
 	n := 0
 	for k, vals := range f {
 		n += len(vals)
+		limit := actMaxValue
+		if strings.HasPrefix(k, "slurm-") {
+			limit = actMaxText
+		}
 		for _, v := range vals {
-			if len(v) > actMaxValue {
-				return fmt.Errorf("the value of %s is longer than %d bytes: %w", k, actMaxValue, ErrBadRequest)
+			if len(v) > limit {
+				return fmt.Errorf("the value of %s is longer than %d bytes: %w", k, limit, ErrBadRequest)
 			}
 		}
 	}
@@ -136,6 +142,8 @@ var actSpecs = map[string]actSpec{
 				}
 			}
 			d.Form.Del("users")
+			d.def("identity", string(config.IdentityLocal))
+			d.def("stab", "main")
 			d.def("dtype", "hostPath")
 			d.def("dir", actDefaultDir(d.Form.Get("name")))
 			d.def("mkdir", "on")
@@ -221,18 +229,68 @@ type actSection struct {
 // actClusterSections are the sections of the New cluster dialog.
 var actClusterSections = []actSection{
 	{ID: "users", Fields: action.UserFieldsOf, Sum: actUsersSum},
-	{ID: "data", Fields: actFields("dtype", "dir", "mkdir", "mount"), Sum: func(p actPreview) string {
-		if p.Form.Get("dtype") == "volume" {
-			return actWithMount("Docker volume", p.Form)
+	{ID: "identity", Fields: actFields("identity", "ctlusers"), Sum: func(p actPreview) string {
+		mode := cmp.Or(p.Form.Get("identity"), string(config.IdentityLocal))
+		if mode == string(config.IdentityClientIDs) && actOn(p.Form.Get("ctlusers")) {
+			return mode + ", users on the controllers too"
 		}
+		return mode
+	}},
+	{ID: "slurm", Fields: actFields(action.SlurmFields()...), Sum: func(p actPreview) string {
+		var files []string
+		for _, s := range action.SlurmFiles {
+			if p.SlurmSet(s.ID) {
+				files = append(files, s.File)
+			}
+		}
+		if len(files) == 0 {
+			return "No additions"
+		}
+		return "Adds to " + strings.Join(files, ", ")
+	}},
+	{ID: "data", Fields: actFields("dtype", "dir", "mkdir", "mount", "cvmfs"), Sum: func(p actPreview) string {
 		sum := strings.TrimSpace(p.Form.Get("dir"))
-		if len(p.Cmd.Dirs) > 0 {
+		if p.Form.Get("dtype") == "volume" {
+			sum = "Docker volume"
+		} else if len(p.Cmd.Dirs) > 0 {
 			sum += ", created"
 		}
-		return actWithMount(sum, p.Form)
+		sum = actWithMount(sum, p.Form)
+		if actOn(p.Form.Get("cvmfs")) {
+			sum += ", CVMFS"
+		}
+		return sum
 	}},
 	{ID: "run", Fields: actFields("pull", "wait", "wait_other"), Sum: actRunSum},
 }
+
+// SlurmSet reports whether the form adds lines to the Slurm config file id.
+func (p actPreview) SlurmSet(id string) bool { return strings.TrimSpace(p.Form.Get("slurm-"+id)) != "" }
+
+// SlurmFiles are the Slurm config files that a new cluster may add lines
+// to.
+func (p actPreview) SlurmFiles() []action.SlurmFile { return action.SlurmFiles }
+
+// SlurmFiles are the Slurm config files that a new cluster may add lines
+// to.
+func (d *actDialog) SlurmFiles() []action.SlurmFile { return action.SlurmFiles }
+
+// actIdentity is an identity mode of a new cluster, with what it does.
+type actIdentity struct {
+	Mode config.IdentityMode
+	Hint string
+}
+
+// actIdentities are the identity modes of a new cluster, as
+// action.IdentityModes orders them.
+var actIdentities = []actIdentity{
+	{config.IdentityLocal, "Every node has the users. munge authenticates them."},
+	{config.IdentityNSSSlurm, "Managed workers do not have the users; nss_slurm gives them the job's user. munge authenticates them."},
+	{config.IdentityClientIDs, "Only the login node has the users. auth/slurm carries them to slurmctld; there is no munge."},
+}
+
+// Identities are the identity modes of a new cluster.
+func (d *actDialog) Identities() []actIdentity { return actIdentities }
 
 // actFields returns the fields of a section that are always the same.
 func actFields(fields ...string) func(url.Values) []string {
