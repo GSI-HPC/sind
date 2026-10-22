@@ -783,7 +783,7 @@ sind help [COMMAND | TOPIC]            # help for a command, or for a word, how-
 sind help topics                       # list the topics of sind help
 ```
 
-`sind help TOPIC` prints the text of a topic from `internal/help` (the YAML that sind ui shows too): a word (`sind help realm`), a how-to (`sind help first-cluster`) or an action of sind ui (`sind help create-cluster`). `sind help topics` lists them. A name that is a command prints that command's help, and an unknown name is a usage error, as in the rule above.
+`sind help TOPIC` prints the text of a topic from `internal/help` (the YAML that sind ui shows too): a word (`sind help realm`), a how-to (`sind help first-cluster`) or an action of sind ui (`sind help create-cluster`). `sind help topics` lists them. A name that is a command prints that command's help, and an unknown name is a usage error, as in the rule above. A topic links to its docs page; in sind ui the link carries `?via=ui`, so that the page shows its steps for the web UI (see `docs/content/contributing/conventions.md`).
 
 `sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`, read with `cobratree.ReadBuildInfo`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 

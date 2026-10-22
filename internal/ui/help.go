@@ -123,7 +123,7 @@ func helpEntry(h *help.Help, topic string) (*helpData, bool) {
 		if !ok {
 			p, _ = h.Page("overview")
 		}
-		d.Kind, d.Crumb, d.Page, d.Doc = "page", "This page", p, help.DocURL(p.Doc)
+		d.Kind, d.Crumb, d.Page, d.Doc = "page", "This page", p, help.UIDocURL(p.Doc)
 		words(p.Words)
 		for _, id := range p.Howtos {
 			if t, ok := h.Howto(id); ok {
@@ -138,21 +138,21 @@ func helpEntry(h *help.Help, topic string) (*helpData, bool) {
 			if !ok {
 				return nil, false
 			}
-			d.Kind, d.Crumb, d.Word, d.Doc = "word", "Word", w, help.DocURL(w.Doc)
+			d.Kind, d.Crumb, d.Word, d.Doc = "word", "Word", w, help.UIDocURL(w.Doc)
 			words(w.See)
 		case help.KindAction:
 			a, ok := h.Action(id)
 			if !ok {
 				return nil, false
 			}
-			d.Kind, d.Crumb, d.Action, d.Doc = "action", "Action", a, help.DocURL(a.Doc)
+			d.Kind, d.Crumb, d.Action, d.Doc = "action", "Action", a, help.UIDocURL(a.Doc)
 			words(a.Words)
 		case help.KindHowto:
 			t, ok := h.Howto(id)
 			if !ok {
 				return nil, false
 			}
-			d.Kind, d.Crumb, d.Howto, d.Doc = "howto", "How do I…", t, help.DocURL(t.Doc)
+			d.Kind, d.Crumb, d.Howto, d.Doc = "howto", "How do I…", t, help.UIDocURL(t.Doc)
 			words(t.Words)
 		default:
 			return nil, false

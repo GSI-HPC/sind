@@ -360,9 +360,16 @@ func (h *Help) Commands() []string {
 }
 
 // DocURL returns the URL of a doc path, such as usage/progress#event-log.
-func DocURL(doc string) string {
+func DocURL(doc string) string { return docURL(doc, "") }
+
+// UIDocURL returns the URL of a doc path for a reader of sind ui: the page
+// then shows the steps for the web UI, and keeps showing them.
+func UIDocURL(doc string) string { return docURL(doc, "?via=ui") }
+
+// docURL returns the URL of a doc path, with the query before the fragment.
+func docURL(doc, query string) string {
 	path, frag, hasFrag := strings.Cut(doc, "#")
-	u := DocsURL + path + "/"
+	u := DocsURL + path + "/" + query
 	if hasFrag {
 		u += "#" + frag
 	}

@@ -69,7 +69,7 @@ func TestHelpPane(t *testing.T) {
 		"/help?topic=%2F":                      {"<h2>Overview</h2>"},
 		"/help?topic=%2Fclusters%2Fsind%2Fdev": {"<h2>Cluster</h2>", `data-help-topic="word/node-roles"`},
 		"/help?topic=%2Fno%2Fsuch%2Fpage":      {"<h2>Overview</h2>"},
-		"/help?topic=word/realm":               {`data-crumb="Word"`, "<h2>Realm</h2>", "sind get realms", `data-help-copy="sind get realms"`, "sind help realm", "gsi-hpc.github.io/sind/configuration/realms/", `rel="noopener noreferrer"`},
+		"/help?topic=word/realm":               {`data-crumb="Word"`, "<h2>Realm</h2>", "sind get realms", `data-help-copy="sind get realms"`, "sind help realm", "gsi-hpc.github.io/sind/configuration/realms/?via=ui", `rel="noopener noreferrer"`},
 		"/help?topic=word/lock":                {"<h2>Realm lock</h2>"},
 		"/help?topic=action/power":             {`data-crumb="Action"`, "<h2>Power</h2>", "sind power reboot NODES", "Use the opposite verb."},
 		"/help?topic=action/delete-realm":      {`class="callout bad"`, "Cannot be undone."},
