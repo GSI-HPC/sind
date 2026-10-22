@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"regexp"
 	"slices"
@@ -46,10 +47,37 @@ type Command struct {
 	// Config is a file that the command reads and that sind ui saves
 	// first, if the action has one.
 	Config *File
+	// Dirs are directories that sind ui creates before it runs the
+	// command.
+	Dirs []string
+	// Script is a shell script that does what running the command does,
+	// with its file and directories, for Copy; empty where Display does.
+	Script string
 	// Nodes are the nodes the command will make, for the preview.
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.
 	Summary string
+	// MemoryMB is the memory that Nodes may use together, in MiB.
+	MemoryMB int
+	// Images are the images of Nodes and what sind ui knows of them.
+	Images []PlanImage
+	// Problems are the fields that the command cannot take as they are.
+	// The command does not run while it has any, but its plan shows.
+	Problems []Problem
+}
+
+// Problem is a field of a form that is wrong. Build reports it, instead of
+// an error, where it can still make the rest of the plan.
+type Problem struct {
+	// Field is the form field, or "" for the config as a whole.
+	Field string
+	// Label names the field for the user.
+	Label string
+	// Text says what is wrong and how to fix it.
+	Text string
+	// Default says that the plan uses the field's default until it is
+	// fixed.
+	Default bool
 }
 
 // File is a file that sind ui saves before it runs a command, readable by
@@ -63,6 +91,9 @@ type File struct {
 type PlannedNode struct {
 	Short string
 	Role  string
+	// Key is the node of the form that makes it: a role, backup, or the
+	// key of a worker group.
+	Key string
 }
 
 // NewCommand returns the command with the arguments argv.
@@ -81,6 +112,10 @@ func (c Command) Fingerprint() string {
 		h.Write([]byte(c.Config.Path))
 		h.Write([]byte{0})
 		h.Write([]byte(c.Config.Content))
+	}
+	for _, d := range c.Dirs {
+		h.Write([]byte{1})
+		h.Write([]byte(d))
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -112,6 +147,10 @@ type Context struct {
 	// ConfigDir is where sind ui saves the configs of the clusters it
 	// creates.
 	ConfigDir string
+	// Stat looks at a file of the host, as os.Stat; nil checks none.
+	Stat func(name string) (fs.FileInfo, error)
+	// Image tells what sind ui knows of an image; nil knows nothing.
+	Image func(image string) ImageFacts
 }
 
 // Action is a change that a dialog makes by running one command.

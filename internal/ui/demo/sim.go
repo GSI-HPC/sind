@@ -375,6 +375,12 @@ func (s *Sim) planCreateCluster(p plan, args []string) (plan, error) {
 		slurm = slurmOld
 	}
 	data2 := flagValue(args, "--data")
+	switch ds := cfg.Storage.DataStorage; {
+	case ds.Type == config.StorageVolume:
+		data2 = "volume"
+	case ds.HostPath != "":
+		data2 = ds.HostPath
+	}
 	users := make([]string, len(cfg.Users))
 	for i, u := range cfg.Users {
 		users[i] = u.Name

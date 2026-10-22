@@ -119,7 +119,7 @@ shots:
     sizes: [desktop, phone]
 
   - name: dialog-create-cluster
-    alt: "The New cluster dialog: the roles, the sizes and the command that sind ui will run"
+    alt: "The New cluster dialog: the form with the nodes and sizes, and the plan with the command and config that sind ui will run"
     path: /clusters
     steps:
       - dialog: create-cluster

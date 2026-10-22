@@ -3,10 +3,13 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/ui/action"
@@ -21,15 +24,35 @@ var actDialogKeys = []string{
 	"realm", "cluster", "nodes", "op", "container",
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
-	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "cpus", "memory", "users",
-	"dtype", "dir", "monitoring", "pull",
+	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
+	"dtype", "dir", "mkdir", "mount", "monitoring", "pull", "wait_other",
+}
+
+// actRowFieldPattern is a field of a node, a worker group or a row of a
+// user, group or account, which a link may fill in too, as may the lists
+// of the keys of the groups and rows.
+var actRowFieldPattern = regexp.MustCompile(`^(wg|ur|gr|ar|(controller|db|api|submitter|[wuga][0-9a-z]{1,8})-[a-zA-Z]{1,16})$`)
+
+// actLinkKeys are the keys of the query that open a dialog with its fields
+// filled in: actDialogKeys, and the fields of nodes and rows.
+func actLinkKeys(q url.Values) []string {
+	keys := slices.Clone(actDialogKeys)
+	for k := range q {
+		if actRowFieldPattern.MatchString(k) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 const (
 	// actMaxValue is the longest value of a field a form may post, in
-	// bytes; actMaxValues is the most values.
+	// bytes, but for a field of text, the lines of a Slurm config file or
+	// the YAML of a config, which may have actMaxText; actMaxValues is the
+	// most values.
 	actMaxValue  = 1024
-	actMaxValues = 256
+	actMaxText   = 64 << 10
+	actMaxValues = 2048
 )
 
 // actCheckForm refuses a form with a value that is too long, or too many.
@@ -37,9 +60,13 @@ func actCheckForm(f url.Values) error {
 	n := 0
 	for k, vals := range f {
 		n += len(vals)
+		limit := actMaxValue
+		if strings.HasPrefix(k, "slurm-") || k == "yaml" {
+			limit = actMaxText
+		}
 		for _, v := range vals {
-			if len(v) > actMaxValue {
-				return fmt.Errorf("the value of %s is longer than %d bytes: %w", k, actMaxValue, ErrBadRequest)
+			if len(v) > limit {
+				return fmt.Errorf("the value of %s is longer than %d bytes: %w", k, limit, ErrBadRequest)
 			}
 		}
 	}
@@ -60,6 +87,14 @@ type actSpec struct {
 	// NeedsCluster says that the dialog is for one cluster, named by the
 	// link.
 	NeedsCluster bool
+	// Plan puts the preview into a pane beside the fields, which shows
+	// the plan of the command even while a field is wrong.
+	Plan bool
+	// Fields returns the fields of the form that show their own problem.
+	Fields func(f url.Values) []string
+	// Sections are the parts of the form that fold, each with a line
+	// that sums it up.
+	Sections []actSection
 	// Title and Lead are the heading and the line below it.
 	Title func(d *actDialog) string
 	Lead  func(d *actDialog) string
@@ -70,25 +105,56 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true,
+		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
 		Lead: func(d *actDialog) string {
 			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
 		},
 		Defaults: func(d *actDialog) {
-			d.def("name", "hpc")
+			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
 			d.def("image", config.DefaultImage)
+			if w := d.Form.Get("wait"); w != "" && w != "other" && !slices.Contains(action.Waits, w) {
+				// A time that has no button of its own.
+				d.Form.Set("wait", "other")
+				d.Form.Set("wait_other", w)
+			}
 			d.def("wait", action.DefaultWait)
-			d.def("backup", "0")
-			d.def("db", "1")
-			d.def("api", "0")
-			d.def("submitter", "1")
-			d.def("workers", "2")
+			d.def("db", "on")
+			d.def("submitter", "on")
+			if !d.Form.Has("wg") {
+				d.Form.Set("wg", "w0")
+				d.Form.Set("w0-count", cmp.Or(d.Form.Get("workers"), "2"))
+			}
+			if !d.Form.Has("size") {
+				// A link with a size of its own gives custom values.
+				d.Form.Set("size", "s")
+				if d.Form.Has("cpus") || d.Form.Has("memory") || d.Form.Has("tmp") {
+					d.Form.Set("size", "x")
+				}
+			}
 			d.def("cpus", "1")
 			d.def("memory", "512m")
+			if names := strings.FieldsFunc(d.Form.Get("users"), func(r rune) bool { return r == ',' || r == ' ' }); len(names) > 0 && !d.Form.Has(action.UserRows.List) {
+				// The users of a link become rows.
+				for i, name := range names {
+					key := action.UserRows.Prefix + strconv.Itoa(i)
+					d.Form.Add(action.UserRows.List, key)
+					d.Form.Set(key+"-name", name)
+				}
+			}
+			d.Form.Del("users")
+			d.def("identity", string(config.IdentityLocal))
+			d.def("stab", "main")
 			d.def("dtype", "hostPath")
-			d.def("dir", "~/sind/"+d.Form.Get("name"))
-			d.def("pull", "on")
+			d.def("dir", actDefaultDir(d.Form.Get("name")))
+			d.def("mkdir", "on")
+			if !d.Form.Has("pull") {
+				// Pull follows the image until the user ticks the box.
+				d.Form.Set("pull_auto", "1")
+				if pull, _ := action.PullByDefault(d.Form.Get("image")); pull {
+					d.Form.Set("pull", "on")
+				}
+			}
 		},
 	},
 	"create-worker": {
@@ -152,6 +218,406 @@ var actSpecs = map[string]actSpec{
 	},
 }
 
+// actSection is a part of a form that folds.
+type actSection struct {
+	ID string
+	// Fields are those in the section, whose problems it counts.
+	Fields func(f url.Values) []string
+	// Sum is the line that sums the section up.
+	Sum func(p actPreview) string
+}
+
+// actClusterSections are the sections of the New cluster dialog.
+var actClusterSections = []actSection{
+	{ID: "users", Fields: action.UserFieldsOf, Sum: actUsersSum},
+	{ID: "identity", Fields: actFields("identity", "ctlusers"), Sum: func(p actPreview) string {
+		mode := cmp.Or(p.Form.Get("identity"), string(config.IdentityLocal))
+		if mode == string(config.IdentityClientIDs) && actOn(p.Form.Get("ctlusers")) {
+			return mode + ", users on the controllers too"
+		}
+		return mode
+	}},
+	{ID: "slurm", Fields: actFields(action.SlurmFields()...), Sum: func(p actPreview) string {
+		var files []string
+		for _, s := range action.SlurmFiles {
+			if p.SlurmSet(s.ID) {
+				files = append(files, s.File)
+			}
+		}
+		if len(files) == 0 {
+			return "No additions"
+		}
+		return "Adds to " + strings.Join(files, ", ")
+	}},
+	{ID: "data", Fields: actFields("dtype", "dir", "mkdir", "mount", "cvmfs"), Sum: func(p actPreview) string {
+		sum := strings.TrimSpace(p.Form.Get("dir"))
+		if p.Form.Get("dtype") == "volume" {
+			sum = "Docker volume"
+		} else if len(p.Cmd.Dirs) > 0 {
+			sum += ", created"
+		}
+		sum = actWithMount(sum, p.Form)
+		if actOn(p.Form.Get("cvmfs")) {
+			sum += ", CVMFS"
+		}
+		return sum
+	}},
+	{ID: "run", Fields: actFields("pull", "wait", "wait_other"), Sum: actRunSum},
+}
+
+// YAMLMode reports whether the user edits the YAML of the config, which
+// then takes the place of the form.
+func (p actPreview) YAMLMode() bool { return p.Form.Get("yaml_on") != "" }
+
+// SlurmSet reports whether the form adds lines to the Slurm config file id.
+func (p actPreview) SlurmSet(id string) bool { return strings.TrimSpace(p.Form.Get("slurm-"+id)) != "" }
+
+// SlurmFiles are the Slurm config files that a new cluster may add lines
+// to.
+func (p actPreview) SlurmFiles() []action.SlurmFile { return action.SlurmFiles }
+
+// SlurmFiles are the Slurm config files that a new cluster may add lines
+// to.
+func (d *actDialog) SlurmFiles() []action.SlurmFile { return action.SlurmFiles }
+
+// actIdentity is an identity mode of a new cluster, with what it does.
+type actIdentity struct {
+	Mode config.IdentityMode
+	Hint string
+}
+
+// actIdentities are the identity modes of a new cluster, as
+// action.IdentityModes orders them.
+var actIdentities = []actIdentity{
+	{config.IdentityLocal, "Every node has the users. munge authenticates them."},
+	{config.IdentityNSSSlurm, "Managed workers do not have the users; nss_slurm gives them the job's user. munge authenticates them."},
+	{config.IdentityClientIDs, "Only the login node has the users. auth/slurm carries them to slurmctld; there is no munge."},
+}
+
+// Identities are the identity modes of a new cluster.
+func (d *actDialog) Identities() []actIdentity { return actIdentities }
+
+// actFields returns the fields of a section that are always the same.
+func actFields(fields ...string) func(url.Values) []string {
+	return func(url.Values) []string { return fields }
+}
+
+// actUsersSum sums up the users, groups and accounts of a new cluster: how
+// many have a name.
+func actUsersSum(p actPreview) string {
+	var parts []string
+	for _, k := range []struct {
+		rows action.Rows
+		what string
+	}{{action.UserRows, "user"}, {action.GroupRows, "group"}, {action.AccountRows, "account"}} {
+		if n := len(actNames(p.Form, k.rows)); n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s%s", n, k.what, map[bool]string{true: "", false: "s"}[n == 1]))
+		}
+	}
+	if len(parts) == 0 {
+		return "No users"
+	}
+	return strings.Join(parts, ", ")
+}
+
+// actNames are the names of the rows of the form, without empty ones.
+func actNames(f url.Values, r action.Rows) []string {
+	var names []string
+	for _, key := range r.Keys(f) {
+		if name := strings.TrimSpace(f.Get(key + "-name")); name != "" && r.Key(key) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// GroupNames are the groups of the form, which the fields of a user
+// suggest.
+func (p actPreview) GroupNames() []string { return actNames(p.Form, action.GroupRows) }
+
+// AccountNames are the accounts of the form, which the fields of a user
+// and of a parent suggest.
+func (p actPreview) AccountNames() []string { return actNames(p.Form, action.AccountRows) }
+
+// actRowView is a row of a user, group or account of the New cluster
+// dialog.
+type actRowView struct {
+	Key  string
+	form url.Values
+}
+
+// Val returns the value of the row's field attr.
+func (r actRowView) Val(attr string) string { return r.form.Get(r.Key + "-" + attr) }
+
+// actLimit is a limit of the account Row, as the dialog shows it.
+type actLimit struct{ Row, Key, Value string }
+
+// Limits are the limits of an account row.
+func (r actRowView) Limits() []actLimit {
+	values := r.form[r.Key+"-lv"]
+	var out []actLimit
+	for i, k := range r.form[r.Key+"-lk"] {
+		l := actLimit{Row: r.Key, Key: k}
+		if i < len(values) {
+			l.Value = values[i]
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+// Blank is a new limit of an account row.
+func (r actRowView) Blank() actLimit { return actLimit{Row: r.Key} }
+
+// Row returns the row key of the dialog.
+func (d *actDialog) Row(key string) actRowView { return actRowView{Key: key, form: d.Form} }
+
+// Rows returns the rows of a kind, "user", "group" or "account", whose keys
+// the dialog made.
+func (d *actDialog) Rows(kind string) []actRowView {
+	r := map[string]action.Rows{"user": action.UserRows, "group": action.GroupRows, "account": action.AccountRows}[kind]
+	var out []actRowView
+	for _, key := range r.Keys(d.Form) {
+		if r.Key(key) {
+			out = append(out, d.Row(key))
+		}
+	}
+	return out
+}
+
+// LimitKeys are the limits that an account may have.
+func (d *actDialog) LimitKeys() []string { return config.LimitKeys }
+
+// actRunSum sums up the run options of a new cluster.
+func actRunSum(p actPreview) string {
+	sum := "No pull"
+	if p.PullOn() {
+		sum = "Pull"
+	}
+	switch wait := p.Form.Get("wait"); wait {
+	case "0":
+		return sum + ", no wait limit"
+	case "other":
+		return sum + ", wait " + strings.TrimSpace(p.Form.Get("wait_other"))
+	case "":
+		return sum + ", wait " + action.DefaultWait
+	default:
+		return sum + ", wait " + wait
+	}
+}
+
+// PullOn reports whether the command of a new cluster pulls the image.
+func (p actPreview) PullOn() bool {
+	return slices.Contains(p.Cmd.Argv, "--pull")
+}
+
+// PullHint says why the command of a new cluster pulls the image, or not.
+func (p actPreview) PullHint() string {
+	if p.Form.Get("pull_auto") == "" {
+		return "Gets the newest image first, even if Docker has one."
+	}
+	pull, why := action.PullByDefault(strings.TrimSpace(p.Form.Get("image")))
+	if pull {
+		return "On, as " + why + ". Create gets the newest image first."
+	}
+	return "Off, as " + why + "."
+}
+
+// actWithMount adds the mount path of the data to sum, if it is not the
+// default.
+func actWithMount(sum string, f url.Values) string {
+	if m := strings.TrimSpace(f.Get("mount")); m != "" {
+		return sum + ", at " + m
+	}
+	return sum
+}
+
+// actSectionView is a section as a preview shows it.
+type actSectionView struct {
+	ID, Summary string
+	// Bad is how many problems the section has.
+	Bad int
+}
+
+// Sections sum up the sections of the dialog.
+func (p actPreview) Sections() []actSectionView {
+	var out []actSectionView
+	for _, sec := range p.Spec.Sections {
+		v := actSectionView{ID: sec.ID, Summary: sec.Sum(p)}
+		fields := sec.Fields(p.Form)
+		for _, pr := range p.Cmd.Problems {
+			if slices.Contains(fields, pr.Field) {
+				v.Bad++
+			}
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// actEff are the node defaults of a new cluster, which a node takes where
+// its own field is empty.
+type actEff struct {
+	Image, CPUs, Memory, TmpSize string
+}
+
+// actEffOf returns the node defaults of the form.
+func actEffOf(f url.Values) actEff {
+	e := actEff{Image: strings.TrimSpace(f.Get("image")), CPUs: "1", Memory: config.DefaultMemory, TmpSize: config.DefaultTmpSize}
+	if e.Image == "" {
+		e.Image = config.DefaultImage
+	}
+	if f.Get("size") == "x" {
+		e.CPUs = cmp.Or(strings.TrimSpace(f.Get("cpus")), e.CPUs)
+		e.Memory = cmp.Or(strings.TrimSpace(f.Get("memory")), e.Memory)
+		e.TmpSize = cmp.Or(strings.TrimSpace(f.Get("tmp")), e.TmpSize)
+		return e
+	}
+	for _, size := range action.Sizes {
+		if size.ID == f.Get("size") {
+			e.CPUs, e.Memory, e.TmpSize = strconv.Itoa(size.CPUs), size.Memory, cmp.Or(size.TmpSize, e.TmpSize)
+		}
+	}
+	return e
+}
+
+// actNodeView is a node of the New cluster dialog: a role or a worker group,
+// with its size button and editor.
+type actNodeView struct {
+	Key, Label string
+	// Group says that the node is a worker group.
+	Group bool
+	// Eff are the node defaults, which the editor shows as placeholders.
+	Eff  actEff
+	form url.Values
+	// first is the index of the first worker of a group.
+	first int
+}
+
+// actNodeOf returns the node key of the form.
+func actNodeOf(f url.Values, key string) actNodeView {
+	n := actNodeView{Key: key, Label: key, Eff: actEffOf(f), form: f}
+	if !slices.Contains(action.NodeRoles, key) {
+		n.Group, n.Label = true, "workers"
+	}
+	return n
+}
+
+// Val returns the value of the node's field attr.
+func (n actNodeView) Val(attr string) string { return n.form.Get(n.Key + "-" + attr) }
+
+// On reports whether the node's checkbox attr is ticked.
+func (n actNodeView) On(attr string) bool { return actOn(n.Val(attr)) }
+
+// Managed says whether the node can be unmanaged: the submitter cannot.
+func (n actNodeView) Managed() bool { return n.Key != "submitter" }
+
+// UnmanagedHint says what an unmanaged node is.
+func (n actNodeView) UnmanagedHint() string {
+	switch {
+	case n.Key == "controller":
+		return "Makes the cluster unmanaged: sind writes no Slurm config and starts no Slurm daemons."
+	case n.Group:
+		return "The workers start without slurmd."
+	}
+	return "The node starts without its daemons."
+}
+
+// actList is a field of a node that takes a list.
+type actList struct{ Attr, Example string }
+
+// Lists are the fields of the node that take a list.
+func (n actNodeView) Lists() []actList {
+	return []actList{{"capAdd", "such as SYS_ADMIN"}, {"capDrop", "such as NET_RAW"}, {"devices", "such as /dev/fuse"}, {"securityOpt", "such as seccomp=unconfined"}}
+}
+
+// Chip is the text of the node's size button: its own values, or
+// "defaults".
+func (n actNodeView) Chip() string {
+	var parts []string
+	if v := strings.TrimSpace(n.Val("cpus")); v != "" {
+		parts = append(parts, v+" CPU"+map[bool]string{true: "", false: "s"}[v == "1"])
+	}
+	if v := strings.TrimSpace(n.Val("memory")); v != "" {
+		parts = append(parts, v)
+	}
+	if v := strings.TrimSpace(n.Val("tmp")); v != "" {
+		parts = append(parts, "/tmp "+v)
+	}
+	if strings.TrimSpace(n.Val("image")) != "" {
+		parts = append(parts, "own image")
+	}
+	if n.Managed() && n.On("unmanaged") {
+		parts = append(parts, "unmanaged")
+	}
+	for _, l := range n.Lists() {
+		if strings.TrimSpace(n.Val(l.Attr)) != "" {
+			parts = append(parts, "more")
+			break
+		}
+	}
+	if len(parts) == 0 {
+		return "defaults"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// Own says that the node has values of its own.
+func (n actNodeView) Own() bool { return n.Chip() != "defaults" }
+
+// Open says that the node's editor starts open: where it has values of
+// its own.
+func (n actNodeView) Open() bool { return n.Own() }
+
+// Range names the workers of a group, as the dialog opens.
+func (n actNodeView) Range() string {
+	count, err := strconv.Atoi(strings.TrimSpace(n.Val("count")))
+	if err != nil || count < 1 {
+		count = 1
+	}
+	return actRange(n.first, n.first+count-1)
+}
+
+// actRange names the workers first to last.
+func actRange(first, last int) string {
+	if first == last {
+		return fmt.Sprintf("worker-%d", first)
+	}
+	return fmt.Sprintf("worker-%d … worker-%d", first, last)
+}
+
+// actOn reports whether a checkbox's value is ticked: on, or the 1 of a
+// link.
+func actOn(v string) bool { return slices.Contains([]string{"on", "1", "true"}, strings.TrimSpace(v)) }
+
+// Node returns the node key of the dialog; a worker group knows the index
+// of its first worker.
+func (d *actDialog) Node(key string) actNodeView {
+	n := actNodeOf(d.Form, key)
+	for _, g := range d.Groups() {
+		if g == key {
+			break
+		}
+		n.first += actNodeOf(d.Form, g).count()
+	}
+	return n
+}
+
+// count is the number of workers of a group, 1 where its field is wrong.
+func (n actNodeView) count() int {
+	c, err := strconv.Atoi(strings.TrimSpace(n.Val("count")))
+	if err != nil || c < 1 {
+		return 1
+	}
+	return c
+}
+
+// Groups are the keys of the worker groups.
+func (d *actDialog) Groups() []string { return action.WorkerGroups(d.Form) }
+
+// Sizes are the node defaults that the dialog offers.
+func (d *actDialog) Sizes() []action.Size { return action.Sizes }
+
 // actDialog is what the dialog's templates render from.
 type actDialog struct {
 	*View
@@ -178,45 +644,45 @@ type actDialog struct {
 // actChoice is an option of a select.
 type actChoice struct{ Value, Label string }
 
-// actWaits are the choices of the wait for a new cluster, those of
-// action.Waits.
+// actWaits are the choices of the wait for a new cluster: those of
+// action.Waits, and another time.
 var actWaits = []actChoice{
-	{"1m", "1 minute"}, {"2m", "2 minutes"}, {"5m", "5 minutes"}, {"10m", "10 minutes"}, {"0", "no limit"},
+	{"2m", "2m"}, {"5m", "5m"}, {"10m", "10m"}, {"0", "No limit"}, {"other", "Other"},
 }
 
-// actMemories are the choices of the memory of a node, besides the value in
-// the form.
-var actMemories = []string{"512m", "1g", "2g", "4g"}
+// actMemories are the memories of a node that the field suggests.
+var actMemories = []string{"512m", "1g", "2g", "4g", "8g"}
 
-// actCounter is a role of the New cluster dialog with its counter.
-type actCounter struct {
-	Name, Label, Hint string
-	Min, Max          int
-	Required          bool
-	Value             string
+// actRole is a role of the New cluster dialog that is a checkbox.
+type actRole struct {
+	Name, Label, Small, Hint string
+	// Sub sets the row in below the one above it.
+	Sub bool
 }
 
-// Counters are the roles of the New cluster dialog.
-func (d *actDialog) Counters() []actCounter {
-	return []actCounter{
-		{"controller", "controller", "Exactly one. Runs slurmctld.", 1, 1, true, "1"},
-		{"backup", "controller-backup", "A second slurmctld that takes over.", 0, 1, false, d.Form.Get("backup")},
-		{"db", "db", "mariadb and slurmdbd: accounting.", 0, 1, false, d.Form.Get("db")},
-		{"api", "api", "slurmrestd. Slurm 26.05 only.", 0, 1, false, d.Form.Get("api")},
-		{"submitter", "submitter", "Where sind enter puts you.", 0, 1, false, d.Form.Get("submitter")},
-		{"workers", "worker", "Run slurmd.", 1, 64, false, d.Form.Get("workers")},
-	}
+// actRoles are the roles of the New cluster dialog that are a checkbox.
+var actRoles = []actRole{
+	{"backup", "backup", "controller-backup", "A second slurmctld that takes over. Same image and size as the controller.", true},
+	{"db", "db", "", "MariaDB and slurmdbd: accounting.", false},
+	{"api", "api", "", "slurmrestd. Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", false},
+	{"submitter", "submitter", "", "The login node. sind enter puts you here.", false},
 }
 
-// Memories returns the choices of the memory of a node: the usual ones, and
-// the value of the form when it is none of them.
-func (d *actDialog) Memories() []string {
-	m := actMemories
-	if v := d.Form.Get("memory"); v != "" && !slices.Contains(m, v) {
-		m = append([]string{v}, m...)
-	}
-	return m
-}
+// Roles are the roles of the New cluster dialog that are a checkbox.
+func (d *actDialog) Roles() []actRole { return actRoles }
+
+// Memories are the memories of a node that the field suggests.
+func (d *actDialog) Memories() []string { return actMemories }
+
+// On reports whether the checkbox field is ticked: on, or the 1 of a link.
+func (d *actDialog) On(field string) bool { return actOn(d.Form.Get(field)) }
+
+// DirFollows reports whether the directory is the one that the name gives,
+// which then follows the name as the user types it.
+func (d *actDialog) DirFollows() bool { return d.Form.Get("dir") == actDefaultDir(d.Form.Get("name")) }
+
+// actDefaultDir is the directory of the data of a new cluster name.
+func actDefaultDir(name string) string { return "~/sind/" + name }
 
 // actNodeChoice is a node of the picker of the power and delete worker
 // dialogs.
@@ -259,7 +725,8 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v, err := s.View(r, actDialogKeys...)
+	keys := actLinkKeys(r.URL.Query())
+	v, err := s.View(r, keys...)
 	if err != nil {
 		s.Fail(w, r, err)
 		return
@@ -269,7 +736,7 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
 		Ops: action.PowerOps, Waits: actWaits,
 	}
-	for _, k := range actDialogKeys {
+	for _, k := range keys {
 		if vals := v.Params[k]; len(vals) > 0 {
 			d.Form[k] = slices.Clone(vals)
 		}
@@ -336,6 +803,8 @@ type actPreview struct {
 	*View
 	ID   string
 	Spec actSpec
+	// Form is the form that the preview is of.
+	Form action.Form
 	Cmd  action.Command
 	Err  string
 	Warn string
@@ -349,13 +818,117 @@ type actPreview struct {
 	// command will wait for it.
 	Realm string
 	Lock  *state.LockHolder
-	// Tiles says whether to show the nodes a new cluster gets.
-	Tiles bool
+}
+
+// actMaxTiles is the most nodes that a plan draws one by one.
+const actMaxTiles = 16
+
+// Tiles are the nodes that the plan draws: all, or the first ones when
+// there are more than actMaxTiles.
+func (p actPreview) Tiles() []action.PlannedNode {
+	if len(p.Cmd.Nodes) > actMaxTiles {
+		return p.Cmd.Nodes[:actMaxTiles-1]
+	}
+	return p.Cmd.Nodes
+}
+
+// More is how many nodes the plan does not draw.
+func (p actPreview) More() int { return len(p.Cmd.Nodes) - len(p.Tiles()) }
+
+// Fields are the fields of the form that show their own problem.
+func (p actPreview) Fields() []string {
+	if p.Spec.Fields == nil {
+		return nil
+	}
+	return p.Spec.Fields(p.Form)
+}
+
+// NodeViews are the nodes of a new cluster whose size buttons and ranges
+// the preview updates.
+func (p actPreview) NodeViews() []actNodeView {
+	var out []actNodeView
+	for _, key := range action.NodeRoles {
+		out = append(out, actNodeOf(p.Form, key))
+	}
+	for _, g := range action.WorkerGroups(p.Form) {
+		if actGroupPattern.MatchString(g) {
+			out = append(out, actNodeOf(p.Form, g))
+		}
+	}
+	return out
+}
+
+// actGroupPattern is the key of a worker group, which ends up in ids.
+var actGroupPattern = regexp.MustCompile(`^w[0-9a-z]{1,8}$`)
+
+// HostMB is the memory of the Docker host in MiB, 0 when unknown.
+func (p actPreview) HostMB() int { return int(p.Snap.Docker.MemTotal >> 20) }
+
+// HostHigh is the memory of the host above which the plan warns, in MiB.
+func (p actPreview) HostHigh() int { return p.HostMB() * action.HostMemoryWarn / 100 }
+
+// MemoryLabel writes a size in MiB for people.
+func (p actPreview) MemoryLabel(mb int) string { return action.MemoryLabel(mb) }
+
+// Eff are the node defaults of a new cluster.
+func (p actPreview) Eff() actEff { return actEffOf(p.Form) }
+
+// RangeOf names the workers of the group key in the plan.
+func (p actPreview) RangeOf(key string) string {
+	first, last := -1, -1
+	for i, n := range p.Cmd.Nodes {
+		if n.Key == key {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 0 {
+		return ""
+	}
+	return actRange(actWorkerIndex(p.Cmd.Nodes[first]), actWorkerIndex(p.Cmd.Nodes[last]))
+}
+
+// actWorkerIndex is the number in the name of a worker.
+func actWorkerIndex(n action.PlannedNode) int {
+	i, _ := strconv.Atoi(strings.TrimPrefix(n.Short, "worker-"))
+	return i
+}
+
+// ProblemOf returns what is wrong with the field, or "".
+func (p actPreview) ProblemOf(field string) string {
+	for _, pr := range p.Cmd.Problems {
+		if pr.Field == field {
+			return pr.Text
+		}
+	}
+	return ""
+}
+
+// Problems is how many things keep the command from running.
+func (p actPreview) Problems() int {
+	if p.Err != "" {
+		return 1
+	}
+	return len(p.Cmd.Problems)
+}
+
+// Defaulted names the fields whose defaults the plan takes, as they are
+// wrong.
+func (p actPreview) Defaulted() string {
+	var labels []string
+	for _, pr := range p.Cmd.Problems {
+		if pr.Default {
+			labels = append(labels, pr.Label)
+		}
+	}
+	return strings.Join(labels, ", ")
 }
 
 // actEvaluate builds the command of the form and decides whether it may run.
 func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) actPreview {
-	p := actPreview{View: v, ID: a.ID, Spec: actSpecs[a.ID]}
+	p := actPreview{View: v, ID: a.ID, Spec: actSpecs[a.ID], Form: f}
 	p.Danger = p.Spec.Danger
 	if op, ok := action.PowerOpOf(f.Get("op")); a.ID == "power" && ok && op.Danger {
 		p.Danger = true
@@ -366,8 +939,7 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 		return p
 	}
 	p.Cmd, p.Shown = cmd, cmd.Fingerprint()
-	p.Tiles = cmd.Config != nil
-	p.Blocked = !a.Confirmed(f)
+	p.Blocked = !a.Confirmed(f) || len(cmd.Problems) > 0
 	p.Realm = action.Realm(f)
 	if actLocks(a, f) {
 		p.Lock = v.Snap.Lock(p.Realm)
@@ -376,8 +948,12 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 }
 
 // actContext returns what the actions check a form against.
-func actContext(v *View, st *actState) action.Context {
-	return action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir}
+func actContext(r *http.Request, v *View, st *actState) action.Context {
+	c := action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir, Stat: st.stat}
+	if st.images != nil {
+		c.Image = func(image string) action.ImageFacts { return st.images.facts(r.Context(), image) }
+	}
+	return c
 }
 
 // actFormView returns the view of a request that posts a dialog's form,
@@ -404,7 +980,7 @@ func actPreviewRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		s.Fail(w, r, err)
 		return
 	}
-	s.Write(w, r, http.StatusOK, "act-preview", v.withData(actEvaluate(v, a, r.PostForm, actContext(v, st))))
+	s.Write(w, r, http.StatusOK, "act-preview", v.withData(actEvaluate(v, a, r.PostForm, actContext(r, v, st))))
 }
 
 // actRunRoute builds the command of the form again and runs it as a task,
@@ -424,9 +1000,11 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := r.PostForm
-	p := actEvaluate(v, a, f, actContext(v, st))
+	p := actEvaluate(v, a, f, actContext(r, v, st))
 	switch {
 	case p.Err != "":
+	case len(p.Cmd.Problems) > 0:
+		// The preview lists them; the button was off.
 	case !a.Confirmed(f):
 		p.Err = "Type " + a.Want(f) + " to confirm."
 	case f.Get("shown") != p.Shown:
@@ -447,9 +1025,14 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	actRejected(s, w, r, v, p)
 }
 
-// actStart saves the command's file, if it has one, and starts the command
-// as a task. It returns the task's ID.
+// actStart creates the command's directories, saves its file, if it has
+// one, and starts the command as a task. It returns the task's ID.
 func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) (string, error) {
+	for _, dir := range cmd.Dirs {
+		if err := st.mkdirAll(dir); err != nil {
+			return "", fmt.Errorf("creating the directory %s: %w", dir, err)
+		}
+	}
 	if cmd.Config != nil {
 		if err := st.writeFile(cmd.Config.Path, []byte(cmd.Config.Content)); err != nil {
 			return "", fmt.Errorf("saving the config: %w", err)

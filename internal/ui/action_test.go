@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -65,6 +67,8 @@ type actFixture struct {
 	starter *actFakeStarter
 	state   *actState
 	saved   map[string]string
+	// made are the directories that the actions made.
+	made []string
 }
 
 func actNode(clusterName, short string, role config.Role) cluster.NodeSummary {
@@ -84,6 +88,13 @@ func newActFixture(t *testing.T) *actFixture {
 	f.state = &actState{
 		starter: f.starter, home: "/home/ada", configDir: "/state/sind/ui/configs",
 		writeFile: func(path string, data []byte) error { f.saved[path] = string(data); return nil },
+		stat: func(name string) (fs.FileInfo, error) {
+			if strings.Contains(name, "missing") {
+				return nil, fs.ErrNotExist
+			}
+			return os.Stat("/")
+		},
+		mkdirAll: func(path string) error { f.made = append(f.made, path); return nil },
 	}
 	cfg.Env.Put(actKey{}, f.state)
 	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}})
@@ -139,8 +150,15 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		id, query string
 		want      []string
 	}{
-		{"create-cluster", "", []string{"New cluster", `name="name" value="hpc"`, `data-act-step="workers"`, `id="act-yaml"`, "ghcr.io/gsi-hpc/sind-node", `value="5m" selected`, "In realm sind"}},
+		{"create-cluster", "", []string{"New cluster", `id="act-name" name="name" value="hpc"`, `data-act-step="w0-count"`, `id="act-w0-count" name="w0-count" value="2"`,
+			`id="act-db" name="db" checked`, `id="act-submitter" name="submitter" checked`, `id="act-backup" name="backup" aria-`, `id="act-pull" name="pull" checked`,
+			`<aside class="act-planpane" aria-label="Plan">`, `id="act-status" role="status"`, `value="~/sind/hpc"`, `data-act-follow`,
+			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`, "In realm sind"}},
+		{"create-cluster", "wait=7m&pull=&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="other" checked`, `name="wait_other" value="7m"`, `id="act-pull" name="pull" aria-`}},
+		{"create-cluster", "wait=0&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="0" checked`, `id="act-pull" name="pull" aria-`, `name="pull_auto"`}},
 		{"create-cluster", "realm=ci&name=big", []string{"In realm ci", `value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`}},
+		{"create-cluster", "name=dev", []string{`value="dev"`}},
+		{"create-cluster", "dir=/scratch", []string{`name="name" value="hpc"`, `value="/scratch"`}},
 		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`}},
 		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Removes its 3 containers", `Type <b class="mono">dev</b> to confirm`, `btn danger solid`}},
 		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, "Type"}},
@@ -170,9 +188,21 @@ func TestActDialog_CreateClusterKeepsTheLinksValues(t *testing.T) {
 	w := f.get("/dialogs/create-cluster?name=x&memory=3g&dtype=volume&monitoring=on")
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, `<option selected>3g</option>`)
+	assert.Contains(t, body, `name="memory" value="3g"`)
 	assert.Contains(t, body, `value="volume" checked`)
 	assert.Contains(t, body, `name="monitoring" checked`)
+	assert.Contains(t, body, ` readonly aria-describedby="act-err-dir`, "a volume needs no directory")
+}
+
+func TestActDialog_NewClusterTakesAFreeName(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "hpc"}, {Name: "hpc-2"}})
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+
+	assert.Contains(t, body, `id="act-name" name="name" value="hpc-3"`)
+	assert.Contains(t, body, `value="~/sind/hpc-3" autocapitalize="off" spellcheck="false" data-act-follow`)
+	assert.NotContains(t, f.get("/dialogs/create-cluster?dir=/x").Body.String(), "data-act-follow", "a typed directory stays")
 }
 
 func TestActDialog_Errors(t *testing.T) {
@@ -272,16 +302,16 @@ func TestActPreview_Warnings(t *testing.T) {
 func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
 	f := newActFixture(t)
 
-	w := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "workers", "2", "dir", "/scratch/hpc", "users", "ada"))
+	w := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "w0-count", "2", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "ada"))
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
-	assert.Contains(t, body, `--config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc`)
-	assert.Contains(t, body, `<div class="preview-map" id="act-map" hx-swap-oob="innerHTML"><i class="nm controller" title="controller"></i>`)
-	assert.Contains(t, body, `<i class="nm worker" title="worker-1"></i>`)
-	assert.Contains(t, body, `3 nodes`)
-	assert.Contains(t, body, `3 containers, 3 CPUs, 512m each.`)
-	assert.Contains(t, body, `id="act-path" hx-swap-oob="innerHTML">/state/sind/ui/configs/hpc.yaml</span>`)
+	assert.Contains(t, body, `<code>sind create cluster --config /state/sind/ui/configs/hpc.yaml</code>`)
+	assert.Contains(t, body, `<div class="act-tiles"><span class="act-tile controller">controller</span><span class="act-tile worker">worker-0</span><span class="act-tile worker">worker-1</span></div>`)
+	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/hpc.yaml</span>`)
+	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
+	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML"></span>`)
+	assert.Contains(t, body, `id="act-ok" hx-swap-oob="true">Create</button>`)
 	assert.Contains(t, body, "kind: Cluster\nname: hpc\n")
 	assert.Contains(t, body, "- name: ada")
 	assert.Contains(t, body, "saves the config to /state/sind/ui/configs/hpc.yaml")
@@ -312,6 +342,9 @@ func TestActPreviewAndRun_RefuseAFormThatIsTooBig(t *testing.T) {
 	}
 	assert.Empty(t, f.starter.specs)
 	assert.NoError(t, actCheckForm(url.Values{"nodes": {strings.Repeat("x", actMaxValue)}}))
+	assert.NoError(t, actCheckForm(url.Values{"slurm-main": {strings.Repeat("x", actMaxText)}}), "a field of text may be longer")
+	assert.ErrorContains(t, actCheckForm(url.Values{"slurm-main": {strings.Repeat("x", actMaxText+1)}}), "longer than 65536 bytes")
+	assert.NoError(t, actCheckForm(url.Values{"yaml": {strings.Repeat("x", actMaxText)}}))
 }
 
 func TestActRun_StartsTheCommand(t *testing.T) {
@@ -334,7 +367,7 @@ func TestActRun_StartsTheCommand(t *testing.T) {
 
 func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	f := newActFixture(t)
-	form := actForm("realm", "ci", "name", "hpc", "workers", "1", "dir", "/scratch/hpc", "wait", "2m")
+	form := actForm("realm", "ci", "name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "wait", "2m")
 	form += "&shown=" + f.shown(t, "create-cluster", form)
 
 	w := f.post("/actions/create-cluster/run", form)
@@ -343,9 +376,128 @@ func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, mapKeys(f.saved))
 	assert.Contains(t, f.saved["/state/sind/ui/configs/hpc.yaml"], "name: hpc\nrealm: ci\n")
 	require.Len(t, f.starter.specs, 1)
-	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc --wait 2m", f.starter.specs[0].Display)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --wait 2m", f.starter.specs[0].Display)
 	assert.Equal(t, "ci", f.starter.specs[0].Realm)
 	assert.Equal(t, "hpc", f.starter.specs[0].Cluster)
+}
+
+func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/missing", "mkdir", "on")
+	form += "&shown=" + f.shown(t, "create-cluster", form)
+
+	w := f.post("/actions/create-cluster/run", form)
+
+	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
+	assert.Equal(t, []string{"/scratch/missing"}, f.made)
+
+	// A directory that cannot be made stops the run before the config.
+	f.state.mkdirAll = func(string) error { return errors.New("read-only file system") }
+	f.saved, f.starter.specs = map[string]string{}, nil
+	w = f.post("/actions/create-cluster/run", form)
+	assert.Contains(t, w.Body.String(), "creating the directory /scratch/missing: read-only file system")
+	assert.Empty(t, f.saved)
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActPreview_NewClusterPullsAsTheImageSays(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "pull_auto", "1")
+
+	body := f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<span class="hint" id="act-pull-hint" data-act-pull="on" hx-swap-oob="true">On, as the tag latest can move to a newer image. Create gets the newest image first.</span>`)
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">Pull, wait 5m</span>`)
+
+	body = f.post("/actions/create-cluster/preview", form+"&pull=on&image=ghcr.io/gsi-hpc/sind-node:26.05.4&wait=0").Body.String()
+	assert.Contains(t, body, `data-act-pull="off" hx-swap-oob="true">Off, as the tag 26.05.4 is fixed.</span>`)
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">No pull, no wait limit</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "pull", "on", "wait", "other", "wait_other", "20m")).Body.String()
+	assert.Contains(t, body, `data-act-pull="on" hx-swap-oob="true">Gets the newest image first, even if Docker has one.</span>`)
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">Pull, wait 20m</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "wait", "2m")).Body.String()
+	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">No pull, wait 2m</span>`)
+	assert.Contains(t, body, `data-copy="cfg=`, "Copy gives the script")
+}
+
+func TestActDialog_NewClusterNodes(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<input type="hidden" name="wg" value="w0">`)
+	assert.Contains(t, body, `<span class="hint" id="act-range-w0">worker-0 … worker-1</span>`)
+	assert.Contains(t, body, `<span id="act-chip-controller">defaults</span>`)
+	assert.Contains(t, body, `<div class="act-ned" id="act-ed-db" hidden>`)
+	assert.Contains(t, body, `id="act-db-cpus" name="db-cpus" value="" min="1" placeholder="1"`)
+	assert.Contains(t, body, `name="size" value="s" checked id="act-size"`)
+	assert.Contains(t, body, `<template id="act-wg-tpl"><div class="act-nr act-wgrow" id="act-wg-__WG__">`)
+	assert.Contains(t, body, `id="act-controller-unmanaged"`)
+	assert.NotContains(t, body, `id="act-submitter-unmanaged"`, "the submitter is always managed")
+	assert.Contains(t, body, "Makes the cluster unmanaged")
+	assert.Contains(t, body, "The workers start without slurmd.")
+	assert.Contains(t, body, "The node starts without its daemons.")
+
+	body = f.get("/dialogs/create-cluster?workers=abc&cpus=3").Body.String()
+	assert.Contains(t, body, `<span class="hint" id="act-range-w0">worker-0</span>`, "a wrong count is one worker")
+	assert.Contains(t, body, `name="size" value="x" checked`, "a link with a size gives custom values")
+	assert.Contains(t, body, `placeholder="3" data-act-ph="cpus"`)
+
+	body = f.get("/dialogs/create-cluster?workers=5").Body.String()
+	assert.Contains(t, body, `id="act-w0-count" name="w0-count" value="5"`)
+}
+
+func TestActPreview_NewClusterNodes(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "db", "on", "size", "l", "image", "ghcr.io/x/y:1",
+		"db-cpus", "1", "db-memory", "2g", "db-tmp", "1g", "db-image", "ghcr.io/x/y:2", "db-unmanaged", "on", "db-capAdd", "SYS_ADMIN",
+		"api-devices", "/dev/fuse", "w0-count", "2", "w1-count", "3", "w1-cpus", "8")
+	form += "&wg=w0&wg=w1&wg=bad+key"
+
+	body := f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<span id="act-chip-db" class="own" hx-swap-oob="true">1 CPU · 2g · /tmp 1g · own image · unmanaged · more</span>`)
+	assert.Contains(t, body, `<span id="act-chip-api" class="own" hx-swap-oob="true">more</span>`)
+	assert.Contains(t, body, `<span id="act-chip-w1" class="own" hx-swap-oob="true">8 CPUs</span>`)
+	assert.Contains(t, body, `<span id="act-chip-controller" hx-swap-oob="true">defaults</span>`)
+	assert.Contains(t, body, `<span class="hint" id="act-range-w0" hx-swap-oob="true">worker-0 … worker-1</span>`)
+	assert.Contains(t, body, `<span class="hint" id="act-range-w1" hx-swap-oob="true">worker-2 … worker-4</span>`)
+	assert.NotContains(t, body, "act-chip-bad", "a key that the dialog did not make gets no swap")
+	assert.Contains(t, body, `<span id="act-eff" hidden hx-swap-oob="true" data-image="ghcr.io/x/y:1" data-cpus="4" data-memory="4g" data-tmp="1g"></span>`)
+	assert.Contains(t, body, `id="act-err-w1-cpus" hx-swap-oob="innerHTML"></span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "size", "x", "cpus", "3", "w0-count", "1")).Body.String()
+	assert.Contains(t, body, `data-image="ghcr.io/gsi-hpc/sind-node:latest" data-cpus="3" data-memory="512m" data-tmp="256m"`)
+	assert.Contains(t, body, `id="act-range-w0" hx-swap-oob="true">worker-0</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("realm", "Bad Realm")).Body.String()
+	assert.Contains(t, body, `id="act-range-w0" hx-swap-oob="true"></span>`, "no plan, no range")
+}
+
+func TestActPreview_NewClusterMemoryMeter(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "w0-count", "2")
+
+	assert.NotContains(t, f.post("/actions/create-cluster/preview", form).Body.String(), "<meter", "a host of unknown size")
+
+	f.st.SetDocker(store.DockerState{Checked: true, MemTotal: 2 << 30})
+	body := f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<meter min="0" max="2048" value="1536" high="1638" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">1.5 GiB of the 2 GiB of the Docker host</span>`)
+}
+
+func TestActPreview_NewClusterSumsUpTheSections(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dir", "~/sind/missing", "mkdir", "on", "mount", "/work")).Body.String()
+	assert.Contains(t, body, `<span class="act-ss" id="act-sum-data" hx-swap-oob="innerHTML">~/sind/missing, created, at /work</span>`)
+	assert.Contains(t, body, `<span class="act-sb" id="act-bad-data" hx-swap-oob="innerHTML"></span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dtype", "volume", "mount", "work,x")).Body.String()
+	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">Docker volume, at work,x</span>`)
+	assert.Contains(t, body, `id="act-bad-data" hx-swap-oob="innerHTML">1 problem</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dir", "rel", "dtype", "nfs")).Body.String()
+	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">rel</span>`)
+	assert.Contains(t, body, `id="act-bad-data" hx-swap-oob="innerHTML">2 problems</span>`)
 }
 
 func mapKeys(m map[string]string) []string {
@@ -409,11 +561,11 @@ func TestActRun_RefusesACommandThatChanged(t *testing.T) {
 
 func TestActRun_ShownCoversTheConfig(t *testing.T) {
 	f := newActFixture(t)
-	form := actForm("name", "hpc", "workers", "1", "dir", "/scratch/hpc", "users", "ada")
+	form := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "ada")
 	shown := f.shown(t, "create-cluster", form)
 
 	// The command line is the same; the config is not.
-	w := f.post("/actions/create-cluster/run", actForm("name", "hpc", "workers", "1", "dir", "/scratch/hpc", "users", "eve", "shown", shown))
+	w := f.post("/actions/create-cluster/run", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "eve", "shown", shown))
 
 	assert.Contains(t, w.Body.String(), "The command changed while you looked")
 	assert.Empty(t, f.saved)
@@ -432,7 +584,7 @@ func TestActRun_StartFailures(t *testing.T) {
 	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
 	assert.Contains(t, w.Body.String(), "not a sind command")
 
-	createForm := actForm("name", "hpc", "workers", "1", "dir", "/scratch/hpc")
+	createForm := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc")
 	createForm += "&shown=" + f.shown(t, "create-cluster", createForm)
 	f.state.writeFile = func(string, []byte) error { return errors.New("disk full") }
 	f.starter.specs = nil
@@ -489,7 +641,7 @@ func TestActWaits_AreTheOnesTheActionTakes(t *testing.T) {
 		values = append(values, w.Value)
 		assert.NotEmpty(t, w.Label)
 	}
-	assert.Equal(t, action.Waits, values)
+	assert.Equal(t, append(slices.Clone(action.Waits), "other"), values)
 	assert.Contains(t, action.Waits, action.DefaultWait)
 }
 
@@ -633,6 +785,17 @@ func TestActActivityLog(t *testing.T) {
 	assert.Equal(t, filepath.Join(blocker, "sind", "activity.jsonl"), path)
 }
 
+func TestActMkdirAll(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sind", "hpc")
+
+	require.NoError(t, actMkdirAll(path))
+	require.NoError(t, actMkdirAll(path), "a directory that exists is fine")
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
 func TestActSaveFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ui", "configs", "hpc.yaml")
@@ -670,4 +833,141 @@ func TestActDialog_OpenedByItsURLIsAPage(t *testing.T) {
 	body := f.get("/dialogs/connect").Body.String()
 	assert.Contains(t, body, "<title>Connect a container · sind ui</title>")
 	assert.Contains(t, body, `<main class="main" id="main">`+"\n"+`<div class="scrim" id="act-dialog"`)
+}
+
+func TestActPreview_NewClusterShowsThePlanWithProblems(t *testing.T) {
+	f := newActFixture(t)
+
+	w := f.post("/actions/create-cluster/preview", actForm("name", "dev", "w0-count", "20", "cpus", "0", "dir", "/scratch/dev"))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	body := w.Body.String()
+	assert.Contains(t, body, `<span class="pill bad">Not ready · 2 problems</span>`)
+	assert.Contains(t, body, `<a href="#act-name" data-act-jump="name">Name</a>: realm sind has a cluster dev already`)
+	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML">realm sind has a cluster dev already; pick another name, or delete that cluster first</span>`)
+	assert.Contains(t, body, `id="act-err-cpus" hx-swap-oob="innerHTML">`)
+	assert.Contains(t, body, "The plan takes the defaults for CPUs per node until you fix them.")
+	assert.Contains(t, body, `<span class="act-tile more">6 more</span>`, "21 nodes show as 15 tiles and the rest")
+	assert.Contains(t, body, "kind: Cluster\nname: dev\n", "the plan still shows the config")
+	assert.Contains(t, body, `disabled>Create</button>`)
+}
+
+func TestActPreview_NewClusterThatCannotBuild(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("realm", "Bad Realm")).Body.String()
+
+	assert.Contains(t, body, `<span class="pill bad">Not ready · 1 problem</span>`)
+	assert.Contains(t, body, `<div class="callout bad">realm: `)
+	assert.NotContains(t, body, "act-yaml")
+}
+
+func TestActRun_RefusesANewClusterWithProblems(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "dev", "w0-count", "1", "dir", "/scratch/dev")
+	form += "&shown=" + f.shown(t, "create-cluster", form)
+
+	w := f.post("/actions/create-cluster/run", form)
+
+	assert.Empty(t, w.Header().Get("HX-Redirect"))
+	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
+	assert.Contains(t, w.Body.String(), "realm sind has a cluster dev already")
+	assert.Empty(t, f.saved)
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActDialog_NewClusterUsers(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<details class="act-sec" id="act-sec-users"><summary>`, "no rows: the section is closed")
+	assert.Contains(t, body, `<template id="act-tpl-user"><div class="act-row" id="act-row-__ROW__" data-act-row><input type="hidden" name="ur" value="__ROW__">`)
+	assert.Contains(t, body, `<template id="act-tpl-limit"><div class="act-rowf act-lim" data-act-row>
+  <input type="text" name="__ROW__-lk" value=""`)
+	assert.Contains(t, body, `<option value="MaxJobs"></option>`)
+
+	body = f.get("/dialogs/create-cluster?users=ada,bob").Body.String()
+	assert.Contains(t, body, `<details class="act-sec" id="act-sec-users" open>`)
+	assert.Contains(t, body, `id="act-u0-name" name="u0-name" value="ada"`)
+	assert.Contains(t, body, `id="act-u1-name" name="u1-name" value="bob"`)
+
+	body = f.get("/dialogs/create-cluster?" + actForm("ar", "a0", "a0-name", "physics", "a0-lk", "MaxJobs", "a0-lv", "4", "a0-lk", "GrpTRES",
+		"ur", "u0", "u0-admin", "operator", "gr", "g0", "gr", "api", "g0-name", "hpc", "evil", "x")).Body.String()
+	assert.Contains(t, body, `name="a0-lk" value="MaxJobs"`)
+	assert.Contains(t, body, `name="a0-lv" value="4"`)
+	assert.Contains(t, body, `name="a0-lk" value="GrpTRES"`, "a limit without its value")
+	assert.Contains(t, body, `id="act-g0-name" name="g0-name" value="hpc"`)
+	assert.NotContains(t, body, `id="act-row-api"`, "a key that the dialog does not make")
+	assert.Contains(t, body, `<option value="operator" selected>Operator</option>`)
+	assert.Contains(t, body, `<details class="act-more" open><summary>More: groups, coordinator, admin level</summary>`)
+}
+
+func TestActPreview_NewClusterUsers(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "db", "on", "ur", "u0", "u0-name", "ada", "ur", "u1", "u1-name", "bob",
+		"gr", "g0", "g0-name", "hpc", "ar", "a0", "a0-name", "physics", "ar", "a1")).Body.String()
+	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">2 users, 1 group, 1 account</span>`)
+	assert.Contains(t, body, `<datalist id="act-dl-groups" hx-swap-oob="true"><option value="hpc"></option></datalist>`)
+	assert.Contains(t, body, `<datalist id="act-dl-accounts" hx-swap-oob="true"><option value="physics"></option></datalist>`)
+	assert.Contains(t, body, `id="act-err-u1-name" hx-swap-oob="innerHTML"></span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "ur", "u0", "u0-name", "Ada")).Body.String()
+	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">1 user</span>`)
+	assert.Contains(t, body, `id="act-bad-users" hx-swap-oob="innerHTML">1 problem</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `id="act-sum-users" hx-swap-oob="innerHTML">No users</span>`)
+}
+
+func TestActDialog_NewClusterSlurmAndIdentity(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<details class="act-sec" id="act-sec-identity"><summary>`)
+	assert.Contains(t, body, `<input type="radio" name="identity" value="local" checked id="act-identity">`)
+	assert.Contains(t, body, `<details class="act-sec act-slurm" id="act-sec-slurm"><summary>`)
+	assert.Contains(t, body, `<input type="radio" name="stab" value="main" checked>`)
+	assert.Contains(t, body, `<textarea id="act-slurm-gres" name="slurm-gres" rows="6" placeholder="such as Name=gpu File=/dev/null Count=1"`)
+	assert.Contains(t, body, `id="act-cvmfs" name="cvmfs"`)
+}
+
+func TestActPreview_NewClusterSlurmAndIdentity(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "slurm-main", "MaxJobCount=100", "slurm-gres", " ",
+		"identity", "clientIds", "ctlusers", "on", "cvmfs", "on", "dtype", "volume")).Body.String()
+	assert.Contains(t, body, `id="act-sum-slurm" hx-swap-oob="innerHTML">Adds to slurm.conf</span>`)
+	assert.Contains(t, body, `<span class="act-dot" id="act-dot-main" hx-swap-oob="true"> •</span>`)
+	assert.Contains(t, body, `<span class="act-dot" id="act-dot-gres" hx-swap-oob="true"></span>`)
+	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">clientIds, users on the controllers too</span>`)
+	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">Docker volume, CVMFS</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "identity", "nssSlurm", "ctlusers", "on")).Body.String()
+	assert.Contains(t, body, `id="act-sum-slurm" hx-swap-oob="innerHTML">No additions</span>`)
+	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">nssSlurm</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">local</span>`)
+}
+
+func TestActPreview_NewClusterYAML(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml" disabled></textarea>`)
+	assert.Contains(t, body, `<input type="hidden" id="act-yaml-on" name="yaml_on" value="1" disabled>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: lab # mine\n", "name", "hpc")).Body.String()
+	assert.NotContains(t, body, "data-act-yaml-edit")
+	assert.Contains(t, body, "The YAML that you edit, as it is.")
+	assert.Contains(t, body, `<code>sind create cluster --config /state/sind/ui/configs/lab.yaml</code>`)
+	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: [")).Body.String()
+	assert.Contains(t, body, `<a href="#act-yaml" data-act-jump="yaml">YAML</a>`)
+	assert.Contains(t, body, `<span class="err" id="act-err-yaml" hx-swap-oob="innerHTML">`)
 }

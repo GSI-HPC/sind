@@ -43,6 +43,8 @@ type Sind struct {
 
 	// known are the realms the store has data of.
 	known map[string]bool
+	// host is what docker info says of Docker's host, read once.
+	host *docker.DaemonInfo
 }
 
 func (s *Sind) logger() *slog.Logger { return logOr(s.Log) }
@@ -109,7 +111,7 @@ func (s *Sind) pass(ctx context.Context, all bool, pending map[string]bool) (dow
 		}
 		return true
 	}
-	s.Store.SetDocker(store.DockerState{Checked: true})
+	s.Store.SetDocker(s.dockerState(ctx))
 	s.Store.SetRealms(deref(realms))
 
 	present := map[string]bool{}
@@ -134,6 +136,19 @@ func (s *Sind) pass(ctx context.Context, all bool, pending map[string]bool) (dow
 	}
 	wg.Wait()
 	return false
+}
+
+// dockerState is the state of a Docker that answers, with the size of its
+// host: docker info runs until it has said it once.
+func (s *Sind) dockerState(ctx context.Context) store.DockerState {
+	if s.host == nil {
+		s.host, _ = s.Client.Info(ctx)
+	}
+	d := store.DockerState{Checked: true}
+	if s.host != nil {
+		d.MemTotal, d.NCPU = s.host.MemTotal, s.host.NCPU
+	}
+	return d
 }
 
 // forget removes what the store holds of a realm that is gone.

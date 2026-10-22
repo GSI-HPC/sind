@@ -956,6 +956,20 @@ func TestSection_UnmarshalYAML(t *testing.T) {
 	assert.True(t, s.IsEmpty())
 }
 
+func TestSection_MarshalYAML(t *testing.T) {
+	out, err := yaml.Marshal(Slurm{
+		Main:   Section{Content: "SelectType=select/cons_tres\nMaxJobCount=100\n"},
+		Cgroup: Section{Fragments: map[string]string{"b": "x=1", "a": "y=2"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "main: |\n    SelectType=select/cons_tres\n    MaxJobCount=100\ncgroup:\n    a: y=2\n    b: x=1\n", string(out))
+
+	var back Slurm
+	require.NoError(t, yaml.Unmarshal(out, &back))
+	assert.Equal(t, "SelectType=select/cons_tres\nMaxJobCount=100\n", back.Main.Content)
+	assert.Equal(t, map[string]string{"a": "y=2", "b": "x=1"}, back.Cgroup.Fragments)
+}
+
 func TestSection_IsEmpty(t *testing.T) {
 	assert.True(t, Section{}.IsEmpty())
 	assert.False(t, Section{Content: "x"}.IsEmpty())
@@ -1485,4 +1499,36 @@ func TestValidate_SecurityFields(t *testing.T) {
 		cfg.Nodes[1].SecurityOpt = []string{"apparmor=unconfined"}
 		require.NoError(t, cfg.Validate())
 	})
+}
+
+func TestValidateAll(t *testing.T) {
+	cfg := &Cluster{
+		Name: "Bad Name",
+		Nodes: []Node{
+			{Role: "boss"},
+			{Role: RoleSubmitter, Managed: new(true)},
+			{Role: RoleWorker, CapAdd: []string{"FLY"}},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	errs := cfg.ValidateAll()
+	var texts []string
+	for _, err := range errs {
+		texts = append(texts, err.Error())
+	}
+	require.Len(t, texts, 5, "%q", texts)
+	assert.Contains(t, texts[0], "Bad Name")
+	assert.Contains(t, texts[1], `invalid role "boss"`)
+	assert.Contains(t, texts[2], "managed is only valid")
+	assert.Contains(t, texts[3], "exactly one controller required")
+	assert.Contains(t, texts[4], "FLY")
+	assert.Equal(t, errs[0], cfg.Validate(), "Validate returns the first error")
+}
+
+func TestValidateAll_Valid(t *testing.T) {
+	cfg := &Cluster{Name: "dev", Nodes: []Node{{Role: RoleController}, {Role: RoleWorker}}}
+	cfg.ApplyDefaults()
+	assert.Empty(t, cfg.ValidateAll())
+	assert.NoError(t, cfg.Validate())
 }

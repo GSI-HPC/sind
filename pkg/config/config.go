@@ -190,6 +190,15 @@ func (s *Section) UnmarshalYAML(v *yaml.Node) error {
 	return v.Decode(&s.Fragments)
 }
 
+// MarshalYAML writes the section in the form that UnmarshalYAML reads: the
+// map of fragments, or else the string.
+func (s Section) MarshalYAML() (any, error) {
+	if s.IsMap() {
+		return s.Fragments, nil
+	}
+	return s.Content, nil
+}
+
 // Slurm configures custom Slurm configuration files.
 // Each field maps to a Slurm config file: main → slurm.conf,
 // cgroup → cgroup.conf, gres → gres.conf, etc.
@@ -291,18 +300,32 @@ func mergeStringSlices(base, overlay []string) []string {
 }
 
 // Validate checks that the cluster configuration satisfies all constraints.
-// It should be called after ApplyDefaults.
+// It should be called after ApplyDefaults. It returns the first error of
+// ValidateAll.
 func (c *Cluster) Validate() error {
-	if err := CheckName("cluster", c.Name); err != nil {
-		return err
+	if errs := c.ValidateAll(); len(errs) > 0 {
+		return errs[0]
 	}
+	return nil
+}
+
+// ValidateAll checks the cluster configuration as Validate does, and
+// returns every error it finds, in the order of the checks, so that an
+// editor can show them all at once. It should be called after
+// ApplyDefaults.
+func (c *Cluster) ValidateAll() []error {
+	var errs []error
+	add := func(err error) {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	add(CheckName("cluster", c.Name))
 	if c.HasManagedDB() && len(c.Name) > MaxAccountingClusterName {
-		return fmt.Errorf("cluster name %q has %d characters: with a managed db node it may have at most %d, as slurmdbd builds its table names from it", c.Name, len(c.Name), MaxAccountingClusterName)
+		add(fmt.Errorf("cluster name %q has %d characters: with a managed db node it may have at most %d, as slurmdbd builds its table names from it", c.Name, len(c.Name), MaxAccountingClusterName))
 	}
 	if c.Realm != "" {
-		if err := CheckName("realm", c.Realm); err != nil {
-			return err
-		}
+		add(CheckName("realm", c.Realm))
 	}
 
 	roles := make(map[Role]int)
@@ -311,63 +334,55 @@ func (c *Cluster) Validate() error {
 		case RoleController, RoleDB, RoleAPI, RoleSubmitter, RoleWorker:
 			roles[n.Role]++
 		default:
-			return fmt.Errorf("invalid role %q, must be one of: controller, db, api, submitter, worker", n.Role)
+			add(fmt.Errorf("invalid role %q, must be one of: controller, db, api, submitter, worker", n.Role))
+			continue
 		}
 
 		if n.Count < 0 {
-			return fmt.Errorf("count must not be negative, got %d", n.Count)
+			add(fmt.Errorf("count must not be negative, got %d", n.Count))
 		}
 		if n.Count > 0 && n.Role != RoleWorker {
-			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
+			add(fmt.Errorf("count is only valid for worker nodes, not %q", n.Role))
 		}
 		if n.Managed != nil && n.Role == RoleSubmitter {
-			return fmt.Errorf("managed is only valid for controller, db, api and worker nodes, not %q", n.Role)
+			add(fmt.Errorf("managed is only valid for controller, db, api and worker nodes, not %q", n.Role))
 		}
 		if n.BackupController && n.Role != RoleController {
-			return fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role)
+			add(fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role))
 		}
 	}
 
 	if roles[RoleController] != 1 {
-		return fmt.Errorf("exactly one controller required, got %d", roles[RoleController])
+		add(fmt.Errorf("exactly one controller required, got %d", roles[RoleController]))
 	}
 	if roles[RoleDB] > 1 {
-		return fmt.Errorf("at most one db node allowed, got %d", roles[RoleDB])
+		add(fmt.Errorf("at most one db node allowed, got %d", roles[RoleDB]))
 	}
 	if roles[RoleAPI] > 1 {
-		return fmt.Errorf("at most one api node allowed, got %d", roles[RoleAPI])
+		add(fmt.Errorf("at most one api node allowed, got %d", roles[RoleAPI]))
 	}
 	if roles[RoleSubmitter] > 1 {
-		return fmt.Errorf("at most one submitter allowed, got %d", roles[RoleSubmitter])
+		add(fmt.Errorf("at most one submitter allowed, got %d", roles[RoleSubmitter]))
 	}
 	if roles[RoleWorker] < 1 {
-		return fmt.Errorf("at least one worker node required, got %d", roles[RoleWorker])
+		add(fmt.Errorf("at least one worker node required, got %d", roles[RoleWorker]))
 	}
 
-	// The first failing check, in this order, is the one reported.
-	if err := cmp.Or(
-		c.validateResources(),
-		c.Storage.DataStorage.validate(),
-		c.validateDataMountPath(),
-		validateUsers(c.Users, c.Groups),
-		c.validateAccounts(),
-		c.Identity.validate(c.Managed(), c.Slurm.Main),
-		c.validateAPI(),
-		c.validateSlurmdbd(),
-		c.validateMonitoring(),
-	); err != nil {
-		return err
-	}
+	add(c.validateResources())
+	add(c.Storage.DataStorage.validate())
+	add(c.validateDataMountPath())
+	add(validateUsers(c.Users, c.Groups))
+	add(c.validateAccounts())
+	add(c.Identity.validate(c.Managed(), c.Slurm.Main))
+	add(c.validateAPI())
+	add(c.validateSlurmdbd())
+	add(c.validateMonitoring())
 
 	for _, n := range c.Nodes {
-		if err := cmp.Or(
-			CheckCapabilities("capAdd", n.CapAdd),
-			CheckCapabilities("capDrop", n.CapDrop),
-			CheckDevices("devices", n.Devices),
-			CheckSecurityOpts("securityOpt", n.SecurityOpt),
-		); err != nil {
-			return err
-		}
+		add(CheckCapabilities("capAdd", n.CapAdd))
+		add(CheckCapabilities("capDrop", n.CapDrop))
+		add(CheckDevices("devices", n.Devices))
+		add(CheckSecurityOpts("securityOpt", n.SecurityOpt))
 	}
 
 	sections := []struct {
@@ -385,38 +400,36 @@ func (c *Cluster) Validate() error {
 	if !c.Managed() {
 		for _, n := range c.Nodes {
 			if n.Role != RoleController && n.Managed != nil && *n.Managed {
-				return fmt.Errorf("%s managed: true requires a managed controller", n.Role)
+				add(fmt.Errorf("%s managed: true requires a managed controller", n.Role))
 			}
 		}
 		for _, s := range sections {
 			if !s.section.IsEmpty() {
-				return fmt.Errorf("slurm %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", s.name)
+				add(fmt.Errorf("slurm %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", s.name))
 			}
 		}
 		if c.Monitoring {
-			return fmt.Errorf("monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster")
+			add(fmt.Errorf("monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster"))
 		}
 	}
 
 	if !c.HasManagedDB() && !c.Slurm.Slurmdbd.IsEmpty() {
-		return fmt.Errorf("slurm slurmdbd requires a managed db node: sind writes no slurmdbd.conf for an unmanaged one")
+		add(fmt.Errorf("slurm slurmdbd requires a managed db node: sind writes no slurmdbd.conf for an unmanaged one"))
 	}
 
 	if c.HasBackupController() {
 		for _, key := range backupControllerManagedKeys {
 			if c.Slurm.Main.SetsParameter(key) {
-				return fmt.Errorf("slurm main must not set %s when backupController is enabled: sind generates the controller configuration", key)
+				add(fmt.Errorf("slurm main must not set %s when backupController is enabled: sind generates the controller configuration", key))
 			}
 		}
 	}
 
 	for _, s := range sections {
-		if err := validateSection(s.name, s.section); err != nil {
-			return err
-		}
+		add(validateSection(s.name, s.section))
 	}
 
-	return nil
+	return errs
 }
 
 // backupControllerManagedKeys are slurm.conf parameters sind generates for a

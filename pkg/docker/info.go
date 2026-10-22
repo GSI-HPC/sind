@@ -35,6 +35,10 @@ type DaemonInfo struct {
 	// KernelVersion is the release of the kernel the daemon runs on, as
 	// uname -r prints it, e.g. "6.8.0-1017-azure".
 	KernelVersion string `json:"KernelVersion"`
+	// MemTotal is the memory of the daemon host in bytes, and NCPU its
+	// CPUs: what all containers share.
+	MemTotal int64 `json:"MemTotal"`
+	NCPU     int   `json:"NCPU"`
 }
 
 // Info runs `docker info` and returns what it says about the daemon.

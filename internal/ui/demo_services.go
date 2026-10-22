@@ -26,6 +26,7 @@ func demoServices(d *demo.Demo, registered []Service) []Service {
 			svc.Setup = func(env *Env) error {
 				env.Put(actKey{}, &actState{
 					starter: d.Starter(), home: demo.Home, configDir: demo.ConfigDir, writeFile: d.SaveFile,
+					stat: demo.Stat, mkdirAll: d.MkdirAll, images: newActImages(demo.InspectImage, demo.DiscoverVersion),
 				})
 				return nil
 			}

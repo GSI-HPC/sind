@@ -110,6 +110,10 @@ type DockerState struct {
 	// Err is the one-line reason Docker is not reachable, empty when it
 	// is.
 	Err string
+	// MemTotal is the memory of Docker's host in bytes, and NCPU its
+	// CPUs; zero until they are read.
+	MemTotal int64
+	NCPU     int
 }
 
 // Reachable reports whether Docker answered the last time.
