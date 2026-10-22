@@ -80,7 +80,7 @@ func ClusterFieldsOf(f Form) []string {
 	fields = append(fields, UserFieldsOf(f)...)
 	fields = append(fields, "identity", "ctlusers")
 	fields = append(fields, SlurmFields()...)
-	return append(fields, "dtype", "dir", "mkdir", "mount", "cvmfs", "pull", "wait", "wait_other")
+	return append(fields, "dtype", "dir", "mkdir", "mount", "cvmfs", "pull", "wait", "wait_other", "yaml")
 }
 
 // nodeFields are the fields of the node key, but the count of a group.

@@ -344,6 +344,7 @@ func TestActPreviewAndRun_RefuseAFormThatIsTooBig(t *testing.T) {
 	assert.NoError(t, actCheckForm(url.Values{"nodes": {strings.Repeat("x", actMaxValue)}}))
 	assert.NoError(t, actCheckForm(url.Values{"slurm-main": {strings.Repeat("x", actMaxText)}}), "a field of text may be longer")
 	assert.ErrorContains(t, actCheckForm(url.Values{"slurm-main": {strings.Repeat("x", actMaxText+1)}}), "longer than 65536 bytes")
+	assert.NoError(t, actCheckForm(url.Values{"yaml": {strings.Repeat("x", actMaxText)}}))
 }
 
 func TestActRun_StartsTheCommand(t *testing.T) {
@@ -948,4 +949,25 @@ func TestActPreview_NewClusterSlurmAndIdentity(t *testing.T) {
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
 	assert.Contains(t, body, `id="act-sum-identity" hx-swap-oob="innerHTML">local</span>`)
+}
+
+func TestActPreview_NewClusterYAML(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-cluster").Body.String()
+	assert.Contains(t, body, `<textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml" disabled></textarea>`)
+	assert.Contains(t, body, `<input type="hidden" id="act-yaml-on" name="yaml_on" value="1" disabled>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: lab # mine\n", "name", "hpc")).Body.String()
+	assert.NotContains(t, body, "data-act-yaml-edit")
+	assert.Contains(t, body, "The YAML that you edit, as it is.")
+	assert.Contains(t, body, `<code>sind create cluster --config /state/sind/ui/configs/lab.yaml</code>`)
+	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: [")).Body.String()
+	assert.Contains(t, body, `<a href="#act-yaml" data-act-jump="yaml">YAML</a>`)
+	assert.Contains(t, body, `<span class="err" id="act-err-yaml" hx-swap-oob="innerHTML">`)
 }

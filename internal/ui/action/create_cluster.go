@@ -74,10 +74,22 @@ func (ps problems) has(field string) bool {
 	return slices.ContainsFunc(ps, func(p Problem) bool { return p.Field == field })
 }
 
+// clusterPlan is the config of a new cluster, as the fields of the form or
+// its YAML give it: the config, its text and sind's warnings, the nodes one
+// by one, and the data storage.
+type clusterPlan struct {
+	cfg     config.Cluster
+	content string
+	warns   []string
+	planned []PlannedNode
+	data    clusterData
+}
+
 // buildCreateCluster makes the command of the New cluster dialog. A wrong
 // field is a problem of the command, not an error: the plan takes the
 // field's default, or the name as it is, so that the dialog can show the
-// rest of it.
+// rest of it. With the field "yaml_on" the config is the YAML that the user
+// edits; the run options stay those of the form.
 func buildCreateCluster(f Form, c Context) (Command, error) {
 	realm, err := checkRealm(f)
 	if err != nil {
@@ -87,33 +99,15 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		return Command{}, errors.New("sind ui has no state directory to save the config in; set XDG_STATE_HOME or HOME")
 	}
 	var ps problems
-	cfg := config.Cluster{Kind: "Cluster", Name: strings.TrimSpace(f.Get("name"))}
-	if realm != mesh.DefaultRealm {
-		cfg.Realm = realm
+	var plan clusterPlan
+	if f.Get("yaml_on") != "" {
+		plan = yamlPlan(f, c, realm, &ps)
+	} else {
+		plan = formPlan(f, c, realm, &ps)
 	}
-	if image := strings.TrimSpace(f.Get("image")); image != "" {
-		if imagePattern.MatchString(image) {
-			cfg.Defaults.Image = image
-		} else {
-			ps.add("image", "Image", true, errors.New("write an image reference such as ghcr.io/gsi-hpc/sind-node:latest"))
-		}
-	}
-	nodeDefaults(f, &cfg.Defaults, &ps)
-	nodes, planned := clusterNodes(f, &ps)
-	cfg.Nodes = nodes
-	clusterUsers(f, &cfg, &ps)
-	clusterSlurm(f, &cfg, &ps)
-	cfg.Monitoring = checkbox(f, "monitoring", "Monitoring", &ps)
+	cfg, data, content := plan.cfg, plan.data, plan.content
 	pull := clusterPull(f, cfg.Defaults.Image, &ps)
-	checkClusterName(c, realm, &cfg, &ps)
 	wait := clusterWait(f, &ps)
-	data := dataStorage(f, c, &ps)
-	cfg.Storage.DataStorage = data.storage
-
-	content, warns, errs := renderConfig(cfg, ps.has("name"))
-	for _, err := range errs {
-		ps.add("", "Config", false, err)
-	}
 	file := cfg.Name
 	if config.CheckName("cluster", file) != nil {
 		// Never a path from a name that sind refuses, such as ../x.
@@ -130,11 +124,11 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	}
 	cmd := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
 	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
-	cmd.Nodes = planned
+	cmd.Nodes = plan.planned
 	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
 	cmd.MemoryMB = memoryMB
-	cmd.Warns = warns
+	cmd.Warns = plan.warns
 	cmd.Problems = ps
 	if data.home {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("%s is your home directory. Jobs write their output files there as root. Pick a scratch directory such as %s.",
@@ -163,6 +157,112 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		cmd.Notes = append(cmd.Notes, fmt.Sprintf("Realm %s has a monitoring stack. sind adds the new nodes to it.", realm))
 	}
 	return cmd, nil
+}
+
+// formPlan reads the config of a new cluster from the fields of the form.
+func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
+	cfg := config.Cluster{Kind: "Cluster", Name: strings.TrimSpace(f.Get("name"))}
+	if realm != mesh.DefaultRealm {
+		cfg.Realm = realm
+	}
+	if image := strings.TrimSpace(f.Get("image")); image != "" {
+		if imagePattern.MatchString(image) {
+			cfg.Defaults.Image = image
+		} else {
+			ps.add("image", "Image", true, errors.New("write an image reference such as ghcr.io/gsi-hpc/sind-node:latest"))
+		}
+	}
+	nodeDefaults(f, &cfg.Defaults, ps)
+	nodes, planned := clusterNodes(f, ps)
+	cfg.Nodes = nodes
+	clusterUsers(f, &cfg, ps)
+	clusterSlurm(f, &cfg, ps)
+	cfg.Monitoring = checkbox(f, "monitoring", "Monitoring", ps)
+	checkClusterName(c, realm, &cfg, ps)
+	data := dataStorage(f, c, ps)
+	cfg.Storage.DataStorage = data.storage
+
+	content, warns, errs := renderConfig(cfg, ps.has("name"))
+	for _, err := range errs {
+		ps.add("", "Config", false, err)
+	}
+	return clusterPlan{cfg: cfg, content: content, warns: warns, planned: planned, data: data}
+}
+
+// maxPlanned is the most workers of a plan, as the form allows them.
+const maxPlanned = maxGroups * maxCount
+
+// yamlPlan reads the config of a new cluster from the field "yaml", which
+// sind ui saves as it is. Its problems are those of the YAML. A host
+// directory that is missing is created first, as Create the directory does
+// by default.
+func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
+	p := clusterPlan{content: strings.ReplaceAll(f.Get("yaml"), "\r\n", "\n")}
+	var yps problems
+	defer func() {
+		for _, pr := range yps {
+			pr.Field = "yaml"
+			*ps = append(*ps, pr)
+		}
+	}()
+	parsed, err := parseConfig([]byte(p.content))
+	if err != nil {
+		yps.add("", "YAML", false, err)
+		return p
+	}
+	if parsed.Realm != "" && parsed.Realm != realm {
+		yps.add("", "YAML", false, fmt.Errorf("the YAML names realm %s, but the dialog makes the cluster in realm %s; remove realm, or open the dialog in realm %s", parsed.Realm, realm, parsed.Realm))
+	}
+	parsed.ApplyDefaults()
+	checkClusterName(c, realm, parsed, &yps)
+	name := parsed.Name
+	if yps.has("name") {
+		// As renderConfig does: the name is a problem of its own.
+		parsed.Name = "cluster"
+	}
+	errs := parsed.ValidateAll()
+	parsed.Name = name
+	p.cfg = *parsed
+	for _, err := range errs {
+		yps.add("", "Config", false, err)
+	}
+	if len(errs) == 0 {
+		p.warns = parsed.Warnings()
+	}
+	p.planned = plannedOf(p.cfg.Nodes, &yps)
+	if ds := p.cfg.Storage.DataStorage; ds.UsesHostPath() && path.IsAbs(ds.HostPath) {
+		p.data.dir = path.Clean(ds.HostPath)
+		checkDir(c, &p.data, true, &yps)
+	}
+	return p
+}
+
+// plannedOf returns the nodes of a config one by one, as sind names them,
+// with at most maxPlanned workers.
+func plannedOf(nodes []config.Node, ps *problems) []PlannedNode {
+	var out []PlannedNode
+	workers := 0
+	for _, n := range nodes {
+		switch n.Role {
+		case config.RoleWorker:
+			for range max(n.Count, 1) {
+				if workers == maxPlanned {
+					ps.add("", "Workers", false, fmt.Errorf("a cluster here has at most %d workers", maxPlanned))
+					return out
+				}
+				out = append(out, PlannedNode{"worker-" + strconv.Itoa(workers), "worker", "yaml"})
+				workers++
+			}
+		case config.RoleController:
+			out = append(out, PlannedNode{"controller", "controller", "controller"})
+			if n.BackupController {
+				out = append(out, PlannedNode{"controller-backup", "controller-backup", "backup"})
+			}
+		default:
+			out = append(out, PlannedNode{string(n.Role), string(n.Role), string(n.Role)})
+		}
+	}
+	return out
 }
 
 // fieldOrder is the place of field in order, the fields of the dialog;
@@ -318,10 +418,16 @@ func dataStorage(f Form, c Context, ps *problems) clusterData {
 	}
 	d.dir = path.Clean(dir)
 	d.storage.HostPath = d.dir
+	checkDir(c, &d, checkbox(f, "mkdir", "Create the directory", ps), ps)
+	return d
+}
+
+// checkDir looks at the host directory d.dir, which mkdir says to create
+// if it is missing, and whether it is the user's home.
+func checkDir(c Context, d *clusterData, mkdir bool, ps *problems) {
 	d.home = c.Home != "" && d.dir == path.Clean(c.Home)
-	mkdir := checkbox(f, "mkdir", "Create the directory", ps)
 	if c.Stat == nil {
-		return d
+		return
 	}
 	switch fi, err := c.Stat(d.dir); {
 	case errors.Is(err, fs.ErrNotExist) && mkdir:
@@ -333,7 +439,6 @@ func dataStorage(f Form, c Context, ps *problems) clusterData {
 	case !fi.IsDir():
 		ps.add("dir", "Directory", false, fmt.Errorf("%s is not a directory", d.dir))
 	}
-	return d
 }
 
 // mountPath reads the field "mount": where the nodes mount the data, or ""

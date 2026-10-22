@@ -117,6 +117,13 @@
 .scrim [aria-invalid=true]{border-color:var(--bad)}
 .scrim .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:12.5px/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
 .scrim .act-sl{display:none}
+.scrim .act-yamled{display:grid;gap:8px}
+.scrim .act-yamled[hidden]{display:none}
+.scrim .act-yamlbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.scrim .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:12.5px/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
+.scrim .act-form.act-yamlmode>:not(#act-yamled,#act-sec-run){display:none}
+.scrim .act-cfgh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.scrim .act-cfgh .btn{margin-left:auto;text-transform:none;letter-spacing:0}
 .scrim .act-dot{color:var(--accent);font-weight:700}
 .scrim .act-stabs{max-width:100%;overflow-x:auto}
 .scrim .act-stabs label>span{padding:4px 8px;white-space:nowrap}

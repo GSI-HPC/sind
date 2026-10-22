@@ -47,8 +47,9 @@ func actLinkKeys(q url.Values) []string {
 
 const (
 	// actMaxValue is the longest value of a field a form may post, in
-	// bytes, but for a field of text, such as the lines of a Slurm config
-	// file, which may have actMaxText; actMaxValues is the most values.
+	// bytes, but for a field of text, the lines of a Slurm config file or
+	// the YAML of a config, which may have actMaxText; actMaxValues is the
+	// most values.
 	actMaxValue  = 1024
 	actMaxText   = 64 << 10
 	actMaxValues = 2048
@@ -60,7 +61,7 @@ func actCheckForm(f url.Values) error {
 	for k, vals := range f {
 		n += len(vals)
 		limit := actMaxValue
-		if strings.HasPrefix(k, "slurm-") {
+		if strings.HasPrefix(k, "slurm-") || k == "yaml" {
 			limit = actMaxText
 		}
 		for _, v := range vals {
@@ -263,6 +264,10 @@ var actClusterSections = []actSection{
 	}},
 	{ID: "run", Fields: actFields("pull", "wait", "wait_other"), Sum: actRunSum},
 }
+
+// YAMLMode reports whether the user edits the YAML of the config, which
+// then takes the place of the form.
+func (p actPreview) YAMLMode() bool { return p.Form.Get("yaml_on") != "" }
 
 // SlurmSet reports whether the form adds lines to the Slurm config file id.
 func (p actPreview) SlurmSet(id string) bool { return strings.TrimSpace(p.Form.Get("slurm-"+id)) != "" }

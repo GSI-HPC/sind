@@ -3,8 +3,8 @@
 // The script of the dialogs of the actions: the steppers, the editors of the
 // nodes, the worker groups and the rows of users, groups and accounts of a
 // new cluster, the directory that follows the name, the pull that follows
-// the image, the links to a field with a problem, the Copy button, and
-// closing. The dialogs are the server's HTML, which htmx puts into #layer;
+// the image, Edit YAML, the links to a field with a problem, the Copy
+// button, and closing. The dialogs are the server's HTML, which htmx puts into #layer;
 // nothing here evaluates text.
 (() => {
   'use strict';
@@ -130,6 +130,17 @@
       return;
     }
 
+    // Edit YAML: the config of the plan goes into the editor, which takes
+    // the place of the form until the user discards the edits.
+    if (t.closest('[data-act-yaml-edit]')) {
+      yamlMode(t.closest('form'), true);
+      return;
+    }
+    if (t.closest('[data-act-yaml-discard]')) {
+      yamlMode(t.closest('form'), false);
+      return;
+    }
+
     const jump = t.closest('[data-act-jump]');
     if (jump) {
       ev.preventDefault();
@@ -178,6 +189,24 @@
     const auto = document.getElementById('act-pull-auto');
     if (auto && ev.target instanceof Element && ev.target.id === 'act-pull') auto.remove();
   });
+
+  // yamlMode turns the editor of the YAML on, with the config of the plan,
+  // or off. Its fields are disabled while it is off, so the form does not
+  // post them.
+  function yamlMode(form, on) {
+    const ed = document.getElementById('act-yamled');
+    const text = document.getElementById('act-yaml');
+    const flag = document.getElementById('act-yaml-on');
+    const plan = document.querySelector('.scrim .act-yaml');
+    if (!form || !ed || !text || !flag) return;
+    if (on) text.value = plan ? plan.textContent : '';
+    ed.hidden = !on;
+    text.disabled = flag.disabled = !on;
+    form.querySelector('.act-form').classList.toggle('act-yamlmode', on);
+    const first = on ? text : form.querySelector('.act-form input[type=text]');
+    if (first) first.focus();
+    form.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 
   // followPull ticks the box as the preview says, while it follows the
   // image.

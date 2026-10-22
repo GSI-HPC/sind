@@ -87,7 +87,9 @@ the nodes, the command and the config also while a field is wrong. */}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
 {{template "act-callouts" .}}
-<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre></div>
+{{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p></div>
+{{else}}<div><div class="cmdlabel act-cfgh">Config <span class="act-path">{{.Cmd.Config.Path}}</span><button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
+  <p class="hint">Edit YAML gives you the whole config, also what the form has no field for, such as Slurm config fragments. The form stays locked until you discard the edits.</p></div>{{end}}
 {{end}}
 {{end}}
 
@@ -179,6 +181,13 @@ limits as pairs of fields. */}}
   {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
 
 {{define "act-dlg-create-cluster"}}
+<div class="act-yamled" id="act-yamled" hidden>
+  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1" disabled>
+  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The form is locked, and the plan follows the YAML. Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
+  <label class="lbl" for="act-yaml">Config</label>
+  <textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml" disabled></textarea>
+  <span class="err" id="act-err-yaml"></span>
+</div>
 <div class="row">
   <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
     <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>

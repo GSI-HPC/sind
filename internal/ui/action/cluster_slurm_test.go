@@ -63,3 +63,11 @@ func TestBuildCreateCluster_SlurmTheConfigChecks(t *testing.T) {
 	assert.Contains(t, texts[1], "slurm slurmdbd requires a managed controller")
 	assert.Contains(t, texts[2], "slurm slurmdbd requires a managed db node")
 }
+
+func TestBuildCreateCluster_EverySlurmFile(t *testing.T) {
+	for _, s := range SlurmFiles {
+		cmd, err := build(t, "create-cluster", valid("db", "on", "slurm-"+s.ID, "# "+s.File))
+		require.NoError(t, err)
+		assert.Contains(t, cmd.Config.Content, "slurm:\n  "+s.ID+": |\n    # "+s.File+"\n")
+	}
+}

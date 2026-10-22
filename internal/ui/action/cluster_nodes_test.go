@@ -146,7 +146,7 @@ func TestClusterFieldsOf(t *testing.T) {
 	assert.Contains(t, fields, "wz-securityOpt")
 	assert.Less(t, indexOf(fields, "w0-count"), indexOf(fields, "wz-count"))
 	assert.Less(t, indexOf(fields, "wz-securityOpt"), indexOf(fields, "monitoring"))
-	assert.Equal(t, "wait_other", fields[len(fields)-1])
+	assert.Equal(t, "yaml", fields[len(fields)-1])
 	for _, f := range fields {
 		assert.NotContains(t, f, " ", "a key that the dialog did not make has no fields")
 	}
