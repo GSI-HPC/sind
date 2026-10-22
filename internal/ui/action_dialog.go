@@ -60,6 +60,11 @@ type actSpec struct {
 	// NeedsCluster says that the dialog is for one cluster, named by the
 	// link.
 	NeedsCluster bool
+	// Plan puts the preview into a pane beside the fields, which shows
+	// the plan of the command even while a field is wrong.
+	Plan bool
+	// Fields are the fields that show their own problem.
+	Fields []string
 	// Title and Lead are the heading and the line below it.
 	Title func(d *actDialog) string
 	Lead  func(d *actDialog) string
@@ -70,24 +75,22 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true,
+		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFields,
 		Title: func(*actDialog) string { return "New cluster" },
 		Lead: func(d *actDialog) string {
 			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
 		},
 		Defaults: func(d *actDialog) {
-			d.def("name", "hpc")
+			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
 			d.def("image", config.DefaultImage)
 			d.def("wait", action.DefaultWait)
-			d.def("backup", "0")
-			d.def("db", "1")
-			d.def("api", "0")
-			d.def("submitter", "1")
+			d.def("db", "on")
+			d.def("submitter", "on")
 			d.def("workers", "2")
 			d.def("cpus", "1")
 			d.def("memory", "512m")
 			d.def("dtype", "hostPath")
-			d.def("dir", "~/sind/"+d.Form.Get("name"))
+			d.def("dir", actDefaultDir(d.Form.Get("name")))
 			d.def("pull", "on")
 		},
 	},
@@ -184,39 +187,41 @@ var actWaits = []actChoice{
 	{"1m", "1 minute"}, {"2m", "2 minutes"}, {"5m", "5 minutes"}, {"10m", "10 minutes"}, {"0", "no limit"},
 }
 
-// actMemories are the choices of the memory of a node, besides the value in
-// the form.
-var actMemories = []string{"512m", "1g", "2g", "4g"}
+// actMemories are the memories of a node that the field suggests.
+var actMemories = []string{"512m", "1g", "2g", "4g", "8g"}
 
-// actCounter is a role of the New cluster dialog with its counter.
-type actCounter struct {
-	Name, Label, Hint string
-	Min, Max          int
-	Required          bool
-	Value             string
+// actRole is a role of the New cluster dialog that is a checkbox.
+type actRole struct {
+	Name, Label, Small, Hint string
+	// Sub sets the row in below the one above it.
+	Sub bool
 }
 
-// Counters are the roles of the New cluster dialog.
-func (d *actDialog) Counters() []actCounter {
-	return []actCounter{
-		{"controller", "controller", "Exactly one. Runs slurmctld.", 1, 1, true, "1"},
-		{"backup", "controller-backup", "A second slurmctld that takes over.", 0, 1, false, d.Form.Get("backup")},
-		{"db", "db", "mariadb and slurmdbd: accounting.", 0, 1, false, d.Form.Get("db")},
-		{"api", "api", "slurmrestd. Slurm 26.05 only.", 0, 1, false, d.Form.Get("api")},
-		{"submitter", "submitter", "Where sind enter puts you.", 0, 1, false, d.Form.Get("submitter")},
-		{"workers", "worker", "Run slurmd.", 1, 64, false, d.Form.Get("workers")},
-	}
+// actRoles are the roles of the New cluster dialog that are a checkbox.
+var actRoles = []actRole{
+	{"backup", "backup", "controller-backup", "A second slurmctld that takes over. Same image and size as the controller.", true},
+	{"db", "db", "", "MariaDB and slurmdbd: accounting.", false},
+	{"api", "api", "", "slurmrestd. Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", false},
+	{"submitter", "submitter", "", "The login node. sind enter puts you here.", false},
 }
 
-// Memories returns the choices of the memory of a node: the usual ones, and
-// the value of the form when it is none of them.
-func (d *actDialog) Memories() []string {
-	m := actMemories
-	if v := d.Form.Get("memory"); v != "" && !slices.Contains(m, v) {
-		m = append([]string{v}, m...)
-	}
-	return m
+// Roles are the roles of the New cluster dialog that are a checkbox.
+func (d *actDialog) Roles() []actRole { return actRoles }
+
+// Memories are the memories of a node that the field suggests.
+func (d *actDialog) Memories() []string { return actMemories }
+
+// On reports whether the checkbox field is ticked: on, or the 1 of a link.
+func (d *actDialog) On(field string) bool {
+	return slices.Contains([]string{"on", "1", "true"}, strings.TrimSpace(d.Form.Get(field)))
 }
+
+// DirFollows reports whether the directory is the one that the name gives,
+// which then follows the name as the user types it.
+func (d *actDialog) DirFollows() bool { return d.Form.Get("dir") == actDefaultDir(d.Form.Get("name")) }
+
+// actDefaultDir is the directory of the data of a new cluster name.
+func actDefaultDir(name string) string { return "~/sind/" + name }
 
 // actNodeChoice is a node of the picker of the power and delete worker
 // dialogs.
@@ -349,8 +354,51 @@ type actPreview struct {
 	// command will wait for it.
 	Realm string
 	Lock  *state.LockHolder
-	// Tiles says whether to show the nodes a new cluster gets.
-	Tiles bool
+}
+
+// actMaxTiles is the most nodes that a plan draws one by one.
+const actMaxTiles = 16
+
+// Tiles are the nodes that the plan draws: all, or the first ones when
+// there are more than actMaxTiles.
+func (p actPreview) Tiles() []action.PlannedNode {
+	if len(p.Cmd.Nodes) > actMaxTiles {
+		return p.Cmd.Nodes[:actMaxTiles-1]
+	}
+	return p.Cmd.Nodes
+}
+
+// More is how many nodes the plan does not draw.
+func (p actPreview) More() int { return len(p.Cmd.Nodes) - len(p.Tiles()) }
+
+// ProblemOf returns what is wrong with the field, or "".
+func (p actPreview) ProblemOf(field string) string {
+	for _, pr := range p.Cmd.Problems {
+		if pr.Field == field {
+			return pr.Text
+		}
+	}
+	return ""
+}
+
+// Problems is how many things keep the command from running.
+func (p actPreview) Problems() int {
+	if p.Err != "" {
+		return 1
+	}
+	return len(p.Cmd.Problems)
+}
+
+// Defaulted names the fields whose defaults the plan takes, as they are
+// wrong.
+func (p actPreview) Defaulted() string {
+	var labels []string
+	for _, pr := range p.Cmd.Problems {
+		if pr.Default {
+			labels = append(labels, pr.Label)
+		}
+	}
+	return strings.Join(labels, ", ")
 }
 
 // actEvaluate builds the command of the form and decides whether it may run.
@@ -366,8 +414,7 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 		return p
 	}
 	p.Cmd, p.Shown = cmd, cmd.Fingerprint()
-	p.Tiles = cmd.Config != nil
-	p.Blocked = !a.Confirmed(f)
+	p.Blocked = !a.Confirmed(f) || len(cmd.Problems) > 0
 	p.Realm = action.Realm(f)
 	if actLocks(a, f) {
 		p.Lock = v.Snap.Lock(p.Realm)
@@ -427,6 +474,8 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	p := actEvaluate(v, a, f, actContext(v, st))
 	switch {
 	case p.Err != "":
+	case len(p.Cmd.Problems) > 0:
+		// The preview lists them; the button was off.
 	case !a.Confirmed(f):
 		p.Err = "Type " + a.Want(f) + " to confirm."
 	case f.Get("shown") != p.Shown:

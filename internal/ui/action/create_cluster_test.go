@@ -79,8 +79,10 @@ monitoring: true
 	assert.Equal(t, "8 containers, 16 CPUs, 1g each.", cmd.Summary)
 	assert.Contains(t, cmd.Nodes, PlannedNode{"controller-backup", "controller-backup"})
 	assert.Contains(t, cmd.Nodes, PlannedNode{"api", "api"})
-	require.Len(t, cmd.Notes, 2)
-	assert.Contains(t, cmd.Notes[1], "need Slurm 26.05")
+	require.Len(t, cmd.Notes, 3)
+	assert.Contains(t, cmd.Notes[1], "Monitoring needs Slurm 26.05 or later")
+	assert.Contains(t, cmd.Notes[2], "The api node needs slurmrestd")
+	assert.Empty(t, cmd.Problems)
 }
 
 func TestBuildCreateCluster_Variants(t *testing.T) {
@@ -131,31 +133,12 @@ func TestBuildCreateCluster_MonitoringStackNote(t *testing.T) {
 }
 
 func TestBuildCreateCluster_Errors(t *testing.T) {
-	long := strings.Repeat("a", config.MaxAccountingClusterName+1)
 	for _, tc := range []struct {
 		name string
 		f    Form
 		want string
 	}{
 		{"realm", valid("realm", "No Realm"), "realm: invalid realm name"},
-		{"name empty", valid("name", ""), "name: invalid cluster name"},
-		{"name upper", valid("name", "Hpc"), "name: invalid cluster name"},
-		{"name taken", valid("name", "dev"), "name: realm sind has a cluster dev already; pick another name, or delete that cluster first"},
-		{"name free in another realm", valid("name", "ci1", "realm", "sind", "workers", "0"), "Workers: write a number from 1 to 64"},
-		{"image", valid("image", "bad image"), "image: write an image reference"},
-		{"image option", valid("image", "-v"), "image: write an image reference"},
-		{"cpus", valid("cpus", "0"), "CPUs per node: write a number from 1 to 64"},
-		{"memory", valid("memory", "lots"), `memory per node: invalid memory "lots"`},
-		{"workers missing", valid("workers", ""), "Workers: write a number from 1 to 64"},
-		{"workers many", valid("workers", "65"), "Workers: write a number from 1 to 64"},
-		{"switch", valid("db", "2"), "db: write a number from 0 to 1"},
-		{"user", valid("users", "Alice!"), "users: "},
-		{"wait", valid("wait", "7m"), "wait for ready: pick one of 1m, 2m, 5m, 10m, 0"},
-		{"data type", valid("dtype", "nfs"), `data: pick a directory or a Docker volume, not "nfs"`},
-		{"dir empty", valid("dir", ""), "directory: say which directory"},
-		{"dir relative", valid("dir", "data"), "directory: write the path in full, starting with / or ~"},
-		{"dir control", valid("dir", "/a\x01b"), "directory: the path holds control characters"},
-		{"validate", valid("name", long, "db", "1"), "config: "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := build(t, "create-cluster", tc.f)
@@ -165,14 +148,109 @@ func TestBuildCreateCluster_Errors(t *testing.T) {
 	}
 }
 
+func TestBuildCreateCluster_Problems(t *testing.T) {
+	long := strings.Repeat("a", config.MaxAccountingClusterName+1)
+	for _, tc := range []struct {
+		name  string
+		f     Form
+		field string
+		want  string
+		def   bool
+	}{
+		{"name empty", valid("name", ""), "name", "invalid cluster name", false},
+		{"name upper", valid("name", "Hpc"), "name", "invalid cluster name", false},
+		{"name taken", valid("name", "dev"), "name", "realm sind has a cluster dev already; pick another name, or delete that cluster first", false},
+		{"name long with db", valid("name", long, "db", "on"), "name", "with a db node the name may have at most 40 characters", false},
+		{"image", valid("image", "bad image"), "image", "write an image reference", true},
+		{"image option", valid("image", "-v"), "image", "write an image reference", true},
+		{"cpus", valid("cpus", "0"), "cpus", "write a number from 1 to 64", true},
+		{"memory", valid("memory", "lots"), "memory", `invalid memory "lots"`, true},
+		{"workers missing", valid("workers", ""), "workers", "write a number from 1 to 64", true},
+		{"workers many", valid("workers", "65"), "workers", "write a number from 1 to 64", true},
+		{"checkbox", valid("db", "2"), "db", "tick the box or leave it empty", true},
+		{"user", valid("users", "Alice! bob Bad?"), "users", "must start with a lowercase letter", false},
+		{"wait", valid("wait", "7m"), "wait", "pick one of 1m, 2m, 5m, 10m, 0", true},
+		{"data type", valid("dtype", "nfs"), "dtype", `pick a directory or a Docker volume, not "nfs"`, false},
+		{"dir empty", valid("dir", ""), "dir", "say which directory", false},
+		{"dir relative", valid("dir", "data"), "dir", "write the path in full, starting with / or ~", false},
+		{"dir control", valid("dir", "/a\x01b"), "dir", "the path holds control characters", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, err := build(t, "create-cluster", tc.f)
+			require.NoError(t, err)
+			require.Len(t, cmd.Problems, 1, "%+v", cmd.Problems)
+			pr := cmd.Problems[0]
+			assert.Equal(t, tc.field, pr.Field)
+			assert.Contains(t, pr.Text, tc.want)
+			assert.Equal(t, tc.def, pr.Default)
+			assert.NotEmpty(t, pr.Label)
+			require.NotNil(t, cmd.Config, "the plan shows also with a problem")
+			assert.Contains(t, cmd.Config.Content, "kind: Cluster")
+			assert.NotEmpty(t, cmd.Nodes)
+		})
+	}
+}
+
+func TestBuildCreateCluster_PlanTakesTheDefaultsOfWrongFields(t *testing.T) {
+	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "workers", "x", "image", "bad image", "wait", "7m", "users", "ada Bad"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc", cmd.Display)
+	assert.Equal(t, `kind: Cluster
+name: hpc
+defaults:
+  cpus: 1
+users:
+  - name: ada
+nodes:
+  - role: controller
+  - role: worker
+    count: 1
+`, cmd.Config.Content)
+	var fields []string
+	for _, p := range cmd.Problems {
+		fields = append(fields, p.Field)
+	}
+	assert.Equal(t, []string{"image", "workers", "cpus", "memory", "users", "wait"}, fields, "in the order of the dialog")
+}
+
+func TestBuildCreateCluster_WrongNameKeepsThePlan(t *testing.T) {
+	cmd, err := build(t, "create-cluster", valid("name", "../x"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "/state/sind/ui/configs/NAME.yaml", cmd.Config.Path, "never a path from a name sind refuses")
+	assert.Contains(t, cmd.Config.Content, "name: ../x")
+	require.Len(t, cmd.Problems, 1)
+	assert.Equal(t, "name", cmd.Problems[0].Field)
+}
+
+func TestBuildCreateCluster_ConfigThatSindRefuses(t *testing.T) {
+	defer func(p func([]byte) (*config.Cluster, error)) { parseConfig = p }(parseConfig)
+	parseConfig = func(data []byte) (*config.Cluster, error) {
+		c, err := config.Parse(data)
+		c.Nodes = append(c.Nodes, config.Node{Role: "bogus"})
+		return c, err
+	}
+
+	cmd, err := build(t, "create-cluster", valid("name", "Bad"))
+
+	require.NoError(t, err)
+	require.Len(t, cmd.Problems, 2)
+	assert.Equal(t, "name", cmd.Problems[0].Field)
+	assert.Equal(t, Problem{Label: "Config", Text: `invalid role "bogus", must be one of: controller, db, api, submitter, worker`}, cmd.Problems[1],
+		"the check takes a valid name in place of the wrong one, and finds the rest")
+}
+
 func TestBuildCreateCluster_ContextErrors(t *testing.T) {
 	a, _ := Lookup("create-cluster")
 	ctx := testContext()
 
 	ctx.Home = ""
-	_, err := a.Build(valid("dir", "~/x"), ctx)
-	assert.EqualError(t, err, "directory: sind ui does not know your home directory; write the path in full")
-	cmd, err := a.Build(valid("dir", "/home/ada"), ctx)
+	cmd, err := a.Build(valid("dir", "~/x"), ctx)
+	require.NoError(t, err)
+	require.Len(t, cmd.Problems, 1)
+	assert.Equal(t, Problem{Field: "dir", Label: "Directory", Text: "sind ui does not know your home directory; write the path in full"}, cmd.Problems[0])
+	cmd, err = a.Build(valid("dir", "/home/ada"), ctx)
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns, "without a home there is nothing to warn about")
 
@@ -182,13 +260,22 @@ func TestBuildCreateCluster_ContextErrors(t *testing.T) {
 	assert.ErrorContains(t, err, "no state directory")
 }
 
+func TestFreeName(t *testing.T) {
+	snap := testStore().ctx().Snap
+	assert.Equal(t, "hpc", FreeName(snap, "sind", "hpc"))
+	assert.Equal(t, "dev-2", FreeName(snap, "sind", "dev"))
+	assert.Equal(t, "dev", FreeName(snap, "other", "dev"))
+}
+
 func TestBuildCreateCluster_ConfigThatDoesNotParse(t *testing.T) {
 	defer func(p func([]byte) (*config.Cluster, error)) { parseConfig = p }(parseConfig)
 	parseConfig = func([]byte) (*config.Cluster, error) { return nil, errors.New("kind is required") }
 
-	_, err := build(t, "create-cluster", valid())
+	cmd, err := build(t, "create-cluster", valid())
 
-	assert.EqualError(t, err, "config: kind is required")
+	require.NoError(t, err)
+	assert.Equal(t, []Problem{{Label: "Config", Text: "kind is required"}}, cmd.Problems)
+	assert.Contains(t, cmd.Config.Content, "name: hpc", "the plan shows what does not parse")
 }
 
 func TestBuildCreateCluster_WarningsOfSind(t *testing.T) {

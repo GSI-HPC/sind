@@ -50,6 +50,23 @@ type Command struct {
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.
 	Summary string
+	// Problems are the fields that the command cannot take as they are.
+	// The command does not run while it has any, but its plan shows.
+	Problems []Problem
+}
+
+// Problem is a field of a form that is wrong. Build reports it, instead of
+// an error, where it can still make the rest of the plan.
+type Problem struct {
+	// Field is the form field, or "" for the config as a whole.
+	Field string
+	// Label names the field for the user.
+	Label string
+	// Text says what is wrong and how to fix it.
+	Text string
+	// Default says that the plan uses the field's default until it is
+	// fixed.
+	Default bool
 }
 
 // File is a file that sind ui saves before it runs a command, readable by
