@@ -1,7 +1,9 @@
 /* sind ui, progress display: the task dock, the run page and the Activity
    page. It uses the tokens and the building blocks of app.css. Widths and
    places that the server computes are classes (w0..w100, l0..l100), as the
-   Content-Security-Policy allows no inline style. */
+   Content-Security-Policy allows no inline style. A live update morphs a
+   fragment in and keeps its elements, so a bar or a ring that changes eases
+   to its new size, and an animation goes on. */
 
 form.inline{display:inline;margin:0}
 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run-soft);border-top-color:var(--run);animation:spin 1s linear infinite;flex:none}
@@ -31,7 +33,7 @@ form.inline{display:inline;margin:0}
 .segbar i.ok,.segbar i.ended{background:var(--ok)} .segbar i.failed{background:var(--bad)} .segbar i.canceled{background:var(--warn)}
 .segbar i.running{background:var(--run-soft)}
 .segbar i.skipped{background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px)}
-.segbar i.running b{position:absolute;inset:0 auto 0 0;background:var(--run)}
+.segbar i.running b{position:absolute;inset:0 auto 0 0;background:var(--run);transition:width .3s linear}
 .segbar i.running::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:sweep 1.4s linear infinite}
 @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .rsum .segbar{height:12px}
@@ -72,7 +74,7 @@ details[open]>summary.grow-row .lbl::before{content:"▾"}
 .gantt>details>.grow-row .lbl,.gantt>details>details>summary .lbl{padding-left:20px;color:var(--muted)}
 .gantt>details>details>.grow-row .lbl,.gantt>details>details>details>summary .lbl{padding-left:40px;color:var(--muted)}
 .grow-row .trk{position:relative;height:16px;background:repeating-linear-gradient(90deg,var(--line-2) 0 1px,transparent 1px 10%)}
-.grow-row .bar{position:absolute;top:2px;bottom:2px;border-radius:3px;background:var(--queued);min-width:3px}
+.grow-row .bar{position:absolute;top:2px;bottom:2px;border-radius:3px;background:var(--queued);min-width:3px;transition:left .3s linear,width .3s linear}
 .gantt details .grow-row .bar{top:4px;bottom:4px}
 .bar.ok,.bar.ended{background:var(--ok)} .bar.failed{background:var(--bad)} .bar.canceled{background:var(--warn)} .bar.queued,.bar.skipped{background:var(--queued)}
 .bar.running{background:var(--run);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.25) 0 6px,transparent 6px 12px);background-size:17px 17px;animation:stripes .8s linear infinite}
@@ -99,7 +101,7 @@ details[open]>summary.grow-row .lbl::before{content:"▾"}
 .ntile .msg span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ring{width:28px;height:28px;flex:none}
 .ring .rtrack{stroke:var(--line-2)}
-.ring .rarc{stroke:var(--run)} .ring .rarc.warn{stroke:var(--warn)} .ring .rarc.bad{stroke:var(--bad)}
+.ring .rarc{stroke:var(--run);transition:stroke-dasharray .3s linear} .ring .rarc.warn{stroke:var(--warn)} .ring .rarc.bad{stroke:var(--bad)}
 
 /* transfers */
 .pullrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:8px 0;border-top:1px solid var(--line-2);font:12px var(--f-mono)}
@@ -109,7 +111,7 @@ details[open]>summary.grow-row .lbl::before{content:"▾"}
 .pullrow .meter,.pullrow .ln{grid-column:1/-1}
 .pullrow .ln{color:var(--muted);font-size:11.5px}
 .meter{height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;display:flex}
-.meter i{display:block;height:100%;background:var(--run)}
+.meter i{display:block;height:100%;background:var(--run);transition:width .3s linear}
 .meter i.ok,.meter i.ended{background:var(--ok)} .meter i.failed{background:var(--bad)} .meter i.canceled{background:var(--warn)}
 details.raw summary{cursor:pointer;color:var(--muted);font-size:12.5px;padding:12px 14px}
 details.raw[open] summary{border-bottom:1px solid var(--line-2)}

@@ -2,8 +2,8 @@
 
 {{define "page-cluster"}}
 <div class="crumbs"><a href="/clusters">Clusters</a> / <a href="/clusters?realm={{.Params.Get "realm"}}">{{.Params.Get "realm"}}</a> / {{.Params.Get "cluster"}}</div>
-<div sse-swap="pg-cluster-head">{{fragment "pg-cluster-head" .}}</div>
-<div sse-swap="pg-cluster-body">{{fragment "pg-cluster-body" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="pg-cluster-head">{{fragment "pg-cluster-head" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="pg-cluster-body">{{fragment "pg-cluster-body" .}}</div>
 {{end}}
 
 {{define "pg-cluster-head"}}{{with .Data}}{{if not .Found}}{{template "pg-gone" .Name}}{{else}}

@@ -26,8 +26,10 @@
 //     wildcards and the declared query keys). Load may return ErrNotFound
 //     (404) or an error that wraps ErrBadRequest (400), and only reads.
 //  3. Fragments, registered with RegisterFragment. A fragment is a block of
-//     HTML that live updates replace. Its page places it with
-//     <div sse-swap="NAME">{{fragment "NAME" .}}</div>: the template function
+//     HTML that live updates morph into its element. Its page places it with
+//     <div hx-swap="morph:innerHTML" sse-swap="NAME">{{fragment "NAME" .}}</div>,
+//     so that the elements that stay keep their animations, focus and open
+//     state (idiomorph's htmx extension): the template function
 //     fragment runs the fragment's Load on a copy of the view and executes
 //     its block, so the page holds what /events would send. /events renders
 //     the fragment again when a topic it depends on changes (Topics for

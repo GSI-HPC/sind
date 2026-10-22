@@ -19,10 +19,11 @@ parts that fill them replace as a whole. */}}
 {{end}}<script src="{{call .Asset "app.js"}}"></script>
 <script src="{{call .Asset "htmx.min.js"}}" defer></script>
 <script src="{{call .Asset "htmx-ext-sse.js"}}" defer></script>
+<script src="{{call .Asset "idiomorph-ext.min.js"}}" defer></script>
 {{range .Scripts}}<script src="{{.}}" defer></script>
 {{end}}</head>
 <body>
-<div class="app"{{if .Events}} hx-ext="sse" sse-connect="{{.Events}}"{{end}}>
+<div class="app"{{if .Events}} hx-ext="sse,morph" sse-connect="{{.Events}}"{{end}}>
   <header class="top">
     <a class="brand" href="/"><img src="{{call .Asset "icon.svg"}}" alt="" width="24" height="24">sind <small>ui</small></a>
     {{template "slot-jump" .}}
@@ -33,9 +34,9 @@ parts that fill them replace as a whole. */}}
     {{template "slot-help" .}}
     <button type="button" class="iconbtn" data-theme-toggle aria-label="Light or dark" title="Light or dark">◐</button>
   </header>
-  <nav class="rail" id="rail" aria-label="Pages" sse-swap="rail">{{fragment "rail" .}}</nav>
+  <nav class="rail" id="rail" aria-label="Pages" hx-swap="morph:innerHTML" sse-swap="rail">{{fragment "rail" .}}</nav>
   <main class="main" id="main">{{include .Content .}}</main>
-  <div class="tasks" id="tasks" aria-live="polite" sse-swap="tasks">{{fragment "tasks" .}}</div>
+  <div class="tasks" id="tasks" aria-live="polite" hx-swap="morph:innerHTML" sse-swap="tasks">{{fragment "tasks" .}}</div>
 </div>
 <div id="layer"></div>
 </body>

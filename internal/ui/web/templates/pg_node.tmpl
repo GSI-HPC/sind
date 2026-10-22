@@ -3,8 +3,8 @@
 {{/* page-node is the page of one node. */}}
 {{define "page-node"}}
 <div class="crumbs"><a href="/nodes">Nodes</a> / <a href="/clusters/{{.Params.Get "realm"}}/{{.Params.Get "cluster"}}">{{.Params.Get "cluster"}}</a> / {{.Params.Get "node"}}</div>
-<div sse-swap="pg-node-head">{{fragment "pg-node-head" .}}</div>
-<div sse-swap="pg-node-body">{{fragment "pg-node-body" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="pg-node-head">{{fragment "pg-node-head" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="pg-node-body">{{fragment "pg-node-body" .}}</div>
 {{end}}
 
 {{define "pg-node-head"}}{{with .Data}}{{if .Found}}

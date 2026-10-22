@@ -6,7 +6,7 @@ fragment then holds an element that asks for /tasks/ID on load, which
 answers with HX-Redirect. */}}
 {{define "page-run-task"}}
 <div class="crumbs"><a href="/activity">Activity</a> / task</div>
-<div sse-swap="run-wait">{{fragment "run-wait" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-wait">{{fragment "run-wait" .}}</div>
 {{end}}
 
 {{define "run-wait"}}{{with .Data}}{{if .Gone}}<div class="callout warn">This task is gone: its card was closed. <a href="/activity">Back to Activity</a></div>

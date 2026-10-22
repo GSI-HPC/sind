@@ -15,8 +15,8 @@ const (
 	maxRuns = 200
 	// activeEvery is how often Follow reads the log while a run goes on,
 	// and idleEvery how often otherwise.
-	activeEvery = 250 * time.Millisecond
-	idleEvery   = time.Second
+	activeEvery = 50 * time.Millisecond
+	idleEvery   = 250 * time.Millisecond
 	// StaleAfter is how long a run that has not ended may go without an
 	// event before Follow ends it as Unfinished: its process was killed,
 	// or the log lost its end. A run that writes again goes on.
@@ -24,8 +24,8 @@ const (
 )
 
 // Follow reads the event log at path as it grows and keeps the runs of st
-// up to date, until ctx ends. It reads every 250 ms while a run has not
-// ended and every second otherwise, and sets the runs, with the IDs of
+// up to date, until ctx ends. It reads every 50 ms while a run has not
+// ended and every 250 ms otherwise, and sets the runs, with the IDs of
 // those that changed, only when something changed. The log may be missing
 // or be rotated: see Tail. A run without an event for StaleAfter ends.
 func Follow(ctx context.Context, st *store.Store, path string) {

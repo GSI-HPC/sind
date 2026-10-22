@@ -18,9 +18,9 @@ func TestEmbeddedAssets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Regexp(t, `^[0-9a-f]{12}$`, a.version)
 	for _, name := range []string{
-		"app.css", "app.js", "icon.svg", "htmx.min.js", "htmx-ext-sse.js",
+		"app.css", "app.js", "icon.svg", "htmx.min.js", "htmx-ext-sse.js", "idiomorph-ext.min.js",
 		"fonts/inter-latin-wght.woff2", "fonts/jetbrains-mono-latin-wght.woff2",
-		"licenses/htmx-0BSD.txt", "licenses/htmx-ext-sse-0BSD.txt",
+		"licenses/htmx-0BSD.txt", "licenses/htmx-ext-sse-0BSD.txt", "licenses/idiomorph-0BSD.txt",
 		"licenses/inter-OFL.txt", "licenses/jetbrains-mono-OFL.txt", "licenses/NOTICE.txt",
 	} {
 		_, err := fs.Stat(webFS(), "static/"+name)
