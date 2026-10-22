@@ -118,6 +118,10 @@ func logsCheck(s *Server, r *http.Request) (src logsSource, realm, clusterName, 
 // logsHandle streams the log of one node until the client leaves, the
 // server stops or the child ends.
 func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
+	if !sameOriginFetch(r) {
+		forbidden(w, "The request came from another page.")
+		return
+	}
 	src, realm, clusterName, node, unit, err := logsCheck(s, r)
 	if err != nil {
 		s.Fail(w, r, err)

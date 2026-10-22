@@ -121,3 +121,38 @@ func TestForbiddenSaysNothingAboutTheToken(t *testing.T) {
 	assert.NotContains(t, w.Body.String(), "the-token")
 	assert.Contains(t, w.Body.String(), "sind ui printed in your terminal")
 }
+
+// The cookie also goes to pages on other ports of 127.0.0.1. A browser
+// marks such requests, and they get no further than a plain navigation.
+func TestFetchMetadata(t *testing.T) {
+	ts := newTestServer(t).login()
+	reached := 0
+	ts.srv.mux.HandleFunc("POST /changes", func(http.ResponseWriter, *http.Request) { reached++ })
+	for _, c := range []struct {
+		name, method, target, site, mode, dest string
+		want                                   int
+	}{
+		{"no metadata", "GET", "/demo/x", "", "", "", http.StatusOK},
+		{"own page", "GET", "/demo/x", "same-origin", "cors", "empty", http.StatusOK},
+		{"typed address", "GET", "/demo/x", "none", "navigate", "document", http.StatusOK},
+		{"link from another port", "GET", "/demo/x", "same-site", "navigate", "document", http.StatusOK},
+		{"link from another site", "GET", "/demo/x", "cross-site", "navigate", "document", http.StatusOK},
+		{"image of another port", "GET", "/demo/x", "same-site", "no-cors", "image", http.StatusForbidden},
+		{"fetch of another site", "GET", "/demo/x", "cross-site", "cors", "empty", http.StatusForbidden},
+		{"form post of another port", "POST", "/changes", "same-site", "navigate", "document", http.StatusForbidden},
+		{"post of own page", "POST", "/changes", "same-origin", "cors", "empty", http.StatusOK},
+		{"events by link", "GET", "/events?f=x", "same-site", "navigate", "document", http.StatusForbidden},
+	} {
+		r := request(c.method, c.target)
+		r.AddCookie(ts.cookie)
+		r.Header.Set("Origin", "http://127.0.0.1:7878")
+		r.Header.Set(csrfHeader, ts.csrf)
+		for k, v := range map[string]string{"Sec-Fetch-Site": c.site, "Sec-Fetch-Mode": c.mode, "Sec-Fetch-Dest": c.dest} {
+			if v != "" {
+				r.Header.Set(k, v)
+			}
+		}
+		assert.Equal(t, c.want, ts.do(r).Code, c.name)
+	}
+	assert.Equal(t, 1, reached, "only the post of an own page reached the handler")
+}

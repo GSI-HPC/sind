@@ -460,3 +460,15 @@ func TestLogsRegistered(t *testing.T) {
 	}
 	assert.Contains(t, patterns, "GET /logs/{realm}/{cluster}")
 }
+
+func TestLogsRefuseNavigationFromAnotherPage(t *testing.T) {
+	ts := logsServer(t, &mock.Executor{})
+	for site, want := range map[string]int{"same-site": http.StatusForbidden, "cross-site": http.StatusForbidden} {
+		r := request("GET", "/logs/sind/dev?node=controller")
+		r.AddCookie(ts.cookie)
+		r.Header.Set("Sec-Fetch-Site", site)
+		r.Header.Set("Sec-Fetch-Mode", "navigate")
+		r.Header.Set("Sec-Fetch-Dest", "document")
+		assert.Equal(t, want, ts.do(r).Code, site)
+	}
+}
