@@ -198,7 +198,9 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 		}
 	}
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "sind-mcp-stream"}, nil)
+	var relay toolProgressRelay
+	client := mcp.NewClient(&mcp.Implementation{Name: "sind-mcp-stream"},
+		&mcp.ClientOptions{ProgressNotificationHandler: relay.handle})
 	session, err := client.Connect(innerCtx, clientTransport, nil)
 	if err != nil {
 		stopInner()
@@ -217,7 +219,13 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 			return nil, nil, fmt.Errorf("listing MCP tools: %w", err)
 		}
 		server.AddTool(tool, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return session.CallTool(ctx, &mcp.CallToolParams{Name: req.Params.Name, Arguments: req.Params.Arguments})
+			params := &mcp.CallToolParams{Name: req.Params.Name, Arguments: req.Params.Arguments}
+			if req.Params.GetProgressToken() != nil {
+				token, forget := relay.add(req)
+				defer forget()
+				params.SetProgressToken(token)
+			}
+			return session.CallTool(ctx, params)
 		})
 	}
 

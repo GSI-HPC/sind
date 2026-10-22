@@ -548,6 +548,17 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 	assert.Equal(t, exitUsage, out.ExitCode)
 	assert.Contains(t, out.StdErr, `argument "-o" is a flag`)
 
+	// A call with a progress token is forwarded with a token of the
+	// stream's, whose notifications go back to the client under its own.
+	withToken := &mcp.CallToolParams{
+		Name:      "sind_get_nodes",
+		Arguments: map[string]any{"flags": map[string]any{}, "args": []string{"-o", "human"}},
+	}
+	withToken.SetProgressToken("client-token")
+	res, err = session.CallTool(t.Context(), withToken)
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+
 	require.NoError(t, session.Close())
 	assert.NoError(t, stop(), "a stopped stream exits 0")
 }
