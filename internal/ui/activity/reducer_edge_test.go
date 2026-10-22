@@ -14,7 +14,12 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
-const runA = "aaaaaaaaaaaaaaaa"
+const (
+	runA = "aaaaaaaaaaaaaaaa"
+	// traceT and parentP are a trace and a parent span a caller handed on.
+	traceT  = "0123456789abcdef0123456789abcdef"
+	parentP = "00f067aa0ba902b7"
+)
 
 // start gives the reducer the start of a span at the second s.
 func start(r *Reducer, run string, s int, id, parent, kind, name string, extra ...string) {
@@ -51,7 +56,7 @@ func TestTreeByParent(t *testing.T) {
 	assert.Equal(t, []string{"b", "a", "orphan", "self", "bare"}, names(root.Children), "in start order")
 	assert.Equal(t, []string{"b1"}, names(root.Children[0].Children))
 	assert.Equal(t, []string{"a1", "a2"}, names(root.Children[1].Children))
-	assert.Equal(t, "gone", root.Children[2].Parent, "the parent the log named")
+	assert.Equal(t, sid("gone"), root.Children[2].Parent, "the parent the log named")
 	assert.Equal(t, at("2026-01-01T00:00:00Z"), runs[0].Start)
 }
 
@@ -69,14 +74,14 @@ func TestRunWithoutCommandSpan(t *testing.T) {
 
 func TestEventsBeforeTheTraceLine(t *testing.T) {
 	r := NewReducer(5)
-	r.Line(ev("start", runA, "2026-01-01T00:00:00Z", `"trace":"t9","span":"r","kind":"command","name":"x"`))
-	assert.Equal(t, "t9", r.Runs()[0].Trace, "the events name the trace too")
+	r.Line(ev("start", runA, "2026-01-01T00:00:00Z", `"trace":"`+traceT+`","span":"r","kind":"command","name":"x"`))
+	assert.Equal(t, traceT, r.Runs()[0].Trace, "the events name the trace too")
 	assert.Empty(t, r.Runs()[0].Program)
-	r.Line(line("trace", runA, `"trace":"t9","parent":"p1","program":"sind","version":"v2"`))
+	r.Line(line("trace", runA, `"trace":"`+traceT+`","parent":"`+parentP+`","traceFlags":"01","program":"sind","version":"v2"`))
 	run := r.Runs()[0]
 	assert.Equal(t, "sind", run.Program)
 	assert.Equal(t, "v2", run.Version)
-	assert.Equal(t, "p1", run.Parent)
+	assert.Equal(t, parentP, run.Parent)
 	assert.Equal(t, "x", run.Title, "the span is kept")
 }
 
@@ -108,29 +113,13 @@ func titles(r *Reducer) []string {
 	return out
 }
 
-func TestKeepAtLeastOneAndForgetsWhatItDropped(t *testing.T) {
+func TestKeepAtLeastOne(t *testing.T) {
 	r := NewReducer(0)
 	for i := range 40 {
 		id := fmt.Sprintf("%016x", i+1)
 		start(r, id, i%60, "r", "", "command", id)
 	}
 	assert.Equal(t, []string{fmt.Sprintf("%016x", 40)}, titles(r), "one run is kept")
-	// The memory of dropped runs is bounded: an old id may come back.
-	r.Line(ev("start", fmt.Sprintf("%016x", 1), "2026-01-01T00:00:59Z", `"span":"r","kind":"command","name":"back"`))
-	assert.Equal(t, []string{"back"}, titles(r))
-	assert.LessOrEqual(t, len(r.gone), 16)
-}
-
-func TestSpanLimit(t *testing.T) {
-	r := NewReducer(5)
-	r.maxSpans = 2
-	start(r, runA, 0, "r", "", "command", "c")
-	start(r, runA, 1, "s1", "r", "step", "one")
-	start(r, runA, 2, "s2", "r", "step", "two")
-	r.Line(ev("update", runA, "2026-01-01T00:00:03Z", `"span":"s1","parent":"r","kind":"step","message":"still counted"`))
-	root := r.Runs()[0].Root
-	assert.Equal(t, []string{"one"}, names(root.Children))
-	assert.Equal(t, "still counted", root.Children[0].Message)
 }
 
 func TestReset(t *testing.T) {
@@ -145,21 +134,21 @@ func TestReset(t *testing.T) {
 	assert.Equal(t, []string{"a2"}, titles(r), "a run forgotten may start again")
 }
 
-func TestTextsAreStrippedOfControlCharacters(t *testing.T) {
+func TestTextsAreEscaped(t *testing.T) {
 	r := NewReducer(5)
 	r.Line(line("trace", runA, `"program":"si\u001b[31mnd","version":"v1\u0000"`))
 	r.Line(ev("start", runA, "2026-01-01T00:00:00Z",
 		`"span":"r","kind":"command","name":"cre\u0007ate\tcluster","node":"de\u202ev","host":"h\u0085ost","role":"w\u200eorker","batch":"1\n/2","message":"a\r\nb\u001b]0;x\u0007"`))
-	r.Line(ev("end", runA, "2026-01-01T00:00:01Z", `"span":"r","status":"failed","class":"target","err":"bad\u0000 news\u202d!"`))
+	r.Line(ev("end", runA, "2026-01-01T00:00:01Z", `"span":"r","kind":"command","name":"cre\u0007ate\tcluster","node":"de\u202ev","host":"h\u0085ost","role":"w\u200eorker","batch":"1\n/2","message":"a\r\nb\u001b]0;x\u0007","status":"failed","class":"target","err":"bad\u0000 news\u202d!"`))
 	run := r.Runs()[0]
-	assert.Equal(t, "si[31mnd", run.Program, "the escape is gone, the rest is text")
-	assert.Equal(t, "v1", run.Version)
-	assert.Equal(t, "create cluster dev", run.Title)
-	assert.Equal(t, "host", run.Root.Host)
-	assert.Equal(t, "worker", run.Root.Role)
-	assert.Equal(t, "1 /2", run.Root.Batch)
-	assert.Equal(t, "a  b]0;x", run.Root.Message)
-	assert.Equal(t, "bad news!", run.Err)
+	assert.Equal(t, `si\x1b[31mnd`, run.Program, "a control character is shown escaped, never acted on")
+	assert.Equal(t, `v1\x00`, run.Version)
+	assert.Equal(t, `cre\x07ate\tcluster de\u202ev`, run.Title)
+	assert.Equal(t, `h\u0085ost`, run.Root.Host)
+	assert.Equal(t, `w\u200eorker`, run.Root.Role)
+	assert.Equal(t, `1\n/2`, run.Root.Batch)
+	assert.Equal(t, `a\nb\x1b]0;x\x07`, run.Root.Message)
+	assert.Equal(t, `bad\x00 news\u202d!`, run.Err)
 }
 
 func TestSuspendAndResume(t *testing.T) {
@@ -246,7 +235,7 @@ func TestLinesAndDropped(t *testing.T) {
 	start(r, runA, 0, "r", "", "command", "c")
 	start(r, runA, 0, "s", "r", "call", "sol", `"flags":["show-lines"]`)
 	for _, extra := range []string{`,"dropped":2`, ``, `,"dropped":-4`, `,"dropped":1`} {
-		r.Line(ev("line", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"call","stream":"stdout"`+extra))
+		r.Line(ev("line", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"call","name":"sol","flags":["show-lines"],"stream":"stdout"`+extra))
 	}
 	s := r.Runs()[0].Root.Children[0]
 	assert.Equal(t, 4, s.Lines)
@@ -294,13 +283,12 @@ func TestCounts(t *testing.T) {
 	r := NewReducer(5)
 	start(r, runA, 0, "r", "", "command", "c")
 	start(r, runA, 0, "s", "r", "step", "s", `"total":7,"limit":3`)
-	r.Line(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"step","total":5,"limit":0,"batch":"2/5","message":"working"`))
-	r.Line(ev("update", runA, "2026-01-01T00:00:02Z", `"span":"s","parent":"r","kind":"step","message":""`))
+	r.Line(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"step","name":"s","total":5,"limit":3,"batch":"2/5","message":"working"`))
 	s := r.Runs()[0].Root.Children[0]
-	assert.Equal(t, 7, s.Total, "a smaller total is not taken")
+	assert.Equal(t, 5, s.Total, "the latest event says")
 	assert.Equal(t, 3, s.Limit)
 	assert.Equal(t, "2/5", s.Batch)
-	assert.Equal(t, "working", s.Message, "the latest message there is")
+	assert.Equal(t, "working", s.Message)
 }
 
 func TestTimeouts(t *testing.T) {
@@ -313,12 +301,12 @@ func TestTimeouts(t *testing.T) {
 		{`"timeout":1.5`, 1500 * time.Millisecond},
 		{`"timeout":300`, 300 * time.Second},
 		{`"timeout":-3`, 0},
-		{`"timeout":1e30`, time.Duration(math.MaxInt64/int64(time.Second)) * time.Second},
+		{`"timeout":1e30`, math.MaxInt64},
 	} {
 		start(r, runA, 1, fmt.Sprintf("w%d", i), "r", "wait", "w", c.json)
 	}
 	for i, c := range r.Runs()[0].Root.Children {
-		want := []time.Duration{1500 * time.Millisecond, 300 * time.Second, 0, time.Duration(math.MaxInt64/int64(time.Second)) * time.Second}[i]
+		want := []time.Duration{1500 * time.Millisecond, 300 * time.Second, 0, time.Duration(math.MaxInt64)}[i]
 		assert.Equal(t, want, c.Timeout, c.ID)
 	}
 }

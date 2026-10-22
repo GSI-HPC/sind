@@ -4,9 +4,13 @@ package activity
 
 import (
 	"bytes"
+	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,9 +29,20 @@ func readFixture(t *testing.T, name string) []byte {
 	return b
 }
 
+// placeholder is how the golden log writes a span id: "#n" stands for the
+// n-th span, as the 16 hexadecimal digits of n.
+var placeholder = regexp.MustCompile(`"#(\d+)"`)
+
+// spanOf returns the span id that "#n" of the golden log stands for.
+func spanOf(n int) string { return fmt.Sprintf("%016x", n) }
+
 // feed gives the reducer each line of data.
 func feed(r *Reducer, data []byte) {
 	for _, line := range bytes.Split(data, []byte("\n")) {
+		line = placeholder.ReplaceAllFunc(line, func(m []byte) []byte {
+			n, _ := strconv.Atoi(string(m[2 : len(m)-1]))
+			return []byte(`"` + spanOf(n) + `"`)
+		})
 		r.Line(line)
 	}
 }
@@ -81,11 +96,25 @@ func at(s string) time.Time {
 	return t
 }
 
-// line makes a line of the log from its keys, as the log writes them.
+// sid returns the span id, 16 hexadecimal digits, that the short name of a
+// span stands for in a test.
+func sid(name string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(name))
+	return fmt.Sprintf("%016x", h.Sum64()|1<<63)
+}
+
+var shortSpan = regexp.MustCompile(`"(span|parent)":"([^"0-9a-f][^"]*|[^"]{1,15}|[^"]{17,})"`)
+
+// line makes a line of the log from its keys, as the log writes them. The
+// short names a test gives its spans become span ids.
 func line(typ, run string, rest string) []byte {
 	s := `{"v":1,"type":"` + typ + `","run":"` + run + `"`
 	if rest != "" {
-		s += "," + rest
+		s += "," + shortSpan.ReplaceAllStringFunc(rest, func(m string) string {
+			k := shortSpan.FindStringSubmatch(m)
+			return `"` + k[1] + `":"` + sid(k[2]) + `"`
+		})
 	}
 	return []byte(s + "}")
 }
@@ -142,3 +171,27 @@ func goldenOfModule(t *testing.T) []byte {
 	}
 	return b
 }
+
+func appendTo(t *testing.T, path string, b []byte) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, err = f.Write(b)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+}
+
+func logLines(run, title string) []byte {
+	var b bytes.Buffer
+	b.Write(line("trace", run, `"trace":"t","program":"sind"`))
+	b.WriteString("\n")
+	b.Write(ev("start", run, "2026-01-01T00:00:00Z", `"span":"r","kind":"command","name":"`+title+`"`))
+	b.WriteString("\n")
+	b.Write(ev("end", run, "2026-01-01T00:00:01Z", `"span":"r","kind":"command","name":"`+title+`","status":"ok"`))
+	b.WriteString("\n")
+	return b.Bytes()
+}
+
+// TestTailByteByByte writes each recorded log one byte at a time, polling
+// after each, and holds that no line is lost, cut or read twice: the runs
+// are those of the log read at once.

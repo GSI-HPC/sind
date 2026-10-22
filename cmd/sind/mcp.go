@@ -255,13 +255,18 @@ func inProcessGroup(mw ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 // it started would go on, holding its output open: the cancelled call
 // would answer only when that docker command ended, if ever. Killing the
 // group ends both, and the call answers at once.
+//
+// A call that came with a progress token gets the progress of the process
+// as progress notifications (withToolProgress).
 func mcpExecute(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, ophis.ToolOutput{}, fmt.Errorf("locating the sind binary: %w", err)
 	}
+	ctx, endProgress := withToolProgress(cmdexec.WithProcessGroup(ctx), req)
 	var e cmdexec.OSExecutor
-	stdout, stderr, err := e.Run(cmdexec.WithProcessGroup(ctx), exe, mcpToolArgs(req.Params.Name, in)...)
+	stdout, stderr, err := e.Run(ctx, exe, mcpToolArgs(req.Params.Name, in)...)
+	endProgress()
 	out := ophis.ToolOutput{StdOut: stdout, StdErr: stderr}
 	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		out.ExitCode = exitErr.ExitCode()
