@@ -9,6 +9,9 @@ A monitored cluster sends its Slurm metrics, its nodes' resource use and their s
 
 ## Turn it on
 
+{{< ways >}}
+{{< cli >}}
+
 Set `monitoring: true` in the [cluster config]({{< relref "/configuration/cluster-config#monitoring" >}}):
 
 ```yaml
@@ -27,6 +30,14 @@ Or add `--monitoring` to `sind create cluster`, also on top of a config:
 ```bash
 sind create cluster --monitoring
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+In the New cluster dialog of `sind ui`, tick **Monitoring**. The dialog writes `monitoring: true` into the config. It needs Slurm 26.05 or later in the images, and the plan says so for an older image.
+
+{{< /ui >}}
+{{< /ways >}}
 
 The flag and the key are ORed: either turns monitoring on, and `--monitoring=false` does not turn off a config's `monitoring: true`.
 
@@ -50,9 +61,20 @@ sind pulls the stack's four images with the node images when it creates the stac
 
 Grafana listens on port 3000 of its container on the mesh. With [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), open:
 
+{{< ways >}}
+{{< cli >}}
+
 ```text
 http://grafana.sind.sind:3000
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Monitoring**. It shows the address of Grafana, Prometheus and Loki as links.
+
+{{< /ui >}}
+{{< /ways >}}
 
 The name is `grafana.<realm>.sind`, so a cluster in realm `ci-42` has its Grafana at `http://grafana.ci-42.sind:3000`. Without host DNS, use the address `sind get monitoring` prints in its JSON output; on Linux the host reaches the containers' addresses directly:
 
@@ -109,9 +131,22 @@ curl -s 'http://prometheus.sind.sind:9090/api/v1/query?query=slurm_nodes_idle'
 
 ## Show the stack
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get monitoring
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Monitoring**. It shows the services of the stack with their addresses and states, and the clusters that they collect. Use **read every** to set how often sind ui reads them.
+
+{{< uishot "monitoring" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```text
 SERVICE      CONTAINER         ADDRESS                            STATUS

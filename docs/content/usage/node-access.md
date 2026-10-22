@@ -7,9 +7,22 @@ toc: true
 
 ## ssh
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+The web UI has no terminal. Open the cluster, then the **Connect** tab. It shows the commands that open a shell on a node, run a command and use `ssh`. Press **Copy** next to one, and run it in your terminal.
+
+{{< uishot "cluster-connect" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 SSH into a specific node. SSH options, before or after `NODE`, are passed through to the underlying SSH command. A remote command must follow `--`: `NODE` is the only other argument before it, so `sind ssh worker-0 hostname`, which `ssh` would run as a command, is a usage error. sind's own flags, such as `--realm`, go before `ssh`.
 

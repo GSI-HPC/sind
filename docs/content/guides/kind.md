@@ -23,9 +23,22 @@ The sind clusters share the realm's mesh, whose DNS server holds the records of 
 
 A kind node needs the mesh network to reach the DNS server, and each cluster network to reach the addresses that DNS answers with. `sind connect container` attaches it to all of them:
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind connect container $(kind get nodes --name bridge)
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+In `sind ui`, press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of a kind node, such as `bridge-control-plane`, and press **Connect**. Do this for each node that `kind get nodes --name bridge` lists.
+
+{{< uishot "dialog-connect" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 A sind cluster created later is connected to the kind nodes as well, as long as the realm keeps a cluster. Deleting its last cluster removes the mesh, and sind forgets the kind nodes: `sind delete cluster` names them in a warning, and after the next `sind create cluster`, `sind connect container` attaches them again. The new mesh can have another DNS address, so re-apply the forward below too.
 

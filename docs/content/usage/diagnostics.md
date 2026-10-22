@@ -7,9 +7,22 @@ toc: true
 
 ## Doctor
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind doctor
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Doctor** in the rail. Each check shows as ok, warning or failed, with the fix.
+
+{{< uishot "doctor" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Checks system prerequisites and reports pass/fail for each:
 
@@ -225,9 +238,22 @@ Listings are sorted by name in natural order, with numbers by their value, so th
 
 ## Cluster status
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get cluster [NAME]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open the cluster. The **Summary** tab shows each node and its services, and the network checks.
+
+{{< uishot "cluster" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Displays detailed health information:
 
@@ -315,9 +341,22 @@ Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}
 
 ## Node status
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get node NODE[.CLUSTER]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster. Its page shows its services, events and power state.
+
+{{< uishot "node" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `default`. A full DNS name ending in `.sind` is rejected.
 
@@ -336,9 +375,22 @@ Controllers of a backup pair get the same `HA` column as in `sind get cluster`.
 
 ## Logs
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open the cluster, then the **Logs** tab. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log. Use **Pause** to stop the stream and **Follow** to resume it.
+
+{{< uishot "cluster-logs" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Without a `SERVICE` argument, shows container logs (stdout/stderr). With a service name, shows journalctl output for that systemd unit.
 
@@ -359,9 +411,22 @@ sind logs api slurmrestd
 
 ## List nodes
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get nodes [CLUSTER]
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Nodes** in the rail for every node of the realm, or the **Nodes** tab of a cluster for its nodes.
+
+{{< uishot "nodes" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Without a `CLUSTER` argument, lists every node in the realm with an extra `CLUSTER` column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`.
 
@@ -374,9 +439,22 @@ sind-default-worker-1     default   worker       worker-1.default.sind.sind     
 
 ## List networks
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get networks
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open the cluster, then the **Network and storage** tab. **Mesh and DNS** shows the mesh network.
+
+{{< uishot "cluster-network" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```
 NAME               DRIVER   SUBNET          GATEWAY
@@ -386,9 +464,20 @@ sind-mesh          bridge   172.18.0.0/16   172.18.0.1
 
 ## List realms
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get realms
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+The **Realms** table of the Overview lists each realm with its clusters, nodes and health. The realm switch in the top bar selects the realm that the pages show.
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```
 NAME   CLUSTERS
@@ -400,9 +489,20 @@ Lists all active realms discovered from Docker container labels. Useful when wor
 
 ## List volumes
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get volumes
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open the cluster, then the **Network and storage** tab. It lists the volumes and mounts of the cluster.
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```
 NAME                  DRIVER
@@ -414,9 +514,20 @@ sind-ssh-config       local
 
 ## DNS records
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get dns
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Mesh and DNS**. It lists the DNS records of the realm.
+
+{{< /ui >}}
+{{< /ways >}}
 
 ```
 HOSTNAME                       IP
@@ -442,9 +553,22 @@ Without `--type` it prints the cluster's main key: `slurm.key` with identity `cl
 
 ## Mesh infrastructure
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get mesh
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Mesh and DNS**. It shows the mesh network, the DNS and SSH containers, and the containers that are connected to the realm.
+
+{{< uishot "mesh" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a [kind cluster]({{< relref "/guides/kind" >}})'s CoreDNS, can forward the `<realm>.sind` zone to it; it is `-` while the DNS container is stopped (`""` with `-o json`).
 
@@ -470,9 +594,22 @@ sind.sind:53 {
 
 ## Monitoring stack
 
+{{< ways >}}
+{{< cli >}}
+
 ```bash
 sind get monitoring
 ```
+
+{{< /cli >}}
+{{< ui >}}
+
+Open **Monitoring**. It shows Grafana, Prometheus, Loki and Alloy with their addresses and states, and the clusters that they collect.
+
+{{< uishot "monitoring" >}}
+
+{{< /ui >}}
+{{< /ways >}}
 
 Shows the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}): each service's container, address and state, and the clusters it collects, with their number of monitored nodes and their Slurm version.
 
