@@ -45,6 +45,10 @@ const DefaultWait = "5m"
 // characters of a registry, repository, tag and digest.
 var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$`)
 
+// ImageRef reports whether s looks like an image reference: the
+// characters of a registry, repository, tag and digest.
+func ImageRef(s string) bool { return imagePattern.MatchString(s) }
+
 // ConfigPath returns where sind ui saves the config of the cluster name.
 func ConfigPath(dir, name string) string { return filepath.Join(dir, name+".yaml") }
 
@@ -113,6 +117,14 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		// Never a path from a name that sind refuses, such as ../x.
 		file = "NAME"
 	}
+	// The images go to a command of their own first: their notes come
+	// after those of the files.
+	var images Command
+	monitoring := "monitoring"
+	if f.Get("yaml_on") != "" {
+		monitoring = "yaml"
+	}
+	clusterImages(cfg, pull, c.Image, monitoring, &images, &ps)
 	order := ClusterFieldsOf(f)
 	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(order, a.Field) - fieldOrder(order, b.Field) })
 	var flags []string
@@ -147,12 +159,9 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui creates the directory %s first. It stays if the create fails.", data.dir))
 	}
 	cmd.Script = clusterScript(realm, file, content, cmd.Dirs, flags)
-	if cfg.Monitoring {
-		cmd.Notes = append(cmd.Notes, "Monitoring needs Slurm 26.05 or later in the image. sind checks the image when it runs, and stops with an error if it is older.")
-	}
-	if slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleAPI }) {
-		cmd.Notes = append(cmd.Notes, "The api node needs slurmrestd in the image. sind-node images have it from Slurm 26.05. sind checks the image when it runs.")
-	}
+	cmd.Images = images.Images
+	cmd.Notes = append(cmd.Notes, images.Notes...)
+	cmd.Warns = append(cmd.Warns, images.Warns...)
 	if s := c.Snap.Monitorings[realm]; cfg.Monitoring && s != nil {
 		cmd.Notes = append(cmd.Notes, fmt.Sprintf("Realm %s has a monitoring stack. sind adds the new nodes to it.", realm))
 	}

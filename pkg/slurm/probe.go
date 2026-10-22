@@ -225,7 +225,7 @@ func (i *ImageInfo) MonitoringProblems(req ProbeRequest) []string {
 	if len(problems) > 0 {
 		return problems
 	}
-	if len(req.Daemons) > 0 && !versionAtLeast(i.Version, MonitoringMinVersion) {
+	if len(req.Daemons) > 0 && !VersionAtLeast(i.Version, MonitoringMinVersion) {
 		problems = append(problems, fmt.Sprintf("Slurm %s is older than %s, which monitoring needs", i.Version, MonitoringMinVersion))
 		return problems
 	}
@@ -266,10 +266,10 @@ func (i *ImageInfo) MariaDBWarning() string {
 	return "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file"
 }
 
-// versionAtLeast reports whether a Slurm version (25.11.8, 26.05.0-0rc1) is
+// VersionAtLeast reports whether a Slurm version (25.11.8, 26.05.0-0rc1) is
 // of the release line oldest (major.minor) or a later one. Pre-releases
 // of a line count as the line.
-func versionAtLeast(version, oldest string) bool {
+func VersionAtLeast(version, oldest string) bool {
 	var v, o [2]int
 	if _, err := fmt.Sscanf(version, "%d.%d", &v[0], &v[1]); err != nil {
 		return false

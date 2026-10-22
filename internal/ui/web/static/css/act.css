@@ -153,6 +153,13 @@
 .scrim .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
 .scrim .act-yaml{max-height:320px;margin:0;overflow:auto}
 .scrim .act-status{margin-right:auto;display:flex;align-items:center}
+.scrim .act-imgs{display:grid;gap:6px}
+.scrim .act-img{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel)}
+.scrim .act-img .mono{font-size:12px;overflow-wrap:anywhere}
+.scrim .act-img small{color:var(--muted);font-size:11.5px}
+.scrim .act-img .act-ver{color:var(--fg)}
+.scrim .act-img .btn{justify-self:start;margin-top:2px}
+.scrim .act-img .btn.htmx-request::after{content:" …"}
 @media (max-width:760px){
   .scrim .modal.split{max-height:none}
   .scrim .modal.split .mb{grid-template-columns:1fr}

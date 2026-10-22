@@ -84,6 +84,8 @@ the nodes, the command and the config also while a field is wrong. */}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
 <p class="hint">{{.Cmd.Summary}}</p>
 {{with .HostMB}}<div class="act-meter"><meter min="0" max="{{.}}" value="{{$p.Cmd.MemoryMB}}" high="{{$p.HostHigh}}" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">{{$p.MemoryLabel $p.Cmd.MemoryMB}} of the {{$p.MemoryLabel .}} of the Docker host</span></div>{{end}}
+{{with .Cmd.Images}}<div class="act-imgs"><div class="cmdlabel">Images</div>{{range .}}<div class="act-img"><span class="mono">{{.Image}}</span><small>{{.Of}}</small>
+  <span class="hint{{if .Version}} act-ver{{end}}">{{$p.ImageLine .}}</span>{{if .CanCheck}}<button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</div>{{end}}</div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
 {{template "act-callouts" .}}

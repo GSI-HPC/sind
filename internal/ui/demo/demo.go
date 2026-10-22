@@ -18,12 +18,16 @@ package demo
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 
@@ -87,6 +91,32 @@ func (d *Demo) MkdirAll(string) error { return nil }
 // Stat finds no file, so that a dialog offers to create a data directory
 // as it does for a new one.
 func Stat(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist }
+
+// demoImages are the images that the demo's Docker has, by reference: the
+// default image, with the release of the demo's new clusters, the image
+// of an older release, and one built without a label.
+var demoImages = map[string]docker.Image{
+	config.DefaultImage:                     {ID: "sha256:d1", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmNew}},
+	"ghcr.io/gsi-hpc/sind-node:" + slurmNew: {ID: "sha256:d1", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmNew}},
+	"ghcr.io/gsi-hpc/sind-node:" + slurmOld: {ID: "sha256:d2", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmOld}},
+	"sind-node:dev":                         {ID: "sha256:d3"},
+}
+
+// InspectImage looks at an image of the demo's Docker.
+func InspectImage(_ context.Context, image string) (docker.Image, bool, error) {
+	img, ok := demoImages[image]
+	return img, ok, nil
+}
+
+// DiscoverVersion finds the Slurm release of an image of the demo's
+// Docker, as a check does: the demo's newest one. The demo pulls nothing,
+// so another image fails.
+func DiscoverVersion(_ context.Context, image string) (string, error) {
+	if _, ok := demoImages[image]; !ok {
+		return "", fmt.Errorf("pulling %s: the demo pulls nothing", image)
+	}
+	return slurmNew, nil
+}
 
 // Exec returns the executor that answers the log streams.
 func (d *Demo) Exec() cmdexec.Executor {

@@ -176,3 +176,11 @@ func TestMariaDBWarning(t *testing.T) {
 		assert.Equal(t, want, (&ImageInfo{MariaDBLogError: opt}).MariaDBWarning(), opt)
 	}
 }
+
+func TestVersionAtLeast(t *testing.T) {
+	assert.True(t, VersionAtLeast("26.05.4", "26.05"))
+	assert.True(t, VersionAtLeast("26.05.0-0rc1", "26.05"), "a pre-release counts as its line")
+	assert.True(t, VersionAtLeast("27.11.0", "26.05"))
+	assert.False(t, VersionAtLeast("25.11.8", "26.05"))
+	assert.False(t, VersionAtLeast("", "26.05"))
+}

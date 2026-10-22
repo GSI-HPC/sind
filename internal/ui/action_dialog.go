@@ -948,8 +948,12 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 }
 
 // actContext returns what the actions check a form against.
-func actContext(v *View, st *actState) action.Context {
-	return action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir, Stat: st.stat}
+func actContext(r *http.Request, v *View, st *actState) action.Context {
+	c := action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir, Stat: st.stat}
+	if st.images != nil {
+		c.Image = func(image string) action.ImageFacts { return st.images.facts(r.Context(), image) }
+	}
+	return c
 }
 
 // actFormView returns the view of a request that posts a dialog's form,
@@ -976,7 +980,7 @@ func actPreviewRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		s.Fail(w, r, err)
 		return
 	}
-	s.Write(w, r, http.StatusOK, "act-preview", v.withData(actEvaluate(v, a, r.PostForm, actContext(v, st))))
+	s.Write(w, r, http.StatusOK, "act-preview", v.withData(actEvaluate(v, a, r.PostForm, actContext(r, v, st))))
 }
 
 // actRunRoute builds the command of the form again and runs it as a task,
@@ -996,7 +1000,7 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := r.PostForm
-	p := actEvaluate(v, a, f, actContext(v, st))
+	p := actEvaluate(v, a, f, actContext(r, v, st))
 	switch {
 	case p.Err != "":
 	case len(p.Cmd.Problems) > 0:

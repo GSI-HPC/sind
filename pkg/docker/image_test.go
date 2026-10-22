@@ -56,6 +56,38 @@ func TestImageLabels_NotFound(t *testing.T) {
 	assert.Nil(t, labels)
 }
 
+func TestInspectImage(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"id":"sha256:abc","labels":{"sind.slurm.version":"26.05.4"}}`+"\n", "", nil)
+	m.AddResult(`{"id":"sha256:def","labels":null}`+"\n", "", nil)
+	m.AddResult("", "Error: No such image: x\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", "permission denied\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("{oops\n", "", nil)
+	c := NewClient(&m)
+	ctx := t.Context()
+
+	img, local, err := c.InspectImage(ctx, testImage)
+	require.NoError(t, err)
+	assert.True(t, local)
+	assert.Equal(t, Image{ID: "sha256:abc", Labels: Labels{"sind.slurm.version": "26.05.4"}}, img)
+	assert.Equal(t, []string{"image", "inspect", "--format", `{"id":{{json .Id}},"labels":{{json .Config.Labels}}}`, testImage}, m.Calls[0].Args)
+
+	img, local, err = c.InspectImage(ctx, "own:dev")
+	require.NoError(t, err)
+	assert.True(t, local)
+	assert.Equal(t, Image{ID: "sha256:def"}, img, "an image without labels")
+
+	_, local, err = c.InspectImage(ctx, "x")
+	require.NoError(t, err)
+	assert.False(t, local)
+
+	_, _, err = c.InspectImage(ctx, "x")
+	require.Error(t, err)
+
+	_, _, err = c.InspectImage(ctx, "x")
+	assert.ErrorContains(t, err, "parsing the inspect of image x")
+}
+
 func TestImageExists(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("sha256:abc\n", "", nil)

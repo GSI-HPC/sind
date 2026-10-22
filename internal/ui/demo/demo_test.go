@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
@@ -188,4 +189,20 @@ func TestDemo_StillStandsStill(t *testing.T) {
 	cancel()
 	<-done
 	assert.Equal(t, before.Statuses, st.Snapshot().Statuses, "nothing moves")
+}
+
+func TestDemo_Images(t *testing.T) {
+	ctx := t.Context()
+	img, local, err := InspectImage(ctx, config.DefaultImage)
+	require.NoError(t, err)
+	assert.True(t, local)
+	assert.Equal(t, slurmNew, img.Labels[cluster.LabelSlurmVersion])
+	_, local, _ = InspectImage(ctx, "elsewhere:1")
+	assert.False(t, local)
+
+	v, err := DiscoverVersion(ctx, "sind-node:dev")
+	require.NoError(t, err)
+	assert.Equal(t, slurmNew, v)
+	_, err = DiscoverVersion(ctx, "elsewhere:1")
+	assert.ErrorContains(t, err, "the demo pulls nothing")
 }

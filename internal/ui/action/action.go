@@ -59,6 +59,8 @@ type Command struct {
 	Summary string
 	// MemoryMB is the memory that Nodes may use together, in MiB.
 	MemoryMB int
+	// Images are the images of Nodes and what sind ui knows of them.
+	Images []PlanImage
 	// Problems are the fields that the command cannot take as they are.
 	// The command does not run while it has any, but its plan shows.
 	Problems []Problem
@@ -147,6 +149,8 @@ type Context struct {
 	ConfigDir string
 	// Stat looks at a file of the host, as os.Stat; nil checks none.
 	Stat func(name string) (fs.FileInfo, error)
+	// Image tells what sind ui knows of an image; nil knows nothing.
+	Image func(image string) ImageFacts
 }
 
 // Action is a change that a dialog makes by running one command.

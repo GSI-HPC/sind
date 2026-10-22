@@ -4,6 +4,8 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -13,6 +15,27 @@ import (
 // there: false, with no error, when it has not been pulled or built.
 func (c *Client) ImageLabels(ctx context.Context, image string) (Labels, bool, error) {
 	return c.labels(ctx, "image", "inspect", image, "--format", "{{json .Config.Labels}}")
+}
+
+// Image is a local image: its ID and labels.
+type Image struct {
+	ID     string `json:"id"`
+	Labels Labels `json:"labels"`
+}
+
+// InspectImage returns the ID and labels of a local image, and whether the
+// image is there: false, with no error, when it has not been pulled or
+// built.
+func (c *Client) InspectImage(ctx context.Context, image string) (Image, bool, error) {
+	stdout, _, err := c.run(ctx, "image", "inspect", "--format", `{"id":{{json .Id}},"labels":{{json .Config.Labels}}}`, image)
+	if err != nil {
+		return Image{}, false, IgnoreNotFound(err)
+	}
+	var img Image
+	if err := json.Unmarshal([]byte(stdout), &img); err != nil {
+		return Image{}, false, fmt.Errorf("parsing the inspect of image %s: %w", image, err)
+	}
+	return img, true, nil
 }
 
 // ImageExists reports whether the daemon has an image, without pulling it.

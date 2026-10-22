@@ -17,6 +17,8 @@ import (
 	"github.com/GSI-HPC/sind/internal/atomicfile"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 
@@ -41,6 +43,8 @@ type actState struct {
 	// stat looks at a directory that a command needs; mkdirAll makes it.
 	stat     func(name string) (fs.FileInfo, error)
 	mkdirAll func(path string) error
+	// images knows the Slurm releases of images; nil knows none.
+	images *actImages
 }
 
 // The seams of Setup; tests replace them.
@@ -79,6 +83,13 @@ func actSaveFile(path string, data []byte) error {
 // directory of a new cluster, as mkdir -p does.
 func actMkdirAll(path string) error { return os.MkdirAll(path, 0o755) }
 
+// actDockerImages returns the images of client, which runs docker.
+func actDockerImages(client *docker.Client) *actImages {
+	return newActImages(client.InspectImage, func(ctx context.Context, image string) (string, error) {
+		return slurm.DiscoverVersion(ctx, client, image)
+	})
+}
+
 func init() { defaultRegistry.AddService(actService()) }
 
 // actService makes the runner of the actions. The commands run in the
@@ -109,7 +120,7 @@ func actService() Service {
 			})
 			env.Put(actKey{}, &actState{
 				starter: r, home: home, configDir: filepath.Join(stateDir, "ui", "configs"), writeFile: actSaveFile,
-				stat: os.Stat, mkdirAll: actMkdirAll,
+				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(docker.NewClient(env.Exec)),
 			})
 			return nil
 		},
@@ -135,6 +146,7 @@ func actRoutes() []Route {
 		{Pattern: "GET /dialogs/{action}", Handle: actDialogRoute},
 		{Pattern: "POST /actions/{action}/preview", Handle: actPreviewRoute},
 		{Pattern: "POST /actions/{action}/run", Handle: actRunRoute},
+		{Pattern: "POST /actions/{action}/check", Handle: actCheckRoute},
 		{Pattern: "POST /tasks/{id}/cancel", Handle: actCancelRoute},
 	}
 }
