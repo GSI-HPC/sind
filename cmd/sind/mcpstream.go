@@ -59,7 +59,7 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 		return cobratree.Usagef("--host must not be empty: give an address, or 0.0.0.0 for all interfaces")
 	}
 	if port < 0 || port > 65535 {
-		return invalidValue("port", strconv.Itoa(port), "a port from 0 to 65535")
+		return cobratree.InvalidValue("port", strconv.Itoa(port), "a port from 0 to 65535")
 	}
 	logLevel, _ := cmd.Flags().GetString("log-level")
 	if err := checkMCPLogLevel(logLevel); err != nil {

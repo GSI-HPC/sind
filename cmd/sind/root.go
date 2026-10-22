@@ -42,7 +42,7 @@ func NewRootCommand() *cobra.Command {
 	}
 
 	cmd.SetVersionTemplate("{{.Version}}\n")
-	cmd.SetFlagErrorFunc(flagError)
+	cmd.SetFlagErrorFunc(cobratree.FlagError)
 
 	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
 	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
