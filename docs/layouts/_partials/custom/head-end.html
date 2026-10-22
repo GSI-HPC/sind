@@ -1,0 +1,55 @@
+{{- /*
+  The reader's interface for the steps of a task: CLI or web UI (shortcodes
+  ways, cli and ui). ?via=cli|ui wins, then the reader's last choice, else the
+  CLI. It is set before the first paint, so the page does not flicker; CSS
+  shows the matching variant.
+*/ -}}
+<script>
+  (function () {
+    var key = "sind-via";
+    var v = new URLSearchParams(location.search).get("via");
+    try {
+      if (v === "cli" || v === "ui") localStorage.setItem(key, v);
+      else v = localStorage.getItem(key);
+    } catch (e) {}
+    document.documentElement.dataset.via = v === "ui" ? "ui" : "cli";
+
+    function sync() {
+      var cur = document.documentElement.dataset.via;
+      document.querySelectorAll("[data-via-set]").forEach(function (b) {
+        var on = b.dataset.viaSet === cur;
+        if (b.getAttribute("role") === "tab") {
+          b.setAttribute("aria-selected", on);
+          b.tabIndex = on ? 0 : -1;
+        } else {
+          b.setAttribute("aria-pressed", on);
+        }
+      });
+    }
+
+    function set(to, keep) {
+      // Keep the pressed control where it was, as the blocks above it change height.
+      var top = keep && keep.getBoundingClientRect().top;
+      document.documentElement.dataset.via = to;
+      try { localStorage.setItem(key, to); } catch (e) {}
+      sync();
+      if (keep) window.scrollBy(0, keep.getBoundingClientRect().top - top);
+    }
+
+    document.addEventListener("DOMContentLoaded", sync);
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-via-set]");
+      if (b) set(b.dataset.viaSet, b);
+    });
+    document.addEventListener("keydown", function (e) {
+      var b = e.target.closest("[role=tab][data-via-set]");
+      if (!b || ["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(e.key) < 0) return;
+      e.preventDefault();
+      var tabs = Array.from(b.parentElement.querySelectorAll("[role=tab]"));
+      var i = tabs.indexOf(b);
+      var to = tabs[e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      set(to.dataset.viaSet, to);
+      to.focus();
+    });
+  })();
+</script>

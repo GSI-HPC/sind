@@ -1,0 +1,5 @@
+{{- /* The web UI steps of a task, inside ways. */ -}}
+{{- if ne .Parent.Name "ways" }}{{ errorf "%s: ui must be inside ways" .Position }}{{ end -}}
+<div class="sind-way" data-way="ui" role="tabpanel">
+{{ .Inner | .Page.RenderString (dict "display" "block") }}
+</div>

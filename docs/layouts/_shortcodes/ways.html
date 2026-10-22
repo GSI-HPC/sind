@@ -1,0 +1,22 @@
+{{- /*
+  The steps of a task with the CLI and with the web UI. The reader's choice
+  (custom/head-end.html) shows one of them, on every page:
+
+    {{< ways >}}
+    {{< cli >}}
+    ...
+    {{< /cli >}}
+    {{< ui >}}
+    ...
+    {{< /ui >}}
+    {{< /ways >}}
+
+  Keep headings and the text that is true for both outside the block.
+*/ -}}
+<div class="sind-ways">
+  <div class="sind-ways__tabs" role="tablist" aria-label="Interface">
+    <button type="button" role="tab" data-via-set="cli">{{ partial "sind-via-icon" "cli" }}CLI</button>
+    <button type="button" role="tab" data-via-set="ui">{{ partial "sind-via-icon" "ui" }}Web UI</button>
+  </div>
+  {{ .Inner }}
+</div>

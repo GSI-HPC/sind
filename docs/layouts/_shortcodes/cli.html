@@ -1,0 +1,5 @@
+{{- /* The CLI steps of a task, inside ways. */ -}}
+{{- if ne .Parent.Name "ways" }}{{ errorf "%s: cli must be inside ways" .Position }}{{ end -}}
+<div class="sind-way" data-way="cli" role="tabpanel">
+{{ .Inner | .Page.RenderString (dict "display" "block") }}
+</div>

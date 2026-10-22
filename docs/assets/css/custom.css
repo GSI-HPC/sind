@@ -382,3 +382,121 @@ body {
   font-size: 0.9rem;
   color: var(--sind-dim);
 }
+
+/* CLI and web UI variants (shortcodes ways, cli, ui; custom/head-end.html) */
+html:not([data-via="ui"]) .sind-way[data-way="ui"],
+html[data-via="ui"] .sind-way[data-way="cli"] {
+  display: none;
+}
+
+.sind-ways {
+  margin-top: 1.25rem;
+  border: 1px solid var(--sind-line);
+  border-radius: 0.6rem;
+  padding: 0 1rem 0.25rem;
+}
+
+.sind-ways__tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 -1rem 0.75rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--sind-line);
+}
+
+.sind-ways__tabs button,
+.sind-via-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--sind-dim);
+  cursor: pointer;
+}
+
+.sind-ways__tabs button {
+  padding: 0.55rem 0.6rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+}
+
+.sind-ways__tabs button:hover { color: var(--sind-text); }
+.dark .sind-ways__tabs button:hover { color: #E2E8F0; }
+
+html:not([data-via="ui"]) .sind-ways__tabs [data-via-set="cli"],
+html[data-via="ui"] .sind-ways__tabs [data-via-set="ui"] {
+  color: var(--sind-deep-teal);
+  border-bottom-color: var(--sind-teal);
+}
+
+html.dark:not([data-via="ui"]) .sind-ways__tabs [data-via-set="cli"],
+html.dark[data-via="ui"] .sind-ways__tabs [data-via-set="ui"] {
+  color: #2DD4BF;
+}
+
+.sind-ways > .sind-way > :first-child { margin-top: 0.25rem; }
+
+.sind-via-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.9rem;
+  border-radius: 0.6rem;
+  background: rgba(20, 184, 166, 0.07);
+  border: 1px solid rgba(20, 184, 166, 0.25);
+  font-size: 0.9rem;
+  color: var(--sind-dim);
+}
+
+.sind-via-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.12);
+}
+
+.sind-via-seg button {
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+}
+
+html:not([data-via="ui"]) .sind-via-seg [data-via-set="cli"],
+html[data-via="ui"] .sind-via-seg [data-via-set="ui"] {
+  background: #fff;
+  color: var(--sind-deep-teal);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+}
+
+html.dark:not([data-via="ui"]) .sind-via-seg [data-via-set="cli"],
+html.dark[data-via="ui"] .sind-via-seg [data-via-set="ui"] {
+  background: var(--sind-dark-alt);
+  color: #2DD4BF;
+}
+
+.sind-via-note {
+  display: none;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.5rem 0 1.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  border: 1px dashed var(--sind-line);
+  font-size: 0.9rem;
+  color: var(--sind-dim);
+}
+
+.sind-via-note svg { margin-top: 0.2rem; flex: none; }
+html[data-via="ui"] .sind-via-note { display: flex; }
+
+/* A printed page has both variants, each with its name. */
+@media print {
+  html .sind-way { display: block !important; }
+  .sind-way::before { display: block; font-weight: 600; margin: 0.5rem 0; }
+  .sind-way[data-way="cli"]::before { content: "CLI"; }
+  .sind-way[data-way="ui"]::before { content: "Web UI"; }
+  .sind-ways__tabs, .sind-via-bar, .sind-via-note { display: none; }
+}
