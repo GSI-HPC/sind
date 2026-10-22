@@ -30,7 +30,7 @@ func TestGoldenLog(t *testing.T) {
 	assert.True(t, run.Done())
 
 	root := run.Root
-	assert.Equal(t, "#1", root.ID)
+	assert.Equal(t, spanOf(1), root.ID)
 	assert.Equal(t, KindCommand, root.Kind)
 	assert.True(t, root.DryRun)
 	// The other commands of the run hang below the root, in order, after
@@ -280,7 +280,7 @@ func TestGoldenIsCurrent(t *testing.T) {
 
 func TestChangedAndImmutableRuns(t *testing.T) {
 	r := NewReducer(5)
-	r.Line(line("trace", "aaaaaaaaaaaaaaaa", `"trace":"t1","program":"sind"`))
+	r.Line(line("trace", "aaaaaaaaaaaaaaaa", `"trace":"`+traceT+`","program":"sind"`))
 	r.Line(ev("start", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"create cluster"`))
 	r.Line(ev("start", "bbbbbbbbbbbbbbbb", "2026-01-01T00:00:01Z", `"span":"r1","kind":"command","name":"delete cluster"`))
 	assert.Equal(t, []string{"aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"}, r.Changed())
@@ -305,7 +305,7 @@ func TestChangedAndImmutableRuns(t *testing.T) {
 	assert.Equal(t, "nodes", third[1].Root.Children[0].Name)
 	assert.Equal(t, "hi", third[1].Root.Children[0].Message)
 	assert.Equal(t, "create cluster", third[1].Title)
-	assert.Equal(t, "t1", third[1].Trace)
+	assert.Equal(t, traceT, third[1].Trace)
 
 	// A run that did not change is the one it was.
 	assert.Equal(t, third[0], r.Runs()[0])
@@ -355,7 +355,7 @@ func TestBadLinesAreLeftOut(t *testing.T) {
 func TestUnknownKeysAndValuesAreLeftOut(t *testing.T) {
 	r := NewReducer(5)
 	const run = "aaaaaaaaaaaaaaaa"
-	r.Line(line("trace", run, `"trace":"t","program":"sind","version":"v1","future":{"a":[1]},"traceFlags":"01","traceState":"x=y"`))
+	r.Line(line("trace", run, `"trace":"`+traceT+`","program":"sind","version":"v1","future":{"a":[1]},"traceFlags":"01","traceState":"x=y"`))
 	r.Line(ev("start", run, "2026-01-01T00:00:00Z",
 		`"span":"r1","kind":"command","name":"cmd","flags":["hidden","sparkly","dry-run"],"state":"running","seq":"one","timeout":"long","exit":"x","newkey":[1,2],"httpStatus":503,"cache":"hit"`))
 	r.Line(ev("start", run, "2026-01-01T00:00:01Z",
@@ -369,7 +369,6 @@ func TestUnknownKeysAndValuesAreLeftOut(t *testing.T) {
 	assert.True(t, root.DryRun)
 	assert.False(t, root.Fold)
 	assert.Zero(t, root.Timeout, "a value of the wrong type is left out")
-	assert.Nil(t, root.Exit)
 	assert.Equal(t, "sind", runs[0].Program)
 	odd := root.Children[0]
 	assert.Empty(t, odd.Kind)

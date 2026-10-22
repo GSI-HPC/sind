@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/progress/eventlog"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -36,12 +37,13 @@ func Follow(ctx context.Context, st *store.Store, path string) {
 // the time after which a run is stale.
 func follow(ctx context.Context, st *store.Store, path string, keep int, active, idle, staleAfter time.Duration) {
 	red := NewReducer(keep)
-	tail := NewTail(path, red)
+	tail := eventlog.NewTail(path, red)
 	busy := false
 	var runs []store.Run
 	for {
 		var ids []string
-		if tail.Poll() {
+		// A log that cannot be read is an empty one: the next poll tries again.
+		if changed, _ := tail.Poll(); changed {
 			if ids = red.Changed(); len(ids) > 0 {
 				runs = red.Runs()
 			}
