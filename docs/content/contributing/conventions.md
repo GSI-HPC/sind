@@ -97,7 +97,7 @@ The docs are a Hugo site in `docs/`. A page that tells how to do a task shows it
 ```
 
 - Keep the heading and the text that is true for both outside the block. Only the steps change.
-- A web UI variant has one to four numbered steps, one screenshot and, for a dialog with fields, a table of its fields and their flags.
+- A web UI variant is one sentence, or two to four numbered steps. It shows one screenshot of the page, tab or dialog of the task, if a shot shows it. For a dialog whose fields map to flags, add a table of its fields and their flags.
 - A page that the web UI cannot do sets `webui: none` in its front matter. It then shows a note in web UI mode: `webuiNote`, or a default.
 - `uishot "NAME"` shows a screenshot of `sind ui`, light or dark as the page, with the alt text of the shot. `NAME` is a shot of `tools/screenshots/shots.yaml`; add one there for a new screenshot. The docs workflow takes the screenshots, and `make docs-shots` takes them locally, which needs Chromium. They are not committed.
 
