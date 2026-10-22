@@ -292,17 +292,16 @@ func runMCPList(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	if err != nil {
 		return err
 	}
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tCOMMAND")
+	t := newTable("NAME", "COMMAND")
 	servers := cfg.Servers()
 	for _, s := range servers {
 		command := s.URL
 		if s.Command != "" {
 			command = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(s.Name), cell(command))
+		t.Add(cell(s.Name), cell(command))
 	}
-	if err := w.Flush(); err != nil {
+	if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 		return err
 	}
 	// The file names where sind looked: a mistyped --config-path reads

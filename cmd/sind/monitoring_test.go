@@ -96,15 +96,15 @@ func TestGetCluster_Monitored(t *testing.T) {
 func TestGetMonitoring(t *testing.T) {
 	stdout, _, err := executeWithMock(&mock.Executor{OnCall: monitoredOnCall(t)}, "get", "monitoring")
 	require.NoError(t, err)
-	assert.Equal(t, `SERVICE      CONTAINER         ADDRESS                            STATUS
-grafana      sind-grafana      http://grafana.sind.sind:3000      running
-prometheus   sind-prometheus   http://prometheus.sind.sind:9090   running
-loki         sind-loki         http://loki.sind.sind:3100         running
-alloy        sind-alloy        -                                  exited
+	assert.Equal(t, `SERVICE     CONTAINER        ADDRESS                           STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
+loki        sind-loki        http://loki.sind.sind:3100        running
+alloy       sind-alloy       -                                 exited
 
 CLUSTERS
-NAME   NODES   SLURM
-dev    2       26.05.5
+NAME  NODES  SLURM
+dev   2      26.05.5
 `, stdout)
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: monitoredOnCall(t)}, "get", "monitoring", "-o", "json")
@@ -133,7 +133,7 @@ func TestGetMonitoring_NoClusters(t *testing.T) {
 	stdout, stderr, err := executeWithMock(m, "get", "monitoring")
 
 	require.NoError(t, err)
-	assert.True(t, strings.HasSuffix(stdout, "\nCLUSTERS\nNAME   NODES   SLURM\n"), stdout)
+	assert.True(t, strings.HasSuffix(stdout, "\nCLUSTERS\nNAME  NODES  SLURM\n"), stdout)
 	assert.Equal(t, "No monitored clusters found in realm \"sind\".\n", stderr)
 }
 
