@@ -112,6 +112,9 @@ func take(parent context.Context, root string, s Shot, size Size, theme string, 
 	for _, st := range s.Steps {
 		tasks = append(tasks, step(st), quiet())
 	}
+	if s.Hide != "" {
+		tasks = append(tasks, hide(s.Hide))
+	}
 	if s.Fit {
 		tasks = append(tasks, shorten(size), quiet())
 	}
@@ -203,4 +206,10 @@ func shorten(size Size) chromedp.Action {
 		height := min(int64(size.Height), max(minHeight, int64(math.Ceil(bottom))+24))
 		return emulation.SetDeviceMetricsOverride(int64(size.Width), height, 1, false).Do(ctx)
 	})
+}
+
+// hide hides the elements that match the selector, keeping their space.
+func hide(selector string) chromedp.Action {
+	js := fmt.Sprintf(`document.querySelectorAll(%q).forEach(e => e.style.visibility = 'hidden')`, selector)
+	return chromedp.Evaluate(js, nil)
 }
