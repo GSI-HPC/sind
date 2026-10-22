@@ -51,6 +51,22 @@ func ActivityLogPath() (string, error) {
 // others than its owner. The log is a convenience, so no caller makes a
 // command fail for the error.
 func PrepareActivityLog() (string, error) {
+	path, err := PrepareActivityDir()
+	if err != nil {
+		return "", err
+	}
+	if err := rotateLog(path, activityLogLimit); err != nil {
+		return "", err
+	}
+	return path, checkLog(path)
+}
+
+// PrepareActivityDir creates the state directory, readable by its owner
+// alone (mode 0700), and returns the path of the activity log in it, which
+// it leaves as it is: go-clikit's cliprogress moves it aside and checks it
+// as it opens it (Options.DefaultLog). It fails when the directory cannot
+// be made, as in a read-only home.
+func PrepareActivityDir() (string, error) {
 	path, err := ActivityLogPath()
 	if err != nil {
 		return "", err
@@ -60,12 +76,9 @@ func PrepareActivityLog() (string, error) {
 		return "", err
 	}
 	// A directory that is not this user's keeps its mode; the log's own
-	// mode, which checkLog holds to, is what keeps it private.
+	// mode, which the check of the log holds to, is what keeps it private.
 	_ = os.Chmod(dir, 0o700)
-	if err := rotateLog(path, activityLogLimit); err != nil {
-		return "", err
-	}
-	return path, checkLog(path)
+	return path, nil
 }
 
 // rotateLog moves the log at path to path+".1", replacing an older copy,
