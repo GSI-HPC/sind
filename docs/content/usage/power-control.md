@@ -18,8 +18,8 @@ sind power <action> NODES
 {{< ui >}}
 
 1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node.
-2. Press the action, such as **Reboot…**. The dialog lists the actions that fit the state of the nodes.
-3. Press the button of the dialog.
+2. Press the action, such as **Reboot…**. The dialog lists every action and selects the one that you pressed.
+3. Press **Run**.
 
 {{< uishot "dialog-power" >}}
 

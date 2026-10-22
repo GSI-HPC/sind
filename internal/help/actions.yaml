@@ -34,7 +34,7 @@
   words: [worker, nodeset]
 - id: power
   title: Power
-  summary: Starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog offers each verb that fits the state of the nodes.
+  summary: Starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog lists every verb and selects the one of the button that opened it.
   command: sind power reboot NODES
   undo: Use the opposite verb
   doc: usage/power-control
