@@ -142,7 +142,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 
 // exec plays a command as the child of the runner would run it.
 func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, id string, p plan) {
-	log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, Run: id, AdvanceEvery: 250 * time.Millisecond})
+	log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, Run: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
 	bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
 	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, p.title, targetOf(p.target)...)
 	pl := play{clk: s.clk, emit: s.emitter(p.realm, nil)}

@@ -48,8 +48,14 @@ const (
 
 // logAdvanceEvery is the least time between two advances of a step that
 // the event log writes, so that sind ui moves a bar four times a second;
-// go-clikit writes one a second by default.
-const logAdvanceEvery = 250 * time.Millisecond
+// go-clikit writes one a second by default. logFlushEvery is how long a
+// line of the event log waits at most before it is written, so that sind
+// ui, which follows the log, shows an event within a few frames; go-clikit
+// waits a second by default.
+const (
+	logAdvanceEvery = 250 * time.Millisecond
+	logFlushEvery   = 25 * time.Millisecond
+)
 
 // The seams of the progress display. Tests replace them to draw on a
 // terminal of their own, such as a progresstest.Screen, frame by frame;
@@ -268,7 +274,7 @@ func progressOptions(interrupt context.Context, cmd *cobra.Command) cliprogress.
 			Variable: envProgress, Env: os.Getenv(envProgress)},
 		Log: cliprogress.Setting{Flag: "--progress-log", Given: flags.Changed("progress-log"), Value: logPath,
 			Variable: envProgressLog, Env: os.Getenv(envProgressLog)},
-		LogOptions: progress.LogOptions{Version: strings.TrimPrefix(resolveVersion(), "v"), AdvanceEvery: logAdvanceEvery},
+		LogOptions: progress.LogOptions{Version: strings.TrimPrefix(resolveVersion(), "v"), AdvanceEvery: logAdvanceEvery, FlushEvery: logFlushEvery},
 		Stderr:     stderr,
 		OnTerminal: onTerminal(stderr),
 		Dumb:       os.Getenv("TERM") == "dumb",
