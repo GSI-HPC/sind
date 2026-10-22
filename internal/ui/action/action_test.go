@@ -208,9 +208,9 @@ func TestBuildCreateWorker(t *testing.T) {
 
 func TestBuildCreateWorker_Errors(t *testing.T) {
 	for field, tc := range map[string]struct{ f, want string }{
-		"count":  {"count=0", "How many: write a number from 1 to 64"},
-		"count2": {"", "How many: write a number from 1 to 64"},
-		"cpus":   {"count=1&cpus=x", "CPUs: write a number from 1 to 64"},
+		"count":  {"count=0", "How many: write a number from 1 to 1024"},
+		"count2": {"", "How many: write a number from 1 to 1024"},
+		"cpus":   {"count=1&cpus=x", "CPUs: write a number from 1 to 1024"},
 		"memory": {"count=1&memory=lots", `memory: invalid memory "lots"`},
 	} {
 		t.Run(field, func(t *testing.T) {

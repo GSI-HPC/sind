@@ -23,7 +23,7 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	count, err := number(f, "count", "How many", 1, maxWorkers, -1)
+	count, err := number(f, "count", "How many", 1, maxCount, -1)
 	if err != nil {
 		return Command{}, err
 	}
@@ -32,7 +32,7 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 		words = append(words, "--count", fmt.Sprint(count))
 	}
 	if s := strings.TrimSpace(f.Get("cpus")); s != "" {
-		cpus, err := number(f, "cpus", "CPUs", 1, 64, -1)
+		cpus, err := number(f, "cpus", "CPUs", 1, maxCPUs, -1)
 		if err != nil {
 			return Command{}, err
 		}

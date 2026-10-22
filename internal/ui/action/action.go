@@ -87,6 +87,9 @@ type File struct {
 type PlannedNode struct {
 	Short string
 	Role  string
+	// Key is the node of the form that makes it: a role, backup, or the
+	// key of a worker group.
+	Key string
 }
 
 // NewCommand returns the command with the arguments argv.

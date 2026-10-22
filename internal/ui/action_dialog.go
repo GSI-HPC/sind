@@ -3,10 +3,13 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/ui/action"
@@ -21,7 +24,7 @@ var actDialogKeys = []string{
 	"realm", "cluster", "nodes", "op", "container",
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
-	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "cpus", "memory", "users",
+	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
 	"dtype", "dir", "mkdir", "mount", "monitoring", "pull", "wait_other",
 }
 
@@ -29,7 +32,7 @@ const (
 	// actMaxValue is the longest value of a field a form may post, in
 	// bytes; actMaxValues is the most values.
 	actMaxValue  = 1024
-	actMaxValues = 256
+	actMaxValues = 512
 )
 
 // actCheckForm refuses a form with a value that is too long, or too many.
@@ -63,8 +66,8 @@ type actSpec struct {
 	// Plan puts the preview into a pane beside the fields, which shows
 	// the plan of the command even while a field is wrong.
 	Plan bool
-	// Fields are the fields that show their own problem.
-	Fields []string
+	// Fields returns the fields of the form that show their own problem.
+	Fields func(f url.Values) []string
 	// Sections are the parts of the form that fold, each with a line
 	// that sums it up.
 	Sections []actSection
@@ -78,7 +81,7 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFields, Sections: actClusterSections,
+		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
 		Lead: func(d *actDialog) string {
 			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
@@ -94,7 +97,17 @@ var actSpecs = map[string]actSpec{
 			d.def("wait", action.DefaultWait)
 			d.def("db", "on")
 			d.def("submitter", "on")
-			d.def("workers", "2")
+			if !d.Form.Has("wg") {
+				d.Form.Set("wg", "w0")
+				d.Form.Set("w0-count", cmp.Or(d.Form.Get("workers"), "2"))
+			}
+			if !d.Form.Has("size") {
+				// A link with a size of its own gives custom values.
+				d.Form.Set("size", "s")
+				if d.Form.Has("cpus") || d.Form.Has("memory") || d.Form.Has("tmp") {
+					d.Form.Set("size", "x")
+				}
+			}
 			d.def("cpus", "1")
 			d.def("memory", "512m")
 			d.def("dtype", "hostPath")
@@ -260,6 +273,169 @@ func (p actPreview) Sections() []actSectionView {
 	return out
 }
 
+// actEff are the node defaults of a new cluster, which a node takes where
+// its own field is empty.
+type actEff struct {
+	Image, CPUs, Memory, TmpSize string
+}
+
+// actEffOf returns the node defaults of the form.
+func actEffOf(f url.Values) actEff {
+	e := actEff{Image: strings.TrimSpace(f.Get("image")), CPUs: "1", Memory: config.DefaultMemory, TmpSize: config.DefaultTmpSize}
+	if e.Image == "" {
+		e.Image = config.DefaultImage
+	}
+	if f.Get("size") == "x" {
+		e.CPUs = cmp.Or(strings.TrimSpace(f.Get("cpus")), e.CPUs)
+		e.Memory = cmp.Or(strings.TrimSpace(f.Get("memory")), e.Memory)
+		e.TmpSize = cmp.Or(strings.TrimSpace(f.Get("tmp")), e.TmpSize)
+		return e
+	}
+	for _, size := range action.Sizes {
+		if size.ID == f.Get("size") {
+			e.CPUs, e.Memory, e.TmpSize = strconv.Itoa(size.CPUs), size.Memory, cmp.Or(size.TmpSize, e.TmpSize)
+		}
+	}
+	return e
+}
+
+// actNodeView is a node of the New cluster dialog: a role or a worker group,
+// with its size button and editor.
+type actNodeView struct {
+	Key, Label string
+	// Group says that the node is a worker group.
+	Group bool
+	// Eff are the node defaults, which the editor shows as placeholders.
+	Eff  actEff
+	form url.Values
+	// first is the index of the first worker of a group.
+	first int
+}
+
+// actNodeOf returns the node key of the form.
+func actNodeOf(f url.Values, key string) actNodeView {
+	n := actNodeView{Key: key, Label: key, Eff: actEffOf(f), form: f}
+	if !slices.Contains(action.NodeRoles, key) {
+		n.Group, n.Label = true, "workers"
+	}
+	return n
+}
+
+// Val returns the value of the node's field attr.
+func (n actNodeView) Val(attr string) string { return n.form.Get(n.Key + "-" + attr) }
+
+// On reports whether the node's checkbox attr is ticked.
+func (n actNodeView) On(attr string) bool { return actOn(n.Val(attr)) }
+
+// Managed says whether the node can be unmanaged: the submitter cannot.
+func (n actNodeView) Managed() bool { return n.Key != "submitter" }
+
+// UnmanagedHint says what an unmanaged node is.
+func (n actNodeView) UnmanagedHint() string {
+	switch {
+	case n.Key == "controller":
+		return "Makes the cluster unmanaged: sind writes no Slurm config and starts no Slurm daemons."
+	case n.Group:
+		return "The workers start without slurmd."
+	}
+	return "The node starts without its daemons."
+}
+
+// actList is a field of a node that takes a list.
+type actList struct{ Attr, Example string }
+
+// Lists are the fields of the node that take a list.
+func (n actNodeView) Lists() []actList {
+	return []actList{{"capAdd", "such as SYS_ADMIN"}, {"capDrop", "such as NET_RAW"}, {"devices", "such as /dev/fuse"}, {"securityOpt", "such as seccomp=unconfined"}}
+}
+
+// Chip is the text of the node's size button: its own values, or
+// "defaults".
+func (n actNodeView) Chip() string {
+	var parts []string
+	if v := strings.TrimSpace(n.Val("cpus")); v != "" {
+		parts = append(parts, v+" CPU"+map[bool]string{true: "", false: "s"}[v == "1"])
+	}
+	if v := strings.TrimSpace(n.Val("memory")); v != "" {
+		parts = append(parts, v)
+	}
+	if v := strings.TrimSpace(n.Val("tmp")); v != "" {
+		parts = append(parts, "/tmp "+v)
+	}
+	if strings.TrimSpace(n.Val("image")) != "" {
+		parts = append(parts, "own image")
+	}
+	if n.Managed() && n.On("unmanaged") {
+		parts = append(parts, "unmanaged")
+	}
+	for _, l := range n.Lists() {
+		if strings.TrimSpace(n.Val(l.Attr)) != "" {
+			parts = append(parts, "more")
+			break
+		}
+	}
+	if len(parts) == 0 {
+		return "defaults"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// Own says that the node has values of its own.
+func (n actNodeView) Own() bool { return n.Chip() != "defaults" }
+
+// Open says that the node's editor starts open: where it has values of
+// its own.
+func (n actNodeView) Open() bool { return n.Own() }
+
+// Range names the workers of a group, as the dialog opens.
+func (n actNodeView) Range() string {
+	count, err := strconv.Atoi(strings.TrimSpace(n.Val("count")))
+	if err != nil || count < 1 {
+		count = 1
+	}
+	return actRange(n.first, n.first+count-1)
+}
+
+// actRange names the workers first to last.
+func actRange(first, last int) string {
+	if first == last {
+		return fmt.Sprintf("worker-%d", first)
+	}
+	return fmt.Sprintf("worker-%d … worker-%d", first, last)
+}
+
+// actOn reports whether a checkbox's value is ticked: on, or the 1 of a
+// link.
+func actOn(v string) bool { return slices.Contains([]string{"on", "1", "true"}, strings.TrimSpace(v)) }
+
+// Node returns the node key of the dialog; a worker group knows the index
+// of its first worker.
+func (d *actDialog) Node(key string) actNodeView {
+	n := actNodeOf(d.Form, key)
+	for _, g := range d.Groups() {
+		if g == key {
+			break
+		}
+		n.first += actNodeOf(d.Form, g).count()
+	}
+	return n
+}
+
+// count is the number of workers of a group, 1 where its field is wrong.
+func (n actNodeView) count() int {
+	c, err := strconv.Atoi(strings.TrimSpace(n.Val("count")))
+	if err != nil || c < 1 {
+		return 1
+	}
+	return c
+}
+
+// Groups are the keys of the worker groups.
+func (d *actDialog) Groups() []string { return action.WorkerGroups(d.Form) }
+
+// Sizes are the node defaults that the dialog offers.
+func (d *actDialog) Sizes() []action.Size { return action.Sizes }
+
 // actDialog is what the dialog's templates render from.
 type actDialog struct {
 	*View
@@ -317,9 +493,7 @@ func (d *actDialog) Roles() []actRole { return actRoles }
 func (d *actDialog) Memories() []string { return actMemories }
 
 // On reports whether the checkbox field is ticked: on, or the 1 of a link.
-func (d *actDialog) On(field string) bool {
-	return slices.Contains([]string{"on", "1", "true"}, strings.TrimSpace(d.Form.Get(field)))
-}
+func (d *actDialog) On(field string) bool { return actOn(d.Form.Get(field)) }
 
 // DirFollows reports whether the directory is the one that the name gives,
 // which then follows the name as the user types it.
@@ -477,6 +651,58 @@ func (p actPreview) Tiles() []action.PlannedNode {
 
 // More is how many nodes the plan does not draw.
 func (p actPreview) More() int { return len(p.Cmd.Nodes) - len(p.Tiles()) }
+
+// Fields are the fields of the form that show their own problem.
+func (p actPreview) Fields() []string {
+	if p.Spec.Fields == nil {
+		return nil
+	}
+	return p.Spec.Fields(p.Form)
+}
+
+// NodeViews are the nodes of a new cluster whose size buttons and ranges
+// the preview updates.
+func (p actPreview) NodeViews() []actNodeView {
+	var out []actNodeView
+	for _, key := range action.NodeRoles {
+		out = append(out, actNodeOf(p.Form, key))
+	}
+	for _, g := range action.WorkerGroups(p.Form) {
+		if actGroupPattern.MatchString(g) {
+			out = append(out, actNodeOf(p.Form, g))
+		}
+	}
+	return out
+}
+
+// actGroupPattern is the key of a worker group, which ends up in ids.
+var actGroupPattern = regexp.MustCompile(`^w[0-9a-z]{1,8}$`)
+
+// Eff are the node defaults of a new cluster.
+func (p actPreview) Eff() actEff { return actEffOf(p.Form) }
+
+// RangeOf names the workers of the group key in the plan.
+func (p actPreview) RangeOf(key string) string {
+	first, last := -1, -1
+	for i, n := range p.Cmd.Nodes {
+		if n.Key == key {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 0 {
+		return ""
+	}
+	return actRange(actWorkerIndex(p.Cmd.Nodes[first]), actWorkerIndex(p.Cmd.Nodes[last]))
+}
+
+// actWorkerIndex is the number in the name of a worker.
+func actWorkerIndex(n action.PlannedNode) int {
+	i, _ := strconv.Atoi(strings.TrimPrefix(n.Short, "worker-"))
+	return i
+}
 
 // ProblemOf returns what is wrong with the field, or "".
 func (p actPreview) ProblemOf(field string) string {

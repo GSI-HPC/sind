@@ -53,8 +53,10 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{template "act-callouts" .}}
 {{end}}
 <button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" hx-swap-oob="true"{{if .Blocked}} disabled{{end}}>{{.Spec.OK}}</button>
-{{range .Spec.Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
-{{if .Spec.Plan}}<span class="hint" id="act-pull-hint" data-act-pull="{{if .PullOn}}on{{else}}off{{end}}" hx-swap-oob="true">{{.PullHint}}</span>
+{{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
+{{if .Spec.Plan}}{{range .NodeViews}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}} hx-swap-oob="true">{{.Chip}}</span>{{if .Group}}<span class="hint" id="act-range-{{.Key}}" hx-swap-oob="true">{{$p.RangeOf .Key}}</span>{{end}}{{end}}
+{{with .Eff}}<span id="act-eff" hidden hx-swap-oob="true" data-image="{{.Image}}" data-cpus="{{.CPUs}}" data-memory="{{.Memory}}" data-tmp="{{.TmpSize}}"></span>{{end}}
+<span class="hint" id="act-pull-hint" data-act-pull="{{if .PullOn}}on{{else}}off{{end}}" hx-swap-oob="true">{{.PullHint}}</span>
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
 {{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
 {{end}}{{end}}
@@ -86,6 +88,37 @@ the nodes, the command and the config also while a field is wrong. */}}
 {{end}}
 {{end}}
 
+{{/* act-chip is the size button of a node of a new cluster, which opens
+its editor. */}}
+{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Open}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-label="Size of {{.Label}}">{{template "act-chip-text" .}}</button>{{end}}
+
+{{define "act-chip-text"}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}}>{{.Chip}}</span>{{end}}
+
+{{/* act-group is a worker group of a new cluster: its row and editor. */}}
+{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>workers</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
+  <span class="act-k"><span class="act-step"><button type="button" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer workers">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" data-act-step="{{.Key}}-count" data-d="1" aria-label="More workers">+</button></span><button type="button" class="act-x" data-act-wgdel="{{.Key}}" aria-label="Remove this worker group">✕</button></span></div>
+{{template "act-ned" .}}{{end}}
+
+{{/* act-ned is the editor of the size and more of a node of a new
+cluster. An empty field takes the node defaults, which it shows as its
+placeholder. */}}
+{{define "act-ned"}}<div class="act-ned" id="act-ed-{{.Key}}"{{if not .Open}} hidden{{end}}>
+  <div class="act-edg">
+    <div class="fld"><label for="act-{{.Key}}-image">Image</label><input type="text" id="act-{{.Key}}-image" name="{{.Key}}-image" value="{{.Val "image"}}" placeholder="{{.Eff.Image}}" data-act-ph="image" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-image"><span class="err" id="act-err-{{.Key}}-image"></span></div>
+    <div class="fld"><label for="act-{{.Key}}-cpus">CPUs</label><input type="number" id="act-{{.Key}}-cpus" name="{{.Key}}-cpus" value="{{.Val "cpus"}}" min="1" placeholder="{{.Eff.CPUs}}" data-act-ph="cpus" aria-describedby="act-err-{{.Key}}-cpus"><span class="err" id="act-err-{{.Key}}-cpus"></span></div>
+    <div class="fld"><label for="act-{{.Key}}-memory">Memory</label><input type="text" id="act-{{.Key}}-memory" name="{{.Key}}-memory" value="{{.Val "memory"}}" list="act-memories" placeholder="{{.Eff.Memory}}" data-act-ph="memory" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-memory"><span class="err" id="act-err-{{.Key}}-memory"></span></div>
+    <div class="fld"><label for="act-{{.Key}}-tmp">/tmp</label><input type="text" id="act-{{.Key}}-tmp" name="{{.Key}}-tmp" value="{{.Val "tmp"}}" placeholder="{{.Eff.TmpSize}}" data-act-ph="tmp" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-tmp"><span class="err" id="act-err-{{.Key}}-tmp"></span></div>
+  </div>
+  <div class="act-inline"><span class="hint">Empty fields take the node defaults.{{if eq .Key "controller"}} The backup controller gets the same values.{{end}}</span><button type="button" class="btn sm" data-act-reset="{{.Key}}">Use the defaults</button></div>
+  <details class="act-more"><summary>More: managed, capabilities, devices</summary>
+    <div class="act-edg">
+      {{if .Managed}}<label class="act-nr act-box act-full"><input type="checkbox" id="act-{{.Key}}-unmanaged" name="{{.Key}}-unmanaged"{{if .On "unmanaged"}} checked{{end}} aria-describedby="act-err-{{.Key}}-unmanaged"><span class="act-lab"><b>Unmanaged</b><span class="hint">{{.UnmanagedHint}}</span><span class="err" id="act-err-{{.Key}}-unmanaged"></span></span></label>{{end}}
+      {{range .Lists}}<div class="fld"><label for="act-{{$.Key}}-{{.Attr}}">{{.Attr}}</label><input type="text" id="act-{{$.Key}}-{{.Attr}}" name="{{$.Key}}-{{.Attr}}" value="{{$.Val .Attr}}" placeholder="{{.Example}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{$.Key}}-{{.Attr}}"><span class="err" id="act-err-{{$.Key}}-{{.Attr}}"></span></div>{{end}}
+      <span class="hint act-full">These give the container more rights on the host. They add to those of the node defaults. Separate values with commas.</span>
+    </div>
+  </details>
+</div>{{end}}
+
 {{/* act-nodes is the picker of the nodes of a cluster. */}}
 {{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
   {{if .Nodes}}<div class="checks act-nodes">{{range .Nodes}}<label><input type="checkbox" name="nodes" value="{{.Short}}"{{if .On}} checked{{end}}> <span class="mono">{{.Short}}</span> <small>{{.Role}}, {{.State}}</small></label>{{end}}</div>
@@ -99,20 +132,34 @@ the nodes, the command and the config also while a field is wrong. */}}
     <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
 </div>
 <div class="fld"><span class="lbl">Nodes</span>
-<div class="act-roles">
-  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b>controller</b><span class="hint">slurmctld. Every cluster has one.</span></span><span class="act-always">always</span></div>
-  {{range .Roles}}<label class="act-nr{{if .Sub}} sub{{end}}"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if $.On .Name}} checked{{end}} aria-describedby="act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i><span class="act-lab"><b>{{.Label}}{{with .Small}} <small>{{.}}</small>{{end}}</b><span class="hint">{{.Hint}}</span><span class="err" id="act-err-{{.Name}}"></span></span></label>
-  {{end}}<div class="act-nr"><span></span><i class="act-sq worker"></i><label class="act-lab" for="act-workers"><b>workers</b><span class="hint">Run slurmd. 1 to 64.</span><span class="err" id="act-err-workers"></span></label>
-    <span class="act-step"><button type="button" data-act-step="workers" data-d="-1" aria-label="Fewer workers">−</button><input type="number" id="act-workers" name="workers" value="{{.Val "workers"}}" min="1" max="64" aria-describedby="act-err-workers"><button type="button" data-act-step="workers" data-d="1" aria-label="More workers">+</button></span></div>
-</div></div>
-<label class="act-nr act-box"><input type="checkbox" id="act-monitoring" name="monitoring"{{if .On "monitoring"}} checked{{end}} aria-describedby="act-err-monitoring"><span class="act-lab"><b>Monitoring</b><span class="hint">Adds the nodes to the realm's Prometheus, Loki and Grafana. Needs Slurm 26.05 or later in the image.</span><span class="err" id="act-err-monitoring"></span></span></label>
-<div class="row">
-  <div class="fld"><label for="act-cpus">CPUs per node</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" min="1" max="64" aria-describedby="act-err-cpus"><span class="err" id="act-err-cpus"></span></div>
-  <div class="fld"><label for="act-memory">Memory per node</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" list="act-memories" autocapitalize="off" spellcheck="false" aria-describedby="act-err-memory act-hint-memory">
-    <datalist id="act-memories">{{range .Memories}}<option value="{{.}}"></option>{{end}}</datalist><span class="err" id="act-err-memory"></span><span class="hint" id="act-hint-memory">Such as 512m, 2g or 1.5g.</span></div>
-  <div class="fld"><label for="act-users">Users</label><input type="text" id="act-users" name="users" value="{{.Val "users"}}" placeholder="none" autocapitalize="off" spellcheck="false" aria-describedby="act-err-users act-hint-users">
-    <span class="err" id="act-err-users"></span><span class="hint" id="act-hint-users">sind creates them on every node, with a home.</span></div>
+<div class="act-roles" id="act-roles">
+  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b>controller</b><span class="hint">slurmctld. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
+  {{template "act-ned" (.Node "controller")}}
+  {{range .Roles}}<div class="act-nr{{if .Sub}} sub{{end}}"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if $.On .Name}} checked{{end}} aria-describedby="act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i><label class="act-lab" for="act-{{.Name}}"><b>{{.Label}}{{with .Small}} <small>{{.}}</small>{{end}}</b><span class="hint">{{.Hint}}</span><span class="err" id="act-err-{{.Name}}"></span></label>{{if not .Sub}}{{template "act-chip" ($.Node .Name)}}{{end}}</div>
+  {{if not .Sub}}{{template "act-ned" ($.Node .Name)}}{{end}}{{end}}
+  <div class="act-groups" id="act-groups">{{range .Groups}}{{template "act-group" ($.Node .)}}{{end}}</div>
 </div>
+<div class="act-inline"><button type="button" class="btn sm" data-act-wgadd>+ Add worker group</button><span class="hint">Each group has its own size. sind create worker later copies the last group.</span></div>
+<span id="act-eff" hidden></span>
+<template id="act-wg-tpl">{{template "act-group" (.Node "__WG__")}}</template>
+</div>
+<label class="act-nr act-box"><input type="checkbox" id="act-monitoring" name="monitoring"{{if .On "monitoring"}} checked{{end}} aria-describedby="act-err-monitoring"><span class="act-lab"><b>Monitoring</b><span class="hint">Adds the nodes to the realm's Prometheus, Loki and Grafana. Needs Slurm 26.05 or later in the image.</span><span class="err" id="act-err-monitoring"></span></span></label>
+<div class="fld"><span class="lbl" id="act-size-lbl">Node defaults</span>
+  <div class="act-size">
+    <div class="seg act-seg act-sizes" role="radiogroup" aria-labelledby="act-size-lbl">{{range .Sizes}}<label><input type="radio" name="size" value="{{.ID}}"{{if $.Is "size" .ID}} checked{{end}}{{if eq .ID "s"}} id="act-size"{{end}}><span>{{.Label}}<small>{{.CPUs}} CPU{{if ne .CPUs 1}}s{{end}} · {{.Memory}} · /tmp {{or .TmpSize "256m"}}</small></span></label>{{end}}<label><input type="radio" name="size" value="x"{{if .Is "size" "x"}} checked{{end}}><span>Custom<small>your values</small></span></label></div>
+    <div class="row act-custom">
+      <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" min="1" aria-describedby="act-err-cpus"><span class="err" id="act-err-cpus"></span></div>
+      <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" list="act-memories" placeholder="512m" autocapitalize="off" spellcheck="false" aria-describedby="act-err-memory act-hint-memory">
+        <span class="err" id="act-err-memory"></span><span class="hint" id="act-hint-memory">Such as 512m, 2g or 1.5g.</span></div>
+      <div class="fld"><label for="act-tmp">/tmp</label><input type="text" id="act-tmp" name="tmp" value="{{.Val "tmp"}}" placeholder="256m" autocapitalize="off" spellcheck="false" aria-describedby="act-err-tmp"><span class="err" id="act-err-tmp"></span></div>
+    </div>
+  </div>
+  <span class="err" id="act-err-size"></span>
+  <span class="hint">Every node takes these values. The size button of a node changes them for that node or worker group.</span>
+  <datalist id="act-memories">{{range .Memories}}<option value="{{.}}"></option>{{end}}</datalist>
+</div>
+<div class="fld"><label for="act-users">Users</label><input type="text" id="act-users" name="users" value="{{.Val "users"}}" placeholder="none" autocapitalize="off" spellcheck="false" aria-describedby="act-err-users act-hint-users">
+  <span class="err" id="act-err-users"></span><span class="hint" id="act-hint-users">sind creates them on every node, with a home.</span></div>
 <details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>
   <div class="act-sbody">
     <div class="seg act-seg" role="radiogroup" aria-label="Data storage">
@@ -143,8 +190,8 @@ the nodes, the command and the config also while a field is wrong. */}}
 
 {{define "act-dlg-create-worker"}}
 <div class="row">
-  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1" max="64"></div>
-  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="as the newest worker" min="1" max="64"></div>
+  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="as the newest worker" min="1"></div>
   <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="as the newest worker" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
 </div>
 {{end}}

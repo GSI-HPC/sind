@@ -134,7 +134,7 @@ func TestDemo_RunsACommandEndToEnd(t *testing.T) {
 	r := startRun(t, Options{Demo: true, NoOpen: true, registry: defaultRegistry.snapshot()})
 	s := openDemo(t, r)
 
-	form := url.Values{"realm": {"sind"}, "name": {"e2e"}, "workers": {"1"}, "cpus": {"1"}, "dtype": {"volume"}, "wait": {"1m"}}
+	form := url.Values{"realm": {"sind"}, "name": {"e2e"}, "w0-count": {"1"}, "cpus": {"1"}, "dtype": {"volume"}, "wait": {"1m"}}
 	_, preview := s.post("/actions/create-cluster/preview", form)
 	m := regexp.MustCompile(`name="shown" value="([^"]*)"`).FindStringSubmatch(preview)
 	require.NotNil(t, m, preview)

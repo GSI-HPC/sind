@@ -37,21 +37,6 @@ var Waits = []string{"2m", "5m", "10m", "0"}
 // leaves out.
 const DefaultWait = "5m"
 
-// Roles of the New cluster dialog that are a checkbox: zero or one node.
-var switchRoles = []struct{ field, label string }{
-	{"backup", "controller-backup"}, {"db", "db"}, {"api", "api"}, {"submitter", "submitter"},
-}
-
-// maxWorkers is the most workers the New cluster dialog makes.
-const maxWorkers = 64
-
-// Defaults of the New cluster dialog that the plan falls back to while
-// their field is wrong.
-const (
-	defaultCPUs    = 1
-	defaultWorkers = 1
-)
-
 // imagePattern is what the image reference of a form may look like: the
 // characters of a registry, repository, tag and digest.
 var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$`)
@@ -109,17 +94,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 			ps.add("image", "Image", true, errors.New("write an image reference such as ghcr.io/gsi-hpc/sind-node:latest"))
 		}
 	}
-	if cfg.Defaults.CPUs, err = number(f, "cpus", "CPUs per node", 1, 64, defaultCPUs); err != nil {
-		ps.add("cpus", "CPUs per node", true, errors.New("write a number from 1 to 64"))
-		cfg.Defaults.CPUs = defaultCPUs
-	}
-	if memory := strings.TrimSpace(f.Get("memory")); memory != "" {
-		if err := config.CheckMemory("memory", memory); err != nil {
-			ps.add("memory", "Memory per node", true, err)
-		} else {
-			cfg.Defaults.Memory = memory
-		}
-	}
+	nodeDefaults(f, &cfg.Defaults, &ps)
 	nodes, planned := clusterNodes(f, &ps)
 	cfg.Nodes = nodes
 	cfg.Users = clusterUsers(f, &ps)
@@ -139,7 +114,8 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		// Never a path from a name that sind refuses, such as ../x.
 		file = "NAME"
 	}
-	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(a.Field) - fieldOrder(b.Field) })
+	order := ClusterFieldsOf(f)
+	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(order, a.Field) - fieldOrder(order, b.Field) })
 	var flags []string
 	if pull {
 		flags = append(flags, "--pull")
@@ -150,7 +126,8 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cmd := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
 	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
 	cmd.Nodes = planned
-	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s each.", len(planned), cfg.Defaults.CPUs*len(planned), memoryLabel(cfg.Defaults.Memory))
+	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
+	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
 	cmd.Warns = warns
 	cmd.Problems = ps
 	if data.home {
@@ -178,17 +155,13 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	return cmd, nil
 }
 
-// ClusterFields are the fields of the New cluster dialog in the order it shows
-// them, which its problems follow.
-var ClusterFields = []string{"name", "image", "backup", "db", "api", "submitter", "workers", "monitoring", "cpus", "memory", "users", "dtype", "dir", "mkdir", "mount", "pull", "wait", "wait_other"}
-
-// fieldOrder is the place of field in the dialog; the config as a whole
-// comes last.
-func fieldOrder(field string) int {
-	if i := slices.Index(ClusterFields, field); i >= 0 {
+// fieldOrder is the place of field in order, the fields of the dialog;
+// the config as a whole comes last.
+func fieldOrder(order []string, field string) int {
+	if i := slices.Index(order, field); i >= 0 {
 		return i
 	}
-	return len(ClusterFields)
+	return len(order)
 }
 
 // checkClusterName records the problems of the cluster's name: one that
@@ -278,43 +251,6 @@ func checkbox(f Form, field, label string, ps *problems) bool {
 	}
 	ps.add(field, label, true, errors.New("tick the box or leave it empty"))
 	return false
-}
-
-// memoryLabel is the memory of a node for the summary.
-func memoryLabel(m string) string {
-	if m == "" {
-		return config.DefaultMemory
-	}
-	return m
-}
-
-// clusterNodes reads the roles of the New cluster dialog: the nodes of the
-// config, and the same nodes one by one for the preview.
-func clusterNodes(f Form, ps *problems) ([]config.Node, []PlannedNode) {
-	workers, err := number(f, "workers", "Workers", 1, maxWorkers, -1)
-	if err != nil {
-		ps.add("workers", "Workers", true, fmt.Errorf("write a number from 1 to %d", maxWorkers))
-		workers = defaultWorkers
-	}
-	nodes := []config.Node{{Role: config.RoleController}}
-	planned := []PlannedNode{{"controller", "controller"}}
-	for _, r := range switchRoles {
-		if !checkbox(f, r.field, r.label, ps) {
-			continue
-		}
-		if r.field == "backup" {
-			nodes[0].BackupController = true
-			planned = append(planned, PlannedNode{"controller-backup", "controller-backup"})
-			continue
-		}
-		nodes = append(nodes, config.Node{Role: config.Role(r.field)})
-		planned = append(planned, PlannedNode{r.field, r.field})
-	}
-	nodes = append(nodes, config.Node{Role: config.RoleWorker, Count: workers})
-	for i := range workers {
-		planned = append(planned, PlannedNode{"worker-" + strconv.Itoa(i), "worker"})
-	}
-	return nodes, planned
 }
 
 // clusterUsers reads the field "users": names separated by commas or

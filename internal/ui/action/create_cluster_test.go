@@ -15,7 +15,7 @@ import (
 
 // valid is a form that builds; each case changes one field of it.
 func valid(kv ...string) Form {
-	f := form("name", "hpc", "workers", "2", "dir", "/scratch/hpc")
+	f := form("name", "hpc", "w0-count", "2", "dir", "/scratch/hpc")
 	for i := 0; i+1 < len(kv); i += 2 {
 		f.Set(kv[i], kv[i+1])
 	}
@@ -26,6 +26,7 @@ const wantMinimalConfig = `kind: Cluster
 name: hpc
 defaults:
   cpus: 1
+  memory: 512m
 storage:
   dataStorage:
     type: hostPath
@@ -45,8 +46,8 @@ func TestBuildCreateCluster_Minimal(t *testing.T) {
 	require.NotNil(t, cmd.Config)
 	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", cmd.Config.Path)
 	assert.Equal(t, wantMinimalConfig, cmd.Config.Content)
-	assert.Equal(t, []PlannedNode{{"controller", "controller"}, {"worker-0", "worker"}, {"worker-1", "worker"}}, cmd.Nodes)
-	assert.Equal(t, "3 containers, 3 CPUs, 512m each.", cmd.Summary)
+	assert.Equal(t, []PlannedNode{{"controller", "controller", "controller"}, {"worker-0", "worker", "w0"}, {"worker-1", "worker", "w0"}}, cmd.Nodes)
+	assert.Equal(t, "3 containers, 3 CPUs, 1.5 GiB of memory.", cmd.Summary)
 	assert.Empty(t, cmd.Warns)
 	require.Len(t, cmd.Notes, 1)
 	assert.Contains(t, cmd.Notes[0], "saves the config to /state/sind/ui/configs/hpc.yaml (mode 0600)")
@@ -55,7 +56,7 @@ func TestBuildCreateCluster_Minimal(t *testing.T) {
 func TestBuildCreateCluster_Everything(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid(
 		"realm", "ci", "image", "ghcr.io/gsi-hpc/sind-node:26.05.4", "cpus", "2", "memory", "1g",
-		"backup", "1", "db", "1", "api", "1", "submitter", "1", "workers", "3", "users", "alice, bob alice",
+		"backup", "1", "db", "1", "api", "1", "submitter", "1", "w0-count", "3", "users", "alice, bob alice",
 		"monitoring", "on", "pull", "on", "wait", "10m", "dtype", "hostPath", "dir", "~/sind/hpc"))
 	require.NoError(t, err)
 
@@ -84,9 +85,9 @@ nodes:
     count: 3
 monitoring: true
 `, cmd.Config.Content)
-	assert.Equal(t, "8 containers, 16 CPUs, 1g each.", cmd.Summary)
-	assert.Contains(t, cmd.Nodes, PlannedNode{"controller-backup", "controller-backup"})
-	assert.Contains(t, cmd.Nodes, PlannedNode{"api", "api"})
+	assert.Equal(t, "8 containers, 16 CPUs, 8 GiB of memory.", cmd.Summary)
+	assert.Contains(t, cmd.Nodes, PlannedNode{"controller-backup", "controller-backup", "backup"})
+	assert.Contains(t, cmd.Nodes, PlannedNode{"api", "api", "api"})
 	require.Len(t, cmd.Notes, 3)
 	assert.Contains(t, cmd.Notes[1], "Monitoring needs Slurm 26.05 or later")
 	assert.Contains(t, cmd.Notes[2], "The api node needs slurmrestd")
@@ -289,10 +290,10 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"name long with db", valid("name", long, "db", "on"), "name", "with a db node the name may have at most 40 characters", false},
 		{"image", valid("image", "bad image"), "image", "write an image reference", true},
 		{"image option", valid("image", "-v"), "image", "write an image reference", true},
-		{"cpus", valid("cpus", "0"), "cpus", "write a number from 1 to 64", true},
+		{"cpus", valid("cpus", "0"), "cpus", "write a number from 1 to 1024", true},
 		{"memory", valid("memory", "lots"), "memory", `invalid memory "lots"`, true},
-		{"workers missing", valid("workers", ""), "workers", "write a number from 1 to 64", true},
-		{"workers many", valid("workers", "65"), "workers", "write a number from 1 to 64", true},
+		{"workers missing", valid("w0-count", ""), "w0-count", "write a number from 1 to 1024", true},
+		{"workers many", valid("w0-count", "1025"), "w0-count", "write a number from 1 to 1024", true},
 		{"checkbox", valid("db", "2"), "db", "tick the box or leave it empty", true},
 		{"user", valid("users", "Alice! bob Bad?"), "users", "must start with a lowercase letter", false},
 		{"wait", valid("wait", "soon"), "wait", "write a time such as 15m", true},
@@ -324,7 +325,7 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 }
 
 func TestBuildCreateCluster_PlanTakesTheDefaultsOfWrongFields(t *testing.T) {
-	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "workers", "x", "image", "bad image", "wait", "7 min", "users", "ada Bad"))
+	cmd, err := build(t, "create-cluster", valid("cpus", "x", "memory", "8 gigs", "w0-count", "x", "image", "bad image", "wait", "7 min", "users", "ada Bad"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)
@@ -347,7 +348,7 @@ nodes:
 	for _, p := range cmd.Problems {
 		fields = append(fields, p.Field)
 	}
-	assert.Equal(t, []string{"image", "workers", "cpus", "memory", "users", "wait"}, fields, "in the order of the dialog")
+	assert.Equal(t, []string{"image", "w0-count", "cpus", "memory", "users", "wait"}, fields, "in the order of the dialog")
 }
 
 func TestBuildCreateCluster_WrongNameKeepsThePlan(t *testing.T) {
