@@ -84,7 +84,7 @@ func TestMCPEnable_VSCodeWorkspaceWithComments(t *testing.T) {
 	require.NoError(t, err)
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	assert.Equal(t, "NAME    COMMAND\nslurm   "+exe+" mcp start\n", stdout)
+	assert.Equal(t, "NAME   COMMAND\nslurm  "+exe+" mcp start\n", stdout)
 
 	_, _, err = executeCommand("mcp", "vscode", "disable", "--workspace", "--server-name", "slurm")
 	require.NoError(t, err)
@@ -263,15 +263,15 @@ func TestMCPList(t *testing.T) {
 
 	stdout, _, err := executeCommand("mcp", "claude", "list", "--config-path", path)
 	require.NoError(t, err)
-	assert.Equal(t, "NAME               COMMAND\n"+
-		"sind               /usr/bin/sind mcp start\n"+
-		"web                https://example.com/mcp\n"+
-		`evil\x1b]0;x\x07   x`+"\n", stdout)
+	assert.Equal(t, "NAME              COMMAND\n"+
+		"sind              /usr/bin/sind mcp start\n"+
+		"web               https://example.com/mcp\n"+
+		`evil\x1b]0;x\x07  x`+"\n", stdout)
 
 	none := filepath.Join(t.TempDir(), "none.json")
 	stdout, stderr, err := executeCommand("mcp", "claude", "list", "--config-path", none)
 	require.NoError(t, err)
-	assert.Equal(t, "NAME   COMMAND\n", stdout)
+	assert.Equal(t, "NAME  COMMAND\n", stdout)
 	assert.Equal(t, "No MCP servers found in \""+none+"\".\n", stderr, "the note names the file, so that a mistyped path shows")
 }
 

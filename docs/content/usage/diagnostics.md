@@ -258,31 +258,31 @@ Open the cluster. The **Summary** tab shows each node and its services, and the 
 Displays detailed health information:
 
 ```
-CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.8   running (4/0/0/4)
+CLUSTER  SLURM    STATUS (R/S/P/T)
+dev      25.11.8  running (4/0/0/4)
 
 NETWORKS
-NAME           DRIVER   SUBNET          GATEWAY      STATUS
-sind-mesh      bridge   172.18.0.0/16   172.18.0.1   ✓
-sind-dev-net   bridge   172.19.0.0/16   172.19.0.1   ✓
+NAME          DRIVER  SUBNET         GATEWAY     STATUS
+sind-mesh     bridge  172.18.0.0/16  172.18.0.1  ✓
+sind-dev-net  bridge  172.19.0.0/16  172.19.0.1  ✓
 
 MESH SERVICES
-NAME   CONTAINER   STATUS
-dns    sind-dns    ✓
-ssh    sind-ssh    ✓
+NAME  CONTAINER  STATUS
+dns   sind-dns   ✓
+ssh   sind-ssh   ✓
 
 MOUNTS
-MOUNT        SOURCE               TYPE       STATUS
-/etc/slurm   sind-dev-config      volume     ✓
-/etc/munge   sind-dev-munge       volume     ✓
-/data        /home/user/project   hostPath   ✓
+MOUNT       SOURCE              TYPE      STATUS
+/etc/slurm  sind-dev-config     volume    ✓
+/etc/munge  sind-dev-munge      volume    ✓
+/data       /home/user/project  hostPath  ✓
 
 NODES
-NAME             ROLE         IP           STATUS    SERVICES
-controller.dev   controller   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
-db.dev           db           172.19.0.5   running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev     worker       172.19.0.3   running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev     worker       172.19.0.4   running   munge ✓ slurmd ✗ sshd ✓
+NAME            ROLE        IP          STATUS   SERVICES
+controller.dev  controller  172.19.0.2  running  munge ✓ slurmctld ✓ sshd ✓
+db.dev          db          172.19.0.5  running  mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev    worker      172.19.0.3  running  munge ✓ slurmd ✓ sshd ✓
+worker-1.dev    worker      172.19.0.4  running  munge ✓ slurmd ✗ sshd ✓
 ```
 
 `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters. The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -313,20 +313,20 @@ When the realm has a [monitoring stack]({{< relref "/guides/monitoring" >}}), `M
 
 ```
 MESH SERVICES
-NAME         CONTAINER         STATUS
-dns          sind-dns          ✓
-ssh          sind-ssh          ✓
-grafana      sind-grafana      ✓
-prometheus   sind-prometheus   ✓
-loki         sind-loki         ✓
-alloy        sind-alloy        ✓
+NAME        CONTAINER        STATUS
+dns         sind-dns         ✓
+ssh         sind-ssh         ✓
+grafana     sind-grafana     ✓
+prometheus  sind-prometheus  ✓
+loki        sind-loki        ✓
+alloy       sind-alloy       ✓
 
 MOUNTS
-MOUNT              SOURCE                    TYPE       STATUS
-/etc/slurm         sind-dev-config           volume     ✓
-/etc/munge         sind-dev-munge            volume     ✓
-/data              /home/user/project        hostPath   ✓
-/var/log/journal   sind-journal:dev/<node>   volume     ✓
+MOUNT             SOURCE                   TYPE      STATUS
+/etc/slurm        sind-dev-config          volume    ✓
+/etc/munge        sind-dev-munge           volume    ✓
+/data             /home/user/project       hostPath  ✓
+/var/log/journal  sind-journal:dev/<node>  volume    ✓
 ```
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
@@ -361,14 +361,14 @@ Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster.
 Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `default`. A full DNS name ending in `.sind` is rejected.
 
 ```
-CONTAINER             ROLE         FQDN                       IP           STATUS
-sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+CONTAINER            ROLE        FQDN                      IP          STATUS
+sind-dev-controller  controller  controller.dev.sind.sind  172.19.0.2  running
 
 SERVICES
-NAME        STATUS
-munge       ✓
-slurmctld   ✓
-sshd        ✓
+NAME       STATUS
+munge      ✓
+slurmctld  ✓
+sshd       ✓
 ```
 
 Controllers of a backup pair get the same `HA` column as in `sind get cluster`.
@@ -431,10 +431,10 @@ Open **Nodes** in the rail for every node of the realm, or the **Nodes** tab of 
 Without a `CLUSTER` argument, lists every node in the realm with an extra `CLUSTER` column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`.
 
 ```
-CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
-sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
-sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
-sind-default-worker-1     default   worker       worker-1.default.sind.sind     172.19.0.4   running
+CONTAINER                CLUSTER  ROLE        FQDN                          IP          STATUS
+sind-default-controller  default  controller  controller.default.sind.sind  172.19.0.2  running
+sind-default-worker-0    default  worker      worker-0.default.sind.sind    172.19.0.3  running
+sind-default-worker-1    default  worker      worker-1.default.sind.sind    172.19.0.4  running
 ```
 
 ## List networks
@@ -457,9 +457,9 @@ Open the cluster, then the **Network and storage** tab. **Mesh and DNS** shows t
 {{< /ways >}}
 
 ```
-NAME               DRIVER   SUBNET          GATEWAY
-sind-default-net   bridge   172.19.0.0/16   172.19.0.1
-sind-mesh          bridge   172.18.0.0/16   172.18.0.1
+NAME              DRIVER  SUBNET         GATEWAY
+sind-default-net  bridge  172.19.0.0/16  172.19.0.1
+sind-mesh         bridge  172.18.0.0/16  172.18.0.1
 ```
 
 ## List realms
@@ -480,9 +480,9 @@ The **Realms** table of the Overview lists each realm with its clusters, nodes a
 {{< /ways >}}
 
 ```
-NAME   CLUSTERS
-ci     1
-sind   2
+NAME  CLUSTERS
+ci    1
+sind  2
 ```
 
 Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what's running.
@@ -505,11 +505,11 @@ Open the cluster, then the **Network and storage** tab. It lists the volumes and
 {{< /ways >}}
 
 ```
-NAME                  DRIVER
-sind-default-config   local
-sind-default-data     local
-sind-default-munge    local
-sind-ssh-config       local
+NAME                 DRIVER
+sind-default-config  local
+sind-default-data    local
+sind-default-munge   local
+sind-ssh-config      local
 ```
 
 ## DNS records
@@ -530,9 +530,9 @@ Open **Mesh and DNS**. It lists the DNS records of the realm.
 {{< /ways >}}
 
 ```
-HOSTNAME                       IP
-controller.default.sind.sind   172.19.0.2
-worker-0.default.sind.sind     172.19.0.3
+HOSTNAME                      IP
+controller.default.sind.sind  172.19.0.2
+worker-0.default.sind.sind    172.19.0.3
 ```
 
 ## Authentication key
@@ -614,16 +614,16 @@ Open **Monitoring**. It shows Grafana, Prometheus, Loki and Alloy with their add
 Shows the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}): each service's container, address and state, and the clusters it collects, with their number of monitored nodes and their Slurm version.
 
 ```
-SERVICE      CONTAINER         ADDRESS                            STATUS
-grafana      sind-grafana      http://grafana.sind.sind:3000      running
-prometheus   sind-prometheus   http://prometheus.sind.sind:9090   running
-loki         sind-loki         http://loki.sind.sind:3100         running
-alloy        sind-alloy        http://172.18.0.9:12345            running
+SERVICE     CONTAINER        ADDRESS                           STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
+loki        sind-loki        http://loki.sind.sind:3100        running
+alloy       sind-alloy       http://172.18.0.9:12345           running
 
 CLUSTERS
-NAME      NODES   SLURM
-default   3       26.05.5
-dev       5       26.05.5
+NAME     NODES  SLURM
+default  3      26.05.5
+dev      5      26.05.5
 ```
 
 `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):

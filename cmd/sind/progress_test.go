@@ -837,26 +837,33 @@ func TestTheDefaultDisplaySeams(t *testing.T) {
 	assert.True(t, intoPipe(w))
 }
 
-// The displays draw Classic on a terminal, in as many colours as it shows,
-// and in its marks alone under NO_COLOR; plain text off a terminal and on
-// a dumb one, where plain lines go to a log.
+// The displays draw Classic on a terminal, in as many colours as the
+// environment says it shows, and in its marks alone under NO_COLOR; plain
+// text off a terminal and on a dumb one, where plain lines go to a log.
 func TestTheDisplaysDrawClassic(t *testing.T) {
 	savedTerm, savedProfile := onTerminal, colourProfile
 	t.Cleanup(func() { onTerminal, colourProfile = savedTerm, savedProfile })
-	t.Setenv("TERM", "xterm-256color")
 	onTerminal = func(io.Writer) bool { return true }
-	for profile, want := range map[termenv.Profile]display.Theme{
-		termenv.TrueColor: display.Classic.In(display.Colours256),
-		termenv.ANSI256:   display.Classic.In(display.Colours256),
-		termenv.ANSI:      display.Classic.In(display.Colours16),
-		termenv.Ascii:     display.Classic.In(display.NoColours),
+	for name, tc := range map[string]struct {
+		env  map[string]string
+		want display.Theme
+	}{
+		"256 colours in TERM": {map[string]string{"TERM": "xterm-256color"}, display.Classic.In(display.Colours256)},
+		"COLORTERM":           {map[string]string{"TERM": "xterm", "COLORTERM": "truecolor"}, display.Classic.In(display.Colours256)},
+		"the terminal's 16":   {map[string]string{"TERM": "xterm"}, display.Classic.In(display.Colours16)},
+		"NO_COLOR":            {map[string]string{"TERM": "xterm-256color", "NO_COLOR": "1"}, display.Classic.In(display.NoColours)},
+		"a dumb terminal":     {map[string]string{"TERM": "dumb"}, display.Theme{}},
 	} {
-		colourProfile = func(io.Writer) termenv.Profile { return profile }
-		assert.Equal(t, want, progressTheme(io.Discard), profile)
+		t.Setenv("TERM", "")
+		t.Setenv("COLORTERM", "")
+		t.Setenv("NO_COLOR", "")
+		for k, v := range tc.env {
+			t.Setenv(k, v)
+		}
+		assert.Equal(t, tc.want, progressTheme(io.Discard), name)
 	}
-	t.Setenv("TERM", "dumb")
-	assert.Equal(t, display.Theme{}, progressTheme(io.Discard), "dumb")
 	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
 	onTerminal = func(io.Writer) bool { return false }
 	assert.Equal(t, display.Theme{}, progressTheme(io.Discard), "no terminal")
 

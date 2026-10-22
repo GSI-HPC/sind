@@ -11,7 +11,6 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // The exit statuses of sind. Scripts branch on them, so they may be added
@@ -35,13 +34,7 @@ const (
 // that is not one of the words it takes, the one form of every such error:
 // invalid --output value "yaml": want human or json.
 func invalidFlagValue(name, value string, words ...string) error {
-	return invalidValue(name, value, oneOf(words))
-}
-
-// invalidValue returns the usage error for a value of the flag --name, with
-// what the flag wants instead.
-func invalidValue(name, value, want string) error {
-	return cobratree.Usagef("invalid --%s value %q: want %s", name, value, want)
+	return cobratree.InvalidValue(name, value, oneOf(words))
 }
 
 // oneOf lists words as "a, b or c".
@@ -50,29 +43,6 @@ func oneOf(words []string) string {
 		return strings.Join(words, "")
 	}
 	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
-}
-
-// flagValueWants says what a flag of each pflag type wants, for the values
-// pflag's parsers reject with their own text (strconv.ParseInt: …, time:
-// missing unit in duration …).
-var flagValueWants = map[string]string{
-	"int":      "a whole number",
-	"count":    "a whole number",
-	"bool":     "true or false",
-	"duration": "a duration with a unit, such as 90s, 5m or 1h30m",
-}
-
-// flagError is the FlagErrorFunc of every command. A value that pflag
-// cannot parse as the flag's type reads as the other invalid flag values
-// do (invalidValue), instead of Go's parser error; every other flag error
-// is kept. Both are usage errors (cobratree.IsUsage).
-func flagError(_ *cobra.Command, err error) error {
-	if invalid, ok := errors.AsType[*pflag.InvalidValueError](err); ok {
-		if want, ok := flagValueWants[invalid.GetFlag().Value.Type()]; ok {
-			return invalidValue(invalid.GetFlag().Name, invalid.GetValue(), want)
-		}
-	}
-	return err
 }
 
 // argsUsageError marks an error in the arguments of a command, whose

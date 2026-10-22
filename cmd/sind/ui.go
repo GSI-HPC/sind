@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/ui"
 	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/spf13/cobra"
@@ -36,7 +37,7 @@ of running them: it needs no Docker, starts no process and writes nothing.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := collect.CheckInterval(o.MonitoringInterval); err != nil {
-				return invalidValue("monitoring-interval", o.MonitoringInterval.String(), "a duration from 5s to 1h")
+				return cobratree.InvalidValue("monitoring-interval", o.MonitoringInterval.String(), "a duration from 5s to 1h")
 			}
 			o.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")
 			o.Stderr = cmd.ErrOrStderr()

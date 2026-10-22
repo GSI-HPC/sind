@@ -9,9 +9,10 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/GSI-HPC/go-clikit/cliout"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -76,7 +77,7 @@ func runGet[T any](cmd *cobra.Command, fetch fetchFunc[T], human func(cmd *cobra
 		return err
 	}
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), v)
+		return cliout.WriteJSON(cmd.OutOrStdout(), v)
 	}
 	return human(cmd, v, realm)
 }
@@ -106,17 +107,15 @@ func newGetNodesCommand() *cobra.Command {
 
 func runGetClusters(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, cluster.GetClusters, func(cmd *cobra.Command, clusters []*cluster.Summary, realm string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/A/W)\tSLURM\tSTATUS")
+		t := newTable("NAME", "NODES (S/C/D/A/W)", "SLURM", "STATUS")
 		for _, c := range clusters {
-			_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d/%d)\t%s\t%s\n",
-				cell(c.Name),
-				c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.APIs, c.Workers,
+			t.Add(cell(c.Name),
+				fmt.Sprintf("%d (%d/%d/%d/%d/%d)", c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.APIs, c.Workers),
 				formatSlurmVersion(c.SlurmVersion),
-				c.State,
+				string(c.State),
 			)
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 			return err
 		}
 		noteNone(cmd, len(clusters), "clusters", inRealm(realm))
@@ -135,14 +134,13 @@ func runGetRealms(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), realms)
+		return cliout.WriteJSON(cmd.OutOrStdout(), realms)
 	}
-	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tCLUSTERS")
+	t := newTable("NAME", "CLUSTERS")
 	for _, r := range realms {
-		_, _ = fmt.Fprintf(w, "%s\t%d\n", cell(r.Name), r.Clusters)
+		t.Add(cell(r.Name), strconv.Itoa(r.Clusters))
 	}
-	if err := w.Flush(); err != nil {
+	if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 		return err
 	}
 	noteNone(cmd, len(realms), "realms", "")
@@ -177,37 +175,35 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	}
 	return runGet(cmd, getNode, func(cmd *cobra.Command, n *cluster.NodeDetail, _ string) error {
 		out := cmd.OutOrStdout()
-		w := newTabWriter(out)
+		var t *cliout.Table
 		if n.HA != nil {
-			_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tHA\tFQDN\tIP\tSTATUS")
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", n.Container, cell(n.Role), formatHA(n.HA), n.FQDN, cell(n.IP), cell(n.Status))
+			t = newTable("CONTAINER", "ROLE", "HA", "FQDN", "IP", "STATUS")
+			t.Add(n.Container, cell(n.Role), formatHA(n.HA), n.FQDN, cell(n.IP), cell(n.Status))
 		} else {
-			_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", n.Container, cell(n.Role), n.FQDN, cell(n.IP), cell(n.Status))
+			t = newTable("CONTAINER", "ROLE", "FQDN", "IP", "STATUS")
+			t.Add(n.Container, cell(n.Role), n.FQDN, cell(n.IP), cell(n.Status))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(out, t); err != nil {
 			return err
 		}
 
 		_, _ = fmt.Fprintln(out)
 		_, _ = fmt.Fprintln(out, "SERVICES")
-		w = newTabWriter(out)
-		_, _ = fmt.Fprintln(w, "NAME\tSTATUS")
+		t = newTable("NAME", "STATUS")
 		for _, name := range slices.Sorted(maps.Keys(n.Services)) {
-			_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(n.Services[name]))
+			t.Add(string(name), checkmark(n.Services[name]))
 		}
-		return w.Flush()
+		return writeTable(out, t)
 	})
 }
 
 func runGetAllNodes(cmd *cobra.Command) error {
 	return runGet(cmd, cluster.GetAllNodes, func(cmd *cobra.Command, nodes []*cluster.NodeSummary, realm string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "CONTAINER\tCLUSTER\tROLE\tFQDN\tIP\tSTATUS")
+		t := newTable("CONTAINER", "CLUSTER", "ROLE", "FQDN", "IP", "STATUS")
 		for _, n := range nodes {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
+			t.Add(cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 			return err
 		}
 		noteNone(cmd, len(nodes), "nodes", inRealm(realm))
@@ -220,23 +216,21 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 		return cluster.GetNodes(ctx, client, realm, name)
 	}
 	return runGet(cmd, getNodes, func(cmd *cobra.Command, nodes []*cluster.NodeSummary, _ string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
+		t := newTable("CONTAINER", "ROLE", "FQDN", "IP", "STATUS")
 		for _, n := range nodes {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
+			t.Add(cell(n.Container), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 		}
-		return w.Flush()
+		return writeTable(cmd.OutOrStdout(), t)
 	})
 }
 
 func runGetNetworks(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, cluster.GetNetworks, func(cmd *cobra.Command, networks []*cluster.NetworkSummary, realm string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
+		t := newTable("NAME", "DRIVER", "SUBNET", "GATEWAY")
 		for _, n := range networks {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(n.Name), cell(n.Driver), cell(n.Subnet), cell(n.Gateway))
+			t.Add(cell(n.Name), cell(n.Driver), cell(n.Subnet), cell(n.Gateway))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 			return err
 		}
 		noteNone(cmd, len(networks), "networks", inRealm(realm))
@@ -246,12 +240,11 @@ func runGetNetworks(cmd *cobra.Command, _ []string) error {
 
 func runGetVolumes(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, cluster.GetVolumes, func(cmd *cobra.Command, volumes []*cluster.VolumeSummary, realm string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "NAME\tDRIVER")
+		t := newTable("NAME", "DRIVER")
 		for _, v := range volumes {
-			_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(v.Name), cell(v.Driver))
+			t.Add(cell(v.Name), cell(v.Driver))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 			return err
 		}
 		noteNone(cmd, len(volumes), "volumes", inRealm(realm))
@@ -261,12 +254,11 @@ func runGetVolumes(cmd *cobra.Command, _ []string) error {
 
 func runGetDNS(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, fromMesh((*mesh.Manager).GetDNSRecords), func(cmd *cobra.Command, records []mesh.DNSRecord, realm string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "HOSTNAME\tIP")
+		t := newTable("HOSTNAME", "IP")
 		for _, r := range records {
-			_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(r.Hostname), cell(r.IP))
+			t.Add(cell(r.Hostname), cell(r.IP))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(cmd.OutOrStdout(), t); err != nil {
 			return err
 		}
 		noteNone(cmd, len(records), "DNS records", inRealm(realm))
@@ -346,7 +338,7 @@ func runGetSSHConfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), conf)
+		return cliout.WriteJSON(cmd.OutOrStdout(), conf)
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), conf.Path)
 	if !conf.Exists {
@@ -357,17 +349,20 @@ func runGetSSHConfig(cmd *cobra.Command, _ []string) error {
 
 func runGetMesh(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, fromMesh((*mesh.Manager).GetInfo), func(cmd *cobra.Command, info *mesh.Info, _ string) error {
-		w := newTabWriter(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(w, "PROPERTY\tVALUE")
-		_, _ = fmt.Fprintf(w, "network\t%s\n", cell(info.Network))
-		_, _ = fmt.Fprintf(w, "dns-container\t%s\n", cell(info.DNSContainer))
-		_, _ = fmt.Fprintf(w, "dns-ip\t%s\n", cell(info.DNSIP))
-		_, _ = fmt.Fprintf(w, "dns-zone\t%s\n", cell(info.DNSZone))
-		_, _ = fmt.Fprintf(w, "dns-image\t%s\n", cell(info.DNSImage))
-		_, _ = fmt.Fprintf(w, "ssh-container\t%s\n", cell(info.SSHContainer))
-		_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", cell(info.SSHVolume))
-		_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", cell(info.SSHImage))
-		return w.Flush()
+		t := newTable("PROPERTY", "VALUE")
+		for _, row := range [][2]string{
+			{"network", info.Network},
+			{"dns-container", info.DNSContainer},
+			{"dns-ip", info.DNSIP},
+			{"dns-zone", info.DNSZone},
+			{"dns-image", info.DNSImage},
+			{"ssh-container", info.SSHContainer},
+			{"ssh-volume", info.SSHVolume},
+			{"ssh-image", info.SSHImage},
+		} {
+			t.Add(row[0], cell(row[1]))
+		}
+		return writeTable(cmd.OutOrStdout(), t)
 	})
 }
 
@@ -381,23 +376,21 @@ func runGetCoreDNSConfig(cmd *cobra.Command, _ []string) error {
 func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, cluster.GetMonitoring, func(cmd *cobra.Command, m *cluster.Monitoring, realm string) error {
 		out := cmd.OutOrStdout()
-		w := newTabWriter(out)
-		_, _ = fmt.Fprintln(w, "SERVICE\tCONTAINER\tADDRESS\tSTATUS")
+		t := newTable("SERVICE", "CONTAINER", "ADDRESS", "STATUS")
 		for _, s := range m.Services {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(s.URL), formatServiceState(s))
+			t.Add(string(s.Name), cell(s.Container), cell(s.URL), formatServiceState(s))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(out, t); err != nil {
 			return err
 		}
 
 		_, _ = fmt.Fprintln(out)
 		_, _ = fmt.Fprintln(out, "CLUSTERS")
-		w = newTabWriter(out)
-		_, _ = fmt.Fprintln(w, "NAME\tNODES\tSLURM")
+		t = newTable("NAME", "NODES", "SLURM")
 		for _, c := range m.Clusters {
-			_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n", cell(c.Name), c.Nodes, formatSlurmVersion(c.SlurmVersion))
+			t.Add(cell(c.Name), strconv.Itoa(c.Nodes), formatSlurmVersion(c.SlurmVersion))
 		}
-		if err := w.Flush(); err != nil {
+		if err := writeTable(out, t); err != nil {
 			return err
 		}
 		noteNone(cmd, len(m.Clusters), "monitored clusters", inRealm(realm))
@@ -445,10 +438,9 @@ func printStatus(cmd *cobra.Command, status *cluster.Status, realm string) error
 	out := cmd.OutOrStdout()
 
 	// Header table
-	w := newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "CLUSTER\tSLURM\tSTATUS (R/S/P/T)")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", cell(status.Name), formatSlurmVersion(status.SlurmVersion), formatState(status))
-	if err := w.Flush(); err != nil {
+	t := newTable("CLUSTER", "SLURM", "STATUS (R/S/P/T)")
+	t.Add(cell(status.Name), formatSlurmVersion(status.SlurmVersion), formatState(status))
+	if err := writeTable(out, t); err != nil {
 		return err
 	}
 
@@ -456,73 +448,62 @@ func printStatus(cmd *cobra.Command, status *cluster.Status, realm string) error
 	net := status.Network
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "NETWORKS")
-	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY\tSTATUS")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(net.MeshName), cell(net.MeshDriver), cell(net.MeshSubnet), cell(net.MeshGateway), checkmark(net.Mesh))
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(net.ClusterName), cell(net.ClusterDriver), cell(net.ClusterSubnet), cell(net.ClusterGateway), checkmark(net.Cluster))
-	if err := w.Flush(); err != nil {
+	t = newTable("NAME", "DRIVER", "SUBNET", "GATEWAY", "STATUS")
+	t.Add(cell(net.MeshName), cell(net.MeshDriver), cell(net.MeshSubnet), cell(net.MeshGateway), checkmark(net.Mesh))
+	t.Add(cell(net.ClusterName), cell(net.ClusterDriver), cell(net.ClusterSubnet), cell(net.ClusterGateway), checkmark(net.Cluster))
+	if err := writeTable(out, t); err != nil {
 		return err
 	}
 
 	// Mesh services table
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "MESH SERVICES")
-	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
-	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", cell(net.DNSName), checkmark(net.DNS))
-	_, _ = fmt.Fprintf(w, "ssh\t%s\t%s\n", cell(net.SSHName), checkmark(net.SSH))
+	t = newTable("NAME", "CONTAINER", "STATUS")
+	t.Add("dns", cell(net.DNSName), checkmark(net.DNS))
+	t.Add("ssh", cell(net.SSHName), checkmark(net.SSH))
 	for i, ready := range net.StackHealth() {
 		if ready != nil {
 			s := observability.Services[i]
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", s, observability.ContainerName(realm, s), checkmark(*ready))
+			t.Add(string(s), string(observability.ContainerName(realm, s)), checkmark(*ready))
 		}
 	}
-	if err := w.Flush(); err != nil {
+	if err := writeTable(out, t); err != nil {
 		return err
 	}
 
 	// Mounts table
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "MOUNTS")
-	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
+	t = newTable("MOUNT", "SOURCE", "TYPE", "STATUS")
 	for _, m := range status.Mounts {
 		source := m.Source
 		if m.Subpath != "" {
 			source += ":" + m.Subpath + "/<node>"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(m.Path), cell(source), cell(m.Type), checkmark(m.OK))
+		t.Add(cell(m.Path), cell(source), cell(m.Type), checkmark(m.OK))
 	}
-	if err := w.Flush(); err != nil {
+	if err := writeTable(out, t); err != nil {
 		return err
 	}
 
 	// Nodes table
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "NODES")
-	w = newTabWriter(out)
 	withHA := slices.ContainsFunc(status.Nodes, func(n *cluster.NodeStatus) bool { return n.Health.HA != nil })
 	if withHA {
-		_, _ = fmt.Fprintln(w, "NAME\tROLE\tHA\tIP\tSTATUS\tSERVICES")
+		t = newTable("NAME", "ROLE", "HA", "IP", "STATUS", "SERVICES")
 	} else {
-		_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tSTATUS\tSERVICES")
+		t = newTable("NAME", "ROLE", "IP", "STATUS", "SERVICES")
 	}
 	for _, n := range status.Nodes {
 		h := n.Health
 		if withHA {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-				cell(n.Name), cell(n.Role), formatHA(h.HA), cell(h.IP), cell(h.State), formatServices(h.Services))
+			t.Add(cell(n.Name), cell(n.Role), formatHA(h.HA), cell(h.IP), cell(h.State), formatServices(h.Services))
 			continue
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			cell(n.Name),
-			cell(n.Role),
-			cell(h.IP),
-			cell(h.State),
-			formatServices(h.Services),
-		)
+		t.Add(cell(n.Name), cell(n.Role), cell(h.IP), cell(h.State), formatServices(h.Services))
 	}
-	return w.Flush()
+	return writeTable(out, t)
 }
 
 // formatHA renders a controller's pair position, marking the controller in
@@ -614,6 +595,17 @@ func getSSHKey(jsonKey string, get func(*mesh.Manager, context.Context) (string,
 	}
 }
 
-func newTabWriter(out io.Writer) *tabwriter.Writer {
-	return tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
+// newTable returns a table with the columns named, every one shown.
+func newTable(names ...string) *cliout.Table {
+	t := &cliout.Table{Columns: make([]cliout.Column, len(names))}
+	for i, name := range names {
+		t.Columns[i].Name = name
+	}
+	return t
+}
+
+// writeTable writes t to out, without the columns that only -o wide shows,
+// which sind has none of.
+func writeTable(out io.Writer, t *cliout.Table) error {
+	return t.Write(out, false)
 }

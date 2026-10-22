@@ -178,39 +178,16 @@ func TestTheDefaultActivityLogIsRotated(t *testing.T) {
 	assert.Equal(t, "trace", readJSONLines(t, log)[0]["type"], "the log is a new one")
 }
 
-// The notes of cliprogress that name the default log are dropped, the
-// others are passed on: what the log says of itself is never the command's.
-func TestDropNotesAbout(t *testing.T) {
-	var out bytes.Buffer
-	w := dropNotesAbout{w: &out, path: "/state/sind/activity.jsonl"}
-
-	for _, note := range []string{
-		"sind: the progress log /state/sind/activity.jsonl stops short: no space left on device\n",
-		"sind: the default activity log names a progress log that cannot be used: x; no log is written\n",
-	} {
-		n, err := w.Write([]byte(note))
-		require.NoError(t, err)
-		assert.Equal(t, len(note), n)
-	}
-	assert.Empty(t, out.String())
-
-	note := "sind: SIND_PROGRESS is \"plian\"; it takes one of auto; no progress is shown\n"
-	n, err := w.Write([]byte(note))
-	require.NoError(t, err)
-	assert.Equal(t, len(note), n)
-	assert.Equal(t, note, out.String())
-}
-
 // withActivityLog leaves the options alone for a flag or a variable that is
-// given, and names the default log, as the one that the notes call it, when
-// neither is.
+// given, and names the default log, with the size it is moved aside at,
+// when neither is.
 func TestWithActivityLog(t *testing.T) {
 	log := activityState(t)
 
 	o := withActivityLog(t.Context(), cliprogress.Options{Stderr: io.Discard})
-	assert.Equal(t, log, o.Log.Env)
-	assert.Equal(t, activityLogName, o.Log.Variable)
-	assert.NotNil(t, o.Notes)
+	assert.Equal(t, log, o.DefaultLog)
+	assert.EqualValues(t, 8<<20, o.RotateAt)
+	assert.Empty(t, o.Log.Env)
 
 	given := cliprogress.Options{Log: cliprogress.Setting{Given: true, Value: "x"}}
 	assert.Equal(t, given, withActivityLog(t.Context(), given))

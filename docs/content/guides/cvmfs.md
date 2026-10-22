@@ -45,11 +45,11 @@ If neither works, `sind create cluster` fails before creating any node, with Doc
 
 ```
 MOUNTS
-MOUNT        SOURCE               TYPE       STATUS
-/etc/slurm   sind-dev-config      volume     ✓
-/etc/munge   sind-dev-munge       volume     ✓
-/data        /home/user/project   hostPath   ✓
-/cvmfs       /cvmfs               hostPath   ✓
+MOUNT       SOURCE              TYPE      STATUS
+/etc/slurm  sind-dev-config     volume    ✓
+/etc/munge  sind-dev-munge      volume    ✓
+/data       /home/user/project  hostPath  ✓
+/cvmfs      /cvmfs              hostPath  ✓
 ```
 
 ### Host bind mount

@@ -3,9 +3,6 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
-
 	"github.com/spf13/cobra"
 )
 
@@ -36,14 +33,4 @@ func validateOutputFlag(cmd *cobra.Command) error {
 	default:
 		return invalidFlagValue("output", outputFlag(cmd), outputHuman, outputJSON)
 	}
-}
-
-// writeJSON encodes v as JSON to w.
-func writeJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	// The output is for scripts and people, not for embedding in HTML:
-	// doctor's ">= 28.0" must not become "\u003e= 28.0".
-	enc.SetEscapeHTML(false)
-	return enc.Encode(v)
 }

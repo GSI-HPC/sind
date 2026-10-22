@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/cliout"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/spf13/cobra"
@@ -43,7 +44,7 @@ func runDoctor(cmd *cobra.Command) error {
 	checks := doctor.Run(ctx, doctor.Deps{Client: client, Fs: fs, Mesh: mgr})
 
 	if isJSONOutput(cmd) {
-		if err := writeJSON(cmd.OutOrStdout(), checks); err != nil {
+		if err := cliout.WriteJSON(cmd.OutOrStdout(), checks); err != nil {
 			return err
 		}
 	} else {

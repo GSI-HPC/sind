@@ -293,22 +293,12 @@ func progressOptions(interrupt context.Context, cmd *cobra.Command) cliprogress.
 }
 
 // progressTheme returns the Theme the displays and the summary draw on
-// stderr: Classic on a terminal that is not a dumb one, in the 256 colours
-// it is designed in, in the terminal's own 16 where it shows no more, and
-// in its marks alone where it shows none or NO_COLOR is set. Elsewhere,
-// where plain lines go to a log, it is the zero Theme, plain text.
+// stderr: Classic in the colours the terminal shows, as cliprogress.ThemeFor
+// reads them from NO_COLOR, TERM and COLORTERM, and the zero Theme, plain
+// text, where stderr is not a terminal or TERM is dumb, as plain lines go
+// to a log there.
 func progressTheme(stderr io.Writer) display.Theme {
-	if !onTerminal(stderr) || os.Getenv("TERM") == "dumb" {
-		return display.Theme{}
-	}
-	switch colourProfile(stderr) {
-	case termenv.TrueColor, termenv.ANSI256:
-		return display.Classic.In(display.Colours256)
-	case termenv.ANSI:
-		return display.Classic.In(display.Colours16)
-	default:
-		return display.Classic.In(display.NoColours)
-	}
+	return cliprogress.ThemeFor(display.Classic, onTerminal(stderr), os.Getenv)
 }
 
 // throughDisplay returns the context of cmd under the Run p, and what puts
@@ -344,49 +334,31 @@ func throughDisplay(cmd *cobra.Command, p *cliprogress.Run) (context.Context, fu
 	}
 }
 
-// activityLogName is what the notes of cliprogress call the default
-// activity log, in place of a variable.
-const activityLogName = "the default activity log"
+// activityLimit is the size above which the default activity log is moved
+// aside to activity.jsonl.1, so that it stays under about twice this size.
+const activityLimit = 8 << 20
 
-// withActivityLog returns o with the default activity log as its event log
-// when neither --progress-log nor SIND_PROGRESS_LOG names one: the file
-// $XDG_STATE_HOME/sind/activity.jsonl (state.PrepareActivityLog), which a
-// display of what sind did, such as sind ui, reads. A flag or a variable
-// that is given, even empty, wins, and an empty one writes no log.
+// withActivityLog returns o with the default activity log as its default
+// event log when neither --progress-log nor SIND_PROGRESS_LOG names one:
+// the file $XDG_STATE_HOME/sind/activity.jsonl, which a display of what
+// sind did, such as sind ui, reads. A flag or a variable that is given,
+// even empty, wins, and an empty one writes no log.
 //
-// The log is a convenience and changes nothing a command writes: a log that
-// cannot be prepared, as in a read-only home, is left out, and one that
-// cannot be opened or written once the command runs says nothing either,
-// where a log named by the flag or the variable would (the notes of
-// cliprogress that name the path are dropped, the others written as before).
+// The log is a convenience and changes nothing a command writes: cliprogress
+// leaves out a log that cannot be opened, as in a read-only home, and says
+// nothing of one that cannot be written, where a log named by the flag or
+// the variable would.
 func withActivityLog(ctx context.Context, o cliprogress.Options) cliprogress.Options {
 	if _, set := os.LookupEnv(envProgressLog); o.Log.Given || set {
 		return o
 	}
-	path, err := state.PrepareActivityLog()
+	path, err := state.PrepareActivityDir()
 	if err != nil {
 		sindlog.From(ctx).DebugContext(ctx, "not writing the activity log", "error", err)
 		return o
 	}
-	o.Log.Env, o.Log.Variable = path, activityLogName
-	o.Notes = dropNotesAbout{w: o.Stderr, path: path}
+	o.DefaultLog, o.RotateAt = path, activityLimit
 	return o
-}
-
-// dropNotesAbout is the writer of the notes of cliprogress while the
-// activity log is written: it drops those that name the log's path, "the
-// progress log ... stops short", and the one that says it cannot be used,
-// which name it as the default activity log, and passes the others on.
-type dropNotesAbout struct {
-	w    io.Writer
-	path string
-}
-
-func (d dropNotesAbout) Write(p []byte) (int, error) {
-	if text := string(p); strings.Contains(text, d.path) || strings.Contains(text, activityLogName) {
-		return len(p), nil
-	}
-	return d.w.Write(p)
 }
 
 // checkProgressFlag rejects a --progress that cliprogress.Choose refuses

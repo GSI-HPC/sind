@@ -149,16 +149,16 @@ Open **Monitoring**. It shows the services of the stack with their addresses and
 {{< /ways >}}
 
 ```text
-SERVICE      CONTAINER         ADDRESS                            STATUS
-grafana      sind-grafana      http://grafana.sind.sind:3000      running
-prometheus   sind-prometheus   http://prometheus.sind.sind:9090   running
-loki         sind-loki         http://loki.sind.sind:3100         running
-alloy        sind-alloy        http://172.18.0.9:12345            running
+SERVICE     CONTAINER        ADDRESS                           STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
+loki        sind-loki        http://loki.sind.sind:3100        running
+alloy       sind-alloy       http://172.18.0.9:12345           running
 
 CLUSTERS
-NAME      NODES   SLURM
-default   3       26.05.5
-dev       5       26.05.5
+NAME     NODES  SLURM
+default  3      26.05.5
+dev      5      26.05.5
 ```
 
 `STATUS` is the container's state, `not ready` while it runs but does not answer its readiness check, `unchecked` while it runs but Grafana, which runs the checks, does not, or `missing`. Without a stack, the command fails with `no monitoring stack in realm "sind"`. `sind get cluster` lists the stack's containers under `MESH SERVICES` and the journal mount under `MOUNTS` (see [Diagnostics]({{< relref "/usage/diagnostics#monitoring-stack" >}})).

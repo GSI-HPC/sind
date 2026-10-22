@@ -548,7 +548,7 @@ func TestGetMesh_StoppedDNS(t *testing.T) {
 
 	stdout, _, err := executeWithMock(m, "get", "mesh")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "\ndns-ip          -\n")
+	assert.Contains(t, stdout, "\ndns-ip         -\n")
 
 	stdout, _, err = executeWithMock(m, "get", "mesh", "-o", "json")
 	require.NoError(t, err)
@@ -905,7 +905,7 @@ func TestGetNode_Output(t *testing.T) {
 func TestGetNode_Stopped(t *testing.T) {
 	inspect := `[{"Id":"id","Name":"/sind-dev-worker-0","State":{"Status":"exited"},"Config":{"Labels":{"sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`
 	for _, tc := range []struct{ format, want string }{
-		{"human", "sind-dev-worker-0   worker   worker-0.dev.sind.sind   -    stopped\n"},
+		{"human", "sind-dev-worker-0  worker  worker-0.dev.sind.sind  -   stopped\n"},
 		{"json", `"status": "stopped"`},
 	} {
 		t.Run(tc.format, func(t *testing.T) {

@@ -84,18 +84,5 @@ func resolveCommit() string {
 	if commit != "" {
 		return commit
 	}
-	return shortCommit(cobratree.ReadBuildInfo())
-}
-
-// shortCommit returns the revision bi records, cut to 7 characters, with
-// "-dirty" for a checkout that held changes not committed; "" for none.
-func shortCommit(bi cobratree.BuildInfo) string {
-	if bi.Commit == "" {
-		return ""
-	}
-	rev := bi.Commit[:min(7, len(bi.Commit))]
-	if bi.Dirty {
-		rev += "-dirty"
-	}
-	return rev
+	return cobratree.ReadBuildInfo().Short(7)
 }
