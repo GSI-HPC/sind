@@ -16,6 +16,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -185,6 +186,11 @@ func TestColServiceFillsTheStoreAndProvidesEnvKeys(t *testing.T) {
 	require.True(t, ok)
 	refresh("sind")
 	require.Eventually(t, func() bool { return len(env.Store.Snapshot().NodesOf("sind")) == 1 }, 5*time.Second, 5*time.Millisecond)
+
+	// The Monitoring page changes the interval of the monitoring stacks.
+	iv, ok := env.Get(ColMonitoringIntervalKey).(moreInterval)
+	require.True(t, ok)
+	assert.Equal(t, collect.MonitoringEvery, iv.Get())
 
 	// A stream that watches the status of a cluster makes it be read.
 	release := env.watch([]store.Topic{store.StatusTopic("sind", "dev")})

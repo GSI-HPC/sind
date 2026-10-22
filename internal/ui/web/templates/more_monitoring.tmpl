@@ -3,9 +3,15 @@
 {{/* page-more-monitoring is the Monitoring page. */}}
 {{define "page-more-monitoring"}}
 <div class="head"><div class="t"><h1>Monitoring</h1>
-  <div class="sub"><span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals.</span></div></div></div>
+  <div class="sub"><span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals.</span></div></div>
+  <div class="actions">{{fragment "more-mon-interval" .}}</div></div>
 <div class="stack" id="more-monitoring" sse-swap="more-monitoring">{{fragment "more-monitoring" .}}</div>
 {{end}}
+
+{{/* more-mon-interval picks how often sind ui reads the stacks while a page
+is open; .Data is moreIntervalData, nil when nothing reads them. It is no
+live fragment, so that an update never closes the open picker. */}}
+{{define "more-mon-interval"}}{{with .Data}}<form class="realm" method="post" action="/monitoring/interval" hx-post="/monitoring/interval" hx-trigger="change" hx-swap="outerHTML"><label for="mon-interval">read every</label>{{template "csrf-field" $}}<select id="mon-interval" name="interval" aria-label="How often to read the stacks">{{range .Choices}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Value}}</option>{{end}}</select></form>{{end}}{{end}}
 
 {{/* more-monitoring is the live body of the page; .Data is moreMonitoringData. */}}
 {{define "more-monitoring"}}{{with .Data}}

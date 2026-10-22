@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/ui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,6 +50,21 @@ func TestUICommand_Defaults(t *testing.T) {
 	assert.Zero(t, got.Port, "a free port")
 	assert.False(t, got.NoOpen)
 	assert.Empty(t, got.RuntimeDir)
+	assert.Equal(t, 30*time.Second, got.MonitoringInterval)
+}
+
+func TestUICommand_MonitoringInterval(t *testing.T) {
+	got := fakeUI(t, nil)
+	_, _, err := executeCommand("ui", "--monitoring-interval", "2m")
+	require.NoError(t, err)
+	assert.Equal(t, 2*time.Minute, got.MonitoringInterval)
+
+	for _, v := range []string{"1s", "2h"} {
+		_, _, err = executeCommand("ui", "--monitoring-interval", v)
+		require.Error(t, err, v)
+		assert.Contains(t, err.Error(), "want a duration from 5s to 1h", v)
+		assert.True(t, cobratree.IsUsage(err), v)
+	}
 }
 
 func TestUICommand_Demo(t *testing.T) {

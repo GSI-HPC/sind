@@ -117,6 +117,9 @@ func TestDemo_ServesEveryPage(t *testing.T) {
 	assert.NotSame(t, env.Opts.Exec, env.Exec)
 	assert.NotNil(t, env.Get(ColRefreshKey))
 	assert.NotNil(t, env.Get(ColDoctorKey))
+	iv, ok := env.Get(ColMonitoringIntervalKey).(moreInterval)
+	require.True(t, ok)
+	assert.Equal(t, 30*time.Second, iv.Get(), "Run fills in the default")
 
 	require.NoError(t, r.stop())
 	entries, err := os.ReadDir(runtimeDir)
@@ -179,6 +182,11 @@ func TestDemo_StreamsLogs(t *testing.T) {
 func TestDemo_StillNeedsDemo(t *testing.T) {
 	err := Run(context.Background(), Options{Still: true, NoOpen: true})
 	assert.EqualError(t, err, "--still needs --demo")
+}
+
+func TestRun_MonitoringInterval(t *testing.T) {
+	err := Run(context.Background(), Options{MonitoringInterval: time.Second, NoOpen: true})
+	assert.EqualError(t, err, "monitoring interval: the interval must be between 5s and 1h, got 1s")
 }
 
 func TestDemoServices(t *testing.T) {

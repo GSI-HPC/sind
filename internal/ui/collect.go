@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"sync"
 
@@ -13,13 +14,18 @@ import (
 )
 
 // The Env keys that the collectors provide, for the parts that act on them.
-// The values are plain funcs, so that no part imports another.
+// The values are plain funcs and interfaces, so that no part imports
+// another.
 const (
 	// ColRefreshKey holds a func(realm string) that reads that realm again
 	// now, such as after a task that changed it ended.
 	ColRefreshKey = "collect.refresh"
 	// ColDoctorKey holds a func() that runs the host checks again.
 	ColDoctorKey = "collect.doctor"
+	// ColMonitoringIntervalKey holds the interval at which the monitoring
+	// stacks are read, a value with the methods Get() time.Duration and
+	// Set(time.Duration).
+	ColMonitoringIntervalKey = "collect.monitoring-interval"
 )
 
 // colKey is the Env key of the collectors that Setup made.
@@ -41,9 +47,9 @@ func init() {
 }
 
 // colService is the service that fills the store with what Docker and the
-// host know (package collect). Its Setup provides ColRefreshKey and
-// ColDoctorKey and registers the Watcher that tells which cluster pages
-// are open.
+// host know (package collect). Its Setup provides ColRefreshKey,
+// ColDoctorKey and ColMonitoringIntervalKey, and registers the Watchers
+// that tell which cluster pages, and whether any pages, are open.
 func colService() Service {
 	return Service{Name: "collect", Setup: colSetup, Run: colRun}
 }
@@ -52,18 +58,22 @@ func colSetup(env *Env) error {
 	client := docker.NewClient(env.Exec)
 	bus := collect.NewBus()
 	watched := collect.NewWatched()
+	interval := collect.NewInterval(cmp.Or(env.Opts.MonitoringInterval, collect.MonitoringEvery))
+	viewers := collect.NewViewers()
 	set := &colSet{
 		events:     &collect.Events{Exec: env.Exec, Bus: bus, Log: env.Log},
 		sind:       &collect.Sind{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		lock:       &collect.Lock{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
-		monitoring: &collect.Monitoring{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
+		monitoring: &collect.Monitoring{Store: env.Store, Client: client, Bus: bus, Interval: interval, Viewers: viewers, Log: env.Log},
 		status:     &collect.Status{Store: env.Store, Client: client, Bus: bus, Watched: watched, Log: env.Log},
 		doctor:     collect.NewDoctor(env.Store, client),
 	}
 	env.Put(colKey{}, set)
 	env.Put(ColRefreshKey, func(realm string) { bus.Publish(collect.Event{Kind: collect.KindRefresh, Realm: realm}) })
 	env.Put(ColDoctorKey, set.doctor.Request)
+	env.Put(ColMonitoringIntervalKey, interval)
 	env.AddWatcher(watched.Watch)
+	env.AddWatcher(viewers.Watch)
 	return nil
 }
 

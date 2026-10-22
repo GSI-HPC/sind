@@ -3,8 +3,10 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 
+	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/demo"
 )
 
@@ -35,6 +37,8 @@ func demoServices(d *demo.Demo, registered []Service) []Service {
 		Setup: func(env *Env) error {
 			env.Put(ColRefreshKey, d.Refresh)
 			env.Put(ColDoctorKey, d.RequestDoctor)
+			// The demo reads no stacks, but its picker works.
+			env.Put(ColMonitoringIntervalKey, collect.NewInterval(cmp.Or(env.Opts.MonitoringInterval, collect.MonitoringEvery)))
 			d.Setup()
 			return nil
 		},

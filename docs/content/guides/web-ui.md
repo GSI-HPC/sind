@@ -34,6 +34,7 @@ Useful flags:
 |------|--------|
 | `--port PORT` | Listen on this port on `127.0.0.1`. By default sind takes a free one. |
 | `--no-open` | Print the URL, but do not start a browser. |
+| `--monitoring-interval DURATION` | How often to read the monitoring stacks while a page is open, from `5s` to `1h`. The default is `30s`. |
 | `--demo` | Show made-up clusters, and play the commands instead of running them. It uses no Docker and changes nothing. |
 
 The UI listens on `127.0.0.1` only. Only your user can open it. To use it from another machine, forward the port over SSH and use the same port on both ends (see [Use it from another machine](#use-it-from-another-machine)).
@@ -50,7 +51,7 @@ The rail on the left lists the pages. The top bar has the realm switch. The task
 | Cluster | The state of one cluster, with the tabs Summary, Nodes, Logs, Network and storage, and Connect. |
 | Node | The services, events and power state of one node. |
 | Mesh and DNS | The mesh network, the DNS server and its records, and the containers that are connected to the realm. |
-| Monitoring | The state and addresses of Grafana, Prometheus, Loki and Alloy, if the realm runs them. |
+| Monitoring | The state and addresses of Grafana, Prometheus, Loki and Alloy, if the realm runs them. Use **read every** to set how often sind ui reads them. The change lasts until sind ui stops. |
 | Topology | A diagram from the host, through the mesh services, to the cluster networks and the nodes. |
 | Doctor | The host checks of `sind doctor`, each as ok, warning or failed, with the fix for each. |
 | Activity | The runs of sind commands that change something, from this UI or from a terminal. |
