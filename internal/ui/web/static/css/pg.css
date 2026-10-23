@@ -166,3 +166,12 @@ td.act .btn + .btn{margin-left:4px}
   table.cards td .pg-nodemap{flex:1 1 0;min-width:0}
   td.act .btn + .btn{margin-left:0}
 }
+/* On a touch screen, the chips, the realm links, the filter, the heads that
+   sort and the tiles of a cluster's nodes are 44 px, as every control. */
+@media (pointer:coarse){
+  .pg-chip,.pg-sort,table.cards .pg-sort,table.cards .pg-all,.pg-r{min-height:44px}
+  .pg-seg a{display:inline-flex;align-items:center;min-height:44px}
+  .pg-filter input{height:44px}
+  a.pg-sumpill{min-height:44px;padding-top:4px;padding-bottom:4px}
+  .pg-big .pg-nm{width:44px;height:44px;border-radius:7px}
+}

@@ -201,3 +201,5 @@ table.runs td:nth-child(2){min-width:200px}
 .l80{left:80%}.l81{left:81%}.l82{left:82%}.l83{left:83%}.l84{left:84%}.l85{left:85%}.l86{left:86%}.l87{left:87%}.l88{left:88%}.l89{left:89%}
 .l90{left:90%}.l91{left:91%}.l92{left:92%}.l93{left:93%}.l94{left:94%}.l95{left:95%}.l96{left:96%}.l97{left:97%}.l98{left:98%}.l99{left:99%}
 .l100{left:100%}
+/* On a touch screen, the chips of Activity are 44 px, as every control. */
+@media (pointer:coarse){.fchip{min-height:44px;padding:2px 12px}}

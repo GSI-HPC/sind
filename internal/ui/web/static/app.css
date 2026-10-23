@@ -323,4 +323,10 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   table.cards td.c-act{gap:8px}
   table.cards td.c-act .btn{min-height:36px}
 }
+/* The phone layout above keeps the row buttons at 44 px on a touch screen
+   too; the logo and the skip link are targets as well. */
+@media (pointer:coarse){
+  table.cards td.c-act .btn{min-height:44px}
+  .brand,.skip{display:inline-flex;align-items:center;min-height:44px}
+}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
