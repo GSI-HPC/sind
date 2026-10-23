@@ -514,7 +514,7 @@ type actNodeView struct {
 func actNodeOf(f url.Values, key string) actNodeView {
 	n := actNodeView{Key: key, Label: key, Eff: actEffOf(f), form: f}
 	if !slices.Contains(action.NodeRoles, key) {
-		n.Group, n.Label = true, "workers"
+		n.Group, n.Label = true, action.GroupLabel(f, key)
 	}
 	return n
 }
@@ -657,6 +657,8 @@ type actDialog struct {
 	Lock *state.LockHolder
 	// Draft says that the fields are those of the user's draft.
 	Draft bool
+	// defaulted are the fields that Spec.Defaults filled.
+	defaulted []string
 }
 
 // actOK is the button of a dialog that runs the command.
@@ -727,8 +729,13 @@ type actNodeChoice struct {
 func (d *actDialog) def(field, v string) {
 	if !d.Form.Has(field) {
 		d.Form.Set(field, v)
+		d.defaulted = append(d.defaulted, field)
 	}
 }
+
+// Defaulted reports whether the field has its default, as the link gives
+// no value: the dialog selects a default name, so that typing replaces it.
+func (d *actDialog) Defaulted(field string) bool { return slices.Contains(d.defaulted, field) }
 
 // Val returns the value of the field.
 func (d *actDialog) Val(field string) string { return d.Form.Get(field) }

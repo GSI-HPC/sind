@@ -139,8 +139,8 @@ its editor. */}}
 {{define "act-chip-text"}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}}>{{.Chip}}</span>{{end}}
 
 {{/* act-group is a worker group of a new cluster: its row and editor. */}}
-{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>workers</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
-  <span class="act-k"><span class="act-step"><button type="button" id="act-{{.Key}}-less" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer workers" aria-labelledby="act-{{.Key}}-less act-range-{{.Key}}">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" id="act-{{.Key}}-more" data-act-step="{{.Key}}-count" data-d="1" aria-label="More workers" aria-labelledby="act-{{.Key}}-more act-range-{{.Key}}">+</button></span><button type="button" class="act-x" id="act-{{.Key}}-del" data-act-wgdel="{{.Key}}" aria-label="Remove the worker group" aria-labelledby="act-{{.Key}}-del act-range-{{.Key}}">✕</button></span></div>
+{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>{{.Label}}</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
+  <span class="act-k"><span class="act-step"><button type="button" id="act-{{.Key}}-less" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer in {{.Label}}" aria-labelledby="act-{{.Key}}-less act-range-{{.Key}}">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" id="act-{{.Key}}-more" data-act-step="{{.Key}}-count" data-d="1" aria-label="More in {{.Label}}" aria-labelledby="act-{{.Key}}-more act-range-{{.Key}}">+</button></span><button type="button" class="act-x" id="act-{{.Key}}-del" data-act-wgdel="{{.Key}}" aria-label="Remove {{.Label}}" aria-labelledby="act-{{.Key}}-del act-range-{{.Key}}">✕</button></span></div>
 {{template "act-ned" .}}{{end}}
 
 {{/* act-ned is the editor of the size and more of a node of a new
@@ -227,7 +227,7 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 
 {{define "act-dlg-create-cluster"}}
 <div class="row act-idrow">
-  <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
+  <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}"{{if .Defaulted "name"}} data-act-select{{end}} autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
     <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>
   {{template "act-realm" .}}
 </div>

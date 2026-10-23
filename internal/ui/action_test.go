@@ -159,8 +159,8 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 			// worker group by the workers it makes.
 			`aria-labelledby="act-czl-controller act-chip-controller"><span class="vh" id="act-czl-controller">Size of controller</span>`,
 			`aria-labelledby="act-czl-w0 act-range-w0 act-chip-w0"><span class="vh" id="act-czl-w0">Size of workers</span>`,
-			`aria-label="Fewer workers" aria-labelledby="act-w0-less act-range-w0"`, `aria-label="More workers" aria-labelledby="act-w0-more act-range-w0"`,
-			`aria-label="Remove the worker group" aria-labelledby="act-w0-del act-range-w0"`}},
+			`aria-label="Fewer in workers" aria-labelledby="act-w0-less act-range-w0"`, `aria-label="More in workers" aria-labelledby="act-w0-more act-range-w0"`,
+			`aria-label="Remove workers" aria-labelledby="act-w0-del act-range-w0"`}},
 		{"create-cluster", "wait=7m&pull=&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="other" checked`, `name="wait_other" value="7m"`, `id="act-pull" name="pull" aria-`}},
 		{"create-cluster", "wait=0&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="0" checked`, `id="act-pull" name="pull" aria-`, `name="pull_auto"`}},
 		{"create-cluster", "realm=ci&name=big", []string{`value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`, `<option value="ci"></option><option value="sind"></option>`}},
@@ -207,9 +207,19 @@ func TestActDialog_NewClusterTakesAFreeName(t *testing.T) {
 
 	body := f.get("/dialogs/create-cluster").Body.String()
 
-	assert.Contains(t, body, `id="act-name" name="name" value="hpc-3"`)
+	assert.Contains(t, body, `id="act-name" name="name" value="hpc-3" data-act-select`, "the script selects a default name")
 	assert.Contains(t, body, `value="~/sind/hpc-3" autocapitalize="off" spellcheck="false" data-act-follow`)
+	assert.Contains(t, body, `<b>workers</b>`)
 	assert.NotContains(t, f.get("/dialogs/create-cluster?dir=/x").Body.String(), "data-act-follow", "a typed directory stays")
+	assert.Contains(t, f.get("/dialogs/create-cluster?name=lab").Body.String(), `id="act-name" name="name" value="lab" autocomplete="off"`, "a name of the link stays as it is")
+
+	body = f.get("/dialogs/create-cluster?wg=w0&wg=wabc&w0-count=1&wabc-count=2").Body.String()
+	assert.Contains(t, body, `<b>workers 1</b>`)
+	assert.Contains(t, body, `<span class="vh" id="act-czl-wabc">Size of workers 2</span>`)
+	assert.Contains(t, body, `aria-label="Fewer in workers 2" aria-labelledby="act-wabc-less act-range-wabc">`)
+	assert.Contains(t, body, `aria-label="More in workers 2" aria-labelledby="act-wabc-more act-range-wabc">`)
+	assert.Contains(t, body, `aria-label="Remove workers 2" aria-labelledby="act-wabc-del act-range-wabc">`)
+	assert.Contains(t, body, `<template id="act-wg-tpl"><div class="act-nr act-wgrow" id="act-wg-__WG__">`)
 }
 
 func TestActDialog_Errors(t *testing.T) {

@@ -60,6 +60,17 @@ func WorkerGroups(f Form) []string {
 	return f["wg"]
 }
 
+// GroupLabel names the worker group g of the form for people: workers, or
+// with more than one group workers 1, workers 2 and so on, in the order of
+// the form.
+func GroupLabel(f Form, g string) string {
+	groups := WorkerGroups(f)
+	if i := slices.Index(groups, g); i >= 0 && len(groups) > 1 {
+		return "workers " + strconv.Itoa(i+1)
+	}
+	return "workers"
+}
+
 // ClusterFieldsOf returns the fields of the New cluster dialog of the form
 // in the order the dialog shows them, which its problems follow.
 func ClusterFieldsOf(f Form) []string {
@@ -167,13 +178,14 @@ func clusterNodes(f Form, ps *problems) ([]config.Node, []PlannedNode) {
 			continue
 		}
 		seen = append(seen, g)
-		count, err := number(f, g+"-count", "Workers", 1, maxCount, -1)
+		label := GroupLabel(f, g)
+		count, err := number(f, g+"-count", "W"+label[1:], 1, maxCount, -1)
 		if err != nil {
-			ps.add(g+"-count", "Workers", true, fmt.Errorf("write a number from 1 to %d", maxCount))
+			ps.add(g+"-count", "W"+label[1:], true, fmt.Errorf("write a number from 1 to %d", maxCount))
 			count = 1
 		}
 		n := config.Node{Role: config.RoleWorker, Count: count}
-		nodeSize(f, g, "workers", &n, ps)
+		nodeSize(f, g, label, &n, ps)
 		nodes = append(nodes, n)
 		for range count {
 			planned = append(planned, PlannedNode{"worker-" + strconv.Itoa(workers), "worker", g})

@@ -119,6 +119,8 @@
     S.dirty = !!form && form.hasAttribute('data-act-restored');
     S.asking = null;
     S.said = null;
+    keptOpen.clear();
+    kept.clear();
     isolate(d);
     footer(d);
     focusIn(d);
@@ -256,6 +258,26 @@
     if (bad) bad.focus();
   }
 
+  // numberGroups names the worker groups as the server does: workers, or
+  // workers 1, workers 2 and so on when there is more than one, in their
+  // rows and in the names of their buttons.
+  function numberGroups() {
+    const rows = document.querySelectorAll('#act-groups .act-wgrow');
+    rows.forEach((row, i) => {
+      const label = rows.length > 1 ? 'workers ' + (i + 1) : 'workers';
+      const b = row.querySelector('.act-lab b');
+      if (b) b.textContent = label;
+      // The size button takes its name from a hidden span; the others
+      // name themselves, before the workers of the group.
+      const size = row.querySelector('.act-cz .vh');
+      if (size) size.textContent = 'Size of ' + label;
+      for (const [sel, name] of [['[data-d="-1"]', 'Fewer in '], ['[data-d="1"]', 'More in '], ['[data-act-wgdel]', 'Remove ']]) {
+        const button = row.querySelector(sel);
+        if (button) button.setAttribute('aria-label', name + label);
+      }
+    });
+  }
+
   // field returns the control of the form named name: the first one of a
   // group of radio buttons.
   function field(form, name) {
@@ -351,6 +373,7 @@
       if (!tpl || !groups) return;
       const key = 'w' + Math.random().toString(36).slice(2, 8).padEnd(6, '0');
       groups.insertAdjacentHTML('beforeend', tpl.innerHTML.replaceAll('__WG__', key));
+      numberGroups();
       const count = document.getElementById('act-' + key + '-count');
       count.value = '1';
       count.focus();
@@ -394,6 +417,7 @@
         const el = document.getElementById(prefix + del.dataset.actWgdel);
         if (el) el.remove();
       }
+      numberGroups();
       // The button that had the focus is gone.
       const add = form.querySelector('[data-act-wgadd]');
       if (add) add.focus();
@@ -455,6 +479,13 @@
     if (!(t instanceof Element) || !t.closest('#act-dialog form')) return;
     S.last = t;
     if (S.asking && !t.closest('#act-ask')) unask(false);
+    // A default name is selected the first time it takes the focus, also
+    // after a tap, so that typing replaces it. The selection waits for
+    // the caret that the tap or click puts in.
+    if (t instanceof HTMLInputElement && t.hasAttribute('data-act-select')) {
+      t.removeAttribute('data-act-select');
+      setTimeout(() => { if (document.activeElement === t) t.setSelectionRange(0, t.value.length); });
+    }
   });
 
   // The directory of the data follows the name until the user types one;

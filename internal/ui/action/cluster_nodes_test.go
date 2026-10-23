@@ -117,6 +117,22 @@ func TestBuildCreateCluster_NodeProblems(t *testing.T) {
 	}
 }
 
+func TestGroupLabel(t *testing.T) {
+	assert.Equal(t, "workers", GroupLabel(form(), "w0"))
+	assert.Equal(t, "workers", GroupLabel(form("wg", "w0"), "w0"))
+	f := form("wg", "w0", "wg", "wabc")
+	assert.Equal(t, "workers 1", GroupLabel(f, "w0"))
+	assert.Equal(t, "workers 2", GroupLabel(f, "wabc"))
+	assert.Equal(t, "workers", GroupLabel(f, "__WG__"), "a group that the script adds")
+}
+
+func TestBuildCreateCluster_WorkerGroupLabels(t *testing.T) {
+	f := groups(valid("w0-count", "x", "w1-count", "1", "w1-cpus", "0"), "w0", "w1")
+	cmd, err := build(t, "create-cluster", f)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Workers 1", "workers 2 CPUs"}, []string{cmd.Problems[0].Label, cmd.Problems[1].Label})
+}
+
 func TestBuildCreateCluster_WorkerGroups(t *testing.T) {
 	f := groups(valid("wg", "w0", "w1-count", "2"), "w0", "w1")
 	cmd, err := build(t, "create-cluster", f)
