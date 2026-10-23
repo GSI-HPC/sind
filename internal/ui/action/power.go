@@ -90,6 +90,9 @@ func buildConnect(detach bool) func(Form, Context) (Command, error) {
 			return Command{}, err
 		}
 		name := strings.TrimSpace(f.Get("container"))
+		if name == "" {
+			return Command{}, &Missing{Field: "container", Text: "write the name of a container, such as kind-control-plane"}
+		}
 		if !containerPattern.MatchString(name) {
 			return Command{}, fmt.Errorf("container: write the name of a container, such as kind-control-plane")
 		}

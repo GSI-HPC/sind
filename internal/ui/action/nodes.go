@@ -40,7 +40,7 @@ func nodeNames(f Form) []string {
 func pickNodes(f Form, c Context, realm, clusterName string, workersOnly bool) ([]cluster.NodeSummary, error) {
 	names := nodeNames(f)
 	if len(names) == 0 {
-		return nil, fmt.Errorf("nodes: pick at least one node of %s", clusterName)
+		return nil, &Missing{Field: "nodes", Text: "pick at least one node of " + clusterName}
 	}
 	have := c.Snap.ClusterNodes(realm, clusterName)
 	var picked []cluster.NodeSummary

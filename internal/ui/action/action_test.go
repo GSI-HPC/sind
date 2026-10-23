@@ -3,6 +3,7 @@
 package action
 
 import (
+	"errors"
 	"io/fs"
 	"net/url"
 	"strings"
@@ -294,6 +295,9 @@ func TestBuildPower(t *testing.T) {
 	assert.EqualError(t, err, "op: pick what to do with the nodes")
 	_, err = build(t, "power", form("cluster", "dev", "op", "on"))
 	assert.EqualError(t, err, "nodes: pick at least one node of dev")
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "Pick at least one node of dev.", missing.Hint())
 	cmd, err = build(t, "power", form("cluster", "dev", "op", "on", "nodes", "controller"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind power on controller.dev", cmd.Display)
@@ -323,9 +327,11 @@ func TestBuildConnect(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci disconnect container kind-1", cmd.Display)
 
-	for _, bad := range []string{"", "-rf", "a b", "a;b", "$(x)"} {
+	for _, bad := range []string{"", " ", "-rf", "a b", "a;b", "$(x)"} {
 		_, err = build(t, "connect", form("container", bad))
 		assert.EqualError(t, err, "container: write the name of a container, such as kind-control-plane", bad)
+		var missing *Missing
+		assert.Equal(t, strings.TrimSpace(bad) == "", errors.As(err, &missing), bad)
 	}
 	_, err = build(t, "connect", form("realm", "No", "container", "x"))
 	assert.ErrorContains(t, err, "realm: invalid realm name")

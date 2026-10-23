@@ -18,6 +18,7 @@
 .scrim .fld label,.scrim .fld .lbl{font-size:13px;font-weight:500}
 .scrim .fld input[type=text],.scrim .fld input[type=number],.scrim .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:13px var(--f-mono);width:100%}
 .scrim .hint{font-size:12px;color:var(--muted)}
+.scrim .act-missing{margin:0;font-size:13px}
 .scrim .checks{display:grid;gap:8px}
 .scrim .checks label{display:flex;gap:8px;align-items:flex-start}
 .scrim .checks small{color:var(--muted);display:block}

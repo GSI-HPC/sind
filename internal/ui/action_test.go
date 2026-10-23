@@ -271,11 +271,23 @@ func TestActPreview_DangerPaintsTheButton(t *testing.T) {
 func TestActPreview_Refusals(t *testing.T) {
 	f := newActFixture(t)
 
-	body := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on")).Body.String()
+	body := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-9")).Body.String()
 	assert.Contains(t, body, `callout bad`)
-	assert.Contains(t, body, "nodes: pick at least one node of dev")
+	assert.Contains(t, body, "nodes: cluster dev has no node worker-9")
 	assert.Contains(t, body, `disabled>Run</button>`)
 	assert.NotContains(t, body, `name="shown"`)
+
+	// A value that the form lacks is a hint, not an error.
+	for _, c := range []struct{ id, form, hint string }{
+		{"power", actForm("cluster", "dev", "op", "on"), "Pick at least one node of dev."},
+		{"connect", actForm("container", " "), "Write the name of a container, such as kind-control-plane."},
+	} {
+		body = f.post("/actions/"+c.id+"/preview", c.form).Body.String()
+		assert.Contains(t, body, `<p class="hint act-missing">`+c.hint+`</p>`, c.id)
+		assert.NotContains(t, body, `callout bad`, c.id)
+		assert.Regexp(t, `id="act-ok"[^>]* disabled>`, body, c.id)
+		assert.NotContains(t, body, `name="shown"`, c.id)
+	}
 
 	// The typed confirmation unlocks the button.
 	del := actForm("cluster", "dev")
@@ -516,7 +528,8 @@ func TestActRun_RefusesTheFormThatDoesNotBuild(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
 	assert.Equal(t, "innerHTML", w.Header().Get("HX-Reswap"))
-	assert.Contains(t, w.Body.String(), "nodes: pick at least one node of dev")
+	assert.Contains(t, w.Body.String(), `<div class="callout bad">Pick at least one node of dev.</div>`)
+	assert.NotContains(t, w.Body.String(), "act-missing")
 	assert.Contains(t, w.Body.String(), "disabled>Run</button>")
 	assert.Empty(t, f.starter.specs)
 }
