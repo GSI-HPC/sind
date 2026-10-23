@@ -4,6 +4,7 @@ package ui
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -807,6 +808,9 @@ type actPreview struct {
 	Form action.Form
 	Cmd  action.Command
 	Err  string
+	// Hint says what the form still lacks, before the user tries to run
+	// it: the dialog shows it in place of the command, not as an error.
+	Hint string
 	Warn string
 	// Danger paints the button red.
 	Danger bool
@@ -934,6 +938,11 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 		p.Danger = true
 	}
 	cmd, err := a.Build(f, ctx)
+	var missing *action.Missing
+	if errors.As(err, &missing) {
+		p.Hint, p.Blocked = missing.Hint(), true
+		return p
+	}
 	if err != nil {
 		p.Err, p.Blocked = err.Error(), true
 		return p
@@ -1003,6 +1012,9 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	p := actEvaluate(v, a, f, actContext(r, v, st))
 	switch {
 	case p.Err != "":
+	case p.Hint != "":
+		// A run of a form that lacks a value is an error.
+		p.Err, p.Hint = p.Hint, ""
 	case len(p.Cmd.Problems) > 0:
 		// The preview lists them; the button was off.
 	case !a.Confirmed(f):

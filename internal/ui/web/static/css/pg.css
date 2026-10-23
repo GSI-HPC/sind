@@ -3,12 +3,11 @@
    tokens of app.css. */
 
 .pg-block{margin-top:14px}
-.pg-hint{margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+.pg-hint{margin:10px 0 0;font-size:var(--t-md);color:var(--muted)}
 .pg-flat{margin:0}
-.pg-small{font-size:12px}
+.pg-small{font-size:var(--t-sm)}
 .pg-grow{flex:1;min-width:0}
 .pg-wide{grid-column:1/-1}
-.pg-h1{font-size:24px}
 .pg-note{margin-bottom:14px}
 .pg-gone{margin-bottom:14px}
 .pg-realms{margin-bottom:0}
@@ -17,8 +16,8 @@
 .pg-ccard{display:flex;flex-direction:column;gap:12px;padding:14px;color:var(--fg)}
 .pg-ccard:hover{border-color:var(--accent);text-decoration:none}
 .pg-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.pg-name{font-size:20px;font-weight:700;letter-spacing:-.025em}
-.pg-ver{margin-left:auto;font:12px var(--f-mono);color:var(--faint)}
+.pg-name{font-size:var(--t-xl);font-weight:700;letter-spacing:-.025em}
+.pg-ver{margin-left:auto;font:var(--t-sm) var(--f-mono);color:var(--faint)}
 .pg-pills{display:flex;gap:6px;flex-wrap:wrap}
 
 /* node tiles: they echo the logo; the controller is deep teal with three
@@ -44,21 +43,21 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-bar{align-self:stretch;border-radius:0 3px 3px 0;background:var(--info)}
 .pg-bar.bad{background:var(--bad)} .pg-bar.warn{background:var(--warn)} .pg-bar.run{background:var(--run)}
 .pg-tt{font-weight:500;overflow-wrap:anywhere}
-.pg-dd{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.pg-dd{color:var(--muted);font-size:var(--t-md);overflow-wrap:anywhere}
 .pg-bb{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 
 /* recent runs */
 .pg-r{display:flex;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line-2);color:var(--fg)}
-.pg-r:hover{background:var(--panel-2);text-decoration:none}
+.pg-r:hover{background:var(--hover);text-decoration:none}
 .pg-r:last-child{border-bottom:0}
-.pg-c{flex:1;font:12.5px var(--f-mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pg-tm{color:var(--faint);font-size:12px;white-space:nowrap}
+.pg-c{flex:1;font:var(--t-md) var(--f-mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-tm{color:var(--faint);font-size:var(--t-sm);white-space:nowrap}
 
 /* first steps */
 .pg-steps{display:grid;gap:10px;counter-reset:pg-step;margin:0;padding:0}
 .pg-steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;list-style:none;padding:10px 0;border-bottom:1px solid var(--line-2)}
 .pg-steps li:last-child{border-bottom:0}
-.pg-steps li::before{counter-increment:pg-step;content:counter(pg-step);width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 12px var(--f-mono)}
+.pg-steps li::before{counter-increment:pg-step;content:counter(pg-step);width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 var(--t-sm) var(--f-mono)}
 
 /* the realm filter of the lists */
 .pg-seg{margin-bottom:14px;max-width:100%;overflow-x:auto}
@@ -76,13 +75,13 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-mx td,.pg-mx th{text-align:center;padding:7px 8px}
 .pg-mx td:first-child,.pg-mx th:first-child,.pg-mx td:nth-child(2),.pg-mx th:nth-child(2){text-align:left}
 .pg-svc{text-transform:none;letter-spacing:0}
-.pg-ck{font:700 13px var(--f-mono)}
-.pg-ck.y{color:var(--ok)} .pg-ck.n{color:var(--bad)} .pg-ck.na{color:var(--faint)}
+.pg-ck{font:700 var(--t-md) var(--f-mono)}
+.pg-ck.y{color:var(--ok)} .pg-ck.n{color:var(--bad)} .pg-ck.na{color:var(--deco)}
 
 /* the nodes tab: the selection and its bar */
 .pg-selbar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line-2);flex-wrap:wrap}
 .pg-selbar[hidden],.pg-selbar [hidden]{display:none}
-.pg-expr{font:600 13px var(--f-mono);overflow-wrap:anywhere}
+.pg-expr{font:600 var(--t-md) var(--f-mono);overflow-wrap:anywhere}
 .pg-chk{width:30px}
 tr.pg-sel td{background:var(--accent-soft)}
 tr[data-href]{cursor:pointer}
@@ -95,6 +94,4 @@ tr[data-href]{cursor:pointer}
   .pg-bb{grid-column:2;justify-content:flex-start}
   .pg-steps li{grid-template-columns:28px minmax(0,1fr)}
   .pg-steps li > :last-child{grid-column:2}
-  .pg-h1{font-size:20px}
-  .realm select{max-width:150px}
 }

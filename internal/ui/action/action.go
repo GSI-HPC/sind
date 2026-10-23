@@ -80,6 +80,23 @@ type Problem struct {
 	Default bool
 }
 
+// Missing is the error of a form that lacks a value that the command needs,
+// such as a field that is still empty. A dialog shows it as a hint until the
+// user tries to run the command, as nothing is wrong yet.
+type Missing struct {
+	// Field is the form field.
+	Field string
+	// Text says what to fill in, as the second part of the error.
+	Text string
+}
+
+func (m *Missing) Error() string { return m.Field + ": " + m.Text }
+
+// Hint is Text as a sentence.
+func (m *Missing) Hint() string {
+	return strings.ToUpper(m.Text[:1]) + m.Text[1:] + "."
+}
+
 // File is a file that sind ui saves before it runs a command, readable by
 // its owner alone.
 type File struct {

@@ -486,7 +486,7 @@ func TestPgNodePage(t *testing.T) {
 	body := pgBody(t, ts, "/nodes/sind/dev/worker-3", 200)
 	assert.Contains(t, body, "<title>worker-3.dev · sind ui</title>")
 	assert.Contains(t, body, `<div class="crumbs"><a href="/nodes">Nodes</a> / <a href="/clusters/sind/dev">dev</a> / worker-3</div>`)
-	assert.Contains(t, body, `<h1><span class="mono pg-h1">worker-3.dev</span> <span class="pill bad">stopped</span></h1>`)
+	assert.Contains(t, body, `<h1>worker-3.dev <span class="pill bad">stopped</span></h1>`)
 	assert.Contains(t, body, `<span class="chip ">worker</span>`)
 	assert.Contains(t, body, `<span class="mono">172.20.0.10</span>`)
 	assert.Contains(t, body, `op=start&amp;realm=sind" hx-get=`)
@@ -498,7 +498,7 @@ func TestPgNodePage(t *testing.T) {
 	assert.Contains(t, body, "No probe result yet.")
 	assert.Contains(t, body, `<dt>name</dt><dd class="mono">sind-dev-worker-3</dd>`)
 	assert.Contains(t, body, `<a href="/clusters/sind/dev">dev</a> <span class="pill warn">mixed</span>`)
-	assert.Contains(t, body, `<dd class="mono">worker-3.dev.sind.sind <button type="button" class="btn sm ghost" data-pg-copy-text="worker-3.dev.sind.sind">Copy</button></dd>`)
+	assert.Contains(t, body, `<dd class="mono">worker-3.dev.sind.sind <button type="button" class="btn sm" data-pg-copy-text="worker-3.dev.sind.sind">Copy</button></dd>`)
 	assert.Contains(t, body, "<code>sind ssh worker-3.dev</code>")
 	assert.Contains(t, body, "<code>sind logs worker-3.dev slurmd -f -n 200</code>")
 

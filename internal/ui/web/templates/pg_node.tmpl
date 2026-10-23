@@ -8,7 +8,7 @@
 {{end}}
 
 {{define "pg-node-head"}}{{with .Data}}{{if .Found}}
-<div class="head"><div class="t"><h1><span class="mono pg-h1">{{.Node.Arg}}</span> <span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></h1>
+<div class="head"><div class="t"><h1>{{.Node.Arg}} <span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></h1>
   <div class="sub"><span class="chip {{.Node.RoleClass}}">{{.Node.Role}}</span>{{with .Node.IP}}<span class="mono">{{.}}</span>{{end}}{{with .Node.HA}}<span>HA position {{.Position}}{{if .InControl}} · in control{{else}} · standby{{end}}</span>{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{else}}{{template "pg-gone" .Short}}{{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
@@ -25,6 +25,6 @@
     <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
     <dt>realm</dt><dd class="mono">{{.Realm}}</dd>
     {{if .Node.Known}}<dt>managed</dt><dd>{{if .Node.Managed}}yes{{else}}no{{end}}</dd>{{end}}
-    <dt>FQDN</dt><dd class="mono">{{.Node.FQDN}} <button type="button" class="btn sm ghost" data-pg-copy-text="{{.Node.FQDN}}">Copy</button></dd></dl></div></section>
+    <dt>FQDN</dt><dd class="mono">{{.Node.FQDN}} <button type="button" class="btn sm" data-pg-copy-text="{{.Node.FQDN}}">Copy</button></dd></dl></div></section>
   <section class="panel pg-wide"><div class="ph"><h2>From your terminal</h2></div><div class="pb stack">{{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
 </div>{{end}}{{end}}{{end}}

@@ -18,7 +18,7 @@ func TestEmbeddedAssets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Regexp(t, `^[0-9a-f]{12}$`, a.version)
 	for _, name := range []string{
-		"app.css", "app.js", "icon.svg", "htmx.min.js", "htmx-ext-sse.js", "idiomorph-ext.min.js",
+		"app.css", "app.js", "icon.svg", "icons.svg", "htmx.min.js", "htmx-ext-sse.js", "idiomorph-ext.min.js",
 		"fonts/inter-latin-wght.woff2", "fonts/jetbrains-mono-latin-wght.woff2",
 		"licenses/htmx-0BSD.txt", "licenses/htmx-ext-sse-0BSD.txt", "licenses/idiomorph-0BSD.txt",
 		"licenses/inter-OFL.txt", "licenses/jetbrains-mono-OFL.txt", "licenses/NOTICE.txt",
@@ -125,3 +125,11 @@ func (f failingFS) Open(name string) (fs.File, error) {
 }
 
 func (failingFS) ReadFile(string) ([]byte, error) { return nil, fs.ErrPermission }
+
+func TestRailIcons(t *testing.T) {
+	data, err := fs.ReadFile(webFS(), "static/icons.svg")
+	require.NoError(t, err)
+	for _, it := range navItems {
+		assert.Contains(t, string(data), `<symbol id="`+it.Key+`" `, it.Key)
+	}
+}

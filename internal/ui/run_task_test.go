@@ -91,7 +91,7 @@ func TestRunTaskPageGone(t *testing.T) {
 	assert.Contains(t, runFragment(t, ts, runNow, "run-wait", "id", "nope"), "This task is gone")
 	// A task without a display shows its action.
 	ts.st.AddTask(store.Task{ID: "a", Action: "power", Start: runAt(1), Status: store.TaskRunning})
-	assert.Contains(t, runFragment(t, ts, runNow, "run-wait", "id", "a"), `<span class="mono rtitle">power</span>`)
+	assert.Contains(t, runFragment(t, ts, runNow, "run-wait", "id", "a"), `<h1>power</h1>`)
 }
 
 func TestRunTaskDismiss(t *testing.T) {
