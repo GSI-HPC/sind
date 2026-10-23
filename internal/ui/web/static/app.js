@@ -21,6 +21,21 @@
     return meta ? meta.content : '';
   }
 
+  function dark() {
+    return root.dataset.theme
+      ? root.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  // The theme button is a toggle of the dark theme: pressed while it is on.
+  function showTheme() {
+    const on = dark();
+    document.querySelectorAll('[data-theme-toggle]').forEach(b => {
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.title = on ? 'Dark theme is on: switch to light' : 'Dark theme is off: switch to dark';
+    });
+  }
+
   function setLive(on) {
     const el = document.getElementById('live');
     if (!el) return;
@@ -30,13 +45,14 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    showTheme();
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', showTheme);
+
     document.addEventListener('click', ev => {
       if (!ev.target.closest('[data-theme-toggle]')) return;
-      const dark = root.dataset.theme
-        ? root.dataset.theme === 'dark'
-        : matchMedia('(prefers-color-scheme: dark)').matches;
-      root.dataset.theme = dark ? 'light' : 'dark';
+      root.dataset.theme = dark() ? 'light' : 'dark';
       store.set('sind-ui-theme', root.dataset.theme);
+      showTheme();
     });
 
     // Every request that htmx sends carries the session's CSRF token.

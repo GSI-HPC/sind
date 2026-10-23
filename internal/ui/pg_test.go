@@ -47,6 +47,7 @@ func TestPgOverview(t *testing.T) {
 
 	// Realms with health, clusters as cards.
 	assert.Contains(t, body, `<a href="/?realm=sind"><b>sind</b></a>`)
+	assert.Contains(t, body, `<a class="btn sm ghost" href="/clusters?realm=sind">Clusters<span class="vh"> of sind</span></a>`)
 	assert.Contains(t, body, "1 node is not running")
 	assert.Contains(t, body, "a command runs")
 	assert.Contains(t, body, `<a class="panel pg-ccard" href="/clusters/sind/dev">`)
@@ -392,6 +393,7 @@ func TestPgClusterNodesTab(t *testing.T) {
 	assert.Contains(t, body, `<a class="btn sm danger" href="/dialogs/delete-worker?cluster=dev&amp;realm=sind" data-pg-dialog data-pg-workers>Delete…</a>`)
 	assert.Contains(t, body, `<span class="pill bad">stopped</span> </td>`)
 	assert.Contains(t, body, `<span class="faint">–</span>`)
+	assert.Contains(t, body, "<title>Nodes · dev · sind ui</title>", "the tab is in the title")
 	pgFillStatus(ts.st)
 	body = pgBody(t, ts, "/clusters/sind/dev?tab=nodes", 200)
 	assert.Contains(t, body, `<span class="pill bad">slurmd down</span>`)

@@ -25,9 +25,20 @@ var pgClusterPage = Page{
 		if !d.Found {
 			return fmt.Errorf("cluster %s in realm %s: %w", d.Name, d.Realm, ErrNotFound)
 		}
-		v.Title = d.Name
+		v.Title = pgClusterTitle(d)
 		return nil
 	},
+}
+
+// pgClusterTitle is the title of a cluster page: the cluster, after its tab
+// unless that is the summary, so that each tab has a title of its own.
+func pgClusterTitle(d *pgClusterView) string {
+	for _, t := range d.Tabs {
+		if t.On && t.Key != "summary" {
+			return t.Label + " · " + d.Name
+		}
+	}
+	return d.Name
 }
 
 // pgClusterTopics returns the topics a cluster page keeps: the cluster's

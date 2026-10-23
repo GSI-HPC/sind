@@ -153,7 +153,13 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-cluster", "", []string{"New cluster", `id="act-name" name="name" value="hpc"`, `data-act-step="w0-count"`, `id="act-w0-count" name="w0-count" value="2"`,
 			`id="act-db" name="db" checked`, `id="act-submitter" name="submitter" checked`, `id="act-backup" name="backup" aria-`, `id="act-pull" name="pull" checked`,
 			`<aside class="act-planpane" aria-label="Plan">`, `id="act-status" role="status"`, `value="~/sind/hpc"`, `data-act-follow`,
-			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`, "In realm sind"}},
+			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`, "In realm sind",
+			// A size chip is named by its node and its value; the controls of a
+			// worker group by the workers it makes.
+			`aria-labelledby="act-czl-controller act-chip-controller"><span class="vh" id="act-czl-controller">Size of controller</span>`,
+			`aria-labelledby="act-czl-w0 act-range-w0 act-chip-w0"><span class="vh" id="act-czl-w0">Size of workers</span>`,
+			`aria-label="Fewer workers" aria-labelledby="act-w0-less act-range-w0"`, `aria-label="More workers" aria-labelledby="act-w0-more act-range-w0"`,
+			`aria-label="Remove the worker group" aria-labelledby="act-w0-del act-range-w0"`}},
 		{"create-cluster", "wait=7m&pull=&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="other" checked`, `name="wait_other" value="7m"`, `id="act-pull" name="pull" aria-`}},
 		{"create-cluster", "wait=0&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="0" checked`, `id="act-pull" name="pull" aria-`, `name="pull_auto"`}},
 		{"create-cluster", "realm=ci&name=big", []string{"In realm ci", `value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`}},
@@ -858,7 +864,7 @@ func TestActDialog_OpenedByItsURLIsAPage(t *testing.T) {
 	f := newActFixture(t)
 	body := f.get("/dialogs/connect").Body.String()
 	assert.Contains(t, body, "<title>Connect a container · sind ui</title>")
-	assert.Contains(t, body, `<main class="main" id="main">`+"\n"+`<div class="scrim" id="act-dialog"`)
+	assert.Contains(t, body, `<main class="main" id="main" tabindex="-1">`+"\n"+`<div class="scrim" id="act-dialog"`)
 }
 
 func TestActPreview_NewClusterShowsThePlanWithProblems(t *testing.T) {
@@ -916,6 +922,8 @@ func TestActDialog_NewClusterUsers(t *testing.T) {
 	assert.Contains(t, body, `<details class="act-sec" id="act-sec-users" open>`)
 	assert.Contains(t, body, `id="act-u0-name" name="u0-name" value="ada"`)
 	assert.Contains(t, body, `id="act-u1-name" name="u1-name" value="bob"`)
+	// Each remove button is named after the name in its row.
+	assert.Contains(t, body, `id="act-u1-del" data-act-rowdel aria-label="Remove the user" aria-labelledby="act-u1-del act-u1-name"`)
 
 	body = f.get("/dialogs/create-cluster?" + actForm("ar", "a0", "a0-name", "physics", "a0-lk", "MaxJobs", "a0-lv", "4", "a0-lk", "GrpTRES",
 		"ur", "u0", "u0-admin", "operator", "gr", "g0", "gr", "api", "g0-name", "hpc", "evil", "x")).Body.String()
@@ -923,6 +931,8 @@ func TestActDialog_NewClusterUsers(t *testing.T) {
 	assert.Contains(t, body, `name="a0-lv" value="4"`)
 	assert.Contains(t, body, `name="a0-lk" value="GrpTRES"`, "a limit without its value")
 	assert.Contains(t, body, `id="act-g0-name" name="g0-name" value="hpc"`)
+	assert.Contains(t, body, `aria-label="Remove the group" aria-labelledby="act-g0-del act-g0-name"`)
+	assert.Contains(t, body, `aria-label="Remove the account" aria-labelledby="act-a0-del act-a0-name"`)
 	assert.NotContains(t, body, `id="act-row-api"`, "a key that the dialog does not make")
 	assert.Contains(t, body, `<option value="operator" selected>Operator</option>`)
 	assert.Contains(t, body, `<details class="act-more" open><summary>More: groups, coordinator, admin level</summary>`)

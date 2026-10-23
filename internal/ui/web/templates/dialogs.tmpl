@@ -97,13 +97,13 @@ the nodes, the command and the config also while a field is wrong. */}}
 
 {{/* act-chip is the size button of a node of a new cluster, which opens
 its editor. */}}
-{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Open}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-label="Size of {{.Label}}">{{template "act-chip-text" .}}</button>{{end}}
+{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Open}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-labelledby="act-czl-{{.Key}}{{if .Group}} act-range-{{.Key}}{{end}} act-chip-{{.Key}}"><span class="vh" id="act-czl-{{.Key}}">Size of {{.Label}}</span>{{template "act-chip-text" .}}</button>{{end}}
 
 {{define "act-chip-text"}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}}>{{.Chip}}</span>{{end}}
 
 {{/* act-group is a worker group of a new cluster: its row and editor. */}}
 {{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>workers</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
-  <span class="act-k"><span class="act-step"><button type="button" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer workers">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" data-act-step="{{.Key}}-count" data-d="1" aria-label="More workers">+</button></span><button type="button" class="act-x" data-act-wgdel="{{.Key}}" aria-label="Remove this worker group">✕</button></span></div>
+  <span class="act-k"><span class="act-step"><button type="button" id="act-{{.Key}}-less" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer workers" aria-labelledby="act-{{.Key}}-less act-range-{{.Key}}">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" id="act-{{.Key}}-more" data-act-step="{{.Key}}-count" data-d="1" aria-label="More workers" aria-labelledby="act-{{.Key}}-more act-range-{{.Key}}">+</button></span><button type="button" class="act-x" id="act-{{.Key}}-del" data-act-wgdel="{{.Key}}" aria-label="Remove the worker group" aria-labelledby="act-{{.Key}}-del act-range-{{.Key}}">✕</button></span></div>
 {{template "act-ned" .}}{{end}}
 
 {{/* act-ned is the editor of the size and more of a node of a new
@@ -132,7 +132,7 @@ placeholder. */}}
     <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as alice" aria-label="User name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
     <input type="number" id="act-{{.Key}}-uid" name="{{.Key}}-uid" value="{{.Val "uid"}}" min="1000" placeholder="UID: auto" aria-label="UID" aria-describedby="act-err-{{.Key}}-uid">
     <input type="text" id="act-{{.Key}}-accounts" name="{{.Key}}-accounts" value="{{.Val "accounts"}}" list="act-dl-accounts" placeholder="Slurm accounts" aria-label="Slurm accounts, the first is the default" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-accounts">
-    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this user">✕</button>
+    <button type="button" class="act-x" id="act-{{.Key}}-del" data-act-rowdel aria-label="Remove the user" aria-labelledby="act-{{.Key}}-del act-{{.Key}}-name">✕</button>
   </div>
   <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-uid"></span><span class="err" id="act-err-{{.Key}}-accounts"></span>
   <details class="act-more"{{if or (.Val "group") (.Val "groups") (.Val "coordinator") (.Val "admin")}} open{{end}}><summary>More: groups, coordinator, admin level</summary>
@@ -151,7 +151,7 @@ placeholder. */}}
   <div class="act-rowf">
     <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as hpc" aria-label="Group name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
     <input type="number" id="act-{{.Key}}-gid" name="{{.Key}}-gid" value="{{.Val "gid"}}" min="1000" placeholder="GID: auto" aria-label="GID" aria-describedby="act-err-{{.Key}}-gid">
-    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this group">✕</button>
+    <button type="button" class="act-x" id="act-{{.Key}}-del" data-act-rowdel aria-label="Remove the group" aria-labelledby="act-{{.Key}}-del act-{{.Key}}-name">✕</button>
   </div>
   <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-gid"></span>
 </div>{{end}}
@@ -162,7 +162,7 @@ limits as pairs of fields. */}}
   <div class="act-rowf">
     <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as physics" aria-label="Account name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
     <input type="text" id="act-{{.Key}}-parent" name="{{.Key}}-parent" value="{{.Val "parent"}}" list="act-dl-accounts" placeholder="parent: root" aria-label="Parent account" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-parent">
-    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this account">✕</button>
+    <button type="button" class="act-x" id="act-{{.Key}}-del" data-act-rowdel aria-label="Remove the account" aria-labelledby="act-{{.Key}}-del act-{{.Key}}-name">✕</button>
   </div>
   <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-parent"></span>
   <div class="act-lims" id="act-lims-{{.Key}}">{{range .Limits}}{{template "act-limit" .}}{{end}}</div>

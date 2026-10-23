@@ -23,6 +23,7 @@ parts that fill them replace as a whole. */}}
 {{range .Scripts}}<script src="{{.}}" defer></script>
 {{end}}</head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <div class="app"{{if .Events}} hx-ext="sse,morph" sse-connect="{{.Events}}"{{end}}>
   <header class="top">
     <a class="brand" href="/"><img src="{{call .Asset "icon.svg"}}" alt="" width="24" height="24">sind <small>ui</small></a>
@@ -32,10 +33,10 @@ parts that fill them replace as a whole. */}}
     {{if .Events}}<span class="live" id="live" title="Live: changes show as they happen"><i></i><span>live</span></span>{{end}}
     <span class="hostchip"><i></i>{{.Addr}}</span>
     {{template "slot-help" .}}
-    <button type="button" class="iconbtn" data-theme-toggle aria-label="Light or dark" title="Light or dark">◐</button>
+    <button type="button" class="iconbtn" data-theme-toggle aria-label="Dark theme" aria-pressed="false" title="Dark theme">◐</button>
   </header>
   <nav class="rail" id="rail" aria-label="Pages" hx-swap="morph:innerHTML" sse-swap="rail">{{fragment "rail" .}}</nav>
-  <main class="main" id="main">{{include .Content .}}</main>
+  <main class="main" id="main" tabindex="-1">{{include .Content .}}</main>
   <div class="tasks" id="tasks" aria-live="polite" hx-swap="morph:innerHTML" sse-swap="tasks">{{fragment "tasks" .}}</div>
 </div>
 <div id="layer"></div>

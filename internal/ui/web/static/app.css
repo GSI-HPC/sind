@@ -59,6 +59,14 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mono{font-family:var(--f-mono);font-size:.92em;font-size:round(.92em,1px)}
 .muted{color:var(--muted)} .faint{color:var(--faint)}
 .num{font-variant-numeric:tabular-nums}
+/* .vh hides text from the eye but not from screen readers. It sits at
+   the corner of its containing block, so that text in a box that scrolls
+   sideways does not widen the page. */
+.vh{position:absolute!important;top:0;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* The skip link is the first stop of Tab, and shows only then. */
+.skip{position:fixed;left:8px;top:8px;z-index:100;padding:8px 14px;border:2px solid var(--accent);border-radius:var(--r);background:var(--panel);color:var(--accent);font-weight:600;transform:translateY(-300%)}
+.skip:focus{transform:none;text-decoration:none}
+.main:focus{outline:none}
 
 /* shell */
 .app{display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100%}
