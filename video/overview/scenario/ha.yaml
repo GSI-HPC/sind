@@ -1,0 +1,9 @@
+kind: Cluster
+name: ha
+nodes:
+  - role: controller
+    backupController: true
+  - role: worker
+slurm:
+  main: |
+    SlurmctldTimeout=10

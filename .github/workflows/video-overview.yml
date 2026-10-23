@@ -1,0 +1,84 @@
+name: Overview video
+
+# Records the overview video (video/overview) on a runner with Docker and
+# renders it, so a pull request that changes it can be reviewed from its
+# artifacts: the video, its poster and chapters, and the recordings, which
+# the compositor can render again locally.
+
+on:
+  pull_request:
+    paths:
+      - video/overview/**
+      - video/voice/**
+      - .github/workflows/video-overview.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-overview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  overview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Set up the recording host
+        run: video/overview/setup-host.sh
+
+      - name: Restore the voice model
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/sindy-voice
+          key: sindy-voice-kokoro-v1.0
+
+      - name: Install the video tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          ffmpeg -hide_banner -encoders | grep -q libsvtav1
+          (cd video && npm ci --no-audit --no-fund)
+          pip install --quiet numpy -r video/voice/requirements.txt
+          python3 video/voice/sindy_voice.py setup
+
+      - name: Record
+        env:
+          # mise's GitHub backend lists the sind releases with it.
+          GITHUB_TOKEN: ${{ github.token }}
+          CHROME: /usr/bin/google-chrome
+        run: python3 video/overview/record.py --out "$RUNNER_TEMP/recordings"
+
+      - name: Upload the recordings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: overview-recordings
+          path: ${{ runner.temp }}/recordings
+          retention-days: 7
+          compression-level: 0
+
+      - name: Render
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: video/overview/build.sh "$RUNNER_TEMP/recordings" "$RUNNER_TEMP/overview"
+
+      - name: Upload the video
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: overview-video
+          path: |
+            ${{ runner.temp }}/overview/overview.*
+            ${{ runner.temp }}/overview/overview-thumb.jpg
+          retention-days: 14
+          compression-level: 0

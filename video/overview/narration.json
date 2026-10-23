@@ -1,0 +1,69 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "open-1", "text": "Meet sind. Slurm in Docker." },
+    { "id": "open-2", "text": "Real Slurm clusters, in Docker containers, right on your machine." },
+    { "id": "open-3", "text": "For development, tests and CI, from the terminal or the browser." },
+
+    { "id": "install", "text": "Install it with meez. Docker is the only thing you need." },
+    { "id": "doctor", "text": "Then sind doctor checks that the host is ready." },
+    { "id": "create", "text": "Describe a cluster in YAML, and create it with one command." },
+    { "id": "get", "text": "Now you see your clusters and their nodes." },
+
+    { "id": "enter", "text": "sind enter opens a shell on the submitter." },
+    { "id": "data", "text": "Your working directory on the host is the data directory on every node." },
+    { "id": "submit", "text": "Submit jobs, and watch the queue." },
+    { "id": "accounting", "text": "The database node keeps the job accounting." },
+    { "id": "exec", "text": "Or run a single command, straight from the host." },
+
+    { "id": "ssh", "text": "sind ssh reaches any node." },
+    { "id": "relay", "text": "sind publishes no ports. A relay on the mesh carries the SSH connection." },
+    { "id": "sshconfig", "text": "Or use your own ssh. Just include the config that sind writes." },
+    { "id": "scp", "text": "Then ssh and scp reach each node by name." },
+    { "id": "forward", "text": "Port forwards reach the services on the nodes." },
+    { "id": "dns", "text": "With systemd resolve-dee, your host finds each node by name, too." },
+
+    { "id": "logs", "text": "Follow the logs of a container, or of a single service, live." },
+    { "id": "workers", "text": "Add workers to a running cluster." },
+    { "id": "failures", "text": "Simulate failures. Freeze, cut, or reboot nodes." },
+    { "id": "frozen", "text": "Slurm marks the frozen node as not responding." },
+    { "id": "nodesets", "text": "Node expressions select many nodes at once." },
+    { "id": "delworkers", "text": "And remove workers when you're done." },
+
+    { "id": "rest", "text": "slurmrestd serves the REST API on the api node, with JWT." },
+    { "id": "users", "text": "Users, groups and Slurm accounts come straight from the config." },
+    { "id": "backup", "text": "A backup controller takes over," },
+    { "id": "failover", "text": "when the primary controller fails." },
+    { "id": "monitoring", "text": "Turn on monitoring, and each realm gets Prometheus, Loki and Grafana." },
+    { "id": "grafana", "text": "Grafana shows the Slurm dashboards of your cluster." },
+    { "id": "images", "text": "The images ship current Slurm releases for amd64 and arm64, with CVMFS on request." },
+
+    { "id": "realm", "text": "A realm keeps its clusters apart, for parallel work and CI." },
+    { "id": "connect", "text": "Connect other containers, like kind nodes, to the realm's networks." },
+
+    { "id": "ui", "text": "sind ui opens in your browser, and only you can open it." },
+    { "id": "overview", "text": "The overview shows all realms, clusters and nodes, live." },
+    { "id": "dialog", "text": "A new cluster is a form, a plan, and the exact command." },
+    { "id": "name", "text": "First, a name. Let's call it lab." },
+    { "id": "api", "text": "Tick a box to add a node, like the api node for the REST API. The plan on the right follows every change." },
+    { "id": "workers3", "text": "Then set how many workers you want. Three, this time." },
+    { "id": "slurmconf", "text": "Slurm config takes your own lines for slurm dot conf and its friends. sind writes them after its own." },
+    { "id": "yaml", "text": "Edit YAML opens the whole config. The form waits until you discard your edits." },
+    { "id": "createbtn", "text": "Create saves the config, and runs the very command the plan shows." },
+    { "id": "run", "text": "Watch each step and each node, as it happens." },
+    { "id": "failed", "text": "When a run fails, sind ui tells you why, and what to do." },
+    { "id": "health", "text": "Here's the health of each service, on each node." },
+    { "id": "nodeset", "text": "Select nodes as a node set, then power them." },
+    { "id": "uilogs", "text": "Logs, from a container or one service, followed live." },
+    { "id": "uiconnect", "text": "Connect shows the ssh and exec commands, ready to copy." },
+    { "id": "pages", "text": "There's mesh and DNS, topology, monitoring and doctor." },
+    { "id": "jump", "text": "Press slash to jump to any node or page, and question mark for help." },
+    { "id": "theme", "text": "Light, or dark." },
+
+    { "id": "action", "text": "In CI, it's one step with the sind action." },
+    { "id": "plain", "text": "Plain progress lines and a JSON event log suit CI and scripts." },
+
+    { "id": "delete", "text": "When you're done, delete everything with one command." },
+    { "id": "bye", "text": "That's sind. Find the docs and the code at these links." }
+  ]
+}

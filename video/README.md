@@ -204,6 +204,7 @@ video/
   voice/                TTS tool, voice presets, pronunciation lexicon
   episodes/<id>/        one HyperFrames project per docs page (script.json + index.html)
   tools/                episode CLI (voice, check, render, publish, ci), vendoring, screenshots, lip-sync stats
+  overview/             the overview video of the landing page, recorded from real runs (overview/README.md)
 ```
 
 Generated files (`vendor/`, `assets/voice/`, `snapshots/`, `renders/`) are not
