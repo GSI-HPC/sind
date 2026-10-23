@@ -75,6 +75,10 @@ func TestRunTaskPageEndedWithoutRun(t *testing.T) {
 	body = ts.get("/tasks/c").Body.String()
 	assert.Contains(t, body, `<div class="callout warn">The command ended (canceled)`)
 	assert.NotContains(t, body, "standard error")
+	// The dock keeps the card of the failed command to one line of its
+	// error, and leaves its output to its page.
+	assert.Contains(t, body, `<div class="tl terr"><span title="docker: not found">docker: not found</span><span class="num">1.0s</span></div>`)
+	assert.NotContains(t, body, "boom")
 	body = ts.get("/tasks/o").Body.String()
 	assert.Contains(t, body, `<div class="callout">The command ended without errors. Commands such as Drain and Resume write no progress`)
 	ts.st.AddTask(store.Task{ID: "w", Display: "d", Trace: "tr5", Start: runAt(10), End: runPtr(runAt(11)), Status: store.TaskOK, Output: "warning"})

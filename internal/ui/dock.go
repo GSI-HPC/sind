@@ -100,8 +100,12 @@ type dockCard struct {
 	Stop *runStop
 	// Canceling is set while a stop is under way.
 	Canceling bool
-	Err       string
-	Output    string
+	// Compact is set for a command that failed or was stopped: its card
+	// keeps to the title, one line and its buttons, as it stays until the
+	// user hides it, and leaves the output to the run page.
+	Compact bool
+	// Why is the first line of the error of a command that failed.
+	Why string
 	// SayKey, SayState and Say are what run.js announces: the sentence
 	// Say, once, when the state of the command with the key changes.
 	SayKey   string
@@ -207,7 +211,7 @@ func dockFit(cards []dockCard, now time.Time) dockData {
 
 // dockTaskCard draws a task, with its run if the log holds one.
 func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockCard {
-	c := dockCard{TaskID: t.ID, Tip: t.Display, Realm: t.Realm, Href: "/tasks/" + t.ID, Err: t.Err, Output: t.Output, start: t.Start}
+	c := dockCard{TaskID: t.ID, Tip: t.Display, Realm: t.Realm, Href: "/tasks/" + t.ID, start: t.Start}
 	c.Title = taskTitle(t, nil)
 	if t.End != nil {
 		c.end = *t.End
@@ -275,6 +279,10 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 	why := t.Err
 	if hasRun && why == "" {
 		why = runFailure(run)
+	}
+	c.Compact = c.Class == runFailed || c.Class == runCanceled || c.Class == runEnded
+	if c.Class == runFailed {
+		c.Why, _, _ = strings.Cut(strings.TrimSpace(why), "\n")
 	}
 	c.SayKey, c.SayState = "t:"+t.ID, runSayState(c.Class, t.Canceling)
 	c.Say = runSay(c.Title, c.SayState, c.Elapsed, why)

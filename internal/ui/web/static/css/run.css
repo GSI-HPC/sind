@@ -24,7 +24,7 @@ form.inline{display:inline;margin:0}
 .task .tl span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task .tf{display:flex;gap:6px;justify-content:flex-end}
 .task .callout{font-size:var(--t-sm);overflow-wrap:anywhere}
-.task .tout{max-height:120px}
+.task .tl.terr span:first-child{color:var(--bad)}
 .task.more{padding:8px 14px;text-align:center;color:var(--muted);font-size:var(--t-md)}
 .task.gone{display:none}
 /* Stop asks in the page: a question below the button, or over the card in

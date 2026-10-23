@@ -68,7 +68,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 
 func TestRunDockTaskEnded(t *testing.T) {
 	failed := runFixture(t, "create-failed.jsonl", -1)[0]
-	task := store.Task{ID: "t", Display: "d", Trace: failed.Trace, Start: runAt(0), End: failed.End, Status: store.TaskFailed, Err: "node worker-1: timed out", Output: "tail"}
+	task := store.Task{ID: "t", Display: "d", Trace: failed.Trace, Start: runAt(0), End: failed.End, Status: store.TaskFailed, Err: "node worker-1: timed out\nmore", Output: "Error: node worker-1: timed out\nmore"}
 	c := runDockOf(store.Snapshot{Runs: []store.Run{failed}, Tasks: []store.Task{task}}, runAt(900)).Cards[0]
 	assert.Equal(t, runFailed, c.Class)
 	assert.Equal(t, "✗", c.Mark)
@@ -78,13 +78,15 @@ func TestRunDockTaskEnded(t *testing.T) {
 	assert.Zero(t, c.Since)
 	assert.True(t, c.Dismiss)
 	assert.Nil(t, c.Stop)
-	assert.Equal(t, "node worker-1: timed out", c.Err)
+	assert.Equal(t, "node worker-1: timed out", c.Why, "the first line of the error")
+	assert.True(t, c.Compact)
 
 	// The command ended, and its task not yet: the run says how.
 	task.Status, task.End = store.TaskRunning, nil
 	c = runDockOf(store.Snapshot{Runs: []store.Run{failed}, Tasks: []store.Task{task}}, runAt(900)).Cards[0]
 	assert.Equal(t, runFailed, c.Class)
 	assert.False(t, c.Dismiss, "it can be stopped, not closed")
+	assert.NotEmpty(t, c.Why, "the error of the run")
 
 	ok := runFixture(t, "create-ok.jsonl", -1)[0]
 	task = store.Task{ID: "t", Trace: ok.Trace, Status: store.TaskOK, Action: "create-cluster"}
@@ -92,6 +94,8 @@ func TestRunDockTaskEnded(t *testing.T) {
 	assert.Equal(t, runOK, c.Class)
 	assert.Equal(t, "create cluster", c.Title)
 	assert.Equal(t, "done in 53s", c.Line)
+	assert.False(t, c.Compact)
+	assert.Empty(t, c.Why)
 }
 
 func TestRunDockTaskWithoutRun(t *testing.T) {

@@ -4,16 +4,16 @@
 ui started, and for each run that a terminal writes to the event log, and a
 bar that sums them up when there are several. The dock shows the first card
 only, until Show all opens it (run.js); a card of a command that ended ok
-hides by itself at data-hide-at. The cards are built in dock.go. */}}
+hides by itself at data-hide-at. A card of a command that failed or was
+stopped is compact: its title, the first line of the error or how it ended,
+and its buttons; the run page has the rest. The cards are built in dock.go. */}}
 {{define "tasks"}}{{with .Data}}{{if .Bar}}<div class="dock-bar">{{if .Running}}<span class="spin" aria-hidden="true"></span>{{end}}<span class="dock-sum">{{range $i, $p := .Parts}}{{if $i}} · {{end}}{{if .Strong}}<b>{{.Text}}</b>{{else}}{{.Text}}{{end}}{{end}}</span>
   {{if .Clear}}<form class="inline" method="post" action="/tasks/clear" hx-post="/tasks/clear" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="btn sm">Clear done</button></form>{{end}}{{if .Toggle}}<button type="button" class="btn sm" data-dock-toggle aria-controls="tasks" aria-expanded="false">Show all</button>{{end}}</div>
-{{end}}{{range .Cards}}<div class="task {{.Class}}"{{if .HideAt}} data-hide-at="{{.HideAt}}"{{end}}>{{template "run-say" .}}
+{{end}}{{range $card := .Cards}}<div class="task {{.Class}}"{{if .HideAt}} data-hide-at="{{.HideAt}}"{{end}}>{{template "run-say" .}}
   <div class="th">{{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}" aria-hidden="true">{{.Mark}}</span>{{end}}<b><a href="{{.Href}}" title="{{or .Tip .Title}}">{{.Title}}</a></b>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}{{with .Chip}}<span class="chip">{{.}}</span>{{end}}
     {{if .Dismiss}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/dismiss" hx-post="/tasks/{{.TaskID}}/dismiss" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="iconbtn" aria-label="Hide the card of {{.Title}}" title="Hide">×</button></form>{{end}}</div>
-  {{template "run-segbar" .}}
-  <div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>
-  {{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
-  {{if .Output}}{{if eq .Class "failed"}}<pre class="term tout">{{.Output}}</pre>{{end}}{{end}}
+  {{if not .Compact}}{{template "run-segbar" .}}{{end}}
+  {{with .Why}}<div class="tl terr"><span title="{{.}}">{{.}}</span>{{template "run-elapsed" $card}}</div>{{else}}<div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>{{end}}
   <div class="tf">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}" aria-label="{{.Action}}: {{.Title}}">{{.Action}}</a></div>
 </div>
 {{end}}{{if .More}}<a class="task more" href="/activity">{{.More}} more in Activity</a>{{end}}{{end}}{{end}}
