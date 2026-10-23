@@ -337,6 +337,16 @@
       ev.detail.headers['X-Sind-CSRF'] = csrfToken();
     });
 
+    // The live stream closes when the page goes, before the browser cuts
+    // it: a cut stream is an error, which htmx logs and the page would
+    // show as a lost connection. A page that the browser brings back from
+    // its cache loads again, as its stream is closed.
+    const streams = new Set();
+    document.body.addEventListener('htmx:sseOpen', ev => { if (ev.detail && ev.detail.source) streams.add(ev.detail.source); });
+    window.addEventListener('pagehide', () => {
+      for (const s of streams) s.close();
+    });
+    window.addEventListener('pageshow', ev => { if (ev.persisted && streams.size) location.reload(); });
     document.body.addEventListener('htmx:sseOpen', connBack);
     document.body.addEventListener('htmx:sseError', connLost);
     document.body.addEventListener('htmx:sseBeforeMessage', ev => before(ev.target));
