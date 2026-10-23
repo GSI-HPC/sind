@@ -44,7 +44,7 @@ type dockCard struct {
 	Title string
 	// Chip says where a run came from that sind ui did not start.
 	Chip    string
-	Segs    []runSeg
+	Segs    runBar
 	Line    string
 	Elapsed string
 	// Since is what run.js counts the clock from; 0 for a clock that
@@ -62,6 +62,11 @@ type dockCard struct {
 	Canceling bool
 	Err       string
 	Output    string
+	// SayKey, SayState and Say are what run.js announces: the sentence
+	// Say, once, when the state of the command with the key changes.
+	SayKey   string
+	SayState string
+	Say      string
 }
 
 // dockLoad builds the cards: a card for each task, then one for each run
@@ -134,7 +139,7 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 			c.Since = runSince(run)
 		}
 	} else {
-		c.Segs = []runSeg{{Class: c.Class, Title: c.Class}}
+		c.Segs = runBar{{Class: c.Class, Title: c.Class}}
 		c.Elapsed = runDur(taskElapsed(t, now))
 		c.Line = "starting"
 		if c.Class == runRunning && !t.Start.IsZero() {
@@ -156,6 +161,12 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 	c.Cancel = c.Class == runRunning && !t.Canceling
 	c.Canceling = c.Class == runRunning && t.Canceling
 	c.Dismiss = taskEnded(t)
+	why := t.Err
+	if hasRun && why == "" {
+		why = runFailure(run)
+	}
+	c.SayKey, c.SayState = "t:"+t.ID, runSayState(c.Class, t.Canceling)
+	c.Say = runSay(c.Title, c.SayState, c.Elapsed, why)
 	return c
 }
 
@@ -167,6 +178,7 @@ func dockRunCard(run store.Run, chip string, now time.Time) dockCard {
 		Segs: runSegs(run), Line: runLine(run, nil, now),
 		Elapsed: runDur(runElapsed(run, now)), Since: runSince(run),
 		Href: "/runs/" + run.ID, Action: "Show progress",
+		SayKey: "r:" + run.ID, SayState: runRunning, Say: runSay(run.Title, runRunning, "", ""),
 	}
 }
 

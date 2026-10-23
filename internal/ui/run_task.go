@@ -47,6 +47,12 @@ type runWait struct {
 	// NoRun says that the command writes no event log, so it never has a
 	// run page.
 	NoRun bool
+	// SayKey, SayState and Say are what run.js announces when the task
+	// ends while the page waits. The key is the page's own, and the page
+	// announces no start: the run page that follows at once does.
+	SayKey   string
+	SayState string
+	Say      string
 }
 
 // runWaitOf builds the waiting page's fragment for the task in the Param id.
@@ -66,6 +72,7 @@ func runWaitOf(v *View) *runWait {
 	w.Class, w.Elapsed, w.Since = card.Class, card.Elapsed, card.Since
 	w.PillClass = runPillClass(card.Class)
 	w.Cancel, w.Canceling = card.Cancel, card.Canceling
+	w.SayKey, w.SayState, w.Say = "w:"+t.ID, card.SayState, card.Say
 	return w
 }
 

@@ -106,16 +106,29 @@ func TestRunSummary(t *testing.T) {
 	assert.Equal(t, []runCount{{"ok", "ok", 1}, {"running", "run", 3}, {"queued", "", 0}, {"failed", "bad", 0}, {"canceled", "warn", 0}}, s.Counts)
 	assert.Equal(t, []string{"3 waits for a node to become ready. The slowest has used 5 % of its limit (5m00s)."}, s.Hints)
 	assert.Equal(t, "▸ nodes 0/3 · sind ui", s.DocTitle)
+	assert.Equal(t, "r:"+run.ID, s.SayKey)
+	assert.Equal(t, runRunning, s.SayState)
+	assert.Equal(t, "create cluster: started.", s.Say)
+	assert.Equal(t, runAt(0).UnixMilli(), s.SaySince)
+
+	// The run of a task: announced by the task, as the dock does.
+	stopping := runCtxOf(run, runAt(25))
+	stopping.Task = &store.Task{ID: "t1", Canceling: true}
+	s = runSummaryOf(stopping)
+	assert.Equal(t, "t:t1", s.SayKey)
+	assert.Equal(t, "stopping", s.SayState)
 
 	done := runSummaryOf(runCtxOf(runFixture(t, "create-canceled.jsonl", -1)[0], runAt(25)))
 	assert.Empty(t, done.Hints)
 	assert.Zero(t, done.Since)
 	assert.Equal(t, "~ create cluster · sind ui", done.DocTitle)
+	assert.Equal(t, "create cluster: stopped.", done.Say)
 	assert.Len(t, done.Counts, 5, "no skipped count unless there are some")
 
 	// Without targets there is nothing to count.
 	bare := runSummaryOf(runCtxOf(runOf(0, ""), runAt(5)))
 	assert.True(t, bare.NoTargets)
+	assert.Zero(t, runSummaryOf(runCtxOf(store.Run{ID: "x"}, runAt(5))).SaySince, "a run without a start")
 	assert.Equal(t, "▸ starting · sind ui", bare.DocTitle)
 	skipped := runOf(0, "", runSp("step", "n", runStartedAt(0), runKids(runSp("target", "a", runEndedAt(0, 1, "skipped")))))
 	assert.Contains(t, runSummaryOf(runCtxOf(skipped, runAt(5))).Counts, runCount{"skipped", "", 1})

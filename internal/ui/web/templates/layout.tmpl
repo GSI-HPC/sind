@@ -4,8 +4,10 @@
 content is the block that .Content names; the rail and the dock are
 fragments. The slots in the top bar are blocks of their own files, which the
 parts that fill them replace as a whole. app.js fills #conn when the live
-updates stop, and #say with what a live update changed, for screen
-readers. */}}
+updates stop. #say is the one live region, for screen readers: app.js puts in
+it what a live update changed, and run.js a sentence when a command starts or
+ends, which the dock and the run pages mark with data-say-key and
+data-say-state (see "run-say"). */}}
 
 {{define "layout"}}<!doctype html>
 <html lang="en">
@@ -40,7 +42,7 @@ readers. */}}
   </header>
   <nav class="rail" id="rail" aria-label="Pages" hx-swap="morph:innerHTML" sse-swap="rail">{{fragment "rail" .}}</nav>
   <main class="main" id="main" tabindex="-1">{{include .Content .}}</main>
-  <div class="tasks" id="tasks" aria-live="polite" hx-swap="morph:innerHTML" sse-swap="tasks">{{fragment "tasks" .}}</div>
+  <section class="tasks" id="tasks" aria-label="Commands" hx-swap="morph:innerHTML" sse-swap="tasks">{{fragment "tasks" .}}</section>
 </div>
 <div class="vh" id="say" role="status"></div>
 <div id="layer"></div>

@@ -284,6 +284,95 @@ type runSeg struct {
 	Fill int
 }
 
+// runBar is the bar of a run's steps, a segment for each step.
+type runBar []runSeg
+
+// runSegDone reports whether a segment stands for a step that is over.
+func runSegDone(class string) bool {
+	switch class {
+	case runOK, runFailed, runCanceled, runSkipped, runEnded:
+		return true
+	}
+	return false
+}
+
+// Pct is the part of the bar that is done, in whole percent: the steps that
+// are over, and the part of the running ones that is done. It is the value
+// of the bar's progressbar role.
+func (b runBar) Pct() int {
+	if len(b) == 0 {
+		return 0
+	}
+	sum := 0
+	for _, s := range b {
+		switch {
+		case runSegDone(s.Class):
+			sum += 100
+		case s.Class == runRunning:
+			sum += s.Fill
+		}
+	}
+	return sum / len(b)
+}
+
+// Text says how far the bar is in words, for assistive technology: "2 of 4
+// steps done", or the state of a run without steps.
+func (b runBar) Text() string {
+	if len(b) == 1 && !strings.Contains(b[0].Title, ":") {
+		return b[0].Title
+	}
+	done := 0
+	for _, s := range b {
+		if runSegDone(s.Class) {
+			done++
+		}
+	}
+	return fmt.Sprintf("%d of %d steps done", done, len(b))
+}
+
+// runSayState is the state of a command as the announcements tell it: its
+// class, or stopping while a stop is under way.
+func runSayState(class string, canceling bool) string {
+	if class == runRunning && canceling {
+		return "stopping"
+	}
+	return class
+}
+
+// runSay is the one sentence that the live region of a page gets when a
+// command starts, is being stopped or ends: "create worker dev: done in
+// 12s." A failure adds why, when it is known.
+func runSay(title, state, elapsed, why string) string {
+	switch state {
+	case runRunning:
+		return title + ": started."
+	case "stopping":
+		return title + ": stopping."
+	case runOK:
+		return title + ": done in " + elapsed + "."
+	case runFailed:
+		if why != "" {
+			return title + ": failed. " + why
+		}
+		return title + ": failed."
+	case runCanceled:
+		return title + ": stopped."
+	}
+	return title + ": ended."
+}
+
+// runFailure says in one line why a run failed: the error of its first
+// target that failed, else the error of its command.
+func runFailure(run store.Run) string {
+	if f := activity.FailedTargets(run.Root); len(f) > 0 {
+		if len(f[0].Nodes) == 1 {
+			return strings.ReplaceAll(f[0].Err, "{}", f[0].Nodes[0])
+		}
+		return runFoldNodes(f[0].Nodes) + ": " + f[0].Err
+	}
+	return run.Err
+}
+
 // runStepCounts returns how many targets of the step s are done and how many
 // it expects: its own total, or the targets seen if there are more.
 func runStepCounts(s store.Span) (done, total int) {
@@ -293,8 +382,8 @@ func runStepCounts(s store.Span) (done, total int) {
 
 // runSegs returns the segments of a run: one for each visible step, in the
 // order they started. A run without steps has one segment for the command.
-func runSegs(run store.Run) []runSeg {
-	var segs []runSeg
+func runSegs(run store.Run) runBar {
+	var segs runBar
 	for _, s := range activity.VisibleChildren(run.Root) {
 		if s.Kind != activity.KindStep {
 			continue

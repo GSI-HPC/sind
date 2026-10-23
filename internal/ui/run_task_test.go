@@ -42,6 +42,7 @@ func TestRunTaskPageWaits(t *testing.T) {
 		`action="/tasks/t1/cancel"`,
 		`<span class="pill run">running</span>`,
 		`data-since="`,
+		`data-say-key="w:t1" data-say-state="running" data-say="sind create cluster dev: started."`,
 		"/events?f=rail&amp;f=run-wait&amp;f=tasks&amp;id=t1&amp;nav=activity&amp;task=t1",
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)

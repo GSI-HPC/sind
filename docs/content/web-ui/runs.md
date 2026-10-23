@@ -9,7 +9,7 @@ When you start an action, its run appears in the task dock, on its run page and 
 
 ## The task dock
 
-The task dock at the bottom right shows a card with the command, a spinner, a bar with one part for each step, and the current step, such as `nodes 3/8 · worker-2 ready munge`. A card links to the run page. Use **Show progress** to open it. Use **Stop** to stop the run. A card of a run that has ended stays until you hide it with ×.
+The task dock at the bottom right shows a card with the command, a spinner, a bar with one part for each step, and the current step, such as `nodes 3/8 · worker-2 ready munge`. A card links to the run page. Use **Show progress** to open it. A screen reader hears once when a command starts, ends or fails; the clock and the current step are not read out. Use **Stop** to stop the run. A card of a run that has ended stays until you hide it with ×.
 
 {{< uishot "task-dock" >}}
 

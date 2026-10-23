@@ -39,15 +39,23 @@
   }
 
   // say tells screen readers a sentence, through the one polite live region
-  // of the page. The same sentence twice is told twice.
+  // of the page. The sentences of one moment are told together, once each,
+  // so that one does not cut off another; the same sentence later is told
+  // again. run.js hands its sentences over as the event sind:say.
   let sayTimer = 0;
+  let sayLines = [];
   function say(text) {
     const region = document.getElementById('say');
     if (!region || !text) return;
+    if (!sayLines.includes(text)) sayLines.push(text);
     region.textContent = '';
     clearTimeout(sayTimer);
-    sayTimer = setTimeout(() => { region.textContent = text; }, 60);
+    sayTimer = setTimeout(() => {
+      region.textContent = sayLines.join(' ');
+      sayLines = [];
+    }, 60);
   }
+  document.addEventListener('sind:say', e => say(e.detail));
 
   function toast(text) {
     const old = document.querySelector('.toast');
@@ -214,9 +222,11 @@
     return out.join(' ').replace(/\s+/g, ' ');
   }
 
+  // The sentences of a command, which carry data-say-state, are run.js's:
+  // it tells each change of state once, across the pages of the tab.
   function sentences(target) {
     const m = new Map();
-    target.querySelectorAll('[data-say]').forEach((e, i) => m.set(e.dataset.sayKey || String(i), e.dataset.say));
+    target.querySelectorAll('[data-say]:not([data-say-state])').forEach((e, i) => m.set(e.dataset.sayKey || String(i), e.dataset.say));
     return m;
   }
 

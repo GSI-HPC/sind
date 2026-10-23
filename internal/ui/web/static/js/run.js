@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // Script of the progress display. The server draws every page and fragment;
-// this file does three small things that need the browser: it counts the
+// this file does four small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
 // milliseconds since 1970), it keeps the details that the user opened open
-// when a fragment is morphed in, and it puts the progress of the run in the
-// title of the tab. It evaluates no text and needs no inline script.
+// when a fragment is morphed in, it puts the progress of the run in the
+// title of the tab, and it announces when a command starts or ends. It evaluates no text and needs no inline script.
 (() => {
   'use strict';
 
@@ -48,9 +48,51 @@
     if (el && document.title !== el.dataset.docTitle) document.title = el.dataset.docTitle;
   }
 
+  // The commands that were announced, by their data-say-key, with the
+  // state that was: kept for the tab, so that the next page announces a
+  // command that ended meanwhile, and only once.
+  const saidKey = 'sind-ui-said';
+  let said = {};
+  try { said = JSON.parse(sessionStorage.getItem(saidKey) || '{}') || {}; } catch (e) { said = {}; }
+  let firstScan = true;
+
+  // announce puts one sentence in the live region #say for each command
+  // whose state changed: started, stopping, done, failed or stopped. The
+  // clocks and the progress lines are outside any live region, so they
+  // change in silence. A command that the page shows when it opens is
+  // announced only if it started a moment ago, as after a dialog's Run.
+  function announce() {
+    const region = document.getElementById('say');
+    if (!region) return;
+    const out = [];
+    const now = Date.now();
+    document.querySelectorAll('[data-say-key]').forEach(el => {
+      const key = el.dataset.sayKey;
+      const state = el.dataset.sayState;
+      const prev = said[key];
+      if (prev === state) return;
+      said[key] = state;
+      if (prev === undefined && firstScan) {
+        const since = Number(el.dataset.saySince);
+        if (!(state === 'running' && since > 0 && now - since < 10000)) return;
+      }
+      if (el.dataset.say && !out.includes(el.dataset.say)) out.push(el.dataset.say);
+    });
+    firstScan = false;
+    const keys = Object.keys(said);
+    if (keys.length > 200) {
+      // Forget the oldest.
+      keys.slice(0, keys.length - 100).forEach(k => { delete said[k]; });
+    }
+    try { sessionStorage.setItem(saidKey, JSON.stringify(said)); } catch (e) { /* private window */ }
+    // app.js tells them, with what the same live update changed.
+    if (out.length) document.dispatchEvent(new CustomEvent('sind:say', { detail: out.join(' ') }));
+  }
+
   function update() {
     title();
     tick();
+    announce();
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -58,10 +100,10 @@
     // A morph changes text and attributes in place, so the observers
     // watch those too: a clock the server drew is counted again before the
     // browser paints it.
-    const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title'], subtree: true };
+    const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title', 'data-say-state'], subtree: true };
     if (main) new MutationObserver(update).observe(main, what);
     const dock = document.getElementById('tasks');
-    if (dock) new MutationObserver(tick).observe(dock, what);
+    if (dock) new MutationObserver(() => { tick(); announce(); }).observe(dock, what);
     update();
     // Tenths of a second, as the terminal draws them.
     setInterval(tick, 100);

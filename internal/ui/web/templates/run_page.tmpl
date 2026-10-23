@@ -26,10 +26,10 @@ part is a fragment that /events sends again when the run changes. */}}
 
 {{define "run-summary"}}{{with .Data}}<section class="panel"><div class="pb">
   <div class="rsum"><span class="clock">{{template "run-elapsed" .}}</span>
-    <div class="rbar">{{template "run-segbar" .Segs}}<div class="mono rline">{{.Line}}</div></div>
+    <div class="rbar">{{template "run-segbar" .}}<div class="mono rline">{{.Line}}</div></div>
     <div class="counts">{{if .NoTargets}}<span class="faint">no targets</span>{{else}}{{range .Counts}}<span><i class="dot {{.Class}}"></i>{{.N}} {{.Label}}</span>{{end}}{{end}}</div></div>
   {{range .Hints}}<div class="hint">{{.}}</div>{{end}}
-  <span hidden data-doc-title="{{.DocTitle}}"></span>
+  <span hidden data-doc-title="{{.DocTitle}}"></span><span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"{{if .SaySince}} data-say-since="{{.SaySince}}"{{end}}></span>
 </div></section>{{end}}{{end}}
 
 {{define "run-failed"}}{{with .Data}}<section class="panel rfail {{.Class}}"><div class="ph"><h2>{{.Title}}</h2></div><div class="pb stack">

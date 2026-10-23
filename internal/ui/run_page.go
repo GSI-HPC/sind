@@ -213,9 +213,11 @@ type runCount struct {
 
 // runSummary is the panel with the clock, the bar and the counts.
 type runSummary struct {
+	// Title names the run, for the name of its bar.
+	Title   string
 	Elapsed string
 	Since   int64
-	Segs    []runSeg
+	Segs    runBar
 	Line    string
 	Counts  []runCount
 	// NoTargets is set for a run without targets, which has nothing to count.
@@ -223,14 +225,32 @@ type runSummary struct {
 	Hints     []string
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
+	// SayKey, SayState and Say are what run.js announces when the state
+	// of the run changes, as for a card of the dock; SaySince is when the
+	// run started, in milliseconds since 1970, so that a page opened just
+	// after the start announces it.
+	SayKey   string
+	SayState string
+	Say      string
+	SaySince int64
 }
 
 // runSummaryOf builds the summary.
 func runSummaryOf(rc runCtx) *runSummary {
 	run := rc.Run
 	s := &runSummary{
-		Elapsed: runDur(runElapsed(run, rc.Now)), Since: runSince(run),
+		Title: run.Title, Elapsed: runDur(runElapsed(run, rc.Now)), Since: runSince(run),
 		Segs: runSegs(run), Line: runLine(run, rc.Task, rc.Now),
+	}
+	canceling := false
+	s.SayKey = "r:" + run.ID
+	if t := rc.Task; t != nil {
+		canceling, s.SayKey = t.Canceling, "t:"+t.ID
+	}
+	s.SayState = runSayState(runStatusClass(run), canceling)
+	s.Say = runSay(run.Title, s.SayState, s.Elapsed, runFailure(run))
+	if origin := runOrigin(run); !origin.IsZero() {
+		s.SaySince = origin.UnixMilli()
 	}
 	c := activity.CountTargets(run.Root)
 	s.NoTargets = c.Total == 0

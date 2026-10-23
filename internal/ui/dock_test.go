@@ -45,6 +45,9 @@ func TestRunDockTaskWithRun(t *testing.T) {
 	assert.False(t, c.Dismiss)
 	assert.Empty(t, c.Chip)
 	assert.Equal(t, "Show progress", c.Action)
+	assert.Equal(t, "t:t1", c.SayKey)
+	assert.Equal(t, runRunning, c.SayState)
+	assert.Equal(t, "create cluster: started.", c.Say)
 	assert.Len(t, c.Segs, 2)
 
 	// Stopping: no second Stop.
@@ -151,6 +154,7 @@ func TestRunDockTerminalRuns(t *testing.T) {
 	assert.Equal(t, "t", d.Cards[0].TaskID)
 	c := d.Cards[1]
 	assert.Equal(t, "terminal", c.Chip)
+	assert.Equal(t, "r:"+run.ID, c.SayKey)
 	assert.Empty(t, c.TaskID)
 	assert.False(t, c.Cancel)
 	assert.False(t, c.Dismiss)
