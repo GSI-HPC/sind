@@ -90,6 +90,11 @@ commit rendered files. When a guide with an episode changes, check the episode
 `.claude/skills/sindy-episode` covers making and updating episodes,
 `.claude/skills/sindy-voice` their narration.
 
+The landing page shows the overview video (`video/overview/README.md`), which the docs
+workflow records from real runs of the CLI and `sind ui` on its runner. When a change
+alters a command, an output or a page that a shot shows, update `video/overview` in the
+same PR.
+
 ## Commits
 
 - Conventional Commits `<type>(<scope>): <description>`; types `feat fix docs style
