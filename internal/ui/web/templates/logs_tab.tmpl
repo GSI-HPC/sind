@@ -2,11 +2,11 @@
 
 {{/* logs-tab is the body of the Logs tab of the cluster page. It takes the
 view of that page: View.LogsTab reads the cluster and the choices of the
-address (node, source, unit). logs.js opens the stream GET
+address (node, source, unit, lines, q, level). logs.js opens the stream GET
 /logs/{realm}/{cluster} and writes the choices back into the address. */}}
 {{define "logs-tab"}}{{with .LogsTab}}
 {{if .Nodes}}
-<section class="panel logs" id="logs-panel" data-logs data-realm="{{.Realm}}" data-cluster="{{.Cluster}}" data-sind="{{.Sind}}" data-suffix="{{.Suffix}}">
+<section class="panel logs" id="logs-panel" data-logs data-realm="{{.Realm}}" data-cluster="{{.Cluster}}" data-sind="{{.Sind}}" data-suffix="{{.Suffix}}" data-keep="{{.Keep}}">
   <div class="ph logs-bar">
     <div class="fld logs-fld"><label for="logs-node">Node</label>
       <select id="logs-node" data-logs-node>
@@ -20,6 +20,8 @@ address (node, source, unit). logs.js opens the stream GET
       </select></div>
     <div class="fld logs-fld" data-logs-unit-fld{{if ne .Source "journal"}} hidden{{end}}><label for="logs-unit">Unit</label>
       <select id="logs-unit" data-logs-unit>{{range .Units}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+    <div class="fld logs-fld"><label for="logs-lines">Start with</label>
+      <select id="logs-lines" data-logs-lines>{{range .Lines}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
     <span class="grow"></span>
     <div class="seg" role="group" aria-label="Follow">
       <button type="button" class="on" data-logs-follow aria-pressed="true">Follow</button>
@@ -27,12 +29,22 @@ address (node, source, unit). logs.js opens the stream GET
     </div>
     <button type="button" class="btn sm" data-logs-clear>Clear</button>
   </div>
+  <div class="ph logs-bar logs-filter">
+    <div class="fld logs-fld logs-q"><label for="logs-q">Filter</label>
+      <input type="search" id="logs-q" data-logs-q value="{{.Query}}" maxlength="{{.QueryMax}}" placeholder="Text in the line" autocomplete="off" spellcheck="false"></div>
+    <label class="logs-chk"><input type="checkbox" data-logs-errors{{if .Errors}} checked{{end}}> Errors and warnings only</label>
+    <span class="grow"></span>
+    <span class="hint faint" data-logs-count aria-hidden="true"></span>
+    <button type="button" class="btn sm" data-logs-copy-lines>Copy lines</button>
+    <button type="button" class="btn sm" data-logs-download>Download</button>
+    <span class="pg-vh" role="status" data-logs-said></span>
+  </div>
   <div class="pb stack">
     <div><p class="cmdlabel">The same in a terminal</p>
       <div class="cmd"><code data-logs-cmd>{{.Command}}</code><button type="button" data-logs-copy>Copy</button></div></div>
     <pre class="term logbox" data-logs-box tabindex="0" aria-label="Log lines" aria-live="off"></pre>
     <div class="logs-foot"><span class="hint faint" data-logs-state>Connecting…</span>
-      <span class="hint faint">Starts with the last 200 lines and keeps the last 2,000. Pause holds new lines until you press Follow. The stream stops when you leave the tab.</span></div>
+      <span class="hint faint">Keeps the last {{.KeepText}} lines. The filter hides lines, it does not drop them. Copy lines and Download take the lines shown. Pause holds new lines until you press Follow. The stream stops when you leave the tab.</span></div>
   </div>
 </section>
 {{else}}

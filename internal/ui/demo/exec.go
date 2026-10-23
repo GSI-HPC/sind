@@ -130,12 +130,14 @@ var messages = map[string][]string{
 		"slurmctld: _job_complete: JobId=%d WEXITSTATUS 0",
 		"slurmctld: _slurm_rpc_node_registration complete for worker-2",
 		"slurmctld: Running as primary controller",
+		"slurmctld: error: Nodes worker-3 not responding",
 	},
 	"slurmd": {
 		"slurmd: launch task StepId=%d.0 request from UID:1000 GID:1000 HOST:172.20.0.2 PORT:6818",
 		"slurmd: Message aggregation disabled",
 		"slurmd: CPUs=2 Boards=1 Sockets=1 CoresPerSocket=2 ThreadsPerCore=1 Memory=1024",
 		"slurmd: done with job %d",
+		"slurmd: warning: Note very large processing time from _rpc_launch_tasks: usec=1204871",
 	},
 	"slurmdbd": {
 		"slurmdbd: slurmdbd version 26.05.4 started",

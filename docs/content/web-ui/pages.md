@@ -37,7 +37,9 @@ The state of one cluster, in five tabs.
 
 {{< uishot "cluster-nodes-selected" >}}
 
-**Logs** shows the container log of a node, or its journal: one unit, or all units. It starts with the last 200 lines and keeps the last 2,000. Use **Pause** to stop the stream and **Follow** to resume it. The address keeps the node, the source and the unit, so a reload or a shared link shows the same log.
+**Logs** shows the container log of a node, or its journal: one unit, or all units. **Start with** sets how many lines it shows first: 200, 1,000 or 5,000. It keeps the last 10,000. Use **Pause** to stop the stream and **Follow** to resume it.
+
+Type in **Filter** to show only the lines with that text, or tick **Errors and warnings only**. The filter hides lines and keeps them. **Copy lines** and **Download** take the lines that show. The address keeps every choice, so a reload or a shared link shows the same log.
 
 {{< uishot "cluster-logs" >}}
 

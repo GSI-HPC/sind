@@ -385,7 +385,7 @@ sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 {{< /cli >}}
 {{< ui >}}
 
-Open the cluster, then the **Logs** tab. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log. Use **Pause** to stop the stream and **Follow** to resume it.
+Open the cluster, then the **Logs** tab, or press **Logs** on the page of a node. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log; **Start with** shows more. Use **Pause** to stop the stream and **Follow** to resume it. **Filter** and **Errors and warnings only** narrow the lines, and **Download** saves them.
 
 {{< uishot "cluster-logs" >}}
 

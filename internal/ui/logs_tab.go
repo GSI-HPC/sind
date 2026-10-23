@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -14,11 +15,19 @@ import (
 
 // The Logs tab of the cluster page keeps what it shows in its address, so
 // that a reload or a shared link shows the same: ?node= the node,
-// &source=journal for the journal and &unit= the unit (empty for every
-// unit). logs.js writes them as they change.
+// &source=journal for the journal, &unit= the unit (empty for every
+// unit), &lines= the line count, &q= the filter and &level=warn for
+// errors and warnings only. logs.js writes them as they change.
 
 // logsTabParams are the query keys of the Logs tab.
-var logsTabParams = []string{"node", "source", "unit"}
+var logsTabParams = []string{"node", "source", "unit", "lines", "q", "level"}
+
+// logsLineCounts are the line counts that a stream may start with; the
+// first is the default.
+var logsLineCounts = []int{200, 1000, 5000}
+
+// logsKeep is how many lines the tab keeps.
+const logsKeep = 10000
 
 // LogsTabView is what the Logs tab of the cluster page shows.
 type LogsTabView struct {
@@ -31,9 +40,20 @@ type LogsTabView struct {
 	// Units are the units of the node shown, after the entry for all.
 	Units []logsChoice
 	Unit  string
+	// Lines are the line counts to start with.
+	Lines []logsChoice
+	// Count is the line count that the stream starts with.
+	Count int
+	// Query is the filter, and Errors keeps errors and warnings only.
+	// QueryMax is the longest filter, the longest value of a parameter.
+	Query    string
+	QueryMax int
+	Errors   bool
 	// Sind is the command that the terminal line starts with, and Suffix
 	// what follows a short name in a node argument.
 	Sind, Suffix string
+	// Keep is how many lines the tab keeps.
+	Keep int
 }
 
 // logsNodeOption is a node of the node picker.
@@ -67,7 +87,7 @@ func logsUnits(r config.Role) []string {
 func (v *View) LogsTab() *LogsTabView {
 	p := v.Params
 	realm, name := p.Get("realm"), p.Get("cluster")
-	d := &LogsTabView{Realm: realm, Cluster: name, Sind: pgSind(realm)}
+	d := &LogsTabView{Realm: realm, Cluster: name, Sind: pgSind(realm), Keep: logsKeep, Query: p.Get("q"), QueryMax: maxParamLen, Errors: p.Get("level") == "warn"}
 	if name != config.DefaultClusterName {
 		d.Suffix = "." + name
 	}
@@ -102,12 +122,19 @@ func (v *View) LogsTab() *LogsTabView {
 	for _, u := range units {
 		d.Units = append(d.Units, logsChoice{Value: u, Label: u, Selected: u == d.Unit})
 	}
+	d.Count = logsLineCounts[0]
+	if n, err := strconv.Atoi(p.Get("lines")); err == nil && slices.Contains(logsLineCounts, n) {
+		d.Count = n
+	}
+	for _, n := range logsLineCounts {
+		d.Lines = append(d.Lines, logsChoice{Value: strconv.Itoa(n), Label: logsThousands(n) + " lines", Selected: n == d.Count})
+	}
 	return d
 }
 
 // Command returns the command of the terminal that shows the same log.
 func (d *LogsTabView) Command() string {
-	return logsCommand(d.Sind, d.Node+d.Suffix, d.Source, d.Unit, logsTail)
+	return logsCommand(d.Sind, d.Node+d.Suffix, d.Source, d.Unit, d.Count)
 }
 
 // logsCommand returns the sind command that follows a log: the container
@@ -123,6 +150,15 @@ func logsCommand(sind, arg, source, unit string, lines int) string {
 	return fmt.Sprintf("%s ssh %s -- journalctl -f -n %d", sind, arg, lines)
 }
 
+// logsThousands writes n with a comma between the thousands: 5,000.
+func logsThousands(n int) string {
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
+}
+
 // pgLogsURL returns the address of the Logs tab of a cluster that shows the
 // log of one node: the journal of unit, or the output of its container
 // for no unit.
@@ -133,4 +169,9 @@ func pgLogsURL(realm, name, short, unit string) string {
 		q.Set("unit", unit)
 	}
 	return "/clusters/" + url.PathEscape(realm) + "/" + url.PathEscape(name) + "?" + q.Encode()
+}
+
+// KeepText is Keep for a sentence: 10,000.
+func (d *LogsTabView) KeepText() string {
+	return logsThousands(d.Keep)
 }

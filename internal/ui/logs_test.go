@@ -127,11 +127,11 @@ func waitDone(t *testing.T, done <-chan struct{}) {
 
 func TestLogsArgs(t *testing.T) {
 	assert.Equal(t, []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"},
-		logsArgs(logsDocker, "sind", "dev", "worker-0", ""))
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "200"},
-		logsArgs(logsJournal, "sind", "dev", "worker-0", "slurmd"))
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "--follow", "-n", "200"},
-		logsArgs(logsJournal, "sind", "dev", "worker-0", ""))
+		logsArgs(logsReq{src: logsDocker, realm: "sind", cluster: "dev", node: "worker-0", tail: 200}))
+	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000"},
+		logsArgs(logsReq{src: logsJournal, realm: "sind", cluster: "dev", node: "worker-0", unit: "slurmd", tail: 1000}))
+	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "--follow", "-n", "5000"},
+		logsArgs(logsReq{src: logsJournal, realm: "sind", cluster: "dev", node: "worker-0", tail: 5000}))
 }
 
 func TestLogsStreamArgvPerSource(t *testing.T) {
@@ -143,6 +143,8 @@ func TestLogsStreamArgvPerSource(t *testing.T) {
 		{"node=worker-0&source=docker&unit=slurmd", []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"}},
 		{"node=worker-0&source=journal&unit=slurmd", []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "200"}},
 		{"node=controller&source=journal", []string{"exec", "sind-dev-controller", "journalctl", "--follow", "-n", "200"}},
+		{"node=worker-0&lines=5000", []string{"logs", "--follow", "--tail", "5000", "sind-dev-worker-0"}},
+		{"node=worker-0&source=journal&unit=slurmd&lines=1000", []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000"}},
 	}
 	for _, c := range cases {
 		t.Run(c.query, func(t *testing.T) {
@@ -307,7 +309,7 @@ func TestLogsStreamSkipsTooFastLines(t *testing.T) {
 	waitDone(t, done)
 	body := w.text()
 	assert.Contains(t, body, " lines skipped: the stream was too fast")
-	assert.LessOrEqual(t, strings.Count(body, "event: line"), logsMaxRate)
+	assert.LessOrEqual(t, strings.Count(body, "event: line"), logsLineCounts[0]+logsMaxRate, "the first lines, then the rate")
 	assert.True(t, strings.HasSuffix(body, "event: end\ndata: \n\n"))
 }
 
@@ -325,6 +327,8 @@ func TestLogsStreamRefusals(t *testing.T) {
 		"/logs/sind/dev?node=worker-0&source=shell":              http.StatusBadRequest,
 		"/logs/sind/dev?node=worker-0&source=journal&unit=-f":    http.StatusBadRequest,
 		"/logs/sind/dev?node=worker-0&source=journal&unit=a%20b": http.StatusBadRequest,
+		"/logs/sind/dev?node=worker-0&lines=7":                   http.StatusBadRequest,
+		"/logs/sind/dev?node=worker-0&lines=all":                 http.StatusBadRequest,
 		"/logs/sind/dev?node=" + strings.Repeat("a", 300):        http.StatusBadRequest,
 	} {
 		assert.Equal(t, want, ts.get(target).Code, target)
@@ -375,7 +379,7 @@ func TestLogsRead(t *testing.T) {
 		long := strings.Repeat("a", 3*logsMaxLine)
 		out := make(chan string, 4)
 		var dropped atomic.Int64
-		logsRead(strings.NewReader(long+"\nnext\nlast"), out, &dropped, time.Now)
+		logsRead(strings.NewReader(long+"\nnext\nlast"), out, &dropped, time.Now, 0, nil)
 		close(out)
 		var got []string
 		for l := range out {
@@ -390,7 +394,7 @@ func TestLogsRead(t *testing.T) {
 	t.Run("blank line and no final newline", func(t *testing.T) {
 		out := make(chan string, 4)
 		var dropped atomic.Int64
-		logsRead(strings.NewReader("a\n\nb"), out, &dropped, time.Now)
+		logsRead(strings.NewReader("a\n\nb"), out, &dropped, time.Now, 0, nil)
 		close(out)
 		var got []string
 		for l := range out {
@@ -401,7 +405,7 @@ func TestLogsRead(t *testing.T) {
 	t.Run("slow reader", func(t *testing.T) {
 		out := make(chan string, 1)
 		var dropped atomic.Int64
-		logsRead(strings.NewReader("1\n2\n3\n4\n5\n"), out, &dropped, time.Now)
+		logsRead(strings.NewReader("1\n2\n3\n4\n5\n"), out, &dropped, time.Now, 0, nil)
 		assert.Equal(t, int64(4), dropped.Load())
 		assert.Equal(t, "1", <-out)
 	})
@@ -410,18 +414,65 @@ func TestLogsRead(t *testing.T) {
 		out := make(chan string, 4*logsMaxRate)
 		var dropped atomic.Int64
 		in := strings.Repeat("x\n", logsMaxRate+5)
-		logsRead(strings.NewReader(in), out, &dropped, func() time.Time { return now })
+		logsRead(strings.NewReader(in), out, &dropped, func() time.Time { return now }, 0, nil)
 		assert.Equal(t, int64(5), dropped.Load())
 		assert.Len(t, out, logsMaxRate)
 		// The next second starts again.
 		now = now.Add(time.Second)
-		logsRead(strings.NewReader("y\n"), out, &dropped, func() time.Time { return now })
+		logsRead(strings.NewReader("y\n"), out, &dropped, func() time.Time { return now }, 0, nil)
 		assert.Equal(t, int64(5), dropped.Load())
+	})
+	t.Run("first lines wait for the reader", func(t *testing.T) {
+		out := make(chan string)
+		var dropped atomic.Int64
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			logsRead(strings.NewReader("1\n2\n3\n4\n5\n"), out, &dropped, time.Now, 3, make(chan struct{}))
+		}()
+		assert.Equal(t, []string{"1", "2", "3"}, []string{<-out, <-out, <-out})
+		<-done
+		assert.Equal(t, int64(2), dropped.Load(), "the lines after the first wait for no one")
+	})
+	t.Run("a pause ends the first lines", func(t *testing.T) {
+		// Each read takes the time between two calls: the first line
+		// waits for the child, the third comes after a pause.
+		steps := []time.Duration{0, logsTailStart, 0, 0, 0, logsTailPause + 1, 0, 0, 0, 0}
+		now := time.Unix(1000, 0)
+		clock := func() time.Time {
+			now = now.Add(steps[0])
+			steps = steps[1:]
+			return now
+		}
+		out := make(chan string, 2)
+		var dropped atomic.Int64
+		logsRead(strings.NewReader("1\n2\n3\n4\n"), out, &dropped, clock, 100, make(chan struct{}))
+		assert.Equal(t, int64(2), dropped.Load(), "the live lines wait for no one")
+		assert.Equal(t, []string{"1", "2"}, []string{<-out, <-out})
+	})
+	t.Run("a slow start is live", func(t *testing.T) {
+		steps := []time.Duration{0, logsTailStart + 1, 0, 0}
+		now := time.Unix(1000, 0)
+		clock := func() time.Time {
+			now = now.Add(steps[0])
+			steps = steps[1:]
+			return now
+		}
+		var dropped atomic.Int64
+		logsRead(strings.NewReader("1\n"), make(chan string), &dropped, clock, 100, make(chan struct{}))
+		assert.Equal(t, int64(1), dropped.Load(), "a live line waits for no one")
+	})
+	t.Run("stop ends the wait", func(t *testing.T) {
+		stop := make(chan struct{})
+		close(stop)
+		var dropped atomic.Int64
+		logsRead(strings.NewReader("1\n2\n"), make(chan string), &dropped, time.Now, 5, stop)
+		assert.Zero(t, dropped.Load())
 	})
 	t.Run("read error", func(t *testing.T) {
 		out := make(chan string, 4)
 		var dropped atomic.Int64
-		logsRead(io.MultiReader(strings.NewReader("part"), &errReader{}), out, &dropped, time.Now)
+		logsRead(io.MultiReader(strings.NewReader("part"), &errReader{}), out, &dropped, time.Now, 0, nil)
 		assert.Equal(t, "part", <-out)
 	})
 }
@@ -497,6 +548,22 @@ func TestLogsTab(t *testing.T) {
 		body = ts.get("/clusters/sind/dev?node=worker-0&source=journal" + q).Body.String()
 		assert.Contains(t, body, `<option value="slurmd" selected>slurmd</option>`, q)
 		assert.Contains(t, body, "sind logs worker-0.dev slurmd -f -n 200", q)
+	}
+
+	// The line count, the filter and the level.
+	assert.Contains(t, body, `<select id="logs-lines" data-logs-lines><option value="200" selected>200 lines</option><option value="1000">1,000 lines</option><option value="5000">5,000 lines</option></select>`)
+	assert.Contains(t, body, `data-logs-q value="" maxlength="256" placeholder`)
+	assert.Contains(t, body, `<input type="checkbox" data-logs-errors> Errors and warnings only`)
+	assert.Contains(t, body, `data-keep="10000"`)
+	assert.Contains(t, body, "Keeps the last 10,000 lines.")
+	body = ts.get("/clusters/sind/dev?node=worker-0&lines=5000&q=%3Cjob%3E&level=warn").Body.String()
+	assert.Contains(t, body, `<option value="5000" selected>5,000 lines</option>`)
+	assert.Contains(t, body, "sind logs worker-0.dev -f -n 5000")
+	assert.Contains(t, body, `data-logs-q value="&lt;job&gt;" maxlength="256" placeholder`)
+	assert.Contains(t, body, `<input type="checkbox" data-logs-errors checked>`)
+	for _, l := range []string{"7", "x"} {
+		body = ts.get("/clusters/sind/dev?lines=" + l).Body.String()
+		assert.Contains(t, body, `<option value="200" selected>200 lines</option>`, l)
 	}
 
 	body = ts.get("/clusters/sind/dev?node=gone&source=nope").Body.String()
