@@ -45,8 +45,10 @@ type pgNodeView struct {
 	Realm, Cluster, Short string
 	Node                  pgNode
 	ClusterState          cluster.State
-	Actions               []pgAction
-	Commands              []pgCmd
+	// Slurm is what Slurm says about the node's cluster.
+	Slurm    *pgSlurmView
+	Actions  []pgAction
+	Commands []pgCmd
 }
 
 // ClusterPillClass returns the class of the pill of the cluster's state.
@@ -79,6 +81,10 @@ func pgLoadNode(v *View) *pgNodeView {
 		}
 		d.Found = true
 		d.Node = pgNodeOf(realm, ns, v.Snap.Status(realm, name))
+		nodes := []pgNode{d.Node}
+		pgAttachSlurm(nodes, v.Snap.Slurm(realm, name))
+		d.Node = nodes[0]
+		d.Slurm = pgSlurmOf(v.Snap.Slurm(realm, name), nodes)
 	}
 	if !d.Found {
 		return d

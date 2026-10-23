@@ -38,6 +38,12 @@ shots:
     page: cluster
     sizes: [desktop, phone]
 
+  - name: cluster-slurm
+    alt: "A cluster's Slurm tab: its partitions, the state, reason, CPUs and memory of each worker, and slurm.conf"
+    path: /clusters/sind/dev?tab=slurm
+    hide: "#tasks"
+    page: cluster
+
   - name: cluster-logs
     alt: "A cluster's Logs tab: the log of one node, from Docker or the journal"
     path: /clusters/sind/dev?tab=logs

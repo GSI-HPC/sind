@@ -21,6 +21,13 @@
     {{if .Node.Known}}<dl class="kv">{{range .Node.Services}}<dt class="mono"><span data-word="{{.Name}}">{{.Name}}</span></dt><dd>{{if not $d.Node.Running}}<span class="pill">not running</span>{{else if .OK}}<span class="pill ok">active</span>{{else}}<span class="pill bad">failed</span>{{end}}{{if $d.Node.Running}} <a class="btn sm ghost" href="{{$d.ServiceLogsLink .Name}}" aria-label="Logs of {{.Name}}">Logs</a>{{end}}</dd>
       {{else}}<dt>none</dt><dd class="muted">This node has no service that sind checks.</dd>{{end}}</dl>
     {{else}}<span class="muted">No probe result yet. sind ui probes the nodes of every cluster while a page is open.</span>{{end}}</div></section>
+  <section class="panel"><div class="ph"><h2>Slurm</h2><span class="grow"></span><span class="faint mono">sinfo</span></div><div class="pb">
+    {{if .Node.Slurm}}<dl class="kv"><dt>state</dt><dd><span class="pill {{.Node.SlurmClass}}">{{.Node.Slurm.State}}</span></dd>
+      {{with .Node.Slurm.Reason}}<dt>reason</dt><dd>{{.}}</dd>{{end}}
+      <dt>CPUs</dt><dd>{{.Node.SlurmCPUs}}</dd><dt>memory</dt><dd>{{.Node.SlurmMemory}}</dd><dt>partitions</dt><dd class="mono">{{.Node.SlurmPartitions}}</dd></dl>
+    {{else if or .Slurm.Err (not .Slurm.Read)}}{{template "pg-slurm-note" .Slurm}}
+    {{else if .Node.Worker}}<span class="muted">sinfo does not list this node. Slurm runs no job on it.</span>
+    {{else}}<span class="muted">Slurm runs jobs on the workers only. This node is a {{.Node.Role}}.</span>{{end}}</div></section>
   <section class="panel"><div class="ph"><h2>Container</h2></div><div class="pb"><dl class="kv">
     <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
     <dt>realm</dt><dd class="mono">{{.Realm}}</dd>

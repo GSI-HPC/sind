@@ -159,6 +159,14 @@
       }
       const ct = t.closest('[data-pg-copy-text]');
       if (ct) { copy(ct.dataset.pgCopyText, ct); return; }
+      // Copy of a long text, such as a config file: the text of the
+      // element it names.
+      const cf = t.closest('[data-pg-copy-from]');
+      if (cf) {
+        const src = document.getElementById(cf.dataset.pgCopyFrom);
+        if (src) copy(src.textContent, cf);
+        return;
+      }
       // A row of a list is a link, for the mouse; its first link is for
       // the keyboard.
       const row = t.closest('tr[data-href]');

@@ -56,7 +56,8 @@ func TestPgNames(t *testing.T) {
 	assert.Equal(t, "sind", pgSind("sind"))
 	assert.Equal(t, "sind --realm ci", pgSind("ci"))
 	assert.True(t, pgValidTab("logs"))
-	assert.False(t, pgValidTab("slurm"))
+	assert.True(t, pgValidTab("slurm"))
+	assert.False(t, pgValidTab("jobs"))
 }
 
 func TestPgStateClasses(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -280,7 +281,9 @@ func TestPgClusterSummary(t *testing.T) {
 	assert.Contains(t, body, `<a class="tab" href="/clusters/sind/dev?tab=logs">Logs</a>`)
 	assert.Contains(t, body, `>Network and storage</a>`)
 	assert.Contains(t, body, `?tab=connect">Connect</a>`)
-	assert.NotContains(t, body, "Slurm</a>")
+	assert.Contains(t, body, `<a class="tab" href="/clusters/sind/dev?tab=slurm">Slurm</a>`)
+	assert.NotContains(t, body, "View slurm.conf", "the controller was not asked yet")
+	assert.NotContains(t, body, "<dt>partitions</dt>", "sinfo was not asked yet")
 	// Without a status: the tiles and a note.
 	assert.Contains(t, body, "Service health appears once sind ui has probed the cluster.")
 	assert.Contains(t, body, "Network health appears once")
@@ -359,7 +362,7 @@ func TestPgClusterNotFound(t *testing.T) {
 	assert.Contains(t, body, `<a class="btn" href="/clusters/sind/dev">Summary</a>`)
 	body = pgBody(t, ts, "/clusters/sind/dev?tab=conect", 404)
 	assert.Contains(t, body, `<a class="btn primary" href="/clusters/sind/dev?tab=connect">Connect</a>`)
-	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 404)
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=jobs", 404)
 	assert.Contains(t, body, `<a class="btn primary" href="/clusters/sind/dev">Summary</a>`)
 }
 
@@ -713,4 +716,83 @@ func TestPgLiveNode(t *testing.T) {
 	}
 	assert.Contains(t, got["pg-node-head"], "worker-3</b> no longer exists")
 	assert.Contains(t, got, "pg-node-body")
+}
+
+func TestPgSlurm(t *testing.T) {
+	ts := pgServer(t)
+	pgFillStore(ts.st)
+
+	// Before the first read.
+	body := pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 200)
+	assert.Contains(t, body, `<a class="tab on" href="/clusters/sind/dev?tab=slurm" aria-current="page">Slurm</a>`)
+	assert.Contains(t, body, "The Slurm state appears once sind ui has asked <span class=\"mono\">sinfo</span> on the controller.")
+	assert.NotContains(t, body, "<h2>Partitions</h2>")
+	assert.Contains(t, pgBody(t, ts, "/nodes/sind/dev/worker-0", 200), "The Slurm state appears once")
+	assert.Contains(t, pgBody(t, ts, "/clusters/sind/dev?tab=nodes", 200), `<span class="pill bad" data-say="worker-3 is stopped." data-say-key="worker-3">stopped</span></td>
+    <td><span class="faint">–</span></td>`)
+
+	// sinfo does not answer.
+	ts.st.SetSlurm("sind", "dev", &store.Slurm{Err: "slurm_load_node: Unable to contact slurm controller"})
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 200)
+	assert.Contains(t, body, `<div class="callout bad"><b>sinfo on the controller did not answer.</b> <span class="mono">slurm_load_node: Unable to contact slurm controller</span></div>`)
+	assert.NotContains(t, body, "<h2>Partitions</h2>")
+	assert.NotContains(t, body, "sind wrote these files", "no file to say it of")
+	assert.Contains(t, pgBody(t, ts, "/nodes/sind/dev/worker-0", 200), "sinfo on the controller did not answer.")
+	assert.NotContains(t, pgBody(t, ts, "/clusters/sind/dev", 200), "View slurm.conf")
+
+	// sinfo does not answer, but the controller reads the files: the tab
+	// shows them, and the Summary links to slurm.conf.
+	ts.st.SetSlurm("sind", "dev", &store.Slurm{Err: "slurm_load_node: Unable to contact slurm controller",
+		Info: &cluster.SlurmInfo{Files: []cluster.SlurmFile{{Path: slurm.SlurmConfPath, Content: "ClusterName=dev\n"}}}})
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 200)
+	assert.Contains(t, body, "sinfo on the controller did not answer.")
+	assert.NotContains(t, body, "<h2>Partitions</h2>")
+	assert.Contains(t, body, `id="slurm-file-slurm-conf"`)
+	assert.Contains(t, body, "sind wrote these files")
+	assert.Contains(t, pgBody(t, ts, "/clusters/sind/dev", 200), `<dt>config</dt><dd><a href="/clusters/sind/dev?tab=slurm#slurm-file-slurm-conf">View slurm.conf</a></dd>`)
+
+	pgFillSlurm(ts.st)
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 200)
+	assert.Contains(t, body, `<td class="mono"><b>all</b> <span class="chip brand">default</span></td><td><span class="pill ok">up</span></td><td class="mono">infinite</td><td class="num">4</td><td class="mono">worker-[0-3]</td>`)
+	assert.Contains(t, body, `<td class="mono"><b>debug</b></td><td><span class="pill bad">down</span></td>`)
+	assert.Contains(t, body, `<td class="mono"><a href="/nodes/sind/dev/worker-0"><b>worker-0</b></a></td><td><span class="pill run">mixed</span></td><td><span class="faint">–</span></td><td>1 of 2 in use</td><td>1 GiB</td><td class="mono">all, debug</td>`)
+	assert.Contains(t, body, `<span class="pill warn">drained</span></td><td>disk check</td>`)
+	assert.Contains(t, body, `<span class="pill bad">down*</span></td><td>Not responding</td><td>0 of 2 in use</td><td>512 MB</td>`)
+	assert.Contains(t, body, `<span class="pill ok">idle</span>`)
+	assert.Contains(t, body, `<section class="panel pg-wide" id="slurm-file-slurm-conf" tabindex="-1"><div class="ph"><h2 class="mono">slurm.conf</h2><span class="grow"></span><span class="faint mono">/etc/slurm/slurm.conf</span><button type="button" class="btn sm" data-pg-copy-from="slurm-file-slurm-conf-text">Copy</button></div>`)
+	assert.Contains(t, body, `<pre class="pg-conf" id="slurm-file-slurm-conf-text">ClusterName=dev
+include /etc/slurm/sind-nodes.conf
+</pre>`)
+	assert.Contains(t, body, `id="slurm-file-sind-nodes-conf"`)
+
+	// The Summary names the partitions; the nodes tab and the node page
+	// show each node's state.
+	body = pgBody(t, ts, "/clusters/sind/dev", 200)
+	assert.Contains(t, body, `<dt>partitions</dt><dd class="mono">all (default), debug</dd>`)
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=nodes", 200)
+	assert.Contains(t, body, `<td><span class="pill warn">drained</span> <span class="faint pg-reason">disk check</span></td>`)
+	body = pgBody(t, ts, "/nodes/sind/dev/worker-0", 200)
+	assert.Contains(t, body, `<dt>state</dt><dd><span class="pill run">mixed</span></dd>`)
+	assert.Contains(t, body, `<dt>CPUs</dt><dd>1 of 2 in use</dd><dt>memory</dt><dd>1 GiB</dd><dt>partitions</dt><dd class="mono">all, debug</dd>`)
+	assert.Contains(t, pgBody(t, ts, "/nodes/sind/dev/worker-1", 200), "<dt>reason</dt><dd>disk check</dd>")
+	assert.Contains(t, pgBody(t, ts, "/nodes/sind/dev/controller", 200), "Slurm runs jobs on the workers only. This node is a controller.")
+
+	// A worker that sinfo does not list, and a cluster without partitions.
+	ts.st.SetSlurm("sind", "dev", &store.Slurm{Info: &cluster.SlurmInfo{}})
+	assert.Contains(t, pgBody(t, ts, "/nodes/sind/dev/worker-0", 200), "sinfo does not list this node.")
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 200)
+	assert.Contains(t, body, "Slurm has no partition.")
+	assert.Contains(t, body, "sinfo lists no node of this cluster.")
+}
+
+func TestPgSlurmClassAndMemory(t *testing.T) {
+	for state, class := range map[string]string{
+		"idle": "ok", "allocated": "run", "mixed": "run", "completing": "run",
+		"drained": "warn", "draining": "warn", "drained*": "bad", "down*": "bad", "idle*": "bad", "fail": "bad",
+	} {
+		assert.Equal(t, class, pgSlurmClass(state), state)
+	}
+	assert.Equal(t, "512 MB", pgMemory(512))
+	assert.Equal(t, "1500 MB", pgMemory(1500))
+	assert.Equal(t, "2 GiB", pgMemory(2048))
 }

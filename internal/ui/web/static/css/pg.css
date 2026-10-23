@@ -15,6 +15,10 @@
    "Needs you"; it may wrap on a phone */
 a.pg-sumpill{white-space:normal;text-decoration:none}
 a.pg-sumpill:hover{text-decoration:underline}
+/* Slurm: the reason of a node's state, and a config file */
+.pg-reason{font-size:var(--t-sm)}
+.pg-conf{margin:0;padding:12px 14px;max-height:420px;overflow:auto;background:var(--term-bg);color:var(--term-fg);font:var(--t-sm)/1.55 var(--f-mono);white-space:pre;border-radius:0 0 var(--r) var(--r)}
+section[id^="slurm-file-"]:focus{outline:none}
 .pg-attn:focus{outline:none}
 .pg-attn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 

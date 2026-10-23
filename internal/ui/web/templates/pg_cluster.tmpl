@@ -17,6 +17,7 @@
 {{define "pg-cluster-body"}}{{with .Data}}{{if .Found}}
 {{if eq .Tab "summary"}}{{template "pg-tab-summary" .}}
 {{else if eq .Tab "nodes"}}{{template "pg-tab-nodes" .}}
+{{else if eq .Tab "slurm"}}{{template "pg-tab-slurm" .}}
 {{else if eq .Tab "logs"}}{{template "logs-tab" $}}
 {{else if eq .Tab "network"}}{{template "pg-tab-network" .}}
 {{else}}{{template "pg-tab-connect" .}}{{end}}
@@ -35,6 +36,8 @@
   <dt><span data-word="realm">realm</span></dt><dd class="mono">{{.Realm}}</dd>
   <dt>state</dt><dd><span class="pill {{.Cluster.StateClass}}">{{.Cluster.State}}</span></dd>
   {{with .Cluster.Slurm}}<dt>Slurm</dt><dd class="mono">{{.}}</dd>{{end}}
+  {{with .Slurm.Partitions}}<dt>partitions</dt><dd class="mono">{{$.Slurm.PartitionsText}}</dd>{{end}}
+  {{if .Slurm.HasConf}}<dt>config</dt><dd><a href="{{.SlurmConfLink}}">View slurm.conf</a></dd>{{end}}
   {{with .Data}}<dt><span data-word="data">data</span></dt><dd class="mono">{{.Source}} <span class="faint">({{if eq (print .Type) "volume"}}volume{{else}}host directory{{end}}) → {{.Path}}</span></dd>{{end}}
   {{with .HA}}<dt><span data-word="controller-backup">controllers</span></dt><dd>{{range .}}<span class="chip">{{.}}</span>{{end}}</dd>{{end}}</dl></div></section>
 <section class="panel"><div class="ph"><h2>Network</h2></div><div class="pb">
@@ -48,13 +51,32 @@
 {{define "pg-tab-nodes"}}<section class="panel" data-pg-nodes>
   <div class="pg-selbar" data-pg-selbar hidden><span>Selection: <span class="pg-expr" data-pg-expr></span></span><span class="pg-grow"></span>
     {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog>{{.Label}}</a>{{end}}{{range .WorkerSelection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-workers>{{.Label}}</a>{{end}}<a class="btn sm danger" href="{{.Delete.URL}}" data-pg-dialog data-pg-workers data-pg-delete>{{.Delete.Label}}</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
-  <div class="tw"><table><thead><tr><th class="pg-chk"><input type="checkbox" data-pg-all aria-label="Select all"></th><th>Node</th><th>Role</th><th>State</th><th>IP</th><th>Services</th></tr></thead><tbody>
+  <div class="tw"><table><thead><tr><th class="pg-chk"><input type="checkbox" data-pg-all aria-label="Select all"></th><th>Node</th><th>Role</th><th>State</th><th>Slurm</th><th>IP</th><th>Services</th></tr></thead><tbody>
   {{range .Cluster.Nodes}}<tr data-pg-node="{{.Short}}" data-pg-role="{{.Role}}"><td><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"></td>
-    <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
+    <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td>
+    <td>{{if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint pg-reason">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td><td class="mono">{{.IP}}</td>
     <td>{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}{{if .Known}}<span class="faint">{{.ServiceUp}} up</span>{{else}}<span class="faint">–</span>{{end}}{{end}}</td></tr>
-  {{else}}<tr><td colspan="6"><div class="empty">This cluster has no node.</div></td></tr>{{end}}
+  {{else}}<tr><td colspan="7"><div class="empty">This cluster has no node.</div></td></tr>{{end}}
   </tbody></table></div></section>
-<p class="muted pg-hint">Pick nodes to act on them. The selection stays when the table updates.</p>{{end}}
+<p class="muted pg-hint">Pick nodes to act on them. The selection stays when the table updates. Slurm is the state that <span class="mono">sinfo</span> reports for a worker.</p>{{end}}
+
+{{/* pg-slurm-note says why the Slurm view is empty; it takes a pgSlurmView. */}}
+{{define "pg-slurm-note"}}{{if not .Read}}<div class="callout">The Slurm state appears once sind ui has asked <span class="mono">sinfo</span> on the controller.</div>{{else if .Err}}<div class="callout bad"><b>sinfo on the controller did not answer.</b> <span class="mono">{{.Err}}</span></div>{{end}}{{end}}
+
+{{define "pg-tab-slurm"}}{{with .Slurm}}{{template "pg-slurm-note" .}}
+{{if or .Files (and .Read (not .Err))}}<div class="grid g2">
+{{if and .Read (not .Err)}}<section class="panel pg-wide"><div class="ph"><h2>Partitions</h2><span class="grow"></span><span class="faint mono">sinfo</span></div>
+  <div class="tw"><table><thead><tr><th>Partition</th><th>State</th><th>Time limit</th><th class="num">Nodes</th><th>Node list</th></tr></thead><tbody>
+  {{range .Partitions}}<tr><td class="mono"><b>{{.Name}}</b>{{if .Default}} <span class="chip brand">default</span>{{end}}</td><td><span class="pill {{if eq .State "up"}}ok{{else}}bad{{end}}">{{.State}}</span></td><td class="mono">{{.TimeLimit}}</td><td class="num">{{.Nodes}}</td><td class="mono">{{.NodeList}}</td></tr>
+  {{else}}<tr><td colspan="5"><div class="empty">Slurm has no partition. A cluster without workers has none.</div></td></tr>{{end}}</tbody></table></div></section>
+<section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint mono">sinfo --Node</span></div>
+  <div class="tw"><table><thead><tr><th>Node</th><th>State</th><th>Reason</th><th>CPUs</th><th>Memory</th><th>Partitions</th></tr></thead><tbody>
+  {{range .Nodes}}<tr class="click" data-href="{{.Link}}"><td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span></td><td>{{with .Slurm.Reason}}{{.}}{{else}}<span class="faint">–</span>{{end}}</td><td>{{.SlurmCPUs}}</td><td>{{.SlurmMemory}}</td><td class="mono">{{.SlurmPartitions}}</td></tr>
+  {{else}}<tr><td colspan="6"><div class="empty">sinfo lists no node of this cluster.</div></td></tr>{{end}}</tbody></table></div></section>{{end}}
+{{range .Files}}<section class="panel pg-wide" id="{{.ID}}" tabindex="-1"><div class="ph"><h2 class="mono">{{.Name}}</h2><span class="grow"></span><span class="faint mono">{{.Path}}</span><button type="button" class="btn sm" data-pg-copy-from="{{.ID}}-text">Copy</button></div>
+  <pre class="pg-conf" id="{{.ID}}-text">{{.Content}}</pre></section>{{end}}
+</div>{{end}}
+{{if .Files}}<p class="muted pg-hint">sind wrote these files into the config volume. Change them with the <span class="mono">slurm</span> section of the cluster's config.</p>{{end}}{{end}}{{end}}
 
 {{define "pg-tab-network"}}<div class="grid g2"><section class="panel"><div class="ph"><h2>Networks</h2></div>
   {{if .Networks}}<div class="tw"><table><thead><tr><th>Name</th><th>Driver</th><th>Subnet</th><th>Gateway</th></tr></thead><tbody>

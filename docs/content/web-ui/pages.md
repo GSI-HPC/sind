@@ -29,15 +29,19 @@ Every node of the realm. A node is named as you type it in commands, such as `wo
 
 ## Cluster
 
-The state of one cluster, in five tabs.
+The state of one cluster, in six tabs.
 
 **Summary** shows the nodes by role and a matrix of nodes and services, such as munge, sshd and slurmctld, and the network checks.
 
 {{< uishot "cluster" >}}
 
-**Nodes** lets you select nodes. The selection appears as a node set, such as `worker-[2-4]`. Power and delete act on the selection. When you select only workers, **Drain…** and **Resume…** appear, and the delete button names the workers, such as **Delete worker-5…** or **Delete 3 workers…**.
+**Nodes** lets you select nodes. The selection appears as a node set, such as `worker-[2-4]`. Power and delete act on the selection. When you select only workers, **Drain…** and **Resume…** appear, and the delete button names the workers, such as **Delete worker-5…** or **Delete 3 workers…**. The **Slurm** column shows the state that `sinfo` reports for each worker, such as `idle`, `allocated` or `drained`, and the reason.
 
 {{< uishot "cluster-nodes-selected" >}}
+
+**Slurm** shows what Slurm says: the partitions, the state, reason, CPUs and memory of each worker, and the `slurm.conf` and `sind-nodes.conf` that sind wrote, each with **Copy**. **View slurm.conf** on the Summary leads here. sind ui runs `sinfo` on the controller while a page of the cluster is open, and gives it 10 seconds. When slurmctld does not answer, the tab says why and still shows the files, which the controller reads without slurmctld.
+
+{{< uishot "cluster-slurm" >}}
 
 **Logs** shows the container log of a node, or its journal: one unit, or all units. **Start with** sets how many lines it shows first: 200, 1,000 or 5,000. It keeps the last 10,000. Use **Pause** to stop the stream and **Follow** to resume it.
 
@@ -55,7 +59,7 @@ Type in **Filter** to show only the lines with that text, or tick **Errors and w
 
 ## Node
 
-The services, events and power state of one node, and the commands for it. A worker's page also has **Drain…**, **Resume…** and **Delete worker…**. **Logs** opens the log of the node: the journal of its Slurm service while it runs, otherwise the container output. Each service has a **Logs** link to its own journal.
+The services, events and power state of one node, what Slurm says about it (state, reason, CPUs, memory and partitions), and the commands for it. A worker's page also has **Drain…**, **Resume…** and **Delete worker…**. **Logs** opens the log of the node: the journal of its Slurm service while it runs, otherwise the container output. Each service has a **Logs** link to its own journal.
 
 {{< uishot "node" >}}
 

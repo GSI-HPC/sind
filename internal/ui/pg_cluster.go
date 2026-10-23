@@ -49,7 +49,7 @@ func pgClusterTopics(p Params, tab string) []store.Topic {
 	switch tab {
 	case "", "summary":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name), store.MonitoringTopic(realm), store.MeshTopic(realm)}
-	case "nodes":
+	case "nodes", "slurm":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name)}
 	case "network":
 		return []store.Topic{store.ClustersTopic(realm), store.StatusTopic(realm, name), store.NetworksTopic(realm), store.VolumesTopic(realm)}
@@ -126,7 +126,9 @@ type pgClusterView struct {
 	Tab     string
 	Cluster pgCluster
 	// Status is the cluster's status, nil until the first probe.
-	Status  *cluster.Status
+	Status *cluster.Status
+	// Slurm is what Slurm says about the cluster.
+	Slurm   *pgSlurmView
 	Tabs    []pgTabLink
 	Actions []pgAction
 	// Services are the columns of the health matrix, Matrix its rows.
@@ -171,6 +173,7 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 	d.Found = true
 	d.Cluster = pgClusterOf(sn, realm, summary, sn.MonitoringOf(realm), v.Now)
 	d.Status = sn.Status(realm, name)
+	d.Slurm = pgSlurmOf(sn.Slurm(realm, name), d.Cluster.Nodes)
 	d.Tabs = pgTabLinks(d)
 	d.Actions = []pgAction{
 		pgDialogAction("Add workers…", "", "create-worker", "realm", realm, "cluster", name),
@@ -339,6 +342,11 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 			}
 		}
 	}
+}
+
+// SlurmConfLink returns the address of slurm.conf on the Slurm tab.
+func (d *pgClusterView) SlurmConfLink() string {
+	return pgClusterURL(d.Realm, d.Name, "slurm") + "#slurm-file-slurm-conf"
 }
 
 // NodesText returns "1 node" or "3 nodes".

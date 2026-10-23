@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/stretchr/testify/require"
 )
@@ -177,3 +178,28 @@ func pgBody(t *testing.T, ts *testServer, target string, status int) string {
 }
 
 func pgProbe(s string) probe.Service { return probe.Service(s) }
+
+// pgFillSlurm puts what Slurm says about the cluster sind/dev in the store:
+// a busy, a drained, a down and an idle worker, two partitions and the
+// config files.
+func pgFillSlurm(st *store.Store) {
+	node := func(name, state, reason string, alloc, mem int, parts ...string) slurm.NodeInfo {
+		return slurm.NodeInfo{Name: name, State: state, Reason: reason, CPUs: 2, AllocCPUs: alloc, MemoryMB: mem, Partitions: parts}
+	}
+	st.SetSlurm("sind", "dev", &store.Slurm{Info: &cluster.SlurmInfo{
+		Nodes: []slurm.NodeInfo{
+			node("worker-0", "mixed", "", 1, 1024, "all", "debug"),
+			node("worker-1", "drained", "disk check", 0, 1024, "all"),
+			node("worker-2", "idle", "", 0, 1024, "all"),
+			node("worker-3", "down*", "Not responding", 0, 512, "all"),
+		},
+		Partitions: []slurm.PartitionInfo{
+			{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: 4, NodeList: "worker-[0-3]"},
+			{Name: "debug", State: "down", TimeLimit: "30:00", Nodes: 1, NodeList: "worker-0"},
+		},
+		Files: []cluster.SlurmFile{
+			{Path: "/etc/slurm/slurm.conf", Content: "ClusterName=dev\ninclude /etc/slurm/sind-nodes.conf\n"},
+			{Path: "/etc/slurm/sind-nodes.conf", Content: "NodeName=worker-0 CPUs=2\n"},
+		},
+	}})
+}

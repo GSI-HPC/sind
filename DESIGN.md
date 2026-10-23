@@ -842,7 +842,7 @@ The editor commands are sind's own (`cmd/sind/mcpeditor.go`, `internal/mcpconfig
 
 ## Web UI
 
-`sind ui` (`cmd/sind/ui.go` for the flags, `internal/ui` for the logic) is a local web UI for sind. Its pages show the realms, clusters and nodes, the networks and the runs of the realm, and it offers the actions that change something (new cluster, add workers, delete, power, drain and resume, connect and disconnect, delete realm). It has no Slurm page and no terminal: the Connect tab of a cluster shows the commands to run in a terminal.
+`sind ui` (`cmd/sind/ui.go` for the flags, `internal/ui` for the logic) is a local web UI for sind. Its pages show the realms, clusters and nodes, the networks and the runs of the realm, and it offers the actions that change something (new cluster, add workers, delete, power, drain and resume, connect and disconnect, delete realm). It has no terminal: the Connect tab of a cluster shows the commands to run in a terminal. The Slurm tab of a cluster shows what `sinfo` reports and the Slurm config files that sind wrote; of the actions, only drain and resume change Slurm.
 
 ### Architecture
 

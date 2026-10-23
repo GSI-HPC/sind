@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The view models of the main pages. They are built from a snapshot only,
@@ -155,6 +156,9 @@ type pgNode struct {
 	// one that adds workers or reboots a node (pgRunsOn), Creating while
 	// one creates the cluster.
 	Busy, Creating bool
+	// Slurm is what sinfo says about the node, nil when it does not list
+	// it or was not asked.
+	Slurm *slurm.NodeInfo
 }
 
 // Link returns the address of the node's page.
@@ -386,7 +390,7 @@ func (c pgCluster) Problems() []pgPill {
 
 // Tabs of a cluster page, in order.
 var pgTabs = []struct{ Key, Label string }{
-	{"summary", "Summary"}, {"nodes", "Nodes"}, {"logs", "Logs"},
+	{"summary", "Summary"}, {"nodes", "Nodes"}, {"slurm", "Slurm"}, {"logs", "Logs"},
 	{"network", "Network and storage"}, {"connect", "Connect"},
 }
 
@@ -419,6 +423,7 @@ func pgClusterOf(sn store.Snapshot, realm string, c cluster.Summary, mon *cluste
 		n.Busy, n.Creating = busy, creating
 		pc.Nodes = append(pc.Nodes, n)
 	}
+	pgAttachSlurm(pc.Nodes, sn.Slurm(realm, c.Name))
 	if mon != nil {
 		pc.Monitoring = slices.ContainsFunc(mon.Clusters, func(m cluster.MonitoredCluster) bool { return m.Name == c.Name })
 	}
