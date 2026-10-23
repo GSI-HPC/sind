@@ -96,5 +96,4 @@ tr[data-href]{cursor:pointer}
   .pg-steps li{grid-template-columns:28px minmax(0,1fr)}
   .pg-steps li > :last-child{grid-column:2}
   .pg-h1{font-size:20px}
-  .realm select{max-width:150px}
 }
