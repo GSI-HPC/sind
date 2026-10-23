@@ -1055,6 +1055,9 @@ func TestActDialog_NewClusterUsers(t *testing.T) {
 	body = f.get("/dialogs/create-cluster?" + actForm("ar", "a0", "a0-name", "physics", "a0-lk", "MaxJobs", "a0-lv", "4", "a0-lk", "GrpTRES",
 		"ur", "u0", "u0-admin", "operator", "gr", "g0", "gr", "api", "g0-name", "hpc", "evil", "x")).Body.String()
 	assert.Contains(t, body, `name="a0-lk" value="MaxJobs"`)
+	assert.Contains(t, body, `aria-label="Value of MaxJobs"`, "the value is named after its limit")
+	assert.Contains(t, body, `data-act-rowdel aria-label="Remove MaxJobs" data-act-limname="Remove ">`)
+	assert.Contains(t, body, `data-act-rowdel aria-label="Remove the limit" data-act-limname="Remove ">`, "the blank row of the template")
 	assert.Contains(t, body, `name="a0-lv" value="4"`)
 	assert.Contains(t, body, `name="a0-lk" value="GrpTRES"`, "a limit without its value")
 	assert.Contains(t, body, `id="act-g0-name" name="g0-name" value="hpc"`)

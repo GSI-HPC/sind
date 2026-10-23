@@ -44,7 +44,7 @@
         <td role="cell" class="act"><button type="button" class="btn sm ghost" data-more-copy-text="{{.Hostname}}" aria-label="Copy {{.Hostname}}">Copy</button></td></tr>
       {{end}}</tbody></table><p class="empty" data-more-none="dns-{{.Name}}" hidden>No record matches the filter.</p></div>
       {{if .Has}}<div class="pb more-dig"><p class="cmdlabel">Ask the DNS server from this host</p>
-        <div class="cmd"><code>dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}</code><button type="button" data-more-copy>Copy</button></div></div>{{end}}
+        <div class="cmd"><code>dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}</code><button type="button" data-more-copy aria-label="Copy dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}">Copy</button></div></div>{{end}}
       {{else}}<div class="empty">No DNS records yet. Each node adds its name when it starts.</div>{{end}}</section>
     <section class="panel"><div class="ph"><h2>Other containers</h2><span class="grow"></span><span class="faint">connected with sind connect container</span></div>
       {{if .External}}<div class="tw"><table><tbody>

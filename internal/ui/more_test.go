@@ -438,7 +438,7 @@ func TestMoreDoctorPage(t *testing.T) {
 		"Doctor", "Docker Engine 28.5.1", "cgroup v2", "1 failed", "1 warning", "checked 3 min ago",
 		`<span class="more-mark ok"`, `<span class="more-mark warn"`, `<span class="more-mark bad"`, `<span class="more-mark "`, ">?</span>",
 		`<span class="pill warn nodot">warning</span>`, `<span class="pill bad nodot">failed</span>`, `<span class="pill ok nodot">ok</span>`,
-		`<p class="more-fixtext">Raise the limit now:</p>`, `<code>sudo sysctl fs.inotify.max_user_instances=1024</code><button type="button" data-more-copy>Copy</button>`,
+		`<p class="more-fixtext">Raise the limit now:</p>`, `<code>sudo sysctl fs.inotify.max_user_instances=1024</code><button type="button" data-more-copy aria-label="Copy sudo sysctl fs.inotify.max_user_instances=1024">Copy</button>`,
 		"Check again", `action="/doctor/check"`, `name="csrf" value="` + ts.csrf + `"`,
 		`<div class="callout more-verdict bad" role="status"><b>Not ready: sind cannot create clusters on this host.</b> Fix the failed check first.`,
 	} {

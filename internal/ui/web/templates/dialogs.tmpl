@@ -216,11 +216,12 @@ limits as pairs of fields. */}}
   <button type="button" class="btn sm" data-act-rowadd="limit" data-act-into="act-lims-{{.Key}}" data-act-key="{{.Key}}">+ Add limit</button>
 </div>{{end}}
 
-{{/* act-limit is a limit of an account: a pair of fields. */}}
+{{/* act-limit is a limit of an account: a pair of fields. The value and the
+button are named after the limit, which act.js keeps up as it is typed. */}}
 {{define "act-limit"}}<div class="act-rowf act-lim" data-act-row>
   <input type="text" name="{{.Row}}-lk" value="{{.Key}}" list="act-dl-limits" placeholder="limit, such as MaxJobs" aria-label="Limit" autocapitalize="off" spellcheck="false">
-  <input type="text" name="{{.Row}}-lv" value="{{.Value}}" placeholder="value, such as 4" aria-label="Value of the limit" autocapitalize="off" spellcheck="false">
-  <button type="button" class="act-x" data-act-rowdel aria-label="Remove this limit">✕</button>
+  <input type="text" name="{{.Row}}-lv" value="{{.Value}}" placeholder="value, such as 4" aria-label="Value of {{with .Key}}{{.}}{{else}}the limit{{end}}" autocapitalize="off" spellcheck="false" data-act-limname="Value of ">
+  <button type="button" class="act-x" data-act-rowdel aria-label="Remove {{with .Key}}{{.}}{{else}}the limit{{end}}" data-act-limname="Remove ">✕</button>
 </div>{{end}}
 
 {{/* act-realm is the realm field of a dialog with Spec.RealmField: the

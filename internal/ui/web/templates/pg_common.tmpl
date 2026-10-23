@@ -30,7 +30,7 @@ each kind. */}}
 {{define "pg-copy"}}<button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="{{.}}" aria-label="Copy {{.}}">Copy</button>{{end}}
 
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
-{{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy>Copy</button></div></div>{{end}}
+{{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}
 
 {{/* pg-realm-filter lets a list switch to one realm, with the filters it
 has; it takes the list. */}}

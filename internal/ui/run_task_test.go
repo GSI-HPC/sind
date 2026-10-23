@@ -214,7 +214,7 @@ func TestRunTaskPageOffersToTryAgain(t *testing.T) {
 	})
 	body := ts.get("/tasks/t1").Body.String()
 	for _, want := range []string{
-		`<code>sind create worker dev --count 2</code><button type="button" data-pg-copy>Copy</button>`,
+		`<code>sind create worker dev --count 2</code><button type="button" data-pg-copy aria-label="Copy sind create worker dev --count 2">Copy</button>`,
 		`action="/tasks/t1/retry"`,
 		`>Edit and try again…</a>`,
 		`<a class="btn" href="/clusters/sind/dev">Open dev</a>`,

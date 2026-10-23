@@ -571,7 +571,7 @@ func TestPgClusterConnectTab(t *testing.T) {
 	assert.Contains(t, body, "Open a shell on the submitter")
 	assert.Contains(t, body, `<dt><span data-word="slurmrestd">slurmrestd</span></dt><dd class="mono">http://api.dev.sind.sind:6820</dd>`)
 	assert.NotContains(t, body, "Grafana")
-	assert.Contains(t, body, `<button type="button" data-pg-copy>Copy</button>`)
+	assert.Contains(t, body, `<button type="button" data-pg-copy aria-label="Copy `)
 	assert.Contains(t, body, "There is no terminal in the browser.")
 
 	// A cluster of another realm and the default cluster, with monitoring.

@@ -31,7 +31,7 @@
       {{if .Detail}}<div class="muted">{{.Detail}}</div>{{end}}
       {{if .Steps}}<div class="more-fix"><p class="cmdlabel">Fix</p>
         {{range .Steps}}{{range .Text}}<p class="more-fixtext">{{.}}</p>{{end}}{{if .Cmd}}
-        <div class="cmd"><code{{if .Multi}} class="nop"{{end}}>{{.Cmd}}</code><button type="button" data-more-copy>Copy</button></div>{{end}}{{end}}
+        <div class="cmd"><code{{if .Multi}} class="nop"{{end}}>{{.Cmd}}</code><button type="button" data-more-copy aria-label="Copy {{.Cmd}}">Copy</button></div>{{end}}{{end}}
       </div>{{end}}
     </div>
   </div>

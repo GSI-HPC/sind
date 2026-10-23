@@ -103,7 +103,7 @@ func TestRunPageOffersToTryAgain(t *testing.T) {
 	body := ts.get("/runs/r-failed").Body.String()
 	head := runFragment(t, ts, runNow, "run-head", "id", "r-failed")
 	for _, want := range []string{
-		`<div class="cmdlabel">Command</div><div class="cmd"><code>sind create cluster --config /c/dev.yaml</code><button type="button" data-pg-copy>Copy</button></div>`,
+		`<div class="cmdlabel">Command</div><div class="cmd"><code>sind create cluster --config /c/dev.yaml</code><button type="button" data-pg-copy aria-label="Copy sind create cluster --config /c/dev.yaml">Copy</button></div>`,
 		`<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">/c/dev.yaml</div><pre class="mono">name: dev` + "\n" + `realm: sind` + "\n" + `</pre></details>`,
 		`action="/tasks/t-failed/retry"`,
 		`<button type="submit" class="btn primary">Try again</button>`,

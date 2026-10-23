@@ -511,6 +511,14 @@
 
   // The directory of the data follows the name until the user types one;
   // a Docker volume needs none.
+  // The value and the button of a limit row are named after the limit.
+  document.addEventListener('input', ev => {
+    const t = ev.target;
+    const row = t instanceof HTMLInputElement && t.name.endsWith('-lk') ? t.closest('.act-lim') : null;
+    if (!row) return;
+    for (const el of row.querySelectorAll('[data-act-limname]')) el.setAttribute('aria-label', el.dataset.actLimname + (t.value.trim() || 'the limit'));
+  });
+
   document.addEventListener('input', ev => {
     const t = ev.target;
     if (!(t instanceof HTMLInputElement) || !t.form) return;
