@@ -1,0 +1,15 @@
+kind: Cluster
+name: dev
+monitoring: true
+nodes: [controller, db, api, submitter, worker: 4]
+slurm:
+  main: |
+    SlurmdTimeout=30
+groups:
+  - name: physics
+accounts:
+  - name: physics
+users:
+  - name: alice
+    groups: [physics]
+    accounts: [physics]

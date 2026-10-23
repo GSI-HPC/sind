@@ -10,6 +10,10 @@
   <a href="https://gsi-hpc.github.io/sind/getting-started/installation/"><strong>🚀 Getting Started</strong></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://gsi-hpc.github.io/sind/"><strong>📖 Documentation</strong></a>
 </p>
 
+<p align="center">
+  <a href="https://gsi-hpc.github.io/sind/#video-overview"><img src="https://gsi-hpc.github.io/sind/videos/overview-thumb.jpg" alt="Watch a tour of sind: the CLI and the web UI, recorded from real runs" width="720" /></a>
+</p>
+
 ---
 
 Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** offers a familiar CLI experience for quickly spinning up and tearing down Slurm clusters.

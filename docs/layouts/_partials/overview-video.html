@@ -1,0 +1,40 @@
+{{- /*
+  The overview video on the landing page, with its chapters.
+
+  The docs workflow records and renders it (video/overview/README.md) into
+  static/videos/overview.{webm,jpg,vtt} and data/videos/overview.json
+  before building. Without those files (e.g. a local build without the
+  video pipeline), the partial renders nothing.
+*/ -}}
+{{- $meta := index (hugo.Data.videos | default dict) "overview" -}}
+{{- if and $meta (fileExists "static/videos/overview.webm") -}}
+<section class="sind-sec sind-overview">
+  <h2>See it in action</h2>
+  <p class="sind-sec__blurb">The CLI, the web UI and what sind sets up around a cluster, recorded from real runs.</p>
+  <figure class="sind-video" id="video-overview">
+    <video controls preload="none" playsinline poster="{{ "videos/overview.jpg" | relURL }}" aria-label="{{ $meta.title }}">
+      <source src="{{ "videos/overview.webm" | relURL }}" type='video/webm; codecs="av01.0.08M.10, opus"'>
+      <track kind="chapters" src="{{ "videos/overview.vtt" | relURL }}" srclang="en" label="Chapters" default>
+    </video>
+    <figcaption>
+      <div class="sind-video-title"><strong>{{ $meta.title }}</strong><span>{{ $meta.length }} · narrated by Sindy</span></div>
+      {{- with $meta.chapters }}
+      <ol class="sind-video-chapters">
+        {{- range . }}
+        <li><button type="button" data-t="{{ .start }}">{{ .time }}</button>{{ .title }}</li>
+        {{- end }}
+      </ol>
+      {{- end }}
+    </figcaption>
+  </figure>
+</section>
+<script>
+  document.querySelectorAll("#video-overview .sind-video-chapters button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var v = document.querySelector("#video-overview video");
+      v.currentTime = Number(b.dataset.t);
+      v.play();
+    });
+  });
+</script>
+{{- end -}}
