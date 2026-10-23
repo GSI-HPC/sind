@@ -200,8 +200,9 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	assert.Contains(t, body, `<span class="pill ok" data-act-say="Ready. Create runs the command." data-act-key="ready">Ready</span><span class="act-tot">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
 
 	// An error has no field: the status shows the list of problems.
-	body = f.post("/actions/create-cluster/preview", actForm("realm", "Bad Realm")).Body.String()
-	assert.Contains(t, body, `data-act-go="" data-act-say="realm: `)
+	f.state.configDir = ""
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
+	assert.Contains(t, body, `data-act-go="" data-act-say="sind ui has no state directory`)
 	assert.Contains(t, body, `aria-label="1 problem. Show the problems." title="Show the problems">1 problem <span`)
 
 	// Dialogs without a plan have no status.

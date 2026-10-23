@@ -104,6 +104,9 @@ type actSpec struct {
 	// the link: opened on a page of it, the dialog follows its run, as
 	// the page would show only that it is gone.
 	Removes bool
+	// RealmField shows the realm as a field, filled in with the realm of
+	// the link; other dialogs keep it hidden.
+	RealmField bool
 	// Fields returns the fields of the form that show their own problem.
 	Fields func(f url.Values) []string
 	// Sections are the parts of the form that fold, each with a line
@@ -119,10 +122,10 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Draft: true, Follow: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
+		OK: "Create", Wide: true, Plan: true, Draft: true, Follow: true, RealmField: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
-		Lead: func(d *actDialog) string {
-			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
+		Lead: func(*actDialog) string {
+			return "sind ui saves the config, then runs sind create cluster with it."
 		},
 		Defaults: func(d *actDialog) {
 			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
@@ -208,11 +211,10 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"connect": {
-		OK:    "Connect",
+		OK: "Connect", RealmField: true, Fields: actFields("container", "realm"),
 		Title: func(*actDialog) string { return "Connect a container" },
-		Lead: func(d *actDialog) string {
-			return "Attaches a container that sind did not make, such as a kind node, to the mesh and cluster networks of realm " +
-				d.Realm + ". It then resolves the nodes by name."
+		Lead: func(*actDialog) string {
+			return "Attaches a container that sind did not make, such as a kind node, to the mesh and cluster networks of the realm. It then resolves the nodes by name."
 		},
 	},
 	"disconnect": {
@@ -738,6 +740,27 @@ func (d *actDialog) YAMLMode() bool { return d.Form.Get("yaml_on") != "" }
 // Is reports whether the field has the value.
 func (d *actDialog) Is(field, value string) bool { return d.Form.Get(field) == value }
 
+// RealmNames are the realms that the realm field suggests: those that sind
+// ui sees, and the realm of the dialog.
+func (d *actDialog) RealmNames() []string {
+	names := []string{d.Realm}
+	for _, r := range d.Snap.Realms {
+		if r.Name != d.Realm {
+			names = append(names, r.Name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// RealmHint says what the realm field of the dialog does.
+func (d *actDialog) RealmHint() string {
+	if d.ID == "connect" {
+		return "The realm whose networks the container joins. It needs a cluster, whose mesh comes with it."
+	}
+	return "A group of clusters. A new name makes a new realm."
+}
+
 // Body is the name of the block with the dialog's fields.
 func (d *actDialog) Body() string { return "act-dlg-" + d.ID }
 
@@ -970,14 +993,25 @@ func actWorkerIndex(n action.PlannedNode) int {
 	return i
 }
 
-// ProblemOf returns what is wrong with the field, or "".
+// ProblemOf returns what is wrong with the field, or "": a problem of the
+// plan, or the error of the command when it starts with the field.
 func (p actPreview) ProblemOf(field string) string {
 	for _, pr := range p.Cmd.Problems {
 		if pr.Field == field {
 			return pr.Text
 		}
 	}
+	if text, ok := strings.CutPrefix(p.Err, field+": "); ok {
+		return text
+	}
 	return ""
+}
+
+// ErrAtField reports whether the error of the command belongs to a field
+// that shows its own problem, so that the field shows it in place of the
+// preview.
+func (p actPreview) ErrAtField() bool {
+	return slices.ContainsFunc(p.Fields(), func(field string) bool { return strings.HasPrefix(p.Err, field+": ") })
 }
 
 // Problems is how many things keep the command from running.

@@ -21,7 +21,7 @@
   {{- if .Spec.Draft}} data-act-draft="{{.ID}}"{{end}}{{if .Draft}} data-act-restored{{end}}
   hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
   {{template "csrf-field" .View}}
-  <input type="hidden" name="realm" value="{{.Realm}}">{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
+  {{if not .Spec.RealmField}}<input type="hidden" name="realm" value="{{.Realm}}">{{end}}{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
   <div class="mh"><div class="mtop"><h2 id="act-title">{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
     <p id="act-lead">{{.Lead}}</p></div>
   {{if .Draft}}<div class="callout act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>{{end}}
@@ -60,7 +60,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{define "act-preview"}}{{with .Data}}{{$p := .}}
 {{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{template "act-callouts" .}}
@@ -200,6 +200,12 @@ limits as pairs of fields. */}}
   <button type="button" class="act-x" data-act-rowdel aria-label="Remove this limit">✕</button>
 </div>{{end}}
 
+{{/* act-realm is the realm field of a dialog with Spec.RealmField: the
+realm of the link, another one that sind ui sees, or a new one. */}}
+{{define "act-realm"}}<div class="fld"><label for="act-realm">Realm</label><input type="text" id="act-realm" name="realm" value="{{.Realm}}" list="act-dl-realms" autocapitalize="off" spellcheck="false" aria-describedby="act-err-realm act-hint-realm">
+  <span class="err" id="act-err-realm"></span><span class="hint" id="act-hint-realm">{{.RealmHint}}</span>
+  <datalist id="act-dl-realms">{{range .RealmNames}}<option value="{{.}}"></option>{{end}}</datalist></div>{{end}}
+
 {{/* act-nodes is the picker of the nodes of a cluster. */}}
 {{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
   {{if .Nodes}}<div class="checks act-nodes">{{range .Nodes}}<label><input type="checkbox" name="nodes" value="{{.Short}}"{{if .On}} checked{{end}}> <span class="mono">{{.Short}}</span> <small>{{.Role}}, {{.State}}</small></label>{{end}}</div>
@@ -213,12 +219,13 @@ limits as pairs of fields. */}}
   <textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
   <span class="err" id="act-err-yaml"></span>
 </div>
-<div class="row">
+<div class="row act-idrow">
   <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
     <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>
-  <div class="fld act-wide"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
-    <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
+  {{template "act-realm" .}}
 </div>
+<div class="fld"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
+  <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
 <div class="fld"><span class="lbl">Nodes</span>
 <div class="act-roles" id="act-roles">
   <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b data-word="controller">controller</b><span class="hint"><span data-word="slurmctld">slurmctld</span>. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
@@ -335,7 +342,8 @@ limits as pairs of fields. */}}
 {{end}}
 
 {{define "act-dlg-connect"}}
-<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false"><span class="hint">The name of a running container that no realm has yet.</span></div>
+<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">The name of a running container that no realm has yet.</span></div>
+{{template "act-realm" .}}
 {{end}}
 
 {{define "act-dlg-disconnect"}}

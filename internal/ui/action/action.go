@@ -265,7 +265,7 @@ func sindArgv(realm string, words ...string) []string {
 // checkRealm returns the realm of the form once it is a valid name.
 func checkRealm(f Form) (string, error) {
 	realm := Realm(f)
-	if err := config.CheckName("realm", realm); err != nil {
+	if err := nameError("realm", realm); err != nil {
 		return "", fmt.Errorf("realm: %w", err)
 	}
 	return realm, nil

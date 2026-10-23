@@ -196,7 +196,7 @@ sind disconnect container CONTAINER...
 {{< /cli >}}
 {{< ui >}}
 
-Press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of the container, and press **Connect**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
+Press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of the container. **Realm**, below it, has the realm of the page; type another one to connect the container to its networks, which needs a cluster in that realm. Press **Connect**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
 
 {{< uishot "dialog-connect" >}}
 

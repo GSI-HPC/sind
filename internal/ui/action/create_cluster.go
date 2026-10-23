@@ -95,14 +95,14 @@ type clusterPlan struct {
 // rest of it. With the field "yaml_on" the config is the YAML that the user
 // edits; the run options stay those of the form.
 func buildCreateCluster(f Form, c Context) (Command, error) {
-	realm, err := checkRealm(f)
-	if err != nil {
-		return Command{}, err
-	}
 	if c.ConfigDir == "" {
 		return Command{}, errors.New("sind ui has no state directory to save the config in; set XDG_STATE_HOME or HOME")
 	}
+	realm := Realm(f)
 	var ps problems
+	if err := nameError("realm", realm); err != nil {
+		ps.add("realm", "Realm", false, err)
+	}
 	var plan clusterPlan
 	if f.Get("yaml_on") != "" {
 		plan = yamlPlan(f, c, realm, &ps)
@@ -171,7 +171,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 // formPlan reads the config of a new cluster from the fields of the form.
 func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	cfg := config.Cluster{Kind: "Cluster", Name: strings.TrimSpace(f.Get("name"))}
-	if realm != mesh.DefaultRealm {
+	if realm != mesh.DefaultRealm && !ps.has("realm") {
 		cfg.Realm = realm
 	}
 	if image := strings.TrimSpace(f.Get("image")); image != "" {
@@ -220,7 +220,7 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 		return p
 	}
 	if parsed.Realm != "" && parsed.Realm != realm {
-		yps.add("", "YAML", false, fmt.Errorf("the YAML names realm %s, but the dialog makes the cluster in realm %s; remove realm, or open the dialog in realm %s", parsed.Realm, realm, parsed.Realm))
+		ps.add("realm", "Realm", false, fmt.Errorf("the YAML names realm %s, and this field %s; make them the same, or remove realm from the YAML", parsed.Realm, realm))
 	}
 	parsed.ApplyDefaults()
 	checkClusterName(c, realm, parsed, &yps)

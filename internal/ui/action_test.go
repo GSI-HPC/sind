@@ -153,7 +153,8 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-cluster", "", []string{"New cluster", `id="act-name" name="name" value="hpc"`, `data-act-step="w0-count"`, `id="act-w0-count" name="w0-count" value="2"`,
 			`id="act-db" name="db" checked`, `id="act-submitter" name="submitter" checked`, `id="act-backup" name="backup" aria-`, `id="act-pull" name="pull" checked`,
 			`<aside class="act-planpane" aria-label="Plan">`, `<span class="act-status" id="act-status"></span>`, `id="act-say" role="status"`, `value="~/sind/hpc"`, `data-act-follow`,
-			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`, "In realm sind",
+			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`,
+			`id="act-realm" name="realm" value="sind" list="act-dl-realms"`, `<datalist id="act-dl-realms"><option value="sind"></option></datalist>`, "A new name makes a new realm.",
 			// A size chip is named by its node and its value; the controls of a
 			// worker group by the workers it makes.
 			`aria-labelledby="act-czl-controller act-chip-controller"><span class="vh" id="act-czl-controller">Size of controller</span>`,
@@ -162,7 +163,7 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 			`aria-label="Remove the worker group" aria-labelledby="act-w0-del act-range-w0"`}},
 		{"create-cluster", "wait=7m&pull=&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="other" checked`, `name="wait_other" value="7m"`, `id="act-pull" name="pull" aria-`}},
 		{"create-cluster", "wait=0&image=ghcr.io/gsi-hpc/sind-node:26.05.4", []string{`value="0" checked`, `id="act-pull" name="pull" aria-`, `name="pull_auto"`}},
-		{"create-cluster", "realm=ci&name=big", []string{"In realm ci", `value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`}},
+		{"create-cluster", "realm=ci&name=big", []string{`value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`, `<option value="ci"></option><option value="sind"></option>`}},
 		{"create-cluster", "name=dev", []string{`value="dev"`}},
 		{"create-cluster", "dir=/scratch", []string{`name="name" value="hpc"`, `value="/scratch"`}},
 		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`}},
@@ -171,7 +172,7 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Power: nodes of dev", `value="worker-0" checked`, `value="worker-1" checked`, `value="controller">`, `value="cut" checked`, "Cut power"}},
 		{"power", "cluster=dev&op=stop", []string{`value="shutdown" checked`}},
 		{"power", "cluster=dev&op=melt", []string{`value="shutdown" checked`}},
-		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`}},
+		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`, `id="act-realm" name="realm" value="sind"`, "The realm whose networks the container joins."}},
 		{"disconnect", "", []string{"Disconnect a container", "connected to realm sind"}},
 		{"delete-realm", "", []string{"Delete realm sind", "all 2 clusters", `Type <b class="mono">sind</b> to confirm`}},
 	} {
@@ -299,6 +300,34 @@ func TestActPreview_Refusals(t *testing.T) {
 	del := actForm("cluster", "dev")
 	assert.Contains(t, f.post("/actions/delete-cluster/preview", del).Body.String(), `disabled>Delete<kbd`)
 	assert.NotContains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=dev").Body.String(), `disabled`)
+}
+
+func TestActConnect_ProblemsAtTheirFields(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/connect").Body.String()
+	assert.Less(t, strings.Index(body, `id="act-container"`), strings.Index(body, `id="act-realm"`), "the field to fill comes first and gets the focus")
+	assert.Contains(t, body, `aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span>`)
+	assert.Contains(t, body, "It needs a cluster, whose mesh comes with it.")
+
+	body = f.post("/actions/connect/preview", actForm("realm", "No", "container", "kind-cp")).Body.String()
+	assert.Contains(t, body, `<span class="err" id="act-err-realm" hx-swap-oob="innerHTML">use `)
+	assert.Contains(t, body, `<span class="err" id="act-err-container" hx-swap-oob="innerHTML"></span>`)
+	assert.Contains(t, body, `<p class="hint act-missing">Fix the field above to see the command.</p>`)
+	assert.NotContains(t, body, "callout bad", "the field says it")
+	assert.Regexp(t, `id="act-ok"[^>]* disabled>`, body)
+
+	body = f.post("/actions/connect/preview", actForm("container", "a;b")).Body.String()
+	assert.Contains(t, body, `<span class="err" id="act-err-container" hx-swap-oob="innerHTML">write the name of a container, such as kind-control-plane</span>`)
+
+	body = f.post("/actions/connect/preview", actForm("realm", "new", "container", "kind-cp")).Body.String()
+	assert.Contains(t, body, "<code>sind --realm new connect container kind-cp</code>")
+	assert.Contains(t, body, `<div class="callout warn">sind ui sees no realm new. sind connects a container only to a realm with a cluster, whose mesh it joins; create a cluster in new first.</div>`)
+
+	// A dialog without fields of its own keeps the error in the preview.
+	body = f.post("/actions/disconnect/preview", actForm("realm", "No", "container", "kind-cp")).Body.String()
+	assert.Contains(t, body, `<div class="callout bad">realm: use `)
+	assert.NotContains(t, body, "act-err-realm")
 }
 
 func TestActPreview_Warnings(t *testing.T) {
@@ -508,6 +537,10 @@ func TestActPreview_NewClusterNodes(t *testing.T) {
 	assert.Contains(t, body, `id="act-range-w0" hx-swap-oob="true">worker-0</span>`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("realm", "Bad Realm")).Body.String()
+	assert.Contains(t, body, `id="act-range-w0" hx-swap-oob="true">worker-0</span>`, "a wrong realm is a problem; the plan shows")
+
+	f.state.configDir = ""
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
 	assert.Contains(t, body, `id="act-range-w0" hx-swap-oob="true"></span>`, "no plan, no range")
 }
 
@@ -894,10 +927,11 @@ func TestActPreview_NewClusterShowsThePlanWithProblems(t *testing.T) {
 func TestActPreview_NewClusterThatCannotBuild(t *testing.T) {
 	f := newActFixture(t)
 
-	body := f.post("/actions/create-cluster/preview", actForm("realm", "Bad Realm")).Body.String()
+	f.state.configDir = ""
+	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
 
 	assert.Contains(t, body, `<span class="pill bad">Not ready · 1 problem</span>`)
-	assert.Contains(t, body, `<div class="callout bad" id="act-probs" tabindex="-1">realm: `)
+	assert.Contains(t, body, `<div class="callout bad" id="act-probs" tabindex="-1">sind ui has no state directory`)
 	assert.NotContains(t, body, "act-yaml")
 }
 

@@ -140,7 +140,7 @@ func TestBuildCreateCluster_WorkerGroups(t *testing.T) {
 
 func TestClusterFieldsOf(t *testing.T) {
 	fields := ClusterFieldsOf(form("wg", "w0", "wg", "bad key", "wg", "wz"))
-	assert.Equal(t, []string{"name", "image", "controller-image"}, fields[:3])
+	assert.Equal(t, []string{"name", "realm", "image", "controller-image"}, fields[:4])
 	assert.Contains(t, fields, "controller-unmanaged")
 	assert.NotContains(t, fields, "submitter-unmanaged", "the submitter is always managed")
 	assert.Contains(t, fields, "wz-securityOpt")

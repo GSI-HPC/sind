@@ -173,7 +173,7 @@ func TestFindCluster_Errors(t *testing.T) {
 		f    Form
 		want string
 	}{
-		{"bad realm", form("realm", "Bad Realm", "cluster", "dev"), "realm: invalid realm name"},
+		{"bad realm", form("realm", "Bad Realm", "cluster", "dev"), "realm: use "},
 		{"no cluster", form(), "cluster: say which cluster"},
 		{"bad cluster", form("cluster", "Dev!"), "cluster: invalid cluster name"},
 		{"unknown cluster", form("cluster", "nope"), "realm sind has no cluster nope"},
@@ -271,7 +271,7 @@ func TestBuildDeleteRealm(t *testing.T) {
 	_, err = build(t, "delete-realm", form("realm", "gone"))
 	assert.EqualError(t, err, "realm: sind ui sees no realm gone")
 	_, err = build(t, "delete-realm", form("realm", "No"))
-	assert.ErrorContains(t, err, "realm: invalid realm name")
+	assert.ErrorContains(t, err, "realm: use ")
 }
 
 func TestBuildPower(t *testing.T) {
@@ -322,6 +322,16 @@ func TestBuildConnect(t *testing.T) {
 	cmd, err := build(t, "connect", form("container", "kind-control-plane"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "connect", "container", "kind-control-plane"}, cmd.Argv)
+	assert.Empty(t, cmd.Warns, "a realm that sind ui sees")
+
+	cmd, err = build(t, "connect", form("realm", "new", "container", "kind-control-plane"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind --realm new connect container kind-control-plane", cmd.Display)
+	assert.Equal(t, []string{"sind ui sees no realm new. sind connects a container only to a realm with a cluster, whose mesh it joins; create a cluster in new first."}, cmd.Warns)
+
+	cmd, err = build(t, "disconnect", form("realm", "new", "container", "kind-1"))
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns, "disconnect leaves the realm to sind")
 
 	cmd, err = build(t, "disconnect", form("realm", "ci", "container", " kind-1 "))
 	require.NoError(t, err)
@@ -334,7 +344,7 @@ func TestBuildConnect(t *testing.T) {
 		assert.Equal(t, strings.TrimSpace(bad) == "", errors.As(err, &missing), bad)
 	}
 	_, err = build(t, "connect", form("realm", "No", "container", "x"))
-	assert.ErrorContains(t, err, "realm: invalid realm name")
+	assert.ErrorContains(t, err, "realm: use ")
 }
 
 func TestNodeWords(t *testing.T) {

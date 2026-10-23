@@ -47,7 +47,7 @@ func TestBuildCreateCluster_YAMLProblems(t *testing.T) {
 	}{
 		{"does not parse", "kind: Cluster\nname: [", nil, []string{"YAML: "}},
 		{"empty", "", nil, []string{"YAML: empty configuration"}},
-		{"other realm", "kind: Cluster\nname: lab\nrealm: ci\n", nil, []string{"YAML: the YAML names realm ci, but the dialog makes the cluster in realm sind"}},
+		{"other realm", "kind: Cluster\nname: lab\nrealm: ci\n", nil, []string{"Realm: the YAML names realm ci, and this field sind; make them the same, or remove realm from the YAML"}},
 		{"same realm", "kind: Cluster\nname: lab\nrealm: ci\n", []string{"realm", "ci"}, nil},
 		{"name taken", "kind: Cluster\nname: dev\n", nil, []string{"Name: realm sind has a cluster dev already"}},
 		{"bad name", "kind: Cluster\nname: Lab\nnodes: [controller, worker, db]\n", nil, []string{"Name: use lowercase letters, such as lab"}},
@@ -61,7 +61,7 @@ func TestBuildCreateCluster_YAMLProblems(t *testing.T) {
 			var got []string
 			for _, p := range cmd.Problems {
 				got = append(got, p.Label+": "+p.Text)
-				if p.Label != "Wait for ready" {
+				if p.Label != "Wait for ready" && p.Label != "Realm" {
 					assert.Equal(t, "yaml", p.Field, "a problem of the YAML links to it")
 				}
 			}

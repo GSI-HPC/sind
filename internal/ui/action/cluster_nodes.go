@@ -63,7 +63,7 @@ func WorkerGroups(f Form) []string {
 // ClusterFieldsOf returns the fields of the New cluster dialog of the form
 // in the order the dialog shows them, which its problems follow.
 func ClusterFieldsOf(f Form) []string {
-	fields := []string{"name", "image"}
+	fields := []string{"name", "realm", "image"}
 	fields = append(fields, nodeFields("controller")...)
 	fields = append(fields, "backup")
 	for _, role := range NodeRoles[1:] {

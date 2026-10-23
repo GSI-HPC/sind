@@ -284,22 +284,6 @@ func TestBuildCreateCluster_MonitoringStackNote(t *testing.T) {
 	assert.Len(t, cmd.Notes, 1)
 }
 
-func TestBuildCreateCluster_Errors(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		f    Form
-		want string
-	}{
-		{"realm", valid("realm", "No Realm"), "realm: invalid realm name"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := build(t, "create-cluster", tc.f)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.want)
-		})
-	}
-}
-
 func TestBuildCreateCluster_Problems(t *testing.T) {
 	long := strings.Repeat("a", config.MaxAccountingClusterName+1)
 	for _, tc := range []struct {
@@ -309,6 +293,7 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		want  string
 		def   bool
 	}{
+		{"realm", valid("realm", "No Realm"), "realm", "use only lowercase letters, digits and -, no spaces, such as no-realm", false},
 		{"name empty", valid("name", ""), "name", "give the cluster a name, such as hpc", false},
 		{"name upper", valid("name", "Hpc"), "name", "use lowercase letters, such as hpc", false},
 		{"name space", valid("name", "My Cluster"), "name", "use only lowercase letters, digits and -, no spaces, such as my-cluster", false},
