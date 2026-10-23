@@ -345,18 +345,43 @@ func TestMoreTopologyPage(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
 	body := moreGet(t, ts, "/topology", http.StatusOK)
 	for _, want := range []string{
-		"Topology", `<svg viewBox="0 0 900 `, `role="img"`, "Topology of realm sind", "MESH SIND-MESH", "CLUSTER NETWORKS", "HOST", "NODES",
-		"this host", "Docker Engine 28.5.1", "sind-dns", "DNS · 172.18.255.254", "SSH relay", "sind-grafana", "kind-control-plane", "connected container",
+		"Topology", `<svg viewBox="0 0 900 `, `role="group"`, "Diagram of realm sind", "MESH SIND-MESH", "CLUSTER NETWORKS", "HOST", "NODES",
+		"this host", "Docker Engine 28.5.1", "sind-dns", "DNS · 172.18.255.254", "SSH relay", "sind-grafana", "grafana · 172.18.255.253",
+		"kind-control-plane", "connected container", `href="/mesh?realm=sind"`, `href="/monitoring?realm=sind"`,
 		"sind-default-net", "172.19.0.0/16 · running", "sind-dev-net", "172.20.0.0/16 · mixed", "sind-empty-net", "empty",
-		`href="/nodes/sind/dev/worker-1"`, "worker-1.dev", `href="/clusters/sind/dev"`, `class="n bad off"`, `class="n bad"`,
+		`href="/nodes/sind/dev/worker-1"`, "worker-1.dev", "172.19.0.4 · worker · stopped", "172.19.0.2 · controller · running",
+		`aria-label="worker-1.dev · 172.19.0.4 · worker · stopped"`,
+		`href="/clusters/sind/dev"`, `class="n bad off"`, `class="n bad"`,
 		`class="e mesh"`, `class="e net"`, "Realm <b class=\"mono\">ci</b>", "MESH</text>",
+		"the mesh network with 7 containers, and 3 cluster networks with the nodes", "1 cluster network with the nodes",
+		`<div class="pb more-topo" data-more-scroll="Diagram that scrolls sideways">`, "Scroll sideways to see the nodes",
+		`<a href="/topology" class="on" aria-current="true">Diagram</a><a href="/topology?view=table">Table</a>`,
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, `role="img"`, "an image hides its links")
+	assert.NotContains(t, body, `tabindex="0"`, "only a diagram that scrolls is a stop of the Tab key, which the script knows")
 	assert.NotContains(t, body, "<script>")
 	assert.NotContains(t, body, "style=")
 
+	// The table lists the same things with the same links.
+	table := moreGet(t, ts, "/topology?view=table", http.StatusOK)
+	for _, want := range []string{
+		`<table class="more-topotable more-cards" role="table">`, `<th scope="colgroup" colspan="4" role="rowheader">Host and mesh</th>`,
+		`<a href="/doctor">this host</a>`, "Docker Engine 28.5.1",
+		`<a href="/mesh?realm=sind">sind-dns</a></td><td role="cell">DNS</td><td role="cell" class="mono">172.18.255.254</td>`,
+		`<a href="/monitoring?realm=sind">sind-grafana</a></td><td role="cell">grafana</td><td role="cell" class="mono">172.18.255.253</td><td role="cell" class="more-aside"><span class="pill ok">ready</span>`,
+		`<a href="/clusters/sind/dev" class="mono">sind-dev-net</a>`, `<span class="mono">172.20.0.0/16</span>`, `<span class="pill warn">mixed</span>`,
+		`<a href="/nodes/sind/dev/worker-1">worker-1.dev</a></td><td role="cell">worker</td><td role="cell" class="mono">172.19.0.4</td><td role="cell" class="more-aside"><span class="pill bad">stopped</span>`,
+		"No nodes.", `<a href="/topology">Diagram</a><a href="/topology?view=table" class="on" aria-current="true">Table</a>`,
+	} {
+		assert.Contains(t, table, want)
+	}
+	assert.NotContains(t, table, "<svg viewBox")
+	assert.Contains(t, moreGet(t, ts, "/topology?view=table&realm=ci", http.StatusOK), `href="/topology?realm=ci"`)
+
 	moreGet(t, ts, "/topology?realm=nope", http.StatusNotFound)
+	moreGet(t, ts, "/topology?view=pie", http.StatusBadRequest)
 }
 
 func TestMoreTopologyEdges(t *testing.T) {

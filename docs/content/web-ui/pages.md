@@ -89,7 +89,7 @@ The buttons **Read every** 10s, 30s, 1m and 5m set how often sind ui reads the s
 
 ## Topology
 
-A diagram from the host, through the mesh services, to the cluster networks and the nodes.
+A diagram from the host, through the mesh services, to the cluster networks and the nodes. Each node shows its address, its role and its state, and each box opens its page. **Show as Table** lists the same things with the same links, as rows: the host and the containers on the mesh, then each cluster network with its nodes. On a narrow screen the diagram scrolls sideways, and a line above it says so; the Tab key then stops on it, and the arrow keys scroll it. On a phone the table shows each row as a card.
 
 {{< uishot "topology" >}}
 

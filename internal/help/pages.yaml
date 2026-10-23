@@ -52,7 +52,7 @@
   howtos: []
 - id: topology
   title: Topology
-  summary: How this host reaches each node, by name and by address.
+  summary: How this host reaches each node, by name and by address, as a diagram or as a table.
   route: /topology
   doc: architecture/networking
   words: [mesh]

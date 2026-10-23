@@ -92,7 +92,7 @@ shots:
     fit: true
 
   - name: topology
-    alt: "Topology: the realm's mesh, clusters and nodes as a diagram"
+    alt: "Topology: the realm's mesh, clusters and nodes as a diagram, each node with its address, role and state"
     path: /topology
     hide: "#tasks"
     page: topology

@@ -9,6 +9,11 @@
 .more-howto .cmd{text-align:left}
 .more-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .more-copied{color:var(--ok)!important}
+/* a "seg" of links, such as Diagram and Table */
+.more-seg a{padding:5px 12px;color:var(--muted);border-right:1px solid var(--line)}
+.more-seg a:last-child{border-right:0}
+.more-seg a:hover{color:var(--fg);text-decoration:none}
+.more-seg a.on{background:var(--accent-soft);color:var(--fg);font-weight:600}
 
 /* doctor */
 .more-verdict.ok{border-color:var(--ok);background:var(--ok-soft)}
@@ -56,7 +61,7 @@
   .more-cards td[colspan],.more-cards td[data-label]{grid-column:1/-1}
   .more-cards td[data-label]{padding-left:7.5rem}
   .more-cards td[data-label]::before{content:attr(data-label);content:attr(data-label) / "";float:left;width:7.5rem;margin-left:-7.5rem;font-size:var(--t-sm);color:var(--muted)}
-  .more-dnscards td.act,.more-moncards td.more-aside{grid-row:1;grid-column:2}
+  .more-dnscards td.act,.more-moncards td.more-aside,.more-topotable td.more-aside{grid-row:1;grid-column:2}
 }
 /* What a Copy copies, while the browser copies it the old way, and the
    lines of Copy list, shown for Ctrl+C when the browser copies nothing */
@@ -68,7 +73,10 @@
 .more-filter{flex:1 1 200px;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:inherit;color:var(--fg)}
 .more-dig{border-top:1px solid var(--line-2)}
 
-/* topology: the figure scrolls sideways inside its panel, never the page */
+/* topology: the figure scrolls sideways inside its panel, never the page;
+   below its width a line says so, and the edge it can scroll to fades */
+.more-viewbar{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.more-figure{container-type:inline-size}
 .more-figure .ph{gap:10px 16px}
 .more-legend{display:flex;gap:16px;flex-wrap:wrap}
 .more-legend svg{vertical-align:middle}
@@ -76,7 +84,13 @@
 .more-figure .e.mesh{stroke:var(--brand);stroke-width:1.6}
 .more-figure .e.net{stroke:var(--brand-sky);stroke-width:1.4}
 .more-figure rect.off{fill:none;stroke:var(--bad);stroke-dasharray:3 2}
+.more-topo-hint{display:none;margin:10px 14px 0;font-size:var(--t-sm)}
+@container (max-width:950px){.more-topo-hint{display:block}}
 .more-topo{overflow-x:auto;overscroll-behavior-x:contain}
+.more-topo:focus-visible{outline-offset:-2px}
+@supports (animation-timeline:scroll()){
+  .more-topo{animation:edge linear both;animation-timeline:scroll(self inline);-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - var(--edge)),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - var(--edge)),transparent)}
+}
 .more-topo svg{min-width:900px;width:100%;max-width:1100px;height:auto;display:block;margin:0 auto}
 .more-topo .n rect{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
 .more-topo .n.off rect{stroke-dasharray:4 3}
@@ -87,3 +101,11 @@
 .more-topo .n a:focus-visible rect{stroke:var(--accent);stroke-width:2}
 .more-topo .colh{fill:var(--faint);font:600 var(--t-xs) var(--f-body);letter-spacing:.08em}
 .more-topo .band{fill:var(--brand-soft);opacity:.6}
+.more-topotable .more-grp th{background:var(--panel-2);text-transform:none;letter-spacing:0;font:600 var(--t-md) var(--f-body);color:var(--fg);white-space:normal}
+.more-topotable .more-grp th .pill{margin-left:6px}
+.more-topotable td.mono{white-space:nowrap}
+@media (max-width:760px){
+  .more-topotable tr.more-grp{background:var(--panel-2)}
+  .more-topotable .more-grp th{grid-column:1/-1;background:none}
+  .more-topotable td.mono{white-space:normal}
+}

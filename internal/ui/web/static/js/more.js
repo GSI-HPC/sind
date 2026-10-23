@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-// The "more" part's script: the Copy buttons, and the filter of the DNS
-// records. Nothing here evaluates text.
+// The "more" part's script: the Copy buttons, the filter of the DNS
+// records, and the diagrams that scroll sideways. Nothing here evaluates
+// text.
 (() => {
   'use strict';
 
@@ -130,6 +131,27 @@
     filter(input.dataset.moreFilter);
   });
   document.addEventListener('htmx:afterSettle', refilter);
+
+  // scrollable makes each diagram that scrolls sideways a stop of the Tab
+  // key, so that the arrow keys scroll it, and a region whose name says
+  // so; a diagram that fits is neither. A live update draws the
+  // diagrams again, and the window can change its width.
+  function scrollable() {
+    for (const el of document.querySelectorAll('[data-more-scroll]')) {
+      if (el.scrollWidth > el.clientWidth) {
+        el.tabIndex = 0;
+        el.setAttribute('role', 'region');
+        el.setAttribute('aria-label', el.dataset.moreScroll);
+      } else {
+        el.removeAttribute('tabindex');
+        el.removeAttribute('role');
+        el.removeAttribute('aria-label');
+      }
+    }
+  }
+  scrollable();
+  document.addEventListener('htmx:afterSettle', scrollable);
+  window.addEventListener('resize', scrollable);
 
   document.addEventListener('click', ev => {
     const t = ev.target;
