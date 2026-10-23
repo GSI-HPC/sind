@@ -41,6 +41,7 @@ func TestRunTaskPageWaits(t *testing.T) {
 		"<h1>create cluster dev</h1>",
 		"Waiting for the command to write its first progress event.",
 		`action="/tasks/t1/cancel"`,
+		`<b>Stop create cluster dev?</b> sind stops the command, as Ctrl-C does in a terminal.`,
 		`<span class="pill run">running</span>`,
 		`data-since="`,
 		`data-say-key="w:t1" data-say-state="running" data-say="create cluster dev: started."`,

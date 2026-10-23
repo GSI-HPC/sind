@@ -9,7 +9,7 @@ When you start an action, its run appears in the task dock, on its run page and 
 
 ## The task dock
 
-The task dock at the bottom right shows one card at a time: the command that works now, with a spinner, a bar with one part for each step, and the current step, such as `nodes 3/8 · worker-2 ready munge`. The title of a card is the command with its main flags, such as `create worker dev --count 3`, and the realm beside it; point at it to see the whole command. A card links to the run page. Use **Show progress** to open it, or **Details** for a run that has ended. A screen reader hears once when a command starts, ends or fails; the clock and the current step are not read out. Use **Stop** to stop the run, on a phone too.
+The task dock at the bottom right shows one card at a time: the command that works now, with a spinner, a bar with one part for each step, and the current step, such as `nodes 3/8 · worker-2 ready munge`. The title of a card is the command with its main flags, such as `create worker dev --count 3`, and the realm beside it; point at it to see the whole command. A card links to the run page. Use **Show progress** to open it, or **Details** for a run that has ended. A screen reader hears once when a command starts, ends or fails; the clock and the current step are not read out. Use **Stop…** to stop the run, on a phone too.
 
 When there is more than one command, a bar above the card sums them up, such as `2 running · 1 failed · 3 done`. **Show all** shows every card, and **Show one** goes back to one. A card of a command that ended ok hides after a few seconds. A card of a command that failed or was stopped stays until you hide it with ×. **Clear done** hides the cards of all commands that have ended. The page of a run leaves out the card of that run, and the bar still counts it.
 
@@ -46,7 +46,14 @@ The **Activity** page lists the runs, from this UI and from a terminal.
 
 ## Stop a run
 
-Press **Stop** on the task card or on the run page. sind ui sends SIGINT to the command, the same signal as Ctrl-C in a terminal. The command then rolls back what it has made, and the run ends as canceled. The button shows **Stopping…** until the rollback ends. Steps that have not started do not start.
+Press **Stop…** on the task card or on the run page. The page asks you to confirm, and says what stays when the command stops:
+
+- A create removes the nodes or workers it has made so far (rollback). The saved config stays.
+- A delete keeps what it has removed so far. The rest stays, and you can delete it again.
+- A power command leaves the nodes it has handled as they are now.
+- A command that still waits for the lock of its realm has changed nothing yet.
+
+Press **Stop it** to stop the command, or **Keep running** (or Escape) to go back. sind ui sends SIGINT to the command, the same signal as Ctrl-C in a terminal. The command stops as the list above says, and the run ends as canceled. The button shows **Stopping…** until the command has stopped, which for a create includes its rollback. Steps that have not started do not start.
 
 {{< uishot "run-canceled" "A run that was stopped. The page says what stopped and that the rollback removed everything." >}}
 

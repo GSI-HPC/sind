@@ -27,6 +27,21 @@ form.inline{display:inline;margin:0}
 .task .tout{max-height:120px}
 .task.more{padding:8px 14px;text-align:center;color:var(--muted);font-size:var(--t-md)}
 .task.gone{display:none}
+/* Stop asks in the page: a question below the button, or over the card in
+   the dock */
+details.stopc{position:relative;display:inline-block}
+details.stopc>summary{list-style:none;cursor:pointer}
+details.stopc>summary::-webkit-details-marker{display:none}
+.stopc-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:50;width:min(340px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--warn);border-radius:10px;box-shadow:var(--shadow);padding:12px;display:grid;gap:10px;font:var(--t-md)/1.45 var(--f-body);text-align:left;white-space:normal;color:var(--fg)}
+.stopc-pop p{margin:0}
+.stopc-b{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.task{position:relative}
+.task details.stopc{position:static}
+/* in the head of a page the question hangs from the head's right edge, as
+   on a phone the actions wrap below the title to the left */
+.runhead{position:relative}
+.runhead details.stopc{position:static}
+.task .stopc-pop{top:auto;left:8px;right:8px;bottom:8px;width:auto}
 /* the summary bar of several commands; the dock shows its first card until
    Show all opens it, and the bar goes when no card is left to show */
 .dock-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px 8px 6px 12px;font-size:var(--t-md)}

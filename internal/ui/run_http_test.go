@@ -22,7 +22,7 @@ func runStore(t *testing.T, ts *testServer) (mid, ok, failed, canceled store.Run
 	failed = runFixtureAs(t, "create-failed.jsonl", -1, "r-failed", "trace-failed")
 	canceled = runFixtureAs(t, "create-canceled.jsonl", -1, "r-canceled", "trace-canceled")
 	ts.st.SetRuns([]store.Run{mid, ok, failed, canceled})
-	ts.st.AddTask(store.Task{ID: "t-mid", Display: "sind create cluster dev", Trace: "trace-mid", Start: runAt(0), Status: store.TaskRunning})
+	ts.st.AddTask(store.Task{ID: "t-mid", Action: "create-cluster", Cluster: "dev", Display: "sind create cluster dev", Trace: "trace-mid", Start: runAt(0), Status: store.TaskRunning})
 	return mid, ok, failed, canceled
 }
 
@@ -34,11 +34,14 @@ func TestRunPageRenders(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
 	for _, want := range []string{
-		"<title>create cluster · sind ui</title>",
+		"<title>create cluster dev · sind ui</title>",
 		`<div class="crumbs"><a href="/activity">Activity</a> / <span class="mono">r-mid</span></div>`,
 		`<span class="pill run">running</span>`,
 		"from sind ui",
 		`action="/tasks/t-mid/cancel"`,
+		`<summary class="btn" aria-label="Stop create cluster dev…">Stop…</summary>`,
+		`<b>Stop create cluster dev?</b> sind removes the nodes it has made so far (rollback). The saved config stays.`,
+		`data-stop-keep>Keep running</button>`,
 		`name="csrf" value="` + ts.csrf + `"`,
 		"nodes 0/3 · controller ready munge",
 		`data-doc-title="▸ nodes 0/3 · sind ui"`,

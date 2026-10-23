@@ -14,7 +14,7 @@ hides by itself at data-hide-at. The cards are built in dock.go. */}}
   <div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>
   {{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
   {{if .Output}}{{if eq .Class "failed"}}<pre class="term tout">{{.Output}}</pre>{{end}}{{end}}
-  <div class="tf">{{if .Cancel}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none" hx-confirm="Stop this command? sind stops it and removes what it made so far.">{{template "csrf-field" $}}<button type="submit" class="btn sm">Stop</button></form>{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}" aria-label="{{.Action}}: {{.Title}}">{{.Action}}</a></div>
+  <div class="tf">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}" aria-label="{{.Action}}: {{.Title}}">{{.Action}}</a></div>
 </div>
 {{end}}{{if .More}}<a class="task more" href="/activity">{{.More}} more in Activity</a>{{end}}{{end}}{{end}}
 
@@ -30,3 +30,10 @@ page opens. */}}
 
 {{/* run-elapsed is a clock: run.js counts it up while data-since is set. */}}
 {{define "run-elapsed"}}<span class="num"{{if .Since}} data-since="{{.Since}}"{{end}}>{{.Elapsed}}</span>{{end}}
+
+{{/* run-stop is the Stop button of a task that runs, from a runStop: it asks
+in the page what stays when the command stops, before it posts the stop.
+run.js closes the question on Keep running and Escape. */}}
+{{define "run-stop"}}<details class="stopc{{if .Small}} sm{{end}}"><summary class="btn{{if .Small}} sm{{end}}" aria-label="Stop {{.Title}}…">Stop…</summary>
+<div class="stopc-pop" role="group" aria-label="Stop {{.Title}}?"><p><b>Stop {{.Title}}?</b> {{.Text}}</p>
+<div class="stopc-b"><button type="button" class="btn sm" data-stop-keep>Keep running</button><form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn sm danger">Stop it</button></form></div></div></details>{{end}}

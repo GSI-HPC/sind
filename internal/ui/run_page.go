@@ -74,11 +74,13 @@ type runCtx struct {
 	Task *store.Task
 	Snap store.Snapshot
 	Now  time.Time
+	// CSRF is the session's token, for the forms.
+	CSRF string
 }
 
 // newRunCtx finds the run named by the Param id of v.
 func newRunCtx(v *View) runCtx {
-	rc := runCtx{Snap: v.Snap, Now: v.Now}
+	rc := runCtx{Snap: v.Snap, Now: v.Now, CSRF: v.CSRF}
 	rc.Run, rc.Found = v.Snap.Run(v.Params.Get("id"))
 	if t, ok := runTaskOf(v.Snap, rc.Run.Trace); rc.Found && ok {
 		// The page names the run as the dock and Activity do, with the
@@ -151,7 +153,9 @@ type runHead struct {
 	// Running is set while the run goes on.
 	Running bool
 	// TaskID is the task to stop; empty when sind ui cannot stop the run.
+	// Stop is its button, nil while it is being stopped.
 	TaskID    string
+	Stop      *runStop
 	Canceling bool
 	Suspended bool
 }
@@ -187,6 +191,7 @@ func runHeadOf(rc runCtx) *runHead {
 	if t := rc.Task; t != nil {
 		if h.Running {
 			h.TaskID, h.Canceling = t.ID, t.Canceling
+			h.Stop = newRunStop(*t, &rc.Run, run.Title, rc.CSRF, false)
 		}
 		if t.Cluster != "" && runHasCluster(rc.Snap, t.Realm, t.Cluster) {
 			h.Cluster = t.Cluster

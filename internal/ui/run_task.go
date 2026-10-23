@@ -42,7 +42,8 @@ type runWait struct {
 	PillClass string
 	Elapsed   string
 	Since     int64
-	Cancel    bool
+	// Stop is the Stop button while the task runs.
+	Stop      *runStop
 	Canceling bool
 	Err       string
 	Output    string
@@ -71,7 +72,10 @@ func runWaitOf(v *View) *runWait {
 	card := dockTaskCard(t, store.Run{}, false, v.Now)
 	w.Title, w.Class, w.Elapsed, w.Since = card.Title, card.Class, card.Elapsed, card.Since
 	w.PillClass = runPillClass(card.Class)
-	w.Cancel, w.Canceling = card.Cancel, card.Canceling
+	w.Canceling = card.Canceling
+	if card.Stop != nil {
+		w.Stop = newRunStop(t, nil, card.Title, v.CSRF, false)
+	}
 	w.SayKey, w.SayState, w.Say = "w:"+t.ID, card.SayState, card.Say
 	return w
 }

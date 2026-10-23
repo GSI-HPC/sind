@@ -245,6 +245,55 @@ func runWaitsForLock(run store.Run) bool {
 	return false
 }
 
+// runStop is the Stop button of a task that runs, with the question that
+// it asks in the page before it stops the command.
+type runStop struct {
+	TaskID string
+	Title  string
+	// Text says what stays when the command stops.
+	Text string
+	// CSRF is the session's token, for the form.
+	CSRF string
+	// Small makes the button small, as in the dock.
+	Small bool
+}
+
+// newRunStop returns the Stop button of the task t, whose run may be nil,
+// with the command's title; nil for a task that has ended or is
+// being stopped.
+func newRunStop(t store.Task, run *store.Run, title, csrf string, small bool) *runStop {
+	if t.Done() || t.Canceling || (run != nil && run.Done()) {
+		return nil
+	}
+	return &runStop{TaskID: t.ID, Title: title, Text: runStopText(t.Action, run), CSRF: csrf, Small: small}
+}
+
+// runStopText says what stays when a command of the action stops: sind
+// stops it as Ctrl-C does, and a command that makes things removes what it
+// has made, while one that removes or changes things leaves what it has
+// done. A command that still waits for the lock of its realm has done
+// nothing.
+func runStopText(action string, run *store.Run) string {
+	if run != nil && runWaitsForLock(*run) {
+		return "It still waits for the lock of its realm and has changed nothing yet."
+	}
+	switch action {
+	case "create-cluster":
+		return "sind removes the nodes it has made so far (rollback). The saved config stays."
+	case "create-worker":
+		return "sind removes the workers it has added so far (rollback)."
+	case "delete-cluster":
+		return "What sind has removed so far stays removed. The rest of the cluster stays, and you can delete it again."
+	case "delete-worker":
+		return "The workers that sind has removed stay removed. The others stay."
+	case "delete-realm":
+		return "What sind has removed so far stays removed. The rest of the realm stays, and you can delete it again."
+	case "power":
+		return "The nodes that sind has handled stay as they are now. The others stay as they were."
+	}
+	return "sind stops the command, as Ctrl-C does in a terminal."
+}
+
 // runSourceText says where a run came from, for its page.
 func runSourceText(source string) string {
 	switch source {

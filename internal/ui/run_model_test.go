@@ -399,6 +399,39 @@ func TestRunWaitsForLock(t *testing.T) {
 	assert.False(t, runWaitsForLock(runOf(2, store.StatusCanceled, lock)), "a run that ended")
 }
 
+func TestRunStopText(t *testing.T) {
+	for action, want := range map[string]string{
+		"create-cluster": "rollback). The saved config stays.",
+		"create-worker":  "removes the workers it has added so far",
+		"delete-cluster": "The rest of the cluster stays",
+		"delete-worker":  "The others stay.",
+		"delete-realm":   "The rest of the realm stays",
+		"power":          "The nodes that sind has handled stay",
+		"connect":        "as Ctrl-C does in a terminal",
+	} {
+		assert.Contains(t, runStopText(action, nil), want, action)
+	}
+	lock := runOf(0, "", runSp(activity.KindWait, runLockWait, runStartedAt(0)))
+	assert.Equal(t, "It still waits for the lock of its realm and has changed nothing yet.", runStopText("delete-cluster", &lock))
+	busy := runOf(0, "", runSp(activity.KindStep, "nodes", runStartedAt(0)))
+	assert.Contains(t, runStopText("delete-cluster", &busy), "stays removed")
+}
+
+func TestNewRunStop(t *testing.T) {
+	run := store.Task{ID: "t", Action: "power", Status: store.TaskRunning}
+	s := newRunStop(run, nil, "power dev", "tok", true)
+	require.NotNil(t, s)
+	assert.Equal(t, runStop{TaskID: "t", Title: "power dev", Text: runStopText("power", nil), CSRF: "tok", Small: true}, *s)
+	stopping := run
+	stopping.Canceling = true
+	assert.Nil(t, newRunStop(stopping, nil, "", "", false), "a stop is under way")
+	ended := run
+	ended.End = runPtr(runAt(1))
+	assert.Nil(t, newRunStop(ended, nil, "", "", false), "the task has ended")
+	done := runOf(2, store.StatusOK, runSp(activity.KindStep, "nodes", runEndedAt(0, 1, store.StatusOK)))
+	assert.Nil(t, newRunStop(run, &done, "", "", false), "the run has ended")
+}
+
 func TestRunBar(t *testing.T) {
 	assert.Equal(t, 0, runBar{}.Pct())
 	assert.Equal(t, "starting", runBar{{Class: runRunning, Title: "starting"}}.Text())

@@ -107,6 +107,8 @@ func TestRunPageNamesTheRunAsTheDock(t *testing.T) {
 	assert.Equal(t, "create worker dev --count 3", rc.Run.Title)
 	h := runHeadOf(rc)
 	assert.Equal(t, "create worker dev --count 3", h.Title)
+	require.NotNil(t, h.Stop)
+	assert.Equal(t, "create worker dev --count 3", h.Stop.Title)
 	assert.Equal(t, "create worker dev --count 3: started.", runSummaryOf(rc).Say)
 	require.NoError(t, runPageLoad(v))
 	assert.Equal(t, "create worker dev --count 3", v.Title)

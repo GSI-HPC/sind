@@ -41,7 +41,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 	assert.Equal(t, "nodes 0/3 · controller ready munge", c.Line)
 	assert.Equal(t, "25s", c.Elapsed)
 	assert.NotZero(t, c.Since)
-	assert.True(t, c.Cancel)
+	assert.NotNil(t, c.Stop)
 	assert.False(t, c.Dismiss)
 	assert.Empty(t, c.Chip)
 	assert.Equal(t, "Show progress", c.Action)
@@ -53,7 +53,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 	// Stopping: no second Stop.
 	task.Canceling = true
 	c = runDockOf(store.Snapshot{Runs: []store.Run{run}, Tasks: []store.Task{task}}, runAt(25)).Cards[0]
-	assert.False(t, c.Cancel)
+	assert.Nil(t, c.Stop)
 	assert.True(t, c.Canceling)
 
 	// The page of the run hides the card, by run id or by task id.
@@ -77,7 +77,7 @@ func TestRunDockTaskEnded(t *testing.T) {
 	assert.Equal(t, "5m16s", c.Elapsed)
 	assert.Zero(t, c.Since)
 	assert.True(t, c.Dismiss)
-	assert.False(t, c.Cancel)
+	assert.Nil(t, c.Stop)
 	assert.Equal(t, "node worker-1: timed out", c.Err)
 
 	// The command ended, and its task not yet: the run says how.
@@ -131,7 +131,7 @@ func TestRunDockTaskWithoutRun(t *testing.T) {
 		assert.Equal(t, tc.line, c.Line, name)
 		assert.Equal(t, tc.since, c.Since != 0, name)
 		assert.Equal(t, tc.title, c.Title, name)
-		assert.Equal(t, tc.cancel, c.Cancel, name)
+		assert.Equal(t, tc.cancel, c.Stop != nil, name)
 		assert.Equal(t, tc.stop, c.Canceling, name)
 		assert.Equal(t, tc.dismiss, c.Dismiss, name)
 		assert.Equal(t, tc.action, c.Action, name)
@@ -159,7 +159,7 @@ func TestRunDockTerminalRuns(t *testing.T) {
 	assert.Equal(t, "terminal", c.Chip)
 	assert.Equal(t, "r:"+run.ID, c.SayKey)
 	assert.Empty(t, c.TaskID)
-	assert.False(t, c.Cancel)
+	assert.Nil(t, c.Stop)
 	assert.False(t, c.Dismiss)
 	assert.Equal(t, "/runs/"+run.ID, c.Href)
 	assert.Equal(t, "nodes 0/3 · controller ready munge", c.Line)

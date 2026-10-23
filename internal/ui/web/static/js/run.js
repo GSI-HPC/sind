@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // Script of the progress display. The server draws every page and fragment;
-// this file does five small things that need the browser: it counts the
+// this file does six small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
 // milliseconds since 1970), it keeps the details that the user opened open
 // when a fragment is morphed in, it puts the progress of the run in the
-// title of the tab, it announces when a command starts or ends, and it
-// opens and closes the task dock. It evaluates no text and needs no inline script.
+// title of the tab, it announces when a command starts or ends, it opens
+// and closes the task dock, and it closes the question of Stop. It evaluates no text and needs no inline script.
 (() => {
   'use strict';
 
@@ -41,6 +41,30 @@
     if (btn.textContent !== label) btn.textContent = label;
     if (btn.getAttribute('aria-expanded') !== String(open)) btn.setAttribute('aria-expanded', String(open));
   }
+  // Stop asks in the page (template run-stop): Keep running and Escape
+  // close the question, and so does a click elsewhere.
+  function closeStops(except) {
+    document.querySelectorAll('details.stopc[open]').forEach(d => { if (d !== except) d.open = false; });
+  }
+  document.addEventListener('click', ev => {
+    if (!(ev.target instanceof Element)) return;
+    const keep = ev.target.closest('[data-stop-keep]');
+    if (keep) {
+      const d = keep.closest('details.stopc');
+      d.open = false;
+      d.querySelector('summary').focus();
+      return;
+    }
+    closeStops(ev.target.closest('details.stopc'));
+  });
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape' || !(ev.target instanceof Element)) return;
+    const d = ev.target.closest('details.stopc[open]');
+    if (!d) return;
+    d.open = false;
+    d.querySelector('summary').focus();
+  });
+
   document.addEventListener('click', ev => {
     if (!(ev.target instanceof Element) || !ev.target.closest('[data-dock-toggle]')) return;
     try { localStorage.setItem(dockKey, dockOpen() ? '0' : '1'); } catch (e) { /* private window */ }

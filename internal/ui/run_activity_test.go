@@ -27,7 +27,7 @@ func TestRunActivityPage(t *testing.T) {
 		`<a class="tab" href="/activity?status=ok">OK<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=failed">Failed<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=canceled">Canceled<span class="n">1</span></a>`,
-		`<a class="mono" href="/runs/r-mid">create cluster</a>`,
+		`<a class="mono" href="/runs/r-mid">create cluster dev</a>`,
 		`<span class="pill run">running</span>`,
 		`<span class="pill bad">failed</span>`,
 		"3 ok · 2 failed · 1 canceled",

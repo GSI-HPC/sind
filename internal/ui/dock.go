@@ -96,7 +96,8 @@ type dockCard struct {
 	// TaskID is the task of the card; empty for a terminal run.
 	TaskID  string
 	Dismiss bool
-	Cancel  bool
+	// Stop is the Stop button of a task that runs.
+	Stop *runStop
 	// Canceling is set while a stop is under way.
 	Canceling bool
 	Err       string
@@ -137,6 +138,11 @@ func dockLoad(v *View) dockData {
 		c := dockRunCard(run, runSourceChip(runSource(v.Snap, run)), v.Now)
 		c.here = hideRun != "" && run.ID == hideRun
 		cards = append(cards, c)
+	}
+	for i := range cards {
+		if cards[i].Stop != nil {
+			cards[i].Stop.CSRF = v.CSRF
+		}
 	}
 	return dockFit(cards, v.Now)
 }
@@ -254,7 +260,13 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 		c.HideAt = t.End.Add(dockHideAfter).UnixMilli()
 	}
 	c.Mark = runMark(c.Class)
-	c.Cancel = c.Class == runRunning && !t.Canceling
+	var runOf *store.Run
+	if hasRun {
+		runOf = &run
+	}
+	if c.Class == runRunning {
+		c.Stop = newRunStop(t, runOf, c.Title, "", true)
+	}
 	c.Canceling = c.Class == runRunning && t.Canceling
 	c.Dismiss = taskEnded(t)
 	why := t.Err
