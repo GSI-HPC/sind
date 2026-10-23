@@ -170,8 +170,17 @@ func TestPgRealmPickerStaysOnThePage(t *testing.T) {
 		assert.Contains(t, body, `<option value="sind" selected>`, name)
 		assert.Contains(t, body, `Showing realm <b class="mono">sind</b> · <a href="`+path+`?realm=">Show all</a>`, name)
 		assert.Contains(t, body, " · sind · sind ui</title>", name)
-		// Each answers a realm that does not exist the same way.
+		if c := pgRealmSet(pgGetWithRealm(ts, target, "")); assert.NotNil(t, c, name) {
+			assert.Equal(t, "sind", c.Value, "the lists show the realm picked on %s next", name)
+		}
+		// Each answers a realm that does not exist the same way, but
+		// Activity, as the event log keeps the runs of a realm that is gone.
 		w = ts.get(path + "?realm=sindd")
+		if name == "run-activity" {
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), `Showing realm <b class="mono">sindd</b>`)
+			continue
+		}
 		require.Equal(t, http.StatusNotFound, w.Code, name)
 		body = w.Body.String()
 		assert.Contains(t, body, "There is no realm sindd.", name)

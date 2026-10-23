@@ -31,6 +31,7 @@ const realmCookieAge = 365 * 24 * 3600
 var pgRealmPages = map[string]string{
 	"overview": "/", "clusters": "/clusters", "nodes": "/nodes",
 	"more-mesh": "/mesh", "more-monitoring": "/monitoring", "more-topology": "/topology",
+	"run-activity": "/activity",
 }
 
 // pgRealmNext returns the address that the realm picker of a page's view
@@ -116,7 +117,17 @@ func pgRealmKnown(sn store.Snapshot, realm string) bool {
 // realms of a name close to it; while Docker is unknown or down, the page
 // shows the realm empty. Only the page checks: its live updates keep
 // showing the realm when its last cluster goes.
-func pgRealmRoute(p Page, remember bool) Route {
+func pgRealmRoute(p Page, remember bool) Route { return pgRealmRouteOf(p, remember, false) }
+
+// pgRealmLogRoute serves a page of the event log that shows one realm or
+// all of them, as pgRealmRoute does, but for a realm that Docker has no
+// trace of: the log keeps the runs of a realm whose last cluster is gone,
+// so the page shows that realm too.
+func pgRealmLogRoute(p Page) Route { return pgRealmRouteOf(p, false, true) }
+
+// pgRealmRouteOf is pgRealmRoute; anyRealm shows a realm that Docker has
+// no trace of instead of the Not found page.
+func pgRealmRouteOf(p Page, remember, anyRealm bool) Route {
 	load := p.Load
 	base := pgRealmPages[p.Name]
 	p.Load = func(v *View) error {
@@ -126,7 +137,7 @@ func pgRealmRoute(p Page, remember bool) Route {
 			}
 		}
 		if realm := v.Params.Get("realm"); realm != "" {
-			if d := v.Snap.Docker; d.Checked && d.Err == "" && !pgRealmKnown(v.Snap, realm) {
+			if d := v.Snap.Docker; !anyRealm && d.Checked && d.Err == "" && !pgRealmKnown(v.Snap, realm) {
 				return pgRealmMiss(v.Snap, base, realm)
 			}
 			v.Title += " · " + realm

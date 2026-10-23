@@ -36,10 +36,12 @@ func registerRunActivity(r *Registry) {
 			return err
 		},
 	})
-	r.AddPage(Page{
+	// The realm picker stays on the page, and a realm it picks is the
+	// one the lists show next.
+	r.AddRoute(pgRealmLogRoute(Page{
 		Name: "run-activity", Pattern: "GET /activity", Title: "Activity", Nav: "activity",
 		Fragments: []string{"run-list"},
-	})
+	}))
 	r.SetNavCountAt("activity", runNavCount)
 }
 

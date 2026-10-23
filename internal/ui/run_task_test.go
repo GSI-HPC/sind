@@ -175,12 +175,12 @@ func TestRunRoutesAreRegistered(t *testing.T) {
 		pages = append(pages, p.Pattern)
 	}
 	assert.Contains(t, pages, "GET /runs/{id}")
-	assert.Contains(t, pages, "GET /activity")
 	var routes []string
 	for _, rt := range r.routes {
 		routes = append(routes, rt.Pattern)
 	}
 	assert.Contains(t, routes, "GET /tasks/{id}")
+	assert.Contains(t, routes, "GET /activity")
 	assert.Contains(t, routes, "POST /tasks/{id}/dismiss")
 	assert.NotNil(t, r.navCount("activity"))
 }

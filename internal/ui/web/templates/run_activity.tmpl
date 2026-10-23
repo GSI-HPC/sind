@@ -6,7 +6,7 @@ search form sits outside the live fragment, so that a live update leaves
 what the user types alone. */}}
 {{define "page-run-activity"}}
 <div class="head"><div class="t"><h1>Activity</h1>
-  <div class="sub"><span>What sind did, from here or from a terminal that writes the same event log. Open a run for its steps.</span></div></div></div>
+  <div class="sub">{{template "pg-realm-scope" .}}<span>What sind did, from here or from a terminal that writes the same event log. Open a run for its steps.</span></div></div></div>
 <form class="runfind" method="get" action="/activity" role="search">{{with .Params.Get "status"}}<input type="hidden" name="status" value="{{.}}">{{end}}{{with .Params.Get "realm"}}<input type="hidden" name="realm" value="{{.}}">{{end}}{{with .Params.Get "cluster"}}<input type="hidden" name="cluster" value="{{.}}">{{end}}
   <input type="search" name="q" value="{{.Params.Get "q"}}" placeholder="Filter by command, cluster, flag or run ID" aria-label="Filter runs" autocomplete="off" spellcheck="false"><button type="submit" class="btn">Filter</button></form>
 <div hx-swap="morph:innerHTML" sse-swap="run-list">{{fragment "run-list" .}}</div>
