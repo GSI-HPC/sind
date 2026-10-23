@@ -29,6 +29,7 @@ func pgRegister(r *Registry) {
 	r.AddRoute(pgListRoute(pgNodesPage))
 	r.AddRoute(pgRealmRoute())
 	r.AddPage(pgClusterPage)
+	r.AddRoute(pgClusterByNameRoute())
 	r.AddPage(pgNodePage)
 	pgNavCounts(r)
 }

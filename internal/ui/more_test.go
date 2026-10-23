@@ -43,7 +43,12 @@ func TestMoreMeshPage(t *testing.T) {
 	assert.NotContains(t, one, "Realm <b")
 	assert.NotContains(t, one, "has no mesh")
 
-	moreGet(t, ts, "/mesh?realm=nope", http.StatusNotFound)
+	body = moreGet(t, ts, "/mesh?realm=nope", http.StatusNotFound)
+	assert.Contains(t, body, "There is no realm nope.")
+	assert.Contains(t, body, "with its last cluster")
+	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=">All realms</a>`)
+	body = moreGet(t, ts, "/mesh?realm=sindd", http.StatusNotFound)
+	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=sind">Realm sind</a>`)
 }
 
 func TestMoreMeshStates(t *testing.T) {

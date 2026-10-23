@@ -91,7 +91,16 @@ func TestRunPageTerminalNote(t *testing.T) {
 
 func TestRunPageNotFound(t *testing.T) {
 	ts := runTestServer(t, runNow)
-	assert.Equal(t, http.StatusNotFound, ts.get("/runs/nope").Code)
+	w := ts.get("/runs/nope")
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "The activity log holds no run nope.")
+	assert.Contains(t, body, `<a class="btn primary" href="/activity">Activity</a>`)
+	assert.NotContains(t, body, "may have been deleted")
+	// A task of that id is the closest match.
+	ts.st.AddTask(store.Task{ID: "t 1", Display: "sind create cluster dev", Start: runAt(0), Status: store.TaskRunning})
+	body = ts.get("/runs/t%201").Body.String()
+	assert.Contains(t, body, `<a class="btn primary" href="/tasks/t%201">Task t 1</a>`)
 }
 
 func TestRunPageTitleOfARunWithoutTitle(t *testing.T) {

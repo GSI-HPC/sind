@@ -369,17 +369,31 @@ func (s *Server) load(f Fragment, v *View) error {
 }
 
 // Fail answers a request whose Load or route failed: ErrNotFound with the
-// Not found page, ErrBadRequest with 400 and its message, anything else
-// with 500 and a line in the log.
+// Not found page and what a Miss in err says; ErrBadRequest with 400 and
+// its message, in the layout when a browser navigated to the address;
+// anything else with 500 and a line in the log.
 func (s *Server) Fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		s.notFound(w, r)
+		var m *Miss
+		if !errors.As(err, &m) {
+			m = &Miss{Links: []MissLink{missOverview}}
+		}
+		s.errorPage(w, r, http.StatusNotFound, m)
+	case errors.Is(err, ErrBadRequest) && navigation(r):
+		s.errorPage(w, r, http.StatusBadRequest, &Miss{What: userMessage(err), Links: []MissLink{missOverview}})
 	case errors.Is(err, ErrBadRequest):
 		http.Error(w, userMessage(err), http.StatusBadRequest)
 	default:
 		s.fail500(w, r, err)
 	}
+}
+
+// navigation reports whether a browser asked for r as a page to show, not
+// htmx nor a script.
+func navigation(r *http.Request) bool {
+	return r.Method == http.MethodGet && r.Header.Get("HX-Request") == "" &&
+		strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
 // userMessage returns what an ErrBadRequest says to the user: the message of
@@ -433,13 +447,26 @@ func (s *Server) keys(own, fragments []string) []string {
 	return keys
 }
 
-// notFound answers with the Not found page.
+// notFound answers an address that no route serves with the Not found
+// page, which offers what the address names and the pages whose address
+// is close to it.
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
+	s.errorPage(w, r, http.StatusNotFound, missForPath(s.Store().Snapshot(), r.URL.Path))
+}
+
+// errorPage answers with the error page in the layout: the Not found page
+// for status 404, the page of a bad address for 400. It names the address
+// of r and shows what m says.
+func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m *Miss) {
 	v := s.newView(Params{})
 	v.CSRF = session.CSRF(r.Context())
 	v.Title, v.Content = "Not found", "page-notfound"
+	if status != http.StatusNotFound {
+		v.Title = "Bad address"
+	}
+	v.Data = &errorPage{Status: status, Address: missAddress(r), What: m.What, Hint: m.Hint, Links: m.Links}
 	v.Events = s.eventsURL(nil, v)
-	if err := s.respond(w, http.StatusNotFound, "layout", v); err != nil {
+	if err := s.respond(w, status, "layout", v); err != nil {
 		s.fail500(w, r, err)
 	}
 }

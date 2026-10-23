@@ -89,6 +89,13 @@ tr[data-href]{cursor:pointer}
 /* a node's issues */
 .pg-issue{display:flex;gap:8px;align-items:center}
 
+/* the error page: the address, what is missing, the ways forward */
+.miss-addr{overflow-wrap:anywhere}
+.miss p:not(.cmdlabel){margin:0}
+.miss-what{font-weight:600}
+.miss-links{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.miss-links li{display:flex;gap:6px;align-items:center}
+
 @media (max-width:760px){
   .pg-it{grid-template-columns:4px minmax(0,1fr)}
   .pg-bb{grid-column:2;justify-content:flex-start}

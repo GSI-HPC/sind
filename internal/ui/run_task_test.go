@@ -87,7 +87,16 @@ func TestRunTaskRoutesRefuseALongId(t *testing.T) {
 
 func TestRunTaskPageGone(t *testing.T) {
 	ts := runTestServer(t, runNow)
-	assert.Equal(t, http.StatusNotFound, ts.get("/tasks/nope").Code)
+	w := ts.get("/tasks/nope")
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "sind ui holds no task nope.")
+	assert.Contains(t, body, "until you dismiss its card or sind ui stops")
+	assert.Contains(t, body, `<a class="btn primary" href="/activity">Activity</a>`)
+	assert.NotContains(t, body, "may have been deleted")
+	// A run of that id is the closest match.
+	ts.st.SetRuns([]store.Run{{ID: "r-1", Title: "create cluster"}})
+	assert.Contains(t, ts.get("/tasks/r-1").Body.String(), `<a class="btn primary" href="/runs/r-1">Run r-1</a>`)
 	assert.Contains(t, runFragment(t, ts, runNow, "run-wait", "id", "nope"), "This task is gone")
 	// A task without a display shows its action.
 	ts.st.AddTask(store.Task{ID: "a", Action: "power", Start: runAt(1), Status: store.TaskRunning})

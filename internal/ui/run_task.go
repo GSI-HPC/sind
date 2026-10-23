@@ -5,6 +5,7 @@ package ui
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -76,7 +77,7 @@ func runTaskPage(s *Server, w http.ResponseWriter, r *http.Request) {
 	id := v.Params.Get("id")
 	t, ok := v.Snap.Task(id)
 	if !ok {
-		s.Fail(w, r, fmt.Errorf("task %s: %w", id, ErrNotFound))
+		s.Fail(w, r, runTaskMiss(v.Snap, id))
 		return
 	}
 	if run, ok := v.Snap.RunOfTrace(t.Trace); ok {
@@ -87,6 +88,21 @@ func runTaskPage(s *Server, w http.ResponseWriter, r *http.Request) {
 	v.Params.Set("task", id)
 	v.Events = s.eventsURL([]string{"run-wait"}, v)
 	s.Write(w, r, http.StatusOK, "layout", v)
+}
+
+// runTaskMiss says that sind ui holds no task id: it keeps a task only
+// until its card is dismissed or sind ui stops. The run of the same id,
+// when the log holds one, and Activity are the ways forward.
+func runTaskMiss(sn store.Snapshot, id string) *Miss {
+	m := &Miss{
+		What: fmt.Sprintf("sind ui holds no task %s.", id),
+		Hint: "sind ui keeps a task until you dismiss its card or sind ui stops. Activity lists the runs that the activity log holds.",
+	}
+	if run, ok := sn.Run(id); ok {
+		m.Links = append(m.Links, MissLink{Label: "Run " + id, URL: "/runs/" + url.PathEscape(run.ID)})
+	}
+	m.Links = append(m.Links, MissLink{Label: "Activity", URL: "/activity"}, missOverview)
+	return m
 }
 
 // runTaskDismiss answers POST /tasks/{id}/dismiss: it removes the card of a

@@ -23,7 +23,7 @@ var pgClusterPage = Page{
 			return err
 		}
 		if !d.Found {
-			return fmt.Errorf("cluster %s in realm %s: %w", d.Name, d.Realm, ErrNotFound)
+			return pgClusterMiss(v.Snap, d.Realm, d.Name, "")
 		}
 		v.Title = pgClusterTitle(d)
 		return nil
@@ -155,13 +155,14 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 	d := &pgClusterView{Realm: realm, Name: name, Tab: tab}
 	if tab == "" {
 		d.Tab = "summary"
-	} else if !pgValidTab(tab) {
-		return nil, fmt.Errorf("tab: unknown tab %q: %w", tab, ErrBadRequest)
 	}
 	sn := v.Snap
 	summary, ok := sn.Cluster(realm, name)
 	if !ok {
 		return d, nil
+	}
+	if !pgValidTab(d.Tab) {
+		return nil, pgTabMiss(realm, name, tab)
 	}
 	d.Found = true
 	d.Cluster = pgClusterOf(sn, realm, summary, sn.MonitoringOf(realm), v.Now)

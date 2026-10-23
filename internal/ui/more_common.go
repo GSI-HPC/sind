@@ -60,7 +60,7 @@ func moreDockerDown(d store.DockerState) string {
 func moreRealms(v *View) ([]string, error) {
 	if r := v.Params.Get("realm"); r != "" {
 		if _, ok := v.Snap.Realm(r); !ok {
-			return nil, fmt.Errorf("realm %s: %w", r, ErrNotFound)
+			return nil, pgRealmMiss(v.Snap, navHref(v.Nav), r)
 		}
 		return []string{r}, nil
 	}

@@ -17,7 +17,7 @@ var pgNodePage = Page{
 	Load: func(v *View) error {
 		d := pgLoadNode(v)
 		if !d.Found {
-			return fmt.Errorf("node %s in cluster %s of realm %s: %w", d.Short, d.Cluster, d.Realm, ErrNotFound)
+			return pgNodeMiss(v.Snap, d.Realm, d.Cluster, d.Short)
 		}
 		v.Title = d.Node.Arg
 		return nil

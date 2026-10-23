@@ -377,11 +377,98 @@ func TestPgClusterNotFound(t *testing.T) {
 	ts := pgServer(t)
 	assert.Contains(t, pgBody(t, ts, "/clusters/sind/dev", 404), "Not found")
 	pgFillStore(ts.st)
-	for _, target := range []string{"/clusters/sind/nope", "/clusters/nope/dev", "/nodes/sind/dev/nope", "/nodes/sind/nope/worker-0", "/nodes/none/dev/worker-0"} {
-		assert.Contains(t, pgBody(t, ts, target, 404), "Nothing lives at this address", target)
+	ts.st.SetClusters("ci", []cluster.Summary{{Name: "default"}, {Name: "dev"}})
+	for target, want := range map[string][]string{
+		// The address and what is missing; a cluster of that name in
+		// another realm, a close name, the list.
+		"/clusters/sind/devv": {`Nothing lives at <code class="mono miss-addr">/clusters/sind/devv</code>`,
+			"Realm sind has no cluster devv.", `<a class="btn primary" href="/clusters/sind/dev">dev</a> <span class="muted">in realm sind</span>`,
+			`<a class="btn" href="/clusters?realm=sind">Clusters of realm sind</a>`},
+		"/clusters/ci/hpc":    {"Realm ci has no cluster hpc.", `<a class="btn primary" href="/clusters/sind/hpc">hpc</a> <span class="muted">in realm sind</span>`},
+		"/clusters/sind/nope": {"Realm sind has no cluster nope.", pgMissGone, `<a class="btn primary" href="/clusters?realm=sind">`},
+		// An unknown realm: the realms of close names, and every cluster.
+		"/clusters/sindd/dev": {"There is no realm sindd.", `href="/clusters/sind/dev">dev</a> <span class="muted">in realm sind</span>`,
+			`href="/clusters/ci/dev">dev</a> <span class="muted">in realm ci</span>`, `<a class="btn" href="/clusters?realm=sind">Clusters of realm sind</a>`,
+			`<a class="btn" href="/clusters?realm=">All clusters</a>`},
+		"/clusters/zz/x": {"There is no realm zz.", pgMissGone, `<a class="btn primary" href="/clusters?realm=">All clusters</a>`},
+		// A node: close names in its cluster, and the cluster's Nodes tab.
+		"/nodes/sind/dev/worker-9": {"Cluster dev has no node worker-9.", `<a class="btn primary" href="/nodes/sind/dev/worker-0">worker-0.dev</a>`,
+			`<a class="btn" href="/clusters/sind/dev?tab=nodes">Nodes of dev</a>`},
+		"/nodes/sind/dev/zzz": {"Cluster dev has no node zzz.", pgMissGone},
+		// A node of a cluster that is missing: the node where another
+		// realm's cluster of that name has it.
+		"/nodes/sind/default/worker-0": {"Realm sind has no cluster default.", `<a class="btn primary" href="/nodes/ci/default/worker-0">worker-0</a> <span class="muted">in realm ci</span>`},
+		"/nodes/none/dev/worker-0":     {"There is no realm none."},
+	} {
+		body := pgBody(t, ts, target, 404)
+		for _, s := range want {
+			assert.Contains(t, body, s, target)
+		}
 	}
-	body := pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 400)
-	assert.Contains(t, body, `unknown tab "slurm"`)
+
+	// An unknown tab is a missing page too: the tab meant first, then the
+	// others.
+	body := pgBody(t, ts, "/clusters/sind/dev?tab=storage", 404)
+	assert.Contains(t, body, "The page of cluster dev has no tab storage.")
+	assert.Contains(t, body, `<a class="btn primary" href="/clusters/sind/dev?tab=network">Network and storage</a>`)
+	assert.Contains(t, body, `<a class="btn" href="/clusters/sind/dev">Summary</a>`)
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=conect", 404)
+	assert.Contains(t, body, `<a class="btn primary" href="/clusters/sind/dev?tab=connect">Connect</a>`)
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 404)
+	assert.Contains(t, body, `<a class="btn primary" href="/clusters/sind/dev">Summary</a>`)
+}
+
+func TestPgClusterByName(t *testing.T) {
+	ts := pgServer(t)
+	pgFillStore(ts.st)
+	// One realm has the cluster: go there.
+	w := ts.get("/clusters/hpc")
+	require.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "/clusters/sind/hpc", w.Header().Get("Location"))
+	// Two realms have it: list them.
+	ts.st.SetClusters("ci", []cluster.Summary{{Name: "default"}, {Name: "dev"}})
+	body := pgBody(t, ts, "/clusters/dev", 404)
+	assert.Contains(t, body, "More than one realm has a cluster dev.")
+	assert.Contains(t, body, `href="/clusters/ci/dev">dev</a> <span class="muted">in realm ci</span>`)
+	assert.Contains(t, body, `href="/clusters/sind/dev">dev</a> <span class="muted">in realm sind</span>`)
+	// None has it: the close names, in each realm that has one.
+	body = pgBody(t, ts, "/clusters/devv", 404)
+	assert.Contains(t, body, "No realm has a cluster devv.")
+	assert.Contains(t, body, "/clusters/REALM/CLUSTER")
+	assert.Contains(t, body, `href="/clusters/ci/dev"`)
+	assert.Contains(t, body, `href="/clusters/sind/dev"`)
+	assert.Contains(t, body, `<a class="btn" href="/clusters?realm=">All clusters</a>`)
+	assert.NotContains(t, body, "Clusters of realm")
+	// The name is a realm: its clusters first.
+	body = pgBody(t, ts, "/clusters/ci", 404)
+	assert.Contains(t, body, "The address names realm ci, but no cluster.")
+	assert.Contains(t, body, `<a class="btn primary" href="/clusters?realm=ci">Clusters of realm ci</a>`)
+	assert.Contains(t, body, `<a class="btn" href="/clusters?realm=">All clusters</a>`)
+	assert.Equal(t, http.StatusBadRequest, ts.get("/clusters/"+strings.Repeat("a", maxParamLen+1)).Code)
+}
+
+func TestPgMissForPath(t *testing.T) {
+	// An address of the cluster and node pages that no route serves offers
+	// what it names.
+	ts := pgServer(t)
+	pgFillStore(ts.st)
+	for target, want := range map[string][]string{
+		"/clusters/sind/dev/": {`<a class="btn primary" href="/clusters/sind/dev">dev</a> <span class="muted">in realm sind</span>`,
+			`<a class="btn" href="/clusters">Clusters</a>`},
+		"/nodes/sind/dev": {`<a class="btn primary" href="/clusters/sind/dev?tab=nodes">Nodes of dev</a>`},
+		"/clusters/sind/dev/nodes/controller": {`<a class="btn primary" href="/nodes/sind/dev/controller">controller.dev</a>`,
+			`<a class="btn" href="/clusters/sind/dev">dev</a>`},
+		"/nodes/ci/default/worker-0/": {`<a class="btn primary" href="/nodes/ci/default/worker-0">worker-0</a>`},
+		"/clusters/sind/":             {`<a class="btn primary" href="/clusters?realm=sind">Clusters of realm sind</a>`},
+		"/nodes/sind":                 {`<a class="btn primary" href="/nodes?realm=sind">Nodes of realm sind</a>`},
+		"/clusters/sind/devv/x":       {`<a class="btn primary" href="/clusters/sind/dev">dev</a>`, `href="/clusters?realm=sind">Clusters of realm sind</a>`},
+		"/clusters/nope/dev/":         {`<a class="btn primary" href="/clusters">Clusters</a>`},
+	} {
+		body := pgBody(t, ts, target, 404)
+		for _, s := range want {
+			assert.Contains(t, body, s, target)
+		}
+	}
 }
 
 func TestPgClusterNodesTab(t *testing.T) {

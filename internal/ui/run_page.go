@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -91,7 +92,15 @@ func runPageLoad(v *View) error {
 	id := v.Params.Get("id")
 	run, ok := v.Snap.Run(id)
 	if !ok {
-		return fmt.Errorf("run %s: %w", id, ErrNotFound)
+		m := &Miss{
+			What: fmt.Sprintf("The activity log holds no run %s.", id),
+			Hint: "Activity lists the runs that the log holds. sind keeps the log and one older copy.",
+		}
+		if _, ok := v.Snap.Task(id); ok {
+			m.Links = append(m.Links, MissLink{Label: "Task " + id, URL: "/tasks/" + url.PathEscape(id)})
+		}
+		m.Links = append(m.Links, MissLink{Label: "Activity", URL: "/activity"}, missOverview)
+		return m
 	}
 	v.Title = run.Title
 	if t, ok := runTaskOf(v.Snap, run.Trace); ok {
