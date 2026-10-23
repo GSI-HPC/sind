@@ -971,6 +971,13 @@ func TestActSaveFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
 
+	// A file that exists keeps its mode.
+	require.NoError(t, os.Chmod(path, 0o640))
+	require.NoError(t, actSaveFile(path, []byte("kind: Cluster\n")))
+	info, err = os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+
 	// The directory cannot be made below a file.
 	assert.Error(t, actSaveFile(filepath.Join(path, "x", "y.yaml"), nil))
 }

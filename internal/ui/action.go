@@ -12,9 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/afero"
-
-	"github.com/GSI-HPC/sind/internal/atomicfile"
+	"github.com/GSI-HPC/go-clikit/fsutil"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -73,12 +71,9 @@ func activityLogForChildren() (string, error) {
 }
 
 // actSaveFile writes data to path for its owner alone, creating the
-// directory for the owner alone too.
+// directory for the owner alone too. A file that exists keeps its mode.
 func actSaveFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return atomicfile.Write(afero.NewOsFs(), path, data, 0o600)
+	return fsutil.WriteAtomic(path, data, 0o600)
 }
 
 // actMkdirAll makes a directory that a command needs, such as the data
