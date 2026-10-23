@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -475,11 +476,39 @@ func TestPgClusterNetworkTab(t *testing.T) {
 	assert.Contains(t, body, `<tr><td class="mono">sind-dev-config</td><td class="mono">local</td></tr>`)
 	assert.NotContains(t, body, "sind-hpc-munge")
 	assert.NotContains(t, body, "Jobs write to")
+	// Each node's address and DNS name, with Copy; the names and keys.
+	assert.Contains(t, body, `<tr><td class="mono"><a href="/nodes/sind/dev/worker-0"><b>worker-0</b></a></td><td class="mono">172.20.0.7 <button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="172.20.0.7" aria-label="Copy 172.20.0.7">Copy</button></td><td class="mono">worker-0.dev.sind.sind <button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="worker-0.dev.sind.sind" aria-label="Copy worker-0.dev.sind.sind">Copy</button></td></tr>`)
+	assert.Contains(t, body, `<dt>DNS zone</dt><dd><span class="mono">sind.sind</span> <button`)
+	assert.Contains(t, body, `<dt>node names</dt><dd><span class="mono">NODE.dev.sind.sind</span><div class="muted pg-small">Such as controller.dev.sind.sind.</div></dd>`)
+	assert.Contains(t, body, `<dt>munge key</dt><dd><span class="mono">/etc/munge/munge.key</span> <button`)
+	assert.Contains(t, body, "In the volume sind-dev-munge, on every node. sind ui does not show the key.")
+	assert.NotContains(t, body, "DNS server", "the mesh was not read yet")
+
+	// With the mesh: its zone, DNS server and SSH relay.
+	ts.st.SetMesh("sind", store.Mesh{Info: &mesh.Info{DNSZone: "sind.sind", DNSIP: "172.18.255.254", DNSContainer: "sind-dns", SSHContainer: "sind-ssh"}})
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=network", 200)
+	assert.Contains(t, body, `<dt>DNS server</dt><dd><span class="mono">172.18.255.254</span> <button`)
+	assert.Contains(t, body, "The container sind-dns on the mesh network.")
+	assert.Contains(t, body, `<dt>SSH relay</dt><dd><span class="mono">sind-ssh</span>`)
 
 	pgFillStatus(ts.st)
 	body = pgBody(t, ts, "/clusters/sind/dev?tab=network", 200)
-	assert.Contains(t, body, `<tr><td class="mono">/etc/slurm</td><td class="mono">sind-dev-config</td><td><span class="pill ok">ok</span></td></tr>`)
-	assert.Contains(t, body, `<tr><td class="mono">/home</td><td class="mono">sind-dev-home</td><td><span class="pill bad">down</span></td></tr>`)
+	assert.Contains(t, body, `<tr><td class="mono">/etc/slurm</td><td class="mono">sind-dev-config <button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind-dev-config" aria-label="Copy sind-dev-config">Copy</button></td><td>Docker volume</td><td>read-write on the controllers, read-only on the other nodes</td><td><span class="pill ok">exists</span></td></tr>`)
+	assert.Contains(t, body, `<td>host directory (bind mount)</td><td>read-write</td><td><span class="faint">not checked</span></td>`)
+	assert.Contains(t, body, "Volume says whether Docker has the volume. sind does not check a directory of the host.")
+	assert.Contains(t, body, `<td class="mono">/home</td><td class="mono">sind-dev-home <button`)
+	assert.Contains(t, body, `<td>Docker volume</td><td>read-write</td><td><span class="pill bad">missing</span></td></tr>`)
+	assert.Contains(t, body, "None: the nodes use auth/slurm (identity clientIds), not munge.", "the status has no munge mount")
+
+	// A status with a munge volume and a journal volume.
+	st := ts.st.Snapshot().Status("sind", "dev")
+	withMunge := *st
+	withMunge.Mounts = append([]cluster.MountPoint{{Path: "/etc/munge", Source: "sind-dev-munge2", Type: "volume", OK: true}, {Path: "/var/log/journal", Source: "sind-journal", Subpath: "dev", Type: "volume", OK: true}}, st.Mounts...)
+	ts.st.SetStatus("sind", "dev", &withMunge)
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=network", 200)
+	assert.Contains(t, body, "In the volume sind-dev-munge2, on every node.")
+	assert.Contains(t, body, `<td class="mono">/etc/munge</td><td class="mono">sind-dev-munge2 <button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind-dev-munge2" aria-label="Copy sind-dev-munge2">Copy</button></td><td>Docker volume</td><td>read-only</td>`)
+	assert.Contains(t, body, "<td>Docker volume, directory dev</td>")
 	assert.Contains(t, body, `Jobs write to <span class="mono">/scratch/dev</span> on this host as root.`)
 
 	// A status without the realm's networks in the snapshot: its own.

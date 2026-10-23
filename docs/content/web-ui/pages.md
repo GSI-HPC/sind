@@ -49,7 +49,7 @@ Type in **Filter** to show only the lines with that text, or tick **Errors and w
 
 {{< uishot "cluster-logs" >}}
 
-**Network and storage** lists the networks, volumes and mounts of the cluster.
+**Network and storage** lists the networks of the cluster, and its volumes and mounts with their kind, a Docker volume or a host directory, and their mode: the controllers write `/etc/slurm` and the other nodes only read it, `/etc/munge` and `/cvmfs` are read-only, and the others read-write. **Volume** says whether Docker has the volume; a host directory is not checked. It shows the address and DNS name of each node, the DNS zone and how nodes are named in it, the DNS server and SSH relay of the realm, and where the munge key is. Values you may paste elsewhere have **Copy**. The key itself is never shown.
 
 {{< uishot "cluster-network" >}}
 

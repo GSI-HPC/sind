@@ -501,7 +501,7 @@ sind get volumes
 {{< /cli >}}
 {{< ui >}}
 
-Open the cluster, then the **Network and storage** tab. It lists the volumes and mounts of the cluster.
+Open the cluster, then the **Network and storage** tab. It lists the volumes and mounts of the cluster, each as a Docker volume or a host directory, read-only or read-write, and where the munge key is.
 
 {{< uishot "cluster-network" >}}
 

@@ -88,12 +88,18 @@
   {{range .Networks}}<tr><td class="mono">{{.Name}}{{if .Mine}} <span class="chip">cluster</span>{{end}}</td><td class="mono">{{.Driver}}</td><td class="mono">{{.Subnet}}</td><td class="mono">{{.Gateway}}</td></tr>{{end}}
   </tbody></table></div>{{else}}<div class="empty">No network read yet.</div>{{end}}</section>
 <section class="panel"><div class="ph"><h2>Volumes and mounts</h2></div>
-  {{if .Mounts}}<div class="tw"><table><thead><tr><th>Mount</th><th>Source</th><th></th></tr></thead><tbody>
-  {{range .Mounts}}<tr><td class="mono">{{.Path}}</td><td class="mono">{{.Source}}</td><td>{{template "pg-ok" .OK}}</td></tr>{{end}}
-  </tbody></table></div>
+  {{if .Mounts}}<div class="tw"><table><thead><tr><th>Mount</th><th>Source</th><th>Kind</th><th>Mode</th><th>Volume</th></tr></thead><tbody>
+  {{range .Mounts}}<tr><td class="mono">{{.Path}}</td><td class="mono">{{.Source}} {{template "pg-copy" .Source}}</td><td>{{.Kind}}</td><td>{{.Mode}}</td><td>{{if not .Checked}}<span class="faint">not checked</span>{{else if .OK}}<span class="pill ok">exists</span>{{else}}<span class="pill bad">missing</span>{{end}}</td></tr>{{end}}
+  </tbody></table></div><p class="pb hint">Volume says whether Docker has the volume. sind does not check a directory of the host.</p>
   {{else if .Volumes}}<div class="tw"><table><thead><tr><th>Volume</th><th>Driver</th></tr></thead><tbody>
   {{range .Volumes}}<tr><td class="mono">{{.Name}}</td><td class="mono">{{.Driver}}</td></tr>{{end}}
-  </tbody></table></div>{{else}}<div class="empty">No volume or mount read yet.</div>{{end}}</section></div>
+  </tbody></table></div>{{else}}<div class="empty">No volume or mount read yet.</div>{{end}}</section>
+<section class="panel pg-wide"><div class="ph"><h2>Nodes and addresses</h2><span class="grow"></span><span class="faint">on the cluster network</span></div>
+  <div class="tw"><table><thead><tr><th>Node</th><th>IP</th><th>DNS name</th></tr></thead><tbody>
+  {{range .Cluster.Nodes}}<tr><td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td class="mono">{{with .IP}}{{.}} {{template "pg-copy" .}}{{else}}<span class="faint">–</span>{{end}}</td><td class="mono">{{with .FQDN}}{{.}} {{template "pg-copy" .}}{{else}}<span class="faint">–</span>{{end}}</td></tr>
+  {{else}}<tr><td colspan="3"><div class="empty">This cluster has no node.</div></td></tr>{{end}}</tbody></table></div></section>
+<section class="panel pg-wide"><div class="ph"><h2>Names and keys</h2></div><div class="pb"><dl class="kv pg-names">
+  {{range .Names}}<dt>{{.Label}}</dt><dd><span class="mono">{{.Value}}</span>{{if .Copy}} {{template "pg-copy" .Value}}{{end}}<div class="muted pg-small">{{.Note}}</div></dd>{{end}}</dl></div></section></div>
 {{with .HostData}}<div class="callout warn pg-hint">Jobs write to <span class="mono">{{.}}</span> on this host as root. Pick a scratch directory, not your home directory.</div>{{end}}{{end}}
 
 {{define "pg-tab-connect"}}<div class="grid g2"><section class="panel"><div class="ph"><h2>From your terminal</h2></div><div class="pb stack">

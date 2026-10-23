@@ -52,7 +52,7 @@ shots:
     fit: true
 
   - name: cluster-network
-    alt: "A cluster's Network and storage tab: its networks, and the volumes and mounts of its nodes"
+    alt: "A cluster's Network and storage tab: its networks, the volumes and mounts of its nodes, each node's address and DNS name, and where the munge key is"
     path: /clusters/sind/dev?tab=network
     hide: "#tasks"
     page: cluster

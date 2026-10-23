@@ -10,6 +10,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // pgClusterPage is the page of one cluster, template pg_cluster.tmpl. Its
@@ -52,7 +53,7 @@ func pgClusterTopics(p Params, tab string) []store.Topic {
 	case "nodes", "slurm":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name)}
 	case "network":
-		return []store.Topic{store.ClustersTopic(realm), store.StatusTopic(realm, name), store.NetworksTopic(realm), store.VolumesTopic(realm)}
+		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name), store.NetworksTopic(realm), store.VolumesTopic(realm), store.MeshTopic(realm)}
 	case "connect":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.MonitoringTopic(realm)}
 	}
@@ -115,6 +116,26 @@ type pgNetRow struct {
 	Mine                          bool
 }
 
+// pgMount is a mount of the Network tab, with its kind and how the nodes
+// mount it in words.
+type pgMount struct {
+	cluster.MountPoint
+	Kind string
+	Mode string
+}
+
+// Checked reports whether sind checks that the source of the mount is
+// there: a Docker volume, not a directory of the host.
+func (m pgMount) Checked() bool { return m.Type != config.StorageHostPath }
+
+// pgNameRow is a row of the names and keys of the Network tab: a value to
+// copy, and a note on it.
+type pgNameRow struct {
+	Label, Value, Note string
+	// Copy is set when Value is a thing to copy, not a pattern.
+	Copy bool
+}
+
 // pgCmd is a command to copy.
 type pgCmd struct {
 	Label string
@@ -146,7 +167,8 @@ type pgClusterView struct {
 	Delete          pgAction
 	// Network tab.
 	Networks []pgNetRow
-	Mounts   []cluster.MountPoint
+	Mounts   []pgMount
+	Names    []pgNameRow
 	Volumes  []cluster.VolumeSummary
 	HostData string
 	// Data is the cluster's data mount, when the status has it.
@@ -302,9 +324,10 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 			{nh.MeshName, nh.MeshDriver, nh.MeshSubnet, nh.MeshGateway, false},
 		}
 	}
+	d.Names = pgNames(d, sn)
 	if d.Status != nil {
-		d.Mounts = d.Status.Mounts
-		for _, m := range d.Mounts {
+		for _, m := range d.Status.Mounts {
+			d.Mounts = append(d.Mounts, pgMount{m, pgMountKind(m), pgMountMode(m)})
 			if m.Data && m.Type == config.StorageHostPath {
 				d.HostData = m.Source
 			}
@@ -317,6 +340,66 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 			d.Volumes = append(d.Volumes, vol)
 		}
 	}
+}
+
+// pgMountKind says how a mount reaches the nodes: "Docker volume", "host
+// directory (bind mount)", or the directory of a volume that each node
+// mounts its own part of.
+func pgMountKind(m cluster.MountPoint) string {
+	switch {
+	case m.Type == config.StorageHostPath:
+		return "host directory (bind mount)"
+	case m.Subpath != "":
+		return "Docker volume, directory " + m.Subpath
+	}
+	return "Docker volume"
+}
+
+// pgMountMode says how the nodes mount m, as sind creates them: the
+// controllers write the Slurm config, the other nodes only read it, and
+// the munge key and CVMFS are read-only on every node.
+func pgMountMode(m cluster.MountPoint) string {
+	switch m.Path {
+	case slurm.ConfDir:
+		return "read-write on the controllers, read-only on the other nodes"
+	case slurm.MungeDir, cluster.CVMFSPath:
+		return "read-only"
+	}
+	return "read-write"
+}
+
+// pgNames returns the names and keys of the Network tab: the DNS zone and
+// how nodes are named in it, the DNS server and SSH relay of the realm,
+// and where the munge key is.
+func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
+	zone := d.Realm + ".sind"
+	m, _ := sn.MeshOf(d.Realm)
+	if m.Info != nil && m.Info.DNSZone != "" {
+		zone = m.Info.DNSZone
+	}
+	rows := []pgNameRow{
+		{Label: "DNS zone", Value: zone, Note: "The mesh DNS answers for it, on the nodes and, with the host DNS set up, on this host.", Copy: true},
+		{Label: "node names", Value: "NODE." + d.Name + "." + zone, Note: "Such as controller." + d.Name + "." + zone + "."},
+	}
+	if m.Info != nil {
+		rows = append(rows,
+			pgNameRow{Label: "DNS server", Value: m.Info.DNSIP, Note: "The container " + m.Info.DNSContainer + " on the mesh network.", Copy: true},
+			pgNameRow{Label: "SSH relay", Value: m.Info.SSHContainer, Note: "sind ssh goes through it.", Copy: true},
+		)
+	}
+	munge := pgNameRow{Label: "munge key", Value: slurm.MungeKeyPath, Copy: true,
+		Note: "In the volume " + string(cluster.VolumeName(d.Realm, d.Name, cluster.VolumeMunge)) + ", on every node. sind ui does not show the key."}
+	if d.Status != nil {
+		munge.Note = "None: the nodes use auth/slurm (identity clientIds), not munge."
+		munge.Value, munge.Copy = "none", false
+		for _, mp := range d.Status.Mounts {
+			if mp.Path == slurm.MungeDir {
+				munge.Value, munge.Copy = slurm.MungeKeyPath, true
+				munge.Note = "In the volume " + mp.Source + ", on every node. sind ui does not show the key."
+			}
+		}
+	}
+	return append(rows, munge)
 }
 
 // pgConnectTab writes the commands that enter, run on and log in to the

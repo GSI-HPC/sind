@@ -26,6 +26,9 @@ each kind. */}}
   <li><i class="pg-nm pg-nm-worker pg-nm-paused" aria-hidden="true"></i>paused</li>
   <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-svcdown" aria-hidden="true"></i>a service is down</li></ul>{{end}}
 
+{{/* pg-copy is a small Copy button for the string it takes. */}}
+{{define "pg-copy"}}<button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="{{.}}" aria-label="Copy {{.}}">Copy</button>{{end}}
+
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy>Copy</button></div></div>{{end}}
 
