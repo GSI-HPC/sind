@@ -171,6 +171,8 @@ table.runs td:nth-child(2){min-width:200px}
   .task{padding:8px 10px;gap:6px}
   .task .segbar{height:6px}
   .gantt .axis,.grow-row{grid-template-columns:110px minmax(0,1fr) 64px;gap:8px}
+  /* the axis keeps its first, middle and last label, which do not overlap */
+  .gantt .axis .ticks span.minor{display:none}
   .grow-row .res{font-size:var(--t-xs)}
   .grow-row .lbl{white-space:normal}
   .hide-s{display:none}

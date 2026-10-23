@@ -75,6 +75,16 @@ func TestRunTimelineEdges(t *testing.T) {
 	require.Len(t, tl.Rows, 1)
 	assert.False(t, tl.Rows[0].Bar)
 	assert.Len(t, tl.Ticks, 9, "0 s to 8 s, a tick every second")
+	var major []string
+	for _, tk := range tl.Ticks {
+		if !tk.Minor {
+			major = append(major, tk.Label)
+		}
+	}
+	assert.Equal(t, []string{"0s", "4s", "8s"}, major, "a narrow screen shows the first, the middle and the last label")
+	later := runTimelineOf(runCtxOf(runOf(0, "", runSp("step", "a", runEndedAt(0, 100, "ok"))), runAt(100)))
+	require.Len(t, later.Ticks, 4, "0 s to 1m30s")
+	assert.Equal(t, []bool{false, true, true, false}, []bool{later.Ticks[0].Minor, later.Ticks[1].Minor, later.Ticks[2].Minor, later.Ticks[3].Minor}, "an even number has no middle label")
 
 	// A queued span has no bar; a queued span in a finished run is skipped.
 	run := runOf(9, "failed", runSp("step", "never"), runSp("wait", "realm lock", runEndedAt(0, 1, "ok")),

@@ -41,7 +41,7 @@ part is a fragment that /events sends again when the run changes. */}}
 </div></section>{{end}}{{end}}
 
 {{define "run-timeline"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Steps</h2><span class="grow"></span><span class="faint">Open a step for its targets. Steps that overlap ran at the same time.</span></div><div class="pb gantt">
-<div class="axis"><span></span><span class="ticks">{{range .Ticks}}<span class="l{{.Pos}}">{{.Label}}</span>{{end}}</span><span></span></div>
+<div class="axis"><span></span><span class="ticks">{{range .Ticks}}<span class="l{{.Pos}}{{if .Minor}} minor{{end}}">{{.Label}}</span>{{end}}</span><span></span></div>
 {{range .Rows}}{{template "run-row" .}}{{else}}<div class="faint">No steps yet.</div>{{end}}
 </div></section>{{end}}{{end}}
 
