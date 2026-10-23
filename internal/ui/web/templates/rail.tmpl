@@ -10,4 +10,8 @@ other entries; app.js keeps the sheet open across live updates. */}}
 <div class="rail-sheet" id="rail-sheet" hidden><ul aria-label="More pages">{{range .Sheet}}<li>{{template "rail-link" .}}</li>{{end}}</ul></div>{{end}}{{end}}
 
 {{/* rail-link is an entry of the rail: a navEntry. */}}
-{{define "rail-link"}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>{{.Label}}{{if .Count.Text}}<span class="n{{with .Count.Class}} {{.}}{{end}}">{{.Count.Text}}</span>{{end}}</a>{{end}}
+{{define "rail-link"}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>{{.Label}}{{template "rail-count" .Count}}</a>{{end}}
+
+{{/* rail-count is the badge of a rail entry: its count with a unit, or a
+dot when all is well. Label says the same in words, for screen readers. */}}
+{{define "rail-count"}}{{if .Label}}<span class="n{{with .Class}} {{.}}{{end}}" title="{{.Label}}">{{with .Text}}<span aria-hidden="true">{{.}}</span>{{end}}<span class="vh">, {{.Label}}</span></span>{{else if .Text}}<span class="n{{with .Class}} {{.}}{{end}}">{{.Text}}</span>{{end}}{{end}}

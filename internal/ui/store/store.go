@@ -51,8 +51,8 @@ type Snapshot struct {
 	Networks map[string][]cluster.NetworkSummary
 	Volumes  map[string][]cluster.VolumeSummary
 	Meshes   map[string]Mesh
-	// Statuses are keyed by realm and cluster, for the clusters whose page
-	// is open.
+	// Statuses are keyed by realm and cluster, for the clusters listed
+	// and the ones whose page is open.
 	Statuses    map[StatusKey]*cluster.Status
 	Locks       map[string]*state.LockHolder
 	Monitorings map[string]*cluster.Monitoring

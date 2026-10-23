@@ -11,6 +11,12 @@
 .pg-note{margin-bottom:14px}
 .pg-gone{margin-bottom:14px}
 .pg-realms{margin-bottom:0}
+/* the pill in the head of the Overview that names the problems and goes to
+   "Needs you"; it may wrap on a phone */
+a.pg-sumpill{white-space:normal;text-decoration:none}
+a.pg-sumpill:hover{text-decoration:underline}
+.pg-attn:focus{outline:none}
+.pg-attn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* cluster cards */
 .pg-ccard{display:flex;flex-direction:column;gap:12px;padding:14px;color:var(--fg)}

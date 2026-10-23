@@ -174,7 +174,7 @@
   see: [activity-log]
 - id: needs-you
   title: Needs you
-  summary: What sind ui found that you may want to fix, such as nodes that stopped, services that failed, runs that failed and host checks. Empty means nothing waits on you.
+  summary: What sind ui found that you may want to fix, such as nodes that stopped, services that failed, runs that failed and host checks. The Overview shows it only when something waits on you.
   command: sind doctor
   doc: usage/diagnostics#doctor
   see: [doctor]

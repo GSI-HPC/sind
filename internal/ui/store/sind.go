@@ -257,8 +257,8 @@ func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 }
 
 // KeepStatuses drops the status of every cluster that is not in keep, as
-// the pages that needed it are closed. It notifies nothing: no page shows
-// a dropped status.
+// the cluster is gone and no page shows it. It notifies nothing: no page
+// shows a dropped status.
 func (s *Store) KeepStatuses(keep ...StatusKey) {
 	s.change(func(sn *Snapshot) bool {
 		next := maps.Clone(sn.Statuses)

@@ -3,7 +3,7 @@
 # and howtos list ids; both may be empty.
 - id: overview
   title: Overview
-  summary: The clusters of the realm, what needs you, and what sind did lately.
+  summary: What needs you, the clusters of the realm, and what sind did lately.
   route: /
   doc: getting-started/quickstart
   words: [realm, cluster, needs-you, activity-log]

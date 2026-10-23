@@ -65,7 +65,7 @@ func colSetup(env *Env) error {
 		sind:       &collect.Sind{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		lock:       &collect.Lock{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		monitoring: &collect.Monitoring{Store: env.Store, Client: client, Bus: bus, Interval: interval, Viewers: viewers, Log: env.Log},
-		status:     &collect.Status{Store: env.Store, Client: client, Bus: bus, Watched: watched, Log: env.Log},
+		status:     &collect.Status{Store: env.Store, Client: client, Bus: bus, Watched: watched, Viewers: viewers, Log: env.Log},
 		doctor:     collect.NewDoctor(env.Store, client),
 	}
 	env.Put(colKey{}, set)

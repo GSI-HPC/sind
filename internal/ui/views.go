@@ -3,9 +3,8 @@
 package ui
 
 import (
+	"cmp"
 	"strings"
-
-	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
 // NavItem is an entry of the rail.
@@ -87,7 +86,7 @@ func (m *navMore) note(e navEntry) {
 		return
 	}
 	m.Count = NavCount{Text: navMarks[e.Count.Class], Class: e.Count.Class}
-	m.Note = e.Label + ": " + e.Count.Text
+	m.Note = e.Label + ": " + cmp.Or(e.Count.Label, e.Count.Text)
 }
 
 // rail returns the rail for the view: the entry v.Nav is lit, and each
@@ -98,7 +97,7 @@ func (r *Registry) rail(v *View) railData {
 	for _, it := range navItems {
 		e := navEntry{NavItem: it, On: it.Key == v.Nav, Icon: icons + it.Key}
 		if fn := r.navCount(it.Key); fn != nil {
-			e.Count = fn(v.Snap)
+			e.Count = fn(v.Snap, v.Now)
 		}
 		if !it.Main {
 			d.Sheet = append(d.Sheet, e)
@@ -119,7 +118,7 @@ func (r *Registry) rail(v *View) railData {
 }
 
 // navCount returns the count function of the rail entry key, or nil.
-func (r *Registry) navCount(key string) func(store.Snapshot) NavCount {
+func (r *Registry) navCount(key string) NavCountFunc {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.navCounts[key]

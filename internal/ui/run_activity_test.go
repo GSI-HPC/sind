@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -92,10 +93,15 @@ func TestRunActivityLimit(t *testing.T) {
 }
 
 func TestRunNavCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{}))
-	over := store.Run{End: runPtr(runAt(1))}
-	assert.Equal(t, NavCount{Text: "2"}, runNavCount(store.Snapshot{Runs: []store.Run{over, over}}))
-	assert.Equal(t, NavCount{Text: "1 running", Class: "run"}, runNavCount(store.Snapshot{Runs: []store.Run{over, {}}}))
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{}, runNow))
+	over := store.Run{End: runPtr(runAt(1)), Status: store.StatusOK}
+	failed := store.Run{End: runPtr(runAt(1)), Status: store.StatusFailed}
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{over, over}}, runNow), "runs that ended well need no badge")
+	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 runs failed in the last 6 hours"},
+		runNavCount(store.Snapshot{Runs: []store.Run{failed, over, failed}}, runNow))
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{failed}}, runNow.Add(7*time.Hour)), "an old failure is old news")
+	assert.Equal(t, NavCount{Text: "1 running", Class: "run", Label: "1 command runs now"}, runNavCount(store.Snapshot{Runs: []store.Run{failed, {}}}, runNow))
+	assert.Equal(t, "2 commands run now", runNavCount(store.Snapshot{Runs: []store.Run{{}, {}}}, runNow).Label)
 }
 
 func TestRunMatchesAndCounts(t *testing.T) {

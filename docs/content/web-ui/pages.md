@@ -9,7 +9,9 @@ The rail on the left lists the pages; on a phone, the bar at the bottom does, wi
 
 ## Overview
 
-The realms, a card for each cluster, the things that need you, and the recent activity. Each realm's row has **Clusters** and **Delete realm…**. An empty realm says so and offers **New cluster…**.
+The things that need you come first, then the realms, a card for each cluster and the recent activity. Each realm's row has **Clusters** and **Delete realm…**. An empty realm says so and offers **New cluster…**.
+
+The head names the problems, such as `1 node is stopped · 1 run failed`, and links to **Needs you**. A node needs a look when its container does not run, or when a service on it is down. The Overview, the realm table, the lists and the rail count by this one rule. sind ui knows that a service is down once it has probed the cluster: every 30 seconds while any page is open, and every 10 seconds while a page of the cluster is open. A service that is down does not count while a command works on its cluster, such as one that adds workers or reboots the node: the command may be starting it. No node of a cluster counts while `sind create cluster` makes it.
 
 {{< uishot "overview" >}}
 

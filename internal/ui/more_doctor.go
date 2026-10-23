@@ -5,6 +5,7 @@ package ui
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -74,26 +75,38 @@ func moreCheckMark(status string) (class, mark string) {
 	return "", "?"
 }
 
-// moreDoctorCount is the count behind the rail entry: the checks that did
-// not pass, red when one failed.
+// moreDoctorCount is the badge behind the rail entry: the checks that
+// failed, as "1 failed", else the warnings, as "2 warnings", or a dot when
+// every check passed. Before the first check it shows none.
 func moreDoctorCount(sn store.Snapshot) NavCount {
 	if sn.Doctor == nil {
 		return NavCount{}
 	}
-	n, class := 0, ""
+	failed, warned := 0, 0
 	for _, c := range sn.Doctor.Checks {
-		if c.Status == doctor.StatusOK {
-			continue
-		}
-		n++
-		if c.Status == doctor.StatusFailed {
-			class = "bad"
+		switch c.Status {
+		case doctor.StatusOK:
+		case doctor.StatusFailed:
+			failed++
+		default:
+			warned++
 		}
 	}
-	if n == 0 {
-		return NavCount{}
+	var parts []string
+	if failed > 0 {
+		parts = append(parts, pgPlural(failed, "host check failed", "host checks failed"))
 	}
-	return NavCount{Text: strconv.Itoa(n), Class: class}
+	if warned > 0 {
+		parts = append(parts, pgPlural(warned, "warning", "warnings"))
+	}
+	label := strings.Join(parts, ", ")
+	switch {
+	case failed > 0:
+		return NavCount{Text: strconv.Itoa(failed) + " failed", Class: "bad", Label: label}
+	case warned > 0:
+		return NavCount{Text: pgPlural(warned, "warning", "warnings"), Class: "warn", Label: label}
+	}
+	return NavCount{Class: "ok", Label: "every host check passed"}
 }
 
 // moreDoctorLoad fills the data of the Doctor page.

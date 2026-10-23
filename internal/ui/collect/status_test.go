@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -276,4 +277,55 @@ func TestStatusDefaultsAndReadEachDeduplicates(t *testing.T) {
 	stop := start(t, f.status.Run)
 	f.fake.settle()
 	stop()
+}
+
+func TestStatusReadsEveryListedCluster(t *testing.T) {
+	f := newStatusFixture(t)
+	f.status.All = time.Hour
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "prod"}})
+	start(t, f.status.Run)
+	waitFor(t, "the listed clusters at start", func() bool { return f.has(devKey) && f.has(prodKey) })
+	assert.False(t, f.has(ciKey), "not listed, no page")
+
+	// A cluster that the store newly lists is read at once.
+	f.st.SetClusters("ci", []cluster.Summary{{Name: "a"}})
+	waitFor(t, "a new cluster", func() bool { return f.has(ciKey) })
+	f.fake.settle()
+
+	// An event of a listed cluster reads it, although no page is open.
+	n := f.reads()
+	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	waitFor(t, "read", func() bool { return f.reads() > n })
+
+	// A cluster that the store no longer lists loses its status.
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	waitFor(t, "dropped", func() bool { return !f.has(prodKey) })
+	assert.True(t, f.has(devKey))
+
+	// One that comes back is new again.
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "prod"}})
+	waitFor(t, "back", func() bool { return f.has(prodKey) })
+}
+
+func TestStatusReadsEveryClusterWhileAPageIsOpen(t *testing.T) {
+	f := newStatusFixture(t)
+	f.status.All = 30 * time.Millisecond
+	f.status.Viewers = NewViewers()
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	start(t, f.status.Run)
+	waitFor(t, "status at start", func() bool { return f.has(devKey) })
+	f.fake.settle()
+
+	n := f.reads()
+	never(t, "a read with no page open", 150*time.Millisecond, func() bool { return f.reads() != n })
+	f.status.Viewers.Watch(nil)
+	waitFor(t, "read when the first page opens, and every All", func() bool { return f.reads() >= n+3 })
+}
+
+func TestStatusWithoutViewersReadsEveryClusterAlways(t *testing.T) {
+	f := newStatusFixture(t)
+	f.status.All = 30 * time.Millisecond
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	start(t, f.status.Run)
+	waitFor(t, "read every All", func() bool { return f.reads() >= 3 })
 }

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -39,23 +40,27 @@ func registerRunActivity(r *Registry) {
 		Name: "run-activity", Pattern: "GET /activity", Title: "Activity", Nav: "activity",
 		Fragments: []string{"run-list"},
 	})
-	r.SetNavCount("activity", runNavCount)
+	r.SetNavCountAt("activity", runNavCount)
 }
 
-// runNavCount is the count behind the Activity entry of the rail: the runs
-// that go on, or else how many the log holds.
-func runNavCount(snap store.Snapshot) NavCount {
-	running := 0
+// runNavCount is the badge behind the Activity entry of the rail: the runs
+// that go on, or else the runs that failed lately, the ones that "Needs
+// you" lists (failedWindow). A log without either shows none.
+func runNavCount(snap store.Snapshot, now time.Time) NavCount {
+	running, failed := 0, 0
 	for _, run := range snap.Runs {
-		if !run.Done() {
+		switch {
+		case !run.Done():
 			running++
+		case run.Status == store.StatusFailed && now.Sub(*run.End) < failedWindow:
+			failed++
 		}
 	}
 	switch {
 	case running > 0:
-		return NavCount{Text: strconv.Itoa(running) + " running", Class: "run"}
-	case len(snap.Runs) > 0:
-		return NavCount{Text: strconv.Itoa(len(snap.Runs))}
+		return NavCount{Text: strconv.Itoa(running) + " running", Class: "run", Label: pgPlural(running, "command runs", "commands run") + " now"}
+	case failed > 0:
+		return NavCount{Text: strconv.Itoa(failed) + " failed", Class: "bad", Label: pgPlural(failed, "run", "runs") + " failed in the last 6 hours"}
 	}
 	return NavCount{}
 }

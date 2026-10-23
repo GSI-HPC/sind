@@ -2,7 +2,10 @@
 
 package ui
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // The templates of the main pages register no template function: the
 // templates of every part are parsed together, so a function that one part
@@ -26,4 +29,12 @@ func pgPlural(n int, one, many string) string {
 		return "1 " + one
 	}
 	return strconv.Itoa(n) + " " + many
+}
+
+// pgList joins words as a sentence does: "a", "a and b", "a, b and c".
+func pgList(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }

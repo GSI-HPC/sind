@@ -63,13 +63,23 @@ func (i *Interval) Set(d time.Duration) {
 type Viewers struct {
 	mu sync.Mutex
 	n  int
-	// arrived holds a notice that the first page opened, which the
-	// collector has not taken yet.
-	arrived chan struct{}
+	// arrived hold, for each collector that asked (arrivals), a notice
+	// that the first page opened, which it has not taken yet.
+	arrived []chan struct{}
 }
 
 // NewViewers returns Viewers with no page open.
-func NewViewers() *Viewers { return &Viewers{arrived: make(chan struct{}, 1)} }
+func NewViewers() *Viewers { return &Viewers{} }
+
+// arrivals returns a channel of its own for a collector, which receives
+// when the first page opens.
+func (v *Viewers) arrivals() <-chan struct{} {
+	c := make(chan struct{}, 1)
+	v.mu.Lock()
+	v.arrived = append(v.arrived, c)
+	v.mu.Unlock()
+	return c
+}
 
 // Watch counts a page in until the function it returns is called. It
 // takes the topics of the page as ui.Env.AddWatcher hands them, and counts
@@ -78,9 +88,11 @@ func (v *Viewers) Watch([]store.Topic) (release func()) {
 	v.mu.Lock()
 	v.n++
 	if v.n == 1 {
-		select {
-		case v.arrived <- struct{}{}:
-		default:
+		for _, c := range v.arrived {
+			select {
+			case c <- struct{}{}:
+			default:
+			}
 		}
 	}
 	v.mu.Unlock()

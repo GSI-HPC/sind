@@ -20,7 +20,7 @@
   <section class="panel"><div class="ph"><h2>Services</h2><span class="grow"></span><span class="faint">systemd</span></div><div class="pb">
     {{if .Node.Known}}<dl class="kv">{{range .Node.Services}}<dt class="mono"><span data-word="{{.Name}}">{{.Name}}</span></dt><dd>{{if not $d.Node.Running}}<span class="pill">not running</span>{{else if .OK}}<span class="pill ok">active</span>{{else}}<span class="pill bad">failed</span>{{end}}{{if $d.Node.Running}} <a class="btn sm ghost" href="{{$d.ServiceLogsLink .Name}}" aria-label="Logs of {{.Name}}">Logs</a>{{end}}</dd>
       {{else}}<dt>none</dt><dd class="muted">This node has no service that sind checks.</dd>{{end}}</dl>
-    {{else}}<span class="muted">No probe result yet. sind ui probes a cluster's nodes while a page of it is open.</span>{{end}}</div></section>
+    {{else}}<span class="muted">No probe result yet. sind ui probes the nodes of every cluster while a page is open.</span>{{end}}</div></section>
   <section class="panel"><div class="ph"><h2>Container</h2></div><div class="pb"><dl class="kv">
     <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
     <dt>realm</dt><dd class="mono">{{.Realm}}</dd>

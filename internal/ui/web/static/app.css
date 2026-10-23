@@ -115,6 +115,9 @@ nav.rail .more,.rail-sheet{display:none}
 .nav .n{margin-left:auto;min-width:20px;padding:0 6px;border-radius:99px;background:var(--panel-2);font:500 var(--t-xs)/18px var(--f-mono);text-align:center;color:var(--faint)}
 .nav .n.run{background:var(--run-soft);color:var(--run-ink);font-weight:600}
 .nav .n.bad{background:var(--bad-soft);color:var(--bad);font-weight:600}
+.nav .n.warn{background:var(--warn-soft);color:var(--warn);font-weight:600}
+.nav .n.ok{min-width:0;padding:0 4px;background:none;line-height:0}
+.nav .n.ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .nav.on{background:var(--accent-soft);font-weight:600}
 .nav.on .g{color:var(--accent)}
 

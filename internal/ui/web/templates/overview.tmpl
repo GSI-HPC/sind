@@ -1,21 +1,20 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* page-overview is the Overview page: the realms, a card for each cluster,
-what needs the user, and the latest runs. Each part is a fragment. */}}
+{{/* page-overview is the Overview page: what needs the user first, when
+anything does, then the realms, a card for each cluster, and the latest
+runs. Each part is a fragment. */}}
 {{define "page-overview"}}
 <div hx-swap="morph:innerHTML" sse-swap="pg-overview-head">{{fragment "pg-overview-head" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="pg-overview-needs">{{fragment "pg-overview-needs" .}}</div>
 <div class="pg-block" hx-swap="morph:innerHTML" sse-swap="pg-overview-cards">{{fragment "pg-overview-cards" .}}</div>
-<div class="grid g2 pg-block">
-  <div hx-swap="morph:innerHTML" sse-swap="pg-overview-needs">{{fragment "pg-overview-needs" .}}</div>
-  <div hx-swap="morph:innerHTML" sse-swap="pg-overview-recent">{{fragment "pg-overview-recent" .}}</div>
-</div>
+<div class="pg-block" hx-swap="morph:innerHTML" sse-swap="pg-overview-recent">{{fragment "pg-overview-recent" .}}</div>
 {{end}}
 
 {{define "pg-overview-head"}}{{with .Data}}
 <div class="head"><div class="t"><h1>Overview</h1>
   <div class="sub"><span>{{.RealmsText}}</span>{{template "pg-realm-scope" $}}
     <span>{{.ClustersText}} · {{.NodesText}}</span>
-    {{if .Problems}}<span class="pill bad nodot">{{.ProblemsText}}</span>{{end}}</div></div>
+    {{with .Summary}}<a class="pill {{$.Data.SummaryClass}} nodot pg-sumpill" href="#needs">{{.}} <span aria-hidden="true">→</span></a>{{else}}{{if not .Needs}}{{if not .Empty}}<span class="pill ok">Nothing needs you</span>{{end}}{{end}}{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
@@ -44,9 +43,11 @@ what needs the user, and the latest runs. Each part is a fragment. */}}
   <li><div><b>Run a job</b><div class="muted">Enter the cluster and submit a test job.</div></div><span class="faint">after step 2</span></li>
   <li><div><b>Delete it</b><div class="muted">sind removes the containers, networks and volumes.</div></div><span class="faint">when done</span></li></ol></div></section>{{end}}
 
-{{define "pg-overview-needs"}}{{with .Data}}<section class="panel pg-attn"><div class="ph"><h2>Needs you</h2><span class="grow"></span><span class="faint">{{.NeedsText}}</span></div>
+{{/* pg-overview-needs comes first on the page, so it shows only when
+something needs the user; the head says when nothing does. */}}
+{{define "pg-overview-needs"}}{{with .Data}}{{if .Needs}}<section class="panel pg-attn pg-block" id="needs" tabindex="-1"><div class="ph"><h2>Needs you</h2><span class="grow"></span><span class="faint">{{.NeedsText}}</span></div>
   {{range .Needs}}<div class="pg-it"><span class="pg-bar {{.Sev}}"></span><div><div class="pg-tt">{{.Title}}</div><div class="pg-dd">{{.Detail}}</div></div><div class="pg-bb">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
-  {{else}}<div class="empty">Nothing needs you.</div>{{end}}</section>{{end}}{{end}}
+  {{end}}</section>{{end}}{{end}}{{end}}
 
 {{define "pg-overview-recent"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Recent activity</h2><span class="grow"></span><a href="/activity">All activity</a></div>
   <div class="pg-recent">{{range .Runs}}<a class="pg-r" href="{{.Link}}"><span class="dot {{.Class}}"></span><span class="pg-c">{{.Title}}</span>{{if .Terminal}}<span class="chip">terminal</span>{{end}}<span class="pg-tm">{{.Time}}</span></a>

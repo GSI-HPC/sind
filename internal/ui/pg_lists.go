@@ -55,7 +55,7 @@ var pgNodesPage = Page{
 }
 
 // pgListTopics are what the list pages depend on.
-var pgListTopics = []string{"realms", "clusters/", "nodes/", "monitoring/", "docker", "run"}
+var pgListTopics = []string{"realms", "clusters/", "nodes/", "status/", "monitoring/", "docker", "run"}
 
 func pgClustersFragment() Fragment {
 	return Fragment{
@@ -93,10 +93,13 @@ type pgNodeList struct {
 func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
-		rows = append(rows, pgRealmRow{
-			Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)),
+		row := pgRealmRow{
+			Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)), Problems: pgProblemNodes(sn, r),
 			Locked: sn.Lock(r) != nil, On: r == realm,
-		})
+			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
+		}
+		row.Delete.Name = "Delete realm " + r + "…"
+		rows = append(rows, row)
 	}
 	return rows
 }

@@ -29,6 +29,10 @@ func TestPgPlural(t *testing.T) {
 	assert.Equal(t, "0 clusters", pgPlural(0, "cluster", "clusters"))
 	assert.Equal(t, "1 cluster", pgPlural(1, "cluster", "clusters"))
 	assert.Equal(t, "2 clusters", pgPlural(2, "cluster", "clusters"))
+	assert.Empty(t, pgList(nil))
+	assert.Equal(t, "a", pgList([]string{"a"}))
+	assert.Equal(t, "a and b", pgList([]string{"a", "b"}))
+	assert.Equal(t, "a, b and c", pgList([]string{"a", "b", "c"}))
 }
 
 func TestPgDialog(t *testing.T) {
@@ -211,6 +215,54 @@ func TestPgRunBanner(t *testing.T) {
 	assert.Equal(t, "run on dev: 1 works, 2 wait for the lock of the realm.", several.Banner().Text)
 }
 
+func TestPgNodesOfABusyClusterAreNoProblem(t *testing.T) {
+	node := func(c, short string, st cluster.State) cluster.NodeSummary {
+		return cluster.NodeSummary{Cluster: c, Container: "sind-" + c + "-" + short, Role: config.RoleWorker, State: st}
+	}
+	down := func(c string) *cluster.Status {
+		return &cluster.Status{Nodes: []*cluster.NodeStatus{{Name: "worker-0." + c, Health: &cluster.NodeHealth{Services: cluster.ServiceHealth{"slurmd": false}}}}}
+	}
+	sn := store.Snapshot{
+		Clusters: map[string][]cluster.Summary{"sind": {{Name: "dev"}, {Name: "nightly"}}},
+		Nodes: map[string][]cluster.NodeSummary{"sind": {
+			node("dev", "worker-0", cluster.StateRunning), node("nightly", "worker-0", cluster.StateRunning), node("nightly", "worker-1", cluster.StateStopped),
+		}},
+		Statuses: map[store.StatusKey]*cluster.Status{{Realm: "sind", Cluster: "dev"}: down("dev"), {Realm: "sind", Cluster: "nightly"}: down("nightly")},
+		Runs:     []store.Run{{ID: "1", Title: "create cluster nightly", Start: pgNow}},
+	}
+	// dev's worker-0 has slurmd down; the nodes of nightly are being made.
+	assert.Equal(t, 1, pgProblemNodes(sn, ""))
+	for _, n := range pgSnapNodes(sn, "sind") {
+		assert.Equal(t, n.Cluster == "nightly", n.Busy && n.Creating, n.Arg)
+	}
+	c := pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
+	assert.True(t, c.Nodes[0].Creating)
+	assert.False(t, c.Nodes[0].Problem())
+	assert.False(t, c.Nodes[1].Problem())
+	assert.Equal(t, []pgPill{{"slurmd down", "bad"}}, c.Nodes[0].Issues(), "the cluster page still lists what it found")
+	var titles []string
+	for _, need := range pgNeeds(sn, "", pgNow) {
+		titles = append(titles, need.Title)
+	}
+	assert.Equal(t, []string{"worker-0.dev has slurmd down"}, titles)
+
+	// A command that adds workers may start services, but a stopped node
+	// is a problem all the same.
+	sn.Runs = []store.Run{{ID: "2", Title: "create worker nightly", Start: pgNow}}
+	assert.Equal(t, 2, pgProblemNodes(sn, ""))
+	c = pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
+	assert.False(t, c.Nodes[0].Problem())
+	assert.True(t, c.Nodes[1].Problem())
+
+	// A command on a node of the cluster works on the cluster.
+	sn.Runs = []store.Run{{ID: "3", Title: "power reboot worker-0.dev", Start: pgNow}}
+	busy, creating := pgBusy(sn, "sind", "dev")
+	assert.True(t, busy)
+	assert.False(t, creating)
+	busy, _ = pgBusy(sn, "sind", "nightly")
+	assert.False(t, busy)
+}
+
 func TestPgNodeNeed(t *testing.T) {
 	sn := store.Snapshot{Clusters: map[string][]cluster.Summary{"r": {{Name: "c", State: cluster.StateMixed}}}}
 	n := pgNode{Realm: "r", Cluster: "c", Short: "w", Arg: "w.c"}
@@ -223,6 +275,27 @@ func TestPgNodeNeed(t *testing.T) {
 	// A cluster that the snapshot does not hold.
 	n.Cluster = "gone"
 	assert.Contains(t, pgNodeNeed(sn, n).Detail, "The cluster gone is unknown.")
+	// A node that runs with two services down.
+	n.State = cluster.StateRunning
+	n.Services = []pgSvc{{"munge", false}, {"sshd", true}, {"slurmd", false}}
+	need = pgNodeNeed(sn, n)
+	assert.Equal(t, pgNeed{Sev: "bad", Kind: pgNeedService, Title: "w.c has munge, slurmd down", Detail: "The container runs, but munge and slurmd are not active."},
+		pgNeed{Sev: need.Sev, Kind: need.Kind, Title: need.Title, Detail: need.Detail})
+	assert.Equal(t, "/clusters/r/gone?node=w&tab=logs", need.Actions[0].URL)
+}
+
+func TestPgOverviewSummary(t *testing.T) {
+	d := &pgOverview{}
+	assert.Empty(t, d.Summary())
+	d.Needs = []pgNeed{{Sev: "run", Kind: pgNeedLock}}
+	assert.Empty(t, d.Summary(), "a lock is work, not a problem")
+	assert.Equal(t, "warn", d.SummaryClass())
+	d.Needs = append(d.Needs, pgNeed{Sev: "warn", Kind: pgNeedWarning}, pgNeed{Sev: "warn", Kind: pgNeedUnknown}, pgNeed{Sev: "warn", Kind: pgNeedWarning})
+	assert.Equal(t, "1 node is in an unknown state · 2 host warnings", d.Summary())
+	assert.Equal(t, "warn", d.SummaryClass())
+	d.Needs = append(d.Needs, pgNeed{Sev: "bad", Kind: pgNeedService}, pgNeed{Sev: "bad", Kind: pgNeedService}, pgNeed{Sev: "bad", Kind: pgNeedRun}, pgNeed{Sev: "bad", Kind: pgNeedRun})
+	assert.Equal(t, "1 node is in an unknown state · 2 nodes have a service down · 2 runs failed · 2 host warnings", d.Summary())
+	assert.Equal(t, "bad", d.SummaryClass())
 }
 
 func TestPgRealmNames(t *testing.T) {

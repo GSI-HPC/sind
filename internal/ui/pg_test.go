@@ -12,6 +12,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,8 @@ func TestPgOverviewEmpty(t *testing.T) {
 	assert.Contains(t, body, "sind ui has not read Docker yet")
 	assert.Contains(t, body, "No realm on this Docker daemon yet")
 	assert.Contains(t, body, `href="/dialogs/create-cluster"`)
-	assert.Contains(t, body, "Nothing needs you.")
+	assert.NotContains(t, body, "Nothing needs you", "an empty Docker has nothing to say it about")
+	assert.NotContains(t, body, `id="needs"`)
 	assert.Contains(t, body, "No runs yet.")
 
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "Cannot connect to the Docker daemon"})
@@ -32,7 +34,16 @@ func TestPgOverviewEmpty(t *testing.T) {
 	assert.Contains(t, body, "Docker is not reachable.")
 	assert.Contains(t, body, "Cannot connect to the Docker daemon")
 	assert.Contains(t, body, `<div class="pg-tt">Docker is not reachable</div>`)
+	assert.Contains(t, body, `<a class="pill bad nodot pg-sumpill" href="#needs">Docker is not reachable <span aria-hidden="true">→</span></a>`)
 	assert.NotContains(t, body, "has not read Docker yet")
+
+	// A realm with a cluster that runs: nothing needs the user.
+	ts.st.SetDocker(store.DockerState{Checked: true})
+	ts.st.SetRealms([]cluster.RealmSummary{{Name: "solo", Clusters: 1}})
+	ts.st.SetClusters("solo", []cluster.Summary{{Name: "default", State: cluster.StateRunning}})
+	body = pgBody(t, ts, "/", 200)
+	assert.Contains(t, body, `<span class="pill ok">Nothing needs you</span>`)
+	assert.NotContains(t, body, `id="needs"`)
 }
 
 func TestPgOverview(t *testing.T) {
@@ -42,14 +53,17 @@ func TestPgOverview(t *testing.T) {
 
 	assert.Contains(t, body, "2 realms")
 	assert.Contains(t, body, "3 clusters · 15 nodes")
-	assert.Contains(t, body, "2 nodes need a look")
+	// The head names the problems and goes to "Needs you", which comes
+	// before the cards.
+	assert.Contains(t, body, `<a class="pill bad nodot pg-sumpill" href="#needs">1 node is stopped · 1 node is paused · 1 run failed · 1 host check failed · 1 host warning <span aria-hidden="true">→</span></a>`)
+	assert.Less(t, strings.Index(body, `id="needs"`), strings.Index(body, `class="panel pg-ccard"`))
 	assert.NotContains(t, body, "Docker is not reachable")
 
 	// Realms with health, clusters as cards.
 	assert.Contains(t, body, `<a href="/?realm=sind"><b>sind</b></a>`)
 	assert.Contains(t, body, `<a class="btn sm ghost" href="/clusters?realm=sind">Clusters<span class="vh"> of sind</span></a>`)
 	assert.Contains(t, body, `<a class="btn sm danger" href="/dialogs/delete-realm?realm=sind" aria-label="Delete realm sind…" hx-get="/dialogs/delete-realm?realm=sind" hx-target="#layer" hx-push-url="false">Delete realm…</a>`)
-	assert.Contains(t, body, "1 node is not running")
+	assert.Contains(t, body, "1 node needs a look")
 	assert.Contains(t, body, "a command runs")
 	assert.Contains(t, body, `<a class="panel pg-ccard" href="/clusters/sind/dev">`)
 	assert.Contains(t, body, `<span class="pill warn">mixed</span>`)
@@ -95,6 +109,23 @@ func TestPgOverview(t *testing.T) {
 	assert.Contains(t, body, `href="/dialogs/create-cluster"`)
 	assert.Contains(t, body, `href="/dialogs/create-worker?cluster=default&amp;realm=ci"`)
 	assert.Contains(t, body, `href="/dialogs/connect"`)
+
+	// A probe finds a service down while a command works on dev: it may be
+	// starting the service, so it is no problem yet.
+	pgFillStatus(ts.st)
+	body = pgBody(t, ts, "/", 200)
+	assert.NotContains(t, body, "has a service down")
+	assert.Contains(t, body, `<span aria-hidden="true">2 down</span>`)
+
+	// Once the command ended, the node needs a look on every page and in
+	// the rail, by the same rule.
+	ts.st.SetRuns(nil)
+	body = pgBody(t, ts, "/", 200)
+	assert.Contains(t, body, "1 node has a service down")
+	assert.Contains(t, body, `<div class="pg-tt">worker-1.dev has slurmd down</div><div class="pg-dd">The container runs, but slurmd is not active.</div>`)
+	assert.Contains(t, body, `href="/dialogs/power?cluster=dev&amp;nodes=worker-1&amp;op=reboot&amp;realm=sind"`)
+	assert.Contains(t, body, `<span class="pill bad">2 nodes need a look</span>`, "the realm row")
+	assert.Contains(t, body, `<span aria-hidden="true">3 down</span><span class="vh">, 3 nodes need a look</span>`, "the rail: two in sind, one in ci")
 
 	// Narrowed to one realm.
 	body = pgBody(t, ts, "/?realm=ci", 200)
@@ -216,13 +247,18 @@ func TestPgRail(t *testing.T) {
 	assert.NotContains(t, body, `Nodes<span`)
 	pgFillStore(ts.st)
 	body = pgBody(t, ts, "/", 200)
-	assert.Contains(t, body, `Clusters<span class="n">3</span>`)
-	assert.Contains(t, body, `Nodes<span class="n bad">2</span>`)
+	assert.Contains(t, body, `Clusters<span class="n" title="3 clusters"><span aria-hidden="true">3</span><span class="vh">, 3 clusters</span></span>`)
+	assert.Contains(t, body, `Nodes<span class="n bad" title="2 nodes need a look"><span aria-hidden="true">2 down</span><span class="vh">, 2 nodes need a look</span></span>`)
 	assert.Contains(t, body, `<a class="nav on" href="/" aria-current="page">`)
 	body = pgBody(t, ts, "/nodes/sind/dev/worker-0", 200)
 	assert.Contains(t, body, `<a class="nav on" href="/nodes" aria-current="page">`)
 	body = pgBody(t, ts, "/clusters/sind/dev", 200)
 	assert.Contains(t, body, `<a class="nav on" href="/clusters" aria-current="page">`)
+	// Every node runs: a dot, with its meaning in words.
+	ts.st.SetNodes("ci", nil)
+	ts.st.SetNodes("sind", pgNodes("sind", "hpc", map[config.Role]int{config.RoleController: 1}, nil))
+	body = pgBody(t, ts, "/", 200)
+	assert.Contains(t, body, `Nodes<span class="n ok" title="every node runs"><span class="vh">, every node runs</span></span>`)
 }
 
 func TestPgClusterSummary(t *testing.T) {
@@ -603,6 +639,7 @@ func TestPgLiveFragments(t *testing.T) {
 func TestPgLiveCluster(t *testing.T) {
 	ts := pgServer(t)
 	pgFillStore(ts.st)
+	ts.st.SetRuns(nil) // no command works on dev
 	ts.srv.coalesce = 10 * time.Millisecond
 	body := pgBody(t, ts, "/clusters/sind/dev?tab=nodes", 200)
 	m := regexp.MustCompile(`sse-connect="/events\?([^"]+)"`).FindStringSubmatch(body)
@@ -610,18 +647,28 @@ func TestPgLiveCluster(t *testing.T) {
 	query := strings.ReplaceAll(m[1], "&amp;", "&")
 	c := ts.connect(query)
 
-	// A status changes the body; the head says the same.
+	// A status changes the body, and the rail, which counts the node with
+	// a service down now; the head says the same.
 	pgFillStatus(ts.st)
-	e := c.next()
-	assert.Equal(t, "pg-cluster-body", e.name)
-	assert.Contains(t, e.data, `<span class="pill bad">slurmd down</span>`)
+	sent := map[string]string{}
+	for range 2 {
+		e := c.next()
+		sent[e.name] = e.data
+	}
+	assert.Contains(t, sent["pg-cluster-body"], `<span class="pill bad">slurmd down</span>`)
+	assert.Contains(t, sent["rail"], "3 down")
 	c.quiet(60 * time.Millisecond)
 
-	// A run changes the head only.
+	// A run changes the head, and the rail, which counts no service of a
+	// cluster that a command works on.
 	ts.st.SetRuns([]store.Run{{ID: "n", Title: "create worker dev", Start: pgNow}})
-	e = c.next()
-	assert.Equal(t, "pg-cluster-head", e.name)
-	assert.Contains(t, e.data, "create worker dev")
+	sent = map[string]string{}
+	for range 2 {
+		e := c.next()
+		sent[e.name] = e.data
+	}
+	assert.Contains(t, sent["pg-cluster-head"], "create worker dev")
+	assert.Contains(t, sent["rail"], "2 down")
 	c.quiet(60 * time.Millisecond)
 
 	// The cluster goes away: the page says so.

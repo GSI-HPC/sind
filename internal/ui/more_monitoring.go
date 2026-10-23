@@ -116,17 +116,32 @@ func moreServiceState(s cluster.MonitoringService) (class, text string) {
 	return "", string(s.State)
 }
 
-// moreMonitoringCount is the count behind the rail entry: the services of
-// all stacks.
+// moreMonitoringCount is the badge behind the rail entry: the services of
+// all stacks that are not ready, as "1 down" (or "1 starting" when none
+// is down), or a dot when all are ready. Without a stack it shows none.
 func moreMonitoringCount(sn store.Snapshot) NavCount {
-	n := 0
+	n, down, starting := 0, 0, 0
 	for _, m := range sn.Monitorings {
-		n += len(m.Services)
+		for _, s := range m.Services {
+			n++
+			switch class, _ := moreServiceState(s); class {
+			case "ok":
+			case "bad":
+				down++
+			default:
+				starting++
+			}
+		}
 	}
-	if n == 0 {
-		return NavCount{Text: "–"}
+	switch {
+	case down > 0:
+		return NavCount{Text: strconv.Itoa(down) + " down", Class: "bad", Label: pgPlural(down, "monitoring service is", "monitoring services are") + " down"}
+	case starting > 0:
+		return NavCount{Text: strconv.Itoa(starting) + " starting", Class: "warn", Label: pgPlural(starting, "monitoring service is", "monitoring services are") + " not ready yet"}
+	case n > 0:
+		return NavCount{Class: "ok", Label: pgPlural(n, "monitoring service is", "monitoring services are") + " ready"}
 	}
-	return NavCount{Text: strconv.Itoa(n)}
+	return NavCount{}
 }
 
 // moreMonitoringLoad fills the data of the Monitoring page.
