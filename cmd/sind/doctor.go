@@ -4,11 +4,10 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/cliout"
-	"github.com/GSI-HPC/go-clikit/termtext"
+	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/spf13/cobra"
 )
@@ -47,14 +46,14 @@ func runDoctor(cmd *cobra.Command) error {
 		if err := cliout.WriteJSON(cmd.OutOrStdout(), checks); err != nil {
 			return err
 		}
-	} else {
-		printChecks(cmd.OutOrStdout(), checks)
+	} else if err := clidoctor.Write(cmd.OutOrStdout(), checks); err != nil {
+		return err
 	}
 	// The names are the ones the output shows, so the error line points at
 	// the lines marked ✗.
 	var failed []string
 	for _, c := range checks {
-		if c.Status == doctor.StatusFailed {
+		if c.Status == clidoctor.StatusFailed {
 			failed = append(failed, c.Name)
 		}
 	}
@@ -62,25 +61,4 @@ func runDoctor(cmd *cobra.Command) error {
 		return fmt.Errorf("checks failed: %s", strings.Join(failed, ", "))
 	}
 	return nil
-}
-
-// statusMark is the mark of a check: ✓ passed, ✗ failed, and ! for an
-// advisory check that did not pass, which leaves the exit status alone.
-func statusMark(status string) string {
-	if status == doctor.StatusWarning {
-		return "!"
-	}
-	return checkmark(status == doctor.StatusOK)
-}
-
-// printChecks writes one line per check, each failed or warning check
-// followed by its remediation between blank lines. A detail can quote what
-// docker wrote, so it is escaped.
-func printChecks(w io.Writer, checks []doctor.Check) {
-	for _, c := range checks {
-		_, _ = fmt.Fprintf(w, "%s %s: %s\n", statusMark(c.Status), c.Name, termtext.EscapeLines(c.Detail))
-		if c.Remediation != "" {
-			_, _ = fmt.Fprintf(w, "\n%s\n\n", c.Remediation)
-		}
-	}
 }

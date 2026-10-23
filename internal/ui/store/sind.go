@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -96,12 +97,7 @@ type Slurm struct {
 
 // DoctorCheck is the outcome of one host check, as `sind doctor -o json`
 // prints it.
-type DoctorCheck struct {
-	Name        string
-	Status      string
-	Detail      string
-	Remediation string
-}
+type DoctorCheck = doctor.Check
 
 // DoctorReport is the outcome of the last host check.
 type DoctorReport struct {

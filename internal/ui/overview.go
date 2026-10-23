@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 )
 
 func init() { RegisterRoute(pgRealmRoute(overviewPage, false)) }
