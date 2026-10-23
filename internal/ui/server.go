@@ -17,6 +17,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/go-clikit/localweb/assets"
+	"github.com/GSI-HPC/go-clikit/localweb/htmx"
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -64,6 +65,9 @@ type Server struct {
 	// is a hash of all of them: a new sind serves them under a new path, so
 	// browsers may cache them for good.
 	assets *assets.Assets
+	// vendor serves htmx, its SSE extension and idiomorph under
+	// /htmx/VERSION/.
+	vendor *assets.Assets
 	// styles and scripts are the extra files of every page, as URLs:
 	// static/css/*.css and static/js/*.js.
 	styles, scripts []string
@@ -107,8 +111,9 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("static files: %w", err)
 	}
+	vendor, _ := assets.New(htmx.Files(), "/htmx/", assets.Options{}) // the kit's own files are all readable
 	s := &Server{
-		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a,
+		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a, vendor: vendor,
 		styles: a.URLs("css/*.css"), scripts: a.URLs("js/*.js"),
 		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
 		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
@@ -174,6 +179,7 @@ func (s *Server) routes() (err error) {
 		}
 	}()
 	s.mux.Handle("GET /static/", s.assets)
+	s.mux.Handle("GET /htmx/", s.vendor)
 	s.mux.Handle("GET /events", s.fetchOnly(http.HandlerFunc(s.events)))
 	for _, p := range s.reg.pages {
 		s.mux.HandleFunc(p.Pattern, s.pageHandler(p))
@@ -265,7 +271,7 @@ const maxParamValues = 64
 func (s *Server) newView(p Params) *View {
 	return &View{
 		Snap: s.env.Store.Snapshot(), Now: s.now(), Params: p, Addr: s.env.Addr,
-		Asset: s.assets.URL, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
+		Asset: s.assets.URL, Vendor: s.vendor.URL, HTMXConfig: htmx.Config, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
 	}
 }
 

@@ -7,15 +7,15 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/localweb/htmx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEmbeddedAssets(t *testing.T) {
 	for _, name := range []string{
-		"app.css", "app.js", "icon.svg", "icons.svg", "htmx.min.js", "htmx-ext-sse.js", "idiomorph-ext.min.js",
+		"app.css", "app.js", "icon.svg", "icons.svg",
 		"fonts/inter-latin-wght.woff2", "fonts/jetbrains-mono-latin-wght.woff2",
-		"licenses/htmx-0BSD.txt", "licenses/htmx-ext-sse-0BSD.txt", "licenses/idiomorph-0BSD.txt",
 		"licenses/inter-OFL.txt", "licenses/jetbrains-mono-OFL.txt", "licenses/NOTICE.txt",
 	} {
 		_, err := fs.Stat(webFS(), "static/"+name)
@@ -41,6 +41,18 @@ func TestEmbeddedAssetsAreServed(t *testing.T) {
 		assert.Equal(t, "private, max-age=31536000, immutable", w.Header().Get("Cache-Control"), name)
 	}
 	assert.Equal(t, http.StatusNotFound, ts.get("/static/0123456789ab/app.css").Code, "another version")
+}
+
+func TestHTMXIsServedFromTheKit(t *testing.T) {
+	cfg, st := testConfig(t)
+	ts := newTestServerFrom(t, cfg, st).login()
+	for _, name := range []string{htmx.Script, htmx.SSE, htmx.Morph} {
+		w := ts.get(ts.srv.vendor.URL(name))
+		require.Equal(t, http.StatusOK, w.Code, name)
+		assert.Equal(t, "text/javascript; charset=utf-8", w.Header().Get("Content-Type"), name)
+		assert.Equal(t, "private, max-age=31536000, immutable", w.Header().Get("Cache-Control"), name)
+		assert.Equal(t, http.StatusNotFound, ts.get(ts.srv.assets.URL(name)).Code, "no local copy of "+name)
+	}
 }
 
 func TestRailIcons(t *testing.T) {

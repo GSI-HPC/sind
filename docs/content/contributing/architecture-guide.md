@@ -50,7 +50,7 @@ internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fra
   ├── action/      The actions of the dialogs: forms to argv, validated against the snapshot
   ├── run/         Runs a dialog's command as a sind child process and stops it with SIGINT
   ├── demo/        --demo: made-up clusters and commands that write event logs in memory
-  └── web/         Embedded templates, CSS and JavaScript (htmx)
+  └── web/         Embedded templates, CSS and JavaScript (htmx comes from go-clikit's localweb/htmx)
 
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE), TarModes, WithoutCalls
