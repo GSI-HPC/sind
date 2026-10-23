@@ -49,7 +49,7 @@ func logsServer(t *testing.T, ex *mock.Executor) *testServer {
 	cfg.Registry.AddRoute(logsRoute)
 	cfg.Registry.AddPage(Page{
 		Name: "logsdemo", Pattern: "GET /clusters/{realm}/{cluster}", Title: "Cluster",
-		Nav: "clusters", Params: []string{"node"},
+		Nav: "clusters", Params: logsTabParams,
 	})
 	cfg.FS = overlay(t, fstest.MapFS{
 		"templates/test.tmpl":     {Data: []byte(testTemplates)},
@@ -466,22 +466,48 @@ func TestLogsTab(t *testing.T) {
 	w := ts.get("/clusters/sind/dev")
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, `data-realm="sind" data-cluster="dev" data-cmd-prefix="sind logs "`)
+	assert.Contains(t, body, `data-realm="sind" data-cluster="dev" data-sind="sind" data-suffix=".dev"`)
 	assert.Contains(t, body, `<option value="controller" data-units="slurmctld munge sshd" selected>controller</option>`)
-	assert.Contains(t, body, `data-units="mariadb slurmdbd munge sshd"`)
-	assert.Contains(t, body, `<option value="submitter" data-units="munge sshd">`)
+	assert.Contains(t, body, `data-units="slurmdbd mariadb munge sshd"`)
+	assert.Contains(t, body, `<option value="submitter" data-units="sackd munge sshd">`)
 	assert.Contains(t, body, `data-units="slurmd munge sshd">worker-0</option>`)
 	assert.Contains(t, body, `>worker-1 (exited)</option>`)
 	assert.NotContains(t, body, "other-worker")
 	assert.Contains(t, body, `<code data-logs-cmd>sind logs controller.dev -f -n 200</code>`)
-	assert.Contains(t, body, "journal, all units")
+	assert.Contains(t, body, `<option value="docker" selected>container output (docker logs)</option>`)
+	assert.Contains(t, body, `<option value="journal">journal (journalctl)</option>`)
+	assert.Contains(t, body, `data-logs-unit-fld hidden>`)
+	assert.Contains(t, body, `<select id="logs-unit" data-logs-unit><option value="">all units</option><option value="slurmctld" selected>slurmctld</option><option value="munge">munge</option>`)
 
+	// The node, the source and the unit of the address.
 	body = ts.get("/clusters/sind/dev?node=worker-0").Body.String()
 	assert.Contains(t, body, `value="worker-0" data-units="slurmd munge sshd" selected`)
 	assert.Contains(t, body, "sind logs worker-0.dev -f -n 200")
+	body = ts.get("/clusters/sind/dev?node=worker-0&source=journal&unit=munge").Body.String()
+	assert.Contains(t, body, `<option value="journal" selected>`)
+	assert.Contains(t, body, `<div class="fld logs-fld" data-logs-unit-fld><label`)
+	assert.Contains(t, body, `<option value="munge" selected>munge</option>`)
+	assert.Contains(t, body, "sind logs worker-0.dev munge -f -n 200")
+	// An empty unit is the whole journal, which only the node shows.
+	body = ts.get("/clusters/sind/dev?node=worker-0&source=journal&unit=").Body.String()
+	assert.Contains(t, body, `<option value="" selected>all units</option>`)
+	assert.Contains(t, body, "sind ssh worker-0.dev -- journalctl -f -n 200")
+	// No unit, or one the node does not have, is its Slurm service.
+	for _, q := range []string{"", "&unit=nope"} {
+		body = ts.get("/clusters/sind/dev?node=worker-0&source=journal" + q).Body.String()
+		assert.Contains(t, body, `<option value="slurmd" selected>slurmd</option>`, q)
+		assert.Contains(t, body, "sind logs worker-0.dev slurmd -f -n 200", q)
+	}
 
-	body = ts.get("/clusters/sind/dev?node=gone").Body.String()
+	body = ts.get("/clusters/sind/dev?node=gone&source=nope").Body.String()
 	assert.Contains(t, body, `value="controller" data-units="slurmctld munge sshd" selected`)
+	assert.Contains(t, body, `<option value="docker" selected>`)
+
+	// The default cluster takes no suffix, another realm its flag.
+	ts.st.SetNodes("ci", []cluster.NodeSummary{{Container: "ci-default-controller", Cluster: "default", Role: config.RoleController, State: cluster.StateRunning}})
+	body = ts.get("/clusters/ci/default").Body.String()
+	assert.Contains(t, body, `data-sind="sind --realm ci" data-suffix=""`)
+	assert.Contains(t, body, "sind --realm ci logs controller -f -n 200")
 
 	// An empty snapshot says so.
 	body = ts.get("/clusters/sind/nope").Body.String()

@@ -79,7 +79,7 @@ func TestPgOverview(t *testing.T) {
 	assert.Contains(t, body, "sind create worker dev (pid 4242 on zeta, since")
 	assert.Contains(t, body, `href="/dialogs/power?cluster=dev&amp;nodes=worker-3&amp;op=start&amp;realm=sind" hx-get="/dialogs/power?cluster=dev&amp;nodes=worker-3&amp;op=start&amp;realm=sind" hx-target="#layer"`)
 	assert.Contains(t, body, `>Unfreeze…</a>`)
-	assert.Contains(t, body, `href="/clusters/sind/dev?tab=logs"`)
+	assert.Contains(t, body, `href="/clusters/sind/dev?node=worker-3&amp;tab=logs"`, "the logs of the node")
 	assert.Contains(t, body, `href="/runs/r4"`)
 	assert.Contains(t, body, "node controller: timed out")
 	assert.Contains(t, body, `href="/doctor"`)
@@ -482,6 +482,21 @@ func TestPgLogsTabBlock(t *testing.T) {
 	assert.Contains(t, body, `<a class="tab on" href="/clusters/sind/dev?tab=logs" aria-current="page">Logs</a>`)
 	assert.Contains(t, body, `data-logs data-realm="sind" data-cluster="dev"`)
 	assert.NotContains(t, pgBody(t, ts, "/clusters/sind/dev", 200), "data-logs ")
+	// The page hands the tab the node, the source and the unit of the
+	// address, and its live updates carry them.
+	body = pgBody(t, ts, "/clusters/sind/dev?tab=logs&node=worker-2&source=journal&unit=munge", 200)
+	assert.Contains(t, body, `<option value="worker-2" data-units="slurmd munge sshd" selected>worker-2</option>`)
+	assert.Contains(t, body, "sind logs worker-2.dev munge -f -n 200")
+	assert.Contains(t, body, "node=worker-2&amp;realm=sind&amp;source=journal&amp;tab=logs&amp;unit=munge")
+}
+
+func TestPgNodeIssueLogs(t *testing.T) {
+	d := &pgNodeView{Realm: "sind", Cluster: "dev", Short: "worker-0", Node: pgNode{
+		Role: "worker", State: cluster.StateRunning, Services: []pgSvc{{Name: "munge"}, {Name: "slurmd", OK: true}},
+	}}
+	assert.Equal(t, "/clusters/sind/dev?node=worker-0&source=journal&tab=logs&unit=munge", d.IssueLogsLink(), "the service that is down")
+	d.Node.Services[1].OK = false
+	assert.Equal(t, "/clusters/sind/dev?node=worker-0&source=journal&tab=logs&unit=slurmd", d.IssueLogsLink(), "the Slurm service first")
 }
 
 func TestPgNodePage(t *testing.T) {
@@ -498,7 +513,9 @@ func TestPgNodePage(t *testing.T) {
 	assert.Contains(t, body, `class="btn danger" href="/dialogs/delete-worker?cluster=dev&amp;nodes=worker-3&amp;realm=sind"`)
 	assert.Contains(t, body, `<h2>Issues</h2>`)
 	assert.Contains(t, body, `<div class="pg-issue"><span class="pill bad">stopped</span></div>`)
-	assert.Contains(t, body, `<a class="btn sm" href="/clusters/sind/dev?tab=logs">Logs</a>`)
+	// A node that does not run: its container output, which Docker keeps.
+	assert.Contains(t, body, `<a class="btn sm" href="/clusters/sind/dev?node=worker-3&amp;tab=logs">Logs</a>`)
+	assert.Contains(t, body, `<div class="actions"><a class="btn" href="/clusters/sind/dev?node=worker-3&amp;tab=logs">Logs</a>`)
 	assert.Contains(t, body, "No probe result yet.")
 	assert.Contains(t, body, `<dt>name</dt><dd class="mono">sind-dev-worker-3</dd>`)
 	assert.Contains(t, body, `<a href="/clusters/sind/dev">dev</a> <span class="pill warn">mixed</span>`)
@@ -512,8 +529,11 @@ func TestPgNodePage(t *testing.T) {
 	assert.Contains(t, body, `<dt>managed</dt><dd>yes</dd>`)
 	body = pgBody(t, ts, "/nodes/sind/dev/worker-1", 200)
 	assert.Contains(t, body, `<span class="pill bad">slurmd down</span>`)
-	assert.Contains(t, body, `<dt class="mono"><span data-word="slurmd">slurmd</span></dt><dd><span class="pill bad">failed</span></dd>`)
-	assert.Contains(t, body, `<dt class="mono"><span data-word="munge">munge</span></dt><dd><span class="pill ok">active</span></dd>`)
+	// The Issues open the journal of the service that is down, and each
+	// service has its journal.
+	assert.Contains(t, body, `<a class="btn sm" href="/clusters/sind/dev?node=worker-1&amp;source=journal&amp;tab=logs&amp;unit=slurmd">Logs</a>`)
+	assert.Contains(t, body, `<dt class="mono"><span data-word="slurmd">slurmd</span></dt><dd><span class="pill bad">failed</span> <a class="btn sm ghost" href="/clusters/sind/dev?node=worker-1&amp;source=journal&amp;tab=logs&amp;unit=slurmd" aria-label="Logs of slurmd">Logs</a></dd>`)
+	assert.Contains(t, body, `<dt class="mono"><span data-word="munge">munge</span></dt><dd><span class="pill ok">active</span> <a class="btn sm ghost" href="/clusters/sind/dev?node=worker-1&amp;source=journal&amp;tab=logs&amp;unit=munge" aria-label="Logs of munge">Logs</a></dd>`)
 	assert.Contains(t, body, `>Shut down…</a>`)
 	assert.Contains(t, body, `>Reboot…</a>`)
 	assert.Contains(t, body, `>Freeze…</a>`)
@@ -525,6 +545,8 @@ func TestPgNodePage(t *testing.T) {
 	assert.NotContains(t, body, "delete-worker")
 	assert.NotContains(t, body, "<h2>Issues</h2>")
 	assert.Contains(t, body, "sind logs controller.dev slurmctld -f")
+	// A healthy node has its Logs too: the journal of its Slurm service.
+	assert.Contains(t, body, `<div class="actions"><a class="btn" href="/clusters/sind/dev?node=controller&amp;source=journal&amp;tab=logs&amp;unit=slurmctld">Logs</a>`)
 	body = pgBody(t, ts, "/nodes/sind/dev/controller-backup", 200)
 	assert.Contains(t, body, "HA position backup · standby")
 	for short, svc := range map[string]string{"db": "slurmdbd", "api": "slurmrestd", "submitter": "sackd"} {

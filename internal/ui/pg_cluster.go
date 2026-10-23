@@ -72,7 +72,9 @@ func pgClusterFragments() []Fragment {
 			Load: load,
 		},
 		{
-			Name: "pg-cluster-body", Params: params,
+			// The Logs tab reads its own keys too, so that the body that a
+			// stream sends first is the one that the page holds.
+			Name: "pg-cluster-body", Params: append(slices.Clone(params), logsTabParams...),
 			Watch: func(p Params) []store.Topic { return pgClusterTopics(p, p.Get("tab")) },
 			Load:  load,
 		},

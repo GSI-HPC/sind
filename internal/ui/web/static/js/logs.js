@@ -3,7 +3,9 @@
 // The Logs tab of the cluster page: one EventSource on /logs/{realm}/{cluster}
 // that appends each line to a <pre> as text. It follows (keeps the scroll at
 // the bottom) until the reader scrolls up or presses Pause, and keeps the
-// last 2,000 lines. The stream closes when the tab goes away.
+// last 2,000 lines. The stream closes when the tab goes away. The node, the
+// source and the unit go into the address, as the server reads them, so
+// that a reload or a shared link shows the same log.
 (() => {
   'use strict';
 
@@ -22,7 +24,8 @@
     const cmd = $('[data-logs-cmd]');
     const realm = root.dataset.realm;
     const cluster = root.dataset.cluster;
-    const prefix = root.dataset.cmdPrefix;
+    const sind = root.dataset.sind;
+    const suffix = root.dataset.suffix;
     let es = null;
     let following = true;
     let paused = false;
@@ -42,14 +45,37 @@
         o.textContent = u === '' ? 'all units' : u;
         unitSel.append(o);
       }
-      if (units.includes(old)) unitSel.value = old;
+      if (old === '' || units.includes(old)) unitSel.value = old;
       else unitSel.value = units.length ? units[0] : '';
-      unitFld.hidden = sourceSel.value !== 'journal';
+      showUnit();
     }
 
+    function showUnit() { unitFld.hidden = sourceSel.value !== 'journal'; }
+
+    // showCommand writes the command of a terminal that shows the same log,
+    // as logsCommand in Go does.
     function showCommand() {
-      const unit = sourceSel.value === 'journal' ? unitSel.value : '';
-      cmd.textContent = prefix + nodeSel.value + '.' + cluster + (unit ? ' ' + unit : '') + ' -f -n 200';
+      const arg = nodeSel.value + suffix;
+      const n = ' -f -n 200';
+      if (sourceSel.value !== 'journal') cmd.textContent = sind + ' logs ' + arg + n;
+      else if (unitSel.value) cmd.textContent = sind + ' logs ' + arg + ' ' + unitSel.value + n;
+      else cmd.textContent = sind + ' ssh ' + arg + ' -- journalctl' + n;
+    }
+
+    // keepInAddress writes the choices into the address of the page.
+    function keepInAddress() {
+      const u = new URL(location.href);
+      const q = u.searchParams;
+      q.set('tab', 'logs');
+      q.set('node', nodeSel.value);
+      if (sourceSel.value === 'journal') {
+        q.set('source', 'journal');
+        q.set('unit', unitSel.value);
+      } else {
+        q.delete('source');
+        q.delete('unit');
+      }
+      history.replaceState(history.state, '', u);
     }
 
     function addLine(text, cls) {
@@ -111,6 +137,7 @@
     function reselect() {
       clear();
       showCommand();
+      keepInAddress();
       start();
     }
 
@@ -125,7 +152,7 @@
     }
 
     nodeSel.addEventListener('change', () => { fillUnits(); reselect(); });
-    sourceSel.addEventListener('change', () => { fillUnits(); reselect(); });
+    sourceSel.addEventListener('change', () => { showUnit(); reselect(); });
     unitSel.addEventListener('change', reselect);
     followBtn.addEventListener('click', () => { following = true; setPaused(false); });
     pauseBtn.addEventListener('click', () => setPaused(true));
@@ -146,7 +173,8 @@
     new MutationObserver(() => { if (!root.isConnected) stop(); })
       .observe(document.body, { childList: true, subtree: true });
 
-    fillUnits();
+    // The server drew the choices of the address.
+    showUnit();
     showCommand();
     start();
   }

@@ -37,7 +37,7 @@ The state of one cluster, in five tabs.
 
 {{< uishot "cluster-nodes-selected" >}}
 
-**Logs** shows the container log of a node, or the journal of one of its services. It starts with the last 200 lines and keeps the last 2,000. Use **Pause** to stop the stream and **Follow** to resume it.
+**Logs** shows the container log of a node, or its journal: one unit, or all units. It starts with the last 200 lines and keeps the last 2,000. Use **Pause** to stop the stream and **Follow** to resume it. The address keeps the node, the source and the unit, so a reload or a shared link shows the same log.
 
 {{< uishot "cluster-logs" >}}
 
@@ -51,7 +51,7 @@ The state of one cluster, in five tabs.
 
 ## Node
 
-The services, events and power state of one node, and the commands for it.
+The services, events and power state of one node, and the commands for it. **Logs** opens the log of the node: the journal of its Slurm service while it runs, otherwise the container output. Each service has a **Logs** link to its own journal.
 
 {{< uishot "node" >}}
 

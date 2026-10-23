@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -111,5 +112,33 @@ func pgLoadNode(v *View) *pgNodeView {
 // ClusterLink returns the address of the node's cluster page.
 func (d *pgNodeView) ClusterLink() string { return pgClusterURL(d.Realm, d.Cluster, "") }
 
-// LogsLink returns the address of the logs tab of the node's cluster.
-func (d *pgNodeView) LogsLink() string { return pgClusterURL(d.Realm, d.Cluster, "logs") }
+// LogsLink returns the address of the Logs tab with the node's log: the
+// journal of its Slurm service while it runs, else its container output,
+// which Docker keeps for a stopped container too.
+func (d *pgNodeView) LogsLink() string {
+	if !d.Node.Running() {
+		return pgLogsURL(d.Realm, d.Cluster, d.Short, "")
+	}
+	return pgLogsURL(d.Realm, d.Cluster, d.Short, pgServiceOf(d.Node.Role))
+}
+
+// IssueLogsLink returns the address of the log that tells most about the
+// node's issues: the journal of a service that is down, its Slurm service
+// first, or else the node's log.
+func (d *pgNodeView) IssueLogsLink() string {
+	down := d.Node.Down()
+	if len(down) == 0 {
+		return d.LogsLink()
+	}
+	unit := down[0]
+	if slurm := pgServiceOf(d.Node.Role); slices.Contains(down, slurm) {
+		unit = slurm
+	}
+	return pgLogsURL(d.Realm, d.Cluster, d.Short, unit)
+}
+
+// ServiceLogsLink returns the address of the journal of one service of the
+// node.
+func (d *pgNodeView) ServiceLogsLink(unit string) string {
+	return pgLogsURL(d.Realm, d.Cluster, d.Short, unit)
+}

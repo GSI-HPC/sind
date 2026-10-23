@@ -206,7 +206,7 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 	if c, ok := sn.Cluster(n.Realm, n.Cluster); ok {
 		cs = string(c.State)
 	}
-	logs := pgAction{Label: "Logs", URL: pgClusterURL(n.Realm, n.Cluster, "logs"), Class: "sm ghost"}
+	logs := pgAction{Label: "Logs", URL: pgLogsURL(n.Realm, n.Cluster, n.Short, ""), Class: "sm ghost"}
 	switch n.State {
 	case cluster.StateStopped:
 		need.Sev = "bad"
