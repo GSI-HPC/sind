@@ -459,7 +459,7 @@ func (m *Manager) Status(ctx context.Context) ([]ServiceStatus, bool, error) {
 		}
 		g.Go(func() error {
 			s := statuses[i].Service
-			_, err := m.curl(gctx, "-o", "/dev/null", m.URL(s, specs[s].readyPath))
+			_, err := m.curl(gctx, probeTimeout, "-o", "/dev/null", m.URL(s, specs[s].readyPath))
 			statuses[i].Ready = err == nil
 			statuses[i].Checked = true
 			return nil
