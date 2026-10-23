@@ -32,6 +32,8 @@ A run that sind ui started also shows its command, with **Copy**, and the config
 
 When the run failed or was stopped, **Try again** runs the same command again. If the command would now differ, as when a cluster changed in between, sind ui opens the dialog instead, so that you can check it. **Edit and try again…** opens the dialog with the fields of the run filled in. A delete, which asks you to type a name, has **Try again…**, which opens its dialog.
 
+A run from a terminal, or one whose details sind ui no longer keeps, shows the command that its title names, such as `sind create cluster bench`, with **Copy**. The event log keeps no flags, so the command may have had more. When such a run of `create cluster` or `create worker` failed or was stopped, **Edit and try again…** opens New cluster or Add workers, filled in with the cluster; after a timeout, New cluster has a longer **Wait**. **Open bench** leads to the cluster when it exists.
+
 {{< uishot "run-going" "A run that goes on. Two workers wait for munge." >}}
 
 {{< uishot "run-failed" "A run that failed. The page says what failed, that the rollback removed everything, and what to try." >}}

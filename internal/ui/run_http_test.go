@@ -71,6 +71,11 @@ func TestRunPageRenders(t *testing.T) {
 	assert.Contains(t, failed, `<a href="/doctor">Doctor</a>`)
 	assert.Contains(t, failed, `<span class="pill bad">failed</span>`)
 	assert.NotContains(t, failed, "from a terminal, so sind ui cannot stop it", "an ended run has nothing to stop")
+	// From a terminal: the command of its title, and New cluster filled in
+	// from it, with a longer wait after the timeout.
+	assert.Contains(t, failed, `<code>sind create cluster</code>`)
+	assert.Contains(t, failed, `<p class="hint">The event log names the command and what it worked on, not its flags.</p>`)
+	assert.Contains(t, failed, `hx-get="/dialogs/create-cluster?wait=10m" hx-target="#layer" hx-swap="innerHTML">Edit and try again…</a>`)
 
 	canceled := ts.get("/runs/r-canceled").Body.String()
 	assert.Contains(t, canceled, "<h2>Stopped</h2>")

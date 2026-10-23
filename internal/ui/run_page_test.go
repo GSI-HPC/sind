@@ -312,3 +312,53 @@ func TestRunRetry(t *testing.T) {
 		assert.Nil(t, edit, name)
 	}
 }
+
+func TestRunHeadWithoutTask(t *testing.T) {
+	// A failed run from a terminal: the command of its title, a dialog
+	// filled in from it, with a longer wait after a timeout, and the list
+	// of clusters, as no realm has the cluster.
+	run := runOf(9, "failed")
+	run.Title, run.Root.Node, run.Class = "create cluster bench", "bench", "timeout"
+	h := runHeadOf(runCtx{Run: run, Found: true, Snap: store.Snapshot{}, Now: runAt(30)})
+	assert.Equal(t, &pgCmd{Label: "Command", Text: "sind create cluster bench"}, h.Command)
+	assert.Contains(t, h.CmdNote, "not its flags")
+	assert.Empty(t, h.Realm)
+	assert.Equal(t, &runLink{Label: "Edit and try again…", Href: "/dialogs/create-cluster?name=bench&wait=10m"}, h.Edit)
+	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, h.Back)
+	assert.Empty(t, h.RetryID, "only a task runs again at once")
+
+	// One realm has the cluster: the command names the realm, and the page
+	// links to the cluster; without a timeout the wait is the dialog's.
+	run.Class = ""
+	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"ci": {{Name: "bench"}}}}
+	h = runHeadOf(runCtx{Run: run, Found: true, Snap: snap, Now: runAt(30)})
+	assert.Equal(t, "sind --realm ci create cluster bench", h.Command.Text)
+	assert.Equal(t, "ci", h.Realm)
+	assert.Equal(t, "/dialogs/create-cluster?name=bench&realm=ci", h.Edit.Href)
+	assert.Equal(t, &runLink{Label: "Open bench", Href: "/clusters/ci/bench"}, h.Back)
+	snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "bench"}}}
+	assert.Equal(t, "sind create cluster bench", runHeadOf(runCtx{Run: run, Snap: snap}).Command.Text, "the default realm needs no flag")
+
+	// A stopped create worker opens Add workers of its cluster, a timed
+	// out node too; other commands get no dialog.
+	run = runOf(9, "canceled")
+	run.Title, run.Root.Node = "create worker bench", "bench"
+	run.Root.Children = []store.Span{runSp("target", "worker-1", runEndedAt(0, 9, "failed"), runWith(func(s *store.Span) { s.Class = "timeout" }))}
+	assert.True(t, runTimedOut(run))
+	h = runHeadOf(runCtx{Run: run, Snap: snap})
+	assert.Equal(t, "/dialogs/create-worker?cluster=bench&realm=sind", h.Edit.Href)
+	run.Title = "delete cluster bench"
+	assert.Nil(t, runHeadOf(runCtx{Run: run, Snap: snap}).Edit)
+	run.Title = "create worker bench"
+	assert.Nil(t, runHeadOf(runCtx{Run: run, Snap: store.Snapshot{}}).Edit, "Add workers needs the realm")
+
+	// A run that went well, or goes on, offers no dialog; one without a
+	// title no command.
+	ok := runOf(9, "ok")
+	ok.Root.Node = "dev"
+	h = runHeadOf(runCtx{Run: ok, Snap: store.Snapshot{}})
+	assert.NotNil(t, h.Command)
+	assert.Nil(t, h.Edit)
+	assert.Nil(t, runHeadOf(runCtx{Run: store.Run{}}).Command)
+	assert.False(t, runTimedOut(ok))
+}

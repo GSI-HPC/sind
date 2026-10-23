@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() { registerRun(defaultRegistry) }
@@ -151,8 +152,13 @@ type runHead struct {
 	// Back leads to what the run's task worked on: its cluster, the list
 	// of clusters once the cluster is gone, or the mesh.
 	Back *runLink
-	// Command is the command line of the run's task, with Copy.
+	// Command is the command line of the run's task, with Copy, or for a
+	// run without a task the command that its title names; CmdNote then
+	// says that the log keeps no flags.
 	Command *pgCmd
+	CmdNote string
+	// Realm is the realm the run worked on, when sind ui knows it.
+	Realm string
 	// Config is the file that the task saved and ran with.
 	Config *pgCmd
 	// RetryID is the task that Try again runs again, when it runs it
@@ -214,8 +220,73 @@ func runHeadOf(rc runCtx) *runHead {
 		if run.Done() {
 			h.RetryID, h.Edit = runRetry(*t, runStatusClass(run))
 		}
+		h.Realm = t.Realm
+	} else {
+		runHeadNoTask(rc, h)
 	}
 	return h
+}
+
+// runHeadNoTask fills in the head of a run without a task, as one from a
+// terminal or one whose task sind ui no longer keeps: the command that its
+// title names, with the realm when only one realm has its cluster; once it
+// failed or was stopped, the dialog that does it again where there is one,
+// filled in from the title; and the way to its cluster.
+func runHeadNoTask(rc runCtx, h *runHead) {
+	run := rc.Run
+	e := runEntryOf(rc.Snap, run)
+	h.Realm = e.realm
+	if run.Title == "" {
+		return
+	}
+	h.Command = &pgCmd{Label: "Command", Text: strings.Join(sindArgvOf(e.realm, strings.Fields(run.Title)...), " ")}
+	h.CmdNote = "The event log names the command and what it worked on, not its flags."
+	if e.cluster != "" {
+		h.Back = &runLink{Label: "Open Clusters", Href: "/clusters"}
+		if e.realm != "" {
+			h.Back = &runLink{Label: "Open " + e.cluster, Href: pgClusterURL(e.realm, e.cluster, "")}
+		}
+	}
+	class := runStatusClass(run)
+	if !run.Done() || (class != runFailed && class != runCanceled) {
+		return
+	}
+	words := strings.Fields(run.Title)
+	switch strings.Join(words[:min(2, len(words))], " ") {
+	case "create cluster":
+		wait := ""
+		if runTimedOut(run) {
+			wait = "10m"
+		}
+		h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-cluster", "realm", e.realm, "name", e.cluster, "wait", wait)}
+	case "create worker":
+		if e.realm != "" {
+			h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-worker", "realm", e.realm, "cluster", e.cluster)}
+		}
+	}
+}
+
+// sindArgvOf is the command line of sind in realm, which names a realm
+// other than the default one; an empty realm is the default one.
+func sindArgvOf(realm string, words ...string) []string {
+	argv := []string{"sind"}
+	if realm != "" && realm != mesh.DefaultRealm {
+		argv = append(argv, "--realm", realm)
+	}
+	return append(argv, words...)
+}
+
+// runTimedOut reports whether a run failed as a node ran out of time.
+func runTimedOut(run store.Run) bool {
+	if run.Class == "timeout" {
+		return true
+	}
+	for _, f := range activity.FailedTargets(run.Root) {
+		if f.Class == "timeout" {
+			return true
+		}
+	}
+	return false
 }
 
 // runLink is a link of the run page.
