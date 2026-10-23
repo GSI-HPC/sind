@@ -239,7 +239,7 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 		if len(down) > 1 {
 			verb = "are"
 		}
-		need.Detail = fmt.Sprintf("The container runs, but %s %s not active.", pgList(down), verb)
+		need.Detail = fmt.Sprintf("The container runs, but %s %s not active.", pgJoin(down), verb)
 		need.Actions = []pgAction{logs, power("Reboot…", "reboot")}
 	case cluster.StateStopped:
 		need.Sev, need.Kind = "bad", pgNeedStopped

@@ -72,7 +72,7 @@ The address `/help` opens the same texts as a page of their own, with a search t
 
 | Key | What it does |
 |-----|--------------|
-| `/` or `Ctrl+K` | Open the jump box. On a Mac, `⌘ K`. |
+| `/` or `Ctrl+K` | Open the jump box. On a Mac, `⌘ K`. On Clusters and Nodes, `/` goes to the filter of the list instead. |
 | `?` | Help for the item under the pointer or with the focus, else for the open dialog or the page |
 | `g` then `o`, `c`, `n`, `m`, `p`, `t`, `d` or `a` | Go to Overview, Clusters, Nodes, Mesh and DNS, Monitoring, Topology, Doctor or Activity |
 | `↑` `↓`, `Enter` | Move through the results of the jump box, and open one |

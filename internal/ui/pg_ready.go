@@ -205,7 +205,7 @@ func pgControllerCheck(d *pgClusterView) pgReadyCheck {
 	if d.Slurm.Err != "" {
 		return pgReadyCheck{State: "bad", Title: "The controller does not answer", Detail: "sinfo fails: " + d.Slurm.Err, Actions: pgFixActions(ctls[0])}
 	}
-	c := pgReadyCheck{State: "ok", Title: "The controller answers", Detail: "slurmctld runs on " + pgList(running) + "."}
+	c := pgReadyCheck{State: "ok", Title: "The controller answers", Detail: "slurmctld runs on " + pgJoin(running) + "."}
 	if len(broken) > 0 {
 		c.State, c.Detail = "warn", c.Detail+" "+strings.Join(broken, "; ")+": no failover."
 		c.Actions = pgFixActions(*first)

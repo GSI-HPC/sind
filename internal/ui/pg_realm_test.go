@@ -118,7 +118,7 @@ func TestPgRealmInTheAddress(t *testing.T) {
 	assert.Contains(t, events.Query()["f"], "pg-nodes-table")
 	v := ts.srv.newView(Params{"realm": {"ci"}})
 	v.Nav = "nodes"
-	html, err := ts.srv.renderFragment(ts.srv.reg.fragments["pg-nodes-table"], v)
+	html, err := ts.srv.renderFragment(ts.srv.reg.fragments["pg-nodes-head"], v)
 	require.NoError(t, err)
 	assert.Contains(t, html, `<a href="/nodes?realm=">Show all</a>`)
 
@@ -185,6 +185,6 @@ func TestPgRealmGoneKeepsLiveUpdates(t *testing.T) {
 	st := store.New()
 	st.SetDocker(store.DockerState{Checked: true})
 	v := &View{Params: Params{"realm": {"gone"}}, Snap: st.Snapshot()}
-	require.NoError(t, pgClustersFragment().Load(v))
+	require.NoError(t, pgClustersFragments()[0].Load(v))
 	assert.Empty(t, v.Data.(*pgClusterList).Clusters)
 }

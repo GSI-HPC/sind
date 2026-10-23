@@ -64,7 +64,7 @@
     return !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable || !!(el.closest && el.closest('[role="textbox"]')));
   };
 
-  // Single-key shortcuts: /, ? and the g keys. The root has the class
+  // Single-key shortcuts: /, ? and the g keys; / filters a list page. The root has the class
   // keys-off while they are off, which the help texts show and which hides
   // the key caps of class k1-on; the buttons of the top bar stop naming
   // the keys too.
@@ -81,7 +81,22 @@
       b.title = on ? 'Help (?)' : 'Help';
       if (on) b.setAttribute('aria-keyshortcuts', '?'); else b.removeAttribute('aria-keyshortcuts');
     }
-    for (const b of document.querySelectorAll('[data-palette-open]')) b.setAttribute('aria-keyshortcuts', on ? '/ Control+K' : 'Control+K');
+    // On a list page, / goes to its filter instead (listFilter).
+    const filter = listFilter();
+    for (const b of document.querySelectorAll('[data-palette-open]')) {
+      b.setAttribute('aria-keyshortcuts', on && !filter ? '/ Control+K' : 'Control+K');
+      for (const k of b.querySelectorAll('kbd')) k.hidden = !!filter;
+    }
+    if (filter) {
+      if (on) filter.setAttribute('aria-keyshortcuts', '/'); else filter.removeAttribute('aria-keyshortcuts');
+    }
+  }
+
+  // listFilter returns the filter field of a list page, such as Clusters,
+  // when it shows: / goes there, as the jump box has Ctrl+K too.
+  function listFilter() {
+    const f = document.querySelector('[data-pg-filter]');
+    return f && f.getClientRects().length && !f.closest('[inert]') ? f : null;
   }
   syncKeys();
 
@@ -603,7 +618,12 @@
       return;
     }
     if (typing() || ev.ctrlKey || ev.metaKey || ev.altKey || !keysOn()) return;
-    if (ev.key === '/') { ev.preventDefault(); openJump(''); return; }
+    if (ev.key === '/') {
+      ev.preventDefault();
+      const filter = listFilter();
+      if (filter) { filter.focus(); filter.select(); } else openJump('');
+      return;
+    }
     if (ev.key === '?') { ev.preventDefault(); help(); return; }
     const pending = Date.now() - H.g < 1200;
     if (ev.key === 'g' && !pending) { H.g = Date.now(); chordHint(true); return; }

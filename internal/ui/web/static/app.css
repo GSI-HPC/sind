@@ -178,6 +178,7 @@ table{width:100%;border-collapse:collapse;font-size:var(--t-md)}
 th{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:middle}
 tr:last-child td{border-bottom:0}
+tr[hidden]{display:none}
 tr.click{cursor:pointer}
 tr.click:hover td{background:var(--hover)}
 tr.sel td{background:var(--accent-soft)}

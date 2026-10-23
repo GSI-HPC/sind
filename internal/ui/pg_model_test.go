@@ -29,10 +29,10 @@ func TestPgPlural(t *testing.T) {
 	assert.Equal(t, "0 clusters", pgPlural(0, "cluster", "clusters"))
 	assert.Equal(t, "1 cluster", pgPlural(1, "cluster", "clusters"))
 	assert.Equal(t, "2 clusters", pgPlural(2, "cluster", "clusters"))
-	assert.Empty(t, pgList(nil))
-	assert.Equal(t, "a", pgList([]string{"a"}))
-	assert.Equal(t, "a and b", pgList([]string{"a", "b"}))
-	assert.Equal(t, "a, b and c", pgList([]string{"a", "b", "c"}))
+	assert.Empty(t, pgJoin(nil))
+	assert.Equal(t, "a", pgJoin([]string{"a"}))
+	assert.Equal(t, "a and b", pgJoin([]string{"a", "b"}))
+	assert.Equal(t, "a, b and c", pgJoin([]string{"a", "b", "c"}))
 }
 
 func TestPgDialog(t *testing.T) {

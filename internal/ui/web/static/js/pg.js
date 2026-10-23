@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-// The script of the main pages: clickable table rows, the node selection of a cluster's nodes tab, and Copy for commands.
-// Nothing here evaluates text, and the page holds no inline script.
+// The script of the main pages: clickable table rows, the filter field of
+// the lists, the node selection of a cluster's nodes tab, and Copy for
+// commands. Nothing here evaluates text, and the page holds no inline
+// script.
 (() => {
   'use strict';
 
@@ -34,6 +36,70 @@
       parts.push(nums.length === 1 ? prefix + nums[0] : prefix + '[' + ranges.join(',') + ']');
     }
     return parts.join(' ');
+  }
+
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  // words are the words of the filter field, in lower case.
+  function words() {
+    const f = document.querySelector('[data-pg-filter]');
+    return f ? f.value.toLowerCase().split(/\s+/).filter(Boolean) : [];
+  }
+
+  // filter hides the rows of a list that do not hold every word of the
+  // filter field. When the user typed, it tells screen readers how many
+  // rows match.
+  function filter(typed) {
+    const list = document.querySelector('[data-pg-list]');
+    if (!list) return;
+    const w = words();
+    let shown = 0;
+    const rows = list.querySelectorAll('tr[data-pg-text]');
+    for (const r of rows) {
+      const on = w.every(x => r.dataset.pgText.includes(x));
+      r.hidden = !on;
+      if (on) shown++;
+    }
+    const none = list.querySelector('[data-pg-none]');
+    if (none) none.hidden = shown > 0;
+    if (typed) {
+      const noun = list.dataset.pgList || 'row';
+      const all = plural(rows.length, noun, noun + 's');
+      say(w.length ? shown + ' of ' + all + ' match the filter.' : all + ' shown.');
+    }
+  }
+
+  // say tells screen readers a sentence through the page's polite live
+  // region, once the user stops typing.
+  let sayTimer = 0;
+  function say(text) {
+    const region = document.getElementById('say');
+    if (!region) return;
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => {
+      region.textContent = '';
+      setTimeout(() => { region.textContent = text; }, 60);
+    }, 500);
+  }
+
+  // keepText writes the text of the filter field into the address of the
+  // page and into the links that keep it: the chips, the column heads and
+  // the realms.
+  function keepText(address) {
+    const f = document.querySelector('[data-pg-filter]');
+    if (!f) return;
+    const v = f.value.trim();
+    const set = u => { if (v) u.searchParams.set('q', v); else u.searchParams.delete('q'); };
+    if (address) {
+      const u = new URL(location.href);
+      set(u);
+      history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+    }
+    for (const a of document.querySelectorAll('a[data-pg-keep]')) {
+      const u = new URL(a.href);
+      set(u);
+      a.setAttribute('href', u.pathname + u.search);
+    }
   }
 
   // clusterKey names the cluster whose nodes are selected, so that a
@@ -142,6 +208,29 @@
       }
     });
 
+    document.addEventListener('input', ev => {
+      if (!ev.target.matches('[data-pg-filter]')) return;
+      filter(true);
+      keepText(true);
+    });
+
+    // With the script, the list filters as the user types; Enter has
+    // nothing left to do. Without it, the form asks the server.
+    document.addEventListener('submit', ev => {
+      if (ev.target.matches('[data-pg-filter-form]')) ev.preventDefault();
+    });
+
+    // Escape in the filter field empties it, before the other keys of the
+    // page see it.
+    document.addEventListener('keydown', ev => {
+      const t = ev.target;
+      if (ev.key !== 'Escape' || !t.matches || !t.matches('[data-pg-filter]') || !t.value) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      t.value = '';
+      t.dispatchEvent(new Event('input', { bubbles: true }));
+    }, true);
+
     document.addEventListener('click', ev => {
       const t = ev.target;
       const dlg = t.closest('a[data-pg-dialog]');
@@ -176,9 +265,15 @@
       }
     });
 
+    filter();
     draw();
   });
 
-  // After a live update replaced the table, the selection is drawn again.
-  document.addEventListener('htmx:afterSwap', draw);
+  // After a live update replaced a table, the filter, the links and the
+  // selection are drawn again.
+  document.addEventListener('htmx:afterSwap', () => {
+    filter();
+    keepText(false);
+    draw();
+  });
 })();

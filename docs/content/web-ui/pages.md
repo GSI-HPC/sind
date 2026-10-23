@@ -21,11 +21,15 @@ Every cluster of the realm. sind keeps no list of clusters. It finds them by the
 
 {{< uishot "clusters" >}}
 
+Type in **Filter** to show only the clusters whose name, realm, state or nodes hold every word you type. **Esc** clears it. The chips above the table show the clusters that need a look, those that run, or those with monitoring, each with its count. Select a column head to sort by it, and again to reverse the order. Sort by state puts the clusters that need a look first. The address keeps the filter, the chip and the order, so a link or a reload shows the same list.
+
 ## Nodes
 
 Every node of the realm. A node is named as you type it in commands, such as `worker-0.dev`.
 
 {{< uishot "nodes" >}}
+
+**Filter**, the chips (Needs a look, Running, Not running) and the column heads work as on the Clusters page. Sort by state puts the nodes that are stopped, or that have a service down, first.
 
 ## Cluster
 

@@ -10,7 +10,7 @@
   howtos: [first-cluster, add-workers, job-pending, clean-up]
 - id: clusters
   title: Clusters
-  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels.
+  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels. Filter, pick a chip or sort by a column; the address keeps them.
   route: /clusters
   doc: usage/cluster-lifecycle
   words: [realm, cluster, data]
@@ -24,7 +24,7 @@
   howtos: [job-output, job-pending, add-workers, reach-node, slow-create, clean-up]
 - id: nodes
   title: Nodes
-  summary: Every node of the realm, with its role and state.
+  summary: Every node of the realm, with its role and state. Filter, pick a chip or sort by a column; the address keeps them.
   route: /nodes
   doc: usage/diagnostics#list-nodes
   words: [node-roles, managed, nodeset]

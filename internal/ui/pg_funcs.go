@@ -31,8 +31,8 @@ func pgPlural(n int, one, many string) string {
 	return strconv.Itoa(n) + " " + many
 }
 
-// pgList joins words as a sentence does: "a", "a and b", "a, b and c".
-func pgList(words []string) string {
+// pgJoin joins words as a sentence does: "a", "a and b", "a, b and c".
+func pgJoin(words []string) string {
 	if len(words) < 2 {
 		return strings.Join(words, "")
 	}

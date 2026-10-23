@@ -98,7 +98,7 @@ var helpChords = []helpChord{
 // helpKeys returns every key of sind ui, by where it works.
 func helpKeys() []helpKeyGroup {
 	all := helpKeyGroup{Title: "Everywhere", Keys: []helpKey{
-		{Keys: []string{"/"}, Text: "Jump to a cluster, node, page or help", Single: true},
+		{Keys: []string{"/"}, Text: "Jump to a cluster, node, page or help. On Clusters and Nodes: filter the list.", Single: true},
 		{Keys: []string{"Ctrl", "K"}, Join: "+", Text: "Jump, also when single-key shortcuts are off. On a Mac: ⌘ K."},
 		{Keys: []string{"?"}, Text: "Help for the item under the pointer or with the focus, else for the open dialog or the page", Single: true},
 	}}
