@@ -9,23 +9,23 @@
 .scrim .modal.wide{width:min(880px,100%)}
 .scrim .mh{padding:16px 18px 6px}
 .scrim .mtop{display:flex;gap:10px;align-items:flex-start}
-.scrim .mh h2{font-size:19px;font-weight:700;letter-spacing:-.02em;flex:1;min-width:0;overflow-wrap:anywhere}
+.scrim .mh h2{font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em;flex:1;min-width:0;overflow-wrap:anywhere}
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
 .scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
 .scrim .mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
 .scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
 .scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
-.scrim .fld label,.scrim .fld .lbl{font-size:13px;font-weight:500}
-.scrim .fld input[type=text],.scrim .fld input[type=number],.scrim .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:13px var(--f-mono);width:100%}
-.scrim .hint{font-size:12px;color:var(--muted)}
-.scrim .act-missing{margin:0;font-size:13px}
+.scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}
+.scrim .fld input[type=text],.scrim .fld input[type=number],.scrim .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono);width:100%}
+.scrim .hint{font-size:var(--t-sm);color:var(--muted)}
+.scrim .act-missing{margin:0;font-size:var(--t-md)}
 .scrim .checks{display:grid;gap:8px}
 .scrim .checks label{display:flex;gap:8px;align-items:flex-start}
 .scrim .checks small{color:var(--muted);display:block}
 .scrim .checks.act-nodes label{flex-wrap:wrap}
 .scrim .checks.act-nodes{grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))}
 .scrim .checks.act-nodes small{display:inline}
-.scrim .err{font-size:12px;color:var(--bad)}
+.scrim .err{font-size:var(--t-sm);color:var(--bad)}
 .scrim .err:empty{display:none}
 .scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}
 
@@ -45,30 +45,30 @@
 .scrim .act-nr.act-box{grid-template-columns:18px minmax(0,1fr);border:1px solid var(--line);border-radius:8px}
 .scrim .act-nr input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
 .scrim .act-lab{display:grid;gap:1px;min-width:0}
-.scrim .act-lab b{font:600 12.5px var(--f-mono)}
-.scrim .act-lab small{font:400 11.5px var(--f-mono);color:var(--faint)}
+.scrim .act-lab b{font:600 var(--t-md) var(--f-mono)}
+.scrim .act-lab small{font:400 var(--t-sm) var(--f-mono);color:var(--faint)}
 .scrim .act-nr:has(input[type=checkbox]:not(:checked)) .act-sq{opacity:.4}
 .scrim .act-sq{width:12px;height:12px;border-radius:3px;background:var(--deco)}
 .scrim .act-sq.controller{background:var(--brand)}
 .scrim .act-sq.backup{background:var(--brand-2)}
 .scrim .act-sq.worker{background:var(--brand-sky)}
-.scrim .act-always{font-size:12px;font-weight:600;color:var(--brand-ink);border:1px solid var(--brand);border-radius:99px;padding:1px 8px}
+.scrim .act-always{font-size:var(--t-sm);font-weight:600;color:var(--brand-ink);border:1px solid var(--brand);border-radius:99px;padding:1px 8px}
 .scrim .act-step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
-.scrim .act-step button{width:28px;height:28px;border:0;background:none;cursor:pointer;font-size:15px;color:var(--fg)}
-.scrim .act-step input[type=number]{width:52px;text-align:center;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);border-radius:0;padding:5px 2px;background:var(--panel);font:13px var(--f-mono);-moz-appearance:textfield;appearance:textfield}
+.scrim .act-step button{width:28px;height:28px;border:0;background:none;cursor:pointer;font-size:var(--t-lg);color:var(--fg)}
+.scrim .act-step input[type=number]{width:52px;text-align:center;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);border-radius:0;padding:5px 2px;background:var(--panel);font:var(--t-md) var(--f-mono);-moz-appearance:textfield;appearance:textfield}
 .scrim .act-step input::-webkit-inner-spin-button,.scrim .act-step input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .scrim .act-nr:has(.err:not(:empty)) .act-step{border-color:var(--bad)}
 .scrim .act-seg{align-self:start}
 .scrim .act-seg label{position:relative;display:flex;cursor:pointer;border-right:1px solid var(--line)}
 .scrim .act-seg label:last-child{border-right:0}
 .scrim .act-seg input{position:absolute;opacity:0;width:1px;height:1px}
-.scrim .act-seg span{padding:5px 10px;color:var(--muted);font-size:13px}
+.scrim .act-seg span{padding:5px 10px;color:var(--muted);font-size:var(--t-md)}
 .scrim .act-seg input:checked+span{background:var(--accent-soft);color:var(--fg);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
 .scrim .act-seg input:checked+span::before{content:"✓ "}
 .scrim .act-seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:-2px}
 .scrim input[readonly]{opacity:.55}
 .scrim .act-groups{display:contents}
-.scrim .act-cz{border:1px solid var(--line);border-radius:99px;background:var(--panel);padding:2px 9px;font:12px var(--f-mono);color:var(--muted);cursor:pointer;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.scrim .act-cz{border:1px solid var(--line);border-radius:99px;background:var(--panel);padding:2px 9px;font:var(--t-sm) var(--f-mono);color:var(--muted);cursor:pointer;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .scrim .act-cz .own{color:var(--accent);font-weight:600}
 .scrim .act-cz::after{content:" ▾"}
 .scrim .act-cz[aria-expanded=true]::after{content:" ▴"}
@@ -77,20 +77,20 @@
 .scrim .act-ned{display:grid;gap:8px;padding:10px 12px 12px 40px;border-top:1px dashed var(--line-2);background:var(--panel-2)}
 .scrim .act-ned[hidden]{display:none}
 .scrim .act-edg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.scrim .act-edg label{font-size:12px}
+.scrim .act-edg label{font-size:var(--t-sm)}
 .scrim .act-full{grid-column:1/-1}
-.scrim .act-more>summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
+.scrim .act-more>summary{cursor:pointer;font-size:var(--t-md);color:var(--muted)}
 .scrim .act-more[open]>summary{margin-bottom:8px}
 .scrim .act-more .act-edg{grid-template-columns:repeat(2,minmax(0,1fr))}
 .scrim .act-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
 .scrim .act-ned .act-inline{margin-top:0;justify-content:space-between}
 .scrim .act-k{display:inline-flex;gap:4px;align-items:center}
-.scrim .act-x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:13px;padding:4px 6px;border-radius:var(--r)}
+.scrim .act-x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:var(--t-md);padding:4px 6px;border-radius:var(--r)}
 .scrim .act-x:hover{color:var(--bad)}
 .scrim .act-groups:not(:has(.act-wgrow~.act-wgrow)) .act-x{display:none}
 .scrim .act-size{display:grid;gap:8px}
 .scrim .act-sizes span{display:grid;line-height:1.3}
-.scrim .act-sizes small{font:11px var(--f-mono);color:var(--faint);font-weight:400}
+.scrim .act-sizes small{font:var(--t-xs) var(--f-mono);color:var(--faint);font-weight:400}
 .scrim .act-sizes input:checked+span::before{content:none}
 .scrim .act-size:not(:has(input[name=size][value=x]:checked)) .act-custom{display:none}
 .scrim .act-sec{border:1px solid var(--line);border-radius:8px;min-width:0}
@@ -99,8 +99,8 @@
 .scrim .act-sec>summary::before{content:"▸";color:var(--muted);width:10px}
 .scrim .act-sec[open]>summary::before{content:"▾"}
 .scrim .act-st{font-weight:600;white-space:nowrap}
-.scrim .act-ss{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:12px var(--f-mono)}
-.scrim .act-sb{color:var(--bad);font-size:12px;font-weight:600;white-space:nowrap}
+.scrim .act-ss{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:var(--t-sm) var(--f-mono)}
+.scrim .act-sb{color:var(--bad);font-size:var(--t-sm);font-weight:600;white-space:nowrap}
 .scrim .act-waits{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .scrim .act-waits input[type=text]{width:120px}
 .scrim .act-waits:not(:has(input[value=other]:checked)) input[type=text]{display:none}
@@ -110,18 +110,18 @@
 .scrim .act-row{display:grid;gap:4px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2)}
 .scrim .act-rowf{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:6px;align-items:center}
 .scrim #act-rows-group .act-rowf,.scrim #act-rows-account>.act-row>.act-rowf,.scrim .act-lim{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
-.scrim .act-rowf input,.scrim .act-rowf select{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);font:13px var(--f-mono);width:100%;min-width:0}
+.scrim .act-rowf input,.scrim .act-rowf select{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);font:var(--t-md) var(--f-mono);width:100%;min-width:0}
 .scrim .act-row .act-more .fld input,.scrim .act-row .act-more .fld select{background:var(--panel)}
 .scrim .act-lims{display:grid;gap:4px;padding-left:14px}
 .scrim .act-lims:empty{display:none}
 .scrim .act-row>.btn.sm{justify-self:start}
 .scrim [aria-invalid=true]{border-color:var(--bad)}
-.scrim .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:12.5px/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
+.scrim .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
 .scrim .act-sl{display:none}
 .scrim .act-yamled{display:grid;gap:8px}
 .scrim .act-yamled[hidden]{display:none}
 .scrim .act-yamlbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.scrim .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:12.5px/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
+.scrim .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
 .scrim .act-form.act-yamlmode>:not(#act-yamled,#act-sec-run){display:none}
 .scrim .act-cfgh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .scrim .act-cfgh .btn{margin-left:auto;text-transform:none;letter-spacing:0}
@@ -145,7 +145,7 @@
 .scrim .act-probs ul{margin:4px 0 0;padding-left:18px}
 .scrim .act-probs a{color:var(--bad);font-weight:600}
 .scrim .act-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:5px}
-.scrim .act-tile{border:1px solid var(--line);border-left:4px solid var(--deco);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 11.5px var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scrim .act-tile{border:1px solid var(--line);border-left:4px solid var(--deco);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 var(--t-sm) var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scrim .act-tile.controller{border-left-color:var(--brand)}
 .scrim .act-tile.controller-backup{border-left-color:var(--brand-2);border-left-style:dashed}
 .scrim .act-tile.worker{border-left-color:var(--brand-sky)}
@@ -156,8 +156,8 @@
 .scrim .act-status{margin-right:auto;display:flex;align-items:center}
 .scrim .act-imgs{display:grid;gap:6px}
 .scrim .act-img{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel)}
-.scrim .act-img .mono{font-size:12px;overflow-wrap:anywhere}
-.scrim .act-img small{color:var(--muted);font-size:11.5px}
+.scrim .act-img .mono{font-size:var(--t-sm);overflow-wrap:anywhere}
+.scrim .act-img small{color:var(--muted);font-size:var(--t-sm)}
 .scrim .act-img .act-ver{color:var(--fg)}
 .scrim .act-img .btn{justify-self:start;margin-top:2px}
 .scrim .act-img .btn.htmx-request::after{content:" …"}
