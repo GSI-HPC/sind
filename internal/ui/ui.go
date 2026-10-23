@@ -102,7 +102,7 @@ func Run(ctx context.Context, o Options) error {
 	var inst *launch.Instance
 	if o.RuntimeDir != "" && !o.Demo {
 		var err error
-		if inst, err = launch.Acquire(o.RuntimeDir, "sind"); err != nil {
+		if inst, err = launch.Acquire(ctx, o.RuntimeDir, "sind"); err != nil {
 			return fmt.Errorf("preparing the runtime directory: %w", err)
 		}
 		// The lock is dropped once the record is written, or on an error.
@@ -173,7 +173,7 @@ func Run(ctx context.Context, o Options) error {
 		if err := inst.Publish(url); err != nil {
 			return fmt.Errorf("recording the running sind ui: %w", err)
 		}
-		defer func() { _ = inst.Retire() }()
+		defer func() { _ = inst.Retire(ctx) }()
 	}
 	_, _ = fmt.Fprintf(o.Stderr, "sind ui: %s\nPress Ctrl-C to stop.\n", url)
 	if o.Demo {

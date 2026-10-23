@@ -177,10 +177,10 @@ func forEachContainer(ctx context.Context, targets []powerTarget, verb string, o
 		Limit:    powerConcurrency,
 		Program:  program,
 		PanicLog: panicLog(ctx),
-		Describe: func(t powerTarget) fanout.Item {
-			return fanout.Item{Node: t.node, Role: t.role}
+		Describe: func(t powerTarget) fanout.ItemInfo {
+			return fanout.ItemInfo{Node: t.node, Role: t.role}
 		},
-		Summarize: joinFailures(func(f fanout.Failed) error {
+		Summarize: joinFailures(func(f fanout.FailedItem) error {
 			return fmt.Errorf("%s %s: %w", verb, containers[f.Name], f.Err)
 		}),
 	}, func(ctx context.Context, t powerTarget) (struct{}, error) {

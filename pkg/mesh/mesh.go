@@ -182,7 +182,7 @@ func (m *Manager) ComposeProject() string {
 // not seen to because one before it failed ends canceled with the step.
 func (m *Manager) EnsureMesh(ctx context.Context) (err error) {
 	ctx, step := progress.Start(ctx, progress.KindStep, "mesh",
-		progress.WithFlags(progress.Hidden|progress.Fold|progress.ShowLines), progress.Total(4))
+		progress.Flagged(progress.FlagHidden|progress.FlagFold|progress.FlagShowLines), progress.Total(4))
 	defer func() { step.End(err) }()
 	log := sindlog.From(ctx)
 	log.InfoContext(ctx, "ensuring mesh infrastructure", "realm", m.Realm)

@@ -197,9 +197,9 @@ func startMonitoring(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 func forgetMonitoredNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cluster string, nodes ...string) {
 	var flags progress.Flags
 	if cluster == "" {
-		flags = progress.Hidden
+		flags = progress.FlagHidden
 	}
-	ctx, end := startStep(ctx, "monitoring", progress.WithFlags(flags))
+	ctx, end := startStep(ctx, "monitoring", progress.Flagged(flags))
 	defer end(nil) // failures are warnings
 	realm := meshMgr.Realm
 	warn := func(err error) {
@@ -250,7 +250,7 @@ func otherMonitoredClusters(ctx context.Context, client *docker.Client, realm, c
 // It is the hidden progress step "monitoring stack": a realm without a
 // stack has nothing for it to do.
 func removeMonitoringContainers(ctx context.Context, client *docker.Client, realm string) (err error) {
-	ctx, end := startStep(ctx, "monitoring stack", progress.WithFlags(progress.Hidden))
+	ctx, end := startStep(ctx, "monitoring stack", progress.Flagged(progress.FlagHidden))
 	defer func() { end(err) }()
 	if err := observability.NewManager(client, realm).Remove(ctx); err != nil {
 		return fmt.Errorf("removing the monitoring stack: %w", err)
@@ -263,7 +263,7 @@ func removeMonitoringContainers(ctx context.Context, client *docker.Client, real
 //
 // It is the hidden progress step "monitoring volumes".
 func removeMonitoringVolumes(ctx context.Context, client *docker.Client, realm string) (err error) {
-	ctx, end := startStep(ctx, "monitoring volumes", progress.WithFlags(progress.Hidden))
+	ctx, end := startStep(ctx, "monitoring volumes", progress.Flagged(progress.FlagHidden))
 	defer func() { end(err) }()
 	if err := observability.NewManager(client, realm).RemoveVolumes(ctx); err != nil {
 		return fmt.Errorf("removing the monitoring stack's volumes: %w", err)

@@ -117,9 +117,9 @@ func parseLines(ctx context.Context, stdout, stderr string) {
 		}
 	}
 	if !cmdexec.StdoutIsData(ctx) {
-		feed(progress.Stdout, stdout)
+		feed(progress.StreamStdout, stdout)
 	}
-	feed(progress.Stderr, stderr)
+	feed(progress.StreamStderr, stderr)
 }
 
 // Run implements cmdexec.Executor.

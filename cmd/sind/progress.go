@@ -82,9 +82,9 @@ const (
 //     each frame with Run.Draw, once it has moved displayClock on.
 var (
 	onTerminal    = func(w io.Writer) bool { return isTerminal(w) }
-	intoPipe      = cliprogress.IsPipe
-	terminalSize  = cliprogress.TerminalSize
-	inForeground  = cliprogress.InForeground
+	intoPipe      = func(w io.Writer) bool { return cliprogress.IsPipe(w) }
+	terminalSize  = func(w io.Writer) (int, int, error) { return cliprogress.TerminalSize(w) }
+	inForeground  = func(w io.Writer) bool { return cliprogress.InForeground(w) }
 	colourProfile = func(w io.Writer) termenv.Profile { return lipgloss.NewRenderer(w).ColorProfile() }
 	displayClock  = time.Now
 	startRun      = cliprogress.Start
@@ -310,7 +310,7 @@ func progressTheme(stderr io.Writer) display.Theme {
 // to, the realm lock's and the mesh's among them; and the logger, rebuilt
 // on the terminal's Lines, which writes its records above the display
 // whatever goroutine logs them, in the colours the terminal takes.
-func throughDisplay(cmd *cobra.Command, p *cliprogress.Run) (context.Context, func()) {
+func throughDisplay(cmd *cobra.Command, p *cliprogress.Session) (context.Context, func()) {
 	ctx := p.Context()
 	if p.Mode() == cliprogress.ModeNone {
 		return ctx, func() {}
