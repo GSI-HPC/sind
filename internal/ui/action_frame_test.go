@@ -26,7 +26,7 @@ func TestActDialog_Frame(t *testing.T) {
 	for _, want := range []string{
 		`role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"`,
 		`<h2 id="act-title">Add workers to dev</h2>`, `<p id="act-lead">New workers take`,
-		`<div class="scrim" id="act-dialog" data-act-scrim>`,
+		`<div class="scrim" id="act-dialog" hx-ext="ignore:morph" data-act-scrim>`,
 		`<div class="mf" id="act-mf">`,
 		`<div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>`,
 		`<span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span>`,
@@ -43,7 +43,7 @@ func TestActDialog_Frame(t *testing.T) {
 	// New cluster keeps a draft, does not close on a click beside it, and
 	// has the status in its footer, which act.js says when it changes.
 	body = f.get("/dialogs/create-cluster").Body.String()
-	assert.Contains(t, body, `<div class="scrim" id="act-dialog">`)
+	assert.Contains(t, body, `<div class="scrim" id="act-dialog" hx-ext="ignore:morph">`)
 	assert.Contains(t, body, `tabindex="-1" data-act-draft="create-cluster"`)
 	assert.Contains(t, body, `<span class="act-vh" id="act-say" role="status"></span>`)
 	assert.Contains(t, body, `<div class="act-form">`)

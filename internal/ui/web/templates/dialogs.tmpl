@@ -13,10 +13,13 @@
 
 {{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
 
+{{/* A dialog ignores the morph extension of the page, which a dialog shown
+as a page of its own sits in: with it, htmx would put each element that
+hx-swap-oob="innerHTML" swaps into its target, not its content. */}}
 {{define "act-dialog-page"}}{{template "act-frame" .Data}}{{end}}
 
 {{define "act-frame"}}
-<div class="scrim" id="act-dialog"{{if not .Spec.Draft}} data-act-scrim{{end}}>
+<div class="scrim" id="act-dialog" hx-ext="ignore:morph"{{if not .Spec.Draft}} data-act-scrim{{end}}>
 <form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"
   {{- if .Spec.Draft}} data-act-draft="{{.ID}}"{{end}}{{if .Draft}} data-act-restored{{end}}
   hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
