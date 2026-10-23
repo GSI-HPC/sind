@@ -5,9 +5,9 @@
 // new cluster, the directory that follows the name, the pull that follows
 // the image, Edit YAML, the links to a field with a problem, the Copy
 // button, and the frame of every dialog: the focus, which stays in the
-// dialog and goes back to the button that opened it, the status, and the
-// notice of a command that started. The dialogs are the server's HTML,
-// which htmx puts into #layer; nothing here evaluates text.
+// dialog and goes back to the button that opened it, Enter and Ctrl+Enter,
+// the status, and the notice of a command that started. The dialogs are the
+// server's HTML, which htmx puts into #layer; nothing here evaluates text.
 (() => {
   'use strict';
 
@@ -17,8 +17,9 @@
   const inPage = d => !d.closest('#layer');
 
   // A touch screen gets no focus in a field when a dialog opens, as its
-  // keyboard would cover the dialog.
+  // keyboard would cover the dialog. macOS shows Cmd in place of Ctrl.
   const touch = () => matchMedia('(pointer: coarse)').matches;
+  if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) document.documentElement.classList.add('act-mac');
 
   // What the open dialog needs: the element that opened it and how to find
   // it again after a swap, the element in it that had the focus last, the
@@ -141,6 +142,28 @@
       document.documentElement.style.setProperty('--act-mf-h', (f ? f.offsetHeight : 0) + 'px');
     });
     for (const f of d.querySelectorAll('.mf')) ro.observe(f);
+  }
+
+  // fields counts the fields of a form, a group of radio buttons or
+  // checkboxes of one name as one.
+  function fields(form) {
+    const names = new Set();
+    for (const el of form.elements) {
+      if (el.disabled || !el.name || el.tagName === 'BUTTON' || /^(hidden|button|submit|reset|image)$/.test(el.type)) continue;
+      names.add(el.name);
+    }
+    return names.size;
+  }
+
+  // submit presses the button of the dialog, or, while the command cannot
+  // run, goes to the first problem, or to the name to type.
+  function submit(form) {
+    const ok = form.querySelector('#act-ok');
+    if (ok && !ok.disabled) { form.requestSubmit(ok); return; }
+    const go = form.querySelector('[data-act-go]');
+    if (go) { go.click(); return; }
+    const bad = form.querySelector('[aria-invalid=true], #act-confirm');
+    if (bad) bad.focus();
   }
 
   // field returns the control of the form named name: the first one of a
@@ -377,7 +400,9 @@
 
   // Esc closes the dialog. In the help pane over a dialog, it closes the
   // pane, and the focus goes back into the dialog; the jump box takes its
-  // own.
+  // own. Enter does not run the command of a dialog with more than one
+  // field, as it would without a look at it; Ctrl+Enter, or Cmd+Enter,
+  // does in every dialog.
   document.addEventListener('keydown', ev => {
     const form = formOf();
     const t = ev.target;
@@ -394,7 +419,15 @@
     if (ev.key === 'Escape') {
       ev.preventDefault();
       close();
+      return;
     }
+    if (ev.key !== 'Enter' || ev.isComposing || !form.contains(t)) return;
+    if (ev.ctrlKey || ev.metaKey) {
+      ev.preventDefault();
+      submit(form);
+      return;
+    }
+    if (t instanceof HTMLInputElement && !/^(button|submit|reset|image)$/.test(t.type) && fields(form) > 1) ev.preventDefault();
   });
 
   // A field with a problem says so to assistive technology too.

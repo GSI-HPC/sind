@@ -65,7 +65,7 @@ func TestHelpCoversTheUI(t *testing.T) {
 func TestHelpPane(t *testing.T) {
 	ts := helpServer(t)
 	for target, want := range map[string][]string{
-		"/help":                                {`data-crumb="This page"`, "<h2>Overview</h2>", `data-help-topic="word/realm"`, `data-help-topic="howto/first-cluster"`, "<kbd>?</kbd>"},
+		"/help":                                {`data-crumb="This page"`, "<h2>Overview</h2>", `data-help-topic="word/realm"`, `data-help-topic="howto/first-cluster"`, "<kbd>?</kbd>", "<kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run the command of the dialog"},
 		"/help?topic=%2F":                      {"<h2>Overview</h2>"},
 		"/help?topic=%2Fclusters%2Fsind%2Fdev": {"<h2>Cluster</h2>", `data-help-topic="word/node-roles"`},
 		"/help?topic=%2Fno%2Fsuch%2Fpage":      {"<h2>Overview</h2>"},

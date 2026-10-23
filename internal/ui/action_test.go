@@ -255,7 +255,7 @@ func TestActPreview_ShowsTheCommand(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, `<code>sind power on &#39;worker-[0-1].dev&#39;</code>`)
 	assert.Contains(t, body, `data-copy="sind power on &#39;worker-[0-1].dev&#39;"`)
-	assert.Contains(t, body, `id="act-ok" hx-swap-oob="true">Run</button>`)
+	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Run<kbd`)
 	assert.NotContains(t, body, `disabled`)
 	assert.NotContains(t, body, "act-yaml")
 }
@@ -280,7 +280,7 @@ func TestActPreview_Refusals(t *testing.T) {
 	body := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-9")).Body.String()
 	assert.Contains(t, body, `callout bad`)
 	assert.Contains(t, body, "nodes: cluster dev has no node worker-9")
-	assert.Contains(t, body, `disabled>Run</button>`)
+	assert.Contains(t, body, `disabled>Run<kbd`)
 	assert.NotContains(t, body, `name="shown"`)
 
 	// A value that the form lacks is a hint, not an error.
@@ -297,7 +297,7 @@ func TestActPreview_Refusals(t *testing.T) {
 
 	// The typed confirmation unlocks the button.
 	del := actForm("cluster", "dev")
-	assert.Contains(t, f.post("/actions/delete-cluster/preview", del).Body.String(), `disabled>Delete</button>`)
+	assert.Contains(t, f.post("/actions/delete-cluster/preview", del).Body.String(), `disabled>Delete<kbd`)
 	assert.NotContains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=dev").Body.String(), `disabled`)
 }
 
@@ -329,7 +329,7 @@ func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
 	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/hpc.yaml</span>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
 	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML"></span>`)
-	assert.Contains(t, body, `id="act-ok" hx-swap-oob="true">Create</button>`)
+	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Create<kbd`)
 	assert.Contains(t, body, "kind: Cluster\nname: hpc\n")
 	assert.Contains(t, body, "- name: ada")
 	assert.Contains(t, body, "saves the config to /state/sind/ui/configs/hpc.yaml")
@@ -556,7 +556,7 @@ func TestActRun_RefusesTheFormThatDoesNotBuild(t *testing.T) {
 	assert.Equal(t, "innerHTML", w.Header().Get("HX-Reswap"))
 	assert.Contains(t, w.Body.String(), `<div class="callout bad">Pick at least one node of dev.</div>`)
 	assert.NotContains(t, w.Body.String(), "act-missing")
-	assert.Contains(t, w.Body.String(), "disabled>Run</button>")
+	assert.Contains(t, w.Body.String(), "disabled>Run<kbd")
 	assert.Empty(t, f.starter.specs)
 }
 
@@ -888,7 +888,7 @@ func TestActPreview_NewClusterShowsThePlanWithProblems(t *testing.T) {
 	assert.Contains(t, body, "The plan takes the defaults for CPUs per node until you fix them.")
 	assert.Contains(t, body, `<span class="act-tile more">6 more</span>`, "21 nodes show as 15 tiles and the rest")
 	assert.Contains(t, body, "kind: Cluster\nname: dev\n", "the plan still shows the config")
-	assert.Contains(t, body, `disabled>Create</button>`)
+	assert.Contains(t, body, `disabled>Create<kbd`)
 }
 
 func TestActPreview_NewClusterThatCannotBuild(t *testing.T) {

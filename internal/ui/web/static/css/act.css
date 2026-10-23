@@ -19,6 +19,13 @@
 .scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
 .scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
 .scrim .act-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* The button that runs the command shows its key, Ctrl+Enter or on macOS
+   Cmd+Enter, where there is a keyboard. */
+.scrim .act-kbd{margin-left:2px;background:transparent;color:inherit;border-color:currentColor;opacity:.7}
+.scrim .act-k-cmd,.act-mac .scrim .act-k-ctrl{display:none}
+.act-mac .scrim .act-k-cmd{display:inline}
+@media (hover:none) and (pointer:coarse){.scrim .act-kbd{display:none}}
 .scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
 .scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
 .scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}

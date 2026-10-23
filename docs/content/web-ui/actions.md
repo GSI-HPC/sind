@@ -14,7 +14,7 @@ Action buttons open a dialog. The dialog shows:
 - a **Copy** button for that command;
 - whether you can undo the action.
 
-Press the button of the dialog, such as **Create**, **Add**, **Run** or **Delete**, to start the command. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
+Press the button of the dialog, such as **Create**, **Add**, **Run** or **Delete**, or press Ctrl+Enter (Cmd+Enter on macOS), to start the command. Enter in a field does not start it, unless the dialog has only that field, such as the name to type for a delete. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
 
 When the command starts, the dialog closes and you stay on your page. A notice names the command and links to its run page, and the task dock shows its progress, so you can start the next action at once. **New cluster** opens the run page of its command instead, and so does **Delete** on the page of the cluster that it deletes, or on the page of one of its nodes.
 

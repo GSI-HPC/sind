@@ -13,8 +13,8 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
-// The frame of every dialog: its name and description, and the dialog
-// itself, which takes the focus on a touch screen.
+// The frame of every dialog: its name and description, the dialog itself,
+// which takes the focus on a touch screen, and the button with its key.
 func TestActDialog_Frame(t *testing.T) {
 	f := newActFixture(t)
 
@@ -23,10 +23,12 @@ func TestActDialog_Frame(t *testing.T) {
 		`role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"`,
 		`<h2 id="act-title">Add workers to dev</h2>`, `<p id="act-lead">New workers take`,
 		`<div class="scrim" id="act-dialog" data-act-scrim>`,
+		`<button type="submit" class="btn primary" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" disabled>Add<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>`,
 	} {
 		assert.Contains(t, body, want)
 	}
 	assert.NotContains(t, body, "aria-label=\"Add workers")
+	assert.Contains(t, f.get("/dialogs/delete-cluster?cluster=dev").Body.String(), `class="btn danger solid" id="act-ok"`)
 }
 
 func TestActDialog_LayoutHasTheNotices(t *testing.T) {

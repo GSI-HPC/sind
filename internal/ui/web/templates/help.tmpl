@@ -14,7 +14,7 @@ sind help TOPIC prints too. */}}
 {{if eq .Kind "page"}}<div class="kind">This page</div><h2>{{.Page.Title}}</h2><p class="lead">{{.Page.Summary}}</p>
 {{with .Words}}<div><h3>Words on this page</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}
 {{with .Howtos}}<div><h3>How do I…</h3><ul>{{range .}}<li><button type="button" class="link" data-help-topic="howto/{{.ID}}">{{.Title}}</button></li>{{end}}</ul></div>{{end}}
-<div><h3>Keys</h3><dl class="keys"><dt><kbd>/</kbd></dt><dd>Jump to a cluster, node or page</dd><dt><kbd>?</kbd></dt><dd>Help for what the pointer is on</dd><dt><kbd>g</kbd> <kbd>a</kbd></dt><dd>Go to Activity; <kbd>c</kbd> Clusters, <kbd>n</kbd> Nodes, <kbd>o</kbd> Overview, <kbd>d</kbd> Doctor</dd><dt><kbd>Esc</kbd></dt><dd>Close the card, the dialog or this pane</dd></dl></div>
+<div><h3>Keys</h3><dl class="keys"><dt><kbd>/</kbd></dt><dd>Jump to a cluster, node or page</dd><dt><kbd>?</kbd></dt><dd>Help for what the pointer is on</dd><dt><kbd>g</kbd> <kbd>a</kbd></dt><dd>Go to Activity; <kbd>c</kbd> Clusters, <kbd>n</kbd> Nodes, <kbd>o</kbd> Overview, <kbd>d</kbd> Doctor</dd><dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run the command of the dialog; <kbd>⌘</kbd> <kbd>Enter</kbd> on macOS</dd><dt><kbd>Esc</kbd></dt><dd>Close the card, the dialog or this pane</dd></dl></div>
 {{template "help-more" .}}
 {{else if eq .Kind "word"}}<div class="kind">Word</div><h2>{{.Word.Title}}</h2><p class="lead">{{.Word.Summary}}</p>
 {{with .Word.Command}}<div><div class="cmdlabel">In a terminal</div>{{template "help-cmd" .}}</div>{{end}}

@@ -651,6 +651,20 @@ type actDialog struct {
 	Lock *state.LockHolder
 }
 
+// actOK is the button of a dialog that runs the command.
+type actOK struct {
+	Label string
+	// Danger paints it red, Off disables it, and Swap marks it as a part of
+	// a preview that takes the place of the button of the dialog.
+	Danger, Off, Swap bool
+}
+
+// OKButton is the button that runs the command, off until a preview says
+// that it can run.
+func (d *actDialog) OKButton() actOK {
+	return actOK{Label: d.Spec.OK, Danger: d.Spec.Danger, Off: true}
+}
+
 // actChoice is an option of a select.
 type actChoice struct{ Value, Label string }
 
@@ -831,6 +845,11 @@ type actPreview struct {
 	// command will wait for it.
 	Realm string
 	Lock  *state.LockHolder
+}
+
+// OKButton is the button that runs the command, as the preview says.
+func (p actPreview) OKButton() actOK {
+	return actOK{Label: p.Spec.OK, Danger: p.Danger, Off: p.Blocked, Swap: true}
 }
 
 // actMaxTiles is the most nodes that a plan draws one by one.

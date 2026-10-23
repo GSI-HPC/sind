@@ -34,11 +34,16 @@
     {{template "act-preview-slot" .}}
   </div>
   {{end}}
-  <div class="mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button><button type="submit" class="btn {{if .Spec.Danger}}danger solid{{else}}primary{{end}}" id="act-ok" disabled>{{.Spec.OK}}</button></div>
+  <div class="mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
   {{if .Spec.Plan}}<span class="act-vh" id="act-say" role="status"></span>{{end}}
 </form>
 </div>
 {{end}}
+
+{{/* act-ok is the button that runs the command, an actOK. It is off until
+a preview says that the command can run, and each preview swaps it.
+Ctrl+Enter, or Cmd+Enter on macOS, presses it. */}}
+{{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}>{{.Label}}<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
 
 {{define "act-preview-slot"}}<div id="act-preview" class="stack" hx-post="/actions/{{.ID}}/preview" hx-target="this" hx-swap="innerHTML"
       hx-trigger="load, input from:closest form delay:150ms, change from:closest form"></div>{{end}}
@@ -53,7 +58,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{end}}
 {{template "act-callouts" .}}
 {{end}}
-<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" hx-swap-oob="true"{{if .Blocked}} disabled{{end}}>{{.Spec.OK}}</button>
+{{template "act-ok" .OKButton}}
 {{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
 {{if .Spec.Plan}}{{range .NodeViews}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}} hx-swap-oob="true">{{.Chip}}</span>{{if .Group}}<span class="hint" id="act-range-{{.Key}}" hx-swap-oob="true">{{$p.RangeOf .Key}}</span>{{end}}{{end}}
 {{with .Eff}}<span id="act-eff" hidden hx-swap-oob="true" data-image="{{.Image}}" data-cpus="{{.CPUs}}" data-memory="{{.Memory}}" data-tmp="{{.TmpSize}}"></span>{{end}}
