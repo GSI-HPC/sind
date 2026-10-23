@@ -313,11 +313,13 @@ func TestMoreDoctorPage(t *testing.T) {
 		"Doctor", "Docker Engine 28.5.1", "cgroup v2", "1 failed", "1 warning", "checked 3 min ago",
 		`<span class="more-mark ok"`, `<span class="more-mark warn"`, `<span class="more-mark bad"`, `<span class="more-mark "`, ">?</span>",
 		`<span class="pill warn nodot">warning</span>`, `<span class="pill bad nodot">failed</span>`, `<span class="pill ok nodot">ok</span>`,
-		"sudo sysctl fs.inotify.max_user_instances=1024", "Raise the limit now:", "data-more-copy", `<code class="nop">`,
-		"Check again", `action="/doctor/check"`, `name="csrf" value="` + ts.csrf + `"`, "A failed check stops create",
+		`<p class="more-fixtext">Raise the limit now:</p>`, `<code>sudo sysctl fs.inotify.max_user_instances=1024</code><button type="button" data-more-copy>Copy</button>`,
+		"Check again", `action="/doctor/check"`, `name="csrf" value="` + ts.csrf + `"`,
+		`<div class="callout more-verdict bad" role="status"><b>Not ready: sind cannot create clusters on this host.</b> Fix the failed check first.`,
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, "<code>Raise", "Copy takes the command, not the sentence before it")
 	assert.NotContains(t, body, "not reachable")
 	assert.NotContains(t, body, "disabled>Check again")
 	assert.Zero(t, *calls)
@@ -329,10 +331,59 @@ func TestMoreDoctorPage(t *testing.T) {
 	assert.Contains(t, body, "just now")
 
 	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}, {Name: "x", Status: "warning"}, {Name: "y", Status: "warning"}}})
-	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "2 warnings")
+	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	assert.Contains(t, body, "2 warnings")
+	assert.Contains(t, body, "<b>Ready: sind can create clusters on this host.</b> The 2 warnings do not stop sind")
 
 	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}}})
-	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "all passed")
+	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	assert.Contains(t, body, "all passed")
+	assert.Contains(t, body, `more-verdict ok" role="status"><b>Ready: sind can create clusters on this host.</b> Every check passed.`)
+
+	// A multi-line command has no prompt.
+	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker host", Status: "warning",
+		Remediation: "Point the docker CLI here:\n\nunset DOCKER_HOST\ndocker context use default"}}})
+	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "<code class=\"nop\">unset DOCKER_HOST\ndocker context use default</code>")
+}
+
+func TestMoreFixSteps(t *testing.T) {
+	assert.Nil(t, moreFixSteps(""))
+	assert.Equal(t, []moreFixStep{
+		{Text: []string{"Raise the limit now:"}, Cmd: "sudo sysctl fs.inotify.max_user_instances=1024"},
+		{Text: []string{"Keep it across reboots:"}, Cmd: "echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf"},
+	}, moreFixSteps("Raise the limit now:\r\n\r\n  sudo sysctl fs.inotify.max_user_instances=1024  \n\n\nKeep it across reboots:\n\n"+
+		"echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf\n"))
+	// Sentences that start in lower case end like sentences; a heredoc
+	// keeps its indent; words with no command after them are a step too.
+	assert.Equal(t, []moreFixStep{
+		{Text: []string{"sind starts its nodes with options that Docker refuses here.\nRemove them and restart the daemon:"},
+			Cmd: "sudo tee /x <<'R'\n  rule\nR"},
+		{Text: []string{"Install Docker Engine 28 or later: https://docs.docker.com/engine/install/", "Then log in again."}},
+	}, moreFixSteps("sind starts its nodes with options that Docker refuses here.\nRemove them and restart the daemon:\n\n"+
+		"sudo tee /x <<'R'\n  rule\nR\n\nInstall Docker Engine 28 or later: https://docs.docker.com/engine/install/\n\nThen log in again."))
+	assert.Equal(t, "a\n\n\tb", moreDedent("\t\ta\n\n\t\t\tb\n"))
+	assert.Equal(t, "", moreDedent(" \n\t"))
+	assert.False(t, moreFixStep{Cmd: "a"}.Multi())
+}
+
+func TestMoreDoctorVerdict(t *testing.T) {
+	for _, tc := range []struct {
+		d           moreDoctorData
+		class, want string
+	}{
+		{moreDoctorData{Running: true}, "run", "Checking this host"},
+		{moreDoctorData{CanRecheck: true}, "", "Press Check again"},
+		{moreDoctorData{}, "", "Run sind doctor in a terminal"},
+		{moreDoctorData{HasReport: true, Failures: 1, Warnings: 3}, "bad", "Fix the failed check first. Create and power on stop until it passes."},
+		{moreDoctorData{HasReport: true, Failures: 2}, "bad", "Fix the 2 failed checks first. Create and power on stop until they pass."},
+		{moreDoctorData{HasReport: true, Warnings: 1}, "ok", "The warning does not stop sind, but read its fix."},
+		{moreDoctorData{HasReport: true, Warnings: 2}, "ok", "The 2 warnings do not stop sind, but read their fixes."},
+		{moreDoctorData{HasReport: true, Running: true}, "ok", "Every check passed."},
+	} {
+		v := moreDoctorVerdict(tc.d)
+		assert.Equal(t, tc.class, v.Class, tc.want)
+		assert.Contains(t, v.Title+" "+v.Text, tc.want)
+	}
 }
 
 func TestMoreDoctorEmptyStates(t *testing.T) {

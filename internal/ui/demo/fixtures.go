@@ -109,7 +109,8 @@ func Checks() []store.DoctorCheck {
 		{Name: "Docker host", Status: "ok", Detail: "local daemon at unix:///var/run/docker.sock"},
 		{Name: "cgroup v2", Status: "ok", Detail: "cgroup2 with nsdelegate"},
 		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_instances is 128; 9 nodes and more can run out",
-			Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
+			Remediation: "Raise the limit now:\n\nsudo sysctl fs.inotify.max_user_instances=1024\n\n" +
+				"Keep it across reboots:\n\necho fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf"},
 		{Name: "DNS policy", Status: "ok", Detail: "systemd-resolved forwards *.sind to sind-dns"},
 	}
 }

@@ -17,7 +17,7 @@ sind doctor
 {{< /cli >}}
 {{< ui >}}
 
-Open **Doctor** in the rail. Each check shows as ok, warning or failed, with the fix.
+Open **Doctor** in the rail. The line at the top says whether sind can create clusters on this host. Each check shows as ok, warning or failed, with the fix. **Copy** beside a command copies only the command.
 
 {{< uishot "doctor" >}}
 

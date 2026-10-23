@@ -91,7 +91,7 @@ A diagram from the host, through the mesh services, to the cluster networks and 
 
 ## Doctor
 
-The host checks of `sind doctor`, each as ok, warning or failed, with the fix for each.
+The host checks of `sind doctor`, each as ok, warning or failed, with the fix for each. The line at the top says whether sind can create clusters on this host: a failed check stops create and power on, a warning does not. A fix shows each command in its own block, after the words that say what it does, and **Copy** copies only the command. The fix for inotify has a second command that keeps the limit across reboots.
 
 {{< uishot "doctor" >}}
 

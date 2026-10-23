@@ -59,7 +59,7 @@
   howtos: [reach-node]
 - id: doctor
   title: Doctor
-  summary: What sind needs from this host. Each check says ok, warning or failed, and what to change.
+  summary: Whether sind can create clusters on this host. Each check says ok, warning or failed, and what to change.
   route: /doctor
   doc: usage/diagnostics#doctor
   words: [doctor, needs-you]

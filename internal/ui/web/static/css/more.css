@@ -9,13 +9,16 @@
 .more-howto .cmd{text-align:left}
 
 /* doctor */
+.more-verdict.ok{border-color:var(--ok);background:var(--ok-soft)}
 .more-check{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:12px 14px;border-bottom:1px solid var(--line-2)}
 .more-check:last-child{border-bottom:0}
 .more-mark{font:700 var(--t-lg)/1.3 var(--f-mono);text-align:center;color:var(--faint)}
 .more-mark.ok{color:var(--ok)} .more-mark.warn{color:var(--warn)} .more-mark.bad{color:var(--bad)}
 .more-cbody{min-width:0}
 .more-fix{margin-top:8px}
-.more-fix .cmd code{white-space:pre-wrap}
+.more-fixtext{margin:0 0 6px;white-space:pre-line}
+.more-fix .cmd{margin-bottom:10px}
+.more-fix .cmd:last-child{margin-bottom:0}
 .more-copied{color:var(--ok)!important}
 
 /* topology: the figure scrolls sideways inside its panel, never the page */

@@ -98,7 +98,7 @@ shots:
     page: topology
 
   - name: doctor
-    alt: "Doctor: the host checks, with one warning and what to run to fix it"
+    alt: "Doctor: sind can create clusters on this host, and the host checks, with one warning and the commands that fix it"
     path: /doctor
     hide: "#tasks"
     page: doctor
