@@ -39,16 +39,17 @@
   const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0 };
 
   // isolate makes everything but the dialog, the layer, the notices and
-  // the page's live region inert, as a modal dialog needs: Tab and the
+  // the page's live region inert, marked data-act-inert, as a modal dialog needs: Tab and the
   // screen reader stay in the dialog, the help pane and the jump box in the
   // layer still work, and what app.js says is still heard.
   function isolate(root) {
     release();
     const walk = parent => {
       for (const c of parent.children) {
-        if (c === root || c.id === 'layer' || c.id === 'act-notes' || c.id === 'say' || c.inert || /^(SCRIPT|TEMPLATE|STYLE|LINK)$/.test(c.tagName)) continue;
+        if (c === root || c.id === 'layer' || c.id === 'act-notes' || c.id === 'say' || (c.inert && !c.hasAttribute('data-help-inert')) || /^(SCRIPT|TEMPLATE|STYLE|LINK)$/.test(c.tagName)) continue;
         if (c.contains(root)) { walk(c); continue; }
         c.inert = true;
+        c.setAttribute('data-act-inert', '');
         S.inert.push(c);
       }
     };
@@ -56,7 +57,11 @@
   }
 
   function release() {
-    for (const el of S.inert) el.inert = false;
+    // The help pane may hold an element inert too (help.js).
+    for (const el of S.inert) {
+      el.removeAttribute('data-act-inert');
+      if (!el.hasAttribute('data-help-inert')) el.inert = false;
+    }
     S.inert = [];
   }
 

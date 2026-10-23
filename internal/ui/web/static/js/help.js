@@ -200,8 +200,8 @@
     H.hint = null;
   }
 
-  // The help pane: a dialog beside the page. It takes the focus when it
-  // opens and gives it back when it closes. It stays below the dialog of an
+  // The help pane: a dialog beside the page, or over it on a narrow screen.
+  // It takes the focus when it opens and gives it back when it closes. It stays below the dialog of an
   // action, so that a pane left open does not cover a dialog that opens
   // later, until it explains that dialog: then it lifts above it (the class
   // over) and is the modal dialog, as the dialog that it covers cannot be
@@ -225,9 +225,9 @@
     if (!p || !dlg) return;
     if (focusable(back) && dlg.contains(back)) H.paneBack = back;
     dlg.setAttribute('aria-modal', 'false');
-    p.setAttribute('aria-modal', 'true');
     p.classList.add('over');
     H.lifted = dlg;
+    modal();
   }
 
   function drop() {
@@ -237,8 +237,43 @@
     const p = H.paneEl;
     if (!p) return;
     p.classList.remove('over');
-    p.setAttribute('aria-modal', 'false');
+    modal();
   }
+
+  // On a narrow screen the pane covers the page (help.css), so it is modal
+  // there too: what is behind it goes inert, as act.js does for a dialog,
+  // so that Tab and a screen reader stay in the pane. An element that both
+  // make inert carries the marks of both, data-help-inert and
+  // data-act-inert, and wakes up only when neither holds it.
+  const narrow = matchMedia('(max-width: 600px)');
+  H.inert = [];
+  function modal() {
+    unmodal();
+    const p = H.paneEl;
+    if (!p || !p.isConnected) return;
+    const covers = narrow.matches;
+    p.setAttribute('aria-modal', String(covers || !!H.lifted));
+    if (!covers) return;
+    const walk = parent => {
+      for (const c of parent.children) {
+        if (c === p || c.id === 'say' || (c.inert && !c.hasAttribute('data-act-inert')) || /^(SCRIPT|TEMPLATE|STYLE|LINK)$/.test(c.tagName)) continue;
+        if (c.contains(p)) { walk(c); continue; }
+        c.inert = true;
+        c.setAttribute('data-help-inert', '');
+        H.inert.push(c);
+      }
+    };
+    walk(document.body);
+  }
+
+  function unmodal() {
+    for (const el of H.inert) {
+      el.removeAttribute('data-help-inert');
+      if (!el.hasAttribute('data-act-inert')) el.inert = false;
+    }
+    H.inert = [];
+  }
+  narrow.addEventListener('change', modal);
 
   function syncButton() {
     const on = !!pane();
@@ -262,6 +297,7 @@
     layer().appendChild(shell.content.cloneNode(true));
     H.paneEl = pane();
     syncButton();
+    modal();
     return true;
   }
 
@@ -285,6 +321,7 @@
     if (!p) return;
     const inside = p.contains(document.activeElement);
     drop();
+    unmodal();
     p.remove();
     H.paneEl = null;
     syncButton();
@@ -641,7 +678,7 @@
     if (l) {
       new MutationObserver(() => {
         if (H.lifted && !H.lifted.isConnected) drop();
-        if (H.paneEl && !H.paneEl.isConnected) l.appendChild(H.paneEl);
+        if (H.paneEl && !H.paneEl.isConnected) { l.appendChild(H.paneEl); modal(); }
       }).observe(l, { childList: true });
     }
     mark();

@@ -62,7 +62,7 @@ The jump box finds what you type in the names of clusters, nodes, pages and runs
 
 An action that needs a cluster, such as **Add workers** or **Power**, asks for it next: the box lists the clusters, the one of the page you are on first, and opens the dialog of the cluster you pick. Backspace in the empty box goes back. An action of a realm, such as **Delete realm**, asks for the realm when there is more than one.
 
-The help pane shows the help of the page: what it shows, the words on it and how to do the common things. The **?** button of a dialog opens the help of that dialog, above it. A pane that you left open stays beside a dialog that opens later, or behind it on a narrow screen. The pane takes the focus, and Esc closes it and takes you back to where you were. **All how-tos** and **All words** list every how-to and every word, such as how to see the output of a job, what to do when a job does not start, and how to clean up when you are done.
+The help pane shows the help of the page: what it shows, the words on it and how to do the common things. The **?** button of a dialog opens the help of that dialog, above it. A pane that you left open stays beside a dialog that opens later, or behind it on a narrow screen. The pane takes the focus, and Esc closes it and takes you back to where you were. On a phone the pane fills the screen, and Tab and a screen reader stay in it until you close it. **All how-tos** and **All words** list every how-to and every word, such as how to see the output of a job, what to do when a job does not start, and how to clean up when you are done.
 
 The address `/help` opens the same texts as a page of their own, with a search that works without script, so that you can bookmark or share an entry.
 

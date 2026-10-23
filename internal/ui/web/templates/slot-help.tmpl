@@ -2,7 +2,8 @@
 
 {{/* slot-help is the help button in the top bar, and the markup of the help
 pane, which help.js copies into #layer when the pane opens. The pane is a
-dialog that does not block the page; help-status says what it loaded, as
+dialog that does not block the page, but on a narrow screen, where it covers
+the page, help.js makes it modal; help-status says what it loaded, as
 the body itself is not a live region. */}}
 {{define "slot-help"}}<button type="button" class="iconbtn" data-help-toggle aria-label="Help" title="Help (?)" aria-expanded="false" aria-keyshortcuts="?">?</button>
 <template id="help-shell"><aside class="helppane" id="helppane" role="dialog" aria-modal="false" aria-labelledby="help-crumb">
