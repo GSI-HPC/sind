@@ -75,7 +75,7 @@ sind get clusters
 {{< /cli >}}
 {{< ui >}}
 
-Open **Clusters** in the rail, then the cluster. The **Summary** tab shows each node and its services, such as munge, sshd and slurmctld.
+Open **Clusters** in the rail, then the cluster. **Ready for jobs** at the top of the **Summary** tab says whether the cluster can run a job now, and gives the commands to submit one. Below it, the tab shows each node and its services, such as munge, sshd and slurmctld.
 
 {{< uishot "cluster" >}}
 

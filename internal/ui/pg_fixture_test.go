@@ -162,7 +162,7 @@ func pgFillStatus(st *store.Store) {
 		},
 		Mounts: []cluster.MountPoint{
 			{Path: "/etc/slurm", Source: "sind-dev-config", Type: config.StorageVolume, OK: true},
-			{Path: "/data", Source: "/scratch/dev", Type: config.StorageHostPath, OK: true},
+			{Path: "/data", Source: "/scratch/dev", Type: config.StorageHostPath, OK: true, Data: true},
 			{Path: "/home", Source: "sind-dev-home", Type: config.StorageVolume},
 		},
 	})

@@ -528,7 +528,7 @@ func TestGetMountPoints_HostPathWithComma(t *testing.T) {
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
 
 	require.NoError(t, err)
-	assert.Equal(t, MountPoint{Path: "/data", Source: "/srv/run,2024", Type: config.StorageHostPath, OK: true}, mounts[2])
+	assert.Equal(t, MountPoint{Path: "/data", Source: "/srv/run,2024", Type: config.StorageHostPath, OK: true, Data: true}, mounts[2])
 }
 
 // TestGetMountPoints_DataFromMountsNotLabels checks that the data mount
@@ -549,7 +549,7 @@ func TestGetMountPoints_DataFromMountsNotLabels(t *testing.T) {
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
 
 	require.NoError(t, err)
-	assert.Equal(t, MountPoint{Path: "/data", Source: "sind-dev-data", Type: config.StorageVolume, OK: true}, mounts[2])
+	assert.Equal(t, MountPoint{Path: "/data", Source: "sind-dev-data", Type: config.StorageVolume, OK: true, Data: true}, mounts[2])
 	assert.Len(t, m.Calls, 1)
 }
 
@@ -695,7 +695,7 @@ func TestGetStatus_MountsFromInspect(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, status.Mounts, 3)
-	assert.Equal(t, MountPoint{Path: "/data", Source: "/srv/run,2024", Type: config.StorageHostPath, OK: true}, status.Mounts[2])
+	assert.Equal(t, MountPoint{Path: "/data", Source: "/srv/run,2024", Type: config.StorageHostPath, OK: true, Data: true}, status.Mounts[2])
 }
 
 // TestGetStatus_EmptyButClusterNetworkExists covers the partial-teardown case:

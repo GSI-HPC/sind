@@ -6,8 +6,8 @@
   steps:
     - Press New cluster on the Overview.
     - Keep the defaults, or change the nodes. Press Create.
-    - When the run is done, open the cluster and its Connect tab.
-    - Run a job with the command that the tab shows.
+    - When the run is done, open the cluster. Ready for jobs at the top says whether it can run a job.
+    - Run a job with the two commands beside it.
     - Read its output in slurm-JOBID.out in the data directory of the cluster.
     - When you are done, press Delete… on the page of the cluster.
   commands:

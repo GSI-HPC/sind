@@ -31,7 +31,7 @@ Every node of the realm. A node is named as you type it in commands, such as `wo
 
 The state of one cluster, in six tabs.
 
-**Summary** shows the nodes by role and a matrix of nodes and services, such as munge, sshd and slurmctld, and the network checks.
+**Summary** starts with **Ready for jobs**: it says whether the cluster can run a job now, and checks the controller, the workers, accounting and where your files are. A check that fails names the node and links to its logs. While `sind create cluster` makes the cluster, it says `not yet` and offers no fix. Beside the checks are the first two commands of a job, `sind enter` and `sbatch`, with **Copy**. Below are the nodes by role, a matrix of nodes and services, such as munge, sshd and slurmctld, and the network checks.
 
 {{< uishot "cluster" >}}
 

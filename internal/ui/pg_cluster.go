@@ -147,6 +147,8 @@ type pgClusterView struct {
 	HostData string
 	// Data is the cluster's data mount, when the status has it.
 	Data *cluster.MountPoint
+	// Ready is the "Ready for jobs" card of the Summary.
+	Ready *pgReady
 	// Connect tab.
 	Commands []pgCmd
 	API      string
@@ -245,13 +247,22 @@ func pgSummaryTab(d *pgClusterView) {
 			d.HA = append(d.HA, fmt.Sprintf("%s: %s, %s", n.Short, n.HA.Position, role))
 		}
 	}
-	if d.Status != nil {
-		for i, m := range d.Status.Mounts {
-			if m.Path == "/data" {
-				d.Data = &d.Status.Mounts[i]
-			}
+	d.Data = pgDataMount(d.Status)
+	d.Ready = pgReadyOf(d)
+}
+
+// pgDataMount returns the cluster's data mount, whatever its path, nil
+// before the first probe.
+func pgDataMount(st *cluster.Status) *cluster.MountPoint {
+	if st == nil {
+		return nil
+	}
+	for i, m := range st.Mounts {
+		if m.Data {
+			return &st.Mounts[i]
 		}
 	}
+	return nil
 }
 
 // pgNodesTab prepares the dialogs that the selection of nodes opens. The
@@ -290,7 +301,7 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 	if d.Status != nil {
 		d.Mounts = d.Status.Mounts
 		for _, m := range d.Mounts {
-			if m.Path == "/data" && m.Type == config.StorageHostPath {
+			if m.Data && m.Type == config.StorageHostPath {
 				d.HostData = m.Source
 			}
 		}
@@ -308,13 +319,10 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 // cluster, and the addresses of its services.
 func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 	sind, cl := pgSind(d.Realm), pgClusterArg(d.Name)
-	entry := "controller"
+	entry := pgEntry(d.Cluster.Nodes)
 	var first, api *pgNode
 	for i, n := range d.Cluster.Nodes {
-		switch n.Role {
-		case config.RoleSubmitter:
-			entry = "submitter"
-		case config.RoleAPI:
+		if n.Role == config.RoleAPI {
 			api = &d.Cluster.Nodes[i]
 		}
 		if first == nil || n.Role == config.RoleWorker && first.Role != config.RoleWorker {
@@ -343,6 +351,9 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 		}
 	}
 }
+
+// ConnectLink returns the address of the Connect tab.
+func (d *pgClusterView) ConnectLink() string { return pgClusterURL(d.Realm, d.Name, "connect") }
 
 // SlurmConfLink returns the address of slurm.conf on the Slurm tab.
 func (d *pgClusterView) SlurmConfLink() string {

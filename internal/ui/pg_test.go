@@ -292,6 +292,14 @@ func TestPgClusterSummary(t *testing.T) {
 	pgFillStatus(ts.st)
 	body = pgBody(t, ts, "/clusters/sind/dev", 200)
 	assert.NotContains(t, body, "Service health appears once")
+	// Ready for jobs: the verdict, the checks with their state in words,
+	// and the first commands.
+	assert.Contains(t, body, `<h2>Ready for jobs</h2><span class="pill warn">yes, with 2 of 4 workers</span>`)
+	assert.Contains(t, body, `<li><span class="pg-ck warn" aria-hidden="true">!</span><div><span class="vh">warning: </span><b>2 of 4 workers take jobs</b> <span class="muted">worker-1: slurmd is down; worker-3: stopped.</span><div class="pg-fix"><a class="btn sm ghost" href="/clusters/sind/dev?node=worker-1&amp;tab=logs">Logs of worker-1</a>`)
+	assert.Contains(t, body, `<b>Your files</b> <span class="muted">/scratch/dev on this host is /data on every node.</span>`)
+	assert.Contains(t, body, "<code>sind enter dev</code>")
+	assert.Contains(t, body, "<code>sbatch --chdir=/data --wrap hostname &amp;&amp; squeue</code>")
+	assert.Contains(t, body, `More commands are on <a href="/clusters/sind/dev?tab=connect">Connect</a>.`)
 	assert.Contains(t, body, `<th class="mono pg-svc"><span data-word="munge">munge</span></th><th class="mono pg-svc"><span data-word="sshd">sshd</span></th><th class="mono pg-svc"><span data-word="slurmctld">slurmctld</span></th><th class="mono pg-svc"><span data-word="slurmd">slurmd</span></th><th class="mono pg-svc"><span data-word="mariadb">mariadb</span></th><th class="mono pg-svc"><span data-word="slurmdbd">slurmdbd</span></th><th class="mono pg-svc"><span data-word="slurmrestd">slurmrestd</span></th><th class="mono pg-svc"><span data-word="sackd">sackd</span></th>`)
 	// controller: up on munge, sshd and slurmctld, not on the others.
 	assert.Contains(t, body, `<span class="pg-ck y">✓</span></td><td><span class="pg-ck y">✓</span></td><td><span class="pg-ck y">✓</span></td><td><span class="pg-ck na">·</span>`)
@@ -308,12 +316,13 @@ func TestPgClusterSummary(t *testing.T) {
 
 	// A cluster with monitoring and a status with a volume as its data.
 	ts.st.SetStatus("sind", "hpc", &cluster.Status{
-		Name: "hpc", Network: &cluster.NetworkHealth{DNS: false}, Mounts: []cluster.MountPoint{{Path: "/data", Source: "sind-hpc-data", Type: "volume", OK: true}},
+		Name: "hpc", Network: &cluster.NetworkHealth{DNS: false}, Mounts: []cluster.MountPoint{{Path: "/work", Source: "sind-hpc-data", Type: "volume", OK: true, Data: true}},
 	})
 	body = pgBody(t, ts, "/clusters/sind/hpc", 200)
 	assert.Contains(t, body, `<span class="chip brand">monitoring</span>`)
 	assert.Contains(t, body, "grafana, prometheus, loki, alloy")
-	assert.Contains(t, body, `<span class="faint">(volume) → /data</span>`)
+	assert.Contains(t, body, `<span class="faint">(volume) → /work</span>`)
+	assert.Contains(t, body, "sbatch --chdir=/work --wrap hostname", "the data mount of hpc is at /work")
 	assert.Contains(t, body, `<dt>DNS</dt><dd><span class="pill bad">down</span></dd>`)
 	assert.NotContains(t, body, "callout run", "no run touches hpc")
 	assert.NotContains(t, body, `n bad">!`, "every node of hpc runs")

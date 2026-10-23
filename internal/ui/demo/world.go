@@ -466,7 +466,7 @@ func (w *World) statusOf(r *realm, c *clusterState, m *mesh.Manager) *cluster.St
 		{Path: "/etc/slurm", Source: string(cluster.VolumeName(r.name, c.name, cluster.VolumeConfig)), Type: config.StorageVolume, OK: true},
 		{Path: "/etc/munge", Source: string(cluster.VolumeName(r.name, c.name, cluster.VolumeMunge)), Type: config.StorageVolume, OK: true},
 	}
-	data := cluster.MountPoint{Path: "/data", Source: c.dataPath, Type: config.StorageVolume, OK: true}
+	data := cluster.MountPoint{Path: cluster.DefaultDataMountPath, Source: c.dataPath, Type: config.StorageVolume, OK: true, Data: true}
 	if !c.volume {
 		data.Type = config.StorageHostPath
 	}
