@@ -30,7 +30,7 @@ key has the class k1, which the setting for single-key shortcuts marks. */}}
 {{with .Words}}<div><h3>Related</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}
 {{template "help-more" .}}<p class="hint">In a terminal: <span class="mono">sind help {{.Word.ID}}</span> · <a href="/help?topic=words" data-help-topic="words">All words</a></p>
 {{else if eq .Kind "action"}}<div class="kind">Action</div><h2>{{.Action.Title}}</h2><p class="lead">{{.Action.Summary}}</p>
-<div class="callout{{if .Action.Irreversible}} bad{{end}}">{{.Action.Undo}}.</div>
+<div class="callout{{if .Action.Irreversible}} bad{{end}}">{{.Action.UndoText}}</div>
 <div><div class="cmdlabel">Runs</div>{{template "help-cmd" .Action.Command}}</div>
 <p class="hint">The dialog shows the exact command before it runs it. Activity keeps it afterwards.</p>
 {{with .Words}}<div><h3>Words</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}

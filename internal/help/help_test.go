@@ -334,3 +334,9 @@ func TestWrap(t *testing.T) {
 		assert.LessOrEqual(t, len(l), width)
 	}
 }
+
+func TestActionUndoText(t *testing.T) {
+	assert.Equal(t, "To undo: delete the workers.", Action{Undo: "Delete the workers"}.UndoText())
+	assert.Equal(t, "Cannot be undone.", Action{Undo: "Cannot be undone", Irreversible: true}.UndoText())
+	assert.Equal(t, ".", Action{}.UndoText())
+}

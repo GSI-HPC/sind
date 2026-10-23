@@ -31,7 +31,7 @@ func (h *Help) Text(id string) (string, bool) {
 		a, _ := h.Action(id)
 		heading(&b, a.Title, "action of sind ui")
 		paragraph(&b, a.Summary)
-		paragraph(&b, a.Undo+".")
+		paragraph(&b, a.UndoText())
 		terminal(&b, a.Command)
 		h.related(&b, a.Words)
 		more(&b, a.Doc)

@@ -72,6 +72,15 @@ type Action struct {
 	Words        []string `yaml:"words"`
 }
 
+// UndoText says how to take the action back, as a sentence that says so
+// ("To undo: delete the workers."), or that nobody can.
+func (a Action) UndoText() string {
+	if a.Irreversible || a.Undo == "" {
+		return a.Undo + "."
+	}
+	return "To undo: " + strings.ToLower(a.Undo[:1]) + a.Undo[1:] + "."
+}
+
 // Page is a page of sind ui.
 type Page struct {
 	ID      string `yaml:"id"`
