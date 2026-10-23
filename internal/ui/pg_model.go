@@ -465,8 +465,10 @@ type pgRunBanner struct {
 	// Count is "3 commands" for several runs.
 	Count string
 	Text  string
-	// Href is the run's page, or the first run's for several.
-	Href string
+	// Href is the run's page, or Activity with the runs of the cluster
+	// that go on for several; Action labels the link.
+	Href   string
+	Action string
 }
 
 // Banner returns the line about the runs of the cluster, nil for none.
@@ -483,7 +485,7 @@ func (c pgCluster) Banner() *pgRunBanner {
 		if r.Waiting {
 			text = "waits for the lock of the realm. It runs " + runSourceText(r.Source) + "."
 		}
-		return &pgRunBanner{Command: r.Title, Text: text, Href: r.Link()}
+		return &pgRunBanner{Command: r.Title, Text: text, Href: r.Link(), Action: "Show progress"}
 	}
 	waiting := 0
 	for _, r := range c.Runs {
@@ -499,7 +501,8 @@ func (c pgCluster) Banner() *pgRunBanner {
 		}
 		text = fmt.Sprintf("run on %s: %d works, %d %s for the lock of the realm.", c.Name, len(c.Runs)-waiting, waiting, verb)
 	}
-	return &pgRunBanner{Count: fmt.Sprintf("%d commands", len(c.Runs)), Text: text, Href: c.Runs[0].Link()}
+	href := runQuery{Status: "running", Realm: c.Realm, Cluster: c.Name}.href()
+	return &pgRunBanner{Count: fmt.Sprintf("%d commands", len(c.Runs)), Text: text, Href: href, Action: "Show them"}
 }
 
 // pgAgo says how long ago t was, as "just now", "5 min ago", "3 h ago".

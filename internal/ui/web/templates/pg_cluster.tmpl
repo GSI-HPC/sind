@@ -10,7 +10,7 @@
 <div class="head"><div class="t"><h1>{{.Name}} <span class="pill {{.Cluster.StateClass}}" data-say="{{.Name}} is {{.Cluster.State}}.">{{.Cluster.State}}</span></h1>
   <div class="sub">{{with .Cluster.Slurm}}<span class="mono">Slurm {{.}}</span>{{end}}<span>{{with .Cluster.Roles}}{{.}}{{else}}no nodes{{end}}</span>{{if .Cluster.Monitoring}}<span class="chip brand">monitoring</span>{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
-{{with .Cluster.Banner}}<div class="callout run pg-run"><span class="pg-spin"></span><span class="pg-grow">{{if .Command}}<b class="mono">{{.Command}}</b>{{else}}<b>{{.Count}}</b>{{end}} {{.Text}}</span><a class="btn sm" href="{{.Href}}">Show progress</a></div>{{end}}
+{{with .Cluster.Banner}}<div class="callout run pg-run"><span class="pg-spin"></span><span class="pg-grow">{{if .Command}}<b class="mono">{{.Command}}</b>{{else}}<b>{{.Count}}</b>{{end}} {{.Text}}</span><a class="btn sm" href="{{.Href}}">{{.Action}}</a></div>{{end}}
 <div class="tabs">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}{{if .Count}}<span class="n{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a>{{end}}</div>
 {{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
 

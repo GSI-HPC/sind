@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func TestRunActivityPage(t *testing.T) {
 	body := w.Body.String()
 	for _, want := range []string{
 		"<title>Activity · sind ui</title>",
-		`<a class="tab on" href="/activity">All<span class="n">4</span></a>`,
+		`<a class="tab on" href="/activity" aria-current="page">All<span class="n">4</span></a>`,
 		`<a class="tab" href="/activity?status=running">Running<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=ok">OK<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=failed">Failed<span class="n">1</span></a>`,
@@ -56,7 +57,7 @@ func TestRunActivityFilters(t *testing.T) {
 		w := ts.get("/activity?status=" + filter)
 		require.Equal(t, http.StatusOK, w.Code, filter)
 		body := w.Body.String()
-		assert.Contains(t, body, `<a class="tab on" href="/activity?status=`+filter+`">`, filter)
+		assert.Contains(t, body, `<a class="tab on" href="/activity?status=`+filter+`" aria-current="page">`, filter)
 		assert.Equal(t, len(want), strings.Count(body, `<a class="mono" href="/runs/`), filter)
 		for _, id := range want {
 			assert.Contains(t, body, `href="/runs/`+id+`"`, filter)
@@ -111,4 +112,101 @@ func TestRunMatchesAndCounts(t *testing.T) {
 			runSp("target", "a", runEndedAt(0, 1, "ok")), runSp("target", "b", runStartedAt(0)), runSp("target", "c"),
 			runSp("target", "d", runEndedAt(0, 1, "failed")), runSp("target", "e", runEndedAt(0, 1, "canceled")),
 			runSp("target", "f", runEndedAt(0, 1, "skipped")))))))
+}
+
+// runSearchStore fills the store with runs on clusters of two realms: a
+// task of sind ui on dev of sind, terminal runs on dev of both realms and
+// on lab of lab, and one without a cluster.
+func runSearchStore(ts *testServer) {
+	ts.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	ts.st.SetClusters("lab", []cluster.Summary{{Name: "dev"}, {Name: "lab"}})
+	end := runPtr(runAt(5))
+	run := func(id, title, node, status string) store.Run {
+		r := store.Run{ID: id, Title: title, Trace: "tr-" + id, Start: runAt(0), Root: store.Span{Node: node}}
+		if status != "" {
+			r.End, r.Status = end, status
+		}
+		return r
+	}
+	ts.st.SetRuns([]store.Run{
+		run("r-ui", "create worker dev", "dev", ""),
+		run("r-dev", "power reboot dev", "dev", "ok"),
+		run("r-lab", "create cluster lab", "lab", "failed"),
+		run("r-none", "doctor", "", "ok"),
+	})
+	ts.st.AddTask(store.Task{ID: "t", Action: "create-worker", Realm: "sind", Cluster: "dev", Trace: "tr-r-ui",
+		Display: "sind create worker dev --count 3 --cpus 4", Argv: []string{"sind", "create", "worker", "dev", "--count", "3", "--cpus", "4"},
+		Start: runAt(0), Status: store.TaskRunning})
+}
+
+func TestRunActivitySearch(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	runSearchStore(ts)
+
+	body := ts.get("/activity").Body.String()
+	for _, want := range []string{
+		`<form class="runfind" method="get" action="/activity" role="search">`,
+		`<input type="search" name="q" value="" placeholder="Filter by command, cluster, flag or run ID" aria-label="Filter runs"`,
+		`<a class="mono" href="/runs/r-ui">create worker dev <span class="flag">--count 3</span> <span class="flag">--cpus 4</span></a> <span class="chip" title="realm">sind</span>`,
+		`<a class="mono" href="/runs/r-lab">create cluster lab</a> <span class="chip" title="realm">lab</span>`,
+		`<div class="runchips-g" role="group" aria-label="Filter by realm"><span class="faint">Realm</span>`,
+		`<a class="fchip" href="/activity?realm=lab" title="realm lab">lab<span class="n">2</span></a>`,
+		`<a class="fchip" href="/activity?realm=sind" title="realm sind">sind<span class="n">2</span></a>`,
+		`<a class="fchip" href="/activity?cluster=dev" title="cluster dev">dev<span class="n">2</span></a>`,
+		`<a class="fchip" href="/activity?cluster=lab" title="cluster lab in realm lab">lab<span class="n">1</span></a>`,
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.NotContains(t, body, "Clear filter")
+	assert.NotContains(t, body, `href="/runs/r-dev">power reboot dev</a> <span class="chip" title="realm">`, "dev is in two realms")
+
+	// A text, a realm and a cluster; the tabs keep them.
+	body = ts.get("/activity?q=CPUS+4").Body.String()
+	assert.Equal(t, 1, strings.Count(body, `<a class="mono" href="/runs/`))
+	assert.Contains(t, body, `value="CPUS 4"`)
+	assert.Contains(t, body, `<a class="tab" href="/activity?q=CPUS&#43;4&amp;status=running">Running<span class="n">1</span></a>`)
+	assert.Contains(t, body, `<a class="runchips-clear" href="/activity">Clear filter</a>`)
+
+	body = ts.get("/activity?realm=sind&status=running").Body.String()
+	assert.Contains(t, body, `<input type="hidden" name="status" value="running"><input type="hidden" name="realm" value="sind">`)
+	assert.Contains(t, body, `<a class="fchip on" href="/activity?status=running" title="realm sind" aria-current="true"><span aria-hidden="true">✓ </span>sind<span class="n">1</span></a>`)
+	assert.Contains(t, body, `<a class="fchip" href="/activity?cluster=dev&amp;realm=sind&amp;status=running" title="cluster dev in realm sind">dev<span class="n">1</span></a>`)
+	assert.Contains(t, body, `<a class="runchips-clear" href="/activity?status=running">Clear filter</a>`)
+	assert.Equal(t, 1, strings.Count(body, `<a class="mono" href="/runs/`))
+
+	body = ts.get("/activity?realm=sind&cluster=dev").Body.String()
+	assert.Contains(t, body, `<input type="hidden" name="cluster" value="dev">`)
+	assert.Contains(t, body, `href="/runs/r-ui"`)
+	assert.Contains(t, body, `href="/runs/r-dev"`, "a terminal run on a cluster of that name")
+	assert.NotContains(t, body, `href="/runs/r-lab"`)
+
+	body = ts.get("/activity?q=nothing").Body.String()
+	assert.Contains(t, body, `No run matches this filter. <a href="/activity">Clear filter</a>`)
+}
+
+func TestRunEntryOf(t *testing.T) {
+	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"a": {{Name: "x"}}, "b": {{Name: "x"}, {Name: "y"}}}}
+	e := runEntryOf(snap, store.Run{ID: "r1", Root: store.Span{Node: "y"}})
+	assert.Equal(t, "r1", e.title, "a run without a title is named by its id")
+	assert.Equal(t, []string{"b"}, e.realms)
+	assert.Equal(t, "b", e.realm)
+	e = runEntryOf(snap, store.Run{ID: "r2", Title: "create cluster x", Root: store.Span{Node: "x"}})
+	assert.Equal(t, []string{"a", "b"}, e.realms)
+	assert.Empty(t, e.realm)
+	assert.True(t, e.matches(runQuery{Realm: "a", Cluster: "x", Text: "Create x"}))
+	assert.False(t, e.matches(runQuery{Realm: "c"}))
+	assert.False(t, e.matches(runQuery{Cluster: "y"}))
+	assert.False(t, e.matches(runQuery{Text: "create z"}))
+	e = runEntryOf(snap, store.Run{ID: "r3", Title: "gone", Root: store.Span{Node: "z"}})
+	assert.Nil(t, e.realms, "no realm has the cluster")
+	assert.Equal(t, "/activity", runQuery{}.href())
+}
+
+func TestRunListRowWords(t *testing.T) {
+	// A flag keeps its value; a flag with = or one before another flag
+	// stands alone.
+	r := runListRow{Title: "create cluster --pull --wait 5m --memory=8g x"}
+	assert.Equal(t, []runWord{
+		{"create", false}, {"cluster", false}, {"--pull", true}, {"--wait 5m", true}, {"--memory=8g", true}, {"x", false},
+	}, r.Words())
 }

@@ -44,7 +44,9 @@ The progress comes from the activity log. sind writes it by default, in `activit
 
 A run that another program started, such as a CI job or an MCP client that hands sind a trace, is marked with an **other program** label. A run that sind ui started stays marked as **from sind ui**, also after you restart sind ui.
 
-The **Activity** page lists the runs, from this UI and from a terminal.
+The **Activity** page lists the runs, from this UI and from a terminal. A run of this UI shows its command with the main flags, such as `create worker dev --count 3 --cpus 4`, and its realm. To find a run, type a part of its command, a cluster, a flag or its run ID in the filter field and press Enter. The tabs filter by status, and the chips by realm and by cluster; press a chip again to turn it off. **Clear filter** shows all runs again.
+
+When several commands run on a cluster, the banner of the cluster page has **Show them**, which opens Activity with the runs of that cluster that go on.
 
 {{< uishot "activity" >}}
 

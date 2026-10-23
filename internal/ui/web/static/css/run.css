@@ -62,6 +62,18 @@ details.stopc>summary::-webkit-details-marker{display:none}
 @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .rsum .segbar{height:12px}
 
+/* Activity: the search field and the chips of realms and clusters */
+.runfind{display:flex;gap:8px;margin:0 0 12px;max-width:560px}
+.runfind input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);color:var(--fg);font:var(--t-md) var(--f-body)}
+.runchips{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:-6px 0 14px}
+.runchips-g{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.runchips-g>.faint{font-size:var(--t-sm);margin-right:2px}
+.fchip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--muted);font:var(--t-sm) var(--f-mono);text-decoration:none}
+.fchip:hover{color:var(--fg);border-color:var(--line-2)}
+.fchip.on{color:var(--fg);border-color:var(--accent);font-weight:600}
+.fchip .n{font-size:var(--t-xs);color:var(--faint)}
+.runchips-clear{font-size:var(--t-sm)}
+
 /* run page */
 .rp{display:grid;gap:14px;min-width:0}
 .rp>div:empty{display:none}
@@ -149,6 +161,10 @@ details.raw[open] summary{border-bottom:1px solid var(--line-2)}
 
 /* Activity */
 table.runs td a{overflow-wrap:anywhere}
+/* a flag stays whole, never "--" on one line and "count" on the next */
+table.runs td a .flag{white-space:nowrap}
+/* the command keeps room for its flags; the table scrolls on a phone */
+table.runs td:nth-child(2){min-width:200px}
 
 @media (max-width:760px){
   /* a card keeps its line, its clock and Stop; the dock shows one card */

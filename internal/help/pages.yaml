@@ -66,7 +66,7 @@
   howtos: []
 - id: activity
   title: Activity
-  summary: The runs of the sind commands that change something, from this UI and from terminals.
+  summary: The runs of the sind commands that change something, from this UI and from terminals. Filter them by text, status, realm and cluster.
   route: /activity
   doc: usage/progress#the-activity-log
   words: [activity-log, run, lock]

@@ -197,14 +197,14 @@ func TestPgRunsOn(t *testing.T) {
 func TestPgRunBanner(t *testing.T) {
 	assert.Nil(t, pgCluster{Name: "dev"}.Banner())
 	one := pgCluster{Name: "dev", Runs: []pgRun{{ID: "a", Title: "create worker dev", Source: runFromTerminal}}}
-	assert.Equal(t, &pgRunBanner{Command: "create worker dev", Text: "runs in a terminal.", Href: "/runs/a"}, one.Banner())
+	assert.Equal(t, &pgRunBanner{Command: "create worker dev", Text: "runs in a terminal.", Href: "/runs/a", Action: "Show progress"}, one.Banner())
 	one.Runs[0].Source = runFromUI
 	assert.Equal(t, "runs from sind ui.", one.Banner().Text)
 	one.Runs[0].Waiting = true
 	assert.Equal(t, "waits for the lock of the realm. It runs from sind ui.", one.Banner().Text)
 
-	several := pgCluster{Name: "dev", Runs: []pgRun{{ID: "a"}, {ID: "b"}}}
-	assert.Equal(t, &pgRunBanner{Count: "2 commands", Text: "run on dev.", Href: "/runs/a"}, several.Banner())
+	several := pgCluster{Realm: "sind", Name: "dev", Runs: []pgRun{{ID: "a"}, {ID: "b"}}}
+	assert.Equal(t, &pgRunBanner{Count: "2 commands", Text: "run on dev.", Href: "/activity?cluster=dev&realm=sind&status=running", Action: "Show them"}, several.Banner())
 	several.Runs[1].Waiting = true
 	assert.Equal(t, "run on dev: 1 works, 1 waits for the lock of the realm.", several.Banner().Text)
 	several.Runs = append(several.Runs, pgRun{ID: "c", Waiting: true})

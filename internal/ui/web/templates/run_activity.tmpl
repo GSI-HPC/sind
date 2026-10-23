@@ -1,20 +1,31 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* page-run-activity is the Activity page: the runs of the event log. */}}
+{{/* page-run-activity is the Activity page: the runs of the event log, which
+a text, the status tabs and the chips of realms and clusters filter. The
+search form sits outside the live fragment, so that a live update leaves
+what the user types alone. */}}
 {{define "page-run-activity"}}
 <div class="head"><div class="t"><h1>Activity</h1>
   <div class="sub"><span>What sind did, from here or from a terminal that writes the same event log. Open a run for its steps.</span></div></div></div>
+<form class="runfind" method="get" action="/activity" role="search">{{with .Params.Get "status"}}<input type="hidden" name="status" value="{{.}}">{{end}}{{with .Params.Get "realm"}}<input type="hidden" name="realm" value="{{.}}">{{end}}{{with .Params.Get "cluster"}}<input type="hidden" name="cluster" value="{{.}}">{{end}}
+  <input type="search" name="q" value="{{.Params.Get "q"}}" placeholder="Filter by command, cluster, flag or run ID" aria-label="Filter runs" autocomplete="off" spellcheck="false"><button type="submit" class="btn">Filter</button></form>
 <div hx-swap="morph:innerHTML" sse-swap="run-list">{{fragment "run-list" .}}</div>
 {{end}}
 
-{{define "run-list"}}{{with .Data}}<div class="tabs" role="navigation" aria-label="Filter by status">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.Href}}">{{.Label}}<span class="n">{{.N}}</span></a>{{end}}</div>
+{{define "run-list"}}{{with .Data}}<div class="tabs" role="navigation" aria-label="Filter by status">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}<span class="n">{{.N}}</span></a>{{end}}</div>
+{{if or .Realms .Clusters .Clear}}<div class="runchips">{{with .Realms}}<div class="runchips-g" role="group" aria-label="Filter by realm"><span class="faint">Realm</span>{{range .}}{{template "run-chip" .}}{{end}}</div>{{end}}{{with .Clusters}}<div class="runchips-g" role="group" aria-label="Filter by cluster"><span class="faint">Cluster</span>{{range .}}{{template "run-chip" .}}{{end}}</div>{{end}}{{with .Clear}}<a class="runchips-clear" href="{{.}}">Clear filter</a>{{end}}</div>{{end}}
 <section class="panel">{{if .Rows}}<div class="tw"><table class="runs">
 <thead><tr><th>Status</th><th>Command</th><th>Started</th><th class="num">Duration</th><th class="hide-s">Targets</th></tr></thead>
 <tbody>{{range .Rows}}<tr>
 <td><span class="pill {{.PillClass}}">{{.Pill}}</span></td>
-<td><a class="mono" href="/runs/{{.ID}}">{{.Title}}</a>{{with .Chip}} <span class="chip">{{.}}</span>{{end}}</td>
+<td><a class="mono" href="/runs/{{.ID}}">{{range $i, $w := .Words}}{{if $i}} {{end}}{{if $w.Flag}}<span class="flag">{{$w.Text}}</span>{{else}}{{$w.Text}}{{end}}{{end}}</a>{{with .Realm}} <span class="chip" title="realm">{{.}}</span>{{end}}{{with .Chip}} <span class="chip">{{.}}</span>{{end}}</td>
 <td class="muted">{{.Started}}</td>
 <td class="num">{{template "run-elapsed" .}}</td>
 <td class="hide-s mono muted">{{.Counts}}</td>
 </tr>{{end}}</tbody></table></div>{{if .More}}<div class="pb faint">{{.More}} older runs are not listed.</div>{{end}}
-{{else}}<div class="empty">{{if .Total}}No run matches this filter.{{else}}No runs yet. A command that sind runs, here or in a terminal, shows up as soon as it writes to the event log.{{end}}</div>{{end}}</section>{{end}}{{end}}
+{{else}}<div class="empty">{{if .Total}}No run matches this filter.{{with .Clear}} <a href="{{.}}">Clear filter</a>{{end}}{{else}}No runs yet. A command that sind runs, here or in a terminal, shows up as soon as it writes to the event log.{{end}}</div>{{end}}</section>{{end}}{{end}}
+
+{{/* run-chip is a chip of the Activity page that filters by a realm or a
+cluster, from a runTab: a link that turns the filter on, or off when it is
+on, which a check mark and aria-current show. */}}
+{{define "run-chip"}}<a class="fchip{{if .On}} on{{end}}" href="{{.Href}}" title="{{.Tip}}"{{if .On}} aria-current="true"{{end}}>{{if .On}}<span aria-hidden="true">✓ </span>{{end}}{{.Label}}<span class="n">{{.N}}</span></a>{{end}}
