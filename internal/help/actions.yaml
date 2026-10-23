@@ -34,11 +34,11 @@
   words: [worker, nodeset]
 - id: power
   title: Power
-  summary: Starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog lists every verb and selects the one of the button that opened it.
+  summary: Drains or resumes workers in Slurm with scontrol, or starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog groups the actions, selects the one of the button that opened it, and warns before it stops the controller in control, the standby controller of a pair, the db node or the last running workers.
   command: sind power reboot NODES
   undo: Use the opposite verb
   doc: usage/power-control#commands
-  words: [nodeset]
+  words: [nodeset, drain]
 - id: connect
   title: Connect a container
   summary: Attaches a container that sind did not make to the networks of the realm.

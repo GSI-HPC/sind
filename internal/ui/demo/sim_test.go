@@ -275,6 +275,25 @@ func TestSim_UnknownCommands(t *testing.T) {
 	assert.Equal(t, []string{"run"}, stepsOf(r))
 }
 
+func TestSim_ExecWritesNoRun(t *testing.T) {
+	s, st := newSim(t)
+	task := s.startWait(t, st, "--realm", "sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-0", "State=RESUME")
+	assert.Equal(t, store.TaskOK, task.Status)
+	_, ok := st.Snapshot().RunOfTrace(task.Trace)
+	assert.False(t, ok, "sind exec writes no event log")
+	assert.Nil(t, st.Snapshot().Lock("sind"), "and takes no lock")
+}
+
+func TestSim_ExecCanceled(t *testing.T) {
+	w, st := seededStore(t)
+	s := NewSim(st, w, liveClock{speed: 1})
+	t.Cleanup(func() { s.Shutdown(10 * time.Second) })
+	id, err := s.Start(run.Spec{Argv: []string{"sind", "exec", "--", "scontrol", "update", "NodeName=worker-0", "State=RESUME"}})
+	require.NoError(t, err)
+	require.NoError(t, s.Cancel(id))
+	assert.Equal(t, store.TaskCanceled, waitTask(t, st, id).Status)
+}
+
 func TestSim_Cancel(t *testing.T) {
 	w, st := seededStore(t)
 	s := NewSim(st, w, liveClock{speed: 20})

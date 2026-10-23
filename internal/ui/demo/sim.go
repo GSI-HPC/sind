@@ -91,6 +91,9 @@ type plan struct {
 	work   func(ctx context.Context, p play) error
 	// done is what a command that succeeded leaves besides its nodes.
 	done func()
+	// silent says that the command writes no event log and takes no lock,
+	// as sind exec.
+	silent bool
 }
 
 // emitter returns the function that applies what a script does to the
@@ -142,19 +145,26 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 
 // exec plays a command as the child of the runner would run it.
 func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, id string, p plan) {
-	log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, Run: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
-	bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
-	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, p.title, targetOf(p.target)...)
-	pl := play{clk: s.clk, emit: s.emitter(p.realm, nil)}
-	err := s.locked(ctx, pl, p.realm, t.Display, func() error { return p.work(ctx, pl) })
-	if err == nil && p.done != nil {
-		p.done()
-		s.w.Publish(s.st)
+	var err error
+	if p.silent {
+		// A command that writes no event log, such as sind exec, and takes
+		// no lock.
+		err = p.work(ctx, play{clk: s.clk})
+	} else {
+		log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, Run: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
+		bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
+		cctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, p.title, targetOf(p.target)...)
+		pl := play{clk: s.clk, emit: s.emitter(p.realm, nil)}
+		err = s.locked(cctx, pl, p.realm, t.Display, func() error { return p.work(cctx, pl) })
+		if err == nil && p.done != nil {
+			p.done()
+			s.w.Publish(s.st)
+		}
+		command.End(err)
+		bus.Close()
+		// The log writes to the simulator, which does not fail.
+		_ = log.Close()
 	}
-	command.End(err)
-	bus.Close()
-	// The log writes to the simulator, which does not fail.
-	_ = log.Close()
 
 	s.mu.Lock()
 	delete(s.running, t.ID)
@@ -298,6 +308,13 @@ func (s *Sim) plan(argv []string) (plan, error) {
 	realm := mesh.DefaultRealm
 	if len(argv) >= 2 && argv[0] == "--realm" {
 		realm, argv = argv[1], argv[2:]
+	}
+	if len(argv) > 0 && argv[0] == "exec" {
+		// sind exec runs a command in a node, such as the scontrol of a
+		// drain, and draws no progress.
+		return plan{title: "exec", realm: realm, silent: true, work: func(ctx context.Context, p play) error {
+			return p.clk.Sleep(ctx, 600*time.Millisecond)
+		}}, nil
 	}
 	if len(argv) < 2 {
 		return plan{title: strings.Join(argv, " "), realm: realm, work: func(ctx context.Context, p play) error {

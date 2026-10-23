@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -43,6 +44,9 @@ type runWait struct {
 	Canceling bool
 	Err       string
 	Output    string
+	// NoRun says that the command writes no event log, so it never has a
+	// run page.
+	NoRun bool
 }
 
 // runWaitOf builds the waiting page's fragment for the task in the Param id.
@@ -51,7 +55,7 @@ func runWaitOf(v *View) *runWait {
 	if !ok {
 		return &runWait{Gone: true}
 	}
-	w := &runWait{TaskID: t.ID, Title: t.Display, Err: t.Err, Output: t.Output}
+	w := &runWait{TaskID: t.ID, Title: t.Display, Err: t.Err, Output: t.Output, NoRun: runless(t)}
 	if w.Title == "" {
 		w.Title = t.Action
 	}
@@ -63,6 +67,17 @@ func runWaitOf(v *View) *runWait {
 	w.PillClass = runPillClass(card.Class)
 	w.Cancel, w.Canceling = card.Cancel, card.Canceling
 	return w
+}
+
+// runless reports whether the command of the task writes no event log, so
+// that it has no run page: sind exec, which Drain and Resume run.
+func runless(t store.Task) bool {
+	words := strings.Fields(t.Display)
+	i := 1
+	if len(words) > i && words[i] == "--realm" {
+		i += 2
+	}
+	return len(words) > i && words[i] == "exec"
 }
 
 // runTaskPage answers GET /tasks/{id}: a redirect to the run page when the

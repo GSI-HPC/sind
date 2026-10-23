@@ -36,8 +36,9 @@ func nodeNames(f Form) []string {
 }
 
 // pickNodes returns the nodes of the cluster that the form's field "nodes"
-// names, which must all exist and, with workersOnly, be workers.
-func pickNodes(f Form, c Context, realm, clusterName string, workersOnly bool) ([]cluster.NodeSummary, error) {
+// names, which must all exist and, where workersFor says what the command
+// does to them, such as "deleted", be workers.
+func pickNodes(f Form, c Context, realm, clusterName, workersFor string) ([]cluster.NodeSummary, error) {
 	names := nodeNames(f)
 	if len(names) == 0 {
 		return nil, &Missing{Field: "nodes", Text: "pick at least one node of " + clusterName}
@@ -50,8 +51,8 @@ func pickNodes(f Form, c Context, realm, clusterName string, workersOnly bool) (
 			return nil, fmt.Errorf("nodes: cluster %s has no node %s", clusterName, name)
 		}
 		n := have[i]
-		if workersOnly && n.Role != config.RoleWorker {
-			return nil, fmt.Errorf("nodes: %s is the %s, and only workers can be deleted", name, n.Role)
+		if workersFor != "" && n.Role != config.RoleWorker {
+			return nil, fmt.Errorf("nodes: %s is the %s, and only workers can be %s", name, n.Role, workersFor)
 		}
 		picked = append(picked, n)
 	}
@@ -84,19 +85,37 @@ func nodeWords(clusterName string, shorts []string) []string {
 // nodes get: worker-N upward from the highest number there is.
 func nextWorkers(nodes []cluster.NodeSummary, count int) []string {
 	next := 0
-	for _, n := range nodes {
-		if n.Role != config.RoleWorker {
-			continue
-		}
-		if i := strings.LastIndex(ShortName(n), "-"); i >= 0 {
-			if v, err := strconv.Atoi(ShortName(n)[i+1:]); err == nil && v >= next {
-				next = v + 1
-			}
-		}
+	if n, ok := NewestWorker(nodes); ok {
+		next = workerNumber(n) + 1
 	}
 	out := make([]string, count)
 	for i := range out {
 		out[i] = "worker-" + strconv.Itoa(next+i)
 	}
 	return out
+}
+
+// NewestWorker returns the worker of nodes with the highest number, which
+// new workers take their image and size from.
+func NewestWorker(nodes []cluster.NodeSummary) (cluster.NodeSummary, bool) {
+	var newest cluster.NodeSummary
+	found := false
+	for _, n := range nodes {
+		if n.Role == config.RoleWorker && workerNumber(n) >= 0 && (!found || workerNumber(n) > workerNumber(newest)) {
+			newest, found = n, true
+		}
+	}
+	return newest, found
+}
+
+// workerNumber returns the number at the end of the short name of a worker,
+// -1 for none.
+func workerNumber(n cluster.NodeSummary) int {
+	short := ShortName(n)
+	if i := strings.LastIndex(short, "-"); i >= 0 {
+		if v, err := strconv.Atoi(short[i+1:]); err == nil && v >= 0 {
+			return v
+		}
+	}
+	return -1
 }

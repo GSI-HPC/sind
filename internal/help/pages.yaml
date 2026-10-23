@@ -31,10 +31,10 @@
   howtos: [reach-node, job-pending]
 - id: node
   title: Node
-  summary: One node container, its services and its address. You can power it or delete it here.
+  summary: One node container, its services and its address. You can power it or delete it here, and drain or resume a worker in Slurm.
   route: /nodes/{realm}/{cluster}/{node}
   doc: usage/diagnostics#node-status
-  words: [node-roles, managed, munge, slurmctld, slurmd, sshd]
+  words: [node-roles, managed, munge, slurmctld, sshd, drain]
   howtos: [reach-node, job-pending]
 - id: mesh
   title: Mesh and DNS

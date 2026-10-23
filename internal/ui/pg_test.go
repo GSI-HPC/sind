@@ -391,6 +391,8 @@ func TestPgClusterNodesTab(t *testing.T) {
 	assert.Contains(t, body, `op=reboot&amp;realm=sind" data-pg-dialog>Reboot…`)
 	assert.Contains(t, body, `op=pause&amp;realm=sind" data-pg-dialog>Freeze…`)
 	assert.Contains(t, body, `op=unpause&amp;realm=sind" data-pg-dialog>Unfreeze…`)
+	assert.Contains(t, body, `op=drain&amp;realm=sind" data-pg-dialog data-pg-workers>Drain…`)
+	assert.Contains(t, body, `op=resume&amp;realm=sind" data-pg-dialog data-pg-workers>Resume…`)
 	assert.Contains(t, body, `<a class="btn sm danger" href="/dialogs/delete-worker?cluster=dev&amp;realm=sind" data-pg-dialog data-pg-workers>Delete…</a>`)
 	assert.Contains(t, body, `<span class="pill bad">stopped</span> </td>`)
 	assert.Contains(t, body, `<span class="faint">–</span>`)
@@ -511,6 +513,8 @@ func TestPgNodePage(t *testing.T) {
 	assert.Contains(t, body, `op=start&amp;realm=sind" hx-get=`)
 	assert.Contains(t, body, `nodes=worker-3&amp;op=start`)
 	assert.Contains(t, body, `class="btn danger" href="/dialogs/delete-worker?cluster=dev&amp;nodes=worker-3&amp;realm=sind"`)
+	assert.Contains(t, body, `nodes=worker-3&amp;op=drain&amp;realm=sind" hx-get=`)
+	assert.Contains(t, body, `nodes=worker-3&amp;op=resume&amp;realm=sind" hx-get=`)
 	assert.Contains(t, body, `<h2>Issues</h2>`)
 	assert.Contains(t, body, `<div class="pg-issue"><span class="pill bad">stopped</span></div>`)
 	// A node that does not run: its container output, which Docker keeps.

@@ -169,7 +169,11 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`}},
 		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Removes its 3 containers", `Type <b class="mono">dev</b> to confirm`, `btn danger solid`}},
 		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, "Type"}},
-		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Power: nodes of dev", `value="worker-0" checked`, `value="worker-1" checked`, `value="controller">`, `value="cut" checked`, "Cut power"}},
+		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Power and drain: nodes of dev", `value="worker-0" checked`, `value="worker-1" checked`, `value="controller">`, `value="cut" checked`, "Cut power",
+			`<legend class="lbl">Slurm (scontrol)</legend>`, `<legend class="lbl">Containers</legend>`, `<fieldset class="fld act-ops act-danger"><legend class="lbl">Can lose data</legend>`,
+			`id="act-reason" name="reason" value=""`, "Drain and Resume change what Slurm does"}},
+		{"power", "cluster=dev&op=drain&reason=disk", []string{`value="drain" checked`, `name="reason" value="disk"`}},
+		{"power", "cluster=dev&op=resume", []string{`value="resume" checked`}},
 		{"power", "cluster=dev&op=stop", []string{`value="shutdown" checked`}},
 		{"power", "cluster=dev&op=melt", []string{`value="shutdown" checked`}},
 		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`, `id="act-realm" name="realm" value="sind"`, "The realm whose networks the container joins."}},
@@ -266,7 +270,7 @@ func TestActPreview_ShowsTheCommand(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, `<code>sind power on &#39;worker-[0-1].dev&#39;</code>`)
 	assert.Contains(t, body, `data-copy="sind power on &#39;worker-[0-1].dev&#39;"`)
-	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Run<kbd`)
+	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Start 2 nodes<kbd`)
 	assert.NotContains(t, body, `disabled`)
 	assert.NotContains(t, body, "act-yaml")
 }

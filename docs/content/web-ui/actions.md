@@ -35,6 +35,7 @@ Each action runs one command:
 | Delete cluster | `sind delete cluster NAME` | Cannot be undone |
 | Delete workers | `sind delete worker NODES` | Cannot be undone |
 | Power | `sind power VERB NODES` | Use the opposite verb |
+| Drain or resume workers | `sind exec CLUSTER -- scontrol update NodeName=NODES State=DRAIN Reason=WHY` | Resume, or drain |
 | Connect or disconnect a container | `sind connect container NAME` | Disconnect or connect it again |
 | Delete realm | `sind delete realm` | Cannot be undone |
 
@@ -56,9 +57,15 @@ The plan lists the images of the nodes with their Slurm release, which sind ui r
 
 ## Power
 
-The power buttons of a page, such as **Reboot…**, open the Power dialog. It lists every verb and selects the one of the button. Power-cycle and cut power kill the containers at once. Run them only when you need to.
+The power buttons of a page, such as **Reboot…**, open the Power dialog. It sorts the actions into three groups and selects the one of the button:
 
-{{< uishot "dialog-power" "The Power dialog lists every verb, and the command of the one that you selected." >}}
+- **Slurm (scontrol)**: **Drain** and **Resume** change what Slurm does with workers and leave their containers running. Drain lets the running jobs end and starts no new ones on the nodes; it needs a reason, which `sinfo -R` shows. Resume lets the nodes take jobs again. Both run `scontrol update` in the cluster with `sind exec`, which writes no progress, so their task has no run page.
+- **Containers**: power on, shut down, reboot, freeze and unfreeze change the containers, up to 8 at a time.
+- **Can lose data**: power-cycle and cut power kill the containers at once. Run them only when you need to.
+
+Before an action that stops nodes, the dialog warns when they include the controller in control, the standby controller of a pair, the db node or every running worker of a cluster, and says what that does to jobs, failover and accounting. The button names the action and the nodes, such as **Shut down 3 nodes**.
+
+{{< uishot "dialog-power" "The Power dialog groups the actions, and shows the command of the one that you selected." >}}
 
 ## Delete
 

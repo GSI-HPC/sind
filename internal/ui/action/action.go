@@ -73,6 +73,9 @@ type Command struct {
 	// Problems are the fields that the command cannot take as they are.
 	// The command does not run while it has any, but its plan shows.
 	Problems []Problem
+	// OK labels the button that runs the command, such as "Delete
+	// worker-5"; empty for the dialog's own label.
+	OK string
 }
 
 // Problem is a field of a form that is wrong. Build reports it, instead of

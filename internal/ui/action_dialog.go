@@ -24,7 +24,7 @@ import (
 // actDialogKeys are the query keys that open a dialog with its fields
 // filled in.
 var actDialogKeys = []string{
-	"realm", "cluster", "nodes", "op", "container",
+	"realm", "cluster", "nodes", "op", "reason", "container",
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
@@ -200,12 +200,14 @@ var actSpecs = map[string]actSpec{
 	},
 	"power": {
 		OK: "Run", NeedsCluster: true,
-		Title: func(d *actDialog) string { return "Power: nodes of " + d.Cluster },
-		Lead:  func(*actDialog) string { return "At most 8 nodes at a time." },
+		Title: func(d *actDialog) string { return "Power and drain: nodes of " + d.Cluster },
+		Lead: func(*actDialog) string {
+			return "Drain and Resume change what Slurm does with the nodes. The other actions change their containers, up to 8 at a time."
+		},
 		Defaults: func(d *actDialog) {
 			op, ok := action.PowerOpOf(d.Form.Get("op"))
 			if !ok {
-				op = action.PowerOps[0]
+				op, _ = action.PowerOpOf("shutdown")
 			}
 			d.Form.Set("op", op.ID)
 		},
@@ -649,8 +651,8 @@ type actDialog struct {
 	Title, Lead, Typed string
 	// Nodes are the nodes of the cluster that the user can pick.
 	Nodes []actNodeChoice
-	// Ops are the power operations.
-	Ops []action.PowerOp
+	// OpGroups are the power operations, by group.
+	OpGroups []action.PowerGroup
 	// Waits are the choices of the wait for a new cluster.
 	Waits []actChoice
 	// Lock is who holds the realm's lock, if the command will wait for it.
@@ -800,7 +802,7 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	spec := actSpecs[a.ID]
 	d := &actDialog{
 		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
-		Ops: action.PowerOps, Waits: actWaits,
+		OpGroups: action.PowerGroups(), Waits: actWaits,
 	}
 	for _, k := range keys {
 		if vals := v.Params[k]; len(vals) > 0 {
@@ -919,9 +921,13 @@ type actPreview struct {
 	Lock  *state.LockHolder
 }
 
+// OK labels the button that runs the command: as the command says, or as
+// the dialog does.
+func (p actPreview) OK() string { return cmp.Or(p.Cmd.OK, p.Spec.OK) }
+
 // OKButton is the button that runs the command, as the preview says.
 func (p actPreview) OKButton() actOK {
-	return actOK{Label: p.Spec.OK, Danger: p.Danger, Off: p.Blocked, Swap: true}
+	return actOK{Label: p.OK(), Danger: p.Danger, Off: p.Blocked, Swap: true}
 }
 
 // actMaxTiles is the most nodes that a plan draws one by one.

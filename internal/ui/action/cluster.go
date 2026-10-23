@@ -67,7 +67,7 @@ func buildDeleteWorker(f Form, c Context) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	picked, err := pickNodes(f, c, realm, cl.Name, true)
+	picked, err := pickNodes(f, c, realm, cl.Name, "deleted")
 	if err != nil {
 		return Command{}, err
 	}

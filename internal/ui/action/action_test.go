@@ -278,18 +278,21 @@ func TestBuildPower(t *testing.T) {
 	for _, tc := range []struct{ op, sub string }{
 		{"shutdown", "shutdown"}, {"stop", "shutdown"}, {"off", "shutdown"}, {"on", "on"}, {"start", "on"},
 		{"reboot", "reboot"}, {"restart", "reboot"}, {"cycle", "cycle"}, {"cut", "cut"},
-		{"freeze", "freeze"}, {"pause", "freeze"}, {"unfreeze", "unfreeze"}, {"unpause", "unfreeze"}, {"resume", "unfreeze"},
+		{"freeze", "freeze"}, {"pause", "freeze"}, {"unfreeze", "unfreeze"}, {"unpause", "unfreeze"},
 	} {
 		cmd, err := build(t, "power", form("cluster", "dev", "op", tc.op, "nodes", "worker-0,worker-1,worker-2"))
 		require.NoError(t, err, tc.op)
 		assert.Equal(t, "sind power "+tc.sub+" 'worker-[0-2].dev'", cmd.Display)
 		danger := tc.sub == "cut" || tc.sub == "cycle"
 		assert.Equal(t, danger, len(cmd.Warns) == 1, tc.op)
+		op, _ := PowerOpOf(tc.sub)
+		assert.Equal(t, op.Label+" 3 nodes", cmd.OK)
 	}
 
 	cmd, err := build(t, "power", form("realm", "ci", "cluster", "ci1", "op", "on", "nodes", "worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci power on worker-0.ci1", cmd.Display)
+	assert.Equal(t, "Start worker-0", cmd.OK)
 
 	_, err = build(t, "power", form("cluster", "dev", "op", "melt", "nodes", "worker-0"))
 	assert.EqualError(t, err, "op: pick what to do with the nodes")
@@ -303,6 +306,113 @@ func TestBuildPower(t *testing.T) {
 	assert.Equal(t, "sind power on controller.dev", cmd.Display)
 }
 
+func TestBuildPower_Warnings(t *testing.T) {
+	st := store.New()
+	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 1}})
+	st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	backup := node("dev", "controller-backup", config.RoleController)
+	st.SetNodes("sind", []cluster.NodeSummary{
+		node("dev", "controller", config.RoleController), backup, node("dev", "db", config.RoleDB),
+		node("dev", "worker-0", config.RoleWorker), node("dev", "worker-1", config.RoleWorker),
+	})
+	a, _ := Lookup("power")
+	warns := func(op, nodes string) []string {
+		t.Helper()
+		cmd, err := a.Build(form("cluster", "dev", "op", op, "nodes", nodes), (&testStoreT{st}).ctx())
+		require.NoError(t, err)
+		return cmd.Warns
+	}
+
+	assert.Equal(t, []string{"controller runs slurmctld. controller-backup takes over after SlurmctldTimeout; until then dev takes no jobs."}, warns("shutdown", "controller"))
+	assert.Equal(t, []string{"controller and controller-backup run slurmctld. While they are down, dev takes no jobs, and sbatch, squeue and sinfo fail."},
+		warns("freeze", "controller,controller-backup"))
+	assert.Equal(t, []string{"controller-backup is the standby controller. controller stays in control and dev keeps taking jobs, but has no failover while controller-backup is down."},
+		warns("shutdown", "controller-backup"))
+	assert.Equal(t, []string{"db runs slurmdbd and MariaDB. While it is down, sacct and sacctmgr fail; slurmctld keeps the accounting records until it is back."}, warns("reboot", "db"))
+	assert.Equal(t, []string{"These are all the running workers of dev: new jobs wait until a worker is back."}, warns("shutdown", "worker-0,worker-1"))
+	assert.Empty(t, warns("shutdown", "worker-0"))
+	assert.Empty(t, warns("on", "controller,db,worker-0,worker-1"), "start stops nothing")
+	assert.Len(t, warns("cut", "worker-0,worker-1"), 2, "the last workers and the danger")
+
+	// The status says which controller is in control.
+	st.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{
+		{Name: "controller.dev", Role: config.RoleController, Health: &cluster.NodeHealth{HA: &cluster.HAStatus{Position: "primary"}}},
+		{Name: "controller-backup.dev", Role: config.RoleController, Health: &cluster.NodeHealth{HA: &cluster.HAStatus{Position: "backup", InControl: true}}},
+		{Name: "worker-0.dev", Role: config.RoleWorker},
+	}})
+	assert.Equal(t, []string{"controller-backup runs slurmctld. controller takes over after SlurmctldTimeout; until then dev takes no jobs."}, warns("shutdown", "controller-backup"))
+	assert.Equal(t, []string{"controller is the standby controller. controller-backup stays in control and dev keeps taking jobs, but has no failover while controller is down."},
+		warns("reboot", "controller"))
+	st.SetStatus("sind", "dev", nil)
+
+	// Without the primary, the backup is in control.
+	primary := node("dev", "controller", config.RoleController)
+	primary.State = cluster.StateStopped
+	st.SetNodes("sind", []cluster.NodeSummary{primary, backup, node("dev", "worker-0", config.RoleWorker)})
+	assert.Equal(t, []string{"controller-backup runs slurmctld. While it is down, dev takes no jobs, and sbatch, squeue and sinfo fail."}, warns("shutdown", "controller-backup"))
+	assert.Empty(t, warns("shutdown", "controller"), "a stopped controller serves nothing")
+
+	// A stopped worker does not count as one that runs jobs.
+	stopped := node("dev", "worker-1", config.RoleWorker)
+	stopped.State = cluster.StateStopped
+	st.SetNodes("sind", []cluster.NodeSummary{node("dev", "controller", config.RoleController), node("dev", "worker-0", config.RoleWorker), stopped})
+	assert.Equal(t, []string{
+		"controller runs slurmctld. While it is down, dev takes no jobs, and sbatch, squeue and sinfo fail.",
+		"These are all the running workers of dev: new jobs wait until a worker is back.",
+	}, warns("shutdown", "controller,worker-0"))
+	assert.Empty(t, warns("shutdown", "worker-1"))
+}
+
+func TestBuildPower_SlurmState(t *testing.T) {
+	cmd, err := build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "worker-0,worker-1", "reason", " disk test "))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-[0-1]", "State=DRAIN", "Reason=disk test"}, cmd.Argv)
+	assert.Equal(t, "sind exec dev -- scontrol update 'NodeName=worker-[0-1]' State=DRAIN 'Reason=disk test'", cmd.Display)
+	assert.Equal(t, "Drain 2 nodes", cmd.OK)
+	assert.Contains(t, cmd.Notes[0], "Running jobs go on")
+	assert.Empty(t, cmd.Warns)
+
+	cmd, err = build(t, "power", form("realm", "ci", "cluster", "ci1", "op", "resume", "nodes", "worker-0"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind --realm ci exec ci1 -- scontrol update NodeName=worker-0 State=RESUME", cmd.Display)
+	assert.Equal(t, "Resume worker-0", cmd.OK)
+	assert.Equal(t, []string{"No controller of ci1 runs, so scontrol fails. Start the controller first."}, cmd.Warns)
+
+	cmd, err = build(t, "power", form("cluster", "default", "op", "resume", "nodes", "worker-0"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind exec -- scontrol update NodeName=worker-0 State=RESUME", cmd.Display)
+
+	_, err = build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "worker-0"))
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "Write why the nodes drain, such as disk test.", missing.Hint())
+	cmd, err = build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "worker-0", "reason", strings.Repeat("ä", 200)))
+	require.NoError(t, err, "the length counts characters, not bytes")
+	assert.Contains(t, cmd.Display, "Reason="+strings.Repeat("ä", 200))
+	for _, bad := range []string{strings.Repeat("x", 201), strings.Repeat("ä", 201), "a\nb"} {
+		_, err = build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "worker-0", "reason", bad))
+		assert.EqualError(t, err, "reason: write one line of at most 200 characters")
+	}
+	_, err = build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "controller", "reason", "x"))
+	assert.EqualError(t, err, "nodes: controller is the controller, and only workers can be drained or resumed")
+
+	// sind runs no Slurm on an unmanaged cluster or node.
+	st := testStore()
+	a, _ := Lookup("power")
+	st.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{
+		{Name: "controller.dev", Role: config.RoleController, Managed: true},
+		{Name: "worker-0.dev", Role: config.RoleWorker, Managed: false},
+		{Name: "worker-1.dev", Role: config.RoleWorker, Managed: true},
+	}})
+	_, err = a.Build(form("cluster", "dev", "op", "resume", "nodes", "worker-0"), st.ctx())
+	assert.EqualError(t, err, "nodes: worker-0 is unmanaged: it runs no slurmd")
+	_, err = a.Build(form("cluster", "dev", "op", "resume", "nodes", "worker-1"), st.ctx())
+	require.NoError(t, err)
+	st.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{{Name: "controller.dev", Role: config.RoleController}}})
+	_, err = a.Build(form("cluster", "dev", "op", "resume", "nodes", "worker-1"), st.ctx())
+	assert.EqualError(t, err, "cluster dev is unmanaged: sind runs no Slurm on it")
+}
+
 func TestPowerOpOf(t *testing.T) {
 	op, ok := PowerOpOf("cut")
 	assert.True(t, ok)
@@ -310,12 +420,31 @@ func TestPowerOpOf(t *testing.T) {
 	op, ok = PowerOpOf("unpause")
 	assert.True(t, ok)
 	assert.Equal(t, "unfreeze", op.ID)
+	op, ok = PowerOpOf("resume")
+	assert.True(t, ok)
+	assert.True(t, op.Slurm(), "resume is Slurm's, not unfreeze")
 	_, ok = PowerOpOf("")
 	assert.False(t, ok)
 	for _, op := range PowerOps {
 		assert.NotEmpty(t, op.Label)
 		assert.NotEmpty(t, op.Text)
 	}
+}
+
+func TestPowerGroups(t *testing.T) {
+	var ids []string
+	n := 0
+	for _, g := range PowerGroups() {
+		ids = append(ids, g.ID)
+		assert.NotEmpty(t, g.Label)
+		for _, op := range g.Ops {
+			assert.Equal(t, g.ID, op.Group)
+			assert.Equal(t, g.ID == GroupDanger, op.Danger, op.ID)
+			n++
+		}
+	}
+	assert.Equal(t, []string{GroupSlurm, GroupContainers, GroupDanger}, ids)
+	assert.Equal(t, len(PowerOps), n, "every op has a group")
 }
 
 func TestBuildConnect(t *testing.T) {

@@ -133,9 +133,11 @@ type pgClusterView struct {
 	Services []string
 	Matrix   []pgMatrixRow
 	// Selection holds the dialogs that the nodes tab offers for the
-	// selected nodes.
-	Selection []pgAction
-	Delete    pgAction
+	// selected nodes, WorkerSelection and Delete those it offers while only
+	// workers are selected.
+	Selection       []pgAction
+	WorkerSelection []pgAction
+	Delete          pgAction
 	// Network tab.
 	Networks []pgNetRow
 	Mounts   []cluster.MountPoint
@@ -259,6 +261,7 @@ func pgNodesTab(d *pgClusterView) {
 		power("Start…", "", "start"), power("Shut down…", "", "stop"), power("Reboot…", "", "reboot"),
 		power("Freeze…", "", "pause"), power("Unfreeze…", "", "unpause"),
 	}
+	d.WorkerSelection = []pgAction{power("Drain…", "", "drain"), power("Resume…", "", "resume")}
 	d.Delete = pgDialogAction("Delete…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
 }
 

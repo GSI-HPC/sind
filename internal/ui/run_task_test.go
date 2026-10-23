@@ -72,10 +72,36 @@ func TestRunTaskPageEndedWithoutRun(t *testing.T) {
 	assert.Contains(t, body, `<div class="callout warn">The command ended (canceled)`)
 	assert.NotContains(t, body, "standard error")
 	body = ts.get("/tasks/o").Body.String()
+	assert.Contains(t, body, `<div class="callout">The command ended without errors. Commands such as Drain and Resume write no progress`)
+	ts.st.AddTask(store.Task{ID: "w", Display: "d", Trace: "tr5", Start: runAt(10), End: runPtr(runAt(11)), Status: store.TaskOK, Output: "warning"})
+	body = ts.get("/tasks/w").Body.String()
 	assert.Contains(t, body, `<div class="callout ">The command ended (ok)`)
+	assert.Contains(t, body, `<pre class="term tout">warning</pre>`)
 	body = ts.get("/tasks/s").Body.String()
 	assert.Contains(t, body, "Stopping…")
 	assert.NotContains(t, body, `action="/tasks/s/cancel"`)
+}
+
+func TestRunTaskPageOfExec(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	ts.st.AddTask(store.Task{ID: "r", Display: "sind exec dev -- scontrol update NodeName=worker-0 State=RESUME", Trace: "tr", Start: runAt(10), Status: store.TaskRunning})
+	ts.st.AddTask(store.Task{ID: "f", Display: "sind --realm ci exec ci1 -- scontrol update NodeName=worker-0 State=RESUME", Trace: "tr2", Start: runAt(10), End: runPtr(runAt(11)), Status: store.TaskFailed, Err: "exit status 1"})
+
+	body := ts.get("/tasks/r").Body.String()
+	assert.Contains(t, body, "The command runs. It writes no progress, so it has no run page: this page shows how it ends.")
+	assert.NotContains(t, body, "first progress event")
+	body = ts.get("/tasks/f").Body.String()
+	assert.Contains(t, body, "The command ended (failed). exit status 1")
+	assert.NotContains(t, body, "event log")
+}
+
+func TestRunless(t *testing.T) {
+	for display, want := range map[string]bool{
+		"sind exec dev -- scontrol ping": true, "sind --realm ci exec": true,
+		"sind create cluster": false, "sind --realm ci delete realm": false, "sind": false, "sind --realm": false, "": false,
+	} {
+		assert.Equal(t, want, runless(store.Task{Display: display}), display)
+	}
 }
 
 func TestRunTaskRoutesRefuseALongId(t *testing.T) {

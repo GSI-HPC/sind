@@ -60,9 +60,9 @@
     bar.hidden = selected.size === 0;
     const chosen = rows.filter(r => selected.has(r.dataset.pgNode));
     bar.querySelector('[data-pg-expr]').textContent = fold(chosen.map(r => r.dataset.pgNode));
-    // Only workers can be deleted.
-    const del = bar.querySelector('[data-pg-workers]');
-    if (del) del.hidden = !chosen.every(r => r.dataset.pgRole === 'worker');
+    // Only workers can be drained, resumed and deleted.
+    const workers = chosen.every(r => r.dataset.pgRole === 'worker');
+    for (const b of bar.querySelectorAll('[data-pg-workers]')) b.hidden = !workers;
   }
 
   // dialogURL adds the selected nodes to the address of a dialog.

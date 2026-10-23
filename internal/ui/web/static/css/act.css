@@ -45,6 +45,14 @@
 .scrim .checks.act-nodes label{flex-wrap:wrap}
 .scrim .checks.act-nodes{grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))}
 .scrim .checks.act-nodes small{display:inline}
+/* Power and drain: the actions in groups, the ones that can lose data
+   apart, and the reason of a drain only while Drain is picked. */
+.scrim fieldset.act-ops{border:0;margin:0;padding:0}
+.scrim fieldset.act-ops legend{padding:0;margin-bottom:6px}
+.scrim fieldset.act-danger{border:1px solid var(--bad);border-radius:var(--r);padding:8px 10px 10px;background:var(--bad-soft)}
+.scrim fieldset.act-danger legend{color:var(--bad);padding:0 4px;margin-bottom:0}
+.scrim .act-reason{display:none;margin-top:8px}
+.scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
 .scrim .err{font-size:var(--t-sm);color:var(--bad)}
 .scrim .err:empty{display:none}
 .scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}

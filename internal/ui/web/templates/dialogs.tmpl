@@ -352,9 +352,9 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 
 {{define "act-dlg-power"}}
 {{template "act-nodes" .}}
-<div class="fld"><span class="lbl">What to do</span><div class="checks">
+{{range .OpGroups}}<fieldset class="fld act-ops{{if eq .ID "danger"}} act-danger{{end}}"><legend class="lbl">{{.Label}}</legend><div class="checks">
   {{range .Ops}}<label><input type="radio" name="op" value="{{.ID}}"{{if $.Is "op" .ID}} checked{{end}}> <span>{{.Label}} <small>{{.Text}}</small></span></label>{{end}}
-</div></div>
+</div>{{if eq .ID "slurm"}}<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{$.Val "reason"}}" placeholder="such as disk test" maxlength="200"><span class="hint">sinfo -R shows it.</span></div>{{end}}</fieldset>{{end}}
 {{end}}
 
 {{define "act-dlg-connect"}}

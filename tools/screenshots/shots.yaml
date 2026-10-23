@@ -132,7 +132,7 @@ shots:
     page: dialogs
 
   - name: dialog-power
-    alt: "The Power dialog: what to do with the nodes of a cluster, and the command it runs"
+    alt: "The Power dialog: Drain and Resume, the container actions and those that can lose data, and the command it runs"
     path: /clusters/sind/dev
     steps:
       - dialog: power?realm=sind&cluster=dev&op=reboot&nodes=worker-0

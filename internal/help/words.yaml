@@ -25,6 +25,12 @@
   command: sind get node controller
   doc: configuration/node-definitions#node-roles
   see: [slurmctld, controller-backup, worker]
+- id: drain
+  title: Drain
+  summary: A drained worker takes no new jobs, while its running jobs go on and its container keeps running. Drain needs a reason, which sinfo -R shows. Resume lets the worker take jobs again.
+  command: sind exec -- scontrol update NodeName=worker-0 State=DRAIN Reason=test
+  doc: usage/power-control#drain-and-resume
+  see: [worker, slurmctld]
 - id: worker
   title: Worker
   summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster has at least one worker.
