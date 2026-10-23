@@ -144,8 +144,10 @@ type Task struct {
 	ID string
 	// Action is the id of the action that built the command.
 	Action string
-	// Display is the command as the dialog showed it, quoted for a shell.
+	// Display is the command as the dialog showed it, quoted for a shell,
+	// and Argv the command line it is made from.
 	Display string
+	Argv    []string
 	// Realm and Cluster name what the command works on, empty for none.
 	Realm   string
 	Cluster string

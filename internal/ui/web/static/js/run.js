@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // Script of the progress display. The server draws every page and fragment;
-// this file does four small things that need the browser: it counts the
+// this file does five small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
 // milliseconds since 1970), it keeps the details that the user opened open
 // when a fragment is morphed in, it puts the progress of the run in the
-// title of the tab, and it announces when a command starts or ends. It evaluates no text and needs no inline script.
+// title of the tab, it announces when a command starts or ends, and it
+// opens and closes the task dock. It evaluates no text and needs no inline script.
 (() => {
   'use strict';
 
@@ -22,8 +23,35 @@
     return Math.floor(d / 3600000) + 'h' + pad(Math.floor(d % 3600000 / 60000)) + 'm';
   }
 
+  // The dock shows its first card, or every card once the user opens it
+  // with Show all; the choice stays for the viewer. A card of a command
+  // that ended ok hides at its data-hide-at.
+  const dockKey = 'sind-ui-dock-open';
+  function dockOpen() {
+    try { return localStorage.getItem(dockKey) === '1'; } catch (e) { return false; }
+  }
+  function drawDock() {
+    const dock = document.getElementById('tasks');
+    if (!dock) return;
+    const open = dockOpen();
+    dock.classList.toggle('open', open);
+    const btn = dock.querySelector('[data-dock-toggle]');
+    if (!btn) return;
+    const label = open ? 'Show one' : 'Show all';
+    if (btn.textContent !== label) btn.textContent = label;
+    if (btn.getAttribute('aria-expanded') !== String(open)) btn.setAttribute('aria-expanded', String(open));
+  }
+  document.addEventListener('click', ev => {
+    if (!(ev.target instanceof Element) || !ev.target.closest('[data-dock-toggle]')) return;
+    try { localStorage.setItem(dockKey, dockOpen() ? '0' : '1'); } catch (e) { /* private window */ }
+    drawDock();
+  });
+
   function tick() {
     const now = Date.now();
+    document.querySelectorAll('[data-hide-at]').forEach(el => {
+      if (now >= Number(el.dataset.hideAt) && !el.classList.contains('gone')) el.classList.add('gone');
+    });
     document.querySelectorAll('[data-since]').forEach(el => {
       const since = Number(el.dataset.since);
       if (!(since > 0)) return;
@@ -103,7 +131,8 @@
     const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title', 'data-say-state'], subtree: true };
     if (main) new MutationObserver(update).observe(main, what);
     const dock = document.getElementById('tasks');
-    if (dock) new MutationObserver(() => { tick(); announce(); }).observe(dock, what);
+    if (dock) new MutationObserver(() => { tick(); announce(); drawDock(); }).observe(dock, what);
+    drawDock();
     update();
     // Tenths of a second, as the terminal draws them.
     setInterval(tick, 100);

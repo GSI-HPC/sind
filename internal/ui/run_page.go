@@ -81,8 +81,10 @@ func newRunCtx(v *View) runCtx {
 	rc := runCtx{Snap: v.Snap, Now: v.Now}
 	rc.Run, rc.Found = v.Snap.Run(v.Params.Get("id"))
 	if t, ok := runTaskOf(v.Snap, rc.Run.Trace); rc.Found && ok {
+		// The page names the run as the dock and Activity do, with the
+		// flags that tell it from other runs of the command.
 		rc.Task = &t
-		rc.Run.Title = runTitle(rc.Run, &t)
+		rc.Run.Title = taskTitle(t, &rc.Run)
 	}
 	return rc
 }
@@ -104,7 +106,7 @@ func runPageLoad(v *View) error {
 	}
 	v.Title = run.Title
 	if t, ok := runTaskOf(v.Snap, run.Trace); ok {
-		v.Title = runTitle(run, &t)
+		v.Title = taskTitle(t, &run)
 	}
 	if v.Title == "" {
 		v.Title = "Run " + id

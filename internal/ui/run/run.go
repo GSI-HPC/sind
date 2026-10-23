@@ -149,7 +149,7 @@ func (r *Runner) Start(s Spec) (string, error) {
 	}
 	trace, span := r.hex(16), r.hex(8)
 	t := store.Task{
-		ID: r.hex(8), Action: s.Action, Display: s.Display, Realm: s.Realm, Cluster: s.Cluster,
+		ID: r.hex(8), Action: s.Action, Display: s.Display, Argv: s.Argv, Realm: s.Realm, Cluster: s.Cluster,
 		Trace: trace, Start: r.cfg.Now(), Status: store.TaskRunning,
 	}
 	var environ []string

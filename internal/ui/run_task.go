@@ -13,8 +13,9 @@ import (
 )
 
 // registerRunTask adds the page of a task whose run is not in the event log
-// yet, and the routes of the dock: GET /tasks/{id} and POST
-// /tasks/{id}/dismiss. POST /tasks/{id}/cancel belongs to the actions.
+// yet, and the routes of the dock: GET /tasks/{id}, POST
+// /tasks/{id}/dismiss and POST /tasks/clear. POST /tasks/{id}/cancel belongs
+// to the actions.
 func registerRunTask(r *Registry) {
 	r.AddFragment(Fragment{
 		Name:     "run-wait",
@@ -25,6 +26,7 @@ func registerRunTask(r *Registry) {
 	})
 	r.AddRoute(Route{Pattern: "GET /tasks/{id}", Handle: runTaskPage})
 	r.AddRoute(Route{Pattern: "POST /tasks/{id}/dismiss", Handle: runTaskDismiss})
+	r.AddRoute(Route{Pattern: "POST /tasks/clear", Handle: runTaskClear})
 }
 
 // runWait is what the waiting page says about a task.
@@ -61,15 +63,13 @@ func runWaitOf(v *View) *runWait {
 	if !ok {
 		return &runWait{Gone: true}
 	}
-	w := &runWait{TaskID: t.ID, Title: t.Display, Err: t.Err, Output: t.Output, NoRun: runless(t)}
-	if w.Title == "" {
-		w.Title = t.Action
-	}
+	w := &runWait{TaskID: t.ID, Err: t.Err, Output: t.Output, NoRun: runless(t)}
 	if run, ok := v.Snap.RunOfTrace(t.Trace); ok {
 		w.Redirect = "/runs/" + run.ID
 	}
+	// The page names the task as its card and its run page do.
 	card := dockTaskCard(t, store.Run{}, false, v.Now)
-	w.Class, w.Elapsed, w.Since = card.Class, card.Elapsed, card.Since
+	w.Title, w.Class, w.Elapsed, w.Since = card.Title, card.Class, card.Elapsed, card.Since
 	w.PillClass = runPillClass(card.Class)
 	w.Cancel, w.Canceling = card.Cancel, card.Canceling
 	w.SayKey, w.SayState, w.Say = "w:"+t.ID, card.SayState, card.Say
@@ -106,7 +106,7 @@ func runTaskPage(s *Server, w http.ResponseWriter, r *http.Request) {
 		page.Redirect(w, r, "/runs/"+run.ID)
 		return
 	}
-	v.Page, v.Title, v.Nav, v.Content = "run-task", "Starting "+t.Display, "activity", "page-run-task"
+	v.Page, v.Title, v.Nav, v.Content = "run-task", "Starting "+taskTitle(t, nil), "activity", "page-run-task"
 	v.Params.Set("task", id)
 	v.Events = s.eventsURL([]string{"run-wait"}, v)
 	s.Write(w, r, http.StatusOK, "layout", v)
@@ -142,6 +142,17 @@ func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.Store().RemoveTask(id)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// runTaskClear answers POST /tasks/clear, the Clear done of the dock: it
+// removes the cards of all tasks that have ended.
+func runTaskClear(s *Server, w http.ResponseWriter, _ *http.Request) {
+	for _, t := range s.Store().Snapshot().Tasks {
+		if taskEnded(t) {
+			s.Store().RemoveTask(t.ID)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

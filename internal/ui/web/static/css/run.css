@@ -26,6 +26,15 @@ form.inline{display:inline;margin:0}
 .task .callout{font-size:var(--t-sm);overflow-wrap:anywhere}
 .task .tout{max-height:120px}
 .task.more{padding:8px 14px;text-align:center;color:var(--muted);font-size:var(--t-md)}
+.task.gone{display:none}
+/* the summary bar of several commands; the dock shows its first card until
+   Show all opens it, and the bar goes when no card is left to show */
+.dock-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px 8px 6px 12px;font-size:var(--t-md)}
+.dock-sum{flex:1;min-width:0;color:var(--muted)}
+.dock-sum b{color:var(--fg);font-weight:600}
+.tasks:not(.open) .task:not(.gone)~.task{display:none}
+.tasks:not(:has(.task:not(.gone))) .dock-bar{display:none}
+.tasks.open{max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);overflow-y:auto}
 
 /* the bar of a run's steps */
 .segbar{display:flex;gap:2px;height:8px}
@@ -122,14 +131,9 @@ details.raw[open] summary{border-bottom:1px solid var(--line-2)}
 table.runs td a{overflow-wrap:anywhere}
 
 @media (max-width:760px){
-  /* a card is one row: the title and the bar, and the button that opens
-     the run, where Stop is */
-  .task{grid-template-columns:minmax(0,1fr) auto;padding:8px 10px;gap:6px 10px}
-  .task>*{grid-column:1/-1}
-  .task .th,.task .segbar{grid-column:1}
+  /* a card keeps its line, its clock and Stop; the dock shows one card */
+  .task{padding:8px 10px;gap:6px}
   .task .segbar{height:6px}
-  .task .tl,.task .tf>:not(:last-child){display:none}
-  .task .tf{grid-column:2;grid-row:1/3;align-self:center}
   .gantt .axis,.grow-row{grid-template-columns:110px minmax(0,1fr) 64px;gap:8px}
   .grow-row .res{font-size:var(--t-xs)}
   .grow-row .lbl{white-space:normal}

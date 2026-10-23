@@ -37,12 +37,13 @@ func TestRunTaskPageWaits(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
 	for _, want := range []string{
-		"<title>Starting sind create cluster dev · sind ui</title>",
+		"<title>Starting create cluster dev · sind ui</title>",
+		"<h1>create cluster dev</h1>",
 		"Waiting for the command to write its first progress event.",
 		`action="/tasks/t1/cancel"`,
 		`<span class="pill run">running</span>`,
 		`data-since="`,
-		`data-say-key="w:t1" data-say-state="running" data-say="sind create cluster dev: started."`,
+		`data-say-key="w:t1" data-say-state="running" data-say="create cluster dev: started."`,
 		"/events?f=rail&amp;f=run-wait&amp;f=tasks&amp;id=t1&amp;nav=activity&amp;task=t1",
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
@@ -176,4 +177,16 @@ func TestRunRoutesAreRegistered(t *testing.T) {
 	assert.Contains(t, routes, "GET /tasks/{id}")
 	assert.Contains(t, routes, "POST /tasks/{id}/dismiss")
 	assert.NotNil(t, r.navCount("activity"))
+}
+
+func TestRunTaskClear(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	ts.st.AddTask(store.Task{ID: "run", Status: store.TaskRunning})
+	ts.st.AddTask(store.Task{ID: "ok", Status: store.TaskOK, End: runPtr(runAt(1))})
+	ts.st.AddTask(store.Task{ID: "bad", Status: store.TaskFailed, End: runPtr(runAt(1))})
+	w := ts.post("/tasks/clear", "")
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	tasks := ts.st.Snapshot().Tasks
+	require.Len(t, tasks, 1, "the command that runs stays")
+	assert.Equal(t, "run", tasks[0].ID)
 }

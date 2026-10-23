@@ -96,6 +96,23 @@ func TestRunHead(t *testing.T) {
 	assert.Empty(t, runHeadOf(runCtx{Run: store.Run{}}).Program)
 }
 
+func TestRunPageNamesTheRunAsTheDock(t *testing.T) {
+	// Two runs of the same command differ by their flags, on the run page
+	// as on their cards.
+	run := runOf(0, "")
+	run.Title = "create worker"
+	task := store.Task{ID: "t1", Trace: run.Trace, Realm: "sind", Cluster: "dev", Argv: []string{"sind", "create", "worker", "dev", "--count", "3", "--realm", "sind"}}
+	v := (&View{Snap: store.Snapshot{Tasks: []store.Task{task}}, Now: runAt(30), Params: Params{}}).runWithRun(run)
+	rc := newRunCtx(v)
+	assert.Equal(t, "create worker dev --count 3", rc.Run.Title)
+	h := runHeadOf(rc)
+	assert.Equal(t, "create worker dev --count 3", h.Title)
+	assert.Equal(t, "create worker dev --count 3: started.", runSummaryOf(rc).Say)
+	require.NoError(t, runPageLoad(v))
+	assert.Equal(t, "create worker dev --count 3", v.Title)
+	assert.Equal(t, dockTaskCard(task, run, true, runAt(30)).Title, h.Title)
+}
+
 func TestRunSummary(t *testing.T) {
 	run := runFixture(t, "create-ok.jsonl", 59)[0]
 	s := runSummaryOf(runCtxOf(run, runAt(25)))
