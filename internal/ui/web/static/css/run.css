@@ -63,7 +63,7 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rsum .segbar{height:12px}
 
 /* Activity: the search field and the chips of realms and clusters */
-.runfind{display:flex;gap:8px;margin:0 0 12px;max-width:560px}
+.runfind{display:flex;gap:8px;margin:0 0 16px;max-width:560px}
 .runfind input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);color:var(--fg);font:var(--t-md) var(--f-body)}
 .runchips{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:-6px 0 14px}
 .runchips-g{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -203,3 +203,11 @@ table.runs td:nth-child(2){min-width:200px}
 .l100{left:100%}
 /* On a touch screen, the chips of Activity are 44 px, as every control. */
 @media (pointer:coarse){.fchip{min-height:44px;padding:2px 12px}}
+/* On a short screen, such as a phone on its side, the closed dock keeps to
+   one line: the summary bar when there is one, else the title of its card.
+   Show all opens it, and the title leads to the run. */
+@media (max-height:500px){
+  .tasks:not(.open):has(.dock-bar) .task{display:none}
+  .tasks:not(.open) .task :is(.segbar,.tl,.tf){display:none}
+  .tasks:not(.open) .task{padding:4px 10px}
+}

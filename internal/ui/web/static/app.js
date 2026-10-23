@@ -347,6 +347,12 @@
       for (const s of streams) s.close();
     });
     window.addEventListener('pageshow', ev => { if (ev.persisted && streams.size) location.reload(); });
+    // The page keeps the focus clear of the task dock (app.css), which
+    // needs its height.
+    const dock = document.getElementById('tasks');
+    if (dock && window.ResizeObserver) {
+      new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', dock.offsetHeight + 'px')).observe(dock);
+    }
     document.body.addEventListener('htmx:sseOpen', connBack);
     document.body.addEventListener('htmx:sseError', connLost);
     document.body.addEventListener('htmx:sseBeforeMessage', ev => before(ev.target));
