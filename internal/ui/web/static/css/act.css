@@ -176,3 +176,11 @@
   .scrim .act-rowf>input[name$=-accounts]{grid-column:1/3}
 }
 @media (max-width:520px){.scrim{padding-top:2vh}}
+/* On a touch screen, the small controls of a dialog are 44 px too. */
+@media (pointer:coarse){
+  .scrim .act-step button{width:44px;height:44px}
+  .scrim .act-step input[type=number]{height:44px}
+  .scrim .act-cz,.scrim .act-x{min-height:44px;min-width:44px}
+  .scrim .act-sec>summary{min-height:44px;align-items:center}
+  .scrim .act-more>summary{padding:12px 0}
+}

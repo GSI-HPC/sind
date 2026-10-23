@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-// sind ui's own script: the theme switch, the CSRF header of htmx requests
-// and the live indicator. Pages are rendered on the server; htmx swaps their
-// parts. Nothing here evaluates text, and no page has inline script.
+// sind ui's own script: the theme switch, the CSRF header of htmx requests,
+// the live indicator, and the More sheet of a phone.
+// Pages are rendered on the server; htmx swaps their parts. Nothing here
+// evaluates text, and no page has inline script.
 (() => {
   'use strict';
 
@@ -44,15 +45,74 @@
     el.lastElementChild.textContent = on ? 'live' : 'offline';
   }
 
+  // The More sheet of a phone's bar. Its open state is on the rail, which
+  // live updates do not replace; the morph keeps the sheet's own state.
+  function rail() { return document.getElementById('rail'); }
+
+  function setSheet(open) {
+    const nav = rail();
+    if (!nav) return;
+    nav.classList.toggle('open', open);
+    const sheet = document.getElementById('rail-sheet');
+    const more = nav.querySelector('[data-rail-more]');
+    if (sheet) sheet.hidden = !open;
+    if (more) more.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      const first = sheet && sheet.querySelector('a');
+      if (first) first.focus();
+    }
+  }
+
+  function sheetOpen() { const nav = rail(); return !!nav && nav.classList.contains('open'); }
+
+  // A tab strip that scrolls sideways shows its current tab.
+  function showTabs(scope) {
+    scope.querySelectorAll('.tabs').forEach(strip => {
+      const on = strip.querySelector('[aria-current="page"], .on');
+      if (!on || strip.scrollWidth <= strip.clientWidth) return;
+      const s = strip.getBoundingClientRect();
+      const r = on.getBoundingClientRect();
+      if (r.left >= s.left && r.right <= s.right) return;
+      strip.scrollLeft += (r.left + r.width / 2) - (s.left + s.width / 2);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     showTheme();
+    showTabs(document);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', showTheme);
 
+    // The morph keeps what the page holds itself: the open More sheet.
+    if (window.Idiomorph) {
+      Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node) => {
+        if (name === 'hidden' && node.id === 'rail-sheet') return false;
+        if (name === 'aria-expanded' && node.hasAttribute('data-rail-more')) return false;
+        return true;
+      };
+    }
+
     document.addEventListener('click', ev => {
-      if (!ev.target.closest('[data-theme-toggle]')) return;
-      root.dataset.theme = dark() ? 'light' : 'dark';
-      store.set('sind-ui-theme', root.dataset.theme);
-      showTheme();
+      const t = ev.target;
+      if (t.closest('[data-theme-toggle]')) {
+        root.dataset.theme = dark() ? 'light' : 'dark';
+        store.set('sind-ui-theme', root.dataset.theme);
+        showTheme();
+        return;
+      }
+      if (t.closest('[data-rail-more]')) { setSheet(!sheetOpen()); return; }
+      if (sheetOpen() && !t.closest('#rail-sheet')) setSheet(false);
+      // A table cell that holds only a checkbox is the checkbox's target
+      // too, which a finger finds more easily.
+      const cell = t.closest('td, th');
+      const box = cell && cell.children.length === 1 && cell.querySelector(':scope > input[type=checkbox]');
+      if (box && t === cell) box.click();
+    });
+
+    document.addEventListener('keydown', ev => {
+      if (ev.key !== 'Escape' || !sheetOpen()) return;
+      setSheet(false);
+      const more = document.querySelector('[data-rail-more]');
+      if (more) more.focus();
     });
 
     // Every request that htmx sends carries the session's CSRF token.
@@ -62,5 +122,6 @@
 
     document.body.addEventListener('htmx:sseOpen', () => setLive(true));
     document.body.addEventListener('htmx:sseError', () => setLive(false));
+    document.body.addEventListener('htmx:sseMessage', ev => showTabs(ev.target));
   });
 })();

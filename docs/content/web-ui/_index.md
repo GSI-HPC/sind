@@ -46,7 +46,7 @@ The UI listens on `127.0.0.1` only. Only your user can open it. To use it from a
 
 ## The parts of the window
 
-- **The rail** on the left lists the pages. A number shows how many items a page has, or how many need you.
+- **The rail** on the left lists the pages. A number shows how many items a page has, or how many need you. On a phone, and in a window that is not high, the rail is a bar at the bottom of the screen: Overview, Clusters, Nodes, Doctor and **More**, which opens the other pages.
 - **The top bar** has the jump box, which finds a cluster, a node, a page or a help entry, and the realm switch. **live** shows that the page gets updates. `?` opens the help for the page you are on, and ◐ turns the dark theme on or off.
 - **The task dock** at the bottom right shows the runs that go on (see [Runs and Progress]({{< relref "/web-ui/runs" >}})).
 - A dotted word explains itself when you point at it.

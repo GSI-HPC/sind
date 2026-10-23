@@ -5,7 +5,7 @@ description: "What each page of sind ui shows"
 toc: true
 ---
 
-The rail on the left lists the pages. The pages update by themselves. A cluster page refreshes its state while it is open, and the Overview and the lists update when Docker reports a change.
+The rail on the left lists the pages; on a phone, the bar at the bottom does, with the less used pages under **More**. The pages update by themselves. A cluster page refreshes its state while it is open, and the Overview and the lists update when Docker reports a change.
 
 ## Overview
 

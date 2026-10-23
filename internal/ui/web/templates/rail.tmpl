@@ -1,7 +1,13 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* rail is the fragment of the page list; .Data holds the groups. */}}
-{{define "rail"}}{{range .Data}}
-<h6>{{.Title}}</h6>
-{{range .Items}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{call $.Asset "icons.svg"}}#{{.Key}}"></use></svg>{{.Label}}{{if .Count.Text}}<span class="n{{with .Count.Class}} {{.}}{{end}}">{{.Count.Text}}</span>{{end}}</a>
-{{end}}{{end}}{{end}}
+{{/* rail is the fragment of the page list; .Data is a railData. Each group
+is a list that its label names. On a phone the rail is a bar at the bottom
+of the screen with the Main entries and More, which opens the sheet of the
+other entries; app.js keeps the sheet open across live updates. */}}
+{{define "rail"}}{{with .Data}}{{range .Groups}}<span class="rgl" id="{{.ID}}">{{.Title}}</span>
+<ul class="rg rg-{{.Main}}" aria-labelledby="{{.ID}}">{{range .Items}}<li{{if not .Main}} class="sec"{{end}}>{{template "rail-link" .}}</li>{{end}}</ul>
+{{end}}{{with .More}}<button type="button" class="nav more{{if .On}} on{{end}}" data-rail-more aria-expanded="false" aria-controls="rail-sheet"><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>More{{if .Count.Text}}<span class="n {{.Count.Class}}" aria-hidden="true">{{.Count.Text}}</span><span class="vh">, {{.Note}}</span>{{end}}</button>{{end}}
+<div class="rail-sheet" id="rail-sheet" hidden><ul aria-label="More pages">{{range .Sheet}}<li>{{template "rail-link" .}}</li>{{end}}</ul></div>{{end}}{{end}}
+
+{{/* rail-link is an entry of the rail: a navEntry. */}}
+{{define "rail-link"}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>{{.Label}}{{if .Count.Text}}<span class="n{{with .Count.Class}} {{.}}{{end}}">{{.Count.Text}}</span>{{end}}</a>{{end}}
