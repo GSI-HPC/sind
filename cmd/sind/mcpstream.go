@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -17,12 +18,11 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
-	"github.com/GSI-HPC/sind/internal/atomicfile"
+	"github.com/GSI-HPC/go-clikit/fsutil"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -160,10 +160,13 @@ func mcpStreamToken() (token, path string, err error) {
 		return "", "", fmt.Errorf("creating state directory: %w", err)
 	}
 	token = rand.Text()
-	// A new file, renamed into place, is 0600 even if an older token file
-	// was not.
+	// WriteAtomic keeps the mode of a file that exists, so an older token
+	// file that was wider than 0600 is narrowed first.
 	path = filepath.Join(dir, mcpTokenFile)
-	if err := atomicfile.Write(afero.NewOsFs(), path, []byte(token+"\n"), 0o600); err != nil {
+	if err := os.Chmod(path, 0o600); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", "", fmt.Errorf("writing MCP token: %w", err)
+	}
+	if err := fsutil.WriteAtomic(path, []byte(token+"\n"), 0o600); err != nil {
 		return "", "", fmt.Errorf("writing MCP token: %w", err)
 	}
 	return token, path, nil
