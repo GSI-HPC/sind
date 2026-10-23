@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/assets"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -58,8 +59,14 @@ type Server struct {
 	sessions *session.Sessions
 	hosts    func(host string) bool
 	tmpl     *templates
-	assets   *assets
-	log      *slog.Logger
+	// assets serves the static files under /static/VERSION/, where VERSION
+	// is a hash of all of them: a new sind serves them under a new path, so
+	// browsers may cache them for good.
+	assets *assets.Assets
+	// styles and scripts are the extra files of every page, as URLs:
+	// static/css/*.css and static/js/*.js.
+	styles, scripts []string
+	log             *slog.Logger
 	// ctx ends the live update streams when the server stops.
 	ctx context.Context
 	now func() time.Time
@@ -94,12 +101,14 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		c.Now = time.Now
 	}
 	reg := c.Registry.snapshot()
-	a, err := newAssets(c.FS)
+	static, _ := fs.Sub(c.FS, "static") // "static" is a valid directory name
+	a, err := assets.New(static, "/static/", assets.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("static files: %w", err)
 	}
 	s := &Server{
 		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a,
+		styles: a.URLs("css/*.css"), scripts: a.URLs("js/*.js"),
 		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
 		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
 	}
@@ -255,7 +264,7 @@ const maxParamValues = 64
 func (s *Server) newView(p Params) *View {
 	return &View{
 		Snap: s.env.Store.Snapshot(), Now: s.now(), Params: p, Addr: s.env.Addr,
-		Asset: s.assets.url, Styles: s.assets.styles, Scripts: s.assets.scripts, reg: s.reg,
+		Asset: s.assets.URL, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
 	}
 }
 

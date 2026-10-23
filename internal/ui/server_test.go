@@ -72,7 +72,7 @@ func TestRefusalsAreLoggedAndSayWhereTheAddressIs(t *testing.T) {
 
 func TestSecurityHeaders(t *testing.T) {
 	ts := newTestServer(t).login()
-	for _, target := range []string{"/demo/x", "/nope", "/static/" + ts.srv.assets.version + "/app.css", "/events"} {
+	for _, target := range []string{"/demo/x", "/nope", "/static/" + ts.srv.assets.Version() + "/app.css", "/events"} {
 		h := ts.get(target).Header()
 		for k, want := range map[string]string{
 			"Content-Security-Policy":      contentSecurityPolicy,
@@ -113,15 +113,15 @@ func TestPageShell(t *testing.T) {
 
 	assert.Contains(t, body, "<title>Demo · sind ui</title>")
 	assert.Contains(t, body, `<meta name="csrf-token" content="`+ts.csrf+`">`)
-	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.url("app.css")+`">`)
-	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.url("css/demo.css")+`">`)
-	assert.Less(t, strings.Index(body, a.url("app.css")), strings.Index(body, a.url("css/demo.css")), "extra styles follow app.css")
-	assert.Contains(t, body, `<script src="`+a.url("app.js")+`"></script>`)
-	assert.Contains(t, body, `<script src="`+a.url("htmx.min.js")+`" defer></script>`)
-	assert.Contains(t, body, `<script src="`+a.url("htmx-ext-sse.js")+`" defer></script>`)
-	assert.Contains(t, body, `<script src="`+a.url("idiomorph-ext.min.js")+`" defer></script>`)
+	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("app.css")+`">`)
+	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("css/demo.css")+`">`)
+	assert.Less(t, strings.Index(body, a.URL("app.css")), strings.Index(body, a.URL("css/demo.css")), "extra styles follow app.css")
+	assert.Contains(t, body, `<script src="`+a.URL("app.js")+`"></script>`)
+	assert.Contains(t, body, `<script src="`+a.URL("htmx.min.js")+`" defer></script>`)
+	assert.Contains(t, body, `<script src="`+a.URL("htmx-ext-sse.js")+`" defer></script>`)
+	assert.Contains(t, body, `<script src="`+a.URL("idiomorph-ext.min.js")+`" defer></script>`)
 	assert.Contains(t, body, `hx-ext="sse,morph"`)
-	assert.Contains(t, body, `<script src="`+a.url("js/demo.js")+`" defer></script>`)
+	assert.Contains(t, body, `<script src="`+a.URL("js/demo.js")+`" defer></script>`)
 	assert.Contains(t, body, "127.0.0.1:7878</span>", "the address in the top bar")
 
 	// The page names the live updates it needs, with the Params they declare.
