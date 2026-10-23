@@ -3,7 +3,8 @@
 {{/* layout is the shell of every page: top bar, rail, content, task dock. The
 content is the block that .Content names; the rail and the dock are
 fragments. The slots in the top bar are blocks of their own files, which the
-parts that fill them replace as a whole. */}}
+parts that fill them replace as a whole. app.js fills #conn when the live
+updates stop, and #say with what screen readers should hear. */}}
 
 {{define "layout"}}<!doctype html>
 <html lang="en">
@@ -25,6 +26,7 @@ parts that fill them replace as a whole. */}}
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <div class="app"{{if .Events}} hx-ext="sse,morph" sse-connect="{{.Events}}"{{end}}>
+  <div class="conn" id="conn" role="status"></div>
   <header class="top">
     <a class="brand" href="/"><img src="{{call .Asset "icon.svg"}}" alt="" width="24" height="24">sind <small>ui</small></a>
     {{template "slot-jump" .}}
@@ -38,6 +40,7 @@ parts that fill them replace as a whole. */}}
   <nav class="rail" id="rail" aria-label="Pages" hx-swap="morph:innerHTML" sse-swap="rail">{{fragment "rail" .}}</nav>
   <main class="main" id="main" tabindex="-1">{{include .Content .}}</main>
   <div class="tasks" id="tasks" aria-live="polite" hx-swap="morph:innerHTML" sse-swap="tasks">{{fragment "tasks" .}}</div>
+  <div class="vh" id="say" role="status"></div>
 </div>
 <div id="layer"></div>
 </body>

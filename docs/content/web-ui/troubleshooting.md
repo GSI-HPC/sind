@@ -31,7 +31,13 @@ The Overview shows **Docker is not reachable**. The pages show the data that sin
 
 ## The page says the link is old or wrong
 
-The token is new with each run. Use the URL that the running `sind ui` printed, or the one that the second command printed. A bookmark of an older run does not work. A tab of an older run that is still open is refused too, as its session is gone. Open the new URL.
+The page **Open sind ui from its address** says that this browser is not signed in, or that the link holds an old or wrong token. The token is new with each run. Use the URL that the running `sind ui` printed, or the one that the second command printed: run `sind ui` again in a terminal, and it prints the URL of the running UI and opens it. A bookmark of an older run does not work. A tab of an older run that is still open is refused too, as its session is gone. Open the new URL.
+
+## Connection lost
+
+A banner at the top says **Connection lost** and the time of the data on the page. The page dims, and its buttons wait. The UI tries to connect again by itself, and the banner goes away when it is back. **Retry** tries at once.
+
+If `sind ui` stopped, start it again. A new `sind ui` does not know the old tab, so the banner then says **sind ui restarted**: press **Sign in again**, and open the URL that the new `sind ui` printed.
 
 ## Opened by another host name
 

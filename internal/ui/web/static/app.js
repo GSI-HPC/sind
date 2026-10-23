@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // sind ui's own script: the theme switch, the CSRF header of htmx requests,
-// the live indicator, and the More sheet of a phone.
+// the live indicator and the banner of a lost connection, and the More
+// sheet of a phone.
 // Pages are rendered on the server; htmx swaps their parts. Nothing here
 // evaluates text, and no page has inline script.
 (() => {
@@ -37,12 +38,116 @@
     });
   }
 
+  // say tells screen readers a sentence, through the one polite live region
+  // of the page. The same sentence twice is told twice.
+  let sayTimer = 0;
+  function say(text) {
+    const region = document.getElementById('say');
+    if (!region || !text) return;
+    region.textContent = '';
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => { region.textContent = text; }, 60);
+  }
+
+  function toast(text) {
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    const t = el('div', 'toast', text);
+    t.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2600);
+    say(text);
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  // The connection. A stream that drops for a moment and comes back shows
+  // only in the indicator; one that stays away for longer dims the page,
+  // holds its actions and fills the banner #conn, which says how old the
+  // page is. A request for the page tells whether sind ui is down or was
+  // started again, which ends every session.
+  const conn = { since: 0, timer: 0, shown: false, restarted: false };
+  const lostAfter = 1500;
+
+  function app() { return document.querySelector('.app'); }
+  function stale() { const a = app(); return !!a && a.classList.contains('stale'); }
+
+  function clock(t) {
+    return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
   function setLive(on) {
-    const el = document.getElementById('live');
-    if (!el) return;
-    el.classList.toggle('off', !on);
-    el.title = on ? 'Live: changes show as they happen' : 'Not connected: reconnecting';
-    el.lastElementChild.textContent = on ? 'live' : 'offline';
+    const live = document.getElementById('live');
+    if (!live) return;
+    live.classList.toggle('off', !on);
+    live.title = on ? 'Live: changes show as they happen' : 'Not connected: reconnecting';
+    live.lastElementChild.textContent = on ? 'live' : 'offline';
+  }
+
+  function banner(title, text, action) {
+    const box = document.getElementById('conn');
+    if (!box) return;
+    const msg = el('span', 'msg');
+    msg.append(el('b', '', title), ' ' + text);
+    box.replaceChildren(msg, action);
+  }
+
+  function showLost() {
+    const a = app();
+    if (!a) return;
+    a.classList.add('stale');
+    conn.shown = true;
+    const retry = el('button', 'btn sm', 'Retry');
+    retry.type = 'button';
+    retry.dataset.connRetry = '';
+    banner('Connection lost.', 'What you see is from ' + clock(conn.since) + '. sind ui tries again by itself.', retry);
+    probe(false);
+  }
+
+  function showRestarted() {
+    if (conn.restarted) return;
+    conn.restarted = true;
+    const signIn = el('a', 'btn sm', 'Sign in again');
+    signIn.href = location.href;
+    banner('sind ui restarted.', 'This browser must sign in again. What you see is from ' + clock(conn.since) + '.', signIn);
+  }
+
+  // probe asks for the page: 403 is a new sind ui, which does not know this
+  // browser; an answer is a server that is back, which the stream finds by
+  // itself. A press of Retry loads the page again then.
+  function probe(retry) {
+    fetch(location.href, { method: 'HEAD', cache: 'no-store', credentials: 'same-origin' }).then(r => {
+      if (r.status === 403) showRestarted();
+      else if (retry) location.reload();
+    }, () => { if (retry) toast('sind ui does not answer yet.'); });
+  }
+
+  function connLost() {
+    setLive(false);
+    // Each new try of the stream that fails asks again whether sind ui
+    // was started again.
+    if (conn.shown) probe(false);
+    if (conn.since) return;
+    conn.since = Date.now();
+    conn.timer = setTimeout(showLost, lostAfter);
+  }
+
+  function connBack() {
+    setLive(true);
+    clearTimeout(conn.timer);
+    conn.since = 0;
+    if (!conn.shown) return;
+    conn.shown = false;
+    const a = app();
+    if (a) a.classList.remove('stale');
+    const box = document.getElementById('conn');
+    if (box) box.replaceChildren();
+    say('Connected again. The page is up to date.');
   }
 
   // The More sheet of a phone's bar. Its open state is on the rail, which
@@ -101,6 +206,13 @@
       }
       if (t.closest('[data-rail-more]')) { setSheet(!sheetOpen()); return; }
       if (sheetOpen() && !t.closest('#rail-sheet')) setSheet(false);
+      if (t.closest('[data-conn-retry]')) { probe(true); return; }
+      const copy = t.closest('[data-shell-copy]');
+      if (copy) {
+        const done = navigator.clipboard ? navigator.clipboard.writeText(copy.dataset.shellCopy) : Promise.reject(new Error('no clipboard'));
+        done.then(() => toast('Copied'), () => toast('Select the text and press Ctrl+C to copy'));
+        return;
+      }
       // A table cell that holds only a checkbox is the checkbox's target
       // too, which a finger finds more easily.
       const cell = t.closest('td, th');
@@ -115,13 +227,26 @@
       if (more) more.focus();
     });
 
+    // While the page is not live, its actions wait: they would act on what
+    // the page showed then, or fail without a word.
+    document.body.addEventListener('htmx:beforeRequest', ev => {
+      if (!stale()) return;
+      ev.preventDefault();
+      toast('Not connected to sind ui. Try again when it is back.');
+    });
+    document.addEventListener('submit', ev => {
+      if (!stale()) return;
+      ev.preventDefault();
+      toast('Not connected to sind ui. Try again when it is back.');
+    }, true);
+
     // Every request that htmx sends carries the session's CSRF token.
     document.body.addEventListener('htmx:configRequest', ev => {
       ev.detail.headers['X-Sind-CSRF'] = csrfToken();
     });
 
-    document.body.addEventListener('htmx:sseOpen', () => setLive(true));
-    document.body.addEventListener('htmx:sseError', () => setLive(false));
+    document.body.addEventListener('htmx:sseOpen', connBack);
+    document.body.addEventListener('htmx:sseError', connLost);
     document.body.addEventListener('htmx:sseMessage', ev => showTabs(ev.target));
   });
 })();

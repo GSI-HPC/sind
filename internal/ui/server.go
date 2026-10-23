@@ -142,7 +142,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 // check verifies that what is registered fits together: every page and
 // fragment has its template, and every fragment a page names exists.
 func (s *Server) check() error {
-	for _, name := range []string{"layout", "page-notfound"} {
+	for _, name := range []string{"layout", "page-notfound", "signin"} {
 		if !s.tmpl.Has(name) {
 			return fmt.Errorf("template %q is missing", name)
 		}
@@ -178,7 +178,6 @@ func (s *Server) routes() (err error) {
 			err = fmt.Errorf("route: %v", r)
 		}
 	}()
-	s.mux.Handle("GET /static/", s.assets)
 	s.mux.Handle("GET /htmx/", s.vendor)
 	s.mux.Handle("GET /events", s.fetchOnly(http.HandlerFunc(s.events)))
 	for _, p := range s.reg.pages {
@@ -196,8 +195,13 @@ func (s *Server) routes() (err error) {
 }
 
 // Handler returns the server's handler with every check in front of it.
+// The static files need no session: they hold no data, and the page that
+// asks a browser to sign in uses them.
 func (s *Server) Handler() http.Handler {
-	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(s.sessions.Middleware(s.mux))
+	open := http.NewServeMux()
+	open.Handle("GET /static/", s.assets)
+	open.Handle("/", s.sessions.Middleware(s.mux))
+	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(open)
 	return localweb.Headers(contentSecurityPolicy)(localweb.NoStore(localweb.Hosts(s.hosts, s.refuse)(h)))
 }
 
@@ -209,13 +213,45 @@ func (s *Server) fetchOnly(next http.Handler) http.Handler {
 }
 
 // refuse answers a request that a check of localweb refuses. A 403 adds the
-// line that says where the address is, and the log says why.
+// line that says where the address is, and the log says why. A browser that
+// opens a page gets the 403 as the page signin, which tells how to get the
+// address.
 func (s *Server) refuse(w http.ResponseWriter, r *http.Request, f localweb.Refusal) {
 	s.log.Warn("refused a request", "path", r.URL.Path, "why", f.Reason)
 	if f.Status == http.StatusForbidden {
+		if opensPage(r) && s.signIn(w, f) {
+			return
+		}
 		f.Message += "\n" + openHint
 	}
 	localweb.Refuse(w, r, f)
+}
+
+// opensPage reports whether r is a browser that opens a page: a GET or HEAD
+// of a document, and not a request of a page's script.
+func opensPage(r *http.Request) bool {
+	if !localweb.SafeMethod(r.Method) {
+		return false
+	}
+	if dest := r.Header.Get("Sec-Fetch-Dest"); dest != "" {
+		return dest == "document"
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
+}
+
+// signInPage is what the page signin shows.
+type signInPage struct {
+	Asset   func(string) string
+	Message string
+}
+
+// signIn answers with the page signin, and reports whether it could.
+func (s *Server) signIn(w http.ResponseWriter, f localweb.Refusal) bool {
+	err := s.tmpl.Respond(w, f.Status, "signin", signInPage{Asset: s.assets.URL, Message: f.Message})
+	if err != nil {
+		s.log.Error("rendering the sign-in page", "err", err)
+	}
+	return err == nil
 }
 
 // Env returns what the server shares with the services.
