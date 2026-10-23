@@ -30,6 +30,11 @@ type pgAction struct {
 	// Name is the accessible name, where Label alone does not say what the
 	// button acts on; empty for Label.
 	Name string
+	// Verb is the label without the dots, set on an action of a
+	// selection of nodes and on a row's button; Fit, set on the former,
+	// lists the node states and roles that it acts on, separated by
+	// spaces.
+	Verb, Fit string
 }
 
 // pgDialog returns the URL of the dialog of the action with the query
@@ -180,6 +185,31 @@ func (n pgNode) Running() bool { return n.State == cluster.StateRunning }
 
 // Worker reports whether the node is a worker, the only role to delete.
 func (n pgNode) Worker() bool { return n.Role == config.RoleWorker }
+
+// RowPower returns the power button of the node's row in the Nodes tab:
+// Start for a node that does not run, Unfreeze for a paused one, and none
+// for a running one, whose verbs the selection offers.
+func (n pgNode) RowPower() *pgAction {
+	power := func(verb, op string) *pgAction {
+		a := pgDialogAction(verb+"…", "", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", op)
+		a.Verb = verb
+		return &a
+	}
+	switch n.State {
+	case cluster.StateRunning:
+		return nil
+	case cluster.StatePaused:
+		return power("Unfreeze", "unpause")
+	}
+	return power("Start", "start")
+}
+
+// SSH returns the command that opens a shell on the node.
+func (n pgNode) SSH() string { return pgSind(n.Realm) + " ssh " + n.Arg }
+
+// Match lists the words that the actions of a selection of nodes fit:
+// the node's state and its role.
+func (n pgNode) Match() string { return string(n.State) + " " + string(n.Role) }
 
 // Tile returns the classes of the node's tile in a node map.
 func (n pgNode) Tile() string {

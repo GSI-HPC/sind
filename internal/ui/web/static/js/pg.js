@@ -129,7 +129,8 @@
     }
   }
 
-  // draw shows the selection in the table and in its bar.
+  // draw shows the selection in the table and in its bar, with only the
+  // actions that fit the selected rows.
   function draw() {
     const root = document.querySelector('[data-pg-select]');
     if (!root) return;
@@ -158,12 +159,21 @@
     bar.querySelector('[data-pg-expr]').textContent = root.dataset.pgSelect === 'nodes'
       ? fold(chosen.map(r => r.dataset.pgItem))
       : chosen.map(r => r.dataset.pgLabel).join(', ');
-    // Only workers can be drained, resumed and deleted.
-    const workers = chosen.every(r => r.dataset.pgRole === 'worker');
-    for (const b of bar.querySelectorAll('[data-pg-workers]')) b.hidden = !workers;
-    // The delete button names what it deletes.
-    const del = bar.querySelector('[data-pg-delete]');
-    if (del) del.textContent = chosen.length === 1 ? 'Delete ' + chosen[0].dataset.pgItem + '…' : 'Delete ' + chosen.length + ' workers…';
+    // A verb shows when it fits a selected row, and acts on those it fits:
+    // only workers can be drained, resumed and deleted. Delete names what
+    // it deletes.
+    for (const a of bar.querySelectorAll('a[data-pg-fit]')) {
+      const fit = new Set(a.dataset.pgFit.split(' '));
+      const fits = chosen.filter(r => r.dataset.pgMatch.split(' ').some(w => fit.has(w)));
+      const noun = a.dataset.pgNoun || 'node';
+      a.hidden = fits.length === 0;
+      if (a.hasAttribute('data-pg-delete')) {
+        a.textContent = a.dataset.pgVerb + ' ' + (fits.length === 1 ? fits[0].dataset.pgItem : plural(fits.length, noun, noun + 's')) + '…';
+      } else {
+        a.textContent = a.dataset.pgVerb + (fits.length < chosen.length ? ' ' + plural(fits.length, noun, noun + 's') : '') + '…';
+      }
+      a.dataset.pgNodes = fits.map(r => r.dataset.pgItem).sort().join(',');
+    }
     const bulk = bar.querySelector('a[data-pg-bulk]');
     if (bulk) bulk.textContent = chosen.length > 1 ? 'Delete ' + chosen.length + ' clusters…' : 'Delete…';
     saveSel();
@@ -292,7 +302,7 @@
       const dlg = t.closest('a[data-pg-dialog]');
       if (dlg) {
         ev.preventDefault();
-        openDialog(dlg.getAttribute('href') + '&nodes=' + encodeURIComponent([...sel.items].sort().join(',')));
+        openDialog(dlg.getAttribute('href') + '&nodes=' + encodeURIComponent(dlg.dataset.pgNodes || ''));
         return;
       }
       const bulk = t.closest('a[data-pg-bulk]');

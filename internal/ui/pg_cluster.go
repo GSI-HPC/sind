@@ -292,18 +292,26 @@ func pgDataMount(st *cluster.Status) *cluster.MountPoint {
 }
 
 // pgNodesTab prepares the dialogs that the selection of nodes opens. The
-// page script appends the selected nodes, as ?nodes=worker-0,worker-1.
+// page script shows those that fit a selected node, and appends the
+// selected nodes that each fits, as ?nodes=worker-0,worker-1.
 func pgNodesTab(d *pgClusterView) {
-	power := func(label, class, op string) pgAction {
-		return pgDialogAction(label, class, "power", "realm", d.Realm, "cluster", d.Name, "op", op)
+	power := func(verb, op, fit string) pgAction {
+		a := pgDialogAction(verb+"…", "", "power", "realm", d.Realm, "cluster", d.Name, "op", op)
+		a.Verb, a.Fit = verb, fit
+		return a
 	}
+	notRunning := string(cluster.StateStopped) + " " + string(cluster.StateUnknown)
+	running := string(cluster.StateRunning)
 	d.Selection = []pgAction{
-		power("Start…", "", "start"), power("Shut down…", "", "stop"), power("Reboot…", "", "reboot"),
-		power("Freeze…", "", "pause"), power("Unfreeze…", "", "unpause"),
+		power("Start", "start", notRunning), power("Shut down", "stop", running), power("Reboot", "reboot", running),
+		power("Freeze", "pause", running), power("Unfreeze", "unpause", string(cluster.StatePaused)),
 	}
-	d.WorkerSelection = []pgAction{power("Drain…", "", "drain"), power("Resume…", "", "resume")}
-	// The page script names the selected workers in the label.
-	d.Delete = pgDialogAction("Delete workers…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
+	// Drain and Resume act on workers, as Delete does, which names the
+	// workers that it deletes; the page script counts them in each label.
+	worker := string(config.RoleWorker)
+	d.WorkerSelection = []pgAction{power("Drain", "drain", worker), power("Resume", "resume", worker)}
+	d.Delete = pgDialogAction("Delete…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
+	d.Delete.Verb, d.Delete.Fit = "Delete", worker
 }
 
 // pgNetworkTab fills the networks, the mounts and the volumes. The

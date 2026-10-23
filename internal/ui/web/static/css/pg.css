@@ -130,6 +130,7 @@ tr[data-href]{cursor:pointer}
 .pg-arrow{font-size:var(--t-xs);color:var(--deco)}
 .pg-sort.on .pg-arrow{color:var(--accent)}
 .pg-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+td.act .btn + .btn{margin-left:4px}
 
 /* a node's issues */
 .pg-issue{display:flex;gap:8px;align-items:center}

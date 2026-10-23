@@ -41,7 +41,7 @@ The state of one cluster, in six tabs.
 
 {{< uishot "cluster" >}}
 
-**Nodes** lets you select nodes. The selection appears as a node set, such as `worker-[2-4]`. Power and delete act on the selection. When you select only workers, **Drain…** and **Resume…** appear, and the delete button names the workers, such as **Delete worker-5…** or **Delete 3 workers…**. The **Slurm** column shows the state that `sinfo` reports for each worker, such as `idle`, `allocated` or `drained`, and the reason.
+**Nodes** lets you select nodes. The selection appears as a node set, such as `worker-[2-4]`. Power and delete act on the selection, and the bar offers only the actions that fit it: **Start…** for nodes that do not run, **Shut down…** for nodes that run, **Drain…**, **Resume…** and delete for workers. When an action fits only some of the nodes, its label counts them, such as **Start 1 node…**, and it acts on those. The delete button names the workers, such as **Delete worker-5…** or **Delete 3 workers…**. Each row has **Start…** (or **Unfreeze…** for a frozen node), **Logs**, which opens the Logs tab on the node, and **Shell**, which copies the command that opens a shell on it. The **Slurm** column shows the state that `sinfo` reports for each worker, such as `idle`, `allocated` or `drained`, and the reason.
 
 {{< uishot "cluster-nodes-selected" >}}
 

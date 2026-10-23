@@ -18,7 +18,7 @@ sind power <action> NODES
 {{< ui >}}
 
 1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node.
-2. Press the action, such as **Reboot…**. The dialog groups the actions and selects the one that you pressed.
+2. Press the action, such as **Reboot…**. The bar offers only the actions that fit the nodes you selected, and when one fits only some of them, its label counts them, such as **Start 2 nodes…**. The dialog groups the actions and selects the one that you pressed. To start one node that does not run, press **Start…** in its row.
 3. Read the warnings: the dialog says when the nodes include the controller in control, the standby controller of a pair, the db node or every running worker of the cluster.
 4. Press the button, which names the action and the nodes, such as **Reboot 3 nodes**.
 
@@ -111,7 +111,7 @@ sind exec dev -- scontrol update 'NodeName=worker-[2-3]' State=RESUME
 3. For Drain, write the reason, at most 200 characters on one line. `sinfo -R` shows it.
 4. Press the button, such as **Drain 2 nodes**.
 
-The dialog runs the `sind exec … scontrol update` command above. It writes no progress, so the task has no run page. The buttons appear when you select only workers. The dialog refuses the workers of an unmanaged cluster, and unmanaged workers, as sind runs no Slurm there.
+The dialog runs the `sind exec … scontrol update` command above. It writes no progress, so the task has no run page. The buttons appear when you select a worker; when you select other nodes too, they act only on the workers and count them, such as **Drain 2 workers…**. The dialog refuses the workers of an unmanaged cluster, and unmanaged workers, as sind runs no Slurm there.
 
 {{< /ui >}}
 {{< /ways >}}

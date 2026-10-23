@@ -124,7 +124,7 @@ sind delete worker NODES
 
 1. Open the cluster, then the **Nodes** tab.
 2. Select the workers. The selection shows as a node set, such as `worker-[2-4]`.
-3. Press the delete button in the selection bar, such as **Delete 3 workers…**. The dialog lists what goes and what stays.
+3. Press the delete button in the selection bar, such as **Delete 3 workers…**. If you selected other nodes too, it counts only the workers and deletes only them. The dialog lists what goes and what stays.
 4. Type the name of the worker when you delete one worker, else the name of the cluster, and press the button, such as **Delete 3 workers**.
 
 {{< uishot "dialog-delete-worker" >}}
