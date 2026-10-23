@@ -17,6 +17,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
+	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -816,6 +817,16 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
 		OpGroups: action.PowerGroups(), Waits: actWaits,
 	}
+	if id := r.URL.Query().Get("task"); id != "" {
+		// Edit and try again: the form of the task, which the link may
+		// change.
+		t, ok := v.Snap.Task(id)
+		if !ok || t.Action != a.ID {
+			s.Fail(w, r, fmt.Errorf("task %s of %s: %w", id, a.ID, ErrNotFound))
+			return
+		}
+		d.Form = actKeptForm(t.Form)
+	}
 	for _, k := range keys {
 		if vals := v.Params[k]; len(vals) > 0 {
 			d.Form[k] = slices.Clone(vals)
@@ -1288,7 +1299,86 @@ func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) 
 		}
 	}
 	realm, cl := a.Target(f)
-	return st.starter.Start(run.Spec{Action: a.ID, Argv: cmd.Argv, Display: cmd.Display, Realm: realm, Cluster: cl})
+	spec := run.Spec{Action: a.ID, Argv: cmd.Argv, Display: cmd.Display, Realm: realm, Cluster: cl, Form: actKeptForm(f)}
+	if cmd.Config != nil {
+		spec.ConfigPath, spec.Config = cmd.Config.Path, cmd.Config.Content
+	}
+	return st.starter.Start(spec)
+}
+
+// actKeptForm is the form that a task keeps, so that the user can try its
+// command again: the fields without the CSRF token, the fingerprint and
+// the typed confirmation, which the user gives again.
+func actKeptForm(f url.Values) url.Values {
+	out := url.Values{}
+	for k, vals := range f {
+		if k != "csrf" && k != "shown" && k != action.ConfirmField {
+			out[k] = slices.Clone(vals)
+		}
+	}
+	return out
+}
+
+// actEditHref is the dialog of a task's action, filled in with the form of
+// the task.
+func actEditHref(t store.Task) string {
+	return "/dialogs/" + t.Action + "?task=" + url.QueryEscape(t.ID)
+}
+
+// actSameCommand reports whether cmd is the command that the task ran:
+// the same command line and the same config.
+func actSameCommand(cmd action.Command, t store.Task) bool {
+	if cmd.Display != t.Display {
+		return false
+	}
+	if cmd.Config == nil {
+		return t.ConfigPath == ""
+	}
+	return cmd.Config.Path == t.ConfigPath && cmd.Config.Content == t.Config
+}
+
+// actRetryRoute tries the command of a task that ended again: it builds
+// the command from the task's form, and starts it when it is the command
+// that ran, with the same config, and needs no typed confirmation. The
+// browser then follows the new task. Otherwise, as when a cluster changed
+// in between, it opens the dialog filled in with the form, to check it.
+func actRetryRoute(s *Server, w http.ResponseWriter, r *http.Request) {
+	st, ok := actStateOf(s, w, r)
+	if !ok {
+		return
+	}
+	v, err := s.View(r)
+	if err != nil {
+		s.Fail(w, r, err)
+		return
+	}
+	id := r.PathValue("id")
+	t, ok := v.Snap.Task(id)
+	if !ok {
+		s.Fail(w, r, fmt.Errorf("task %s: %w", id, ErrNotFound))
+		return
+	}
+	a, ok := action.Lookup(t.Action)
+	if !ok || t.Form == nil {
+		s.Fail(w, r, fmt.Errorf("task %s: no form to try again: %w", id, ErrBadRequest))
+		return
+	}
+	if !t.Done() {
+		http.Error(w, "this command is still running", http.StatusConflict)
+		return
+	}
+	f := actKeptForm(t.Form)
+	p := actEvaluate(v, a, f, actContext(r, v, st))
+	if p.Blocked || !actSameCommand(p.Cmd, t) {
+		page.Redirect(w, r, actEditHref(t))
+		return
+	}
+	nid, err := actStart(st, a, f, p.Cmd)
+	if err != nil {
+		s.Fail(w, r, err)
+		return
+	}
+	page.Redirect(w, r, "/tasks/"+nid)
 }
 
 // actStartedNote is what the notice of a command that started says.

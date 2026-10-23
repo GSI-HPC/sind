@@ -71,14 +71,13 @@ func TestRunHead(t *testing.T) {
 	assert.Equal(t, "from sind ui", h.Origin)
 	assert.Empty(t, h.NoStop)
 	assert.Equal(t, "t1", h.TaskID)
-	assert.Empty(t, h.ClusterHref, "no such cluster yet")
+	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, h.Back, "no such cluster yet")
 
 	rc := newRunCtx((&View{Snap: snap, Now: runAt(30), Params: Params{}}).runWithRun(run))
 	require.NotNil(t, rc.Task)
 	rc.Snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "other"}, {Name: "dev"}}}
 	h = runHeadOf(rc)
-	assert.Equal(t, "/clusters/sind/dev", h.ClusterHref)
-	assert.Equal(t, "dev", h.Cluster)
+	assert.Equal(t, &runLink{Label: "Open dev", Href: "/clusters/sind/dev"}, h.Back)
 
 	// Stopping, and over: no task to stop any more; the exit code shows.
 	rc.Task.Canceling = true
@@ -269,4 +268,47 @@ func TestRunPlural(t *testing.T) {
 	assert.Equal(t, "1 target", runPlural(1, "target"))
 	assert.Equal(t, "0 targets", runPlural(0, "target"))
 	assert.Equal(t, "2 targets", runPlural(2, "target"))
+}
+
+func TestRunBack(t *testing.T) {
+	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"sind": {{Name: "dev"}}}}
+	assert.Equal(t, &runLink{Label: "Open dev", Href: "/clusters/sind/dev"}, runBack(snap, store.Task{Realm: "sind", Cluster: "dev"}))
+	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, runBack(snap, store.Task{Realm: "lab", Cluster: "dev"}))
+	for _, a := range []string{"connect", "disconnect", "delete-realm"} {
+		assert.Equal(t, &runLink{Label: "Open Mesh and DNS", Href: "/mesh"}, runBack(snap, store.Task{Realm: "sind", Action: a}), a)
+	}
+	assert.Nil(t, runBack(snap, store.Task{Action: "create-cluster"}))
+}
+
+func TestRunRetry(t *testing.T) {
+	form := map[string][]string{"realm": {"sind"}, "cluster": {"dev"}, "count": {"2"}}
+	failed := runFailed
+	task := store.Task{ID: "t1", Action: "create-worker", Form: form}
+
+	id, edit := runRetry(task, failed)
+	assert.Equal(t, "t1", id)
+	assert.Equal(t, &runLink{Label: "Edit and try again…", Href: "/dialogs/create-worker?task=t1"}, edit)
+
+	id, edit = runRetry(task, runCanceled)
+	assert.Equal(t, "t1", id, "a stopped run")
+	assert.NotNil(t, edit)
+
+	typed := store.Task{ID: "t2", Action: "delete-cluster", Form: form}
+	id, edit = runRetry(typed, failed)
+	assert.Empty(t, id, "the dialog asks for the name")
+	assert.Equal(t, &runLink{Label: "Try again…", Href: "/dialogs/delete-cluster?task=t2"}, edit)
+
+	for name, tc := range map[string]struct {
+		task  store.Task
+		class string
+	}{
+		"ok":        {task, runOK},
+		"running":   {task, runRunning},
+		"no form":   {store.Task{ID: "t3", Action: "create-worker"}, failed},
+		"no action": {store.Task{ID: "t4", Action: "nope", Form: form}, failed},
+	} {
+		id, edit := runRetry(tc.task, tc.class)
+		assert.Empty(t, id, name)
+		assert.Nil(t, edit, name)
+	}
 }

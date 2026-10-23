@@ -56,6 +56,14 @@ type Spec struct {
 	// Realm and Cluster name what the command works on, empty for none.
 	Realm   string
 	Cluster string
+	// Form is the dialog's form that built the command, without the CSRF
+	// token, the fingerprint and the typed confirmation, so that the user
+	// can try the command again; nil for a command that no form built.
+	Form map[string][]string
+	// ConfigPath and Config are the file that the command saved and runs
+	// with, such as the config of a new cluster; empty for none.
+	ConfigPath string
+	Config     string
 }
 
 // Starter starts tasks and stops them. The runner executes them.
@@ -150,7 +158,7 @@ func (r *Runner) Start(s Spec) (string, error) {
 	trace, span := r.hex(16), r.hex(8)
 	t := store.Task{
 		ID: r.hex(8), Action: s.Action, Display: s.Display, Argv: s.Argv, Realm: s.Realm, Cluster: s.Cluster,
-		Trace: trace, Start: r.cfg.Now(), Status: store.TaskRunning,
+		Form: s.Form, ConfigPath: s.ConfigPath, Config: s.Config, Trace: trace, Start: r.cfg.Now(), Status: store.TaskRunning,
 	}
 	var environ []string
 	if r.cfg.Environ != nil {

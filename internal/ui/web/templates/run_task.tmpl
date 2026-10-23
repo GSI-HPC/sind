@@ -9,10 +9,11 @@ answers with HX-Redirect. */}}
 <div hx-swap="morph:innerHTML" sse-swap="run-wait">{{fragment "run-wait" .}}</div>
 {{end}}
 
-{{define "run-wait"}}{{with .Data}}{{if .Gone}}<div class="callout warn">This task is gone: its card was closed. <a href="/activity">Back to Activity</a></div>
+{{define "run-wait"}}{{with .Data}}{{if .Gone}}<div class="callout warn">This task is gone: sind ui keeps only the newest commands that ended. <a href="/activity">Back to Activity</a></div>
 {{else}}<span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"></span><div class="head runhead"><div class="t"><h1>{{.Title}}</h1>
   <div class="sub"><span class="pill {{.PillClass}}">{{.Class}}</span><span>from sind ui</span></div></div>
-  <div class="actions">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{end}}</div></div>
+  <div class="actions">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{end}}{{template "run-retry" .}}</div></div>
+{{with .Command}}<div class="runcmd">{{template "pg-cmd" .}}</div>{{end}}
 {{if .Redirect}}<div class="callout run" hx-get="/tasks/{{.TaskID}}" hx-trigger="load" hx-swap="none">Opening the run…</div>
 {{else if eq .Class "running"}}<section class="panel"><div class="pb waiting"><span class="spin" aria-hidden="true"></span><span>{{if .NoRun}}The command runs. It writes no progress, so it has no run page: this page shows how it ends.{{else}}Waiting for the command to write its first progress event. This page opens the run as soon as it does.{{end}}</span>{{template "run-elapsed" .}}</div></section>
 {{else if and (eq .Class "ok") (not .Output)}}<section class="panel"><div class="pb"><div class="callout">The command ended without errors. Commands such as Drain and Resume write no progress, so they have no run page.</div></div></section>

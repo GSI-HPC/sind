@@ -151,6 +151,14 @@ type Task struct {
 	// Realm and Cluster name what the command works on, empty for none.
 	Realm   string
 	Cluster string
+	// Form is the dialog's form that built the command, without the CSRF
+	// token, the fingerprint and the typed confirmation, so that the user
+	// can try the command again; nil for a command that no form built.
+	Form map[string][]string
+	// ConfigPath and Config are the file that the command saved and runs
+	// with, such as the config of a new cluster; empty for none.
+	ConfigPath string
+	Config     string
 	// Trace is the trace ID that the command got in TRACEPARENT.
 	Trace string
 	Start time.Time
@@ -166,6 +174,10 @@ type Task struct {
 	// Output is the end of what the command wrote to standard error,
 	// escaped for display.
 	Output string
+	// Hidden is set once the user closed the card of the task after it
+	// ended: the dock leaves it out, and its run page still shows its
+	// command and offers to try it again.
+	Hidden bool
 }
 
 // Done reports whether the command has ended.

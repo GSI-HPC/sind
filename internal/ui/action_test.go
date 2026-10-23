@@ -137,6 +137,7 @@ func TestActRoutes_AreRegistered(t *testing.T) {
 	}
 	assert.Subset(t, patterns, []string{
 		"GET /dialogs/{action}", "POST /dialogs/{action}", "POST /actions/{action}/preview", "POST /actions/{action}/run", "POST /tasks/{id}/cancel",
+		"POST /tasks/{id}/retry",
 	})
 	var services []string
 	for _, s := range defaultRegistry.snapshot().services {
@@ -433,6 +434,7 @@ func TestActRoutes_WithoutTheRunner(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, f.post("/actions/power/preview", "").Code)
 	assert.Equal(t, http.StatusInternalServerError, f.postHTMX("/actions/power/run", "").Code)
 	assert.Equal(t, http.StatusInternalServerError, f.post("/tasks/t/cancel", "").Code)
+	assert.Equal(t, http.StatusInternalServerError, f.post("/tasks/t/retry", "").Code)
 }
 
 func TestActPreviewAndRun_UnknownAction(t *testing.T) {
@@ -475,7 +477,8 @@ func TestActRun_StartsTheCommand(t *testing.T) {
 	assert.Equal(t, run.Spec{
 		Action: "power", Argv: []string{"sind", "power", "reboot", "worker-0.dev"},
 		Display: "sind power reboot worker-0.dev", Realm: "sind", Cluster: "dev",
-	}, f.starter.specs[0])
+		Form: map[string][]string{"realm": {"sind"}, "cluster": {"dev"}, "op": {"reboot"}, "nodes": {"worker-0"}},
+	}, f.starter.specs[0], "the task keeps the form, without the fingerprint")
 	assert.Empty(t, f.saved)
 }
 
@@ -508,6 +511,8 @@ func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --wait 2m", f.starter.specs[0].Display)
 	assert.Equal(t, "ci", f.starter.specs[0].Realm)
 	assert.Equal(t, "hpc", f.starter.specs[0].Cluster)
+	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", f.starter.specs[0].ConfigPath)
+	assert.Equal(t, f.saved["/state/sind/ui/configs/hpc.yaml"], f.starter.specs[0].Config, "the task keeps the config it ran with")
 }
 
 func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
@@ -1159,4 +1164,84 @@ sacctmgr -i add user alice account=physics defaultaccount=physics
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "Hpc")).Body.String()
 	assert.NotContains(t, body, "act-conf", "no preview while the name is wrong")
+}
+
+func TestActKeptForm(t *testing.T) {
+	kept := actKeptForm(url.Values{"csrf": {"x"}, "shown": {"y"}, "confirm": {"dev"}, "cluster": {"dev"}, "nodes": {"a", "b"}})
+	assert.Equal(t, url.Values{"cluster": {"dev"}, "nodes": {"a", "b"}}, kept)
+}
+
+func TestActSameCommand(t *testing.T) {
+	task := store.Task{Display: "sind create cluster --config /c/x.yaml", ConfigPath: "/c/x.yaml", Config: "name: x\n"}
+	cmd := action.Command{Display: task.Display, Config: &action.File{Path: "/c/x.yaml", Content: "name: x\n"}}
+	assert.True(t, actSameCommand(cmd, task))
+	cmd.Config.Content = "name: y\n"
+	assert.False(t, actSameCommand(cmd, task), "another config")
+	assert.False(t, actSameCommand(action.Command{Display: task.Display}, task), "no config now")
+	assert.True(t, actSameCommand(action.Command{Display: "sind power on x"}, store.Task{Display: "sind power on x"}))
+	assert.False(t, actSameCommand(action.Command{Display: "sind power on y"}, store.Task{Display: "sind power on x"}))
+}
+
+// actEndedTask adds a task of the action that failed, with the form.
+func (f *actFixture) actEndedTask(id, act, display string, kv ...string) {
+	form := url.Values{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		form.Add(kv[i], kv[i+1])
+	}
+	end := time.Unix(10, 0)
+	f.st.AddTask(store.Task{ID: id, Action: act, Display: display, Form: form, Realm: "sind", Start: time.Unix(0, 0), End: &end, Status: store.TaskFailed})
+}
+
+func TestActRetry_RunsTheSameCommandAgain(t *testing.T) {
+	f := newActFixture(t)
+	f.actEndedTask("t0", "power", "sind power reboot worker-0.dev", "realm", "sind", "cluster", "dev", "op", "reboot", "nodes", "worker-0")
+
+	w := f.postHTMX("/tasks/t0/retry", "")
+
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	assert.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"))
+	require.Len(t, f.starter.specs, 1)
+	assert.Equal(t, "sind power reboot worker-0.dev", f.starter.specs[0].Display)
+	assert.Equal(t, []string{"reboot"}, f.starter.specs[0].Form["op"])
+}
+
+func TestActRetry_OpensTheDialogWhenTheCommandChanged(t *testing.T) {
+	f := newActFixture(t)
+	f.actEndedTask("t0", "power", "sind power reboot worker-9.dev", "realm", "sind", "cluster", "dev", "op", "reboot", "nodes", "worker-0")
+	f.actEndedTask("t1", "delete-cluster", "sind delete cluster dev", "realm", "sind", "cluster", "dev")
+
+	w := f.post("/tasks/t0/retry", "")
+	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
+	assert.Equal(t, "/dialogs/power?task=t0", w.Header().Get("Location"))
+	w = f.postHTMX("/tasks/t1/retry", "")
+	assert.Equal(t, "/dialogs/delete-cluster?task=t1", w.Header().Get("HX-Redirect"), "the dialog asks for the name")
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActRetry_Errors(t *testing.T) {
+	f := newActFixture(t)
+	f.actEndedTask("t0", "power", "sind power reboot worker-0.dev", "realm", "sind", "cluster", "dev", "op", "reboot", "nodes", "worker-0")
+	f.st.AddTask(store.Task{ID: "run", Action: "power", Form: url.Values{"cluster": {"dev"}}, Status: store.TaskRunning})
+	f.st.AddTask(store.Task{ID: "bare", Action: "power", Status: store.TaskFailed})
+
+	assert.Equal(t, http.StatusNotFound, f.post("/tasks/nope/retry", "").Code)
+	assert.Equal(t, http.StatusBadRequest, f.post("/tasks/bare/retry", "").Code)
+	assert.Equal(t, http.StatusConflict, f.post("/tasks/run/retry", "").Code)
+	assert.Equal(t, http.StatusBadRequest, f.post("/tasks/"+strings.Repeat("x", maxParamLen+1)+"/retry", "").Code)
+	f.starter.startErr = errors.New("no fork")
+	assert.Equal(t, http.StatusInternalServerError, f.post("/tasks/t0/retry", "").Code)
+}
+
+func TestActDialog_FillsInTheFormOfATask(t *testing.T) {
+	f := newActFixture(t)
+	f.actEndedTask("t0", "create-worker", "sind create worker dev --count 3", "realm", "sind", "cluster", "dev", "count", "3")
+	f.actEndedTask("t1", "power", "sind power on worker-0.dev", "realm", "sind", "cluster", "dev", "op", "on", "nodes", "worker-0")
+
+	body := f.get("/dialogs/create-worker?task=t0").Body.String()
+	assert.Contains(t, body, `id="act-count" name="count" value="3"`)
+	body = f.get("/dialogs/power?task=t1&op=reboot").Body.String()
+	assert.Contains(t, body, `value="reboot" checked`, "the link changes the form")
+	assert.Contains(t, f.get("/dialogs/power?task=t1").Body.String(), `value="on" checked`)
+	assert.Equal(t, http.StatusNotFound, f.get("/dialogs/create-worker?task=nope").Code)
+	assert.Equal(t, http.StatusNotFound, f.get("/dialogs/delete-worker?task=t0&cluster=dev").Code, "a task of another action")
 }

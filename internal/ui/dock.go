@@ -117,12 +117,15 @@ type dockCard struct {
 	here bool
 }
 
-// dockLoad builds the cards: a card for each task, then one for each run
-// that goes on without a task.
+// dockLoad builds the cards: a card for each task whose card the user has
+// not closed, then one for each run that goes on without a task.
 func dockLoad(v *View) dockData {
 	hideRun, hideTask := v.Params.Get("run"), v.Params.Get("task")
 	var cards []dockCard
 	for _, t := range v.Snap.Tasks {
+		if t.Hidden {
+			continue
+		}
 		run, hasRun := v.Snap.RunOfTrace(t.Trace)
 		c := dockTaskCard(t, run, hasRun, v.Now)
 		c.here = (hideTask != "" && t.ID == hideTask) || (hasRun && hideRun != "" && run.ID == hideRun)

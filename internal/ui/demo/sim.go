@@ -127,7 +127,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 	tc := uiTrace(n)
 	t := store.Task{
 		ID: fmt.Sprintf("%016x", 0x7a5c000000000000+n), Action: spec.Action, Display: spec.Display, Argv: spec.Argv, Realm: spec.Realm, Cluster: spec.Cluster,
-		Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,
+		Form: spec.Form, ConfigPath: spec.ConfigPath, Config: spec.Config, Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,
 	}
 	s.st.AddTask(t)
 	ctx, cancel := context.WithCancel(context.Background())

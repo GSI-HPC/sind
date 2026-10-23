@@ -31,7 +31,7 @@ func registerRunTask(r *Registry) {
 
 // runWait is what the waiting page says about a task.
 type runWait struct {
-	// Gone is set when the task was dismissed while the page is open.
+	// Gone is set when the store dropped the task while the page is open.
 	Gone bool
 	// Redirect is the run page to go to, once the log holds the run.
 	Redirect string
@@ -50,6 +50,13 @@ type runWait struct {
 	// NoRun says that the command writes no event log, so it never has a
 	// run page.
 	NoRun bool
+	// Command, Back, RetryID and Edit are those of the run page (runHead),
+	// for a command that ended before it wrote a run.
+	Command *pgCmd
+	Back    *runLink
+	RetryID string
+	Edit    *runLink
+	CSRF    string
 	// SayKey, SayState and Say are what run.js announces when the task
 	// ends while the page waits. The key is the page's own, and the page
 	// announces no start: the run page that follows at once does.
@@ -77,6 +84,11 @@ func runWaitOf(v *View) *runWait {
 		w.Stop = newRunStop(t, nil, card.Title, v.CSRF, false)
 	}
 	w.SayKey, w.SayState, w.Say = "w:"+t.ID, card.SayState, card.Say
+	w.CSRF, w.Back = v.CSRF, runBack(v.Snap, t)
+	if t.Display != "" {
+		w.Command = &pgCmd{Label: "Command", Text: t.Display}
+	}
+	w.RetryID, w.Edit = runRetry(t, card.Class)
 	return w
 }
 
@@ -116,13 +128,13 @@ func runTaskPage(s *Server, w http.ResponseWriter, r *http.Request) {
 	s.Write(w, r, http.StatusOK, "layout", v)
 }
 
-// runTaskMiss says that sind ui holds no task id: it keeps a task only
-// until its card is dismissed or sind ui stops. The run of the same id,
+// runTaskMiss says that sind ui holds no task id: it keeps the newest
+// tasks that ended, store.MaxEndedTasks of them, until it stops. The run of the same id,
 // when the log holds one, and Activity are the ways forward.
 func runTaskMiss(sn store.Snapshot, id string) *Miss {
 	m := &Miss{
 		What: fmt.Sprintf("sind ui holds no task %s.", id),
-		Hint: "sind ui keeps a task until you dismiss its card or sind ui stops. Activity lists the runs that the activity log holds.",
+		Hint: fmt.Sprintf("sind ui keeps the last %d commands that ended, until it stops. Activity lists the runs that the activity log holds.", store.MaxEndedTasks),
 	}
 	if run, ok := sn.Run(id); ok {
 		m.Links = append(m.Links, MissLink{Label: "Run " + id, URL: "/runs/" + url.PathEscape(run.ID)})
@@ -131,8 +143,9 @@ func runTaskMiss(sn store.Snapshot, id string) *Miss {
 	return m
 }
 
-// runTaskDismiss answers POST /tasks/{id}/dismiss: it removes the card of a
-// task that has ended. A task that is gone already counts as dismissed.
+// runTaskDismiss answers POST /tasks/{id}/dismiss: it hides the card of a
+// task that has ended. The task stays, so that its run page still shows its
+// command and Try again. A task that is gone counts as dismissed.
 func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 	v, err := s.View(r)
 	if err != nil {
@@ -145,18 +158,14 @@ func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 			s.Fail(w, r, fmt.Errorf("the command still runs; stop it first: %w", ErrBadRequest))
 			return
 		}
-		s.Store().RemoveTask(id)
+		s.Store().HideTasks(func(t store.Task) bool { return t.ID == id })
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // runTaskClear answers POST /tasks/clear, the Clear done of the dock: it
-// removes the cards of all tasks that have ended.
+// hides the cards of all tasks that have ended.
 func runTaskClear(s *Server, w http.ResponseWriter, _ *http.Request) {
-	for _, t := range s.Store().Snapshot().Tasks {
-		if taskEnded(t) {
-			s.Store().RemoveTask(t.ID)
-		}
-	}
+	s.Store().HideTasks(taskEnded)
 	w.WriteHeader(http.StatusNoContent)
 }

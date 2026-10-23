@@ -73,7 +73,7 @@
   howtos: [slow-create]
 - id: run
   title: Run
-  summary: One sind command and its steps, live while it works. The steps are those that the terminal shows.
+  summary: One sind command and its steps, live while it works. The steps are those that the terminal shows. A run of this UI shows its command, and Try again when it failed or was stopped.
   route: /runs/{id}
   doc: usage/progress
   words: [run, wait, rollback, lock, trace, nodeset]

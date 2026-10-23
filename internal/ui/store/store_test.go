@@ -3,6 +3,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -52,10 +53,42 @@ func TestTasks(t *testing.T) {
 	old, _ := before.Task("1")
 	assert.False(t, old.Done(), "a published snapshot never changes")
 
-	s.RemoveTask("1")
-	_, ok = s.Snapshot().Task("1")
-	assert.False(t, ok)
-	assert.Len(t, s.Snapshot().Tasks, 1)
+	s.HideTasks(func(t Task) bool { return t.ID == "1" })
+	task, ok = s.Snapshot().Task("1")
+	require.True(t, ok, "a hidden task stays")
+	assert.True(t, task.Hidden)
+	other, _ := s.Snapshot().Task("2")
+	assert.False(t, other.Hidden)
+	assert.Len(t, s.Snapshot().Tasks, 2)
+}
+
+func TestEndedTasksAreCapped(t *testing.T) {
+	s := New()
+	end := time.Now()
+	s.AddTask(Task{ID: "run", Status: TaskRunning})
+	for i := range MaxEndedTasks + 2 {
+		s.AddTask(Task{ID: fmt.Sprint(i), Trace: fmt.Sprint("tr", i), Status: TaskRunning})
+	}
+	s.SetRuns([]Run{{ID: "r0", Trace: "tr0", End: &end}, {ID: "r1", Trace: "tr1", End: &end}, {ID: "nt", End: &end}})
+	sub := s.Subscribe()
+	defer sub.Close()
+	for i := range MaxEndedTasks {
+		s.UpdateTask(fmt.Sprint(i), func(t *Task) { t.End, t.Status = &end, TaskOK })
+	}
+	assert.Equal(t, []Topic{TopicTasks}, sub.Take())
+	assert.Len(t, s.Snapshot().Tasks, MaxEndedTasks+3, "no more than the cap have ended")
+
+	// Two more end: the two that started first of those that ended are
+	// dropped, and their run pages hear of it.
+	s.UpdateTask(fmt.Sprint(MaxEndedTasks+1), func(t *Task) { t.End, t.Status = &end, TaskFailed })
+	s.UpdateTask(fmt.Sprint(MaxEndedTasks), func(t *Task) { t.End, t.Status = &end, TaskFailed })
+	assert.Equal(t, []Topic{TopicTasks, RunTopic("r0"), RunTopic("r1")}, sub.Take())
+	tasks := s.Snapshot().Tasks
+	assert.Len(t, tasks, MaxEndedTasks+1)
+	assert.Equal(t, "run", tasks[0].ID, "a task that runs stays")
+	assert.Equal(t, "2", tasks[1].ID)
+	_, ok := s.Snapshot().Task("0")
+	assert.False(t, ok, "a dropped task is gone")
 }
 
 func TestSlowSubscriberLosesNoTopic(t *testing.T) {
@@ -126,7 +159,7 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 	// without an end, and still ends with its task, also when the task
 	// was dismissed.
 	s.UpdateTask("t2", func(t *Task) { t.End, t.Status = &end, TaskCanceled })
-	s.RemoveTask("t2")
+	s.HideTasks(func(t Task) bool { return t.ID == "t2" })
 	s.SetRuns([]Run{{ID: "b", Trace: "tr2", Start: start}, {ID: "x", Trace: "tr1", Start: start}})
 	b, _ := s.Snapshot().Run("b")
 	assert.Equal(t, StatusCanceled, b.Status)

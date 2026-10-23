@@ -66,6 +66,11 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rp{display:grid;gap:14px;min-width:0}
 .rp>div:empty{display:none}
 .runhead{margin-bottom:0}
+/* the command of a run of sind ui, with Copy, and the config it ran with */
+.runcmd{display:grid;gap:8px;margin-top:12px;min-width:0}
+.runcfg>summary{cursor:pointer;width:max-content;font:var(--t-sm) var(--f-body);color:var(--muted)}
+.runcfg-path{margin:6px 0 0;font-size:var(--t-sm);color:var(--muted);overflow-wrap:anywhere}
+.runcfg pre{margin:6px 0 0;max-height:320px;overflow:auto;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font:var(--t-sm)/1.5 var(--f-mono)}
 .rsum{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 .rsum .clock{font:600 var(--t-xl) var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted)}
 .rbar{flex:1 1 320px;display:grid;gap:8px;min-width:0}

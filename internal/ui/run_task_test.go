@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -120,7 +121,7 @@ func TestRunTaskPageGone(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	body := w.Body.String()
 	assert.Contains(t, body, "sind ui holds no task nope.")
-	assert.Contains(t, body, "until you dismiss its card or sind ui stops")
+	assert.Contains(t, body, "sind ui keeps the last 25 commands that ended, until it stops.")
 	assert.Contains(t, body, `<a class="btn primary" href="/activity">Activity</a>`)
 	assert.NotContains(t, body, "may have been deleted")
 	// A run of that id is the closest match.
@@ -145,8 +146,12 @@ func TestRunTaskDismiss(t *testing.T) {
 
 	w = ts.post("/tasks/done/dismiss", "")
 	assert.Equal(t, http.StatusNoContent, w.Code)
-	_, ok = ts.st.Snapshot().Task("done")
-	assert.False(t, ok)
+	done, ok := ts.st.Snapshot().Task("done")
+	require.True(t, ok, "the task stays for its run page")
+	assert.True(t, done.Hidden)
+	assert.NotContains(t, runFragment(t, ts, runNow, "tasks"), "/tasks/done", "the dock leaves it out")
+	busy, _ := ts.st.Snapshot().Task("busy")
+	assert.False(t, busy.Hidden)
 
 	// Closing a card twice, as two tabs do, is not an error.
 	assert.Equal(t, http.StatusNoContent, ts.post("/tasks/done/dismiss", "").Code)
@@ -188,6 +193,28 @@ func TestRunTaskClear(t *testing.T) {
 	w := ts.post("/tasks/clear", "")
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	tasks := ts.st.Snapshot().Tasks
-	require.Len(t, tasks, 1, "the command that runs stays")
-	assert.Equal(t, "run", tasks[0].ID)
+	require.Len(t, tasks, 3, "the tasks stay for their run pages")
+	assert.False(t, tasks[0].Hidden, "the command that runs keeps its card")
+	assert.True(t, tasks[1].Hidden)
+	assert.True(t, tasks[2].Hidden)
+}
+
+func TestRunTaskPageOffersToTryAgain(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	end := runAt(12)
+	ts.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	ts.st.AddTask(store.Task{
+		ID: "t1", Action: "create-worker", Realm: "sind", Cluster: "dev", Display: "sind create worker dev --count 2",
+		Form:  map[string][]string{"realm": {"sind"}, "cluster": {"dev"}, "count": {"2"}},
+		Trace: "tr", Start: runAt(10), End: &end, Status: store.TaskFailed, Err: "exit status 2",
+	})
+	body := ts.get("/tasks/t1").Body.String()
+	for _, want := range []string{
+		`<code>sind create worker dev --count 2</code><button type="button" data-pg-copy>Copy</button>`,
+		`action="/tasks/t1/retry"`,
+		`>Edit and try again…</a>`,
+		`<a class="btn" href="/clusters/sind/dev">Open dev</a>`,
+	} {
+		assert.Contains(t, body, want)
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -147,9 +148,18 @@ type runHead struct {
 	Exit     string
 	Trace    string
 	TraceTip string
-	// Cluster is the cluster the run's task worked on, when it exists.
-	Cluster     string
-	ClusterHref string
+	// Back leads to what the run's task worked on: its cluster, the list
+	// of clusters once the cluster is gone, or the mesh.
+	Back *runLink
+	// Command is the command line of the run's task, with Copy.
+	Command *pgCmd
+	// Config is the file that the task saved and ran with.
+	Config *pgCmd
+	// RetryID is the task that Try again runs again, when it runs it
+	// without a dialog; Edit opens the dialog filled in with its form.
+	RetryID string
+	Edit    *runLink
+	CSRF    string
 	// Running is set while the run goes on.
 	Running bool
 	// TaskID is the task to stop; empty when sind ui cannot stop the run.
@@ -189,16 +199,61 @@ func runHeadOf(rc runCtx) *runHead {
 		}
 	}
 	if t := rc.Task; t != nil {
+		h.CSRF = rc.CSRF
 		if h.Running {
 			h.TaskID, h.Canceling = t.ID, t.Canceling
 			h.Stop = newRunStop(*t, &rc.Run, run.Title, rc.CSRF, false)
 		}
-		if t.Cluster != "" && runHasCluster(rc.Snap, t.Realm, t.Cluster) {
-			h.Cluster = t.Cluster
-			h.ClusterHref = "/clusters/" + t.Realm + "/" + t.Cluster
+		h.Back = runBack(rc.Snap, *t)
+		if t.Display != "" {
+			h.Command = &pgCmd{Label: "Command", Text: t.Display}
+		}
+		if t.ConfigPath != "" {
+			h.Config = &pgCmd{Label: t.ConfigPath, Text: t.Config}
+		}
+		if run.Done() {
+			h.RetryID, h.Edit = runRetry(*t, runStatusClass(run))
 		}
 	}
 	return h
+}
+
+// runLink is a link of the run page.
+type runLink struct{ Label, Href string }
+
+// runBack leads from the run of a task to what it worked on: its cluster
+// while it exists, the list of clusters once it is gone, and the mesh for
+// a command of the realm. Nil for a task of none of them.
+func runBack(snap store.Snapshot, t store.Task) *runLink {
+	switch {
+	case t.Cluster != "" && runHasCluster(snap, t.Realm, t.Cluster):
+		return &runLink{Label: "Open " + t.Cluster, Href: "/clusters/" + t.Realm + "/" + t.Cluster}
+	case t.Cluster != "":
+		return &runLink{Label: "Open Clusters", Href: "/clusters"}
+	case t.Action == "connect" || t.Action == "disconnect" || t.Action == "delete-realm":
+		return &runLink{Label: "Open Mesh and DNS", Href: "/mesh"}
+	}
+	return nil
+}
+
+// runRetry offers to try the command of a task that failed or was stopped
+// again. A command that wants no typed confirmation gets Try again, which
+// runs it at once, and Edit and try again, which opens its dialog filled
+// in; one that wants the user to type a name gets Try again… alone, which
+// opens the dialog. Nothing for a command whose class is not failed or
+// canceled, or for a task that no form started.
+func runRetry(t store.Task, class string) (string, *runLink) {
+	if (class != runFailed && class != runCanceled) || t.Form == nil {
+		return "", nil
+	}
+	a, ok := action.Lookup(t.Action)
+	if !ok {
+		return "", nil
+	}
+	if a.Want(url.Values(t.Form)) != "" {
+		return "", &runLink{Label: "Try again…", Href: actEditHref(t)}
+	}
+	return t.ID, &runLink{Label: "Edit and try again…", Href: actEditHref(t)}
 }
 
 // runHasCluster reports whether the snapshot holds the cluster.

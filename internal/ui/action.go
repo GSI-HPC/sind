@@ -152,6 +152,7 @@ func actRoutes() []Route {
 		{Pattern: "POST /actions/{action}/run", Handle: actRunRoute},
 		{Pattern: "POST /actions/{action}/check", Handle: actCheckRoute},
 		{Pattern: "POST /tasks/{id}/cancel", Handle: actCancelRoute},
+		{Pattern: "POST /tasks/{id}/retry", Handle: actRetryRoute},
 	}
 }
 
