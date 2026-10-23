@@ -4,7 +4,9 @@ name: Deploy docs
 # together and deploys them as one Pages artifact, so no gh-pages branch
 # accumulates history. Video episodes (video/README.md) are rendered here into
 # each checkout's docs/ before Hugo runs. Renders are cached by a hash of their
-# inputs, so only new or changed episodes are rendered. The screenshots of
+# inputs, so only new or changed episodes are rendered. The overview video
+# (video/overview/README.md) is recorded from real runs and rendered here
+# too, cached by the git tree of video/overview. The screenshots of
 # sind ui (tools/screenshots) are taken here too, from the sind of each
 # checkout, so they always show its UI.
 
@@ -69,7 +71,6 @@ jobs:
           python-version: "3.12"
 
       - name: Restore voice model
-        if: steps.episodes.outputs.cache-hit != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/sindy-voice
@@ -103,6 +104,51 @@ jobs:
         with:
           go-version-file: next/go.mod
           cache: false
+
+      - name: Restore the overview video
+        id: overview
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: overview-store
+          key: video-overview-${{ hashFiles('main/video/overview/**', 'main/video/voice/**', 'next/video/overview/**', 'next/video/voice/**') }}
+          restore-keys: video-overview-
+
+      # The overview video (video/overview) is recorded from real runs of
+      # each checkout's sind on this runner, narrated by Sindy, then
+      # rendered. A render is kept by the git trees of its video/overview
+      # and video/voice, so it is made again only when they change.
+      - name: Record and render the overview video
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CHROME: /usr/bin/google-chrome
+        run: |
+          mkdir -p overview-store
+          : > overview-used.txt
+          for branch in main next; do
+            [ -f "$branch/video/overview/build.sh" ] || continue
+            key=$(git -C "$branch" rev-parse HEAD:video/overview)-$(git -C "$branch" rev-parse --short=12 HEAD:video/voice)
+            echo "$key" >> overview-used.txt
+            store="$GITHUB_WORKSPACE/overview-store/$key"
+            if [ ! -f "$store/overview.webm" ]; then
+              command -v ffmpeg >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+              (cd "$branch" && video/overview/setup-host.sh)
+              (cd "$branch/video" && npm ci --no-audit --no-fund)
+              pip install --quiet numpy -r "$branch/video/voice/requirements.txt"
+              python3 "$branch/video/voice/sindy_voice.py" setup
+              rec="$RUNNER_TEMP/overview-$branch"
+              PATH="$HOME/.local/bin:$PATH" python3 "$branch/video/overview/record.py" --out "$rec"
+              "$branch/video/overview/build.sh" "$rec" "$store"
+              rm -rf "$store/work" "$rec"
+            fi
+            mkdir -p "$branch/docs/static/videos" "$branch/docs/data/videos"
+            cp "$store"/overview.webm "$store"/overview.jpg "$store"/overview-thumb.jpg "$store"/overview.vtt "$branch/docs/static/videos/"
+            cp "$store/overview.json" "$branch/docs/data/videos/"
+          done
+          # Keep only the renders that main or next still use.
+          for entry in overview-store/*; do
+            [ -e "$entry" ] || continue
+            grep -qx "$(basename "$entry")" overview-used.txt || rm -rf "$entry"
+          done
 
       # The runner's Chrome; -no-sandbox as the runner's AppArmor may refuse
       # the user namespaces of its sandbox.
