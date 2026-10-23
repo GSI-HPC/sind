@@ -349,6 +349,15 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 
 {{define "act-dlg-delete-cluster"}}{{end}}
 
+{{define "act-dlg-delete-clusters"}}
+<input type="hidden" name="back" value="{{.Val "back"}}">
+{{if .Clusters}}<div class="fld"><span class="lbl">Clusters</span>
+  <ul class="act-clusters">{{range .Clusters}}<li><input type="hidden" name="clusters" value="{{.Ref}}"><b class="mono">{{.Name}}</b> <small>realm {{.Realm}}, {{.NodesText}}, {{.State}}</small></li>{{end}}</ul></div>
+{{with .Gone}}<div class="callout warn">sind ui no longer sees <span class="mono">{{$.GoneText}}</span>, so the dialog leaves {{if eq (len .) 1}}it{{else}}them{{end}} out.</div>{{end}}
+<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{if eq (len .Clusters) 1}}this cluster go with it{{else}}these clusters go with them{{end}}. A host directory mounted as /data stays as it is; a data volume goes too.</div>
+{{else}}<div class="empty">{{if .Gone}}sind ui no longer sees <span class="mono">{{.GoneText}}</span>. {{end}}No cluster to delete. Tick clusters on <a href="{{.Back}}">the Clusters page</a> and delete them from the bar above the table.</div>
+{{end}}{{end}}
+
 {{define "act-dlg-delete-worker"}}
 {{template "act-nodes" .}}
 {{end}}

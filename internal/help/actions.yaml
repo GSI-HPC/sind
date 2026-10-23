@@ -24,6 +24,14 @@
   irreversible: true
   doc: usage/cluster-lifecycle#delete-a-cluster
   words: [cluster]
+- id: delete-clusters
+  title: Delete clusters
+  summary: Deletes the clusters that you ticked on the Clusters page, with one confirmation. sind ui runs sind delete cluster once for each of them.
+  command: sind delete cluster NAME
+  undo: Cannot be undone
+  irreversible: true
+  doc: usage/cluster-lifecycle#delete-a-cluster
+  words: [cluster, realm]
 - id: delete-worker
   title: Delete workers
   summary: Removes worker nodes from a cluster.

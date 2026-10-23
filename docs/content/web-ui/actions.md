@@ -33,6 +33,7 @@ Each action runs one command:
 | New cluster | `sind create cluster --config FILE` | Delete the cluster |
 | Add workers | `sind create worker CLUSTER --count N` | Delete the workers |
 | Delete cluster | `sind delete cluster NAME` | Cannot be undone |
+| Delete clusters | `sind delete cluster NAME`, once for each | Cannot be undone |
 | Delete workers | `sind delete worker NODES` | Cannot be undone |
 | Power | `sind power VERB NODES` | Use the opposite verb |
 | Drain or resume workers | `sind exec CLUSTER -- scontrol update NodeName=NODES State=DRAIN Reason=WHY` | Resume, or drain |
@@ -82,6 +83,10 @@ To confirm, type the name of the worker when you delete one worker, else the nam
 Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. Its list of what stays names the host directories of its clusters and those containers. Open it from the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell.
 
 {{< uishot "dialog-delete-cluster" "A delete lists what goes and what stays, and asks you to type the name of the cluster." >}}
+
+**Delete clusters** deletes the clusters that you ticked on the Clusters page, up to 32. It asks you to type their number, and its button, such as **Delete 2 clusters**, starts one `sind delete cluster` for each. A cluster that is gone by the time the dialog opens is named and left out. Delete clusters in the jump box takes you to the Clusters page to tick them. The commands of one realm run one after the other, as each waits for the realm lock. The page goes back to the list, and the task dock shows each command.
+
+{{< uishot "dialog-delete-clusters" "Deleting several clusters asks you to type their number." >}}
 
 ## The realm lock
 

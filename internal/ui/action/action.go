@@ -79,6 +79,29 @@ type Command struct {
 	// Goes and Stays say what a command that deletes removes and what it
 	// keeps.
 	Goes, Stays []string
+	// Parts are the commands of an action that runs several, each as a
+	// task of its own, instead of Argv; Display shows them one per line.
+	Parts []Part
+}
+
+// Part is one of the commands of an action that runs several.
+type Part struct {
+	// Action is the id of the action whose task the part is, as the
+	// task's page shows it.
+	Action string
+	// Realm and Cluster are what the part works on.
+	Realm, Cluster string
+	Argv           []string
+	Display        string
+}
+
+// NewParts returns the command that runs the parts.
+func NewParts(parts []Part) Command {
+	lines := make([]string, len(parts))
+	for i, p := range parts {
+		lines[i] = p.Display
+	}
+	return Command{Display: strings.Join(lines, "\n"), Parts: parts}
 }
 
 // Problem is a field of a form that is wrong. Build reports it, instead of

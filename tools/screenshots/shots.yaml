@@ -153,6 +153,14 @@ shots:
     crop: "#layer [role=dialog]"
     page: dialogs
 
+  - name: dialog-delete-clusters
+    alt: "The Delete clusters dialog: the clusters, the number to type and one command for each"
+    path: /clusters
+    steps:
+      - dialog: delete-clusters?clusters=sind/legacy&clusters=ci/pr-145
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
   - name: help
     alt: "The help pane: what the page shows, the words on it and how to do the common things"
     path: /clusters/sind/dev

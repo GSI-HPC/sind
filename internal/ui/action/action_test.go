@@ -89,7 +89,7 @@ func build(t *testing.T, id string, f Form) (Command, error) {
 
 func TestIDs(t *testing.T) {
 	assert.Equal(t, []string{
-		"connect", "create-cluster", "create-worker", "delete-cluster", "delete-realm", "delete-worker", "disconnect", "power",
+		"connect", "create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-realm", "delete-worker", "disconnect", "power",
 	}, IDs())
 	_, ok := Lookup("nope")
 	assert.False(t, ok)
@@ -331,6 +331,60 @@ func TestBuildDeleteCluster(t *testing.T) {
 	cmd, err = build(t, "delete-cluster", form("cluster", "default"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind delete cluster", cmd.Display)
+}
+
+func TestBuildDeleteClusters(t *testing.T) {
+	cmd, err := build(t, "delete-clusters", form("clusters", "sind/dev,ci/ci1", "clusters", "sind/default sind/dev"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind --realm ci delete cluster ci1\nsind delete cluster\nsind delete cluster dev", cmd.Display)
+	assert.Empty(t, cmd.Argv)
+	require.Len(t, cmd.Parts, 3)
+	assert.Equal(t, Part{Action: "delete-cluster", Realm: "ci", Cluster: "ci1", Argv: []string{"sind", "--realm", "ci", "delete", "cluster", "ci1"}, Display: "sind --realm ci delete cluster ci1"}, cmd.Parts[0])
+	assert.Equal(t, []string{"sind", "delete", "cluster"}, cmd.Parts[1].Argv)
+	assert.Equal(t, "Delete 3 clusters", cmd.OK)
+	assert.Contains(t, cmd.Notes[0], "one command for each cluster")
+	assert.Equal(t, []string{
+		"These are all the clusters of realm ci, so sind also removes its mesh, DNS server and SSH relay.",
+		"These are all the clusters of realm sind, so sind also removes its mesh, DNS server and SSH relay.",
+	}, cmd.Notes[1:])
+	a, _ := Lookup("delete-clusters")
+	assert.Equal(t, "3", a.Want(form("clusters", "sind/dev,ci/ci1", "clusters", "sind/default sind/dev")))
+	assert.Empty(t, a.Want(form()), "without clusters there is nothing to confirm")
+	realm, cl := a.Target(form("clusters", "sind/dev"))
+	assert.Equal(t, "sind", realm)
+	assert.Empty(t, cl)
+
+	cmd, err = build(t, "delete-clusters", form("clusters", "sind/dev"))
+	require.NoError(t, err)
+	assert.Len(t, cmd.Notes, 1, "sind keeps a realm that has a cluster left")
+	assert.Equal(t, "Delete 1 cluster", cmd.OK)
+
+	_, err = build(t, "delete-clusters", form())
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "clusters", missing.Field)
+
+	many := make([]string, 33)
+	for i := range many {
+		many[i] = "sind/c" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+	}
+	for _, tc := range []struct{ value, want string }{
+		{strings.Join(many, ","), "pick at most 32 clusters"},
+		{"dev", `"dev" is not REALM/CLUSTER`},
+		{"Sind/dev", "clusters: "},
+		{"sind/Dev", "clusters: "},
+		{"sind/gone", "realm sind has no cluster gone"},
+	} {
+		_, err := build(t, "delete-clusters", form("clusters", tc.value))
+		require.Error(t, err, tc.value)
+		assert.Contains(t, err.Error(), tc.want, tc.value)
+	}
+}
+
+func TestNewParts(t *testing.T) {
+	cmd := NewParts([]Part{{Display: "a"}, {Display: "b"}})
+	assert.Equal(t, "a\nb", cmd.Display)
+	assert.Len(t, cmd.Parts, 2)
 }
 
 func TestBuildDeleteWorker(t *testing.T) {

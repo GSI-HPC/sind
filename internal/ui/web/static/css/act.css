@@ -61,6 +61,10 @@
 .scrim .act-why:empty{display:none}
 .scrim .act-checking{margin-right:auto;align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
 .scrim .act-checking.htmx-request{visibility:visible}
+/* The clusters that a delete of several removes. */
+.scrim .act-clusters{display:grid;gap:6px;margin:0;padding:0;list-style:none;max-height:40vh;overflow-y:auto}
+.scrim .act-clusters li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:6px 10px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+.scrim .act-clusters small{color:var(--muted)}
 .scrim .err{font-size:var(--t-sm);color:var(--bad)}
 .scrim .err:empty{display:none}
 .scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}

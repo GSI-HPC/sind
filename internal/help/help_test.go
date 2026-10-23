@@ -16,7 +16,7 @@ import (
 
 // wave2Actions are the action ids that the actions part of sind ui owns.
 var wave2Actions = []string{
-	"create-cluster", "create-worker", "delete-cluster", "delete-worker",
+	"create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-worker",
 	"power", "connect", "disconnect", "delete-realm",
 }
 

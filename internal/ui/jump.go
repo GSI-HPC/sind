@@ -306,6 +306,11 @@ func jumpHelp(h *help.Help, only bool) []jumpItem {
 	return items
 }
 
+// jumpActionPages are the actions that start on a page instead of their
+// dialog: the dialog that deletes several clusters deletes those ticked on
+// the Clusters page, and has nothing to show without them.
+var jumpActionPages = map[string]string{"delete-clusters": "/clusters"}
+
 // jumpObjects lists what the user can open: the clusters, the pages without
 // a wildcard, the actions, and the nodes and runs of the snapshot.
 func jumpObjects(h *help.Help, sn store.Snapshot, ctx jumpContext) []jumpItem {
@@ -358,6 +363,8 @@ func jumpAction(a help.Action, sn store.Snapshot, ctx jumpContext, clusters int)
 	it := jumpItem{Label: a.Title, Kind: "action", Text: a.Summary + " " + a.Command, rank: jumpRankAction, quiet: !slices.Contains(jumpDefaults, a.ID)}
 	realms := sn.Realms
 	switch {
+	case jumpActionPages[a.ID] != "":
+		it.Href = jumpActionPages[a.ID]
 	case actSpecs[a.ID].NeedsCluster && clusters == 0:
 		return it, false
 	case actSpecs[a.ID].NeedsCluster && clusters == 1:

@@ -80,23 +80,24 @@ func TestJump(t *testing.T) {
 	fixtureStore(ts.st)
 
 	for target, want := range map[string][]string{
-		"/jump?q=hpc":         {`href="/clusters/sind/hpc">hpc<small>cluster · sind</small>`, `data-jump-say="1 result."`},
-		"/jump?q=dev":         {`href="/clusters/ci/dev">dev<small>cluster · ci</small>`, `href="/nodes/sind/dev/worker-0">worker-0.dev<small>node · dev · sind</small>`, `href="/runs/x">create cluster dev<small>run · running</small>`},
-		"/jump?q=controller":  {`href="/nodes/sind/dev/controller">controller.dev`, `data-help-topic="word/controller"`},
-		"/jump?q=new+cluster": {`href="/dialogs/create-cluster" data-jump-dialog>New cluster<small>action</small>`},
-		"/jump?q=add+workers": {`data-jump-step="create-worker">Add workers…<small>action · pick a cluster</small></button>`},
-		"/jump?q=power":       {`data-jump-step="power">Power…`, `href="/runs/ra">power reboot worker-0<small>run · ok</small>`},
-		"/jump?q=delete":      {`data-jump-step="delete-cluster">Delete cluster…`, `data-jump-step="delete-realm">Delete realm…<small>action · pick a realm</small>`},
-		"/jump?q=rollback":    {`href="/help?topic=word%2frollback" data-help-topic="word/rollback">Rollback<small>word</small>`},
-		"/jump?q=sbatch":      {`data-help-topic="howto/first-cluster"`},
-		"/jump?q=clean":       {`data-help-topic="howto/clean-up"`},
-		"/jump?q=stuck":       {`data-help-topic="howto/job-pending"`},
-		"/jump?q=dns":         {`href="/mesh">Mesh and DNS<small>page</small>`},
-		"/jump?q=keys":        {`data-help-topic="keys">Keys<small>help</small>`, `data-jump-cmd="keys">Single-key shortcuts on or off<small>setting</small></button>`},
-		"/jump?q=theme":       {`data-jump-cmd="theme">Light or dark<small>setting</small>`},
-		"/jump?q=help":        {`href="/help">Help<small>page</small>`, `data-jump-cmd="help">Help for this page`},
-		"/jump?q=sind+dev":    {`href="/clusters/sind/dev">dev<small>cluster · sind</small>`},
-		"/jump?q=zzzzqq":      {`class="empty">Nothing matches. Try a cluster, a node or a word such as sbatch, or start with ? to search help only.`, `data-jump-say="Nothing matches."`},
+		"/jump?q=hpc":             {`href="/clusters/sind/hpc">hpc<small>cluster · sind</small>`, `data-jump-say="1 result."`},
+		"/jump?q=dev":             {`href="/clusters/ci/dev">dev<small>cluster · ci</small>`, `href="/nodes/sind/dev/worker-0">worker-0.dev<small>node · dev · sind</small>`, `href="/runs/x">create cluster dev<small>run · running</small>`},
+		"/jump?q=controller":      {`href="/nodes/sind/dev/controller">controller.dev`, `data-help-topic="word/controller"`},
+		"/jump?q=new+cluster":     {`href="/dialogs/create-cluster" data-jump-dialog>New cluster<small>action</small>`},
+		"/jump?q=add+workers":     {`data-jump-step="create-worker">Add workers…<small>action · pick a cluster</small></button>`},
+		"/jump?q=power":           {`data-jump-step="power">Power…`, `href="/runs/ra">power reboot worker-0<small>run · ok</small>`},
+		"/jump?q=delete":          {`data-jump-step="delete-cluster">Delete cluster…`, `data-jump-step="delete-realm">Delete realm…<small>action · pick a realm</small>`},
+		"/jump?q=delete+clusters": {`href="/clusters">Delete clusters<small>action</small>`},
+		"/jump?q=rollback":        {`href="/help?topic=word%2frollback" data-help-topic="word/rollback">Rollback<small>word</small>`},
+		"/jump?q=sbatch":          {`data-help-topic="howto/first-cluster"`},
+		"/jump?q=clean":           {`data-help-topic="howto/clean-up"`},
+		"/jump?q=stuck":           {`data-help-topic="howto/job-pending"`},
+		"/jump?q=dns":             {`href="/mesh">Mesh and DNS<small>page</small>`},
+		"/jump?q=keys":            {`data-help-topic="keys">Keys<small>help</small>`, `data-jump-cmd="keys">Single-key shortcuts on or off<small>setting</small></button>`},
+		"/jump?q=theme":           {`data-jump-cmd="theme">Light or dark<small>setting</small>`},
+		"/jump?q=help":            {`href="/help">Help<small>page</small>`, `data-jump-cmd="help">Help for this page`},
+		"/jump?q=sind+dev":        {`href="/clusters/sind/dev">dev<small>cluster · sind</small>`},
+		"/jump?q=zzzzqq":          {`class="empty">Nothing matches. Try a cluster, a node or a word such as sbatch, or start with ? to search help only.`, `data-jump-say="Nothing matches."`},
 	} {
 		w := ts.get(target)
 		require.Equal(t, http.StatusOK, w.Code, target)
@@ -241,7 +242,7 @@ func TestJumpAction(t *testing.T) {
 	}
 	// Every action that may ask has a question.
 	for _, a := range h.Actions() {
-		if a.ID != "create-cluster" {
+		if _, page := jumpActionPages[a.ID]; !page && a.ID != "create-cluster" {
 			assert.Contains(t, jumpAsks, a.ID)
 		}
 	}

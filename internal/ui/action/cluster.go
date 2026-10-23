@@ -6,8 +6,10 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 )
@@ -16,6 +18,7 @@ func init() {
 	register(
 		Action{ID: "create-worker", Build: buildCreateWorker, Cluster: formCluster},
 		Action{ID: "delete-cluster", Build: buildDeleteCluster, Cluster: formCluster, Typed: formCluster},
+		Action{ID: "delete-clusters", Build: buildDeleteClusters, Typed: typedClusters},
 		Action{ID: "delete-worker", Build: buildDeleteWorker, Cluster: formCluster, Typed: deleteWorkerTyped},
 		Action{ID: "delete-realm", Build: buildDeleteRealm, Typed: func(f Form) string { return Realm(f) }},
 	)
@@ -190,6 +193,84 @@ func buildDeleteCluster(f Form, c Context) (Command, error) {
 // countOf writes n things: 1 cluster, 2 clusters.
 func countOf(n int, thing string) string {
 	return fmt.Sprintf("%d %s%s", n, thing, plural(n))
+}
+
+// maxClusters is the most clusters that one delete of several takes.
+const maxClusters = 32
+
+// ClusterRefs returns the clusters that the field "clusters" names, each as
+// realm/name, without repeats, in the order of the form. A value may hold
+// several, separated by commas or spaces.
+func ClusterRefs(f Form) []string {
+	var out []string
+	for _, v := range f["clusters"] {
+		for _, ref := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }) {
+			if !slices.Contains(out, ref) {
+				out = append(out, ref)
+			}
+		}
+	}
+	return out
+}
+
+// typedClusters is what the user types to delete several clusters: their
+// count. Without clusters there is nothing to confirm, and the build fails.
+func typedClusters(f Form) string {
+	if n := len(ClusterRefs(f)); n > 0 {
+		return strconv.Itoa(n)
+	}
+	return ""
+}
+
+// buildDeleteClusters deletes several clusters, of one realm or of
+// several: sind delete cluster takes one, so each is a part of its own.
+func buildDeleteClusters(f Form, c Context) (Command, error) {
+	refs := ClusterRefs(f)
+	if len(refs) == 0 {
+		return Command{}, &Missing{Field: "clusters", Text: "pick the clusters to delete"}
+	}
+	if len(refs) > maxClusters {
+		return Command{}, fmt.Errorf("clusters: pick at most %d clusters", maxClusters)
+	}
+	parts := make([]Part, 0, len(refs))
+	for _, ref := range refs {
+		realm, name, ok := strings.Cut(ref, "/")
+		if !ok {
+			return Command{}, fmt.Errorf("clusters: %q is not REALM/CLUSTER", ref)
+		}
+		if err := config.CheckName("realm", realm); err != nil {
+			return Command{}, fmt.Errorf("clusters: %w", err)
+		}
+		if err := config.CheckName("cluster", name); err != nil {
+			return Command{}, fmt.Errorf("clusters: %w", err)
+		}
+		if _, ok := c.Snap.Cluster(realm, name); !ok {
+			return Command{}, fmt.Errorf("realm %s has no cluster %s", realm, name)
+		}
+		argv := sindArgv(realm, append([]string{"delete", "cluster"}, clusterWord(name)...)...)
+		parts = append(parts, Part{Action: "delete-cluster", Realm: realm, Cluster: name, Argv: argv, Display: Quote(argv)})
+	}
+	slices.SortFunc(parts, func(a, b Part) int {
+		return cmp.Or(natsort.Compare(a.Realm, b.Realm), natsort.Compare(a.Cluster, b.Cluster))
+	})
+	cmd := NewParts(parts)
+	cmd.OK = "Delete " + countOf(len(parts), "cluster")
+	cmd.Notes = append(cmd.Notes, "sind ui runs one command for each cluster. The commands of one realm run one after the other, as each waits for the lock of the realm.")
+	for i, p := range parts {
+		if i > 0 && parts[i-1].Realm == p.Realm {
+			continue
+		}
+		n := 0
+		for _, q := range parts {
+			if q.Realm == p.Realm {
+				n++
+			}
+		}
+		if n == len(c.Snap.ClustersOf(p.Realm)) {
+			cmd.Notes = append(cmd.Notes, fmt.Sprintf("These are all the clusters of realm %s, so sind also removes its mesh, DNS server and SSH relay.", p.Realm))
+		}
+	}
+	return cmd, nil
 }
 
 func buildDeleteWorker(f Form, c Context) (Command, error) {

@@ -26,6 +26,8 @@ import (
 // filled in.
 var actDialogKeys = []string{
 	"realm", "cluster", "nodes", "op", "reason", "container",
+	// The clusters of a delete of several, and the list to go back to.
+	"clusters", "back",
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
@@ -194,6 +196,25 @@ var actSpecs = map[string]actSpec{
 		Lead: func(d *actDialog) string {
 			return "Deletes cluster " + d.Cluster + " of realm " + d.Realm + ". This cannot be undone."
 		},
+	},
+	"delete-clusters": {
+		OK: "Delete", Danger: true,
+		Title: func(d *actDialog) string {
+			if len(d.Clusters) == 0 {
+				return "Delete clusters"
+			}
+			return "Delete " + pgPlural(len(d.Clusters), "cluster", "clusters")
+		},
+		Lead: func(d *actDialog) string {
+			switch len(d.Clusters) {
+			case 0:
+				return "Deletes several clusters with one confirmation."
+			case 1:
+				return fmt.Sprintf("Removes its %s, its network and its volumes.", pgPlural(d.ClusterNodes(), "container", "containers"))
+			}
+			return fmt.Sprintf("Removes their %s, their networks and their volumes.", pgPlural(d.ClusterNodes(), "container", "containers"))
+		},
+		Defaults: func(d *actDialog) { d.pickClusters() },
 	},
 	"delete-worker": {
 		OK: "Delete", Danger: true, NeedsCluster: true,
@@ -654,6 +675,10 @@ type actDialog struct {
 	Title, Lead, Typed string
 	// Nodes are the nodes of the cluster that the user can pick.
 	Nodes []actNodeChoice
+	// Clusters are the clusters that a delete of several deletes, and Gone
+	// those of its link that sind ui no longer sees, as realm/name.
+	Clusters []actClusterChoice
+	Gone     []string
 	// OpGroups are the power operations, by group.
 	OpGroups []action.PowerGroup
 	// Waits are the choices of the wait for a new cluster.
@@ -729,6 +754,64 @@ func actDefaultDir(name string) string { return "~/sind/" + name }
 type actNodeChoice struct {
 	Short, Role, State string
 	On                 bool
+}
+
+// actClusterChoice is a cluster of the dialog that deletes several.
+type actClusterChoice struct {
+	Realm, Name, State string
+	Nodes              int
+}
+
+// Ref names the cluster as the field clusters does: realm/name.
+func (c actClusterChoice) Ref() string { return c.Realm + "/" + c.Name }
+
+// NodesText returns "1 node" or "3 nodes".
+func (c actClusterChoice) NodesText() string { return pgPlural(c.Nodes, "node", "nodes") }
+
+// pickClusters lists the clusters of the link that sind ui knows, and
+// keeps only those in the form, so that the title, the count to type and
+// the form all count the clusters that the dialog deletes. It names the
+// others, which a stale link or a cluster deleted meanwhile leaves.
+func (d *actDialog) pickClusters() {
+	var known []string
+	for _, ref := range action.ClusterRefs(d.Form) {
+		realm, name, _ := strings.Cut(ref, "/")
+		c, ok := d.Snap.Cluster(realm, name)
+		if !ok {
+			d.Gone = append(d.Gone, ref)
+			continue
+		}
+		known = append(known, ref)
+		d.Clusters = append(d.Clusters, actClusterChoice{Realm: realm, Name: name, State: string(c.State), Nodes: len(d.Snap.ClusterNodes(realm, name))})
+	}
+	d.Form["clusters"] = known
+}
+
+// GoneText names the clusters of the link that sind ui no longer sees.
+func (d *actDialog) GoneText() string { return strings.Join(d.Gone, ", ") }
+
+// Back returns the list page that a delete of several clusters goes back
+// to.
+func (d *actDialog) Back() string { return actBack(d.Form) }
+
+// ClusterNodes counts the nodes of the clusters of the dialog.
+func (d *actDialog) ClusterNodes() int {
+	n := 0
+	for _, c := range d.Clusters {
+		n += c.Nodes
+	}
+	return n
+}
+
+// actBack returns the list page that a delete of several clusters goes back
+// to: the address of the form's field back when it is the Clusters page,
+// else that page.
+func actBack(f action.Form) string {
+	back := f.Get("back")
+	if back == "/clusters" || strings.HasPrefix(back, "/clusters?") {
+		return back
+	}
+	return "/clusters"
 }
 
 // def sets the field to v unless the link gave a value for it.
@@ -956,9 +1039,17 @@ func (p actPreview) OKButton() actOK {
 	return actOK{Label: p.OK(), Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
 }
 
-// actWhy says why what the user typed, typed, does not confirm want.
+// actWhy says why what the user typed, typed, does not confirm want: a
+// name, or a number, such as the count of clusters that one dialog
+// deletes.
 func actWhy(want, typed string) string {
 	typed = strings.TrimSpace(typed)
+	if want != "" && strings.Trim(want, "0123456789") == "" {
+		if typed == "" {
+			return "The button stays off until you type the number."
+		}
+		return typed + " is not " + want + ". Type the number as it is shown."
+	}
 	switch {
 	case typed == "":
 		return "The button stays off until the name matches."
@@ -1194,8 +1285,16 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	p.Cmd, p.Shown = cmd, cmd.Fingerprint()
 	p.Blocked = !a.Confirmed(f) || len(cmd.Problems) > 0
 	p.Realm = action.Realm(f)
-	if actLocks(a, f) {
+	if len(cmd.Parts) == 0 && actLocks(a, f) {
 		p.Lock = v.Snap.Lock(p.Realm)
+	}
+	for _, part := range cmd.Parts {
+		// The parts may be of several realms; the first lock that one of
+		// them waits for is the one to show.
+		if l := v.Snap.Lock(part.Realm); l != nil {
+			p.Realm, p.Lock = part.Realm, l
+			break
+		}
 	}
 	return p
 }
@@ -1271,6 +1370,14 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		p.Warn, p.Blocked = "The command changed while you looked. Check it, then press the button again.", false
 		actRejected(s, w, r, v, p)
 		return
+	case len(p.Cmd.Parts) > 0:
+		err := actStartParts(st, p.Cmd)
+		if err == nil {
+			actFollow(w, r, actBack(f))
+			return
+		}
+		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
+		p.Err = err.Error()
 	default:
 		id, err := actStart(st, a, f, p.Cmd)
 		if err == nil {
@@ -1283,6 +1390,19 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	}
 	p.Blocked = true
 	actRejected(s, w, r, v, p)
+}
+
+// actStartParts starts a task for each part of a command of several. The
+// browser then goes back to the list that the dialog was opened from,
+// where the task dock shows them.
+func actStartParts(st *actState, cmd action.Command) error {
+	for i, p := range cmd.Parts {
+		if _, err := st.starter.Start(run.Spec{Action: p.Action, Argv: p.Argv, Display: p.Display, Realm: p.Realm, Cluster: p.Cluster,
+			Form: url.Values{"realm": {p.Realm}, "cluster": {p.Cluster}}}); err != nil {
+			return fmt.Errorf("started %d of %d commands: %w", i, len(cmd.Parts), err)
+		}
+	}
+	return nil
 }
 
 // actStart creates the command's directories, saves its file, if it has
@@ -1407,13 +1527,11 @@ func actOnPageOf(r *http.Request, realm, cluster string) bool {
 // that the script of the dialogs drops a draft.
 func actStarted(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview, id string, gone bool) {
 	to := "/tasks/" + id
-	follow := p.Spec.Follow || gone || !page.IsHTMX(r)
-	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": follow}})
-	if follow {
-		w.Header().Set("HX-Trigger", string(event))
-		page.Redirect(w, r, to)
+	if p.Spec.Follow || gone || !page.IsHTMX(r) {
+		actFollow(w, r, to)
 		return
 	}
+	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": false}})
 	w.Header().Set("HX-Trigger-After-Settle", string(event))
 	page.Retarget(w, "#act-notes", "beforeend")
 	s.Write(w, r, http.StatusOK, "act-started", v.withData(actStartedNote{ID: id, Display: p.Cmd.Display}))
@@ -1424,4 +1542,12 @@ func actStarted(s *Server, w http.ResponseWriter, r *http.Request, v *View, p ac
 func actRejected(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview) {
 	page.Retarget(w, "#act-preview", "innerHTML")
 	s.Write(w, r, http.StatusOK, "act-preview", v.withData(p))
+}
+
+// actFollow sends the browser to the page to after a command started, with
+// the event act-started, so that the script of the dialogs drops a draft.
+func actFollow(w http.ResponseWriter, r *http.Request, to string) {
+	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": true}})
+	w.Header().Set("HX-Trigger", string(event))
+	page.Redirect(w, r, to)
 }
