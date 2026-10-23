@@ -7,7 +7,7 @@
 {{end}}
 
 {{define "pg-cluster-head"}}{{with .Data}}{{if not .Found}}{{template "pg-gone" .Name}}{{else}}
-<div class="head"><div class="t"><h1>{{.Name}} <span class="pill {{.Cluster.StateClass}}">{{.Cluster.State}}</span></h1>
+<div class="head"><div class="t"><h1>{{.Name}} <span class="pill {{.Cluster.StateClass}}" data-say="{{.Name}} is {{.Cluster.State}}.">{{.Cluster.State}}</span></h1>
   <div class="sub">{{with .Cluster.Slurm}}<span class="mono">Slurm {{.}}</span>{{end}}<span>{{with .Cluster.Roles}}{{.}}{{else}}no nodes{{end}}</span>{{if .Cluster.Monitoring}}<span class="chip brand">monitoring</span>{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{range .Cluster.Runs}}<div class="callout run pg-run"><span class="pg-spin"></span><span class="pg-grow"><b class="mono">{{.Title}}</b> runs {{if .Terminal}}in a terminal{{else}}from here{{end}}.</span><a class="btn sm" href="{{.Link}}">Show progress</a></div>{{end}}
@@ -50,7 +50,7 @@
     {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog>{{.Label}}</a>{{end}}<a class="btn sm danger" href="{{.Delete.URL}}" data-pg-dialog data-pg-workers>{{.Delete.Label}}</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
   <div class="tw"><table><thead><tr><th class="pg-chk"><input type="checkbox" data-pg-all aria-label="Select all"></th><th>Node</th><th>Role</th><th>State</th><th>IP</th><th>Services</th></tr></thead><tbody>
   {{range .Cluster.Nodes}}<tr data-pg-node="{{.Short}}" data-pg-role="{{.Role}}"><td><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"></td>
-    <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
+    <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
     <td>{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}{{if .Known}}<span class="faint">{{.ServiceUp}} up</span>{{else}}<span class="faint">–</span>{{end}}{{end}}</td></tr>
   {{else}}<tr><td colspan="6"><div class="empty">This cluster has no node.</div></td></tr>{{end}}
   </tbody></table></div></section>

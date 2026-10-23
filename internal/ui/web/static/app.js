@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // sind ui's own script: the theme switch, the CSRF header of htmx requests,
-// the live indicator and the banner of a lost connection, and the More
-// sheet of a phone.
+// the live indicator and the banner of a lost connection, the More sheet of
+// a phone, and what live updates do to the focus and tell screen readers.
 // Pages are rendered on the server; htmx swaps their parts. Nothing here
 // evaluates text, and no page has inline script.
 (() => {
@@ -182,16 +182,98 @@
     });
   }
 
+  // Live updates. Before a fragment is morphed, the focus and the
+  // sentences of its [data-say] elements are noted; after it, a changed
+  // sentence is told, and a focused control that the update removed or
+  // turned into another one gives the focus to the page's heading, so that
+  // the next key does not press a control the user never chose.
+  const pending = new WeakMap();
+
+  // A control's identity leaves out what live updates change, such as the
+  // count of a link or the state in a name: a link stays the same link
+  // while its count goes up. Only a control with nothing stable to go by
+  // is known by its text.
+  const keys = ['id', 'name', 'href', 'type', 'value', 'action', 'hx-get', 'hx-post', 'hx-delete', 'for'];
+
+  function ident(e) {
+    const parts = keys.map(k => e.getAttribute(k) || '');
+    Array.from(e.attributes).forEach(at => { if (at.name.startsWith('data-')) parts.push(at.name); });
+    const known = parts.some(p => p && p !== 'button' && p !== 'submit');
+    return [e.tagName].concat(parts, known ? [] : [text(e).slice(0, 80)]).join('|');
+  }
+
+  // The text of an element, with a space between its parts, so that a link
+  // made of "Activity" and a count of 7 reads "Activity 7".
+  function text(e) {
+    const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+    const out = [];
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const t = n.nodeValue.trim();
+      if (t) out.push(t);
+    }
+    return out.join(' ').replace(/\s+/g, ' ');
+  }
+
+  function sentences(target) {
+    const m = new Map();
+    target.querySelectorAll('[data-say]').forEach((e, i) => m.set(e.dataset.sayKey || String(i), e.dataset.say));
+    return m;
+  }
+
+  function before(target) {
+    const rec = { says: sentences(target) };
+    const a = document.activeElement;
+    if (a && a !== document.body && target.contains(a)) {
+      rec.el = a;
+      rec.id = ident(a);
+      rec.label = (a.getAttribute('aria-label') || text(a)).trim();
+    }
+    pending.set(target, rec);
+  }
+
+  function after(target) {
+    const rec = pending.get(target);
+    if (!rec) return;
+    pending.delete(target);
+    const told = [];
+    sentences(target).forEach((line, key) => {
+      if (rec.says.has(key) && rec.says.get(key) !== line) told.push(line);
+    });
+    if (rec.el) {
+      const a = document.activeElement;
+      if (!(a === rec.el && a.isConnected && ident(a) === rec.id)) {
+        // The same control may be there twice, such as a page in the bar
+        // and in the More sheet, and only the one on show takes the focus.
+        const back = Array.from(target.querySelectorAll(rec.el.tagName)).some(e => {
+          if (ident(e) !== rec.id) return false;
+          e.focus({ preventScroll: true });
+          return document.activeElement === e;
+        });
+        if (!back) {
+          const to = document.querySelector('main h1') || document.getElementById('main');
+          if (to) {
+            if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
+            to.focus({ preventScroll: true });
+          }
+          if (rec.label) told.unshift(rec.label + ' is no longer available.');
+        }
+      }
+    }
+    if (told.length) say(told.join(' '));
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     showTheme();
     showTabs(document);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', showTheme);
 
-    // The morph keeps what the page holds itself: the open More sheet.
+    // The morph keeps what the page holds itself: the open More sheet, and
+    // the tabindex of the element that has the focus.
     if (window.Idiomorph) {
-      Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node) => {
+      Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node, kind) => {
         if (name === 'hidden' && node.id === 'rail-sheet') return false;
         if (name === 'aria-expanded' && node.hasAttribute('data-rail-more')) return false;
+        if (name === 'tabindex' && kind === 'remove' && node === document.activeElement) return false;
         return true;
       };
     }
@@ -247,6 +329,10 @@
 
     document.body.addEventListener('htmx:sseOpen', connBack);
     document.body.addEventListener('htmx:sseError', connLost);
-    document.body.addEventListener('htmx:sseMessage', ev => showTabs(ev.target));
+    document.body.addEventListener('htmx:sseBeforeMessage', ev => before(ev.target));
+    document.body.addEventListener('htmx:sseMessage', ev => {
+      after(ev.target);
+      showTabs(ev.target);
+    });
   });
 })();

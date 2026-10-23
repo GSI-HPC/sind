@@ -8,7 +8,7 @@
 {{end}}
 
 {{define "pg-node-head"}}{{with .Data}}{{if .Found}}
-<div class="head"><div class="t"><h1>{{.Node.Arg}} <span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></h1>
+<div class="head"><div class="t"><h1>{{.Node.Arg}} <span class="pill {{.Node.StateClass}}" data-say="{{.Node.Arg}} is {{.Node.State}}.">{{.Node.State}}</span></h1>
   <div class="sub"><span class="chip {{.Node.RoleClass}}">{{.Node.Role}}</span>{{with .Node.IP}}<span class="mono">{{.}}</span>{{end}}{{with .Node.HA}}<span>HA position {{.Position}}{{if .InControl}} · in control{{else}} · standby{{end}}</span>{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{else}}{{template "pg-gone" .Short}}{{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
