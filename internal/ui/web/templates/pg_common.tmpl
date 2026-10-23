@@ -5,7 +5,7 @@ prefix, pg, is part of the pages, clusters and nodes. */}}
 
 {{/* pg-action is a button of a page; a dialog link opens the dialog in the
 layer, and is a plain link without script. .Class holds btn modifiers. */}}
-{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
+{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{with .Name}} aria-label="{{.}}"{{end}}{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
 
 {{/* pg-docker-note says when Docker does not answer; it takes the view. */}}
 {{define "pg-docker-note"}}{{with .Snap.Docker}}{{if not .Checked}}<div class="callout pg-note">sind ui has not read Docker yet. The pages fill in when it has.</div>{{else if .Err}}<div class="callout bad pg-note"><b>Docker is not reachable.</b> {{.Err}}. The pages show what sind ui read last, and no action works until Docker answers. <a href="/doctor">Doctor</a> checks the host.</div>{{end}}{{end}}{{end}}

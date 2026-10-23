@@ -167,8 +167,10 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-cluster", "name=dev", []string{`value="dev"`}},
 		{"create-cluster", "dir=/scratch", []string{`name="name" value="hpc"`, `value="/scratch"`}},
 		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`}},
-		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Removes its 3 containers", `Type <b class="mono">dev</b> to confirm`, `btn danger solid`}},
-		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, "Type"}},
+		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Deletes cluster dev of realm sind. This cannot be undone.", `Type <b class="mono" id="act-confirm-word">dev</b> to confirm`,
+			`autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"`, `btn danger solid`, `disabled aria-describedby="act-why">Delete cluster<kbd`}},
+		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, `id="act-confirm-word">worker-1</b>`}},
+		{"delete-worker", "cluster=dev&nodes=worker-0,worker-1", []string{`id="act-confirm-word">dev</b>`}},
 		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Power and drain: nodes of dev", `value="worker-0" checked`, `value="worker-1" checked`, `value="controller">`, `value="cut" checked`, "Cut power",
 			`<legend class="lbl">Slurm (scontrol)</legend>`, `<legend class="lbl">Containers</legend>`, `<fieldset class="fld act-ops act-danger"><legend class="lbl">Can lose data</legend>`,
 			`id="act-reason" name="reason" value=""`, "Drain and Resume change what Slurm does"}},
@@ -178,7 +180,7 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"power", "cluster=dev&op=melt", []string{`value="shutdown" checked`}},
 		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`, `id="act-realm" name="realm" value="sind"`, "The realm whose networks the container joins."}},
 		{"disconnect", "", []string{"Disconnect a container", "connected to realm sind"}},
-		{"delete-realm", "", []string{"Delete realm sind", "all 2 clusters", `Type <b class="mono">sind</b> to confirm`}},
+		{"delete-realm", "", []string{"Delete realm sind", "Deletes every cluster of realm sind", `Type <b class="mono" id="act-confirm-word">sind</b> to confirm`}},
 	} {
 		t.Run(tc.id+"?"+tc.query, func(t *testing.T) {
 			w := f.get("/dialogs/" + tc.id + "?" + tc.query)
@@ -312,8 +314,36 @@ func TestActPreview_Refusals(t *testing.T) {
 
 	// The typed confirmation unlocks the button.
 	del := actForm("cluster", "dev")
-	assert.Contains(t, f.post("/actions/delete-cluster/preview", del).Body.String(), `disabled>Delete<kbd`)
-	assert.NotContains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=dev").Body.String(), `disabled`)
+	body = f.post("/actions/delete-cluster/preview", del).Body.String()
+	assert.Contains(t, body, `disabled aria-describedby="act-why">Delete cluster dev<kbd`)
+	assert.Contains(t, body, `<span id="act-why" hx-swap-oob="innerHTML">The button stays off until the name matches.</span>`)
+	assert.Contains(t, body, `<b class="mono" id="act-confirm-word" hx-swap-oob="true">dev</b>`)
+	body = f.post("/actions/delete-cluster/preview", del+"&confirm=dev").Body.String()
+	assert.NotContains(t, body, `disabled`)
+	assert.Contains(t, body, `<span id="act-why" hx-swap-oob="innerHTML"></span>`)
+	assert.Contains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=Dev").Body.String(), "Case matters: type dev, not Dev.")
+	assert.Contains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=de").Body.String(), "de is not dev. Type the name as it is shown.")
+
+	// One worker is confirmed with its own name, more with the cluster's.
+	body = f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0")).Body.String()
+	assert.Contains(t, body, `id="act-confirm-word" hx-swap-oob="true">worker-0</b>`)
+	assert.Contains(t, body, `>Delete worker-0<kbd`)
+	assert.NotContains(t, f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0", "confirm", "worker-0 ")).Body.String(), "disabled")
+	body = f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0,worker-1")).Body.String()
+	assert.Contains(t, body, `id="act-confirm-word" hx-swap-oob="true">dev</b>`)
+	assert.Contains(t, body, `>Delete 2 workers<kbd`)
+}
+
+func TestActPreview_ListsWhatGoesAndStays(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/delete-cluster/preview", actForm("cluster", "dev")).Body.String()
+	assert.Contains(t, body, `<div class="callout bad act-list"><b>Goes</b><ul><li>3 containers: controller, worker-0, worker-1</li>`)
+	assert.Contains(t, body, `<div class="callout act-list"><b>Stays</b><ul><li>the host directories it mounts, if any</li><li>the other cluster of realm sind, and its mesh</li></ul></div>`)
+
+	body = f.post("/actions/delete-realm/preview", actForm("realm", "sind")).Body.String()
+	assert.Contains(t, body, "<li>2 clusters: default, dev</li>")
+	assert.Contains(t, body, "<code>sind --realm sind delete realm</code>")
 }
 
 func TestActConnect_ProblemsAtTheirFields(t *testing.T) {

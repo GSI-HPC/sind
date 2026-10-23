@@ -56,7 +56,7 @@
 - id: delete-realm
   title: Delete realm
   summary: Deletes every cluster of the realm, its mesh and what they share. Containers that sind did not make are detached, not removed.
-  command: sind delete realm
+  command: sind --realm REALM delete realm
   undo: Cannot be undone
   irreversible: true
   doc: usage/cluster-lifecycle#delete-a-realm

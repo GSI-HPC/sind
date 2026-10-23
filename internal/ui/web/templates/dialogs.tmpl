@@ -33,8 +33,10 @@
   {{else}}
   <div class="mb">
     {{include .Body .}}
-    {{with .Typed}}<div class="fld"><label for="act-confirm">Type <b class="mono">{{.}}</b> to confirm</label><input type="text" id="act-confirm" name="confirm" autocomplete="off" spellcheck="false"></div>{{end}}
     {{template "act-preview-slot" .}}
+    {{with .Typed}}<div class="fld act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
+      <input type="text" id="act-confirm" name="confirm" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
+      <span class="hint act-why" id="act-why" role="status"></span></div>{{end}}
   </div>
   {{end}}
   <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
@@ -50,7 +52,7 @@
 {{/* act-ok is the button that runs the command, an actOK. It is off until
 a preview says that the command can run, and each preview swaps it.
 Ctrl+Enter, or Cmd+Enter on macOS, presses it. */}}
-{{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}>{{.Label}}<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
+{{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}{{if .Why}} aria-describedby="act-why"{{end}}>{{.Label}}<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
 
 {{define "act-preview-slot"}}<div id="act-preview" class="stack" hx-post="/actions/{{.ID}}/preview" hx-target="this" hx-swap="innerHTML"
       hx-trigger="load, input from:closest form delay:150ms, change from:closest form"></div>{{end}}
@@ -61,9 +63,12 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
 {{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{with .Cmd.Goes}}<div class="callout bad act-list"><b>Goes</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+{{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{template "act-callouts" .}}
+{{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
 {{end}}
 {{template "act-ok" .OKButton}}
 {{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
@@ -341,13 +346,10 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 </div>
 {{end}}
 
-{{define "act-dlg-delete-cluster"}}
-<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{.Cluster}} go with it. A host directory mounted as /data stays as it is; a data volume goes too.</div>
-{{end}}
+{{define "act-dlg-delete-cluster"}}{{end}}
 
 {{define "act-dlg-delete-worker"}}
 {{template "act-nodes" .}}
-<div class="callout bad">Jobs on these workers fail. This cannot be undone; add workers again to get new ones.</div>
 {{end}}
 
 {{define "act-dlg-power"}}
@@ -366,9 +368,7 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 <div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false"><span class="hint">The name of a container that is connected to realm {{.Realm}}.</span></div>
 {{end}}
 
-{{define "act-dlg-delete-realm"}}
-<div class="callout bad">This cannot be undone.</div>
-{{end}}
+{{define "act-dlg-delete-realm"}}{{end}}
 
 {{/* act-started is the notice of a command that a dialog started, which
 htmx adds to #act-notes of the layout. act.js takes it away after a while,

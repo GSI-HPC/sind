@@ -218,7 +218,7 @@ sind delete cluster default
 {{< /cli >}}
 {{< ui >}}
 
-On the page of the cluster, press **Delete…**. Type the name of the cluster to confirm, and press **Delete**.
+On the page of the cluster, press **Delete cluster…**. Type the name of the cluster to confirm, and press **Delete cluster default**.
 
 {{< uishot "dialog-delete-cluster" >}}
 

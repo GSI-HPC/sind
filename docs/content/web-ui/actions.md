@@ -14,7 +14,7 @@ Action buttons open a dialog. The dialog shows:
 - a **Copy** button for that command;
 - whether you can undo the action.
 
-Press the button of the dialog, such as **Create**, **Add**, **Run** or **Delete**, or press Ctrl+Enter (Cmd+Enter on macOS), to start the command. Enter in a field does not start it, unless the dialog has only that field, such as the name to type for a delete. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
+Press the button of the dialog, such as **Create**, **Reboot worker-0** or **Delete cluster dev**, or press Ctrl+Enter (Cmd+Enter on macOS), to start the command. The button names what it changes. Enter in a field does not start it, unless the dialog has only that field, such as the name to type for a delete. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
 
 When the command starts, the dialog closes and you stay on your page. A notice names the command and links to its run page, and the task dock shows its progress, so you can start the next action at once. **New cluster** opens the run page of its command instead, and so does **Delete** on the page of the cluster that it deletes, or on the page of one of its nodes.
 
@@ -37,7 +37,7 @@ Each action runs one command:
 | Power | `sind power VERB NODES` | Use the opposite verb |
 | Drain or resume workers | `sind exec CLUSTER -- scontrol update NodeName=NODES State=DRAIN Reason=WHY` | Resume, or drain |
 | Connect or disconnect a container | `sind connect container NAME` | Disconnect or connect it again |
-| Delete realm | `sind delete realm` | Cannot be undone |
+| Delete realm | `sind --realm REALM delete realm` | Cannot be undone |
 
 ## New cluster
 
@@ -69,9 +69,13 @@ Before an action that stops nodes, the dialog warns when they include the contro
 
 ## Delete
 
-**Delete cluster**, **Delete workers** and **Delete realm** ask you to type the name of the cluster or realm to confirm. Delete realm deletes every cluster of the realm, its mesh and its monitoring stack.
+**Delete cluster**, **Delete workers** and **Delete realm** list what goes and what stays: the containers, the network, the volumes and the Slurm state of a cluster go, and the host directories it mounts stay. The button names what it deletes, such as **Delete worker-5** or **Delete cluster dev**.
 
-{{< uishot "dialog-delete-cluster" "A delete asks you to type the name of the cluster." >}}
+To confirm, type the name of the worker when you delete one worker, else the name of the cluster or the realm. The name must match with its case; spaces around it do not count. Until it matches, a hint below the field says why the button stays off.
+
+Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. Its list of what stays names the host directories of its clusters and those containers. Open it from the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell.
+
+{{< uishot "dialog-delete-cluster" "A delete lists what goes and what stays, and asks you to type the name of the cluster." >}}
 
 ## The realm lock
 

@@ -140,7 +140,7 @@ shots:
     page: dialogs
 
   - name: dialog-delete-cluster
-    alt: "The Delete cluster dialog: type the name of the cluster to confirm"
+    alt: "The Delete cluster dialog: what goes, what stays, and the name of the cluster to type to confirm"
     path: /clusters
     steps:
       - dialog: delete-cluster?realm=sind&cluster=legacy
@@ -178,7 +178,7 @@ shots:
     fit: true
 
   - name: dialog-delete-worker
-    alt: "The Delete workers dialog: the workers it deletes, and the name of the cluster to type to confirm"
+    alt: "The Delete workers dialog for three workers: what goes, what stays, and the name of the cluster to type to confirm"
     path: /clusters/sind/dev?tab=nodes
     steps:
       - dialog: delete-worker?realm=sind&cluster=dev&nodes=worker-2,worker-3,worker-4
@@ -194,7 +194,7 @@ shots:
     page: dialogs
 
   - name: dialog-delete-realm
-    alt: "The Delete realm dialog: what it deletes, and the name of the realm to type to confirm"
+    alt: "The Delete realm dialog: the clusters and the rest that goes, what stays, and the name of the realm to type to confirm"
     path: /mesh
     steps:
       - dialog: delete-realm?realm=sind

@@ -174,7 +174,7 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 	d.Tabs = pgTabLinks(d)
 	d.Actions = []pgAction{
 		pgDialogAction("Add workers…", "", "create-worker", "realm", realm, "cluster", name),
-		pgDialogAction("Delete…", "danger", "delete-cluster", "realm", realm, "cluster", name),
+		pgDialogAction("Delete cluster…", "danger", "delete-cluster", "realm", realm, "cluster", name),
 	}
 	switch d.Tab {
 	case "summary":
@@ -262,7 +262,8 @@ func pgNodesTab(d *pgClusterView) {
 		power("Freeze…", "", "pause"), power("Unfreeze…", "", "unpause"),
 	}
 	d.WorkerSelection = []pgAction{power("Drain…", "", "drain"), power("Resume…", "", "resume")}
-	d.Delete = pgDialogAction("Delete…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
+	// The page script names the selected workers in the label.
+	d.Delete = pgDialogAction("Delete workers…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
 }
 
 // pgNetworkTab fills the networks, the mounts and the volumes. The

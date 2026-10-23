@@ -64,6 +64,8 @@ type pgRealmRow struct {
 	Problems int
 	Locked   bool
 	On       bool
+	// Delete opens the Delete realm dialog.
+	Delete pgAction
 }
 
 // pgNeed is an item of "Needs you".
@@ -99,7 +101,11 @@ func pgLoadOverview(v *View) (*pgOverview, error) {
 	sn := v.Snap
 	d := &pgOverview{Realm: realm}
 	for _, r := range pgRealmNames(sn, "") {
-		row := pgRealmRow{Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)), Locked: sn.Lock(r) != nil, On: r == realm}
+		row := pgRealmRow{
+			Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)), Locked: sn.Lock(r) != nil, On: r == realm,
+			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
+		}
+		row.Delete.Name = "Delete realm " + r + "…"
 		for _, n := range sn.NodesOf(r) {
 			if n.State != cluster.StateRunning {
 				row.Problems++

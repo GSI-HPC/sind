@@ -9,7 +9,7 @@ The rail on the left lists the pages; on a phone, the bar at the bottom does, wi
 
 ## Overview
 
-A card for each cluster, the things that need you, and the recent activity. An empty realm says so and offers **New cluster…**.
+The realms, a card for each cluster, the things that need you, and the recent activity. Each realm's row has **Clusters** and **Delete realm…**. An empty realm says so and offers **New cluster…**.
 
 {{< uishot "overview" >}}
 
@@ -33,7 +33,7 @@ The state of one cluster, in five tabs.
 
 {{< uishot "cluster" >}}
 
-**Nodes** lets you select nodes. The selection appears as a node set, such as `worker-[2-4]`. Power and delete act on the selection. When you select only workers, **Drain…** and **Resume…** appear.
+**Nodes** lets you select nodes. The selection appears as a node set, such as `worker-[2-4]`. Power and delete act on the selection. When you select only workers, **Drain…** and **Resume…** appear, and the delete button names the workers, such as **Delete worker-5…** or **Delete 3 workers…**.
 
 {{< uishot "cluster-nodes-selected" >}}
 
@@ -53,7 +53,7 @@ Type in **Filter** to show only the lines with that text, or tick **Errors and w
 
 ## Node
 
-The services, events and power state of one node, and the commands for it. A worker's page also has **Drain…** and **Resume…**. **Logs** opens the log of the node: the journal of its Slurm service while it runs, otherwise the container output. Each service has a **Logs** link to its own journal.
+The services, events and power state of one node, and the commands for it. A worker's page also has **Drain…**, **Resume…** and **Delete worker…**. **Logs** opens the log of the node: the journal of its Slurm service while it runs, otherwise the container output. Each service has a **Logs** link to its own journal.
 
 {{< uishot "node" >}}
 

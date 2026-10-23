@@ -100,7 +100,7 @@ func pgLoadNode(v *View) *pgNodeView {
 	}
 	if n.Worker() {
 		d.Actions = append(d.Actions, power("Drain…", "", "drain"), power("Resume…", "", "resume"),
-			pgDialogAction("Delete…", "danger", "delete-worker", "realm", realm, "cluster", name, "nodes", short))
+			pgDialogAction("Delete worker…", "danger", "delete-worker", "realm", realm, "cluster", name, "nodes", short))
 	}
 	sind := pgSind(realm)
 	d.Commands = []pgCmd{

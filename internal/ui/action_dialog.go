@@ -185,17 +185,17 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-cluster": {
-		OK: "Delete", Danger: true, NeedsCluster: true, Removes: true,
+		OK: "Delete cluster", Danger: true, NeedsCluster: true, Removes: true,
 		Title: func(d *actDialog) string { return "Delete cluster " + d.Cluster },
 		Lead: func(d *actDialog) string {
-			return fmt.Sprintf("Removes its %d containers, its network and its volumes.", len(d.Snap.ClusterNodes(d.Realm, d.Cluster)))
+			return "Deletes cluster " + d.Cluster + " of realm " + d.Realm + ". This cannot be undone."
 		},
 	},
 	"delete-worker": {
 		OK: "Delete", Danger: true, NeedsCluster: true,
 		Title: func(d *actDialog) string { return "Delete workers of " + d.Cluster },
 		Lead: func(*actDialog) string {
-			return "Removes the worker containers and their DNS records, then tells slurmctld."
+			return "Deletes the workers you pick, then tells slurmctld. This cannot be undone; add workers again to get new ones."
 		},
 	},
 	"power": {
@@ -227,11 +227,10 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-realm": {
-		OK: "Delete", Danger: true, Removes: true,
+		OK: "Delete realm", Danger: true, Removes: true,
 		Title: func(d *actDialog) string { return "Delete realm " + d.Realm },
 		Lead: func(d *actDialog) string {
-			r, _ := d.Snap.Realm(d.Realm)
-			return fmt.Sprintf("Deletes all %d clusters of realm %s, its mesh, DNS server, SSH relay, monitoring stack and the exported SSH config. Connected containers stay; sind only detaches them.", r.Clusters, d.Realm)
+			return "Deletes every cluster of realm " + d.Realm + " and what they share. This cannot be undone."
 		},
 	},
 }
@@ -666,15 +665,16 @@ type actDialog struct {
 // actOK is the button of a dialog that runs the command.
 type actOK struct {
 	Label string
-	// Danger paints it red, Off disables it, and Swap marks it as a part of
-	// a preview that takes the place of the button of the dialog.
-	Danger, Off, Swap bool
+	// Danger paints it red, Off disables it, Swap marks it as a part of a
+	// preview that takes the place of the button of the dialog, and Why
+	// points it at the hint that says why a typed name does not confirm.
+	Danger, Off, Swap, Why bool
 }
 
 // OKButton is the button that runs the command, off until a preview says
 // that it can run.
 func (d *actDialog) OKButton() actOK {
-	return actOK{Label: d.Spec.OK, Danger: d.Spec.Danger, Off: true}
+	return actOK{Label: d.Spec.OK, Danger: d.Spec.Danger, Off: true, Why: d.Typed != ""}
 }
 
 // actChoice is an option of a select.
@@ -919,6 +919,9 @@ type actPreview struct {
 	// command will wait for it.
 	Realm string
 	Lock  *state.LockHolder
+	// Typed is what the user must type to confirm, "" for nothing, and Why
+	// says why the typed text does not confirm yet.
+	Typed, Why string
 }
 
 // OK labels the button that runs the command: as the command says, or as
@@ -927,7 +930,19 @@ func (p actPreview) OK() string { return cmp.Or(p.Cmd.OK, p.Spec.OK) }
 
 // OKButton is the button that runs the command, as the preview says.
 func (p actPreview) OKButton() actOK {
-	return actOK{Label: p.OK(), Danger: p.Danger, Off: p.Blocked, Swap: true}
+	return actOK{Label: p.OK(), Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
+}
+
+// actWhy says why what the user typed, typed, does not confirm want.
+func actWhy(want, typed string) string {
+	typed = strings.TrimSpace(typed)
+	switch {
+	case typed == "":
+		return "The button stays off until the name matches."
+	case strings.EqualFold(typed, want):
+		return "Case matters: type " + want + ", not " + typed + "."
+	}
+	return typed + " is not " + want + ". Type the name as it is shown."
 }
 
 // actMaxTiles is the most nodes that a plan draws one by one.
@@ -1139,6 +1154,9 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	p.Danger = p.Spec.Danger
 	if op, ok := action.PowerOpOf(f.Get("op")); a.ID == "power" && ok && op.Danger {
 		p.Danger = true
+	}
+	if p.Typed = a.Want(f); !a.Confirmed(f) {
+		p.Why = actWhy(p.Typed, f.Get(action.ConfirmField))
 	}
 	cmd, err := a.Build(f, ctx)
 	var missing *action.Missing

@@ -63,6 +63,9 @@
     // Only workers can be drained, resumed and deleted.
     const workers = chosen.every(r => r.dataset.pgRole === 'worker');
     for (const b of bar.querySelectorAll('[data-pg-workers]')) b.hidden = !workers;
+    // The delete button names what it deletes.
+    const del = bar.querySelector('[data-pg-delete]');
+    if (del) del.textContent = chosen.length === 1 ? 'Delete ' + chosen[0].dataset.pgNode + '…' : 'Delete ' + chosen.length + ' workers…';
   }
 
   // dialogURL adds the selected nodes to the address of a dialog.

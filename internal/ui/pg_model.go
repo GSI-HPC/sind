@@ -26,6 +26,9 @@ type pgAction struct {
 	URL    string
 	Class  string
 	Dialog bool
+	// Name is the accessible name, where Label alone does not say what the
+	// button acts on; empty for Label.
+	Name string
 }
 
 // pgDialog returns the URL of the dialog of the action with the query

@@ -76,6 +76,9 @@ type Command struct {
 	// OK labels the button that runs the command, such as "Delete
 	// worker-5"; empty for the dialog's own label.
 	OK string
+	// Goes and Stays say what a command that deletes removes and what it
+	// keeps.
+	Goes, Stays []string
 }
 
 // Problem is a field of a form that is wrong. Build reports it, instead of

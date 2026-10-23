@@ -47,7 +47,7 @@
 
 {{define "pg-tab-nodes"}}<section class="panel" data-pg-nodes>
   <div class="pg-selbar" data-pg-selbar hidden><span>Selection: <span class="pg-expr" data-pg-expr></span></span><span class="pg-grow"></span>
-    {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog>{{.Label}}</a>{{end}}{{range .WorkerSelection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-workers>{{.Label}}</a>{{end}}<a class="btn sm danger" href="{{.Delete.URL}}" data-pg-dialog data-pg-workers>{{.Delete.Label}}</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
+    {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog>{{.Label}}</a>{{end}}{{range .WorkerSelection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-workers>{{.Label}}</a>{{end}}<a class="btn sm danger" href="{{.Delete.URL}}" data-pg-dialog data-pg-workers data-pg-delete>{{.Delete.Label}}</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
   <div class="tw"><table><thead><tr><th class="pg-chk"><input type="checkbox" data-pg-all aria-label="Select all"></th><th>Node</th><th>Role</th><th>State</th><th>IP</th><th>Services</th></tr></thead><tbody>
   {{range .Cluster.Nodes}}<tr data-pg-node="{{.Short}}" data-pg-role="{{.Role}}"><td><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"></td>
     <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
