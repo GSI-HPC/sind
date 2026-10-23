@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
-	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/go-clikit/localweb/launch"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,6 +36,42 @@ func runRegistry() *Registry {
 	r.AddPage(overviewPage)
 	pgRegister(r)
 	return r
+}
+
+// desktop stands in for a desktop with a display. Its opener records the
+// arguments it is started with instead of starting a browser.
+type desktop struct {
+	opened chan []string
+}
+
+func newDesktop() *desktop { return &desktop{opened: make(chan []string, 4)} }
+
+// options returns o with the desktop's environment and opener.
+func (d *desktop) options(o Options) Options {
+	o.GOOS = "linux"
+	o.Getenv = func(k string) string {
+		if k == "DISPLAY" {
+			return ":0"
+		}
+		return ""
+	}
+	o.start = func(name string, args ...string) error {
+		d.opened <- append([]string{name}, args...)
+		return nil
+	}
+	return o
+}
+
+// wait returns what the opener was started with.
+func (d *desktop) wait(t *testing.T) []string {
+	t.Helper()
+	select {
+	case args := <-d.opened:
+		return args
+	case <-time.After(2 * time.Second):
+		t.Fatal("no browser was opened")
+		return nil
+	}
 }
 
 // running is a Run in a goroutine.
@@ -121,8 +157,8 @@ func TestRunServesTheOverviewAndStops(t *testing.T) {
 		},
 	})
 	reg.AddService(Service{Name: "inert"}) // neither Setup nor Run
-	m := &mock.Executor{}
-	r := startRun(t, Options{NoOpen: true, RuntimeDir: runtimeDir, Exec: m, registry: reg})
+	d := newDesktop()
+	r := startRun(t, d.options(Options{NoOpen: true, RuntimeDir: runtimeDir, registry: reg}))
 
 	assert.Regexp(t, `^http://127\.0\.0\.1:\d+/\?token=[A-Za-z0-9_-]{43}$`, r.url)
 	assert.Contains(t, r.stderr.String(), "sind ui: "+r.url)
@@ -145,134 +181,140 @@ func TestRunServesTheOverviewAndStops(t *testing.T) {
 	info, err := os.Stat(record)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-	rec, ok := readRecord(record)
-	require.True(t, ok)
-	assert.Equal(t, runtimeRecord{URL: r.url, PID: os.Getpid()}, rec)
+	data, err := os.ReadFile(record)
+	require.NoError(t, err)
+	assert.JSONEq(t, fmt.Sprintf(`{"url":%q,"pid":%d}`, r.url, os.Getpid()), string(data))
 
 	require.NoError(t, r.stop())
 	assert.True(t, stopped.Load(), "services end with Run")
 	assert.NoFileExists(t, record)
-	assert.Empty(t, m.Calls, "no browser with --no-open")
+	assert.Empty(t, d.opened, "no browser with --no-open")
 }
 
 func TestRunOpensTheBrowserThroughAPrivateFile(t *testing.T) {
 	runtimeDir := t.TempDir()
-	opened := make(chan []string, 1)
-	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
-		opened <- args
-		return mock.Result{}
-	}}
-	r := startRun(t, Options{RuntimeDir: runtimeDir, Exec: m})
-	defer func() { require.NoError(t, r.stop()) }()
+	d := newDesktop()
+	r := startRun(t, d.options(Options{RuntimeDir: runtimeDir}))
 
-	var args []string
-	select {
-	case args = <-opened:
-	case <-time.After(2 * time.Second):
-		t.Fatal("no browser was opened")
-	}
-	require.Equal(t, []string{filepath.Join(runtimeDir, "sind", "ui-open.html")}, args)
-	page, err := os.ReadFile(args[0])
+	args := d.wait(t)
+	port := r.url[strings.LastIndex(r.url, ":")+1 : strings.Index(r.url, "/?")]
+	page := filepath.Join(runtimeDir, "sind", "open-"+port+".html")
+	require.Equal(t, []string{"xdg-open", page}, args)
+	data, err := os.ReadFile(page)
 	require.NoError(t, err)
-	assert.Contains(t, string(page), r.url)
+	assert.Contains(t, string(data), r.url)
 	assert.NotContains(t, strings.Join(args, " "), "token")
-	assert.Equal(t, "xdg-open", m.Calls[0].Name)
+
+	require.NoError(t, r.stop())
+	assert.NoFileExists(t, page, "removed when sind ui stops")
 }
 
 func TestRunOpensTheBrowserWithoutARuntimeDir(t *testing.T) {
-	opened := make(chan []string, 1)
-	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
-		opened <- args
-		return mock.Result{}
-	}}
-	r := startRun(t, Options{Exec: m})
-	var args []string
-	select {
-	case args = <-opened:
-	case <-time.After(2 * time.Second):
-		t.Fatal("no browser was opened")
-	}
+	d := newDesktop()
+	r := startRun(t, d.options(Options{}))
+	args := d.wait(t)
 	// The page is in a private directory of its own, not in the command line.
-	require.Len(t, args, 1)
-	assert.NotContains(t, args[0], "token")
-	page, err := os.ReadFile(args[0])
+	require.Len(t, args, 2)
+	assert.NotContains(t, args[1], "token")
+	page, err := os.ReadFile(args[1])
 	require.NoError(t, err)
 	assert.Contains(t, string(page), r.url)
-	info, err := os.Stat(filepath.Dir(args[0]))
+	info, err := os.Stat(filepath.Dir(args[1]))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
 	require.NoError(t, r.stop())
-	assert.NoDirExists(t, filepath.Dir(args[0]), "removed when sind ui stops")
+	assert.NoDirExists(t, filepath.Dir(args[1]), "removed when sind ui stops")
 }
 
 func TestRunWithoutAPrivateDirectoryOpensNoBrowser(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "gone"))
-	m := &mock.Executor{}
-	r := startRun(t, Options{Exec: m})
+	d := newDesktop()
+	r := startRun(t, d.options(Options{}))
 	require.NoError(t, r.stop())
-	assert.Empty(t, m.Calls)
+	assert.Empty(t, d.opened)
 	assert.Contains(t, r.stderr.String(), "could not make a directory")
+}
+
+func TestRunOpensNoBrowserWithoutADesktop(t *testing.T) {
+	for name, getenv := range map[string]func(string) string{
+		"no display":  func(string) string { return "" },
+		"ssh session": func(k string) string { return map[string]string{"DISPLAY": ":0", "SSH_CONNECTION": "a 1 b 2"}[k] },
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDesktop()
+			o := d.options(Options{})
+			o.Getenv = getenv
+			r := startRun(t, o)
+			require.NoError(t, r.stop())
+			assert.Empty(t, d.opened)
+			assert.Contains(t, r.stderr.String(), "not opening a browser; open the URL above yourself")
+		})
+	}
+}
+
+func TestRunLogsAnOpenerThatFails(t *testing.T) {
+	d := newDesktop()
+	o := d.options(Options{})
+	o.start = func(string, ...string) error { return errors.New("no xdg-open") }
+	r := startRun(t, o)
+	require.NoError(t, r.stop())
+	assert.Contains(t, r.stderr.String(), "could not open a browser; open the URL above yourself")
+	assert.Contains(t, r.stderr.String(), "no xdg-open")
+}
+
+// recordAnotherProcess writes the record of a sind ui at url that runs as
+// another process: a process that finds its own record finds a start of
+// its own that has gone, so a test of a second start records the parent.
+func recordAnotherProcess(t *testing.T, runtimeDir, url string) {
+	t.Helper()
+	dir := filepath.Join(runtimeDir, "sind")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	record := fmt.Sprintf(`{"url":%q,"pid":%d}`, url, os.Getppid())
+	require.NoError(t, os.WriteFile(filepath.Join(dir, launch.RecordFile), []byte(record), 0o600))
 }
 
 func TestSecondRunOpensTheRunningOne(t *testing.T) {
 	runtimeDir := t.TempDir()
-	first := startRun(t, Options{NoOpen: true, RuntimeDir: runtimeDir})
+	first := startRun(t, Options{NoOpen: true})
 	defer func() { require.NoError(t, first.stop()) }()
+	recordAnotherProcess(t, runtimeDir, first.url)
 
-	opened := make(chan []string, 1)
-	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
-		opened <- args
-		return mock.Result{}
-	}}
+	d := newDesktop()
 	var stderr syncBuffer
-	err := Run(context.Background(), Options{RuntimeDir: runtimeDir, Exec: m, Stderr: &stderr, registry: runRegistry()})
+	err := Run(context.Background(), d.options(Options{RuntimeDir: runtimeDir, Stderr: &stderr, registry: runRegistry()}))
 	require.NoError(t, err)
 	assert.Equal(t, "sind ui is already running: "+first.url+"\n", stderr.String())
-	require.Len(t, opened, 1, "the second start waited for xdg-open")
-	page, err := os.ReadFile((<-opened)[0])
+	args := d.wait(t)
+	require.Len(t, args, 2)
+	page, err := os.ReadFile(args[1])
 	require.NoError(t, err)
 	assert.Contains(t, string(page), first.url)
 
 	// With --no-open it only says where.
-	m2 := &mock.Executor{}
+	d2 := newDesktop()
 	stderr = syncBuffer{}
-	require.NoError(t, Run(context.Background(), Options{NoOpen: true, RuntimeDir: runtimeDir, Exec: m2, Stderr: &stderr, registry: runRegistry()}))
+	require.NoError(t, Run(context.Background(), d2.options(Options{NoOpen: true, RuntimeDir: runtimeDir, Stderr: &stderr, registry: runRegistry()})))
 	assert.Contains(t, stderr.String(), "already running")
-	assert.Empty(t, m2.Calls)
+	assert.Empty(t, d2.opened)
 
 	// The first one still runs and still has its record.
 	resp, _ := browse(t, first.url)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestSecondRunDoesNotWaitForeverForTheBrowser(t *testing.T) {
-	runtimeDir := t.TempDir()
-	first := startRun(t, Options{NoOpen: true, RuntimeDir: runtimeDir})
-	defer func() { require.NoError(t, first.stop()) }()
-
-	saved := openWait
-	openWait = 50 * time.Millisecond
-	t.Cleanup(func() { openWait = saved })
-	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
-	m := &mock.Executor{OnCall: func([]string, string) mock.Result { <-release; return mock.Result{} }}
-	start := time.Now()
-	require.NoError(t, Run(context.Background(), Options{RuntimeDir: runtimeDir, Exec: m, Stderr: io.Discard, registry: runRegistry()}))
-	assert.Less(t, time.Since(start), 2*time.Second)
-}
-
 func TestRunReplacesAStaleRecord(t *testing.T) {
 	runtimeDir := t.TempDir()
-	i, err := newInstance(runtimeDir)
-	require.NoError(t, err)
-	writeRecordFile(t, i, `{"url":"http://127.0.0.1:1/?token=old","pid":`+strconv.Itoa(1<<30)+`}`)
+	dir := filepath.Join(runtimeDir, "sind")
+	require.NoError(t, os.Mkdir(dir, 0o700))
+	record := filepath.Join(dir, launch.RecordFile)
+	require.NoError(t, os.WriteFile(record, []byte(`{"url":"http://127.0.0.1:1/?token=old","pid":`+strconv.Itoa(1<<30)+`}`), 0o600))
 
 	r := startRun(t, Options{NoOpen: true, RuntimeDir: runtimeDir})
-	rec, ok := readRecord(i.recordPath())
-	require.True(t, ok)
-	assert.Equal(t, r.url, rec.URL)
+	data, err := os.ReadFile(record)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), r.url)
 	require.NoError(t, r.stop())
-	assert.NoFileExists(t, i.recordPath())
+	assert.NoFileExists(t, record)
 }
 
 func TestRunTwiceOnAFixedPort(t *testing.T) {
@@ -309,7 +351,7 @@ func TestRunRefusesConnectionsOfOtherUsers(t *testing.T) {
 func TestRunDefaults(t *testing.T) {
 	// A context that has ended already: Run starts, then stops, with every
 	// default in place: the real executor, no log, the embedded files, the
-	// default registry and /proc.
+	// default registry.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	require.NoError(t, Run(ctx, Options{NoOpen: true}))
@@ -322,12 +364,12 @@ func TestRunErrors(t *testing.T) {
 		err := Run(context.Background(), Options{RuntimeDir: file, NoOpen: true, registry: runRegistry()})
 		assert.ErrorContains(t, err, "preparing the runtime directory")
 	})
-	t.Run("lock fails", func(t *testing.T) {
-		err := Run(context.Background(), Options{
-			RuntimeDir: t.TempDir(), NoOpen: true, registry: runRegistry(),
-			flock: func(int, int) error { return errors.New("no locks here") },
-		})
-		assert.ErrorContains(t, err, "locking the runtime directory: no locks here")
+	t.Run("runtime directory is open to others", func(t *testing.T) {
+		runtimeDir := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(runtimeDir, "sind"), 0o700))
+		require.NoError(t, os.Chmod(filepath.Join(runtimeDir, "sind"), 0o755))
+		err := Run(context.Background(), Options{RuntimeDir: runtimeDir, NoOpen: true, registry: runRegistry()})
+		assert.ErrorContains(t, err, "preparing the runtime directory")
 	})
 	t.Run("cannot listen", func(t *testing.T) {
 		err := Run(context.Background(), Options{

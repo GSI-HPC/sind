@@ -43,7 +43,7 @@ The browser sent another host name, so the UI refused the request. Open the URL 
 
 ## The browser does not open
 
-Use `--no-open`, or copy the URL that sind prints into a browser on this machine.
+sind ui does not open a browser in an SSH session, or on Linux without a display (`DISPLAY` or `WAYLAND_DISPLAY`). It prints the URL instead: copy it into a browser on this machine, or forward the port as described in [Use it from another machine]({{< relref "/web-ui/security#use-it-from-another-machine" >}}). With `--no-open` it never opens one.
 
 ## A run says "no end recorded"
 
