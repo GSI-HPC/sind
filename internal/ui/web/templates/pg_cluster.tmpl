@@ -11,7 +11,7 @@
   <div class="sub">{{with .Cluster.Slurm}}<span class="mono">Slurm {{.}}</span>{{end}}<span>{{with .Cluster.Roles}}{{.}}{{else}}no nodes{{end}}</span>{{if .Cluster.Monitoring}}<span class="chip brand">monitoring</span>{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{with .Cluster.Banner}}<div class="callout run pg-run"><span class="pg-spin"></span><span class="pg-grow">{{if .Command}}<b class="mono">{{.Command}}</b>{{else}}<b>{{.Count}}</b>{{end}} {{.Text}}</span><a class="btn sm" href="{{.Href}}">{{.Action}}</a></div>{{end}}
-<div class="tabs">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}{{if .Count}}<span class="n{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a>{{end}}</div>
+<div class="tabs">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}{{if .Count}}<span class="n" title="{{.CountLabel}}"><span aria-hidden="true">{{.Count}}</span><span class="vh">, {{.CountLabel}}</span></span>{{end}}{{with .Problems}}<span class="n bad"><span class="vh">, </span>{{.}}</span>{{end}}</a>{{end}}</div>
 {{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
 
 {{define "pg-cluster-body"}}{{with .Data}}{{if .Found}}
@@ -29,13 +29,14 @@
     {{else}}<p class="muted pg-flat">sind ui checks the controller, the workers, accounting and the files once it has probed the cluster.</p>{{end}}</div>
   <div class="stack"><div class="cmdlabel">Run a first job</div>{{range .Commands}}{{template "pg-cmd" .}}{{end}}<p class="hint pg-flat">{{.Note}} More commands are on <a href="{{$.ConnectLink}}">Connect</a>.</p></div></div></section>{{end}}
 <section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">{{.NodesText}}</span></div><div class="pb">
-  <div class="pg-nodemap pg-big">{{range .Cluster.Nodes}}<a class="{{.Tile}}" href="{{.Link}}" title="{{.Short}} · {{.Role}} · {{.State}}" aria-label="{{.Arg}}, {{.State}}"></a>{{else}}<span class="muted">This cluster has no node.</span>{{end}}</div>
-  <p class="hint pg-hint">The controller is the dark teal tile with three lines. Other service nodes are teal, workers sky blue. A red outline is a node that does not run, hatching a paused one, an amber ring a node with a service down.</p></div></section>
+  <div class="pg-nodemap pg-big">{{range .Cluster.Nodes}}<a class="{{.Tile}}" href="{{.Link}}" title="{{.TileTitle}}" aria-label="{{.TileLabel}}"></a>{{else}}<span class="muted">This cluster has no node.</span>{{end}}</div>
+  {{if .Cluster.Nodes}}{{template "pg-legend"}}{{end}}</div></section>
 <section class="panel pg-wide"><div class="ph"><h2>Health</h2><span class="grow"></span><span class="faint mono">sind get cluster{{.ClusterArg}}</span></div>
   {{if not .Status}}<div class="pb"><div class="callout">Service health appears once sind ui has probed the cluster.</div></div>{{end}}
   <div class="tw"><table class="pg-mx"><thead><tr><th>Node</th><th>State</th>{{range .Services}}<th class="mono pg-svc"><span data-word="{{.}}">{{.}}</span></th>{{end}}</tr></thead><tbody>
-  {{range .Matrix}}<tr class="click" data-href="{{.Node.Link}}"><td class="mono"><a href="{{.Node.Link}}"><b>{{.Node.Short}}</b></a></td><td><span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></td>{{range .Cells}}<td><span class="pg-ck {{.Class}}">{{.Mark}}</span></td>{{end}}</tr>
-  {{end}}</tbody></table></div></section>
+  {{range .Matrix}}<tr class="click" data-href="{{.Node.Link}}"><td class="mono"><a href="{{.Node.Link}}"><b>{{.Node.Short}}</b></a></td><td><span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></td>{{range .Cells}}<td title="{{.Text}}"><span class="pg-ck {{.Class}}" aria-hidden="true">{{.Mark}}</span><span class="vh">{{.Text}}</span></td>{{end}}</tr>
+  {{end}}</tbody></table></div>
+  {{if .Matrix}}<p class="hint pg-hint pg-mx-key"><span aria-hidden="true"><span class="pg-ck y">✓</span> active · <span class="pg-ck n">✗</span> down · <span class="pg-ck na">–</span> node not running · <span class="pg-ck na">·</span> not on this node</span></p>{{end}}</section>
 <section class="panel"><div class="ph"><h2>Cluster</h2></div><div class="pb"><dl class="kv">
   <dt><span data-word="realm">realm</span></dt><dd class="mono">{{.Realm}}</dd>
   <dt>state</dt><dd><span class="pill {{.Cluster.StateClass}}">{{.Cluster.State}}</span></dd>

@@ -194,6 +194,26 @@ func (n pgNode) Tile() string {
 	return c
 }
 
+// TileLabel names the node's tile for screen readers: its name, state and
+// the services that are down, as "worker-4.dev, running, slurmd down".
+func (n pgNode) TileLabel() string {
+	label := n.Arg + ", " + string(n.State)
+	if down := n.Down(); len(down) > 0 {
+		label += ", " + strings.Join(down, " and ") + " down"
+	}
+	return label
+}
+
+// TileTitle is the tooltip of the node's tile: "worker-4 · worker ·
+// running · slurmd down".
+func (n pgNode) TileTitle() string {
+	title := n.Short + " · " + string(n.Role) + " · " + string(n.State)
+	if down := n.Down(); len(down) > 0 {
+		title += " · " + strings.Join(down, " and ") + " down"
+	}
+	return title
+}
+
 // Down returns the services that are down on a running node.
 func (n pgNode) Down() []string {
 	if n.State != cluster.StateRunning {

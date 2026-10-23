@@ -85,9 +85,11 @@ func pgClusterFragments() []Fragment {
 type pgTabLink struct {
 	Key, Label, URL string
 	On              bool
-	// Count is the number after the label, Bad marks it.
-	Count string
-	Bad   bool
+	// Count is the number after the label, CountLabel the same in words
+	// for screen readers, as "9 nodes"; Problems says how many of them
+	// need a look, as "1 problem".
+	Count, CountLabel string
+	Problems          string
 }
 
 // pgMatrixRow is a node row of the health matrix.
@@ -99,10 +101,12 @@ type pgMatrixRow struct {
 	Cells []pgCell
 }
 
-// pgCell is a cell of the health matrix.
+// pgCell is a cell of the health matrix: the class and sign of its state,
+// and the state in words, for screen readers and the tooltip.
 type pgCell struct {
 	Class string
 	Mark  string
+	Text  string
 }
 
 // pgNetRow is a network of the Network tab.
@@ -205,9 +209,9 @@ func pgTabLinks(d *pgClusterView) []pgTabLink {
 	for _, t := range pgTabs {
 		l := pgTabLink{Key: t.Key, Label: t.Label, URL: pgClusterURL(d.Realm, d.Name, t.Key), On: t.Key == d.Tab}
 		if t.Key == "nodes" {
-			l.Count = fmt.Sprint(len(d.Cluster.Nodes))
+			l.Count, l.CountLabel = fmt.Sprint(len(d.Cluster.Nodes)), d.NodesText()
 			if problems > 0 {
-				l.Count, l.Bad = "!", true
+				l.Problems = pgPlural(problems, "problem", "problems")
 			}
 		}
 		tabs = append(tabs, l)
@@ -229,13 +233,13 @@ func pgSummaryTab(d *pgClusterView) {
 			up, ok := n.Service(s)
 			switch {
 			case !ok:
-				row.Cells = append(row.Cells, pgCell{"na", "·"})
+				row.Cells = append(row.Cells, pgCell{"na", "·", s + ": not on this node"})
 			case n.State != cluster.StateRunning:
-				row.Cells = append(row.Cells, pgCell{"na", "–"})
+				row.Cells = append(row.Cells, pgCell{"na", "–", s + ": node not running"})
 			case up:
-				row.Cells = append(row.Cells, pgCell{"y", "✓"})
+				row.Cells = append(row.Cells, pgCell{"y", "✓", s + ": active"})
 			default:
-				row.Cells = append(row.Cells, pgCell{"n", "✗"})
+				row.Cells = append(row.Cells, pgCell{"n", "✗", s + ": down"})
 			}
 		}
 		d.Matrix = append(d.Matrix, row)

@@ -14,7 +14,17 @@ layer, and is a plain link without script. .Class holds btn modifiers. */}}
 {{define "pg-ok"}}{{if .}}<span class="pill ok">ok</span>{{else}}<span class="pill bad">down</span>{{end}}{{end}}
 
 {{/* pg-tile is the tile of a node in a node map; it takes a node. */}}
-{{define "pg-tile"}}<i class="{{.Tile}}" title="{{.Short}} · {{.Role}} · {{.State}}"></i>{{end}}
+{{define "pg-tile"}}<i class="{{.Tile}}" title="{{.TileTitle}}" role="img" aria-label="{{.TileLabel}}"></i>{{end}}
+
+{{/* pg-legend shows what the tiles of a node map mean, with a tile of
+each kind. */}}
+{{define "pg-legend"}}<ul class="pg-legend" aria-label="What the tiles mean">
+  <li><i class="pg-nm pg-nm-controller pg-nm-running" aria-hidden="true"></i>controller</li>
+  <li><i class="pg-nm pg-nm-db pg-nm-running" aria-hidden="true"></i>other service node</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-running" aria-hidden="true"></i>worker</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-stopped" aria-hidden="true"></i>not running</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-paused" aria-hidden="true"></i>paused</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-svcdown" aria-hidden="true"></i>a service is down</li></ul>{{end}}
 
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy>Copy</button></div></div>{{end}}

@@ -15,6 +15,13 @@
    "Needs you"; it may wrap on a phone */
 a.pg-sumpill{white-space:normal;text-decoration:none}
 a.pg-sumpill:hover{text-decoration:underline}
+/* the legend of a node map, with small tiles */
+.pg-legend{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:var(--t-sm);color:var(--muted)}
+.pg-legend li{display:flex;align-items:center;gap:6px}
+.pg-legend .pg-nm{width:14px;height:14px;border-radius:3px}
+.pg-legend .pg-nm-svcdown{margin:0 4px}
+.pg-mx-key{padding:0 14px 12px;font-size:var(--t-sm)}
+
 /* Ready for jobs: the checks beside the first commands */
 .pg-ready-b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:24px;align-items:start}
 .pg-checks{list-style:none;margin:0;padding:0;display:grid;gap:10px}
