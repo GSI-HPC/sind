@@ -3,24 +3,144 @@
 // The script of the dialogs of the actions: the steppers, the editors of the
 // nodes, the worker groups and the rows of users, groups and accounts of a
 // new cluster, the directory that follows the name, the pull that follows
-// the image, Edit YAML, the links to a field with a problem, the status
-// that leads to the first problem, the Copy button, closing, and the
-// notice of a command that started. The dialogs are the server's HTML, which htmx puts into #layer;
-// nothing here evaluates text.
+// the image, Edit YAML, the links to a field with a problem, the Copy
+// button, and the frame of every dialog: the focus, which stays in the
+// dialog and goes back to the button that opened it, the status, and the
+// notice of a command that started. The dialogs are the server's HTML,
+// which htmx puts into #layer; nothing here evaluates text.
 (() => {
   'use strict';
 
   const layer = () => document.getElementById('layer');
+  const dialog = () => document.getElementById('act-dialog');
+  const formOf = () => { const d = dialog(); return d && d.querySelector('form.modal'); };
+  const inPage = d => !d.closest('#layer');
 
+  // A touch screen gets no focus in a field when a dialog opens, as its
+  // keyboard would cover the dialog.
+  const touch = () => matchMedia('(pointer: coarse)').matches;
+
+  // What the open dialog needs: the element that opened it and how to find
+  // it again after a swap, the element in it that had the focus last, the
+  // elements made inert, and the status said last. The opener stays after
+  // a close, for the notice that the dialog leaves.
+  const S = { dialog: null, opener: null, find: null, last: null, inert: [], said: null };
+
+  // isolate makes everything but the dialog, the layer, the notices and
+  // the page's live region inert, as a modal dialog needs: Tab and the
+  // screen reader stay in the dialog, the help pane and the jump box in the
+  // layer still work, and what app.js says is still heard.
+  function isolate(root) {
+    release();
+    const walk = parent => {
+      for (const c of parent.children) {
+        if (c === root || c.id === 'layer' || c.id === 'act-notes' || c.id === 'say' || c.inert || /^(SCRIPT|TEMPLATE|STYLE|LINK)$/.test(c.tagName)) continue;
+        if (c.contains(root)) { walk(c); continue; }
+        c.inert = true;
+        S.inert.push(c);
+      }
+    };
+    walk(document.body);
+  }
+
+  function release() {
+    for (const el of S.inert) el.inert = false;
+    S.inert = [];
+  }
+
+  // finder says how to find the opener again, should a live update put a
+  // new element in its place.
+  function finder(el) {
+    if (el.id) return '#' + CSS.escape(el.id);
+    for (const a of ['hx-get', 'href']) {
+      const v = el.getAttribute(a);
+      if (v) return el.tagName.toLowerCase() + '[' + a + '="' + CSS.escape(v) + '"]';
+    }
+    return null;
+  }
+
+  // focusBack gives the focus to the element that opened the dialog, or,
+  // when it went, to the heading of the page, which does not scroll the
+  // page. With still, the page does not scroll for the opener either.
+  function focusBack(still) {
+    const usable = el => el && el.isConnected && !el.closest('[inert]');
+    let el = S.opener;
+    if (!usable(el)) el = S.find && document.querySelector(S.find);
+    if (!usable(el)) {
+      still = true;
+      el = document.querySelector('#main h1') || document.getElementById('main');
+      if (el && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+    }
+    if (el) el.focus({ preventScroll: !!still });
+  }
+
+  // focusIn gives the focus to the element of the open dialog that had it
+  // last, or to its first field, or on a touch screen to the dialog itself.
+  function focusIn(d) {
+    const form = d.querySelector('form.modal');
+    if (!form) return;
+    if (S.last && d.contains(S.last) && S.last.getClientRects().length) { S.last.focus(); return; }
+    const first = touch() ? null : [...form.querySelectorAll('.mb :is(input:not([type=hidden]), select, textarea)')].find(el => !el.disabled && el.getClientRects().length);
+    (first || form).focus();
+  }
+
+  // closeNote closes a notice. The focus that was on it goes into the open
+  // dialog, to the next notice, or back to where the dialog was opened,
+  // without a scroll of the page.
+  function closeNote(n) {
+    const had = n.contains(document.activeElement);
+    n.remove();
+    if (!had) return;
+    const d = dialog();
+    if (d) { focusIn(d); return; }
+    const next = document.querySelector('#act-notes [data-act-note-close]');
+    if (next) next.focus({ preventScroll: true }); else focusBack(true);
+  }
+
+  // opened sets up a dialog that has just come in: the page behind it goes
+  // inert, and its first field takes the focus, or on a touch screen the
+  // dialog itself.
+  function opened(d) {
+    S.dialog = d;
+    S.last = null;
+    S.said = null;
+    isolate(d);
+    footer(d);
+    focusIn(d);
+  }
+
+  // closed forgets the dialog and gives the focus back.
+  function closed() {
+    S.dialog = S.last = null;
+    release();
+    focusBack(false);
+  }
+
+  // close closes the dialog.
   function close() {
-    const d = document.getElementById('act-dialog');
-    if (d && !d.closest('#layer')) {
+    const d = dialog();
+    if (!d) return;
+    if (inPage(d)) {
       // A dialog opened as a page of its own: leave it.
       if (history.length > 1) history.back(); else location.assign('/');
       return;
     }
-    const l = layer();
-    if (l) l.replaceChildren();
+    d.remove();
+    closed();
+  }
+
+  // footer keeps the scroll padding of a dialog at the height of its
+  // footer, which sticks to the bottom on a small screen, so that a field
+  // with the focus never hides below it. The height goes on the root, as
+  // htmx would copy a style of the dialog to the next one of its id.
+  function footer(d) {
+    if (!window.ResizeObserver) return;
+    const ro = new ResizeObserver(() => {
+      if (!d.isConnected) { ro.disconnect(); return; }
+      const f = [...d.querySelectorAll('.mf')].find(x => !x.hidden);
+      document.documentElement.style.setProperty('--act-mf-h', (f ? f.offsetHeight : 0) + 'px');
+    });
+    for (const f of d.querySelectorAll('.mf')) ro.observe(f);
   }
 
   // field returns the control of the form named name: the first one of a
@@ -47,19 +167,25 @@
     el.scrollIntoView({ block: 'center' });
   }
 
+  // A click on the dim edge closes the dialog only where the press began
+  // there too, not at the end of a drag that selects text in a field.
+  let pressedScrim = false;
+  document.addEventListener('pointerdown', ev => {
+    pressedScrim = ev.target instanceof Element && ev.target.matches('[data-act-scrim]');
+  });
 
   document.addEventListener('click', ev => {
     const t = ev.target;
     if (!(t instanceof Element)) return;
 
-    if (t.closest('[data-act-close]') || t.matches('[data-act-scrim]')) {
+    if (t.closest('[data-act-close]') || (t.matches('[data-act-scrim]') && pressedScrim)) {
       close();
       return;
     }
     const go = t.closest('[data-act-go]');
     if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
     const note = t.closest('[data-act-note-close]');
-    if (note) { note.closest('[data-act-note]').remove(); return; }
+    if (note) { closeNote(note.closest('[data-act-note]')); return; }
 
     const step = t.closest('[data-act-step]');
     if (step) {
@@ -84,6 +210,7 @@
       if (!panel) return;
       panel.hidden = !panel.hidden;
       chip.setAttribute('aria-expanded', String(!panel.hidden));
+      if (!panel.hidden) panel.scrollIntoView({ block: 'nearest' });
       return;
     }
 
@@ -184,6 +311,12 @@
     }
   });
 
+  // The dialog keeps the element that had the focus last.
+  document.addEventListener('focusin', ev => {
+    const t = ev.target;
+    if (t instanceof Element && t.closest('#act-dialog form')) S.last = t;
+  });
+
   // The directory of the data follows the name until the user types one;
   // a Docker volume needs none.
   document.addEventListener('input', ev => {
@@ -242,8 +375,26 @@
     });
   }
 
+  // Esc closes the dialog. In the help pane over a dialog, it closes the
+  // pane, and the focus goes back into the dialog; the jump box takes its
+  // own.
   document.addEventListener('keydown', ev => {
-    if (ev.key === 'Escape' && document.getElementById('act-dialog')) close();
+    const form = formOf();
+    const t = ev.target;
+    if (!form || ev.defaultPrevented || !(t instanceof Element) || t.closest('#jump')) return;
+    const pane = t.closest('#helppane');
+    if (pane) {
+      const x = pane.querySelector('[data-help-close]');
+      if (ev.key !== 'Escape' || !x) return;
+      ev.preventDefault();
+      x.click();
+      focusIn(dialog());
+      return;
+    }
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      close();
+    }
   });
 
   // A field with a problem says so to assistive technology too.
@@ -256,21 +407,30 @@
     });
   }
 
-  // The status said last, of the dialog that is open.
-  let said = null;
-
   // say tells assistive technology the status of a dialog with a plan when
   // it changes: the first problem, or that the command can run. The first
   // status of a dialog it says only when the command cannot run.
   function say() {
     const live = document.getElementById('act-say');
     const src = document.querySelector('#act-status [data-act-key]');
-    if (!live || !src || src.dataset.actKey === said) return;
-    const first = said === null;
-    said = src.dataset.actKey;
-    if (first && said === 'ready') return;
+    if (!live || !src || src.dataset.actKey === S.said) return;
+    const first = S.said === null;
+    S.said = src.dataset.actKey;
+    if (first && S.said === 'ready') return;
     live.textContent = src.dataset.actSay;
   }
+
+  // The element that opens a dialog.
+  document.addEventListener('htmx:configRequest', ev => {
+    const d = ev.detail;
+    if (!d || d.target !== layer() || d.verb !== 'get' || !/^\/dialogs\/[a-z-]+(\?|$)/.test(d.path)) return;
+    const el = d.elt instanceof HTMLElement && d.elt !== document.body ? d.elt : document.activeElement;
+    S.opener = S.find = null;
+    if (el instanceof HTMLElement && el !== document.body && !el.closest('#layer')) {
+      S.opener = el;
+      S.find = finder(el);
+    }
+  });
 
   // A command started: a dialog that does not follow its run closes, while
   // its notice stays for a while. One opened as a page of its own goes to
@@ -283,23 +443,25 @@
       setTimeout(tick, 10000);
     }
     if (det.follow) return;
-    const d = document.getElementById('act-dialog');
-    if (d && !d.closest('#layer')) { location.assign(det.url); return; }
+    const d = dialog();
+    if (d && inPage(d)) { location.assign(det.url); return; }
     close();
   });
 
-  // A dialog that has just come in gets the focus on its first field; the
-  // swaps of its preview, which target parts of it, leave the focus alone.
-  document.addEventListener('htmx:afterSettle', ev => {
-    const l = layer();
-    if (l && ev.target === l) {
-      said = null;
-      const first = l.querySelector('input[type=text], input[type=number], select, input[type=checkbox]');
-      if (first) first.focus();
-    }
+  // A dialog that has just come in is set up; the swaps of its preview,
+  // which target parts of it, leave the focus alone.
+  document.addEventListener('htmx:afterSettle', () => {
+    const d = dialog();
+    if (d && d !== S.dialog) opened(d);
+    else if (!d && S.dialog) closed();
     markProblems(document);
     followPull();
     placeholders();
     say();
   });
+
+  // A dialog opened as a page of its own, as the jump box does, is set up
+  // now.
+  const d0 = dialog();
+  if (d0) opened(d0);
 })();

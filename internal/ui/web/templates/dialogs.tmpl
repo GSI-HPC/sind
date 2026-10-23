@@ -7,7 +7,7 @@
   /actions/ID/preview for the command as it changes, and runs it with
   /actions/ID/run. A dialog shows the command it runs; it never sends one.
   The views are the *View of the request; the dialog or the preview is its
-  Data.
+  Data. act.js makes the page behind a dialog inert.
 */}}
 
 {{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
@@ -16,12 +16,12 @@
 
 {{define "act-frame"}}
 <div class="scrim" id="act-dialog" data-act-scrim>
-<form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-label="{{.Title}}"
+<form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"
   hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
   {{template "csrf-field" .View}}
   <input type="hidden" name="realm" value="{{.Realm}}">{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
-  <div class="mh"><div class="mtop"><h2>{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
-    <p>{{.Lead}}</p></div>
+  <div class="mh"><div class="mtop"><h2 id="act-title">{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
+    <p id="act-lead">{{.Lead}}</p></div>
   {{if .Spec.Plan}}
   <div class="mb">
     <div class="act-form">{{include .Body .}}</div>

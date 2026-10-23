@@ -13,6 +13,22 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
+// The frame of every dialog: its name and description, and the dialog
+// itself, which takes the focus on a touch screen.
+func TestActDialog_Frame(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.get("/dialogs/create-worker?cluster=dev").Body.String()
+	for _, want := range []string{
+		`role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"`,
+		`<h2 id="act-title">Add workers to dev</h2>`, `<p id="act-lead">New workers take`,
+		`<div class="scrim" id="act-dialog" data-act-scrim>`,
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.NotContains(t, body, "aria-label=\"Add workers")
+}
+
 func TestActDialog_LayoutHasTheNotices(t *testing.T) {
 	f := newActFixture(t)
 	assert.Contains(t, f.get("/dialogs/connect").Body.String(), `<div id="layer"></div>`+"\n"+`<div class="act-notes" id="act-notes" role="status"></div>`)

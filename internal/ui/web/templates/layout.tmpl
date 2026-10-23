@@ -41,8 +41,8 @@ readers. */}}
   <nav class="rail" id="rail" aria-label="Pages" hx-swap="morph:innerHTML" sse-swap="rail">{{fragment "rail" .}}</nav>
   <main class="main" id="main" tabindex="-1">{{include .Content .}}</main>
   <div class="tasks" id="tasks" aria-live="polite" hx-swap="morph:innerHTML" sse-swap="tasks">{{fragment "tasks" .}}</div>
-  <div class="vh" id="say" role="status"></div>
 </div>
+<div class="vh" id="say" role="status"></div>
 <div id="layer"></div>
 <div class="act-notes" id="act-notes" role="status"></div>
 </body>

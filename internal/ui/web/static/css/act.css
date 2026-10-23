@@ -5,8 +5,12 @@
    screens, stay these dialogs' own; only the notices of the commands that
    the dialogs start, which outlive them, are .act-notes. */
 
-.scrim{position:fixed;inset:0;background:rgba(6,11,22,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow-y:auto}
+/* --act-mf-h is the height of the footer, which act.js keeps: a field that
+   gets the focus scrolls clear of the footer that sticks to the bottom of
+   a small screen, above the padding of the scrim. */
+.scrim{position:fixed;inset:0;background:rgba(6,11,22,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow-y:auto;scroll-padding:12px 0 calc(var(--act-mf-h,64px) + 28px)}
 .scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line)}
+.scrim .modal:focus{outline:none}
 .scrim .modal.wide{width:min(880px,100%)}
 .scrim .mh{padding:16px 18px 6px}
 .scrim .mtop{display:flex;gap:10px;align-items:flex-start}
@@ -172,6 +176,7 @@
   .scrim .modal.split .mb{grid-template-columns:1fr}
   .scrim .act-form,.scrim .act-planpane{overflow:visible}
   .scrim .act-planpane{border-left:0;border-top:1px solid var(--line-2)}
+  .scrim:has(.modal.split){padding-bottom:0}
   .scrim .modal.split .mf{position:sticky;bottom:0;background:var(--panel);border-radius:0 0 10px 10px}
   /* The status button and the buttons share a line, the totals take the
      next. */

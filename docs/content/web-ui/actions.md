@@ -18,6 +18,8 @@ Press the button of the dialog, such as **Create**, **Add**, **Run** or **Delete
 
 When the command starts, the dialog closes and you stay on your page. A notice names the command and links to its run page, and the task dock shows its progress, so you can start the next action at once. **New cluster** opens the run page of its command instead, and so does **Delete** on the page of the cluster that it deletes, or on the page of one of its nodes.
 
+Esc, **Cancel** or a click beside the dialog closes it, and the focus goes back to the button that opened it.
+
 You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. In the New cluster dialog, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm`, as `SIND_REALM` in your shell would otherwise take the place of the config's realm.
 
 {{< uishot "dialog-create-worker" "Each dialog shows the command that it runs, here `sind create worker dev`." >}}
