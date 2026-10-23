@@ -114,3 +114,14 @@
   commands: []
   doc: configuration/realms
   words: [lock, realm, rollback]
+- id: tidy-clusters
+  title: Delete several clusters
+  summary: Find the clusters you no longer need and delete them with one confirmation.
+  steps:
+    - On Clusters, type part of their names in Filter, or pick a chip such as Needs a look.
+    - Tick the clusters, or the box in the head to tick every row shown.
+    - Press Delete 2 clusters… in the bar (it counts the clusters you ticked), type their number and press Delete 2 clusters.
+  commands:
+    - sind delete cluster NAME
+  doc: usage/cluster-lifecycle#delete-a-cluster
+  words: [cluster, realm]

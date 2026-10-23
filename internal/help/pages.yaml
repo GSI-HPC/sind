@@ -10,11 +10,11 @@
   howtos: [first-cluster, add-workers, job-pending, clean-up]
 - id: clusters
   title: Clusters
-  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels. Filter, pick a chip or sort by a column; the address keeps them.
+  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels. Filter, pick a chip or sort by a column; the address keeps them. Tick clusters to delete several at once.
   route: /clusters
   doc: usage/cluster-lifecycle
   words: [realm, cluster, data]
-  howtos: [first-cluster, clean-up]
+  howtos: [first-cluster, clean-up, tidy-clusters]
 - id: cluster
   title: Cluster
   summary: One cluster. Its tabs show the health of its nodes and services, what Slurm says about them, the logs, the network and how to connect.

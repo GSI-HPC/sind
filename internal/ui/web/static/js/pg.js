@@ -1,16 +1,40 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // The script of the main pages: clickable table rows, the filter field of
-// the lists, the node selection of a cluster's nodes tab, and Copy for
-// commands. Nothing here evaluates text, and the page holds no inline
-// script.
+// the lists, the selections of the Clusters list and of a cluster's Nodes
+// tab, and Copy for commands. Nothing here evaluates text, and the page
+// holds no inline script.
 (() => {
   'use strict';
 
-  // The nodes that the user ticked, by name. Live updates replace the
-  // table, so the set lives here and is drawn onto the table again.
-  const selected = new Set();
-  let selectedFor = '';
+  // The rows that the user ticked, by their data-pg-item. Live updates
+  // replace the table, so the set lives here and is drawn onto the table
+  // again; the tab keeps it in sessionStorage, so a reload keeps it too.
+  const sel = { key: '', items: new Set() };
+
+  function storeKey() { return 'sind-ui-sel:' + location.pathname; }
+
+  function loadSel() {
+    try {
+      const v = JSON.parse(sessionStorage.getItem(storeKey()) || '[]');
+      return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
+    } catch (e) { return []; }
+  }
+
+  function saveSel() {
+    try {
+      if (sel.items.size) sessionStorage.setItem(storeKey(), JSON.stringify([...sel.items]));
+      else sessionStorage.removeItem(storeKey());
+    } catch (e) { /* private window */ }
+  }
+
+  // ensure loads the selection of this page, so that a selection does not
+  // follow the user to another page.
+  function ensure() {
+    if (sel.key === storeKey()) return;
+    sel.key = storeKey();
+    sel.items = new Set(loadSel());
+  }
 
   // fold writes node names as one node set, as sind's commands take it:
   // worker-0 worker-1 worker-3 become worker-[0-1,3].
@@ -47,11 +71,13 @@
   }
 
   // filter hides the rows of a list that do not hold every word of the
-  // filter field. When the user typed, it tells screen readers how many
-  // rows match.
+  // filter field, and drops them from the selection: an action acts only
+  // on rows that the user sees. When the user typed, it tells screen
+  // readers how many rows match.
   function filter(typed) {
     const list = document.querySelector('[data-pg-list]');
     if (!list) return;
+    ensure();
     const w = words();
     let shown = 0;
     const rows = list.querySelectorAll('tr[data-pg-text]');
@@ -59,6 +85,7 @@
       const on = w.every(x => r.dataset.pgText.includes(x));
       r.hidden = !on;
       if (on) shown++;
+      else if (r.dataset.pgItem) sel.items.delete(r.dataset.pgItem);
     }
     const none = list.querySelector('[data-pg-none]');
     if (none) none.hidden = shown > 0;
@@ -102,42 +129,70 @@
     }
   }
 
-  // clusterKey names the cluster whose nodes are selected, so that a
-  // selection does not follow the user to another page.
-  function clusterKey() { return location.pathname; }
-
   // draw shows the selection in the table and in its bar.
   function draw() {
-    const root = document.querySelector('[data-pg-nodes]');
+    const root = document.querySelector('[data-pg-select]');
     if (!root) return;
-    if (selectedFor !== clusterKey()) { selected.clear(); selectedFor = clusterKey(); }
-    const rows = [...root.querySelectorAll('tr[data-pg-node]')];
-    // A node that is gone is no longer selected.
-    const names = new Set(rows.map(r => r.dataset.pgNode));
-    for (const n of [...selected]) if (!names.has(n)) selected.delete(n);
+    ensure();
+    const rows = [...root.querySelectorAll('tr[data-pg-item]')];
+    // A row that is gone is no longer selected; before the first rows
+    // arrive, the selection stays.
+    if (rows.length) {
+      const names = new Set(rows.map(r => r.dataset.pgItem));
+      for (const n of [...sel.items]) if (!names.has(n)) sel.items.delete(n);
+    }
     for (const r of rows) {
-      const on = selected.has(r.dataset.pgNode);
+      const on = sel.items.has(r.dataset.pgItem);
       r.classList.toggle('pg-sel', on);
       r.querySelector('input[data-pg-sel]').checked = on;
     }
+    const chosen = rows.filter(r => sel.items.has(r.dataset.pgItem));
+    const shown = rows.filter(r => !r.hidden);
     const all = root.querySelector('input[data-pg-all]');
-    if (all) all.checked = rows.length > 0 && selected.size === rows.length;
+    if (all) {
+      all.checked = shown.length > 0 && chosen.length === shown.length;
+      all.indeterminate = chosen.length > 0 && chosen.length < shown.length;
+    }
     const bar = root.querySelector('[data-pg-selbar]');
-    bar.hidden = selected.size === 0;
-    const chosen = rows.filter(r => selected.has(r.dataset.pgNode));
-    bar.querySelector('[data-pg-expr]').textContent = fold(chosen.map(r => r.dataset.pgNode));
+    bar.hidden = chosen.length === 0;
+    bar.querySelector('[data-pg-expr]').textContent = root.dataset.pgSelect === 'nodes'
+      ? fold(chosen.map(r => r.dataset.pgItem))
+      : chosen.map(r => r.dataset.pgLabel).join(', ');
     // Only workers can be drained, resumed and deleted.
     const workers = chosen.every(r => r.dataset.pgRole === 'worker');
     for (const b of bar.querySelectorAll('[data-pg-workers]')) b.hidden = !workers;
     // The delete button names what it deletes.
     const del = bar.querySelector('[data-pg-delete]');
-    if (del) del.textContent = chosen.length === 1 ? 'Delete ' + chosen[0].dataset.pgNode + '…' : 'Delete ' + chosen.length + ' workers…';
+    if (del) del.textContent = chosen.length === 1 ? 'Delete ' + chosen[0].dataset.pgItem + '…' : 'Delete ' + chosen.length + ' workers…';
+    const bulk = bar.querySelector('a[data-pg-bulk]');
+    if (bulk) bulk.textContent = chosen.length > 1 ? 'Delete ' + chosen.length + ' clusters…' : 'Delete…';
+    saveSel();
   }
 
-  // dialogURL adds the selected nodes to the address of a dialog.
-  function dialogURL(a) {
-    const nodes = [...selected].sort().join(',');
-    return a.getAttribute('href') + '&nodes=' + encodeURIComponent(nodes);
+  // forget drops the selection of the Clusters list once a delete of its
+  // clusters started, so that the bar does not offer to delete them again
+  // while their tasks run.
+  const clustersKey = 'sind-ui-sel:/clusters';
+  function forget() {
+    try { sessionStorage.removeItem(clustersKey); } catch (e) { /* private window */ }
+    if (sel.key === clustersKey) sel.items.clear();
+  }
+
+  // openDialog shows the dialog at url in the layer.
+  function openDialog(url) {
+    if (window.htmx) window.htmx.ajax('GET', url, { target: '#layer', swap: 'innerHTML' });
+    else location.assign(url);
+  }
+
+  // bulkURL is the dialog that deletes the selected clusters: the one of
+  // the cluster for one, else the one for several, which lists them.
+  function bulkURL(root) {
+    const chosen = [...root.querySelectorAll('tr[data-pg-item]')].filter(r => sel.items.has(r.dataset.pgItem));
+    if (chosen.length === 1) return chosen[0].dataset.pgOne;
+    const q = new URLSearchParams();
+    for (const r of chosen) q.append('clusters', r.dataset.pgItem);
+    q.set('back', location.pathname + location.search);
+    return '/dialogs/delete-clusters?' + q.toString();
   }
 
   function copy(text, btn) {
@@ -196,13 +251,13 @@
     document.addEventListener('change', ev => {
       const t = ev.target;
       if (t.matches('input[data-pg-sel]')) {
-        selectedFor = clusterKey();
-        if (t.checked) selected.add(t.dataset.pgSel); else selected.delete(t.dataset.pgSel);
+        ensure();
+        if (t.checked) sel.items.add(t.dataset.pgSel); else sel.items.delete(t.dataset.pgSel);
         draw();
       } else if (t.matches('input[data-pg-all]')) {
-        selectedFor = clusterKey();
-        for (const c of document.querySelectorAll('input[data-pg-sel]')) {
-          if (t.checked) selected.add(c.dataset.pgSel); else selected.delete(c.dataset.pgSel);
+        ensure();
+        for (const r of t.closest('[data-pg-select]').querySelectorAll('tr[data-pg-item]')) {
+          if (t.checked && !r.hidden) sel.items.add(r.dataset.pgItem); else sel.items.delete(r.dataset.pgItem);
         }
         draw();
       }
@@ -212,6 +267,7 @@
       if (!ev.target.matches('[data-pg-filter]')) return;
       filter(true);
       keepText(true);
+      draw();
     });
 
     // With the script, the list filters as the user types; Enter has
@@ -236,10 +292,16 @@
       const dlg = t.closest('a[data-pg-dialog]');
       if (dlg) {
         ev.preventDefault();
-        if (window.htmx) window.htmx.ajax('GET', dialogURL(dlg), { target: '#layer', swap: 'innerHTML' });
+        openDialog(dlg.getAttribute('href') + '&nodes=' + encodeURIComponent([...sel.items].sort().join(',')));
         return;
       }
-      if (t.closest('[data-pg-clear]')) { selected.clear(); draw(); return; }
+      const bulk = t.closest('a[data-pg-bulk]');
+      if (bulk) {
+        ev.preventDefault();
+        openDialog(bulkURL(bulk.closest('[data-pg-select]')));
+        return;
+      }
+      if (t.closest('[data-pg-clear]')) { sel.items.clear(); draw(); return; }
       const cp = t.closest('[data-pg-copy]');
       if (cp) {
         const code = cp.closest('.cmd').querySelector('code');
@@ -257,9 +319,9 @@
         return;
       }
       // A row of a list is a link, for the mouse; its first link is for
-      // the keyboard.
+      // the keyboard. Its checkbox cell is not.
       const row = t.closest('tr[data-href]');
-      if (row && !t.closest('a, button, input, select, label')) {
+      if (row && !t.closest('a, button, input, select, label, .c-chk')) {
         const a = row.querySelector('a[href]');
         if (a) a.click();
       }
@@ -267,6 +329,15 @@
 
     filter();
     draw();
+  });
+
+  // A delete of clusters that started answers with a redirect to the list
+  // or to its task.
+  const deletes = ['/actions/delete-clusters/run', '/actions/delete-cluster/run'];
+  document.addEventListener('htmx:beforeOnLoad', ev => {
+    const d = ev.detail;
+    const path = (d.requestConfig && d.requestConfig.path) || '';
+    if (d.xhr && d.xhr.status < 400 && d.xhr.getResponseHeader('HX-Redirect') && deletes.includes(path.split('?')[0])) forget();
   });
 
   // After a live update replaced a table, the filter, the links and the

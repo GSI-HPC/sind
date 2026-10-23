@@ -278,10 +278,13 @@ type pgClusterRow struct {
 	Text string
 	// Hidden says that the text filter does not match the row.
 	Hidden bool
-	// Label names the cluster in its row's buttons: its name, and its
-	// realm when the list shows every realm.
+	// Label names the cluster in its row's buttons and in the selection:
+	// its name, and its realm when the list shows every realm.
 	Label string
 }
+
+// Key identifies the cluster in a selection: realm/name.
+func (r pgClusterRow) Key() string { return r.Realm + "/" + r.Name }
 
 // pgClusterText is what the text filter of a cluster looks in.
 func pgClusterText(c pgCluster) string {

@@ -135,9 +135,15 @@ sind delete cluster [NAME]
 {{< /cli >}}
 {{< ui >}}
 
-On the page of the cluster, press **Delete cluster…**. The dialog lists what goes, such as the containers, the network and the volumes, and what stays, such as the host directories the cluster mounts. Type the name of the cluster to confirm, and press **Delete cluster NAME**. The dialog deletes one cluster. To delete all clusters of a realm, delete the realm.
+On the page of the cluster, press **Delete cluster…**. The dialog lists what goes, such as the containers, the network and the volumes, and what stays, such as the host directories the cluster mounts. Type the name of the cluster to confirm, and press **Delete cluster NAME**.
 
 {{< uishot "dialog-delete-cluster" >}}
+
+To delete several clusters, tick them on the **Clusters** page and press **Delete 2 clusters…** (it counts the clusters you ticked) in the bar above the table. Type the number of clusters to confirm, and press **Delete 2 clusters**. sind ui runs `sind delete cluster` once for each. To delete all clusters of a realm and its mesh, you can also delete the realm.
+
+{{< uishot "clusters-selected" >}}
+
+{{< uishot "dialog-delete-clusters" >}}
 
 {{< /ui >}}
 {{< /ways >}}

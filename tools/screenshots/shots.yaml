@@ -153,6 +153,16 @@ shots:
     crop: "#layer [role=dialog]"
     page: dialogs
 
+  - name: clusters-selected
+    alt: "Clusters with two clusters ticked, and the bar that deletes them"
+    path: /clusters
+    hide: "#tasks"
+    steps:
+      - click: 'input[data-pg-sel="sind/legacy"]'
+      - click: 'input[data-pg-sel="ci/pr-145"]'
+    page: clusters
+    fit: true
+
   - name: dialog-delete-clusters
     alt: "The Delete clusters dialog: the clusters, the number to type and one command for each"
     path: /clusters

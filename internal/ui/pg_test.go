@@ -176,8 +176,9 @@ func TestPgClusters(t *testing.T) {
 	body = pgBody(t, ts, "/clusters", 200)
 	assert.Contains(t, body, "Every cluster of every realm.")
 	assert.Contains(t, body, `title="Sort by Realm">Realm`)
-	assert.Contains(t, body, `<tr class="click" data-href="/clusters/sind/dev" data-pg-text="dev sind mixed 26.05.4 controller.dev `)
-	assert.Contains(t, body, `<td><a href="/clusters/sind/dev"><b>dev</b></a></td><td class="mono">sind</td><td><span class="pill warn" data-say="dev is mixed." data-say-key="sind/dev">mixed</span></td><td class="mono">26.05.4</td><td class="num">9</td>`)
+	assert.Contains(t, body, `<tr class="click" data-href="/clusters/sind/dev" data-pg-item="sind/dev" data-pg-label="dev (sind)" data-pg-one="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" data-pg-text="dev sind mixed 26.05.4 controller.dev `)
+	assert.Contains(t, body, `<td class="c-chk"><input type="checkbox" data-pg-sel="sind/dev" aria-label="Select dev (sind)"></td>
+  <td><a href="/clusters/sind/dev"><b>dev</b></a></td><td class="mono">sind</td><td><span class="pill warn" data-say="dev is mixed." data-say-key="sind/dev">mixed</span></td><td class="mono">26.05.4</td><td class="num">9</td>`)
 	assert.Contains(t, body, `data-href="/clusters/ci/default"`)
 	assert.Regexp(t, `<span class="pill warn" data-say="\S+ is paused\." data-say-key="[a-z]+/[a-z0-9-]+">paused</span>`, body)
 	assert.Regexp(t, `<span class="pill ok" data-say="\S+ is running\." data-say-key="[a-z]+/[a-z0-9-]+">running</span>`, body)
@@ -189,11 +190,12 @@ func TestPgClusters(t *testing.T) {
 	assert.Contains(t, body, `<a class="on" aria-current="true" href="/clusters?realm=" data-pg-keep>All realms</a>`)
 	assert.Contains(t, body, `<a href="/clusters?realm=ci" data-pg-keep>ci · 1</a>`)
 	assert.Contains(t, body, `<a href="/clusters?realm=sind" data-pg-keep>sind · 2</a>`)
-	// The filter field and the chips.
+	// The filter field, the chips and the selection, which deletes several.
 	assert.Contains(t, body, `<form class="pg-filter" role="search" method="get" action="/clusters" data-pg-filter-form>
   <input type="hidden" name="realm" value="">
   <input type="search" name="q" value="" placeholder="Filter by name, realm or node" aria-label="Filter the clusters" data-pg-filter`)
 	assert.Contains(t, body, `<a class="pg-chip on" href="/clusters?realm=" data-pg-keep aria-current="true">All <span class="n">3</span></a><a class="pg-chip bad" href="/clusters?realm=&amp;state=problem" data-pg-keep>Needs a look <span class="n">2</span></a><a class="pg-chip" href="/clusters?realm=&amp;state=running" data-pg-keep>Running <span class="n">1</span></a><a class="pg-chip" href="/clusters?realm=&amp;state=monitoring" data-pg-keep>With monitoring <span class="n">1</span></a>`)
+	assert.Contains(t, body, `<a class="btn sm danger" href="/dialogs/delete-clusters" data-pg-bulk data-pg-verb="Delete">Delete…</a>`)
 	assert.Contains(t, body, `<tr class="pg-none" data-pg-none hidden><td colspan="9"><div class="empty">No cluster matches the filter. <a href="/clusters?realm=">Show all</a></div></td></tr>`)
 	assert.Contains(t, body, `sse-swap="pg-clusters-head"`)
 	assert.Contains(t, body, `sse-swap="pg-clusters-chips"`)
@@ -206,7 +208,7 @@ func TestPgClusters(t *testing.T) {
 	assert.NotContains(t, body, "/clusters/ci/default")
 	assert.Contains(t, body, `<a class="on" aria-current="true" href="/clusters?realm=sind" data-pg-keep>sind · 2</a>`)
 	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=sind"`)
-	assert.Contains(t, body, `aria-label="Delete dev…"`, "one realm names a cluster by its name alone")
+	assert.Contains(t, body, `data-pg-label="dev"`, "one realm names a cluster by its name alone")
 
 	body = pgBody(t, ts, "/clusters?realm=cix", 404)
 	assert.Contains(t, body, "There is no realm cix.")
@@ -460,7 +462,8 @@ func TestPgClusterNodesTab(t *testing.T) {
 	pgFillStore(ts.st)
 	body := pgBody(t, ts, "/clusters/sind/dev?tab=nodes", 200)
 	assert.Contains(t, body, `<a class="tab on" href="/clusters/sind/dev?tab=nodes" aria-current="page">Nodes<span class="n" title="9 nodes"><span aria-hidden="true">9</span><span class="vh">, 9 nodes</span></span><span class="n bad"><span class="vh">, </span>1 problem</span></a>`)
-	assert.Contains(t, body, `<tr data-pg-node="worker-3" data-pg-role="worker"><td><input type="checkbox" data-pg-sel="worker-3" aria-label="Select worker-3"></td>`)
+	assert.Contains(t, body, `<section class="panel" data-pg-select="nodes">`)
+	assert.Contains(t, body, `<tr data-pg-item="worker-3" data-pg-label="worker-3" data-pg-role="worker"><td class="c-chk"><input type="checkbox" data-pg-sel="worker-3" aria-label="Select worker-3"></td>`)
 	assert.Contains(t, body, `<div class="pg-selbar" data-pg-selbar hidden>`)
 	assert.Contains(t, body, `<a class="btn sm" href="/dialogs/power?cluster=dev&amp;op=start&amp;realm=sind" data-pg-dialog>Start…</a>`)
 	assert.Contains(t, body, `op=stop&amp;realm=sind" data-pg-dialog>Shut down…`)
