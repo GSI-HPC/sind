@@ -1,9 +1,28 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
 {{/* slot-jump is the jump box's button in the top bar, and the markup of the
-box, which help.js copies into #layer when it opens. */}}
-{{define "slot-jump"}}<button type="button" class="jump" data-palette-open aria-label="Jump to"><span>Jump to a cluster, node, page or help</span><kbd>/</kbd></button>
-<template id="help-jump-shell"><div class="palette" id="jump"><div class="box" role="dialog" aria-label="Jump to"><input type="text" id="jump-q" placeholder="Jump to… (start with ? for help only)" aria-label="Jump to" role="combobox" aria-expanded="true" aria-controls="jump-list" autocomplete="off" spellcheck="false"><div class="pl" id="jump-list" role="listbox"></div></div></div></template>{{end}}
+box, which help.js copies into #layer when it opens. The box is a modal
+dialog with a combobox: the focus stays in the field, the arrow keys move
+the option that aria-activedescendant names, and jump-status says how many
+options the list has. An action that asks for a cluster shows its name in
+jump-step while the list holds the clusters. */}}
+{{define "slot-jump"}}<button type="button" class="jump" data-palette-open aria-label="Jump to" aria-keyshortcuts="/ Control+K"><span>Jump to a cluster, node, page or help</span><kbd class="kbd-only k1-on">/</kbd></button>
+<template id="help-jump-shell"><div class="palette" id="jump"><div class="box" role="dialog" aria-modal="true" aria-label="Jump to">
+<div class="pstep" id="jump-step" hidden><span class="chip brand" id="jump-step-name"></span><span class="muted"><span class="kbd-only">Backspace goes back</span><button type="button" class="link touch-only" data-jump-back>Back</button></span></div>
+<div class="pin"><input type="text" id="jump-q" placeholder="Jump to… (start with ? for help only)" aria-label="Jump to" role="combobox" aria-expanded="false" aria-controls="jump-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"><button type="button" class="iconbtn" data-jump-close aria-label="Close" title="Close (Esc)" tabindex="-1">×</button></div>
+<div id="jump-res"></div>
+<div class="pvh" id="jump-status" role="status"></div>
+</div></div></template>{{end}}
 
-{{/* help-jump-list is the list of the jump box: .Data is a *jumpData. */}}
-{{define "help-jump-list"}}{{with .Data}}{{range .Items}}{{if .Topic}}<a class="pi" role="option" href="/help?topic={{.Topic}}" data-help-topic="{{.Topic}}">{{.Label}}<small>{{.Kind}}</small></a>{{else}}<a class="pi" role="option" href="{{.Href}}">{{.Label}}<small>{{.Kind}}</small></a>{{end}}{{else}}<div class="empty">{{if .HelpOnly}}Nothing in help matches.{{else}}Nothing matches. Start with ? to search help only.{{end}}</div>{{end}}{{end}}{{end}}
+{{/* help-jump-list is the list of the jump box and the line below it: .Data
+is a *jumpData. help.js reads data-jump-say into jump-status. */}}
+{{define "help-jump-list"}}{{with .Data}}<div class="pl" id="jump-list" role="listbox" aria-label="{{with .Ask}}{{.}}{{else}}Results{{end}}" data-jump-say="{{.Say}}">
+{{- range $i, $e := .Items}}{{$id := printf "jump-o%d" $i}}
+{{- if .Topic}}<a class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" href="/help?topic={{.Topic}}" data-help-topic="{{.Topic}}">
+{{- else if .Step}}<button type="button" class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" data-jump-step="{{.Step}}">
+{{- else if .Cmd}}<button type="button" class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" data-jump-cmd="{{.Cmd}}">
+{{- else}}<a class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" href="{{.Href}}"{{if .Dialog}} data-jump-dialog{{end}}>{{end}}
+{{- if $.Data.Step}}<span class="mono">{{.Label}}</span>{{else}}{{.Label}}{{end}}<small>{{.Kind}}</small>{{if or .Step .Cmd}}</button>{{else}}</a>{{end}}
+{{- end}}</div>
+{{- if not .Items}}<div class="empty">{{if .Step}}{{if .Query}}No {{.Noun}} matches.{{else}}There is no {{.Noun}} yet.{{end}}{{else if .HelpOnly}}Nothing in help matches.{{else}}Nothing matches. Try a cluster, a node or a word such as sbatch, or start with ? to search help only.{{end}}</div>{{end}}
+{{- with .Foot}}<div class="pf">{{.}}</div>{{end}}<div class="pf kbd-only"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>Enter</kbd> {{if .Step}}pick{{else}}open{{end}} · <kbd>Esc</kbd> close</div>{{end}}{{end}}

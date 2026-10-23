@@ -45,6 +45,9 @@
     paneEl: null, paneBack: null,
     // The dialog of an action that the pane covers, while it is lifted.
     lifted: null,
+    // The element that had the focus before the jump box opened, and the
+    // action whose cluster or realm the box asks for.
+    jumpBack: null, step: null,
   };
   try {
     const seen = JSON.parse(local.get(SEEN_KEY) || '[]');
@@ -78,6 +81,7 @@
       b.title = on ? 'Help (?)' : 'Help';
       if (on) b.setAttribute('aria-keyshortcuts', '?'); else b.removeAttribute('aria-keyshortcuts');
     }
+    for (const b of document.querySelectorAll('[data-palette-open]')) b.setAttribute('aria-keyshortcuts', on ? '/ Control+K' : 'Control+K');
   }
   syncKeys();
 
@@ -344,13 +348,17 @@
     open(PAGE);
   }
 
-  // The jump box.
+  // The jump box: a modal dialog with a combobox. The focus stays in its
+  // field; the arrow keys move the option that the field names as active.
 
   function openJump(q) {
     if (jumpBox()) { $('jump-q').focus(); return; }
     const shell = $('help-jump-shell');
     if (!shell) return;
     hideHint();
+    const back = document.activeElement;
+    H.jumpBack = focusable(back) ? back : null;
+    H.step = null;
     layer().appendChild(shell.content.cloneNode(true));
     const input = $('jump-q');
     input.value = q || '';
@@ -358,39 +366,109 @@
     refreshJump();
   }
 
+  // closeJump closes the box and gives the focus back to where it was.
   function closeJump() {
     const j = jumpBox();
-    if (j) j.remove();
+    if (!j) return;
+    j.remove();
+    H.step = null;
+    if (focusable(H.jumpBack)) H.jumpBack.focus();
+    H.jumpBack = null;
+  }
+
+  const PLACEHOLDER = 'Jump to… (start with ? for help only)';
+  const NAME = 'Jump to';
+
+  // step asks for the cluster or the realm of an action, or with null
+  // goes back to the first list.
+  function step(opt) {
+    const input = $('jump-q');
+    const bar = $('jump-step');
+    H.step = opt ? opt.dataset.jumpStep : null;
+    input.value = '';
+    bar.hidden = !opt;
+    if (opt) {
+      $('jump-step-name').textContent = opt.firstChild.textContent.replace(/…$/, '');
+    }
+    input.placeholder = opt ? '' : PLACEHOLDER;
+    input.setAttribute('aria-label', NAME);
+    input.focus();
+    refreshJump();
   }
 
   async function refreshJump() {
     const seq = ++H.jumpSeq;
     const input = $('jump-q');
     if (!input) return;
+    const q = new URLSearchParams({ q: input.value, from: location.pathname + location.search });
+    if (H.step) q.set('step', H.step);
     try {
-      const html = await fetchHTML('/jump?' + new URLSearchParams({ q: input.value }));
+      const html = await fetchHTML('/jump?' + q);
       if (seq !== H.jumpSeq || !jumpBox()) return;
-      $('jump-list').innerHTML = html;
-      const first = $('jump-list').querySelector('.pi');
-      if (first) first.classList.add('on');
+      $('jump-res').innerHTML = html;
+      const list = $('jump-list');
+      const items = list ? [...list.querySelectorAll('.pi')] : [];
+      input.setAttribute('aria-expanded', String(items.length > 0));
+      // In a step, the field names the question, which the status says too.
+      if (H.step && list) {
+        input.placeholder = list.getAttribute('aria-label');
+        input.setAttribute('aria-label', input.placeholder);
+      }
+      setActive(items, items.length ? 0 : -1);
+      const st = $('jump-status');
+      if (st) st.textContent = list ? list.dataset.jumpSay : '';
     } catch (e) {
-      if (seq === H.jumpSeq && jumpBox()) $('jump-list').innerHTML = '<div class="empty">The list is not available. Try again.</div>';
+      if (seq === H.jumpSeq && jumpBox()) {
+        $('jump-res').innerHTML = '<div class="empty">The list is not available. Try again.</div>';
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+      }
     }
   }
 
-  function moveJump(d) {
-    const items = [...$('jump-list').querySelectorAll('.pi')];
-    if (!items.length) return;
-    let i = items.findIndex(x => x.classList.contains('on'));
-    items.forEach(x => x.classList.remove('on'));
-    i = Math.max(0, Math.min(items.length - 1, i + d));
-    items[i].classList.add('on');
+  // setActive makes option i the active one, or none for -1.
+  function setActive(items, i) {
+    const input = $('jump-q');
+    items.forEach((x, k) => {
+      x.classList.toggle('on', k === i);
+      x.setAttribute('aria-selected', String(k === i));
+    });
+    if (i < 0) { input.removeAttribute('aria-activedescendant'); return; }
+    input.setAttribute('aria-activedescendant', items[i].id);
     items[i].scrollIntoView({ block: 'nearest' });
   }
 
+  function moveJump(d) {
+    const list = $('jump-list');
+    const items = list ? [...list.querySelectorAll('.pi')] : [];
+    if (!items.length) return;
+    const i = items.findIndex(x => x.classList.contains('on'));
+    setActive(items, Math.max(0, Math.min(items.length - 1, i + d)));
+  }
+
   function pickJump() {
-    const on = $('jump-list').querySelector('.pi.on') || $('jump-list').querySelector('.pi');
+    const list = $('jump-list');
+    const on = list && (list.querySelector('.pi.on') || list.querySelector('.pi'));
     if (on) on.click();
+  }
+
+  // openDialog opens the dialog of a link over the page, as its buttons do;
+  // without htmx, the browser opens the link as a page of its own.
+  function openDialog(href) {
+    closeJump();
+    if (window.htmx) window.htmx.ajax('GET', href, { target: '#layer', swap: 'innerHTML' });
+    else location.assign(href);
+  }
+
+  // runCmd runs a command of the jump box.
+  function runCmd(cmd) {
+    closeJump();
+    if (cmd === 'help') { open(PAGE); return; }
+    if (cmd === 'theme') { const b = document.querySelector('[data-theme-toggle]'); if (b) b.click(); return; }
+    if (cmd === 'keys') {
+      setKeys(!keysOn());
+      toast(keysOn() ? 'Single-key shortcuts are on.' : 'Single-key shortcuts are off. Ctrl+K still opens the jump box.');
+    }
   }
 
   // The hint of a g chord: the keys that may follow, for a moment.
@@ -450,6 +528,8 @@
     const helpOpen = t.closest('[data-help-open]');
     if (helpOpen) { explain('action/' + helpOpen.dataset.helpOpen); return; }
     if (t.closest('[data-palette-open]')) { openJump(''); return; }
+    if (t.closest('[data-jump-close]')) { closeJump(); return; }
+    if (t.closest('[data-jump-back]')) { step(null); return; }
     const copy = t.closest('[data-help-copy]');
     if (copy) {
       const text = copy.dataset.helpCopy;
@@ -466,6 +546,12 @@
       open(topic.dataset.helpTopic, !fromJump && !!pane());
       return;
     }
+    const stepOpt = t.closest('#jump [data-jump-step]');
+    if (stepOpt) { step(stepOpt); return; }
+    const cmd = t.closest('#jump [data-jump-cmd]');
+    if (cmd) { runCmd(cmd.dataset.jumpCmd); return; }
+    const dlg = t.closest('#jump [data-jump-dialog]');
+    if (dlg) { ev.preventDefault(); openDialog(dlg.getAttribute('href')); return; }
     const jumpBg = t.closest('#jump');
     if (jumpBg && !t.closest('.box')) { closeJump(); return; }
     const word = t.closest('[data-word]');
@@ -500,6 +586,8 @@
       else if (ev.key === 'ArrowDown') { moveJump(1); ev.preventDefault(); }
       else if (ev.key === 'ArrowUp') { moveJump(-1); ev.preventDefault(); }
       else if (ev.key === 'Enter') { ev.preventDefault(); pickJump(); }
+      else if (ev.key === 'Tab') { ev.preventDefault(); $('jump-q').focus(); }
+      else if (ev.key === 'Backspace' && H.step && !$('jump-q').value) { ev.preventDefault(); step(null); }
       return;
     }
     if (ev.key === 'Escape') {

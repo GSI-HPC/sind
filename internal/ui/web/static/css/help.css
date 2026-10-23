@@ -13,7 +13,7 @@
 .helppane .hb{padding:14px 16px;overflow-y:auto;flex:1;display:grid;gap:14px;align-content:start}
 .helppane .hb:focus{outline:0}
 .helppane .hb>div{display:grid;gap:12px;align-content:start}
-#help-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#help-status,.pvh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The texts of an entry, in the pane and on the help page. */
 :is(.helppane,.helpdoc) .kind{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
@@ -68,13 +68,21 @@
 
 .palette{position:fixed;inset:0;background:rgba(6,11,22,.4);z-index:55;display:flex;justify-content:center;align-items:flex-start;padding:10vh 16px 0}
 .palette .box{width:min(560px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line);overflow:hidden}
-.palette input{width:100%;border:0;border-bottom:1px solid var(--line);padding:12px 14px;font-size:var(--t-lg);background:var(--panel);outline:0}
+.palette .pin{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+.palette input{flex:1;min-width:0;border:0;padding:12px 14px;font-size:var(--t-lg);background:var(--panel);outline:0}
+.palette .pin .iconbtn{margin-right:8px}
+.palette .pstep{display:flex;gap:8px;align-items:center;padding:10px 14px 0;font-size:var(--t-sm)}
+.palette .pstep[hidden]{display:none}
+.palette .pstep .link{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font:inherit}
 .palette .pl{max-height:50vh;overflow-y:auto}
-.palette .pi{display:flex;gap:10px;padding:9px 14px;cursor:pointer;align-items:center;color:var(--fg)}
+.palette .pi{display:flex;gap:10px;padding:9px 14px;cursor:pointer;align-items:center;color:var(--fg);width:100%;border:0;background:none;font:inherit;text-align:left}
 .palette .pi:hover{text-decoration:none;background:var(--hover)}
 .palette .pi small{margin-left:auto;font:var(--t-xs) var(--f-mono);color:var(--faint);white-space:nowrap}
-.palette .pi.on{background:var(--accent-soft)}
+.palette .pi.on{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
 .palette .empty{padding:14px;color:var(--muted)}
+.palette .pf{padding:7px 14px;border-top:1px solid var(--line-2);font-size:var(--t-xs);color:var(--muted)}
+.palette .pf+.pf{border-top:0;padding-top:0}
+.palette .pf kbd{margin-right:2px}
 
 /* The keys that may follow g, while the chord waits. */
 .chordhint{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;max-width:calc(100% - 32px);padding:8px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:var(--t-sm)}

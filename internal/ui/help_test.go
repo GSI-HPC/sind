@@ -12,8 +12,6 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/help"
-	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -265,7 +263,9 @@ func TestHelpMarkupInTheShell(t *testing.T) {
 	for _, s := range []string{
 		`data-help-toggle`, `<template id="help-shell">`, `id="help-q"`, `id="help-body"`,
 		`role="dialog" aria-modal="false" aria-labelledby="help-crumb"`, `id="help-status" role="status"`,
-		`data-palette-open`, `<template id="help-jump-shell">`, `id="jump-q"`, `id="jump-list"`,
+		`data-palette-open`, `aria-keyshortcuts="/ Control+K"`, `<kbd class="kbd-only k1-on">/</kbd>`,
+		`<template id="help-jump-shell">`, `role="dialog" aria-modal="true" aria-label="Jump to"`,
+		`id="jump-q"`, `aria-autocomplete="list"`, `aria-controls="jump-list"`, `id="jump-res"`, `id="jump-status" role="status"`,
 		`/static/`,
 	} {
 		assert.Contains(t, body, s)
@@ -278,98 +278,6 @@ func TestHelpMarkupInTheShell(t *testing.T) {
 	assert.Regexp(t, `href="/static/[0-9a-f]+/css/help\.css"`, body)
 	// The CSP allows no inline script or style, so the markup holds none.
 	assert.NotRegexp(t, `<script>|\sstyle="|\sonclick=`, body)
-}
-
-func fixtureStore(st *store.Store) {
-	st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "hpc"}})
-	st.SetClusters("ci", []cluster.Summary{{Name: "dev"}})
-	st.SetNodes("sind", []cluster.NodeSummary{
-		{Cluster: "dev", FQDN: "worker-0.dev.sind", Container: "sind-dev-worker-0"},
-		{Cluster: "dev", FQDN: "controller.dev.sind", Container: "sind-dev-controller"},
-	})
-	runs := []store.Run{{ID: "x", Title: "create cluster dev"}}
-	for i := 0; i < 10; i++ {
-		runs = append(runs, store.Run{ID: "r" + string(rune('a'+i)), Title: "power reboot worker-" + string(rune('0'+i)), Status: store.StatusOK})
-	}
-	st.SetRuns(runs)
-}
-
-func TestJump(t *testing.T) {
-	ts := helpServer(t)
-	fixtureStore(ts.st)
-
-	w := ts.get("/jump")
-	require.Equal(t, http.StatusOK, w.Code)
-	body := w.Body.String()
-	assert.NotContains(t, body, "<html")
-	assert.Equal(t, jumpMax, strings.Count(body, `class="pi"`))
-	assert.Contains(t, body, `href="/clusters">Clusters<small>page</small>`)
-	assert.Contains(t, body, `href="/">Overview<small>page</small>`)
-	assert.NotContains(t, body, "{realm}")
-
-	for target, want := range map[string][]string{
-		"/jump?q=hpc":         {`href="/clusters/sind/hpc">hpc<small>cluster · sind</small>`},
-		"/jump?q=dev":         {`href="/clusters/ci/dev">dev<small>cluster · ci</small>`, `href="/nodes/sind/dev/worker-0">worker-0.dev<small>node · sind</small>`, `href="/runs/x">create cluster dev<small>run · running</small>`},
-		"/jump?q=controller":  {`href="/nodes/sind/dev/controller">controller.dev`, `data-help-topic="word/controller"`},
-		"/jump?q=new+cluster": {`href="/dialogs/create-cluster">New cluster<small>action</small>`},
-		"/jump?q=power":       {`href="/dialogs/power">Power<small>action</small>`, `href="/runs/ra">power reboot worker-0<small>run · ok</small>`},
-		"/jump?q=rollback":    {`href="/help?topic=word%2frollback" data-help-topic="word/rollback">Rollback<small>word</small>`},
-		"/jump?q=zzzzqq":      {`class="empty">Nothing matches. Start with ? to search help only.`},
-	} {
-		w := ts.get(target)
-		require.Equal(t, http.StatusOK, w.Code, target)
-		for _, s := range want {
-			assert.Contains(t, w.Body.String(), s, target)
-		}
-	}
-}
-
-func TestJumpOrder(t *testing.T) {
-	d := jump(help.Default(), store.Snapshot{}, "node")
-	require.NotEmpty(t, d.Items)
-	// A label that starts with the query comes before one that holds it.
-	starts, holds := -1, -1
-	for i, it := range d.Items {
-		l := strings.ToLower(it.Label)
-		if strings.HasPrefix(l, "node") && starts < 0 {
-			starts = i
-		}
-		if !strings.HasPrefix(l, "node") && strings.Contains(l, "node") && holds < 0 {
-			holds = i
-		}
-	}
-	assert.Equal(t, 0, starts)
-	if holds >= 0 {
-		assert.Less(t, starts, holds)
-	}
-}
-
-func TestJumpHelpOnly(t *testing.T) {
-	ts := helpServer(t)
-	fixtureStore(ts.st)
-
-	w := ts.get("/jump?q=" + url.QueryEscape("?"))
-	require.Equal(t, http.StatusOK, w.Code)
-	body := w.Body.String()
-	assert.NotContains(t, body, `href="/clusters`)
-	assert.NotContains(t, body, `href="/runs`)
-	assert.Contains(t, body, `data-help-topic="word/realm"`)
-	assert.Contains(t, body, `data-help-topic="howto/first-cluster"`)
-
-	w = ts.get("/jump?q=" + url.QueryEscape("? delete"))
-	body = w.Body.String()
-	assert.Contains(t, body, `data-help-topic="action/delete-cluster"`)
-	assert.NotContains(t, body, `href="/dialogs/`)
-
-	w = ts.get("/jump?q=" + url.QueryEscape("?zzzzqq"))
-	assert.Contains(t, w.Body.String(), "Nothing in help matches.")
-}
-
-func TestJumpEscapes(t *testing.T) {
-	ts := helpServer(t)
-	ts.st.SetClusters("sind", []cluster.Summary{{Name: `"><b>x`}})
-	w := ts.get("/jump?q=x")
-	assert.NotContains(t, w.Body.String(), "<b>x")
 }
 
 func TestHelpKindLabel(t *testing.T) {

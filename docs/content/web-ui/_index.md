@@ -57,6 +57,10 @@ To try the UI without Docker, run `sind ui --demo`. It shows made-up clusters, a
 
 ## Find things and get help
 
+The jump box finds what you type in the names of clusters, nodes, pages and runs, and in the help: type `sbatch`, `clean up` or `stuck` to find the how-to for it. Clusters and pages come before nodes. When the list holds only some of the results, its last line says how many there are. Start with `?` to search the help only. Without a query, the box lists up to five clusters, the actions that you use most (**New cluster**, **Add workers** and **Power**) and the pages; actions that cannot be undone show only when you type their name.
+
+An action that needs a cluster, such as **Add workers** or **Power**, asks for it next: the box lists the clusters, the one of the page you are on first, and opens the dialog of the cluster you pick. Backspace in the empty box goes back. An action of a realm, such as **Delete realm**, asks for the realm when there is more than one.
+
 The help pane shows the help of the page: what it shows, the words on it and how to do the common things. The **?** button of a dialog opens the help of that dialog, above it. A pane that you left open stays beside a dialog that opens later, or behind it on a narrow screen. The pane takes the focus, and Esc closes it and takes you back to where you were. **All how-tos** and **All words** list every how-to and every word, such as how to see the output of a job, what to do when a job does not start, and how to clean up when you are done.
 
 The address `/help` opens the same texts as a page of their own, with a search that works without script, so that you can bookmark or share an entry.
@@ -74,4 +78,4 @@ The address `/help` opens the same texts as a page of their own, with a search t
 | `Ctrl+Enter` | Run the command of the dialog. On a Mac, `⌘ Enter`. |
 | `Esc` | Close the hint card, the jump box, the help pane or the dialog. A dialog with changes asks first. |
 
-Keys do nothing while you type in a field, except `Esc`, `Ctrl+K` and `Ctrl+Enter`. To turn off the shortcuts of one key (`/`, `?` and the `g` keys), as speech input can press them by accident, open **Keys** in the help pane and clear **Single-key shortcuts**. `Ctrl+K` and `Esc` still work, and the buttons and hint cards stop showing `/` and `?`. Your browser keeps the setting.
+Keys do nothing while you type in a field, except `Esc`, `Ctrl+K` and `Ctrl+Enter`. To turn off the shortcuts of one key (`/`, `?` and the `g` keys), as speech input can press them by accident, open **Keys** in the help pane, or type `keys` in the jump box, and clear **Single-key shortcuts**. `Ctrl+K` and `Esc` still work, and the buttons and hint cards stop showing `/` and `?`. Your browser keeps the setting.

@@ -113,6 +113,7 @@ func helpKeys() []helpKeyGroup {
 		{Title: "In the jump box", Keys: []helpKey{
 			{Keys: []string{"↑", "↓"}, Join: "or", Text: "Move through the results"},
 			{Keys: []string{"Enter"}, Text: "Open the result, or pick the cluster of an action"},
+			{Keys: []string{"Backspace"}, Text: "In an empty box: back from the choice of a cluster"},
 		}},
 		{Title: "In the help pane", Keys: []helpKey{
 			{Keys: []string{"Tab"}, Text: "Move between the search, the links and the buttons"},
