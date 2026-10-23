@@ -346,21 +346,6 @@ func TestFragmentHTMLUnknown(t *testing.T) {
 	assert.ErrorContains(t, err, `unknown fragment "nope"`)
 }
 
-func TestTemplatesIncludeAndFuncs(t *testing.T) {
-	fsys := fstest.MapFS{"templates/a.tmpl": {Data: []byte(`{{define "a"}}<b>{{include "b" .}}</b>{{upper .}}{{end}}{{define "b"}}<i>{{.}}</i>{{end}}{{define "c"}}{{include "nope" .}}{{end}}`)}}
-	tm, err := newTemplates(fsys, template.FuncMap{"upper": strings.ToUpper})
-	require.NoError(t, err)
-	out, err := tm.render("a", "x<y")
-	require.NoError(t, err)
-	assert.Equal(t, "<b><i>x&lt;y</i></b>X&lt;Y", out, "included output is escaped once")
-	_, err = tm.render("nope", nil)
-	assert.Error(t, err)
-	assert.True(t, tm.has("a"))
-	assert.False(t, tm.has("nope"))
-	_, err = tm.render("c", nil) // an included block that does not exist
-	assert.ErrorContains(t, err, `"nope"`)
-}
-
 func TestRegisteredTemplateFunctions(t *testing.T) {
 	cfg, st := testConfig(t)
 	cfg.Registry.AddFuncs(template.FuncMap{"shout": strings.ToUpper})

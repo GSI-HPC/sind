@@ -78,6 +78,7 @@ func (s *demoSession) post(path string, form url.Values) (*http.Response, string
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", s.base)
 	req.Header.Set(csrfHeader, s.csrf)
+	req.Header.Set("HX-Request", "true")
 	resp, err := s.c.Do(req)
 	require.NoError(s.t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -140,7 +141,7 @@ func TestDemo_RunsACommandEndToEnd(t *testing.T) {
 	require.NotNil(t, m, preview)
 	form.Set("shown", m[1])
 	resp, body := s.post("/actions/create-cluster/run", form)
-	require.Equal(t, http.StatusOK, resp.StatusCode, body)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, body)
 	redirect := resp.Header.Get("HX-Redirect")
 	require.True(t, strings.HasPrefix(redirect, "/tasks/"), redirect)
 

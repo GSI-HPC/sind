@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
@@ -130,13 +131,8 @@ func pgRealmRoute() Route {
 		if !slices.Contains(slices.Collect(maps.Values(pgRealmPages)), next) {
 			next = "/clusters"
 		}
-		if r.Header.Get("HX-Request") == "true" {
-			// htmx follows a redirect by itself, but swaps what it
-			// finds; this one leaves the page.
-			w.Header().Set("HX-Redirect", next)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		http.Redirect(w, r, next, http.StatusSeeOther)
+		// htmx follows a redirect by itself, but swaps what it finds; this
+		// one leaves the page.
+		page.Redirect(w, r, next)
 	}}
 }

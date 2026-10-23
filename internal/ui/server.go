@@ -17,6 +17,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/go-clikit/localweb/assets"
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -58,7 +59,7 @@ type Server struct {
 	// sessions lets in the browser that opened the address with the token.
 	sessions *session.Sessions
 	hosts    func(host string) bool
-	tmpl     *templates
+	tmpl     *page.Set
 	// assets serves the static files under /static/VERSION/, where VERSION
 	// is a hash of all of them: a new sind serves them under a new path, so
 	// browsers may cache them for good.
@@ -121,7 +122,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 	for name, fn := range reg.funcs {
 		funcs[name] = fn
 	}
-	if s.tmpl, err = newTemplates(c.FS, funcs); err != nil {
+	if s.tmpl, err = page.Parse(c.FS, page.Options{Funcs: funcs}, "templates/*.tmpl"); err != nil {
 		return nil, fmt.Errorf("templates: %w", err)
 	}
 	if err := s.check(); err != nil {
@@ -137,7 +138,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 // fragment has its template, and every fragment a page names exists.
 func (s *Server) check() error {
 	for _, name := range []string{"layout", "page-notfound"} {
-		if !s.tmpl.has(name) {
+		if !s.tmpl.Has(name) {
 			return fmt.Errorf("template %q is missing", name)
 		}
 	}
@@ -147,12 +148,12 @@ func (s *Server) check() error {
 		}
 	}
 	for name := range s.reg.fragments {
-		if !s.tmpl.has(name) {
+		if !s.tmpl.Has(name) {
 			return fmt.Errorf("fragment %s has no template block of that name", name)
 		}
 	}
 	for _, p := range s.reg.pages {
-		if !s.tmpl.has("page-" + p.Name) {
+		if !s.tmpl.Has("page-" + p.Name) {
 			return fmt.Errorf("page %s has no template block %q", p.Name, "page-"+p.Name)
 		}
 		for _, f := range p.Fragments {
@@ -280,13 +281,9 @@ func (s *Server) Write(w http.ResponseWriter, r *http.Request, status int, name 
 // respond writes the block name rendered with v, or returns the error and
 // writes nothing.
 func (s *Server) respond(w http.ResponseWriter, status int, name string, v *View) error {
-	html, err := s.tmpl.render(name, v)
-	if err != nil {
+	if err := s.tmpl.Respond(w, status, name, v); err != nil {
 		return fmt.Errorf("rendering %s: %w", name, err)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(html)) //nolint:gosec // G705: html/template output, escaped in context
 	return nil
 }
 

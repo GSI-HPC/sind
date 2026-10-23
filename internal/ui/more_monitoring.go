@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -233,7 +234,7 @@ func moreIntervalSet(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	iv.Set(d)
-	if r.Header.Get("HX-Request") == "" {
+	if !page.IsHTMX(r) {
 		http.Redirect(w, r, "/monitoring", http.StatusSeeOther)
 		return
 	}

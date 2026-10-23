@@ -334,14 +334,14 @@ func TestActRoutes_WithoutTheRunner(t *testing.T) {
 	f.srv.env.values.Delete(actKey{})
 
 	assert.Equal(t, http.StatusInternalServerError, f.post("/actions/power/preview", "").Code)
-	assert.Equal(t, http.StatusInternalServerError, f.post("/actions/power/run", "").Code)
+	assert.Equal(t, http.StatusInternalServerError, f.postHTMX("/actions/power/run", "").Code)
 	assert.Equal(t, http.StatusInternalServerError, f.post("/tasks/t/cancel", "").Code)
 }
 
 func TestActPreviewAndRun_UnknownAction(t *testing.T) {
 	f := newActFixture(t)
 	assert.Equal(t, http.StatusNotFound, f.post("/actions/nope/preview", "").Code)
-	assert.Equal(t, http.StatusNotFound, f.post("/actions/nope/run", "").Code)
+	assert.Equal(t, http.StatusNotFound, f.postHTMX("/actions/nope/run", "").Code)
 }
 
 func TestActPreviewAndRun_RefuseAFormThatIsTooBig(t *testing.T) {
@@ -350,7 +350,7 @@ func TestActPreviewAndRun_RefuseAFormThatIsTooBig(t *testing.T) {
 	many := strings.Repeat("nodes=a&", actMaxValues+1)
 	for _, form := range []string{long, many} {
 		assert.Equal(t, http.StatusBadRequest, f.post("/actions/power/preview", form).Code)
-		assert.Equal(t, http.StatusBadRequest, f.post("/actions/power/run", form).Code)
+		assert.Equal(t, http.StatusBadRequest, f.postHTMX("/actions/power/run", form).Code)
 	}
 	assert.Empty(t, f.starter.specs)
 	assert.NoError(t, actCheckForm(url.Values{"nodes": {strings.Repeat("x", actMaxValue)}}))
@@ -364,9 +364,9 @@ func TestActRun_StartsTheCommand(t *testing.T) {
 	form := actForm("realm", "sind", "cluster", "dev", "op", "reboot", "nodes", "worker-0")
 	form += "&shown=" + f.shown(t, "power", form)
 
-	w := f.post("/actions/power/run", form)
+	w := f.postHTMX("/actions/power/run", form)
 
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"))
 	assert.Empty(t, w.Body.String())
 	require.Len(t, f.starter.specs, 1)
@@ -377,12 +377,25 @@ func TestActRun_StartsTheCommand(t *testing.T) {
 	assert.Empty(t, f.saved)
 }
 
+func TestActRun_WithoutScriptRedirectsToTheTask(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("realm", "sind", "cluster", "dev", "op", "reboot", "nodes", "worker-0")
+	form += "&shown=" + f.shown(t, "power", form)
+
+	w := f.post("/actions/power/run", form)
+
+	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
+	assert.Equal(t, "/tasks/task1", w.Header().Get("Location"))
+	assert.Empty(t, w.Header().Get("HX-Redirect"))
+	require.Len(t, f.starter.specs, 1)
+}
+
 func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	f := newActFixture(t)
 	form := actForm("realm", "ci", "name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "wait", "2m")
 	form += "&shown=" + f.shown(t, "create-cluster", form)
 
-	w := f.post("/actions/create-cluster/run", form)
+	w := f.postHTMX("/actions/create-cluster/run", form)
 
 	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
 	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, mapKeys(f.saved))
@@ -398,7 +411,7 @@ func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
 	form := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/missing", "mkdir", "on")
 	form += "&shown=" + f.shown(t, "create-cluster", form)
 
-	w := f.post("/actions/create-cluster/run", form)
+	w := f.postHTMX("/actions/create-cluster/run", form)
 
 	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
 	assert.Equal(t, []string{"/scratch/missing"}, f.made)
@@ -406,7 +419,7 @@ func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
 	// A directory that cannot be made stops the run before the config.
 	f.state.mkdirAll = func(string) error { return errors.New("read-only file system") }
 	f.saved, f.starter.specs = map[string]string{}, nil
-	w = f.post("/actions/create-cluster/run", form)
+	w = f.postHTMX("/actions/create-cluster/run", form)
 	assert.Contains(t, w.Body.String(), "creating the directory /scratch/missing: read-only file system")
 	assert.Empty(t, f.saved)
 	assert.Empty(t, f.starter.specs)
@@ -523,7 +536,7 @@ func mapKeys(m map[string]string) []string {
 func TestActRun_RefusesTheFormThatDoesNotBuild(t *testing.T) {
 	f := newActFixture(t)
 
-	w := f.post("/actions/power/run", actForm("cluster", "dev", "op", "on")+"&shown=x")
+	w := f.postHTMX("/actions/power/run", actForm("cluster", "dev", "op", "on")+"&shown=x")
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
@@ -540,13 +553,13 @@ func TestActRun_RefusesWithoutTheTypedName(t *testing.T) {
 	shown := f.shown(t, "delete-cluster", form)
 
 	for _, typed := range []string{"", "de", "default"} {
-		w := f.post("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm="+typed)
+		w := f.postHTMX("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm="+typed)
 		assert.Contains(t, w.Body.String(), "Type dev to confirm.", typed)
 		assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
 	}
 	assert.Empty(t, f.starter.specs)
 
-	w := f.post("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm=dev")
+	w := f.postHTMX("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm=dev")
 	assert.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"))
 	assert.Equal(t, "sind delete cluster dev", f.starter.specs[0].Display)
 }
@@ -557,7 +570,7 @@ func TestActRun_RefusesACommandThatChanged(t *testing.T) {
 	shown := f.shown(t, "power", form)
 
 	// The browser shows one command and posts the fields of another.
-	w := f.post("/actions/power/run", actForm("cluster", "dev", "op", "cut", "nodes", "worker-0", "shown", shown))
+	w := f.postHTMX("/actions/power/run", actForm("cluster", "dev", "op", "cut", "nodes", "worker-0", "shown", shown))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
@@ -567,7 +580,7 @@ func TestActRun_RefusesACommandThatChanged(t *testing.T) {
 	assert.Empty(t, f.starter.specs)
 
 	// Without any preview, nothing runs either.
-	w = f.post("/actions/power/run", form)
+	w = f.postHTMX("/actions/power/run", form)
 	assert.Contains(t, w.Body.String(), "The command changed while you looked")
 	assert.Empty(t, f.starter.specs)
 }
@@ -578,7 +591,7 @@ func TestActRun_ShownCoversTheConfig(t *testing.T) {
 	shown := f.shown(t, "create-cluster", form)
 
 	// The command line is the same; the config is not.
-	w := f.post("/actions/create-cluster/run", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "eve", "shown", shown))
+	w := f.postHTMX("/actions/create-cluster/run", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "ur", "u0", "u0-name", "eve", "shown", shown))
 
 	assert.Contains(t, w.Body.String(), "The command changed while you looked")
 	assert.Empty(t, f.saved)
@@ -591,7 +604,7 @@ func TestActRun_StartFailures(t *testing.T) {
 	form += "&shown=" + f.shown(t, "power", form)
 	f.starter.startErr = errors.New("not a sind command")
 
-	w := f.post("/actions/power/run", form)
+	w := f.postHTMX("/actions/power/run", form)
 
 	assert.Empty(t, w.Header().Get("HX-Redirect"))
 	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
@@ -602,7 +615,7 @@ func TestActRun_StartFailures(t *testing.T) {
 	f.state.writeFile = func(string, []byte) error { return errors.New("disk full") }
 	f.starter.specs = nil
 
-	w = f.post("/actions/create-cluster/run", createForm)
+	w = f.postHTMX("/actions/create-cluster/run", createForm)
 
 	assert.Contains(t, w.Body.String(), "saving the config: disk full")
 	assert.Empty(t, f.starter.specs)
@@ -880,7 +893,7 @@ func TestActRun_RefusesANewClusterWithProblems(t *testing.T) {
 	form := actForm("name", "dev", "w0-count", "1", "dir", "/scratch/dev")
 	form += "&shown=" + f.shown(t, "create-cluster", form)
 
-	w := f.post("/actions/create-cluster/run", form)
+	w := f.postHTMX("/actions/create-cluster/run", form)
 
 	assert.Empty(t, w.Header().Get("HX-Redirect"))
 	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
