@@ -48,6 +48,7 @@ func TestRunPageRenders(t *testing.T) {
 		`data-doc-title="▸ nodes 0/3 · sind ui"`,
 		`<details class="grow-details" id="step-0000000000000007">`,
 		`class="ntile role-controller running"`,
+		`<small data-word="controller">controller</small>`,
 		`stroke-dasharray="3.5 69.1"`,
 		"101 MB / 101 MB",
 		"/events?f=rail&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-more&amp;f=run-nodes&amp;f=run-summary&amp;f=run-timeline&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",

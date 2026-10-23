@@ -218,6 +218,9 @@ func TestActDialog_NewClusterTakesAFreeName(t *testing.T) {
 	body := f.get("/dialogs/create-cluster").Body.String()
 
 	assert.Contains(t, body, `id="act-name" name="name" value="hpc-3" data-act-select`, "the script selects a default name")
+	// The roles explain their words, outside the label of the checkbox.
+	assert.Contains(t, body, `<span class="act-lab"><label for="act-db"><b data-word="db">db</b></label><span class="hint" id="act-hint-db"><span data-word="mariadb">MariaDB</span> and <span data-word="slurmdbd">slurmdbd</span>: accounting.</span>`)
+	assert.Contains(t, body, `<label for="act-backup"><b data-word="controller-backup">backup</b> <small>controller-backup</small></label>`)
 	assert.Contains(t, body, `value="~/sind/hpc-3" autocapitalize="off" spellcheck="false" data-act-follow`)
 	assert.Contains(t, body, `<b>workers</b>`)
 	assert.NotContains(t, f.get("/dialogs/create-cluster?dir=/x").Body.String(), "data-act-follow", "a typed directory stays")

@@ -718,19 +718,26 @@ var actWaits = []actChoice{
 // actMemories are the memories of a node that the field suggests.
 var actMemories = []string{"512m", "1g", "2g", "4g", "8g"}
 
-// actRole is a role of the New cluster dialog that is a checkbox.
+// actRole is a role of the New cluster dialog that is a checkbox. Word is
+// the help word of the role, and Hint says what it runs, in parts, which
+// name a word of the help where they have one.
 type actRole struct {
-	Name, Label, Small, Hint string
+	Name, Label, Small, Word string
+	Hint                     []actHintPart
 	// Sub sets the row in below the one above it.
 	Sub bool
 }
 
+// actHintPart is a part of a hint: text, which explains itself as the
+// help word Word when it has one.
+type actHintPart struct{ Text, Word string }
+
 // actRoles are the roles of the New cluster dialog that are a checkbox.
 var actRoles = []actRole{
-	{"backup", "backup", "controller-backup", "A second slurmctld that takes over. Same image and size as the controller.", true},
-	{"db", "db", "", "MariaDB and slurmdbd: accounting.", false},
-	{"api", "api", "", "slurmrestd. Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", false},
-	{"submitter", "submitter", "", "The login node. sind enter puts you here.", false},
+	{"backup", "backup", "controller-backup", "controller-backup", []actHintPart{{"A second ", ""}, {"slurmctld", "slurmctld"}, {" that takes over. Same image and size as the controller.", ""}}, true},
+	{"db", "db", "", "db", []actHintPart{{"MariaDB", "mariadb"}, {" and ", ""}, {"slurmdbd", "slurmdbd"}, {": accounting.", ""}}, false},
+	{"api", "api", "", "api", []actHintPart{{"slurmrestd", "slurmrestd"}, {". Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", ""}}, false},
+	{"submitter", "submitter", "", "submitter", []actHintPart{{"The login node. sind enter puts you here.", ""}}, false},
 }
 
 // Roles are the roles of the New cluster dialog that are a checkbox.

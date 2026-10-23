@@ -87,6 +87,7 @@
 .scrim .act-lab{display:grid;gap:1px;min-width:0}
 .scrim .act-lab b{font:600 var(--t-md) var(--f-mono)}
 .scrim .act-lab small{font:400 var(--t-sm) var(--f-mono);color:var(--faint)}
+.scrim .act-lab>label{cursor:pointer}
 .scrim .act-nr:has(input[type=checkbox]:not(:checked)) .act-sq{opacity:.4}
 .scrim .act-sq{width:12px;height:12px;border-radius:3px;background:var(--deco)}
 .scrim .act-sq.controller{background:var(--brand)}
@@ -247,6 +248,7 @@
   .scrim .act-nr.act-box{grid-template-columns:24px minmax(0,1fr)}
   .scrim .act-nr input[type=checkbox]{width:24px;height:24px}
   .scrim .act-nr>label.act-lab{align-self:stretch;align-content:center;min-height:44px;cursor:pointer}
+  .scrim .act-nr>.act-lab>label{padding:12px 0;margin:-12px 0}
   .scrim .checks label{min-height:44px;align-items:center}
   .scrim .act-seg span{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
   .scrim .act-conf summary{padding:12px 0}

@@ -67,6 +67,18 @@ func TestHelpCoversTheUI(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+
+	// The roles of New cluster name their words in Go.
+	for _, r := range actRoles {
+		_, ok := h.Word(r.Word)
+		assert.True(t, ok, "role %s marks the word %q, which has no help", r.Name, r.Word)
+		for _, part := range r.Hint {
+			if part.Word != "" {
+				_, ok := h.Word(part.Word)
+				assert.True(t, ok, "role %s marks the word %q, which has no help", r.Name, part.Word)
+			}
+		}
+	}
 }
 
 func TestHelpPane(t *testing.T) {

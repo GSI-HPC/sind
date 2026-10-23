@@ -50,7 +50,7 @@ part is a fragment that /events sends again when the run changes. */}}
 {{define "run-row"}}{{if .Children}}<details class="grow-details" id="step-{{.ID}}"><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
 
 {{define "run-nodes"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">Each node goes from left to right. The ring is the part of the wait limit it used.</span></div><div class="pb nodegrid">
-{{range .Tiles}}<div class="ntile {{.RoleClass}} {{.Class}}"><div class="nt"><span class="mark {{.Class}}">{{.Mark}}</span><b>{{.Name}}</b>{{if .Role}}<small>{{.Role}}</small>{{end}}</div>
+{{range .Tiles}}<div class="ntile {{.RoleClass}} {{.Class}}"><div class="nt"><span class="mark {{.Class}}">{{.Mark}}</span><b>{{.Name}}</b>{{if .Role}}<small data-word="{{.Role}}">{{.Role}}</small>{{end}}</div>
   <div class="pipe">{{range .Pipe}}<i class="{{.Class}}" title="{{.Title}}"></i>{{end}}</div>
   <div class="pipelbl">{{range .Pipe}}<span>{{.Label}}</span>{{end}}</div>
   <div class="msg"><span title="{{.Msg}}">{{.Msg}}</span>{{with .Ring}}<svg class="ring" viewBox="0 0 28 28" role="img" aria-label="{{.Title}} of the wait limit"><circle class="rtrack" cx="14" cy="14" r="11" fill="none" stroke-width="4"/><circle class="rarc {{.Class}}" cx="14" cy="14" r="11" fill="none" stroke-width="4" stroke-dasharray="{{.Dash}}" transform="rotate(-90 14 14)"/></svg>{{end}}</div></div>
