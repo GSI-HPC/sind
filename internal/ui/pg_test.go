@@ -98,14 +98,22 @@ func TestPgOverview(t *testing.T) {
 	// Narrowed to one realm.
 	body = pgBody(t, ts, "/?realm=ci", 200)
 	assert.Contains(t, body, "1 cluster · 2 nodes")
-	assert.Contains(t, body, "showing <b class=\"mono\">ci</b>")
+	assert.Contains(t, body, `<span class="pg-scope">Showing realm <b class="mono">ci</b> · <a href="/?realm=">Show all</a></span>`)
+	assert.Contains(t, body, "<title>Overview · ci · sind ui</title>")
 	assert.Contains(t, body, `href="/clusters/ci/default"`)
 	assert.NotContains(t, body, `href="/clusters/sind/dev"`)
 	assert.NotContains(t, body, "A command holds the lock")
 	assert.Contains(t, body, `<tr class="sel"><td class="mono"><a href="/?realm=ci">`)
 	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=ci"`)
 
+	// A realm that Docker has no trace of, with the closest realm.
+	body = pgBody(t, ts, "/?realm=cix", 404)
+	assert.Contains(t, body, "There is no realm cix.")
+	assert.Contains(t, body, `href="/?realm=ci">Realm ci</a>`)
+	assert.Contains(t, body, `href="/?realm=">All realms</a>`)
+
 	// A realm without clusters.
+	ts.st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}, {Name: "ci", Clusters: 1}, {Name: "none"}})
 	body = pgBody(t, ts, "/?realm=none", 200)
 	assert.Contains(t, body, `No cluster in realm <b class="mono">none</b> yet.`)
 	assert.Contains(t, body, `class="btn primary"`)
@@ -148,12 +156,18 @@ func TestPgClusters(t *testing.T) {
 	assert.Contains(t, body, `<a href="/clusters?realm=sind">sind · 2</a>`)
 
 	body = pgBody(t, ts, "/clusters?realm=sind", 200)
-	assert.Contains(t, body, "Every cluster of realm <b class=\"mono\">sind</b>.")
+	assert.Contains(t, body, `<span class="pg-scope">Showing realm <b class="mono">sind</b> · <a href="/clusters?realm=">Show all</a></span>`)
+	assert.NotContains(t, body, "Every cluster of every realm.")
 	assert.NotContains(t, body, "<th>Realm</th>")
 	assert.NotContains(t, body, "/clusters/ci/default")
 	assert.Contains(t, body, `<a class="on" aria-current="true" href="/clusters?realm=sind">sind · 2</a>`)
 	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=sind"`)
 
+	body = pgBody(t, ts, "/clusters?realm=cix", 404)
+	assert.Contains(t, body, "There is no realm cix.")
+	assert.Contains(t, body, `href="/clusters?realm=ci">Realm ci</a>`)
+	assert.Contains(t, body, `href="/clusters?realm=">All realms</a>`)
+	ts.st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}, {Name: "ci", Clusters: 1}, {Name: "nowhere"}})
 	body = pgBody(t, ts, "/clusters?realm=nowhere", 200)
 	assert.Contains(t, body, `No cluster in realm <b class="mono">nowhere</b> yet.`)
 	assert.Contains(t, body, `href="/clusters?realm=">All realms</a>`)
@@ -176,128 +190,22 @@ func TestPgNodes(t *testing.T) {
 	assert.Contains(t, body, "sind get nodes")
 
 	assert.Contains(t, body, `<span class="pill bad" data-say="worker-3.dev is stopped." data-say-key="sind/worker-3.dev">stopped</span>`)
+	assert.Contains(t, body, "Every node of every realm.")
 
 	body = pgBody(t, ts, "/nodes?realm=ci", 200)
 	assert.Contains(t, body, `<section class="panel" data-say="2 nodes in realm ci." data-say-key="count">`)
+	assert.Contains(t, body, `Showing realm <b class="mono">ci</b> · <a href="/nodes?realm=">Show all</a>`)
+	assert.Contains(t, body, "<title>Nodes · ci · sind ui</title>")
 	assert.Contains(t, pgBody(t, ts, "/clusters?realm=ci", 200), `<section class="panel" data-say="1 cluster in realm ci." data-say-key="count">`)
 	assert.NotContains(t, body, "<th>Realm</th>")
 	assert.NotContains(t, body, "worker-3.dev")
 	assert.Contains(t, body, "<b>controller</b>")
+	body = pgBody(t, ts, "/nodes?realm=cix", 404)
+	assert.Contains(t, body, `href="/nodes?realm=ci">Realm ci</a>`)
+	ts.st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}, {Name: "ci", Clusters: 1}, {Name: "zz"}})
 	body = pgBody(t, ts, "/nodes?realm=zz", 200)
 	assert.Contains(t, body, `No node in realm <b class="mono">zz</b> yet.`)
 	assert.Equal(t, http.StatusBadRequest, ts.get("/nodes?realm=-").Code)
-}
-
-func TestPgRealmCookie(t *testing.T) {
-	ts := pgServer(t)
-	pgFillStore(ts.st)
-
-	// Picking a realm sets the cookie and goes back to the list.
-	w := ts.post("/realm", "realm=ci&next=/nodes")
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	assert.Equal(t, "/nodes", w.Header().Get("Location"))
-	var c *http.Cookie
-	for _, x := range w.Result().Cookies() {
-		if x.Name == "sind_realm" {
-			c = x
-		}
-	}
-	require.NotNil(t, c)
-	assert.Equal(t, "ci", c.Value)
-	assert.True(t, c.HttpOnly)
-	assert.Equal(t, http.SameSiteStrictMode, c.SameSite)
-	assert.Equal(t, "/", c.Path)
-	assert.Positive(t, c.MaxAge)
-
-	// A list page without ?realm= uses the cookie, ?realm= wins, and an
-	// empty ?realm= shows all realms.
-	get := func(target string, cookie string) string {
-		r := request("GET", target)
-		r.AddCookie(ts.cookie)
-		if cookie != "" {
-			r.AddCookie(&http.Cookie{Name: "sind_realm", Value: cookie})
-		}
-		w := ts.do(r)
-		require.Equal(t, 200, w.Code)
-		return w.Body.String()
-	}
-	body := get("/clusters", "ci")
-	assert.Contains(t, body, `href="/clusters/ci/default"`)
-	assert.NotContains(t, body, `href="/clusters/sind/dev"`)
-	assert.Contains(t, body, `<option value="ci" selected>ci · 1</option>`)
-	assert.Contains(t, body, `<input type="hidden" name="next" value="/clusters">`)
-	body = get("/clusters?realm=sind", "ci")
-	assert.Contains(t, body, `href="/clusters/sind/dev"`)
-	assert.NotContains(t, body, `href="/clusters/ci/default"`)
-	body = get("/clusters?realm=", "ci")
-	assert.Contains(t, body, `href="/clusters/sind/dev"`)
-	assert.Contains(t, body, `href="/clusters/ci/default"`)
-	assert.Contains(t, body, `<option value="" selected>all realms</option>`)
-	// The cookie is the user's: a bad one is ignored.
-	body = get("/nodes", "Not a realm")
-	assert.Contains(t, body, "worker-3.dev")
-	body = get("/nodes", "")
-	assert.Contains(t, body, "worker-3.dev")
-	// The live updates carry the realm of the page.
-	m := regexp.MustCompile(`sse-connect="([^"]+)"`).FindStringSubmatch(get("/nodes", "ci"))
-	require.NotNil(t, m)
-	events, err := url.Parse(strings.ReplaceAll(m[1], "&amp;", "&"))
-	require.NoError(t, err)
-	assert.Equal(t, "ci", events.Query().Get("realm"))
-	assert.Equal(t, "nodes", events.Query().Get("nav"))
-	assert.Contains(t, events.Query()["f"], "pg-nodes-table")
-
-	// The Overview ignores the cookie.
-	body = get("/", "ci")
-	assert.Contains(t, body, `href="/clusters/sind/dev"`)
-
-	// htmx is sent on by a header, which it follows by itself.
-	r := request("POST", "/realm")
-	r.Body = nopCloser("realm=sind&next=/nodes")
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Origin", "http://127.0.0.1:7878")
-	r.Header.Set(csrfHeader, ts.csrf)
-	r.Header.Set("HX-Request", "true")
-	r.AddCookie(ts.cookie)
-	w = ts.do(r)
-	assert.Equal(t, http.StatusNoContent, w.Code)
-	assert.Equal(t, "/nodes", w.Header().Get("HX-Redirect"))
-	assert.Equal(t, "sind", w.Result().Cookies()[0].Value)
-
-	// Every realm: the cookie goes away.
-	w = ts.post("/realm", "realm=&next=/clusters")
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	for _, x := range w.Result().Cookies() {
-		if x.Name == "sind_realm" {
-			assert.Negative(t, x.MaxAge)
-		}
-	}
-	// Only a list page is a place to return to; a bad name is refused.
-	w = ts.post("/realm", "realm=sind&next=https://evil.example/")
-	assert.Equal(t, "/clusters", w.Header().Get("Location"))
-	w = ts.post("/realm", "realm=sind&next=//evil.example")
-	assert.Equal(t, "/clusters", w.Header().Get("Location"))
-	w = ts.post("/realm", "realm=sind&next=/topology")
-	assert.Equal(t, "/topology", w.Header().Get("Location"))
-	assert.Equal(t, http.StatusBadRequest, ts.post("/realm", "realm=a%20b").Code)
-	assert.Equal(t, http.StatusBadRequest, ts.post("/realm", "realm="+strings.Repeat("a", 300)).Code)
-}
-
-func TestPgRealmPicker(t *testing.T) {
-	ts := pgServer(t)
-	body := pgBody(t, ts, "/clusters", 200)
-	assert.Contains(t, body, `<form class="realm" method="post" action="/realm" hx-post="/realm" hx-trigger="change" hx-swap="none">`)
-	assert.Contains(t, body, `<select id="realm-sel" name="realm" aria-label="Realm"><option value="" selected>all realms</option></select>`)
-	assert.Contains(t, body, `name="csrf" value="`+ts.csrf+`"`)
-	pgFillStore(ts.st)
-	body = pgBody(t, ts, "/clusters/sind/dev", 200)
-	assert.Contains(t, body, `<option value="sind" selected>sind · 2</option>`)
-	assert.Contains(t, body, `<option value="ci">ci · 1</option>`)
-	assert.Contains(t, body, `<input type="hidden" name="next" value="/clusters">`, "a cluster page returns to the clusters")
-	// A realm that the snapshot does not hold yet is still the realm shown.
-	body = pgBody(t, ts, "/nodes?realm=future", 200)
-	assert.Contains(t, body, `<option value="future" selected>future</option>`)
-	assert.Contains(t, body, `value="/nodes"`)
 }
 
 func TestPgRail(t *testing.T) {

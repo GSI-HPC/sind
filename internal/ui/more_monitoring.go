@@ -131,10 +131,7 @@ func moreMonitoringCount(sn store.Snapshot) NavCount {
 
 // moreMonitoringLoad fills the data of the Monitoring page.
 func moreMonitoringLoad(v *View) error {
-	realms, err := moreRealms(v)
-	if err != nil {
-		return err
-	}
+	realms := moreRealms(v)
 	d := moreMonitoringData{Multi: len(realms) > 1, Realm: v.Params.Get("realm")}
 	d.NewURL = moreDialogURL("create-cluster", "realm", d.Realm)
 	if len(realms) == 0 {

@@ -473,8 +473,7 @@ func TestMoreListPagesReadTheRealmCookie(t *testing.T) {
 		r.AddCookie(ts.cookie)
 		r.AddCookie(&http.Cookie{Name: "sind_realm", Value: "ci"})
 		w := ts.do(r)
-		require.Equal(t, http.StatusOK, w.Code, path)
-		assert.Contains(t, w.Body.String(), `<option value="ci" selected>`, path)
-		assert.Contains(t, w.Body.String(), "realm=ci", path)
+		require.Equal(t, http.StatusFound, w.Code, path)
+		assert.Equal(t, path+"?realm=ci", w.Header().Get("Location"), path)
 	}
 }

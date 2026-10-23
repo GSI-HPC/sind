@@ -117,11 +117,11 @@ func TestEnvKeepsValues(t *testing.T) {
 }
 
 func TestDefaultRegistryHasTheShell(t *testing.T) {
-	var pages []string
-	for _, p := range defaultRegistry.pages {
-		pages = append(pages, p.Name)
+	var patterns []string
+	for _, rt := range defaultRegistry.routes {
+		patterns = append(patterns, rt.Pattern)
 	}
-	assert.Contains(t, pages, "overview")
+	assert.Contains(t, patterns, "GET /{$}", "the Overview")
 	for _, name := range []string{"rail", "tasks"} {
 		f, ok := defaultRegistry.fragments[name]
 		require.True(t, ok, name)

@@ -3,7 +3,7 @@
 {{/* page-more-topology is the Topology page. */}}
 {{define "page-more-topology"}}
 <div class="head"><div class="t"><h1>Topology</h1>
-  <div class="sub"><span>From this host through the mesh of a realm to each cluster network and node. sind publishes no ports: the host reaches the nodes by their addresses.</span></div></div></div>
+  <div class="sub">{{template "pg-realm-scope" .}}<span>From this host through the mesh of a realm to each cluster network and node. sind publishes no ports: the host reaches the nodes by their addresses.</span></div></div></div>
 <div class="stack" id="more-topology" hx-swap="morph:innerHTML" sse-swap="more-topology">{{fragment "more-topology" .}}</div>
 {{end}}
 

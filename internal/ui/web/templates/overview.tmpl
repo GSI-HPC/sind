@@ -13,7 +13,7 @@ what needs the user, and the latest runs. Each part is a fragment. */}}
 
 {{define "pg-overview-head"}}{{with .Data}}
 <div class="head"><div class="t"><h1>Overview</h1>
-  <div class="sub"><span>{{.RealmsText}}{{if .Realm}}, showing <b class="mono">{{.Realm}}</b> <a href="/">Show all</a>{{end}}</span>
+  <div class="sub"><span>{{.RealmsText}}</span>{{template "pg-realm-scope" $}}
     <span>{{.ClustersText}} · {{.NodesText}}</span>
     {{if .Problems}}<span class="pill bad nodot">{{.ProblemsText}}</span>{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>

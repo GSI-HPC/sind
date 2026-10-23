@@ -3,7 +3,7 @@
 {{/* page-more-mesh is the Mesh and DNS page. */}}
 {{define "page-more-mesh"}}
 <div class="head"><div class="t"><h1>Mesh and DNS</h1>
-  <div class="sub"><span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
+  <div class="sub">{{template "pg-realm-scope" .}}<span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
 <div class="stack" id="more-mesh" hx-swap="morph:innerHTML" sse-swap="more-mesh">{{fragment "more-mesh" .}}</div>
 {{end}}
 

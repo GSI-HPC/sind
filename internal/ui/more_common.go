@@ -56,19 +56,17 @@ func moreDockerDown(d store.DockerState) string {
 }
 
 // moreRealms returns the realms a page shows: the one named by ?realm=, or
-// every realm. An unknown realm is ErrNotFound.
-func moreRealms(v *View) ([]string, error) {
+// every realm. The page answers a realm that does not exist (pgRealmRoute),
+// so a live update keeps showing a realm whose last cluster went.
+func moreRealms(v *View) []string {
 	if r := v.Params.Get("realm"); r != "" {
-		if _, ok := v.Snap.Realm(r); !ok {
-			return nil, pgRealmMiss(v.Snap, navHref(v.Nav), r)
-		}
-		return []string{r}, nil
+		return []string{r}
 	}
 	names := make([]string, len(v.Snap.Realms))
 	for i, r := range v.Snap.Realms {
 		names[i] = r.Name
 	}
-	return names, nil
+	return names
 }
 
 // moreDialogURL is the address of a dialog of the actions part.

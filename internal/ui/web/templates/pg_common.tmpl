@@ -22,5 +22,10 @@ layer, and is a plain link without script. .Class holds btn modifiers. */}}
 {{/* pg-realm-filter lets a list switch to one realm; it takes the list. */}}
 {{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.Base}}?realm=">All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.Base}}?realm={{.Name}}">{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
 
+{{/* pg-realm-scope says which realm a page shows, with a link to the same
+page with all realms; it takes the view, and is empty on a page that shows
+every realm. */}}
+{{define "pg-realm-scope"}}{{with .PgRealmScope}}{{if .Realm}}<span class="pg-scope">Showing realm <b class="mono">{{.Realm}}</b> · <a href="{{.ShowAll}}">Show all</a></span>{{end}}{{end}}{{end}}
+
 {{/* pg-gone is what a page of a cluster or a node shows after it was deleted. */}}
 {{define "pg-gone"}}<div class="callout warn pg-gone"><b>{{.}}</b> no longer exists. Someone may have deleted it. <a href="/clusters">Back to the clusters</a></div>{{end}}

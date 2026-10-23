@@ -59,10 +59,7 @@ type moreExternal struct {
 
 // moreMeshLoad fills the data of the Mesh and DNS page from the snapshot.
 func moreMeshLoad(v *View) error {
-	realms, err := moreRealms(v)
-	if err != nil {
-		return err
-	}
+	realms := moreRealms(v)
 	d := moreMeshData{Multi: len(realms) > 1}
 	if len(realms) == 0 {
 		d.Notice = moreNoRealms(v.Snap.Docker)

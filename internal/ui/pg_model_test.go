@@ -200,8 +200,11 @@ func TestPgRealmNames(t *testing.T) {
 	assert.Equal(t, []string{"a", "b", "c2", "c10"}, pgRealmNames(sn, ""))
 	assert.Equal(t, []string{"zz"}, pgRealmNames(sn, "zz"))
 	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "cluster"}))
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "run"}))
 	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "nodes"}))
-	assert.Equal(t, "/mesh", pgRealmNext(&View{Page: "mesh"}))
+	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "node"}))
+	assert.Equal(t, "/mesh", pgRealmNext(&View{Page: "more-mesh"}))
+	assert.Equal(t, "/", pgRealmNext(&View{Page: "overview"}))
 }
 
 func TestPgClusterTopics(t *testing.T) {

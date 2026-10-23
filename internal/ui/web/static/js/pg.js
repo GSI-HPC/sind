@@ -80,7 +80,50 @@
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {});
   }
 
+  // realmPicker makes the realm picker of the top bar safe for the keyboard:
+  // a pick of the mouse, or of the list that the keyboard opened, applies at
+  // once; the arrow keys on the closed list only browse it, and Enter, or
+  // the focus leaving, applies the realm they reached. On Apple systems the
+  // arrow keys open the list, as Space does elsewhere.
+  function realmPicker() {
+    const form = document.querySelector('form[data-pg-realm]');
+    if (!form) return;
+    const sel = form.querySelector('select');
+    const hint = form.querySelector('[data-pg-realm-hint]');
+    const start = sel.value;
+    const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    const arrowsOpen = /mac|iphone|ipad|ipod/i.test(platform);
+    let browsing = false;
+    let applied = false;
+    const apply = () => {
+      if (applied || sel.value === start) return;
+      applied = true;
+      form.requestSubmit();
+    };
+    sel.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); apply(); return; }
+      if (ev.key === 'Escape' && browsing) {
+        sel.value = start;
+        hint.textContent = '';
+        browsing = false;
+        return;
+      }
+      // Space, Alt+arrow and F4 open the list, where a pick is a choice.
+      const arrow = /^Arrow(Up|Down)$/.test(ev.key);
+      const opens = ev.key === ' ' || ev.key === 'F4' || (arrow && (ev.altKey || arrowsOpen));
+      browsing = !opens && ev.key !== 'Tab' && ev.key !== 'Shift' && ev.key !== 'Escape';
+    });
+    sel.addEventListener('pointerdown', () => { browsing = false; });
+    sel.addEventListener('change', () => {
+      if (!browsing) { apply(); return; }
+      const name = sel.value ? 'realm ' + sel.value : 'all realms';
+      hint.textContent = sel.value === start ? '' : 'Press Enter to show ' + name + '.';
+    });
+    sel.addEventListener('blur', apply);
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    realmPicker();
     document.addEventListener('change', ev => {
       const t = ev.target;
       if (t.matches('input[data-pg-sel]')) {

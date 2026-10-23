@@ -41,7 +41,7 @@ If `sind ui` stopped, start it again. A new `sind ui` does not know the old tab,
 
 ## A page says Not found
 
-The page names the address and says what is missing: a realm, a cluster, a node, a tab or a task. It offers the closest match first, such as a cluster of the same name in another realm, or a node with a similar name. Then it offers the list that holds what you asked for. A cluster or node that is gone was most likely deleted. sind ui keeps a task only until you dismiss its card or sind ui stops; **Activity** lists the runs of the activity log. An address of a cluster without its realm, such as `/clusters/dev`, opens that cluster when only one realm has it.
+The page names the address and says what is missing: a realm, a cluster, a node, a tab or a task. It offers the closest match first, such as a cluster of the same name in another realm, or a node with a similar name. Then it offers the list that holds what you asked for. A cluster or node that is gone was most likely deleted. sind ui keeps a task only until you dismiss its card or sind ui stops; **Activity** lists the runs of the activity log. An address of a cluster without its realm, such as `/clusters/dev`, opens that cluster when only one realm has it. A `?realm=` that names no realm offers the realms with a similar name.
 
 ## Opened by another host name
 

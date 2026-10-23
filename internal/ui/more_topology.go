@@ -236,10 +236,7 @@ func moreTopologyOf(sn store.Snapshot, realm string) (moreTopology, bool) {
 
 // moreTopologyLoad fills the data of the Topology page.
 func moreTopologyLoad(v *View) error {
-	realms, err := moreRealms(v)
-	if err != nil {
-		return err
-	}
+	realms := moreRealms(v)
 	d := moreTopoData{}
 	if len(realms) == 0 {
 		d.Notice = moreNoRealms(v.Snap.Docker)

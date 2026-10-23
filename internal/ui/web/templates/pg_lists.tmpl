@@ -6,7 +6,7 @@ fragment, so that the head follows the realm that the page shows. */}}
 {{define "page-nodes"}}<div hx-swap="morph:innerHTML" sse-swap="pg-nodes-table">{{fragment "pg-nodes-table" .}}</div>{{end}}
 
 {{define "pg-clusters-table"}}{{with .Data}}{{$d := .}}
-<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">Every cluster of {{if .Realm}}realm <b class="mono">{{.Realm}}</b>{{else}}every realm{{end}}. sind finds them by their Docker labels.</div></div>
+<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every cluster of every realm. {{end}}sind finds them by their Docker labels.</span></div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{template "pg-realm-filter" .}}
 <section class="panel" data-say="{{len .Clusters}} {{if eq (len .Clusters) 1}}cluster{{else}}clusters{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><div class="tw"><table><thead><tr><th>Name</th>{{if not .Realm}}<th>Realm</th>{{end}}<th>State</th><th>Slurm</th><th class="num">Nodes</th><th>Roles</th><th>Monitoring</th><th></th></tr></thead><tbody>
@@ -19,7 +19,7 @@ fragment, so that the head follows the realm that the page shows. */}}
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
 {{define "pg-nodes-table"}}{{with .Data}}{{$d := .}}
-<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">Every node of {{if .Realm}}realm <b class="mono">{{.Realm}}</b>{{else}}every realm{{end}}. A node's name is its short name and its cluster, as sind's commands take it.</div></div></div>
+<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every node of every realm. {{end}}A node's name is its short name and its cluster, as sind's commands take it.</span></div></div></div>
 {{template "pg-realm-filter" .}}
 <section class="panel" data-say="{{len .Nodes}} {{if eq (len .Nodes) 1}}node{{else}}nodes{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><div class="tw"><table><thead><tr><th>Node</th><th>Cluster</th>{{if not .Realm}}<th>Realm</th>{{end}}<th>Role</th><th>State</th><th>IP</th><th>Issues</th></tr></thead><tbody>
 {{range .Nodes}}<tr class="click" data-href="{{.Link}}"><td class="mono"><a href="{{.Link}}"><b>{{.Arg}}</b></a></td><td><a href="{{.ClusterLink}}">{{.Cluster}}</a></td>{{if not $d.Realm}}<td class="mono">{{.Realm}}</td>{{end}}

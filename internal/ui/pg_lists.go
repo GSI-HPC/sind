@@ -23,11 +23,10 @@ func pgRegister(r *Registry) {
 		r.AddFragment(f)
 	}
 	// The list pages read the realm cookie, which a Page cannot see, so
-	// they are routes; the Overview and the pages of one cluster or node
+	// they are routes, as the Overview is; the pages of one cluster or node
 	// are pages.
 	r.AddRoute(pgListRoute(pgClustersPage))
 	r.AddRoute(pgListRoute(pgNodesPage))
-	r.AddRoute(pgRealmRoute())
 	r.AddPage(pgClusterPage)
 	r.AddRoute(pgClusterByNameRoute())
 	r.AddPage(pgNodePage)

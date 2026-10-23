@@ -12,12 +12,13 @@ import (
 	"github.com/GSI-HPC/sind/pkg/doctor"
 )
 
-func init() { RegisterPage(overviewPage) }
+func init() { RegisterRoute(pgRealmRoute(overviewPage, false)) }
 
-// overviewPage is the Overview page, template overview.tmpl. It spans every
-// realm; ?realm= narrows it to one, which the realms panel links to. The
-// realm cookie does not apply: the page is the Overview group of the rail,
-// not the Realm group.
+// overviewPage is the Overview page, template overview.tmpl, served by
+// pgRealmRoute. It spans every realm; ?realm= narrows it to one, which the
+// realms panel and the realm picker link to, and which the realm cookie
+// remembers. Without ?realm= it shows every realm, whatever the cookie
+// says: the page is the Overview group of the rail, not the Realm group.
 var overviewPage = Page{
 	Name:      "overview",
 	Pattern:   "GET /{$}",
