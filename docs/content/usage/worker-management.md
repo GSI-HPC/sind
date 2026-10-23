@@ -18,8 +18,8 @@ sind create worker [CLUSTER] [FLAGS]
 {{< ui >}}
 
 1. On the page of the cluster, press **Add workers…**.
-2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker.
-3. Press **Add**. The task dock shows the progress of the run.
+2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker. The dialog shows the size and the names of the new workers, such as `3 × 2 CPUs, 1 GiB: worker-6 … worker-8`.
+3. Press the button, such as **Add 3 workers**. The task dock shows the progress of the run.
 
 {{< uishot "dialog-create-worker" >}}
 

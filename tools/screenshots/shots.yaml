@@ -159,7 +159,7 @@ shots:
 
   # The shots of the docs' steps for the web UI (shortcode uishot).
   - name: dialog-create-worker
-    alt: "The Add workers dialog: how many workers, their CPUs and memory, and the command it runs"
+    alt: "The Add workers dialog: how many workers, their size and names, and the command it runs"
     path: /clusters/sind/dev
     steps:
       - dialog: create-worker?realm=sind&cluster=dev

@@ -45,6 +45,8 @@ type actState struct {
 	mkdirAll func(path string) error
 	// images knows the Slurm releases of images; nil knows none.
 	images *actImages
+	// workers knows the sizes of worker containers; nil knows none.
+	workers *actWorkers
 }
 
 // The seams of Setup; tests replace them.
@@ -118,9 +120,10 @@ func actService() Service {
 					}
 				},
 			})
+			client := docker.NewClient(env.Exec)
 			env.Put(actKey{}, &actState{
 				starter: r, home: home, configDir: filepath.Join(stateDir, "ui", "configs"), writeFile: actSaveFile,
-				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(docker.NewClient(env.Exec)),
+				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(client), workers: newActWorkers(client.InspectContainer),
 			})
 			return nil
 		},

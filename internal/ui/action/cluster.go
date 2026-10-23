@@ -3,6 +3,7 @@
 package action
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -42,23 +43,87 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	if count != 1 {
 		words = append(words, "--count", fmt.Sprint(count))
 	}
+	nodes := c.Snap.ClusterNodes(realm, cl.Name)
+	size := templateSize(c, nodes, c.Snap.Status(realm, cl.Name))
 	if s := strings.TrimSpace(f.Get("cpus")); s != "" {
 		cpus, err := number(f, "cpus", "CPUs", 1, maxCPUs, -1)
 		if err != nil {
 			return Command{}, err
 		}
 		words = append(words, "--cpus", fmt.Sprint(cpus))
+		size.cpus = cpus
 	}
 	if m := strings.TrimSpace(f.Get("memory")); m != "" {
 		if err := config.CheckMemory("memory", m); err != nil {
 			return Command{}, fmt.Errorf("memory: %w", err)
 		}
 		words = append(words, "--memory", m)
+		size.memoryMB, _ = config.MemoryMB(m) // checked
 	}
 	cmd := NewCommand(sindArgv(realm, words...)...)
-	added := nextWorkers(c.Snap.ClusterNodes(realm, cl.Name), count)
-	cmd.Notes = append(cmd.Notes, fmt.Sprintf("Adds %s and tells slurmctld about them.", strings.Join(nodeWords(cl.Name, added), " ")))
+	added := nextWorkers(nodes, count)
+	names := added[0]
+	if count > 1 {
+		names += " … " + added[count-1]
+	}
+	cmd.Summary = fmt.Sprintf("%d × %s, %s: %s", count, size.cpusLabel(), size.memoryLabel(), names)
+	for _, n := range added {
+		cmd.Nodes = append(cmd.Nodes, PlannedNode{Short: n, Role: string(config.RoleWorker)})
+	}
+	cmd.OK = "Add " + countWorkers(added)
+	cmd.Notes = append(cmd.Notes, strings.TrimSpace(size.why+" sind adds the workers, then tells slurmctld about them."))
 	return cmd, nil
+}
+
+// workerSize is the size that new workers get where the form leaves it
+// out, and where it comes from.
+type workerSize struct {
+	// cpus and memoryMB are 0 where sind ui does not know them.
+	cpus, memoryMB int
+	// of is the worker that new workers are like, "" for none.
+	of string
+	// why says why sind ui does not know the size, "" where it does.
+	why string
+}
+
+// cpusLabel writes the CPUs of a new worker.
+func (s workerSize) cpusLabel() string {
+	if s.cpus == 0 {
+		return "the CPUs of " + s.of
+	}
+	return fmt.Sprintf("%d CPU%s", s.cpus, plural(s.cpus))
+}
+
+// memoryLabel writes the memory of a new worker.
+func (s workerSize) memoryLabel() string {
+	if s.memoryMB == 0 {
+		return "the memory of " + s.of
+	}
+	return MemoryLabel(s.memoryMB)
+}
+
+// templateSize returns the size of the newest worker of nodes, of the
+// cluster with the status st, which new workers take, or sind's defaults
+// for a cluster without a worker. A limit that the worker has none of is
+// sind's default too, as sind create worker gives it.
+func templateSize(c Context, nodes []cluster.NodeSummary, st *cluster.Status) workerSize {
+	defaultMB, _ := config.MemoryMB(config.DefaultMemory) // a constant
+	newest, ok := NewestWorker(nodes, st)
+	if !ok {
+		return workerSize{cpus: config.DefaultCPUs, memoryMB: defaultMB}
+	}
+	size := workerSize{of: ShortName(newest)}
+	if c.Worker == nil {
+		return size
+	}
+	facts := c.Worker(newest.Container)
+	if facts.Err != "" {
+		size.why = "sind ui cannot look at the size of " + size.of + ": " + facts.Err + "."
+		return size
+	}
+	size.cpus = cmp.Or(facts.CPUs, config.DefaultCPUs)
+	size.memoryMB = cmp.Or(int(facts.Memory>>20), defaultMB)
+	return size
 }
 
 // plural is the "s" of a count other than one.

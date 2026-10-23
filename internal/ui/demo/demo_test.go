@@ -206,3 +206,21 @@ func TestDemo_Images(t *testing.T) {
 	_, err = DiscoverVersion(ctx, "elsewhere:1")
 	assert.ErrorContains(t, err, "the demo pulls nothing")
 }
+
+func TestDemo_InspectContainer(t *testing.T) {
+	d := New(store.New(), true)
+	ctx := t.Context()
+	info, err := d.InspectContainer(ctx, "sind-dev-worker-5")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2e9), info.HostConfig.NanoCPUs)
+	assert.Equal(t, int64(1<<30), info.HostConfig.Memory)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:"+slurmNew, info.ImageRef)
+
+	info, err = d.InspectContainer(ctx, "sind-legacy-worker-0")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1e9), info.HostConfig.NanoCPUs, "sind's defaults")
+	assert.Equal(t, int64(512<<20), info.HostConfig.Memory)
+
+	_, err = d.InspectContainer(ctx, "sind-dev-worker-99")
+	assert.EqualError(t, err, "no such container: sind-dev-worker-99")
+}

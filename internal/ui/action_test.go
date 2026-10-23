@@ -23,6 +23,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,7 +167,9 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-cluster", "realm=ci&name=big", []string{`value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`, `<option value="ci"></option><option value="sind"></option>`}},
 		{"create-cluster", "name=dev", []string{`value="dev"`}},
 		{"create-cluster", "dir=/scratch", []string{`name="name" value="hpc"`, `value="/scratch"`}},
-		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`}},
+		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`, "of worker-1, the newest worker", `placeholder="as worker-1"`,
+			`<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>`, `hx-indicator="#act-checking"`}},
+		{"create-worker", "cluster=default", []string{"sind&#39;s sizes and the image of the controller", `placeholder="sind&#39;s default"`}},
 		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Deletes cluster dev of realm sind. This cannot be undone.", `Type <b class="mono" id="act-confirm-word">dev</b> to confirm`,
 			`autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"`, `btn danger solid`, `disabled aria-describedby="act-why">Delete cluster<kbd`}},
 		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, `id="act-confirm-word">worker-1</b>`}},
@@ -372,6 +375,21 @@ func TestActConnect_ProblemsAtTheirFields(t *testing.T) {
 	body = f.post("/actions/disconnect/preview", actForm("realm", "No", "container", "kind-cp")).Body.String()
 	assert.Contains(t, body, `<div class="callout bad">realm: use `)
 	assert.NotContains(t, body, "act-err-realm")
+}
+
+func TestActPreview_AddWorkersShowsTheirSize(t *testing.T) {
+	f := newActFixture(t)
+	f.state.workers = newActWorkers(func(_ context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
+		info := &docker.ContainerInfo{Name: name}
+		info.HostConfig.NanoCPUs, info.HostConfig.Memory = 2e9, 1<<30
+		return info, nil
+	})
+
+	body := f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "3")).Body.String()
+	assert.Contains(t, body, `<p class="act-sum">3 × 2 CPUs, 1 GiB: worker-2 … worker-4</p>`)
+	assert.Contains(t, body, `>Add 3 workers<kbd`)
+	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "1", "memory", "2g")).Body.String()
+	assert.Contains(t, body, `<p class="act-sum">1 × 2 CPUs, 2 GiB: worker-2</p>`)
 }
 
 func TestActPreview_Warnings(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -201,17 +202,77 @@ func TestBuildCreateWorker(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "create", "worker", "dev", "--count", "2"}, cmd.Argv)
 	assert.Equal(t, "sind create worker dev --count 2", cmd.Display)
-	assert.Equal(t, []string{"Adds worker-[4-5].dev and tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, []string{"sind adds the workers, then tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, "2 × the CPUs of worker-3, the memory of worker-3: worker-4 … worker-5", cmd.Summary)
+	assert.Equal(t, []PlannedNode{{Short: "worker-4", Role: "worker"}, {Short: "worker-5", Role: "worker"}}, cmd.Nodes)
+	assert.Equal(t, "Add 2 workers", cmd.OK)
 
 	cmd, err = build(t, "create-worker", form("realm", "ci", "cluster", "ci1", "count", "1", "cpus", "4", "memory", "2g"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci create worker ci1 --cpus 4 --memory 2g", cmd.Display)
-	assert.Equal(t, []string{"Adds worker-1.ci1 and tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, "1 × 4 CPUs, 2 GiB: worker-1", cmd.Summary)
+	assert.Equal(t, "Add worker-1", cmd.OK)
 
 	cmd, err = build(t, "create-worker", form("cluster", "default", "count", "1"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind create worker", cmd.Display)
-	assert.Equal(t, []string{"Adds worker-1 and tells slurmctld about them."}, cmd.Notes)
+}
+
+func TestBuildCreateWorker_Sizes(t *testing.T) {
+	st := testStore()
+	c := st.ctx()
+	var asked []string
+	c.Worker = func(container string) WorkerFacts {
+		asked = append(asked, container)
+		if container == "sind-default-worker-0" {
+			return WorkerFacts{Err: "docker: gone"}
+		}
+		return WorkerFacts{CPUs: 1, Memory: 1536 << 20}
+	}
+	a, _ := Lookup("create-worker")
+
+	cmd, err := a.Build(form("cluster", "dev", "count", "3"), c)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sind-dev-worker-3"}, asked, "the newest worker")
+	assert.Equal(t, "3 × 1 CPU, 1.5 GiB: worker-4 … worker-6", cmd.Summary)
+	cmd, err = a.Build(form("cluster", "dev", "count", "1", "cpus", "2"), c)
+	require.NoError(t, err)
+	assert.Equal(t, "1 × 2 CPUs, 1.5 GiB: worker-4", cmd.Summary)
+
+	cmd, err = a.Build(form("cluster", "default", "count", "1"), c)
+	require.NoError(t, err)
+	assert.Equal(t, "1 × the CPUs of worker-0, the memory of worker-0: worker-1", cmd.Summary)
+	assert.Equal(t, []string{"sind ui cannot look at the size of worker-0: docker: gone. sind adds the workers, then tells slurmctld about them."}, cmd.Notes)
+
+	// A worker without limits gives new workers sind's defaults, as sind
+	// does.
+	c.Worker = func(string) WorkerFacts { return WorkerFacts{} }
+	cmd, err = a.Build(form("cluster", "dev", "count", "1"), c)
+	require.NoError(t, err)
+	assert.Equal(t, "1 × 1 CPU, 512 MiB: worker-4", cmd.Summary)
+
+	// New workers of a managed cluster are like its newest managed worker.
+	st.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{
+		{Name: "controller.dev", Role: config.RoleController, Managed: true},
+		{Name: "worker-2.dev", Role: config.RoleWorker, Managed: true},
+		{Name: "worker-3.dev", Role: config.RoleWorker, Managed: false},
+	}})
+	asked = nil
+	c = st.ctx()
+	c.Worker = func(container string) WorkerFacts {
+		asked = append(asked, container)
+		return WorkerFacts{CPUs: 2, Memory: 1 << 30}
+	}
+	cmd, err = a.Build(form("cluster", "dev", "count", "1"), c)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sind-dev-worker-2"}, asked)
+	assert.Equal(t, "1 × 2 CPUs, 1 GiB: worker-4", cmd.Summary, "the names still follow the highest number")
+
+	// A cluster without a worker takes sind's defaults.
+	st.SetNodes("ci", nil)
+	cmd, err = a.Build(form("realm", "ci", "cluster", "ci1", "count", "2"), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, "2 × 1 CPU, 512 MiB: worker-0 … worker-1", cmd.Summary)
 }
 
 func TestBuildCreateWorker_Errors(t *testing.T) {
@@ -566,6 +627,33 @@ func TestNodeNames(t *testing.T) {
 	assert.Equal(t, []string{"a", "b", "c"}, nodeNames(form("nodes", "a, b", "nodes", "b\tc\n")))
 	assert.Empty(t, nodeNames(form()))
 	assert.True(t, strings.HasPrefix(ShortName(node("dev", "worker-0", config.RoleWorker)), "worker-0"))
+}
+
+func TestNewestWorker(t *testing.T) {
+	nodes := []cluster.NodeSummary{
+		node("dev", "controller", config.RoleController), node("dev", "worker-0", config.RoleWorker),
+		node("dev", "worker-1", config.RoleWorker), node("dev", "worker-2", config.RoleWorker),
+	}
+	short := func(st *cluster.Status) string {
+		t.Helper()
+		n, ok := NewestWorker(nodes, st)
+		require.True(t, ok)
+		return ShortName(n)
+	}
+	status := func(ctlManaged bool, managed ...string) *cluster.Status {
+		st := &cluster.Status{Nodes: []*cluster.NodeStatus{{Name: "controller.dev", Role: config.RoleController, Managed: ctlManaged}}}
+		for _, w := range []string{"worker-0", "worker-1", "worker-2"} {
+			st.Nodes = append(st.Nodes, &cluster.NodeStatus{Name: w + ".dev", Role: config.RoleWorker, Managed: slices.Contains(managed, w)})
+		}
+		return st
+	}
+	assert.Equal(t, "worker-2", short(nil), "without a status, the highest number")
+	assert.Equal(t, "worker-2", short(&cluster.Status{}), "a status without the controller")
+	assert.Equal(t, "worker-1", short(status(true, "worker-0", "worker-1")), "the newest managed worker")
+	assert.Equal(t, "worker-2", short(status(false, "worker-0", "worker-1")), "the newest unmanaged worker")
+	assert.Equal(t, "worker-2", short(status(true)), "no managed worker: the newest of all")
+	_, ok := NewestWorker(nodes[:1], status(true))
+	assert.False(t, ok)
 }
 
 func TestNextWorkers(t *testing.T) {

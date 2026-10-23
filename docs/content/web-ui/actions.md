@@ -14,7 +14,7 @@ Action buttons open a dialog. The dialog shows:
 - a **Copy** button for that command;
 - whether you can undo the action.
 
-Press the button of the dialog, such as **Create**, **Reboot worker-0** or **Delete cluster dev**, or press Ctrl+Enter (Cmd+Enter on macOS), to start the command. The button names what it changes. Enter in a field does not start it, unless the dialog has only that field, such as the name to type for a delete. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
+Press the button of the dialog, such as **Create**, **Add 3 workers**, **Reboot worker-0** or **Delete cluster dev**, or press Ctrl+Enter (Cmd+Enter on macOS), to start the command. The button names what it changes. Enter in a field does not start it, unless the dialog has only that field, such as the name to type for a delete. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
 
 When the command starts, the dialog closes and you stay on your page. A notice names the command and links to its run page, and the task dock shows its progress, so you can start the next action at once. **New cluster** opens the run page of its command instead, and so does **Delete** on the page of the cluster that it deletes, or on the page of one of its nodes.
 
@@ -54,6 +54,12 @@ The plan lists the images of the nodes with their Slurm release, which sind ui r
 **Edit YAML**, at the top of the plan, puts the whole config into an editor, also what the form has no field for, such as named Slurm config fragments or `defaults` capabilities. **Start from YAML…**, below the name, opens the editor empty: paste a config there, press **Open a file…**, or drop a file on it, such as a config that you keep in git (at most 64 KiB). The editor takes the place of the form, which stays locked until you choose **Discard YAML edits**; the run options still apply. Name and Realm stay beside the editor: they show the name and the realm of the YAML, and a change of either goes into it, as a new line if the YAML has none. **Discard YAML edits** puts back the name and the realm of the form. A YAML without a name makes the cluster `default`, as sind does. The plan follows the YAML, and sind ui saves it as you wrote it, with your comments. A missing host directory of the YAML is created first. **Copy YAML**, next to Edit YAML, copies the config, to keep it in a file of your own.
 
 {{< uishot "dialog-create-cluster" "The New cluster dialog: the form on the left, the plan on the right." >}}
+
+## Add workers
+
+**Add workers** shows the size and the names of the new workers, such as `3 × 2 CPUs, 1 GiB: worker-6 … worker-8`. New workers copy the newest worker of the cluster that is managed like its controller, which sind ui reads from its container; the CPUs and memory fields name that worker in grey. A cluster without workers gets sind's defaults, and so does a limit that the newest worker has none of. The button names what it adds: **Add worker-6** or **Add 3 workers**.
+
+While the dialog checks a change of its fields, its footer shows **Checking…**.
 
 ## Power
 

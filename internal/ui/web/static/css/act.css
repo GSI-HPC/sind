@@ -53,11 +53,14 @@
 .scrim fieldset.act-danger legend{color:var(--bad);padding:0 4px;margin-bottom:0}
 .scrim .act-reason{display:none;margin-top:8px}
 .scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
-/* What a delete removes and keeps. */
+/* What a delete removes and keeps, and the line about new workers. */
 .scrim .act-list ul{margin:4px 0 0;padding-left:18px}
 .scrim .act-list li{overflow-wrap:anywhere}
-/* Why the typed name does not confirm yet. */
+.scrim .act-sum{margin:0;font-weight:500}
+/* Why the typed name does not confirm yet, and the preview at work. */
 .scrim .act-why:empty{display:none}
+.scrim .act-checking{margin-right:auto;align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
+.scrim .act-checking.htmx-request{visibility:visible}
 .scrim .err{font-size:var(--t-sm);color:var(--bad)}
 .scrim .err:empty{display:none}
 .scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}

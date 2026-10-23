@@ -183,6 +183,18 @@ type Context struct {
 	Stat func(name string) (fs.FileInfo, error)
 	// Image tells what sind ui knows of an image; nil knows nothing.
 	Image func(image string) ImageFacts
+	// Worker tells the size of a worker container; nil knows nothing.
+	Worker func(container string) WorkerFacts
+}
+
+// WorkerFacts is what sind ui knows of the size of a worker container.
+type WorkerFacts struct {
+	// CPUs is its CPU limit, 0 for none; Memory its memory limit in bytes,
+	// 0 for none.
+	CPUs   int
+	Memory int64
+	// Err says why sind ui cannot look at it.
+	Err string
 }
 
 // Action is a change that a dialog makes by running one command.

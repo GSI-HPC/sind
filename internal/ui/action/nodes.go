@@ -85,7 +85,7 @@ func nodeWords(clusterName string, shorts []string) []string {
 // nodes get: worker-N upward from the highest number there is.
 func nextWorkers(nodes []cluster.NodeSummary, count int) []string {
 	next := 0
-	if n, ok := NewestWorker(nodes); ok {
+	if n, ok := highestWorker(nodes); ok {
 		next = workerNumber(n) + 1
 	}
 	out := make([]string, count)
@@ -95,9 +95,42 @@ func nextWorkers(nodes []cluster.NodeSummary, count int) []string {
 	return out
 }
 
-// NewestWorker returns the worker of nodes with the highest number, which
-// new workers take their image and size from.
-func NewestWorker(nodes []cluster.NodeSummary) (cluster.NodeSummary, bool) {
+// NewestWorker returns the worker of nodes that new workers take their
+// image and size from, as sind create worker picks it: the one with the
+// highest number among the workers that are managed like the controller,
+// as the status st says, or among all workers where none is or st, which
+// may be nil, does not say.
+func NewestWorker(nodes []cluster.NodeSummary, st *cluster.Status) (cluster.NodeSummary, bool) {
+	newest, ok := highestWorker(nodes)
+	if !ok || st == nil {
+		return newest, ok
+	}
+	managed := map[string]bool{}
+	ctlSeen, want := false, false
+	for _, n := range st.Nodes {
+		short, _, _ := strings.Cut(n.Name, ".")
+		managed[short] = n.Managed
+		if n.Role == config.RoleController && !ctlSeen {
+			ctlSeen, want = true, n.Managed
+		}
+	}
+	if !ctlSeen {
+		return newest, true
+	}
+	var alike []cluster.NodeSummary
+	for _, n := range nodes {
+		if m, known := managed[ShortName(n)]; known && m == want {
+			alike = append(alike, n)
+		}
+	}
+	if w, ok := highestWorker(alike); ok {
+		return w, true
+	}
+	return newest, true
+}
+
+// highestWorker returns the worker of nodes with the highest number.
+func highestWorker(nodes []cluster.NodeSummary) (cluster.NodeSummary, bool) {
 	var newest cluster.NodeSummary
 	found := false
 	for _, n := range nodes {

@@ -177,8 +177,11 @@ var actSpecs = map[string]actSpec{
 	"create-worker": {
 		OK: "Add", NeedsCluster: true,
 		Title: func(d *actDialog) string { return "Add workers to " + d.Cluster },
-		Lead: func(*actDialog) string {
-			return "New workers take the image, CPUs and memory of the newest worker, unless you change them."
+		Lead: func(d *actDialog) string {
+			if n, ok := action.NewestWorker(d.Snap.ClusterNodes(d.Realm, d.Cluster), d.Snap.Status(d.Realm, d.Cluster)); ok {
+				return "New workers take the image, CPUs and memory of " + action.ShortName(n) + ", the newest worker, unless you change them."
+			}
+			return "New workers take sind's sizes and the image of the controller, unless you change them."
 		},
 		Defaults: func(d *actDialog) {
 			d.def("count", "1")
@@ -746,6 +749,15 @@ func (d *actDialog) Val(field string) string { return d.Form.Get(field) }
 // only a draft can open the dialog with.
 func (d *actDialog) YAMLMode() bool { return d.Form.Get("yaml_on") != "" }
 
+// LikeNewest is the placeholder of a size of new workers: the newest
+// worker's, which they take when it is empty.
+func (d *actDialog) LikeNewest() string {
+	if n, ok := action.NewestWorker(d.Snap.ClusterNodes(d.Realm, d.Cluster), d.Snap.Status(d.Realm, d.Cluster)); ok {
+		return "as " + action.ShortName(n)
+	}
+	return "sind's default"
+}
+
 // Is reports whether the field has the value.
 func (d *actDialog) Is(field, value string) bool { return d.Form.Get(field) == value }
 
@@ -1182,6 +1194,9 @@ func actContext(r *http.Request, v *View, st *actState) action.Context {
 	c := action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir, Stat: st.stat}
 	if st.images != nil {
 		c.Image = func(image string) action.ImageFacts { return st.images.facts(r.Context(), image) }
+	}
+	if st.workers != nil {
+		c.Worker = func(container string) action.WorkerFacts { return st.workers.facts(r.Context(), container) }
 	}
 	return c
 }

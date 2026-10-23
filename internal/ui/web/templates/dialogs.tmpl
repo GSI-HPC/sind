@@ -39,7 +39,7 @@
       <span class="hint act-why" id="act-why" role="status"></span></div>{{end}}
   </div>
   {{end}}
-  <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+  <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{else}}<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
   <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
     <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
     <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
@@ -55,7 +55,7 @@ Ctrl+Enter, or Cmd+Enter on macOS, presses it. */}}
 {{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}{{if .Why}} aria-describedby="act-why"{{end}}>{{.Label}}<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
 
 {{define "act-preview-slot"}}<div id="act-preview" class="stack" hx-post="/actions/{{.ID}}/preview" hx-target="this" hx-swap="innerHTML"
-      hx-trigger="load, input from:closest form delay:150ms, change from:closest form"></div>{{end}}
+      hx-trigger="load, input from:closest form delay:150ms, change from:closest form"{{if not .Spec.Plan}} hx-indicator="#act-checking"{{end}}></div>{{end}}
 
 {{/* act-preview is the answer to a preview: the command, what to know about
 it, and the button and the parts of the dialog that depend on it. */}}
@@ -63,6 +63,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
 {{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
 {{with .Cmd.Goes}}<div class="callout bad act-list"><b>Goes</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
@@ -341,8 +342,8 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 {{define "act-dlg-create-worker"}}
 <div class="row">
   <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"></div>
-  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="as the newest worker" min="1"></div>
-  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="as the newest worker" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{.LikeNewest}}" min="1"></div>
+  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{.LikeNewest}}" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
 </div>
 {{end}}
 

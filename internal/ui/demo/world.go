@@ -3,6 +3,8 @@
 package demo
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
@@ -49,6 +52,9 @@ type clusterState struct {
 	users    []string
 	nodes    []*nodeState
 	nextHost int
+	// cpus and memory are the size of each node, 0 for sind's defaults.
+	cpus   int
+	memory int64
 }
 
 type nodeState struct {
@@ -171,6 +177,27 @@ func (w *World) clustersOf(realm string) []string {
 
 // Count returns the number of clusters of the realm.
 func (w *World) Count(realm string) int { return len(w.clustersOf(realm)) }
+
+// InspectContainer answers docker inspect for a node of the world: its
+// image and size.
+func (w *World) InspectContainer(_ context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, r := range w.realms {
+		for _, c := range r.clusters {
+			for _, n := range c.nodes {
+				if cluster.ContainerName(r.name, c.name, n.short) != name {
+					continue
+				}
+				info := &docker.ContainerInfo{Name: name, ImageRef: "ghcr.io/gsi-hpc/sind-node:" + c.slurm}
+				info.HostConfig.NanoCPUs = int64(cmp.Or(c.cpus, config.DefaultCPUs)) * 1e9
+				info.HostConfig.Memory = cmp.Or(c.memory, 512<<20)
+				return info, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no such container: %s", name)
+}
 
 // apply changes the world as a script says, for the realm of the node.
 func (w *World) apply(realmName, op string, n node) {
