@@ -12,18 +12,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
-	"github.com/spf13/afero"
 	"github.com/tailscale/hujson"
 
-	"github.com/GSI-HPC/sind/internal/atomicfile"
+	"github.com/GSI-HPC/go-clikit/fsutil"
 )
 
 // defaultIndent indents a file that has no members to copy from.
@@ -32,9 +33,18 @@ const defaultIndent = "  "
 // maxSymlinks bounds the symbolic links Load follows, as the kernel does.
 const maxSymlinks = 40
 
+// openBackup creates the file of a backup, which must not exist. A test
+// replaces it.
+var openBackup = func(name string, mode fs.FileMode) (io.WriteCloser, error) {
+	out, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // File is an editor configuration file loaded for editing.
 type File struct {
-	fs   afero.Fs
 	path string // the file itself, after symbolic links
 	key  string // the member that holds the servers: mcpServers or servers
 
@@ -59,23 +69,21 @@ type Server struct {
 // of the object key. A file that does not exist, or holds only whitespace,
 // loads as an empty configuration. A symbolic link is followed, so that
 // Save writes the file it points to rather than replacing the link.
-func Load(fsys afero.Fs, path, key string) (*File, error) {
-	path, err := resolve(fsys, path)
+func Load(path, key string) (*File, error) {
+	path, err := resolve(path)
 	if err != nil {
 		return nil, err
 	}
-	f := &File{fs: fsys, path: path, key: key, mode: 0o600, newline: "\n"}
-	data, err := afero.ReadFile(fsys, path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-	case err != nil:
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	default:
-		info, err := fsys.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", path, err)
+	f := &File{path: path, key: key, mode: 0o600, newline: "\n"}
+	var data []byte
+	info, err := os.Stat(path)
+	if err == nil {
+		if data, err = os.ReadFile(path); err == nil {
+			f.exists, f.mode, f.orig = true, info.Mode().Perm(), bytes.Clone(data)
 		}
-		f.exists, f.mode, f.orig = true, info.Mode().Perm(), bytes.Clone(data)
+	}
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	if bytes.Contains(data, []byte("\r\n")) {
 		f.newline = "\r\n"
@@ -121,23 +129,15 @@ func duplicate(obj *hujson.Object) string {
 	return ""
 }
 
-// resolve follows the symbolic links of path, if fsys has any, to the file
-// they point to, which need not exist.
-func resolve(fsys afero.Fs, path string) (string, error) {
-	lstater, ok := fsys.(afero.Lstater)
-	reader, _ := fsys.(afero.LinkReader)
-	if !ok || reader == nil {
-		return path, nil
-	}
+// resolve follows the symbolic links of path to the file they point to,
+// which need not exist.
+func resolve(path string) (string, error) {
 	for range maxSymlinks {
-		info, _, err := lstater.LstatIfPossible(path)
-		if errors.Is(err, fs.ErrNotExist) || (err == nil && info.Mode()&fs.ModeSymlink == 0) {
+		target, err := os.Readlink(path)
+		// EINVAL says that path is no link.
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.EINVAL) {
 			return path, nil
 		}
-		if err != nil {
-			return "", fmt.Errorf("reading %s: %w", path, err)
-		}
-		target, err := reader.ReadlinkIfPossible(path)
 		if err != nil {
 			return "", fmt.Errorf("reading %s: %w", path, err)
 		}
@@ -389,10 +389,10 @@ func (f *File) Save(now time.Time) (backup string, err error) {
 		if backup, err = f.backup(now); err != nil {
 			return "", err
 		}
-	} else if err := f.fs.MkdirAll(dir, 0o755); err != nil {
+	} else if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
-	if err := atomicfile.Write(f.fs, f.path, data, f.mode); err != nil {
+	if err := fsutil.WriteAtomic(f.path, data, f.mode); err != nil {
 		return backup, fmt.Errorf("writing %s: %w", f.path, err)
 	}
 	f.exists, f.orig = true, data
@@ -408,7 +408,7 @@ func (f *File) backup(now time.Time) (string, error) {
 		if n > 0 {
 			name = fmt.Sprintf("%s.%s-%d.bak", f.path, stamp, n)
 		}
-		out, err := f.fs.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, f.mode)
+		out, err := openBackup(name, f.mode)
 		if errors.Is(err, fs.ErrExist) {
 			continue
 		}
@@ -420,7 +420,7 @@ func (f *File) backup(now time.Time) (string, error) {
 			err = cerr
 		}
 		if err != nil {
-			_ = f.fs.Remove(name)
+			_ = os.Remove(name)
 			return "", fmt.Errorf("backing up %s: %w", f.path, err)
 		}
 		return name, nil
