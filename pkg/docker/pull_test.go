@@ -58,7 +58,7 @@ func work(t *testing.T, w *progresstest.Watcher) (end progress.Event, sizes []in
 func pullUnder(t *testing.T, result mock.Result) (*progresstest.Watcher, error) {
 	t.Helper()
 	ctx, w := progresstest.Watch(t.Context(), t)
-	ctx, step := progress.Start(ctx, progress.KindStep, "pull images", progress.WithFlags(progress.Fold), progress.Total(1))
+	ctx, step := progress.Start(ctx, progress.KindStep, "pull images", progress.Flagged(progress.FlagFold), progress.Total(1))
 	ctx, target := progress.Start(ctx, progress.KindTarget, "img:1", progress.Queued(), progress.Node("img:1"))
 	target.Run()
 	c := NewClient(&mock.Executor{OnCall: func([]string, string) mock.Result { return result }})
@@ -81,7 +81,7 @@ func TestPullImage_CountsLayers(t *testing.T) {
 	end, sizes := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{1, 2, 3}, sizes, "the size grows as layers are told of")
-	assert.Equal(t, progress.Items, end.Unit)
+	assert.Equal(t, progress.UnitItems, end.Unit)
 	assert.EqualValues(t, 3, end.Amount)
 	assert.EqualValues(t, 3, end.Size)
 	assert.Equal(t, progress.StatusOK, end.Status)
@@ -100,7 +100,7 @@ docker.io/library/busybox:latest
 	end, sizes := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{1}, sizes)
-	assert.Equal(t, progress.Items, end.Unit)
+	assert.Equal(t, progress.UnitItems, end.Unit)
 	assert.EqualValues(t, 1, end.Amount)
 	assert.EqualValues(t, 1, end.Size)
 }
@@ -169,7 +169,7 @@ func TestPullImage_AdvancesTheTarget(t *testing.T) {
 	var amounts []int64
 	for _, e := range capture.Events() {
 		if e.Type == progress.TypeAdvance {
-			assert.Equal(t, progress.Items, e.Unit)
+			assert.Equal(t, progress.UnitItems, e.Unit)
 			assert.NotZero(t, e.Size)
 			amounts = append(amounts, e.Amount)
 		}

@@ -96,7 +96,7 @@ func interrupted(ctx context.Context) error {
 // call plays a hidden docker call that waits for a slot of the client, runs
 // for d and ends with fail. A call that fails carries docker's exit code.
 func (p play) call(ctx context.Context, name string, d time.Duration, fail error) {
-	_, c := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.WithFlags(progress.Hidden))
+	_, c := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.Flagged(progress.FlagHidden))
 	p.pause(ctx, 15*time.Millisecond)
 	c.Run()
 	p.pause(ctx, d)
@@ -110,7 +110,7 @@ func (p play) call(ctx context.Context, name string, d time.Duration, fail error
 // preflight plays the hidden step preflight: the checks before anything is
 // made.
 func (p play) preflight(ctx context.Context) (context.Context, *progress.Span) {
-	prep, step := progress.Start(ctx, progress.KindStep, "preflight", progress.WithFlags(progress.Hidden))
+	prep, step := progress.Start(ctx, progress.KindStep, "preflight", progress.Flagged(progress.FlagHidden))
 	p.call(prep, "docker version", 150*time.Millisecond, nil)
 	p.call(prep, "docker network inspect", 120*time.Millisecond,
 		errors.New("docker network inspect sind-dev: exit status 1"))
@@ -123,7 +123,7 @@ func (p play) preflight(ctx context.Context) (context.Context, *progress.Span) {
 func (p play) pull(ctx context.Context, image string, fail error) error {
 	const layers = 8
 	pctx, pull := progress.Start(ctx, progress.KindStep, "pull images",
-		progress.WithFlags(progress.Fold|progress.ShowLines), progress.Total(1))
+		progress.Flagged(progress.FlagFold|progress.FlagShowLines), progress.Total(1))
 	_, img := progress.Start(pctx, progress.KindTarget, image,
 		progress.Queued(), progress.Node(image))
 	p.pause(ctx, 80*time.Millisecond)
@@ -136,7 +136,7 @@ func (p play) pull(ctx context.Context, image string, fail error) error {
 		pull.End(fail)
 		return fail
 	}
-	img.Update(progress.Work(progress.Items, layers))
+	img.Update(progress.Work(progress.UnitItems, layers))
 	for range layers {
 		p.pause(ctx, 900*time.Millisecond)
 		img.Advance(1)
@@ -161,7 +161,7 @@ type step struct {
 // of the node that failed first, or the interrupt.
 func (p play) nodesStep(ctx context.Context, nodes []node) error {
 	nctx, nodesSpan := progress.Start(ctx, progress.KindStep, "nodes",
-		progress.WithFlags(progress.Fold), progress.Total(len(nodes)))
+		progress.Flagged(progress.FlagFold), progress.Total(len(nodes)))
 	ctxs := make([]context.Context, len(nodes))
 	targets := make([]*progress.Span, len(nodes))
 	for i, n := range nodes {
@@ -267,7 +267,7 @@ func (p play) meshRegistration(ctx context.Context) {
 // running; the step ends with the interrupt.
 func (p play) each(ctx context.Context, name string, nodes []node, work func(ctx context.Context, i int)) error {
 	sctx, sp := progress.Start(ctx, progress.KindStep, name,
-		progress.WithFlags(progress.Fold), progress.Total(len(nodes)))
+		progress.Flagged(progress.FlagFold), progress.Total(len(nodes)))
 	ctxs := make([]context.Context, len(nodes))
 	targets := make([]*progress.Span, len(nodes))
 	for i, n := range nodes {

@@ -74,7 +74,7 @@ func NewRootCommand() *cobra.Command {
 	// Groups refuse an unknown subcommand and help an unknown topic, naming
 	// the command that replaced one sind dropped, and every argument check
 	// returns a usage error that ends with the usage line.
-	cobratree.Strict(cmd, map[string]string{"status": "get cluster"})
+	cobratree.Strict(cmd, cobratree.Moved(map[string]string{"status": "get cluster"}))
 	addHelpTopics(cmd)
 	groupHelpFlags(cmd)
 	usageLines(cmd)

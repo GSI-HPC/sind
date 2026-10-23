@@ -45,7 +45,7 @@ type Reducer struct {
 // NewReducer returns an empty reducer that keeps at most keep runs, at
 // least one: the newest, and of the older ones those that have not ended.
 func NewReducer(keep int) *Reducer {
-	return &Reducer{eventlog.NewReducer(eventlog.Options{Keep: max(keep, 1)})}
+	return &Reducer{eventlog.NewReducer(eventlog.ReducerOptions{KeepRuns: max(keep, 1)})}
 }
 
 // Runs returns the runs that have a command span, newest first.
@@ -66,7 +66,7 @@ func convertRun(ru eventlog.Run) store.Run {
 		title += " " + root.Node
 	}
 	out := store.Run{
-		ID: ru.ID, Trace: ru.Trace.Trace.String(), Parent: spanID(ru.Trace.Parent),
+		ID: ru.ID, Trace: ru.Trace.ID.String(), Parent: spanID(ru.Trace.Parent),
 		FromUI:  store.IsUITraceState(ru.Trace.State),
 		Program: ru.Program, Version: ru.Version,
 		Title: title, Start: root.Queued, End: root.Ended, Last: ru.Last,
@@ -82,18 +82,21 @@ func convertSpan(s eventlog.Span) store.Span {
 	out := store.Span{
 		ID: spanID(s.ID), Parent: spanID(s.Parent),
 		Name:      s.Name,
-		Hidden:    s.Flags&progress.Hidden != 0,
-		Fold:      s.Flags&progress.Fold != 0,
-		ShowLines: s.Flags&progress.ShowLines != 0,
-		DryRun:    s.Flags&progress.DryRun != 0,
+		Hidden:    s.Flags&progress.FlagHidden != 0,
+		Fold:      s.Flags&progress.FlagFold != 0,
+		ShowLines: s.Flags&progress.FlagShowLines != 0,
+		DryRun:    s.Flags&progress.FlagDryRun != 0,
 		Node:      s.Node, Host: s.Host, Role: s.Role,
 		Total: s.Total, Limit: s.Limit, Batch: s.Batch, Message: s.Message,
 		Timeout: s.Timeout, Amount: s.Amount, Size: s.Size,
-		Exit:    s.Exit,
 		Err:     s.Err,
 		Queued:  s.Queued,
 		Started: s.Started,
 		Lines:   s.Lines, Dropped: s.Dropped,
+	}
+	if s.HasExit {
+		exit := s.Exit
+		out.Exit = &exit
 	}
 	if s.Kind != 0 {
 		out.Kind = s.Kind.String()

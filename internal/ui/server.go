@@ -58,16 +58,16 @@ type Server struct {
 	env *Env
 	reg *Registry
 	// sessions lets in the browser that opened the address with the token.
-	sessions *session.Sessions
+	sessions *session.Manager
 	hosts    func(host string) bool
 	tmpl     *page.Set
 	// assets serves the static files under /static/VERSION/, where VERSION
 	// is a hash of all of them: a new sind serves them under a new path, so
 	// browsers may cache them for good.
-	assets *assets.Assets
+	assets *assets.Set
 	// vendor serves htmx, its SSE extension and idiomorph under
 	// /htmx/VERSION/.
-	vendor *assets.Assets
+	vendor *assets.Set
 	// styles and scripts are the extra files of every page, as URLs:
 	// static/css/*.css and static/js/*.js.
 	styles, scripts []string
@@ -119,7 +119,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
 	}
 	if s.sessions, err = session.New(session.Options{
-		Token: c.Token, Cookie: cookiePrefix, Header: csrfHeader, Refuse: s.refuse,
+		Token: c.Token, CookiePrefix: cookiePrefix, CSRFHeader: csrfHeader, Refuse: s.refuse,
 	}); err != nil {
 		return nil, err
 	}
@@ -201,15 +201,15 @@ func (s *Server) Handler() http.Handler {
 	open := http.NewServeMux()
 	open.Handle("GET /static/", s.assets)
 	open.Handle("/", s.sessions.Middleware(s.mux))
-	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(open)
-	return localweb.Headers(contentSecurityPolicy)(localweb.NoStore(localweb.Hosts(s.hosts, s.refuse)(h)))
+	h := localweb.SameOrigin(localweb.OriginPolicy{Navigate: true, Refuse: s.refuse})(open)
+	return localweb.Headers(contentSecurityPolicy)(localweb.NoStore(localweb.Hosts(s.hosts, localweb.HostsOptions{Refuse: s.refuse})(h)))
 }
 
 // fetchOnly lets in only the requests that a page of this server sent
 // itself, as its live parts do, and no navigation from another page. It
 // guards the requests that start work.
 func (s *Server) fetchOnly(next http.Handler) http.Handler {
-	return localweb.SameOrigin(localweb.Origin{Refuse: s.refuse})(next)
+	return localweb.SameOrigin(localweb.OriginPolicy{Refuse: s.refuse})(next)
 }
 
 // refuse answers a request that a check of localweb refuses. A 403 adds the

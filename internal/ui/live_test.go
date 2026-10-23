@@ -25,6 +25,8 @@ func liveServer(t *testing.T) (ts *testServer, base string) {
 	require.NoError(t, err)
 	cfg.Bound, cfg.Env.Addr = b, b.Host()
 	ts = newTestServerFrom(t, cfg, st)
+	// Login follows the redirect to the home page, which must answer.
+	ts.srv.mux.HandleFunc("GET /{$}", func(http.ResponseWriter, *http.Request) {})
 	ctx, cancel := context.WithCancel(context.WithoutCancel(t.Context()))
 	served := make(chan error, 1)
 	go func() { served <- localweb.Serve(ctx, b.Listeners, ts.h, localweb.ServeOptions{}) }()
