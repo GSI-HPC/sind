@@ -293,4 +293,34 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   input[type=checkbox],input[type=radio]{width:22px;height:22px}
   :is(td,th):has(>input[type=checkbox]:only-child){height:48px;cursor:pointer}
 }
+/* A table of class cards shows each row as a card on a phone: the name and
+   the state on the first line, the other cells after it, each with its label
+   (data-label). The cells say what they are: c-chk is the checkbox, c-name
+   the name, c-state the state, c-wide a cell that takes a line of its own
+   and c-act the buttons, on the last line. chk makes room for the checkbox,
+   whose cell in the corner is the target to tap.
+   The head hides, but with class sorts or chk, where the heads that sort and
+   the checkbox that selects all stay as a row. */
+@media (max-width:640px){
+  table.cards,table.cards tbody{display:block}
+  table.cards thead{display:none}
+  table.cards.sorts thead,table.cards.chk thead{display:block;border-bottom:1px solid var(--line)}
+  table.cards thead tr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;padding:6px 14px}
+  table.cards th{width:auto;padding:0;border:0}
+  table.cards th:not(:has(a,input)){display:none}
+  table.cards tbody tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;position:relative;padding:12px 14px;border-bottom:1px solid var(--line-2)}
+  table.cards.chk tbody tr{padding-left:46px}
+  table.cards tbody tr:last-child{border-bottom:0}
+  table.cards tbody tr[hidden]{display:none}
+  table.cards td,table.cards tr.click:hover td{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;min-width:0;padding:0;border:0;background:none;text-align:left}
+  table.cards tr.click:hover{background:var(--hover)}
+  table.cards tr td.c-chk,table.cards tr.click:hover td.c-chk{position:absolute;left:0;top:0;width:46px;height:48px;align-items:center;justify-content:center;cursor:pointer}
+  table.cards .c-chk input{width:24px;height:24px;margin:0}
+  table.cards td.c-name{order:-2;flex:1 1 50%;font-size:var(--t-base);overflow-wrap:anywhere}
+  table.cards td.c-state{order:-1;margin-left:auto}
+  table.cards td.c-wide,table.cards td.c-act,table.cards td[colspan]{flex:1 1 100%}
+  table.cards td[data-label]::before{content:attr(data-label);font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+  table.cards td.c-act{gap:8px}
+  table.cards td.c-act .btn{min-height:36px}
+}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

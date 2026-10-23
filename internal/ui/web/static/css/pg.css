@@ -129,6 +129,8 @@ tr[data-href]{cursor:pointer}
 .pg-sort:hover,.pg-sort.on{color:var(--fg);text-decoration:none}
 .pg-arrow{font-size:var(--t-xs);color:var(--deco)}
 .pg-sort.on .pg-arrow{color:var(--accent)}
+.pg-all{display:inline-flex;align-items:center;gap:6px}
+.pg-phone{display:none}
 .pg-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 td.act .btn + .btn{margin-left:4px}
 
@@ -152,4 +154,15 @@ td.act .btn + .btn{margin-left:4px}
   .pg-bb{grid-column:2;justify-content:flex-start}
   .pg-steps li{grid-template-columns:28px minmax(0,1fr)}
   .pg-steps li > :last-child{grid-column:2}
+}
+@media (max-width:640px){
+  .pg-chip{min-height:36px}
+  .pg-filter input{height:40px}
+  .pg-phone{display:inline}
+  table.cards .pg-sort{min-height:32px}
+  table.cards .pg-all{min-height:36px;cursor:pointer}
+  table.cards tr.pg-sel{background:var(--accent-soft)}
+  table.cards tr.pg-sel td{background:none}
+  table.cards td .pg-nodemap{flex:1 1 0;min-width:0}
+  td.act .btn + .btn{margin-left:0}
 }

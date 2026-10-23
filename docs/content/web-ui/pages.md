@@ -33,6 +33,8 @@ Every node of the realm. A node is named as you type it in commands, such as `wo
 
 **Filter**, the chips (Needs a look, Running, Not running) and the column heads work as on the Clusters page. Sort by state puts the nodes that are stopped, or that have a service down, first.
 
+On a phone, each row of a list is a card with the name and the state first.
+
 ## Cluster
 
 The state of one cluster, in six tabs.
