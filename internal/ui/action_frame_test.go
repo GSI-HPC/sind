@@ -14,7 +14,8 @@ import (
 )
 
 // The frame of every dialog: its name and description, the dialog itself,
-// which takes the focus on a touch screen, and the button with its key.
+// which takes the focus on a touch screen, the question before a close
+// loses changes, and the button with its key.
 func TestActDialog_Frame(t *testing.T) {
 	f := newActFixture(t)
 
@@ -23,6 +24,10 @@ func TestActDialog_Frame(t *testing.T) {
 		`role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"`,
 		`<h2 id="act-title">Add workers to dev</h2>`, `<p id="act-lead">New workers take`,
 		`<div class="scrim" id="act-dialog" data-act-scrim>`,
+		`<div class="mf" id="act-mf">`,
+		`<div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>`,
+		`<span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span>`,
+		`<button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>`,
 		`<button type="submit" class="btn primary" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" disabled>Add<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>`,
 	} {
 		assert.Contains(t, body, want)

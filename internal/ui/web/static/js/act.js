@@ -5,9 +5,10 @@
 // new cluster, the directory that follows the name, the pull that follows
 // the image, Edit YAML, the links to a field with a problem, the Copy
 // button, and the frame of every dialog: the focus, which stays in the
-// dialog and goes back to the button that opened it, Enter and Ctrl+Enter,
-// the status, and the notice of a command that started. The dialogs are the
-// server's HTML, which htmx puts into #layer; nothing here evaluates text.
+// dialog and goes back to the button that opened it, the question before a
+// close loses changes, Enter and Ctrl+Enter, the status, and the notice of
+// a command that started. The dialogs are the server's HTML, which htmx
+// puts into #layer; nothing here evaluates text.
 (() => {
   'use strict';
 
@@ -22,10 +23,11 @@
   if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) document.documentElement.classList.add('act-mac');
 
   // What the open dialog needs: the element that opened it and how to find
-  // it again after a swap, the element in it that had the focus last, the
+  // it again after a swap, the element in it that had the focus last,
+  // whether the user changed a field, the question the footer asks, the
   // elements made inert, and the status said last. The opener stays after
   // a close, for the notice that the dialog leaves.
-  const S = { dialog: null, opener: null, find: null, last: null, inert: [], said: null };
+  const S = { dialog: null, opener: null, find: null, last: null, dirty: false, asking: null, back: null, inert: [], said: null };
 
   // isolate makes everything but the dialog, the layer, the notices and
   // the page's live region inert, as a modal dialog needs: Tab and the
@@ -104,6 +106,8 @@
   function opened(d) {
     S.dialog = d;
     S.last = null;
+    S.dirty = false;
+    S.asking = null;
     S.said = null;
     isolate(d);
     footer(d);
@@ -113,21 +117,70 @@
   // closed forgets the dialog and gives the focus back.
   function closed() {
     S.dialog = S.last = null;
+    S.dirty = false;
+    S.asking = null;
     release();
     focusBack(false);
   }
 
-  // close closes the dialog.
-  function close() {
+  // close closes the dialog. One with changes asks first, unless force.
+  function close(force) {
     const d = dialog();
     if (!d) return;
+    if (!force && S.dirty) { ask('close'); return; }
     if (inPage(d)) {
       // A dialog opened as a page of its own: leave it.
+      S.dirty = false;
       if (history.length > 1) history.back(); else location.assign('/');
       return;
     }
     d.remove();
     closed();
+  }
+
+  // ask shows a question in place of the footer, such as close: close and
+  // lose the changes.
+  function ask(mode) {
+    const form = formOf();
+    const bar = form && form.querySelector('#act-ask');
+    const mf = form && form.querySelector('#act-mf');
+    if (!bar || !mf) return;
+    for (const q of bar.querySelectorAll('[data-act-ask]')) q.hidden = q.dataset.actAsk !== mode;
+    // The question names the new cluster, the cluster of the dialog, or
+    // its realm.
+    const name = ['name', 'cluster', 'realm'].map(k => form.elements.namedItem(k)).find(el => el instanceof HTMLInputElement);
+    const v = name ? name.value.trim() : '';
+    const of = bar.querySelector('[data-act-ask-of]');
+    of.hidden = !v;
+    of.querySelector('[data-act-ask-name]').textContent = v;
+    if (!S.asking) S.back = document.activeElement;
+    S.asking = mode;
+    mf.hidden = true;
+    bar.hidden = false;
+    bar.querySelector('[data-act-keep]').focus();
+  }
+
+  // unask takes the question away; with refocus, the focus goes back to
+  // where it was before.
+  function unask(refocus) {
+    const form = formOf();
+    if (!form || !S.asking) return;
+    S.asking = null;
+    form.querySelector('#act-ask').hidden = true;
+    form.querySelector('#act-mf').hidden = false;
+    if (refocus) (S.back && S.back.isConnected && form.contains(S.back) ? S.back : form.querySelector('[data-act-close]')).focus();
+  }
+
+  // discard drops the changes and closes the dialog.
+  function discard() {
+    S.dirty = false;
+    unask(false);
+    close(true);
+  }
+
+  // changed marks the dialog as changed by the user.
+  function changed() {
+    S.dirty = true;
   }
 
   // footer keeps the scroll padding of a dialog at the height of its
@@ -202,13 +255,17 @@
     if (!(t instanceof Element)) return;
 
     if (t.closest('[data-act-close]') || (t.matches('[data-act-scrim]') && pressedScrim)) {
-      close();
+      close(false);
       return;
     }
+    if (t.closest('[data-act-keep]')) { unask(true); return; }
+    if (t.closest('[data-act-discard]')) { discard(); return; }
     const go = t.closest('[data-act-go]');
     if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
     const note = t.closest('[data-act-note-close]');
     if (note) { closeNote(note.closest('[data-act-note]')); return; }
+    // The buttons that change the form of a new cluster.
+    if (ev.isTrusted && t.closest('.scrim :is([data-act-step], [data-act-rowadd], [data-act-rowdel], [data-act-wgadd], [data-act-wgdel], [data-act-reset])')) changed();
 
     const step = t.closest('[data-act-step]');
     if (step) {
@@ -334,10 +391,22 @@
     }
   });
 
-  // The dialog keeps the element that had the focus last.
+  // A change that the user makes to a field, but to the typed name of a
+  // delete, which is quick to type again.
+  for (const type of ['input', 'change']) {
+    document.addEventListener(type, ev => {
+      const t = ev.target;
+      if (ev.isTrusted && t instanceof Element && t.closest('#act-dialog form') && t.name && t.name !== 'confirm') changed();
+    });
+  }
+
+  // The dialog keeps the element that had the focus last. A click into the
+  // form while the footer asks means: keep editing.
   document.addEventListener('focusin', ev => {
     const t = ev.target;
-    if (t instanceof Element && t.closest('#act-dialog form')) S.last = t;
+    if (!(t instanceof Element) || !t.closest('#act-dialog form')) return;
+    S.last = t;
+    if (S.asking && !t.closest('#act-ask')) unask(false);
   });
 
   // The directory of the data follows the name until the user types one;
@@ -398,11 +467,11 @@
     });
   }
 
-  // Esc closes the dialog. In the help pane over a dialog, it closes the
-  // pane, and the focus goes back into the dialog; the jump box takes its
-  // own. Enter does not run the command of a dialog with more than one
-  // field, as it would without a look at it; Ctrl+Enter, or Cmd+Enter,
-  // does in every dialog.
+  // Esc closes the dialog, or answers the question with Keep editing. In
+  // the help pane over a dialog, it closes the pane, and the focus goes
+  // back into the dialog; the jump box takes its own. Enter does not run
+  // the command of a dialog with more than one field, as it would without
+  // a look at it; Ctrl+Enter, or Cmd+Enter, does in every dialog.
   document.addEventListener('keydown', ev => {
     const form = formOf();
     const t = ev.target;
@@ -418,7 +487,7 @@
     }
     if (ev.key === 'Escape') {
       ev.preventDefault();
-      close();
+      if (S.asking) unask(true); else close(false);
       return;
     }
     if (ev.key !== 'Enter' || ev.isComposing || !form.contains(t)) return;
@@ -470,6 +539,7 @@
   // the run.
   document.addEventListener('act-started', ev => {
     const det = ev.detail || {};
+    S.dirty = false;
     for (const n of document.querySelectorAll('#act-notes [data-act-note]:not([data-act-timed])')) {
       n.dataset.actTimed = '';
       const tick = () => { if (n.matches(':hover, :focus-within')) setTimeout(tick, 2000); else n.remove(); };
@@ -478,7 +548,15 @@
     if (det.follow) return;
     const d = dialog();
     if (d && inPage(d)) { location.assign(det.url); return; }
-    close();
+    close(true);
+  });
+
+  // A dialog with changes asks the browser to ask before the page goes,
+  // as the jump box, a g key or a link would lose them.
+  window.addEventListener('beforeunload', ev => {
+    if (!S.dirty || !formOf()) return;
+    ev.preventDefault();
+    ev.returnValue = '';
   });
 
   // A dialog that has just come in is set up; the swaps of its preview,

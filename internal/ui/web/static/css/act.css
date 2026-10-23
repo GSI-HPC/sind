@@ -18,6 +18,7 @@
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
 .scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
 .scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.scrim .mf[hidden]{display:none}
 .scrim .act-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The button that runs the command shows its key, Ctrl+Enter or on macOS
@@ -26,6 +27,11 @@
 .scrim .act-k-cmd,.act-mac .scrim .act-k-ctrl{display:none}
 .act-mac .scrim .act-k-cmd{display:inline}
 @media (hover:none) and (pointer:coarse){.scrim .act-kbd{display:none}}
+
+/* The question before a close loses changes takes the place of the
+   footer. */
+.scrim .act-ask{background:var(--warn-soft);border-radius:0 0 10px 10px}
+.scrim .act-askq{flex:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:min(100%,240px)}
 .scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
 .scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
 .scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}
@@ -185,6 +191,7 @@
   .scrim .act-planpane{border-left:0;border-top:1px solid var(--line-2)}
   .scrim:has(.modal.split){padding-bottom:0}
   .scrim .modal.split .mf{position:sticky;bottom:0;background:var(--panel);border-radius:0 0 10px 10px}
+  .scrim .modal.split .mf.act-ask{background:var(--warn-soft)}
   /* The status button and the buttons share a line, the totals take the
      next. */
   .scrim .act-status{display:contents}

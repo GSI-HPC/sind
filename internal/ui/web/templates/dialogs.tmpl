@@ -7,7 +7,8 @@
   /actions/ID/preview for the command as it changes, and runs it with
   /actions/ID/run. A dialog shows the command it runs; it never sends one.
   The views are the *View of the request; the dialog or the preview is its
-  Data. act.js makes the page behind a dialog inert.
+  Data. act.js makes the page behind a dialog inert, and asks before a
+  close loses changes.
 */}}
 
 {{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
@@ -34,7 +35,11 @@
     {{template "act-preview-slot" .}}
   </div>
   {{end}}
-  <div class="mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+  <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+  <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
+    <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span></span>
+    <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
+  </div>
   {{if .Spec.Plan}}<span class="act-vh" id="act-say" role="status"></span>{{end}}
 </form>
 </div>
