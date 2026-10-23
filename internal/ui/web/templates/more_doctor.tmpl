@@ -10,6 +10,7 @@
 {{/* more-doctor is the live body of the page; .Data is moreDoctorData. */}}
 {{define "more-doctor"}}{{with .Data}}
 {{if .DockerErr}}<div class="callout bad"><b>Docker is not reachable:</b> {{.DockerErr}}. The checks that need Docker cannot pass until it is.</div>{{end}}
+{{with .Verdict}}<div class="callout more-verdict{{with .Class}} {{.}}{{end}}" role="status"><b>{{.Title}}.</b> {{.Text}}</div>{{end}}
 <section class="panel">
   <div class="ph">
     <h2>Host checks</h2>
@@ -28,12 +29,13 @@
     <div class="more-cbody">
       <div><b>{{.Name}}</b> <span class="pill{{with .Class}} {{.}}{{end}} nodot">{{.Status}}</span></div>
       {{if .Detail}}<div class="muted">{{.Detail}}</div>{{end}}
-      {{if .Remediation}}<div class="more-fix"><p class="cmdlabel">Fix</p>
-        <div class="cmd"><code class="nop">{{.Remediation}}</code><button type="button" data-more-copy>Copy</button></div></div>{{end}}
+      {{if .Steps}}<div class="more-fix"><p class="cmdlabel">Fix</p>
+        {{range .Steps}}{{range .Text}}<p class="more-fixtext">{{.}}</p>{{end}}{{if .Cmd}}
+        <div class="cmd"><code{{if .Multi}} class="nop"{{end}}>{{.Cmd}}</code><button type="button" data-more-copy aria-label="Copy {{.Cmd}}">Copy</button></div>{{end}}{{end}}
+      </div>{{end}}
     </div>
   </div>
   {{else}}<div class="empty">{{if .Running}}The first check is running.{{else}}No check has run yet.{{if .CanRecheck}} Press Check again to run them.{{end}}{{end}}</div>
   {{end}}
 </section>
-<p class="muted">A warning does not stop sind. A failed check stops create and power on.</p>
 {{end}}{{end}}

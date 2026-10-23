@@ -96,7 +96,7 @@ func TestBuildCreateCluster_NodeProblems(t *testing.T) {
 	}{
 		{"size", valid("size", "xl"), "size", "pick Small, Medium, Large or Custom", true},
 		{"tmp", valid("size", "x", "tmp", "lots"), "tmp", `invalid /tmp size "lots"`, true},
-		{"image", valid("controller-image", "a b"), "controller-image", "write an image reference", true},
+		{"image", valid("controller-image", "a b"), "controller-image", "use no spaces", true},
 		{"cpus", valid("db", "on", "db-cpus", "0"), "db-cpus", "write a number from 1 to 1024, or nothing", true},
 		{"memory", valid("w0-memory", "1x"), "w0-memory", `invalid memory "1x"`, true},
 		{"tmp of a node", valid("w0-tmp", "1x"), "w0-tmp", `invalid /tmp size "1x"`, true},
@@ -115,6 +115,22 @@ func TestBuildCreateCluster_NodeProblems(t *testing.T) {
 			assert.Equal(t, tc.defaultsKept, cmd.Problems[0].Default)
 		})
 	}
+}
+
+func TestGroupLabel(t *testing.T) {
+	assert.Equal(t, "workers", GroupLabel(form(), "w0"))
+	assert.Equal(t, "workers", GroupLabel(form("wg", "w0"), "w0"))
+	f := form("wg", "w0", "wg", "wabc")
+	assert.Equal(t, "workers 1", GroupLabel(f, "w0"))
+	assert.Equal(t, "workers 2", GroupLabel(f, "wabc"))
+	assert.Equal(t, "workers", GroupLabel(f, "__WG__"), "a group that the script adds")
+}
+
+func TestBuildCreateCluster_WorkerGroupLabels(t *testing.T) {
+	f := groups(valid("w0-count", "x", "w1-count", "1", "w1-cpus", "0"), "w0", "w1")
+	cmd, err := build(t, "create-cluster", f)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Workers 1", "workers 2 CPUs"}, []string{cmd.Problems[0].Label, cmd.Problems[1].Label})
 }
 
 func TestBuildCreateCluster_WorkerGroups(t *testing.T) {
@@ -140,7 +156,7 @@ func TestBuildCreateCluster_WorkerGroups(t *testing.T) {
 
 func TestClusterFieldsOf(t *testing.T) {
 	fields := ClusterFieldsOf(form("wg", "w0", "wg", "bad key", "wg", "wz"))
-	assert.Equal(t, []string{"name", "image", "controller-image"}, fields[:3])
+	assert.Equal(t, []string{"name", "realm", "image", "controller-image"}, fields[:4])
 	assert.Contains(t, fields, "controller-unmanaged")
 	assert.NotContains(t, fields, "submitter-unmanaged", "the submitter is always managed")
 	assert.Contains(t, fields, "wz-securityOpt")

@@ -282,18 +282,20 @@ func TestCheckInterval(t *testing.T) {
 
 func TestViewersCountPages(t *testing.T) {
 	v := NewViewers()
+	one, two := v.arrivals(), v.arrivals()
 	assert.True(t, v.None())
 	a, b := v.Watch(nil), v.Watch(nil)
 	assert.False(t, v.None())
-	assert.Len(t, v.arrived, 1, "one notice, for the first page")
+	assert.Len(t, one, 1, "one notice, for the first page")
+	assert.Len(t, two, 1, "each collector has its own")
 	a()
 	assert.False(t, v.None())
 	b()
 	assert.True(t, v.None())
-	<-v.arrived
+	<-one
 	v.Watch(nil)
 	v.Watch(nil)
-	assert.Len(t, v.arrived, 1, "the first page again")
+	assert.Len(t, one, 1, "the first page again")
 }
 
 func TestLockAndMonitoringStartWithDefaultIntervals(t *testing.T) {

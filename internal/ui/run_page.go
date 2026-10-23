@@ -4,14 +4,17 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() { registerRun(defaultRegistry) }
@@ -73,15 +76,19 @@ type runCtx struct {
 	Task *store.Task
 	Snap store.Snapshot
 	Now  time.Time
+	// CSRF is the session's token, for the forms.
+	CSRF string
 }
 
 // newRunCtx finds the run named by the Param id of v.
 func newRunCtx(v *View) runCtx {
-	rc := runCtx{Snap: v.Snap, Now: v.Now}
+	rc := runCtx{Snap: v.Snap, Now: v.Now, CSRF: v.CSRF}
 	rc.Run, rc.Found = v.Snap.Run(v.Params.Get("id"))
 	if t, ok := runTaskOf(v.Snap, rc.Run.Trace); rc.Found && ok {
+		// The page names the run as the dock and Activity do, with the
+		// flags that tell it from other runs of the command.
 		rc.Task = &t
-		rc.Run.Title = runTitle(rc.Run, &t)
+		rc.Run.Title = taskTitle(t, &rc.Run)
 	}
 	return rc
 }
@@ -91,11 +98,19 @@ func runPageLoad(v *View) error {
 	id := v.Params.Get("id")
 	run, ok := v.Snap.Run(id)
 	if !ok {
-		return fmt.Errorf("run %s: %w", id, ErrNotFound)
+		m := &Miss{
+			What: fmt.Sprintf("The activity log holds no run %s.", id),
+			Hint: "Activity lists the runs that the log holds. sind keeps the log and one older copy.",
+		}
+		if _, ok := v.Snap.Task(id); ok {
+			m.Links = append(m.Links, MissLink{Label: "Task " + id, URL: "/tasks/" + url.PathEscape(id)})
+		}
+		m.Links = append(m.Links, MissLink{Label: "Activity", URL: "/activity"}, missOverview)
+		return m
 	}
 	v.Title = run.Title
 	if t, ok := runTaskOf(v.Snap, run.Trace); ok {
-		v.Title = runTitle(run, &t)
+		v.Title = taskTitle(t, &run)
 	}
 	if v.Title == "" {
 		v.Title = "Run " + id
@@ -124,21 +139,39 @@ type runHead struct {
 	Title     string
 	Pill      string
 	PillClass string
-	// Terminal is set for a run that sind ui did not start.
+	// Terminal is set for a run that this sind ui did not start, which
+	// it cannot stop; NoStop says why, while the run goes on.
 	Terminal bool
+	NoStop   string
 	Origin   string
 	Program  string
 	Started  string
 	Exit     string
 	Trace    string
 	TraceTip string
-	// Cluster is the cluster the run's task worked on, when it exists.
-	Cluster     string
-	ClusterHref string
+	// Back leads to what the run's task worked on: its cluster, the list
+	// of clusters once the cluster is gone, or the mesh.
+	Back *runLink
+	// Command is the command line of the run's task, with Copy, or for a
+	// run without a task the command that its title names; CmdNote then
+	// says that the log keeps no flags.
+	Command *pgCmd
+	CmdNote string
+	// Realm is the realm the run worked on, when sind ui knows it.
+	Realm string
+	// Config is the file that the task saved and ran with.
+	Config *pgCmd
+	// RetryID is the task that Try again runs again, when it runs it
+	// without a dialog; Edit opens the dialog filled in with its form.
+	RetryID string
+	Edit    *runLink
+	CSRF    string
 	// Running is set while the run goes on.
 	Running bool
 	// TaskID is the task to stop; empty when sind ui cannot stop the run.
+	// Stop is its button, nil while it is being stopped.
 	TaskID    string
+	Stop      *runStop
 	Canceling bool
 	Suspended bool
 }
@@ -147,7 +180,7 @@ type runHead struct {
 func runHeadOf(rc runCtx) *runHead {
 	run := rc.Run
 	h := &runHead{
-		ID: run.ID, Title: run.Title, Terminal: rc.Task == nil, Origin: "from a terminal",
+		ID: run.ID, Title: run.Title, Terminal: rc.Task == nil, Origin: runSourceText(runSource(rc.Snap, run)),
 		Started: runWhen(run.Start, rc.Now), Trace: run.Trace, TraceTip: run.Trace,
 		Running: !run.Done(), Suspended: run.Suspended,
 	}
@@ -161,17 +194,137 @@ func runHeadOf(rc runCtx) *runHead {
 	if run.Root.Exit != nil {
 		h.Exit = "exit " + strconv.Itoa(*run.Root.Exit)
 	}
-	if t := rc.Task; t != nil {
-		h.Origin = "from sind ui"
-		if h.Running {
-			h.TaskID, h.Canceling = t.ID, t.Canceling
-		}
-		if t.Cluster != "" && runHasCluster(rc.Snap, t.Realm, t.Cluster) {
-			h.Cluster = t.Cluster
-			h.ClusterHref = "/clusters/" + t.Realm + "/" + t.Cluster
+	if h.Terminal && h.Running {
+		switch runSource(rc.Snap, run) {
+		case runFromUI:
+			h.NoStop = "Another sind ui started this run, so this one cannot stop it. Stop it there."
+		case runFromProgram:
+			h.NoStop = "Another program started this run, so sind ui cannot stop it. Stop it in that program."
+		default:
+			h.NoStop = "This run was started from a terminal, so sind ui cannot stop it. Press Ctrl-C in that terminal to stop it."
 		}
 	}
+	if t := rc.Task; t != nil {
+		h.CSRF = rc.CSRF
+		if h.Running {
+			h.TaskID, h.Canceling = t.ID, t.Canceling
+			h.Stop = newRunStop(*t, &rc.Run, run.Title, rc.CSRF, false)
+		}
+		h.Back = runBack(rc.Snap, *t)
+		if t.Display != "" {
+			h.Command = &pgCmd{Label: "Command", Text: t.Display}
+		}
+		if t.ConfigPath != "" {
+			h.Config = &pgCmd{Label: t.ConfigPath, Text: t.Config}
+		}
+		if run.Done() {
+			h.RetryID, h.Edit = runRetry(*t, runStatusClass(run))
+		}
+		h.Realm = t.Realm
+	} else {
+		runHeadNoTask(rc, h)
+	}
 	return h
+}
+
+// runHeadNoTask fills in the head of a run without a task, as one from a
+// terminal or one whose task sind ui no longer keeps: the command that its
+// title names, with the realm when only one realm has its cluster; once it
+// failed or was stopped, the dialog that does it again where there is one,
+// filled in from the title; and the way to its cluster.
+func runHeadNoTask(rc runCtx, h *runHead) {
+	run := rc.Run
+	e := runEntryOf(rc.Snap, run)
+	h.Realm = e.realm
+	if run.Title == "" {
+		return
+	}
+	h.Command = &pgCmd{Label: "Command", Text: strings.Join(sindArgvOf(e.realm, strings.Fields(run.Title)...), " ")}
+	h.CmdNote = "The event log names the command and what it worked on, not its flags."
+	if e.cluster != "" {
+		h.Back = &runLink{Label: "Open Clusters", Href: "/clusters"}
+		if e.realm != "" {
+			h.Back = &runLink{Label: "Open " + e.cluster, Href: pgClusterURL(e.realm, e.cluster, "")}
+		}
+	}
+	class := runStatusClass(run)
+	if !run.Done() || (class != runFailed && class != runCanceled) {
+		return
+	}
+	words := strings.Fields(run.Title)
+	switch strings.Join(words[:min(2, len(words))], " ") {
+	case "create cluster":
+		wait := ""
+		if runTimedOut(run) {
+			wait = "10m"
+		}
+		h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-cluster", "realm", e.realm, "name", e.cluster, "wait", wait)}
+	case "create worker":
+		if e.realm != "" {
+			h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-worker", "realm", e.realm, "cluster", e.cluster)}
+		}
+	}
+}
+
+// sindArgvOf is the command line of sind in realm, which names a realm
+// other than the default one; an empty realm is the default one.
+func sindArgvOf(realm string, words ...string) []string {
+	argv := []string{"sind"}
+	if realm != "" && realm != mesh.DefaultRealm {
+		argv = append(argv, "--realm", realm)
+	}
+	return append(argv, words...)
+}
+
+// runTimedOut reports whether a run failed as a node ran out of time.
+func runTimedOut(run store.Run) bool {
+	if run.Class == "timeout" {
+		return true
+	}
+	for _, f := range activity.FailedTargets(run.Root) {
+		if f.Class == "timeout" {
+			return true
+		}
+	}
+	return false
+}
+
+// runLink is a link of the run page.
+type runLink struct{ Label, Href string }
+
+// runBack leads from the run of a task to what it worked on: its cluster
+// while it exists, the list of clusters once it is gone, and the mesh for
+// a command of the realm. Nil for a task of none of them.
+func runBack(snap store.Snapshot, t store.Task) *runLink {
+	switch {
+	case t.Cluster != "" && runHasCluster(snap, t.Realm, t.Cluster):
+		return &runLink{Label: "Open " + t.Cluster, Href: "/clusters/" + t.Realm + "/" + t.Cluster}
+	case t.Cluster != "":
+		return &runLink{Label: "Open Clusters", Href: "/clusters"}
+	case t.Action == "connect" || t.Action == "disconnect" || t.Action == "delete-realm":
+		return &runLink{Label: "Open Mesh and DNS", Href: "/mesh"}
+	}
+	return nil
+}
+
+// runRetry offers to try the command of a task that failed or was stopped
+// again. A command that wants no typed confirmation gets Try again, which
+// runs it at once, and Edit and try again, which opens its dialog filled
+// in; one that wants the user to type a name gets Try again… alone, which
+// opens the dialog. Nothing for a command whose class is not failed or
+// canceled, or for a task that no form started.
+func runRetry(t store.Task, class string) (string, *runLink) {
+	if (class != runFailed && class != runCanceled) || t.Form == nil {
+		return "", nil
+	}
+	a, ok := action.Lookup(t.Action)
+	if !ok {
+		return "", nil
+	}
+	if a.Want(url.Values(t.Form)) != "" {
+		return "", &runLink{Label: "Try again…", Href: actEditHref(t)}
+	}
+	return t.ID, &runLink{Label: "Edit and try again…", Href: actEditHref(t)}
 }
 
 // runHasCluster reports whether the snapshot holds the cluster.
@@ -193,9 +346,11 @@ type runCount struct {
 
 // runSummary is the panel with the clock, the bar and the counts.
 type runSummary struct {
+	// Title names the run, for the name of its bar.
+	Title   string
 	Elapsed string
 	Since   int64
-	Segs    []runSeg
+	Segs    runBar
 	Line    string
 	Counts  []runCount
 	// NoTargets is set for a run without targets, which has nothing to count.
@@ -203,14 +358,32 @@ type runSummary struct {
 	Hints     []string
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
+	// SayKey, SayState and Say are what run.js announces when the state
+	// of the run changes, as for a card of the dock; SaySince is when the
+	// run started, in milliseconds since 1970, so that a page opened just
+	// after the start announces it.
+	SayKey   string
+	SayState string
+	Say      string
+	SaySince int64
 }
 
 // runSummaryOf builds the summary.
 func runSummaryOf(rc runCtx) *runSummary {
 	run := rc.Run
 	s := &runSummary{
-		Elapsed: runDur(runElapsed(run, rc.Now)), Since: runSince(run),
+		Title: run.Title, Elapsed: runDur(runElapsed(run, rc.Now)), Since: runSince(run),
 		Segs: runSegs(run), Line: runLine(run, rc.Task, rc.Now),
+	}
+	canceling := false
+	s.SayKey = "r:" + run.ID
+	if t := rc.Task; t != nil {
+		canceling, s.SayKey = t.Canceling, "t:"+t.ID
+	}
+	s.SayState = runSayState(runStatusClass(run), canceling)
+	s.Say = runSay(run.Title, s.SayState, s.Elapsed, runFailure(run))
+	if origin := runOrigin(run); !origin.IsZero() {
+		s.SaySince = origin.UnixMilli()
 	}
 	c := activity.CountTargets(run.Root)
 	s.NoTargets = c.Total == 0

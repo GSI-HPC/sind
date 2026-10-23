@@ -4,7 +4,7 @@
 # the action uses.
 - id: create-cluster
   title: New cluster
-  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. The dialog writes the config, which Edit YAML lets you change as a whole.
+  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. The dialog writes the config, which Edit YAML lets you change as a whole; Start from YAML takes a config that you paste or open from a file.
   command: sind create cluster --config FILE
   undo: Delete the cluster
   doc: usage/cluster-lifecycle#create-a-cluster
@@ -24,6 +24,14 @@
   irreversible: true
   doc: usage/cluster-lifecycle#delete-a-cluster
   words: [cluster]
+- id: delete-clusters
+  title: Delete clusters
+  summary: Deletes the clusters that you ticked on the Clusters page, with one confirmation. sind ui runs sind delete cluster once for each of them.
+  command: sind delete cluster NAME
+  undo: Cannot be undone
+  irreversible: true
+  doc: usage/cluster-lifecycle#delete-a-cluster
+  words: [cluster, realm]
 - id: delete-worker
   title: Delete workers
   summary: Removes worker nodes from a cluster.
@@ -34,11 +42,11 @@
   words: [worker, nodeset]
 - id: power
   title: Power
-  summary: Starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog lists every verb and selects the one of the button that opened it.
+  summary: Drains or resumes workers in Slurm with scontrol, or starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog groups the actions, selects the one of the button that opened it, and warns before it stops the controller in control, the standby controller of a pair, the db node or the last running workers.
   command: sind power reboot NODES
   undo: Use the opposite verb
   doc: usage/power-control#commands
-  words: [nodeset]
+  words: [nodeset, drain]
 - id: connect
   title: Connect a container
   summary: Attaches a container that sind did not make to the networks of the realm.
@@ -56,7 +64,7 @@
 - id: delete-realm
   title: Delete realm
   summary: Deletes every cluster of the realm, its mesh and what they share. Containers that sind did not make are detached, not removed.
-  command: sind delete realm
+  command: sind --realm REALM delete realm
   undo: Cannot be undone
   irreversible: true
   doc: usage/cluster-lifecycle#delete-a-realm

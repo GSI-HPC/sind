@@ -34,20 +34,14 @@ func init() {
 var Waits = []string{"2m", "5m", "10m", "0"}
 
 // HostMemoryWarn is the share of the memory of the Docker host, in
-// percent, above which the plan of a new cluster warns.
+// percent, above which the plan of a new cluster warns. Above all of it,
+// the plan has a problem until the field "overcommit" says to create the
+// cluster anyway.
 const HostMemoryWarn = 80
 
 // DefaultWait is the --wait of sind create cluster, which the command line
 // leaves out.
 const DefaultWait = "5m"
-
-// imagePattern is what the image reference of a form may look like: the
-// characters of a registry, repository, tag and digest.
-var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$`)
-
-// ImageRef reports whether s looks like an image reference: the
-// characters of a registry, repository, tag and digest.
-func ImageRef(s string) bool { return imagePattern.MatchString(s) }
 
 // ConfigPath returns where sind ui saves the config of the cluster name.
 func ConfigPath(dir, name string) string { return filepath.Join(dir, name+".yaml") }
@@ -82,7 +76,9 @@ func (ps problems) has(field string) bool {
 // its YAML give it: the config, its text and sind's warnings, the nodes one
 // by one, and the data storage.
 type clusterPlan struct {
-	cfg     config.Cluster
+	cfg config.Cluster
+	// final is cfg as sind takes it, after ApplyDefaults, once it is valid.
+	final   *config.Cluster
 	content string
 	warns   []string
 	planned []PlannedNode
@@ -95,14 +91,14 @@ type clusterPlan struct {
 // rest of it. With the field "yaml_on" the config is the YAML that the user
 // edits; the run options stay those of the form.
 func buildCreateCluster(f Form, c Context) (Command, error) {
-	realm, err := checkRealm(f)
-	if err != nil {
-		return Command{}, err
-	}
 	if c.ConfigDir == "" {
 		return Command{}, errors.New("sind ui has no state directory to save the config in; set XDG_STATE_HOME or HOME")
 	}
+	realm := Realm(f)
 	var ps problems
+	if err := nameError("realm", realm); err != nil {
+		ps.add("realm", "Realm", false, err)
+	}
 	var plan clusterPlan
 	if f.Get("yaml_on") != "" {
 		plan = yamlPlan(f, c, realm, &ps)
@@ -125,6 +121,13 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		monitoring = "yaml"
 	}
 	clusterImages(cfg, pull, c.Image, monitoring, &images, &ps)
+	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
+	host := int(c.Snap.Docker.MemTotal >> 20)
+	over := host > 0 && memoryMB > host
+	if over && !checkbox(f, "overcommit", "Create anyway", &ps) {
+		ps.add("overcommit", "Memory", false, fmt.Errorf("the nodes may use %s, more than the %s of the Docker host; give them less memory, or tick Create anyway",
+			MemoryLabel(memoryMB), MemoryLabel(host)))
+	}
 	order := ClusterFieldsOf(f)
 	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(order, a.Field) - fieldOrder(order, b.Field) })
 	var flags []string
@@ -137,10 +140,13 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cmd := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
 	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
 	cmd.Nodes = plan.planned
-	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
+	if plan.final != nil {
+		cmd.After, cmd.SlurmConf = afterCreate(plan.final)
+	}
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
-	cmd.MemoryMB = memoryMB
-	cmd.Warns = plan.warns
+	cmd.Containers, cmd.CPUs, cmd.MemoryMB = containers, cpus, memoryMB
+	cmd.OverHost = over
+	cmd.Warns = append(plan.warns, slurmWarnings(cfg)...)
 	cmd.Problems = ps
 	if data.home {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("%s is your home directory. Jobs write their output files there as root. Pick a scratch directory such as %s.",
@@ -149,7 +155,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if data.warn != "" {
 		cmd.Warns = append(cmd.Warns, data.warn)
 	}
-	if host := int(c.Snap.Docker.MemTotal >> 20); host > 0 && memoryMB*100 > host*HostMemoryWarn {
+	if host > 0 && memoryMB*100 > host*HostMemoryWarn && !ps.has("overcommit") {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("The nodes may use %s of memory, %d%% of the %s of the Docker host, which then can run out of memory.",
 			MemoryLabel(memoryMB), memoryMB*100/host, MemoryLabel(host)))
 	}
@@ -171,14 +177,14 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 // formPlan reads the config of a new cluster from the fields of the form.
 func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	cfg := config.Cluster{Kind: "Cluster", Name: strings.TrimSpace(f.Get("name"))}
-	if realm != mesh.DefaultRealm {
+	if realm != mesh.DefaultRealm && !ps.has("realm") {
 		cfg.Realm = realm
 	}
 	if image := strings.TrimSpace(f.Get("image")); image != "" {
-		if imagePattern.MatchString(image) {
+		if err := imageError(image); err == nil {
 			cfg.Defaults.Image = image
 		} else {
-			ps.add("image", "Image", true, errors.New("write an image reference such as ghcr.io/gsi-hpc/sind-node:latest"))
+			ps.add("image", "Image", true, err)
 		}
 	}
 	nodeDefaults(f, &cfg.Defaults, ps)
@@ -191,20 +197,21 @@ func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	data := dataStorage(f, c, ps)
 	cfg.Storage.DataStorage = data.storage
 
-	content, warns, errs := renderConfig(cfg, ps.has("name"))
+	content, final, warns, errs := renderConfig(cfg, ps.has("name"))
 	for _, err := range errs {
-		ps.add("", "Config", false, err)
+		*ps = append(*ps, configProblem(f, err))
 	}
-	return clusterPlan{cfg: cfg, content: content, warns: warns, planned: planned, data: data}
+	return clusterPlan{cfg: cfg, final: final, content: content, warns: warns, planned: planned, data: data}
 }
 
 // maxPlanned is the most workers of a plan, as the form allows them.
 const maxPlanned = maxGroups * maxCount
 
 // yamlPlan reads the config of a new cluster from the field "yaml", which
-// sind ui saves as it is. Its problems are those of the YAML. A host
-// directory that is missing is created first, as Create the directory does
-// by default.
+// sind ui saves as it is. Its problems are those of the YAML, but for the
+// name and the realm, whose fields stay beside the YAML. A host directory
+// that is missing is created first, as Create the directory does by
+// default.
 func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	p := clusterPlan{content: strings.ReplaceAll(f.Get("yaml"), "\r\n", "\n")}
 	var yps problems
@@ -214,18 +221,26 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 			*ps = append(*ps, pr)
 		}
 	}()
+	if strings.TrimSpace(p.content) == "" {
+		yps.add("", "YAML", false, errors.New("paste a cluster config, or open a file of one"))
+		return p
+	}
 	parsed, err := parseConfig([]byte(p.content))
 	if err != nil {
 		yps.add("", "YAML", false, err)
 		return p
 	}
 	if parsed.Realm != "" && parsed.Realm != realm {
-		yps.add("", "YAML", false, fmt.Errorf("the YAML names realm %s, but the dialog makes the cluster in realm %s; remove realm, or open the dialog in realm %s", parsed.Realm, realm, parsed.Realm))
+		ps.add("realm", "Realm", false, fmt.Errorf("the YAML names realm %s, and this field %s; make them the same, or remove realm from the YAML", parsed.Realm, realm))
 	}
+	yamlImageProblems(parsed, &yps)
+	yamlQOSProblems(parsed, &yps)
 	parsed.ApplyDefaults()
-	checkClusterName(c, realm, parsed, &yps)
+	var nps problems
+	checkClusterName(c, realm, parsed, &nps)
+	*ps = append(*ps, nps...)
 	name := parsed.Name
-	if yps.has("name") {
+	if nps.has("name") {
 		// As renderConfig does: the name is a problem of its own.
 		parsed.Name = "cluster"
 	}
@@ -237,6 +252,9 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	}
 	if len(errs) == 0 {
 		p.warns = parsed.Warnings()
+		if !nps.has("name") {
+			p.final = parsed
+		}
 	}
 	p.planned = plannedOf(p.cfg.Nodes, &yps)
 	if ds := p.cfg.Storage.DataStorage; ds.UsesHostPath() && path.IsAbs(ds.HostPath) {
@@ -287,11 +305,11 @@ func fieldOrder(order []string, field string) int {
 // sind refuses, one that is too long for accounting, or one that the realm
 // has already.
 func checkClusterName(c Context, realm string, cfg *config.Cluster, ps *problems) {
-	switch err := config.CheckName("cluster", cfg.Name); {
+	switch err := nameError("cluster", cfg.Name); {
 	case err != nil:
 		ps.add("name", "Name", false, err)
 	case len(cfg.Name) > config.MaxAccountingClusterName && slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleDB }):
-		ps.add("name", "Name", false, fmt.Errorf("with a db node the name may have at most %d characters, as slurmdbd builds its table names from it", config.MaxAccountingClusterName))
+		ps.add("name", "Name", false, fmt.Errorf("with a db node, use at most %d characters, as slurmdbd builds its table names from the name", config.MaxAccountingClusterName))
 	default:
 		if _, ok := c.Snap.Cluster(realm, cfg.Name); ok {
 			ps.add("name", "Name", false, fmt.Errorf("realm %s has a cluster %s already; pick another name, or delete that cluster first", realm, cfg.Name))
@@ -492,10 +510,11 @@ var parseConfig = config.Parse
 
 // renderConfig writes the config as YAML and checks it as sind create
 // cluster will: it parses it, applies the defaults and validates it. It
-// returns every error of the check, where sind stops at the first. The
-// warnings are those of sind. A name that is wrong already is a problem of
-// its own: the check puts a valid one in its place.
-func renderConfig(cfg config.Cluster, badName bool) (content string, warns []string, errs []error) {
+// returns every error of the check, where sind stops at the first, or the
+// config as sind takes it. The warnings are those of sind. A name that is
+// wrong already is a problem of its own: the check puts a valid one in its
+// place, and returns no config.
+func renderConfig(cfg config.Cluster, badName bool) (content string, final *config.Cluster, warns []string, errs []error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -505,14 +524,17 @@ func renderConfig(cfg config.Cluster, badName bool) (content string, warns []str
 	content = buf.String()
 	parsed, err := parseConfig(buf.Bytes())
 	if err != nil {
-		return content, nil, []error{err}
+		return content, nil, nil, []error{err}
 	}
 	if badName {
 		parsed.Name = "cluster"
 	}
 	parsed.ApplyDefaults()
 	if errs := parsed.ValidateAll(); len(errs) > 0 {
-		return content, nil, errs
+		return content, nil, nil, errs
 	}
-	return content, parsed.Warnings(), nil
+	if badName {
+		return content, nil, parsed.Warnings(), nil
+	}
+	return content, parsed, parsed.Warnings(), nil
 }

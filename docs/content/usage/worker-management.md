@@ -18,8 +18,8 @@ sind create worker [CLUSTER] [FLAGS]
 {{< ui >}}
 
 1. On the page of the cluster, press **Add workers…**.
-2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker.
-3. Press **Add**. The task dock shows the progress of the run.
+2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker. The dialog shows the size and the names of the new workers, such as `3 × 2 CPUs, 1 GiB: worker-6 … worker-8`.
+3. Press the button, such as **Add 3 workers**. The task dock shows the progress of the run.
 
 {{< uishot "dialog-create-worker" >}}
 
@@ -124,11 +124,12 @@ sind delete worker NODES
 
 1. Open the cluster, then the **Nodes** tab.
 2. Select the workers. The selection shows as a node set, such as `worker-[2-4]`.
-3. Press **Delete…** in the selection bar. Type the name of the cluster to confirm, and press **Delete**.
+3. Press the delete button in the selection bar, such as **Delete 3 workers…**. If you selected other nodes too, it counts only the workers and deletes only them. The dialog lists what goes and what stays.
+4. Type the name of the worker when you delete one worker, else the name of the cluster, and press the button, such as **Delete 3 workers**.
 
 {{< uishot "dialog-delete-worker" >}}
 
-The page of a worker has a **Delete…** button too.
+The page of a worker has a **Delete worker…** button too.
 
 {{< /ui >}}
 {{< /ways >}}

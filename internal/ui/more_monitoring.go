@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/observability"
 )
 
@@ -43,12 +44,13 @@ func moreIntervalOf() moreInterval {
 var moreIntervalChoices = []time.Duration{10 * time.Second, 30 * time.Second, time.Minute, 5 * time.Minute}
 
 func init() {
-	RegisterFragment(Fragment{Name: "more-mon-interval", Load: moreIntervalLoad})
+	// The picker reads the interval that a POST set, to say it saved it.
+	RegisterFragment(Fragment{Name: "more-mon-interval", Params: []string{"interval"}, Load: moreIntervalLoad})
 	RegisterRoute(Route{Pattern: "POST /monitoring/interval", Handle: moreIntervalSet})
 	RegisterFragment(Fragment{
 		Name:     "more-monitoring",
-		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker},
-		Prefixes: []string{"monitoring/"},
+		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker, store.TopicDoctor},
+		Prefixes: []string{"monitoring/", "nodes/"},
 		Params:   []string{"realm"},
 		Load:     moreMonitoringLoad,
 	})
@@ -76,13 +78,18 @@ type moreMonitoringData struct {
 	// Notice is set when there is no realm to show.
 	Notice    moreNotice
 	DockerErr string
+	// HostDNS says whether this host resolves the names under .sind,
+	// which the Open links use: "ok", "off", or "" when no check says.
+	HostDNS string
+	// Forward is the address of a Grafana, for the ssh -L example.
+	Forward string
 }
 
 // moreMonRealm is the monitoring stack of one realm.
 type moreMonRealm struct {
 	Name     string
 	Services []moreMonService
-	Clusters []cluster.MonitoredCluster
+	Clusters []moreMonCluster
 }
 
 // moreMonService is a service of a stack, as the table draws it.
@@ -92,6 +99,21 @@ type moreMonService struct {
 	Pill, Text string
 	// Open is set when the service has a page to open in a new tab.
 	Open bool
+	// Addr is the service's address with its port, for a browser that
+	// does not resolve the URL's name; empty when the URL has the address.
+	Addr string
+}
+
+// moreMonCluster is a monitored cluster with its key numbers.
+type moreMonCluster struct {
+	cluster.MonitoredCluster
+	// Running and Total count the cluster's node containers.
+	Running, Total int
+	// Up is the number of Slurm's nodes that are not down; only with
+	// Slurm. Draining nodes count as up, and the page shows them beside
+	// it: a node can be down and drain at once, and the counts do not
+	// tell how many are both.
+	Up int
 }
 
 // moreServiceState says how a service stands. A service that runs and
@@ -116,26 +138,81 @@ func moreServiceState(s cluster.MonitoringService) (class, text string) {
 	return "", string(s.State)
 }
 
-// moreMonitoringCount is the count behind the rail entry: the services of
-// all stacks.
+// moreMonitoringCount is the badge behind the rail entry: the services of
+// all stacks that are not ready, as "1 down" (or "1 starting" when none
+// is down), or a dot when all are ready. Without a stack it shows none.
 func moreMonitoringCount(sn store.Snapshot) NavCount {
-	n := 0
+	n, down, starting := 0, 0, 0
 	for _, m := range sn.Monitorings {
-		n += len(m.Services)
+		for _, s := range m.Services {
+			n++
+			switch class, _ := moreServiceState(s); class {
+			case "ok":
+			case "bad":
+				down++
+			default:
+				starting++
+			}
+		}
 	}
-	if n == 0 {
-		return NavCount{Text: "–"}
+	switch {
+	case down > 0:
+		return NavCount{Text: strconv.Itoa(down) + " down", Class: "bad", Label: pgPlural(down, "monitoring service is", "monitoring services are") + " down"}
+	case starting > 0:
+		return NavCount{Text: strconv.Itoa(starting) + " starting", Class: "warn", Label: pgPlural(starting, "monitoring service is", "monitoring services are") + " not ready yet"}
+	case n > 0:
+		return NavCount{Class: "ok", Label: pgPlural(n, "monitoring service is", "monitoring services are") + " ready"}
 	}
-	return NavCount{Text: strconv.Itoa(n)}
+	return NavCount{}
+}
+
+// moreHostDNS says whether this host resolves the names under .sind, by
+// the doctor's DNS policy check: "ok" when it passed, "off" when it did
+// not, "" when there is no such check, as without systemd-resolved.
+func moreHostDNS(sn store.Snapshot) string {
+	if sn.Doctor == nil {
+		return ""
+	}
+	for _, c := range sn.Doctor.Checks {
+		if c.Name == "DNS policy" {
+			if c.Status == doctor.StatusOK {
+				return "ok"
+			}
+			return "off"
+		}
+	}
+	return ""
+}
+
+// moreServiceAddr returns the address and port of a service whose URL
+// names it by DNS, "" when its URL has the address or it has none.
+func moreServiceAddr(s cluster.MonitoringService) string {
+	if s.IP == "" || strings.Contains(s.URL, "//"+s.IP+":") {
+		return ""
+	}
+	return s.IP + ":" + s.Name.Port()
+}
+
+// moreMonClusterOf returns a monitored cluster with the count of its node
+// containers and of its Slurm nodes that are up.
+func moreMonClusterOf(sn store.Snapshot, realm string, c cluster.MonitoredCluster) moreMonCluster {
+	mc := moreMonCluster{MonitoredCluster: c}
+	for _, n := range sn.ClusterNodes(realm, c.Name) {
+		mc.Total++
+		if n.State == cluster.StateRunning {
+			mc.Running++
+		}
+	}
+	if s := c.Slurm; s != nil {
+		mc.Up = max(s.Nodes-s.NodesDown, 0)
+	}
+	return mc
 }
 
 // moreMonitoringLoad fills the data of the Monitoring page.
 func moreMonitoringLoad(v *View) error {
-	realms, err := moreRealms(v)
-	if err != nil {
-		return err
-	}
-	d := moreMonitoringData{Multi: len(realms) > 1, Realm: v.Params.Get("realm")}
+	realms := moreRealms(v)
+	d := moreMonitoringData{Multi: len(realms) > 1, Realm: v.Params.Get("realm"), HostDNS: moreHostDNS(v.Snap)}
 	d.NewURL = moreDialogURL("create-cluster", "realm", d.Realm)
 	if len(realms) == 0 {
 		d.Notice = moreNoRealms(v.Snap.Docker)
@@ -148,12 +225,18 @@ func moreMonitoringLoad(v *View) error {
 			d.Without = append(d.Without, name)
 			continue
 		}
-		r := moreMonRealm{Name: name, Clusters: m.Clusters}
+		r := moreMonRealm{Name: name}
+		for _, c := range m.Clusters {
+			r.Clusters = append(r.Clusters, moreMonClusterOf(v.Snap, name, c))
+		}
 		for _, s := range m.Services {
-			ms := moreMonService{MonitoringService: s}
+			ms := moreMonService{MonitoringService: s, Addr: moreServiceAddr(s)}
 			ms.Pill, ms.Text = moreServiceState(s)
 			ms.Open = s.State == docker.StateRunning && s.Name != observability.ServiceAlloy &&
 				(strings.HasPrefix(s.URL, "http://") || strings.HasPrefix(s.URL, "https://"))
+			if s.Name == observability.ServiceGrafana && ms.Addr != "" && d.Forward == "" {
+				d.Forward = ms.Addr
+			}
 			r.Services = append(r.Services, ms)
 		}
 		d.Realms = append(d.Realms, r)
@@ -166,6 +249,8 @@ func moreMonitoringLoad(v *View) error {
 // moreIntervalData is the interval picker of the Monitoring page.
 type moreIntervalData struct {
 	Choices []moreIntervalChoice
+	// Saved is the interval that the request set, "" when it set none.
+	Saved string
 }
 
 // moreIntervalChoice is an option of the picker.
@@ -209,6 +294,9 @@ func moreIntervalLoad(v *View) error {
 	var d moreIntervalData
 	for _, c := range moreIntervalOptions(current) {
 		d.Choices = append(d.Choices, moreIntervalChoice{Value: moreDuration(c), Selected: c == current})
+	}
+	if v.Params.Get("interval") != "" {
+		d.Saved = moreDuration(current)
 	}
 	v.Data = d
 	return nil

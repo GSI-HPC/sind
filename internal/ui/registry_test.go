@@ -5,6 +5,7 @@ package ui
 import (
 	"html/template"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
@@ -117,11 +118,11 @@ func TestEnvKeepsValues(t *testing.T) {
 }
 
 func TestDefaultRegistryHasTheShell(t *testing.T) {
-	var pages []string
-	for _, p := range defaultRegistry.pages {
-		pages = append(pages, p.Name)
+	var patterns []string
+	for _, rt := range defaultRegistry.routes {
+		patterns = append(patterns, rt.Pattern)
 	}
-	assert.Contains(t, pages, "overview")
+	assert.Contains(t, patterns, "GET /{$}", "the Overview")
 	for _, name := range []string{"rail", "tasks"} {
 		f, ok := defaultRegistry.fragments[name]
 		require.True(t, ok, name)
@@ -146,6 +147,8 @@ func TestRegisterFunctionsUseTheDefaultRegistry(t *testing.T) {
 	assert.Len(t, defaultRegistry.routes, 1)
 	assert.Len(t, defaultRegistry.services, 1)
 	assert.Contains(t, defaultRegistry.funcs, "fn")
-	assert.Equal(t, "9", defaultRegistry.navCount("clusters")(store.Snapshot{}).Text)
-	assert.Nil(t, defaultRegistry.navCount("nodes"))
+	assert.Equal(t, "9", defaultRegistry.navCount("clusters")(store.Snapshot{}, time.Time{}).Text)
+	SetNavCountAt("nodes", func(_ store.Snapshot, now time.Time) NavCount { return NavCount{Text: now.Format("2006")} })
+	assert.Equal(t, "2026", defaultRegistry.navCount("nodes")(store.Snapshot{}, pgNow).Text)
+	assert.Nil(t, defaultRegistry.navCount("monitoring"))
 }

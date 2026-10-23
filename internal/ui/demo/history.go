@@ -49,12 +49,15 @@ func history(now time.Time) [][]byte {
 			work: create(createSpec{image: node26, mesh: true, nodes: nodeSet("bench", 14*time.Second, 21*time.Second, 0, 340*time.Second)})},
 		{title: "create worker", target: "legacy", start: now.Add(-75 * time.Minute), cancelAfter: 9 * time.Second,
 			work: create(createSpec{nodes: nodeSet("legacy", 0, 0, 0, 19*time.Second)[3:]})},
-		{title: "create cluster", target: "pr-145", start: now.Add(-40 * time.Minute),
+		{title: "create cluster", target: "pr-145", start: now.Add(-40 * time.Minute), ui: true,
 			work: create(createSpec{image: node26, mesh: true, nodes: nodeSet("pr-145", 14*time.Second, 19*time.Second, 22*time.Second)})},
 	}
 	logs := make([][]byte, len(runs))
 	for i, r := range runs {
 		r.id, r.trace = runID(i+1), traceID(i+1)
+		if r.ui {
+			r.trace = uiTrace(i + 1)
+		}
 		logs[i] = record(r)
 	}
 	return logs
@@ -72,7 +75,7 @@ const (
 func midRun(now time.Time) []byte {
 	start := now.Add(-midRunAge)
 	log := record(recording{
-		id: runID(midRunIndex), trace: traceID(midRunIndex), title: "create cluster", target: "nightly", start: start,
+		id: runID(midRunIndex), trace: uiTrace(midRunIndex), title: "create cluster", target: "nightly", start: start,
 		work: func(ctx context.Context, p play) error {
 			return p.create(ctx, createSpec{image: "ghcr.io/gsi-hpc/sind-node:26.05.4", mesh: true, nodes: nodeSet("nightly", 14*time.Second, 19*time.Second, 22*time.Second)})
 		},

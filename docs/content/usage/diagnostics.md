@@ -17,7 +17,7 @@ sind doctor
 {{< /cli >}}
 {{< ui >}}
 
-Open **Doctor** in the rail. Each check shows as ok, warning or failed, with the fix.
+Open **Doctor** in the rail. The line at the top says whether sind can create clusters on this host. Each check shows as ok, warning or failed, with the fix. **Copy** beside a command copies only the command.
 
 {{< uishot "doctor" >}}
 
@@ -385,7 +385,7 @@ sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 {{< /cli >}}
 {{< ui >}}
 
-Open the cluster, then the **Logs** tab. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log. Use **Pause** to stop the stream and **Follow** to resume it.
+Open the cluster, then the **Logs** tab, or press **Logs** on the page of a node. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log; **Start with** shows more. Use **Pause** to stop the stream and **Follow** to resume it. **Filter** and **Errors and warnings only** narrow the lines, and **Download** saves them.
 
 {{< uishot "cluster-logs" >}}
 
@@ -501,7 +501,7 @@ sind get volumes
 {{< /cli >}}
 {{< ui >}}
 
-Open the cluster, then the **Network and storage** tab. It lists the volumes and mounts of the cluster.
+Open the cluster, then the **Network and storage** tab. It lists the volumes and mounts of the cluster, each as a Docker volume or a host directory, read-only or read-write, and where the munge key is.
 
 {{< uishot "cluster-network" >}}
 
@@ -528,7 +528,7 @@ sind get dns
 {{< /cli >}}
 {{< ui >}}
 
-Open **Mesh and DNS**. It lists the DNS records of the realm.
+Open **Mesh and DNS**. It lists the DNS records of the realm. Type into the filter to find a name or an address; **Copy list** copies the records that show.
 
 {{< uishot "mesh" >}}
 
@@ -610,7 +610,7 @@ sind get monitoring
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows Grafana, Prometheus, Loki and Alloy with their addresses and states, and the clusters that they collect.
+Open **Monitoring**. It shows the clusters that the stack collects, with their key numbers from Prometheus, and Grafana, Prometheus, Loki and Alloy with their addresses and states.
 
 {{< uishot "monitoring" >}}
 
@@ -632,7 +632,7 @@ default  3      26.05.5
 dev      5      26.05.5
 ```
 
-`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
+`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
 
 ```json
 {
@@ -641,7 +641,8 @@ dev      5      26.05.5
     {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5"}]
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
+                "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```
 

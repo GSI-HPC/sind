@@ -3,39 +3,39 @@
 # and howtos list ids; both may be empty.
 - id: overview
   title: Overview
-  summary: The clusters of the realm, what needs you, and what sind did lately.
+  summary: What needs you, the clusters of the realm, and what sind did lately.
   route: /
   doc: getting-started/quickstart
   words: [realm, cluster, needs-you, activity-log]
-  howtos: [first-cluster, add-workers]
+  howtos: [first-cluster, add-workers, job-pending, clean-up]
 - id: clusters
   title: Clusters
-  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels.
+  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels. Filter, pick a chip or sort by a column; the address keeps them. Tick clusters to delete several at once.
   route: /clusters
   doc: usage/cluster-lifecycle
   words: [realm, cluster, data]
-  howtos: [first-cluster]
+  howtos: [first-cluster, clean-up, tidy-clusters]
 - id: cluster
   title: Cluster
-  summary: One cluster. Its tabs show the health of its nodes and services, the logs, the network and how to connect.
+  summary: One cluster. Its tabs show the health of its nodes and services, what Slurm says about them, the logs, the network and how to connect.
   route: /clusters/{realm}/{cluster}
   doc: usage/diagnostics#cluster-status
-  words: [cluster, node-roles, managed, nodeset, data, identity]
-  howtos: [add-workers, reach-node, slow-create]
+  words: [cluster, node-roles, managed, nodeset, data, identity, slurmctld, slurmd, munge]
+  howtos: [job-output, job-pending, add-workers, reach-node, slow-create, clean-up]
 - id: nodes
   title: Nodes
-  summary: Every node of the realm, with its role and state.
+  summary: Every node of the realm, with its role and state. Filter, pick a chip or sort by a column; the address keeps them.
   route: /nodes
   doc: usage/diagnostics#list-nodes
   words: [node-roles, managed, nodeset]
-  howtos: [reach-node]
+  howtos: [reach-node, job-pending]
 - id: node
   title: Node
-  summary: One node container, its services and its address. You can power it or delete it here.
+  summary: One node container, its services and its address. You can power it or delete it here, and drain or resume a worker in Slurm.
   route: /nodes/{realm}/{cluster}/{node}
   doc: usage/diagnostics#node-status
-  words: [node-roles, managed, munge, slurmctld]
-  howtos: [reach-node]
+  words: [node-roles, managed, munge, slurmctld, sshd, drain]
+  howtos: [reach-node, job-pending]
 - id: mesh
   title: Mesh and DNS
   summary: What the clusters of a realm share. It shows the mesh network, the DNS records and the containers that you connected.
@@ -45,35 +45,35 @@
   howtos: [connect-container]
 - id: monitoring
   title: Monitoring
-  summary: The Prometheus, Loki, Grafana and Alloy of the realm, when a cluster asks for them.
+  summary: The key numbers of each monitored cluster, such as its jobs, and the Prometheus, Loki, Grafana and Alloy of the realm, when a cluster asks for them.
   route: /monitoring
   doc: guides/monitoring
   words: [realm]
   howtos: []
 - id: topology
   title: Topology
-  summary: How this host reaches each node, by name and by address.
+  summary: How this host reaches each node, by name and by address, as a diagram or as a table.
   route: /topology
   doc: architecture/networking
   words: [mesh]
   howtos: [reach-node]
 - id: doctor
   title: Doctor
-  summary: What sind needs from this host. Each check says ok, warning or failed, and what to change.
+  summary: Whether sind can create clusters on this host. Each check says ok, warning or failed, and what to change.
   route: /doctor
   doc: usage/diagnostics#doctor
   words: [doctor, needs-you]
   howtos: []
 - id: activity
   title: Activity
-  summary: The runs of the sind commands that change something, from this UI and from terminals.
+  summary: The runs of the sind commands that change something, from this UI and from terminals. Filter them by text, status, realm and cluster.
   route: /activity
   doc: usage/progress#the-activity-log
   words: [activity-log, run, lock]
   howtos: [slow-create]
 - id: run
   title: Run
-  summary: One sind command and its steps, live while it works. The steps are those that the terminal shows.
+  summary: One sind command and its steps, live while it works. The steps are those that the terminal shows. A run of this UI shows its command, and Try again when it failed or was stopped.
   route: /runs/{id}
   doc: usage/progress
   words: [run, wait, rollback, lock, trace, nodeset]
@@ -85,3 +85,10 @@
   doc: usage/progress
   words: [run, activity-log]
   howtos: []
+- id: help
+  title: Help
+  summary: Every how-to, word and key of sind ui in one place. The help pane, which ? opens, shows the same texts beside any page.
+  route: /help
+  doc: web-ui/pages#help
+  words: [realm, cluster, node-roles]
+  howtos: [first-cluster]

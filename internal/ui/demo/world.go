@@ -3,6 +3,8 @@
 package demo
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
@@ -49,6 +52,9 @@ type clusterState struct {
 	users    []string
 	nodes    []*nodeState
 	nextHost int
+	// cpus and memory are the size of each node, 0 for sind's defaults.
+	cpus   int
+	memory int64
 }
 
 type nodeState struct {
@@ -58,6 +64,10 @@ type nodeState struct {
 	state cluster.State
 	// up are the services that run; a node that is not running has none.
 	up map[probe.Service]bool
+	// drain is the reason Slurm does not schedule on the node, empty for
+	// none; busy are the CPUs its jobs hold (see slurmNode).
+	drain string
+	busy  int
 }
 
 // NewWorld returns a world with nothing in it.
@@ -171,6 +181,27 @@ func (w *World) clustersOf(realm string) []string {
 
 // Count returns the number of clusters of the realm.
 func (w *World) Count(realm string) int { return len(w.clustersOf(realm)) }
+
+// InspectContainer answers docker inspect for a node of the world: its
+// image and size.
+func (w *World) InspectContainer(_ context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, r := range w.realms {
+		for _, c := range r.clusters {
+			for _, n := range c.nodes {
+				if cluster.ContainerName(r.name, c.name, n.short) != name {
+					continue
+				}
+				info := &docker.ContainerInfo{Name: name, ImageRef: "ghcr.io/gsi-hpc/sind-node:" + c.slurm}
+				info.HostConfig.NanoCPUs = int64(cmp.Or(c.cpus, config.DefaultCPUs)) * 1e9
+				info.HostConfig.Memory = cmp.Or(c.memory, 512<<20)
+				return info, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no such container: %s", name)
+}
 
 // apply changes the world as a script says, for the realm of the node.
 func (w *World) apply(realmName, op string, n node) {
@@ -291,6 +322,7 @@ func (w *World) Publish(st *store.Store) {
 	for _, k := range w.statuses {
 		if !slices.Contains(keys, k) {
 			st.SetStatus(k.Realm, k.Cluster, nil)
+			st.SetSlurm(k.Realm, k.Cluster, nil)
 		}
 	}
 	w.published, w.statuses = now, keys
@@ -349,9 +381,10 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 			volumes = append(volumes, cluster.VolumeSummary{Name: c.dataPath, Driver: "local"})
 		}
 		if c.monitoring {
-			watched = append(watched, cluster.MonitoredCluster{Name: c.name, Nodes: len(c.nodes), SlurmVersion: c.slurm})
+			watched = append(watched, cluster.MonitoredCluster{Name: c.name, Nodes: len(c.nodes), SlurmVersion: c.slurm, Slurm: slurmCountsOf(c)})
 		}
 		st.SetStatus(r.name, c.name, w.statusOf(r, c, m))
+		st.SetSlurm(r.name, c.name, slurmOf(c))
 		*keys = append(*keys, store.StatusKey{Realm: r.name, Cluster: c.name})
 	}
 	st.SetClusters(r.name, clusters)
@@ -372,6 +405,29 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 	} else {
 		st.SetMonitoring(r.name, nil)
 	}
+}
+
+// demoPending is how many jobs wait in the queue of a monitored cluster
+// of the demo.
+const demoPending = 3
+
+// slurmCountsOf returns the numbers that Prometheus would have of a
+// monitored cluster: its workers are Slurm's nodes, one whose slurmd does
+// not run is down, and each other one runs a job.
+func slurmCountsOf(c *clusterState) *cluster.SlurmCounts {
+	s := &cluster.SlurmCounts{JobsPending: demoPending}
+	for _, n := range c.nodes {
+		if n.role != config.RoleWorker {
+			continue
+		}
+		s.Nodes++
+		if n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd] {
+			s.NodesDown++
+			continue
+		}
+		s.JobsRunning++
+	}
+	return s
 }
 
 // monitoringOf returns the monitoring stack of the realm.
@@ -433,7 +489,7 @@ func (w *World) statusOf(r *realm, c *clusterState, m *mesh.Manager) *cluster.St
 		{Path: "/etc/slurm", Source: string(cluster.VolumeName(r.name, c.name, cluster.VolumeConfig)), Type: config.StorageVolume, OK: true},
 		{Path: "/etc/munge", Source: string(cluster.VolumeName(r.name, c.name, cluster.VolumeMunge)), Type: config.StorageVolume, OK: true},
 	}
-	data := cluster.MountPoint{Path: "/data", Source: c.dataPath, Type: config.StorageVolume, OK: true}
+	data := cluster.MountPoint{Path: cluster.DefaultDataMountPath, Source: c.dataPath, Type: config.StorageVolume, OK: true, Data: true}
 	if !c.volume {
 		data.Type = config.StorageHostPath
 	}

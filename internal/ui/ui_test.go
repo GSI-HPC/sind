@@ -33,7 +33,7 @@ func runRegistry() *Registry {
 	r := NewRegistry()
 	r.AddFragment(railFragment())
 	r.AddFragment(tasksFragment())
-	r.AddPage(overviewPage)
+	r.AddRoute(pgRealmRoute(overviewPage, false))
 	pgRegister(r)
 	return r
 }

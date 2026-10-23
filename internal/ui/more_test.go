@@ -38,12 +38,31 @@ func TestMoreMeshPage(t *testing.T) {
 		assert.Contains(t, body, want)
 	}
 	assert.NotContains(t, body, "not reachable")
+	// The records can be filtered, copied one by one or as a list, and
+	// lead to their nodes.
+	for _, want := range []string{
+		`data-more-filter="dns-sind" placeholder="Filter by name or address" aria-label="Filter the DNS records of realm sind"`,
+		`<span class="faint" role="status" data-more-count="dns-sind">2 records</span>`,
+		`<table id="dns-sind" class="more-cards more-dnscards" role="table">`,
+		`<tr role="row" data-more-row="172.19.0.2 controller.default.sind.sind"><td role="cell" class="mono"><a href="/nodes/sind/default/controller">controller.default.sind.sind</a></td>`,
+		`data-more-copy-text="worker-0.default.sind.sind" aria-label="Copy worker-0.default.sind.sind">Copy</button>`,
+		`data-more-copy-rows="dns-sind" aria-label="Copy list of realm sind, as lines of /etc/hosts">Copy list</button>`,
+		`data-more-none="dns-sind" hidden>No record matches the filter.`,
+		`<code>dig +short @172.18.255.254 controller.default.sind.sind</code>`,
+	} {
+		assert.Contains(t, body, want)
+	}
 
 	one := moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.NotContains(t, one, "Realm <b")
 	assert.NotContains(t, one, "has no mesh")
 
-	moreGet(t, ts, "/mesh?realm=nope", http.StatusNotFound)
+	body = moreGet(t, ts, "/mesh?realm=nope", http.StatusNotFound)
+	assert.Contains(t, body, "There is no realm nope.")
+	assert.Contains(t, body, "with its last cluster")
+	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=">All realms</a>`)
+	body = moreGet(t, ts, "/mesh?realm=sindd", http.StatusNotFound)
+	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=sind">Realm sind</a>`)
 }
 
 func TestMoreMeshStates(t *testing.T) {
@@ -52,6 +71,7 @@ func TestMoreMeshStates(t *testing.T) {
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "cannot connect"})
 	body := moreGet(t, ts, "/mesh?realm=ci", http.StatusOK)
 	assert.Contains(t, body, "could not be read: docker inspect failed")
+	assert.NotContains(t, body, "dig +short", "no DNS server to ask")
 	assert.Contains(t, body, "Docker is not reachable: cannot connect")
 	assert.NotContains(t, body, "has no mesh")
 	assert.Contains(t, body, "No DNS records yet")
@@ -63,6 +83,13 @@ func TestMoreMeshStates(t *testing.T) {
 	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.Contains(t, body, `<span class="pill bad">error</span>`)
 	assert.Contains(t, body, "sind-dns")
+
+	// One record is one, not "1 records".
+	m.Records = m.Records[:1]
+	ts.st.SetMesh("sind", m)
+	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `<span class="chip">1 record</span>`)
+	assert.Contains(t, body, `data-more-count="dns-sind">1 record</span>`)
 }
 
 func TestMoreNoRealms(t *testing.T) {
@@ -105,6 +132,18 @@ func TestMoreMonitoringPage(t *testing.T) {
 	}
 	assert.Equal(t, 3, strings.Count(body, "Open ↗"), "alloy has no page to open")
 	assert.NotContains(t, body, "no monitoring stack")
+	for _, want := range []string{
+		`aria-label="Open grafana in a new tab"`,
+		`172.18.255.253:3000</span> <button type="button" class="btn sm" data-more-copy-text="172.18.255.253:3000" aria-label="Copy the address of grafana">Copy</button>`,
+		// The host check says host DNS is off, so the Open links fail.
+		`<div class="callout warn">This host does not resolve the names under <span class="mono">.sind</span> (<a href="/doctor">Doctor: DNS policy</a>), so the Open links fail.`,
+		`ssh -L 3000:172.18.255.253:3000 HOST`,
+		// dev has a stopped node, and Prometheus has no numbers of it yet.
+		`data-label="Nodes running">3 of 4</td>`, "No numbers yet: Prometheus has them once it has read slurmctld.",
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.Equal(t, 1, strings.Count(body, "data-more-copy-text="), "only grafana's URL has a name instead of its address")
 
 	one := moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	assert.Contains(t, one, "<h2>Stack</h2>")
@@ -137,6 +176,61 @@ func TestMoreMonitoringEmptyAndEdges(t *testing.T) {
 	assert.Contains(t, body, "Docker is not reachable: gone")
 }
 
+func TestMoreMonitoringNumbers(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m.Clusters = []cluster.MonitoredCluster{
+		{Name: "dev", Nodes: 4, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 3, NodesDown: 1, NodesDrain: 1, JobsRunning: 7, JobsPending: 12}},
+		{Name: "default", Nodes: 2, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 1, NodesDown: 2, JobsRunning: 1}},
+	}
+	ts.st.SetMonitoring("sind", &m)
+	body := moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	for _, want := range []string{
+		"Nodes running", "Slurm nodes up", "Jobs running", "Jobs pending",
+		// A draining node is up: the counts do not tell whether the
+		// down one drains too.
+		`<td role="cell" class="num" data-label="Slurm nodes up">2 of 3<br><span class="faint more-nowrap">1 down, 1 draining</span></td>`,
+		`<td role="cell" class="num" data-label="Jobs running">7</td><td role="cell" class="num" data-label="Jobs pending">12</td>`,
+		`<td role="cell" class="num" data-label="Nodes running">2 of 2</td>`, `data-label="Slurm nodes up">0 of 1<br>`,
+		// On a phone, each row is a card with the labels in it.
+		`<table class="more-cards more-moncards" role="table">`, `<td role="cell" class="mono more-aside">26.05.1</td>`,
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.NotContains(t, body, "No numbers yet")
+
+	// Slurm's nodes all up: no line of down ones.
+	m.Clusters = []cluster.MonitoredCluster{{Name: "dev", Slurm: &cluster.SlurmCounts{Nodes: 3}}}
+	ts.st.SetMonitoring("sind", &m)
+	body = moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `data-label="Slurm nodes up">3 of 3</td>`)
+}
+
+func TestMoreMonitoringHostDNS(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	report := func(checks ...store.DoctorCheck) { ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: checks}) }
+
+	report(store.DoctorCheck{Name: "DNS policy", Status: "ok"})
+	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	assert.Contains(t, body, "which this host resolves. To open Grafana from another machine")
+	assert.NotContains(t, body, "callout warn")
+
+	report(store.DoctorCheck{Name: "Docker Engine", Status: "ok"})
+	body = moreGet(t, ts, "/monitoring", http.StatusOK)
+	assert.Contains(t, body, "which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.")
+
+	// Without an address of Grafana there is no ssh example.
+	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m.Services = []cluster.MonitoringService{{Name: "grafana", URL: "http://grafana.sind.sind:3000", State: "running"}}
+	ts.st.SetMonitoring("sind", &m)
+	ts.st.SetDoctor(nil)
+	body = moreGet(t, ts, "/monitoring", http.StatusOK)
+	assert.Contains(t, body, "with host DNS. If Open fails")
+	assert.NotContains(t, body, "ssh -L")
+
+	assert.Empty(t, moreHostDNS(store.Snapshot{}))
+}
+
 func TestMoreServiceState(t *testing.T) {
 	for _, tc := range []struct {
 		state            string
@@ -161,24 +255,44 @@ func TestMoreServiceState(t *testing.T) {
 }
 
 func TestMoreMonitoringCount(t *testing.T) {
-	assert.Equal(t, NavCount{Text: "–"}, moreMonitoringCount(store.Snapshot{}))
+	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}), "no stack, no badge")
 	ts, _ := moreTestServer(t, true, false)
-	assert.Equal(t, NavCount{Text: "4"}, moreMonitoringCount(ts.st.Snapshot()))
+	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot()))
+	stack := func(states ...string) store.Snapshot {
+		m := &cluster.Monitoring{}
+		for _, s := range states {
+			m.Services = append(m.Services, cluster.MonitoringService{State: dockerState(s), Ready: true, Checked: true})
+		}
+		return store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": m}}
+	}
+	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running")))
+	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused")))
+	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created")).Label)
+	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited")).Label)
 }
 
 func TestMoreMonitoringInterval(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "read every", "nothing reads the stacks")
+	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "Read every", "nothing reads the stacks")
 
 	iv := collect.NewInterval(45 * time.Second)
 	ts.srv.Env().Put(moreIntervalKey, iv)
 	body := moreGet(t, ts, "/monitoring", http.StatusOK)
 	for _, want := range []string{
-		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "read every",
-		`<option value="10s">10s</option><option value="30s">30s</option><option value="45s" selected>45s</option><option value="1m">1m</option><option value="5m">5m</option></select>`,
+		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "Read every", `aria-labelledby="mon-interval-label"`,
+		// The ids let htmx give the focus back to the button pressed.
+		`<button type="submit" id="mon-interval-10s" name="interval" value="10s" aria-pressed="false">10s</button>` +
+			`<button type="submit" id="mon-interval-30s" name="interval" value="30s" aria-pressed="false">30s</button>` +
+			`<button type="submit" id="mon-interval-45s" name="interval" value="45s" aria-pressed="true" class="on">45s</button>` +
+			`<button type="submit" id="mon-interval-1m" name="interval" value="1m" aria-pressed="false">1m</button>` +
+			`<button type="submit" id="mon-interval-5m" name="interval" value="5m" aria-pressed="false">5m</button>`,
+		`<span class="more-saved" role="status"><span id="mon-saved"></span></span>`,
+		"How often sind ui reads the stacks", "The choice lasts until sind ui stops.", "Prometheus keeps its own scrape interval",
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, "Saved:", "a page that set nothing saved nothing")
+	assert.NotContains(t, body, `name="interval"><option`, "buttons save one choice each, not every arrow key")
 
 	post := func(value string, hx bool) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "http://127.0.0.1:7878/monitoring/interval", strings.NewReader("interval="+value))
@@ -195,7 +309,9 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	w := post("5m", true)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, 5*time.Minute, iv.Get())
-	assert.Contains(t, w.Body.String(), `<option value="5m" selected>`)
+	assert.Contains(t, w.Body.String(), `id="mon-interval-5m" name="interval" value="5m" aria-pressed="true" class="on"`)
+	assert.Contains(t, w.Body.String(), `<span id="mon-saved" hx-swap-oob="true">Saved: every 5m</span>`)
+	assert.NotContains(t, w.Body.String(), "more-ivnote", "the note stays on the page")
 	assert.NotContains(t, w.Body.String(), "45s", "a choice that is no longer current goes")
 	assert.NotContains(t, w.Body.String(), "<html")
 
@@ -229,18 +345,43 @@ func TestMoreTopologyPage(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
 	body := moreGet(t, ts, "/topology", http.StatusOK)
 	for _, want := range []string{
-		"Topology", `<svg viewBox="0 0 900 `, `role="img"`, "Topology of realm sind", "MESH SIND-MESH", "CLUSTER NETWORKS", "HOST", "NODES",
-		"this host", "Docker Engine 28.5.1", "sind-dns", "DNS · 172.18.255.254", "SSH relay", "sind-grafana", "kind-control-plane", "connected container",
+		"Topology", `<svg viewBox="0 0 900 `, `role="group"`, "Diagram of realm sind", "MESH SIND-MESH", "CLUSTER NETWORKS", "HOST", "NODES",
+		"this host", "Docker Engine 28.5.1", "sind-dns", "DNS · 172.18.255.254", "SSH relay", "sind-grafana", "grafana · 172.18.255.253",
+		"kind-control-plane", "connected container", `href="/mesh?realm=sind"`, `href="/monitoring?realm=sind"`,
 		"sind-default-net", "172.19.0.0/16 · running", "sind-dev-net", "172.20.0.0/16 · mixed", "sind-empty-net", "empty",
-		`href="/nodes/sind/dev/worker-1"`, "worker-1.dev", `href="/clusters/sind/dev"`, `class="n bad off"`, `class="n bad"`,
+		`href="/nodes/sind/dev/worker-1"`, "worker-1.dev", "172.19.0.4 · worker · stopped", "172.19.0.2 · controller · running",
+		`aria-label="worker-1.dev · 172.19.0.4 · worker · stopped"`,
+		`href="/clusters/sind/dev"`, `class="n bad off"`, `class="n bad"`,
 		`class="e mesh"`, `class="e net"`, "Realm <b class=\"mono\">ci</b>", "MESH</text>",
+		"the mesh network with 7 containers, and 3 cluster networks with the nodes", "1 cluster network with the nodes",
+		`<div class="pb more-topo" data-more-scroll="Diagram that scrolls sideways">`, "Scroll sideways to see the nodes",
+		`<a href="/topology" class="on" aria-current="true">Diagram</a><a href="/topology?view=table">Table</a>`,
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, `role="img"`, "an image hides its links")
+	assert.NotContains(t, body, `tabindex="0"`, "only a diagram that scrolls is a stop of the Tab key, which the script knows")
 	assert.NotContains(t, body, "<script>")
 	assert.NotContains(t, body, "style=")
 
+	// The table lists the same things with the same links.
+	table := moreGet(t, ts, "/topology?view=table", http.StatusOK)
+	for _, want := range []string{
+		`<table class="more-topotable more-cards" role="table">`, `<th scope="colgroup" colspan="4" role="rowheader">Host and mesh</th>`,
+		`<a href="/doctor">this host</a>`, "Docker Engine 28.5.1",
+		`<a href="/mesh?realm=sind">sind-dns</a></td><td role="cell">DNS</td><td role="cell" class="mono">172.18.255.254</td>`,
+		`<a href="/monitoring?realm=sind">sind-grafana</a></td><td role="cell">grafana</td><td role="cell" class="mono">172.18.255.253</td><td role="cell" class="more-aside"><span class="pill ok">ready</span>`,
+		`<a href="/clusters/sind/dev" class="mono">sind-dev-net</a>`, `<span class="mono">172.20.0.0/16</span>`, `<span class="pill warn">mixed</span>`,
+		`<a href="/nodes/sind/dev/worker-1">worker-1.dev</a></td><td role="cell">worker</td><td role="cell" class="mono">172.19.0.4</td><td role="cell" class="more-aside"><span class="pill bad">stopped</span>`,
+		"No nodes.", `<a href="/topology">Diagram</a><a href="/topology?view=table" class="on" aria-current="true">Table</a>`,
+	} {
+		assert.Contains(t, table, want)
+	}
+	assert.NotContains(t, table, "<svg viewBox")
+	assert.Contains(t, moreGet(t, ts, "/topology?view=table&realm=ci", http.StatusOK), `href="/topology?realm=ci"`)
+
 	moreGet(t, ts, "/topology?realm=nope", http.StatusNotFound)
+	moreGet(t, ts, "/topology?view=pie", http.StatusBadRequest)
 }
 
 func TestMoreTopologyEdges(t *testing.T) {
@@ -297,11 +438,13 @@ func TestMoreDoctorPage(t *testing.T) {
 		"Doctor", "Docker Engine 28.5.1", "cgroup v2", "1 failed", "1 warning", "checked 3 min ago",
 		`<span class="more-mark ok"`, `<span class="more-mark warn"`, `<span class="more-mark bad"`, `<span class="more-mark "`, ">?</span>",
 		`<span class="pill warn nodot">warning</span>`, `<span class="pill bad nodot">failed</span>`, `<span class="pill ok nodot">ok</span>`,
-		"sudo sysctl fs.inotify.max_user_instances=1024", "Raise the limit now:", "data-more-copy", `<code class="nop">`,
-		"Check again", `action="/doctor/check"`, `name="csrf" value="` + ts.csrf + `"`, "A failed check stops create",
+		`<p class="more-fixtext">Raise the limit now:</p>`, `<code>sudo sysctl fs.inotify.max_user_instances=1024</code><button type="button" data-more-copy aria-label="Copy sudo sysctl fs.inotify.max_user_instances=1024">Copy</button>`,
+		"Check again", `action="/doctor/check"`, `name="csrf" value="` + ts.csrf + `"`,
+		`<div class="callout more-verdict bad" role="status"><b>Not ready: sind cannot create clusters on this host.</b> Fix the failed check first.`,
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, "<code>Raise", "Copy takes the command, not the sentence before it")
 	assert.NotContains(t, body, "not reachable")
 	assert.NotContains(t, body, "disabled>Check again")
 	assert.Zero(t, *calls)
@@ -313,10 +456,59 @@ func TestMoreDoctorPage(t *testing.T) {
 	assert.Contains(t, body, "just now")
 
 	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}, {Name: "x", Status: "warning"}, {Name: "y", Status: "warning"}}})
-	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "2 warnings")
+	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	assert.Contains(t, body, "2 warnings")
+	assert.Contains(t, body, "<b>Ready: sind can create clusters on this host.</b> The 2 warnings do not stop sind")
 
 	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}}})
-	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "all passed")
+	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	assert.Contains(t, body, "all passed")
+	assert.Contains(t, body, `more-verdict ok" role="status"><b>Ready: sind can create clusters on this host.</b> Every check passed.`)
+
+	// A multi-line command has no prompt.
+	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker host", Status: "warning",
+		Remediation: "Point the docker CLI here:\n\nunset DOCKER_HOST\ndocker context use default"}}})
+	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "<code class=\"nop\">unset DOCKER_HOST\ndocker context use default</code>")
+}
+
+func TestMoreFixSteps(t *testing.T) {
+	assert.Nil(t, moreFixSteps(""))
+	assert.Equal(t, []moreFixStep{
+		{Text: []string{"Raise the limit now:"}, Cmd: "sudo sysctl fs.inotify.max_user_instances=1024"},
+		{Text: []string{"Keep it across reboots:"}, Cmd: "echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf"},
+	}, moreFixSteps("Raise the limit now:\r\n\r\n  sudo sysctl fs.inotify.max_user_instances=1024  \n\n\nKeep it across reboots:\n\n"+
+		"echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf\n"))
+	// Sentences that start in lower case end like sentences; a heredoc
+	// keeps its indent; words with no command after them are a step too.
+	assert.Equal(t, []moreFixStep{
+		{Text: []string{"sind starts its nodes with options that Docker refuses here.\nRemove them and restart the daemon:"},
+			Cmd: "sudo tee /x <<'R'\n  rule\nR"},
+		{Text: []string{"Install Docker Engine 28 or later: https://docs.docker.com/engine/install/", "Then log in again."}},
+	}, moreFixSteps("sind starts its nodes with options that Docker refuses here.\nRemove them and restart the daemon:\n\n"+
+		"sudo tee /x <<'R'\n  rule\nR\n\nInstall Docker Engine 28 or later: https://docs.docker.com/engine/install/\n\nThen log in again."))
+	assert.Equal(t, "a\n\n\tb", moreDedent("\t\ta\n\n\t\t\tb\n"))
+	assert.Equal(t, "", moreDedent(" \n\t"))
+	assert.False(t, moreFixStep{Cmd: "a"}.Multi())
+}
+
+func TestMoreDoctorVerdict(t *testing.T) {
+	for _, tc := range []struct {
+		d           moreDoctorData
+		class, want string
+	}{
+		{moreDoctorData{Running: true}, "run", "Checking this host"},
+		{moreDoctorData{CanRecheck: true}, "", "Press Check again"},
+		{moreDoctorData{}, "", "Run sind doctor in a terminal"},
+		{moreDoctorData{HasReport: true, Failures: 1, Warnings: 3}, "bad", "Fix the failed check first. Create and power on stop until it passes."},
+		{moreDoctorData{HasReport: true, Failures: 2}, "bad", "Fix the 2 failed checks first. Create and power on stop until they pass."},
+		{moreDoctorData{HasReport: true, Warnings: 1}, "ok", "The warning does not stop sind, but read its fix."},
+		{moreDoctorData{HasReport: true, Warnings: 2}, "ok", "The 2 warnings do not stop sind, but read their fixes."},
+		{moreDoctorData{HasReport: true, Running: true}, "ok", "Every check passed."},
+	} {
+		v := moreDoctorVerdict(tc.d)
+		assert.Equal(t, tc.class, v.Class, tc.want)
+		assert.Contains(t, v.Title+" "+v.Text, tc.want)
+	}
 }
 
 func TestMoreDoctorEmptyStates(t *testing.T) {
@@ -390,17 +582,19 @@ func TestMoreDoctorCheck(t *testing.T) {
 func TestMoreDoctorCount(t *testing.T) {
 	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}))
 	ok := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}}}
-	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{Doctor: ok}))
+	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}))
 	warn := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1"}, moreDoctorCount(store.Snapshot{Doctor: warn}))
+	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}))
 	bad := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "warning"}, {Status: "failed"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "3", Class: "bad"}, moreDoctorCount(store.Snapshot{Doctor: bad}))
+	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}))
+	worse := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "failed"}, {Status: "failed"}}}
+	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}))
 
-	// The rail of any page shows both counts.
+	// The rail of any page shows both badges, with their meaning in words.
 	ts, _ := moreTestServer(t, true, false)
 	body := moreGet(t, ts, "/doctor", http.StatusOK)
-	assert.Contains(t, body, `<span class="n bad">3</span>`)
-	assert.Contains(t, body, `<span class="n">4</span>`)
+	assert.Contains(t, body, `<span class="n bad" title="1 host check failed, 2 warnings"><span aria-hidden="true">1 failed</span><span class="vh">, 1 host check failed, 2 warnings</span></span>`)
+	assert.Contains(t, body, `<span class="n warn" title="1 monitoring service is not ready yet"><span aria-hidden="true">1 starting</span>`)
 }
 
 func TestMoreFragmentsAreLive(t *testing.T) {
@@ -468,8 +662,7 @@ func TestMoreListPagesReadTheRealmCookie(t *testing.T) {
 		r.AddCookie(ts.cookie)
 		r.AddCookie(&http.Cookie{Name: "sind_realm", Value: "ci"})
 		w := ts.do(r)
-		require.Equal(t, http.StatusOK, w.Code, path)
-		assert.Contains(t, w.Body.String(), `<option value="ci" selected>`, path)
-		assert.Contains(t, w.Body.String(), "realm=ci", path)
+		require.Equal(t, http.StatusFound, w.Code, path)
+		assert.Equal(t, path+"?realm=ci", w.Header().Get("Location"), path)
 	}
 }

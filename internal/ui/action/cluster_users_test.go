@@ -69,11 +69,11 @@ func TestBuildCreateCluster_RowProblems(t *testing.T) {
 		field, want string
 		def         bool
 	}{
-		{"user name", rows(valid(), UserRows, "u0", "name", "Alice"), "u0-name", "invalid user name", false},
+		{"user name", rows(valid(), UserRows, "u0", "name", "Alice"), "u0-name", "start with a lowercase letter or _", false},
 		{"uid", rows(valid(), UserRows, "u0", "name", "alice", "uid", "12"), "u0-uid", "write a number from 1000", true},
 		{"uid text", rows(valid(), UserRows, "u0", "name", "alice", "uid", "x"), "u0-uid", "write a number from 1000", true},
 		{"admin", rows(rows(valid("db", "on"), AccountRows, "a0", "name", "a"), UserRows, "u0", "name", "alice", "accounts", "a", "admin", "root"), "u0-admin", "pick none, operator or admin", true},
-		{"group name", rows(valid(), GroupRows, "g0", "name", "-x"), "g0-name", "invalid group name", false},
+		{"group name", rows(valid(), GroupRows, "g0", "name", "-x"), "g0-name", "start with a lowercase letter or _", false},
 		{"gid", rows(valid(), GroupRows, "g0", "name", "hpc", "gid", "65534000000"), "g0-gid", "write a number from 1000", true},
 		{"limit", rows(valid("db", "on"), AccountRows, "a0", "name", "a", "lk", "Account", "lv", "x"), "a0-lk", `"Account" is no limit that sacctmgr takes`, false},
 		{"row key", rows(valid(), UserRows, "api"), "", `the row "api" is not one that the dialog made`, false},
@@ -103,14 +103,10 @@ func TestBuildCreateCluster_RowsTheConfigChecks(t *testing.T) {
 	rows(f, AccountRows, "a0", "name", "Physics")
 	cmd, err := build(t, "create-cluster", f)
 	require.NoError(t, err)
-	var texts []string
-	for _, p := range cmd.Problems {
-		assert.Equal(t, "Config", p.Label)
-		texts = append(texts, p.Text)
-	}
-	require.Len(t, texts, 2, "%q", texts)
-	assert.Contains(t, texts[0], `group "nope"`)
-	assert.Contains(t, texts[1], `invalid account name "Physics"`)
+	require.Len(t, cmd.Problems, 2, "%+v", cmd.Problems)
+	assert.Equal(t, Problem{Field: "u0-group", Label: "Primary group of alice", Text: "add the group nope under Groups first, or leave the primary group empty"}, cmd.Problems[0],
+		"a problem of the whole config goes to the field that causes it, in the words of the form")
+	assert.Equal(t, Problem{Field: "a0-name", Label: "Account", Text: "use lowercase letters, digits, _ and -, not - first, at most 64 characters"}, cmd.Problems[1])
 }
 
 func TestBuildCreateCluster_ManyRows(t *testing.T) {

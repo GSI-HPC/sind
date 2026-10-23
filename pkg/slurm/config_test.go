@@ -429,3 +429,10 @@ func TestGenerateSlurmConf_Metrics(t *testing.T) {
 	conf = GenerateSlurmConf("dev", config.Section{Content: "MetricsType=metrics/openmetrics\n"}, ConfOptions{Metrics: true})
 	assert.Equal(t, 1, strings.Count(conf, "MetricsType="))
 }
+
+func TestFixedParameters(t *testing.T) {
+	conf := GenerateSlurmConf("hpc", config.Section{Content: "ClusterName=prod\n"}, ConfOptions{})
+	for _, key := range FixedParameters {
+		assert.Contains(t, conf, "\n"+key+"=", "sind writes %s whatever the main section sets", key)
+	}
+}

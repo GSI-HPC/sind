@@ -142,7 +142,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 // check verifies that what is registered fits together: every page and
 // fragment has its template, and every fragment a page names exists.
 func (s *Server) check() error {
-	for _, name := range []string{"layout", "page-notfound"} {
+	for _, name := range []string{"layout", "page-notfound", "signin"} {
 		if !s.tmpl.Has(name) {
 			return fmt.Errorf("template %q is missing", name)
 		}
@@ -178,7 +178,6 @@ func (s *Server) routes() (err error) {
 			err = fmt.Errorf("route: %v", r)
 		}
 	}()
-	s.mux.Handle("GET /static/", s.assets)
 	s.mux.Handle("GET /htmx/", s.vendor)
 	s.mux.Handle("GET /events", s.fetchOnly(http.HandlerFunc(s.events)))
 	for _, p := range s.reg.pages {
@@ -196,8 +195,13 @@ func (s *Server) routes() (err error) {
 }
 
 // Handler returns the server's handler with every check in front of it.
+// The static files need no session: they hold no data, and the page that
+// asks a browser to sign in uses them.
 func (s *Server) Handler() http.Handler {
-	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(s.sessions.Middleware(s.mux))
+	open := http.NewServeMux()
+	open.Handle("GET /static/", s.assets)
+	open.Handle("/", s.sessions.Middleware(s.mux))
+	h := localweb.SameOrigin(localweb.Origin{Navigate: true, Refuse: s.refuse})(open)
 	return localweb.Headers(contentSecurityPolicy)(localweb.NoStore(localweb.Hosts(s.hosts, s.refuse)(h)))
 }
 
@@ -209,13 +213,45 @@ func (s *Server) fetchOnly(next http.Handler) http.Handler {
 }
 
 // refuse answers a request that a check of localweb refuses. A 403 adds the
-// line that says where the address is, and the log says why.
+// line that says where the address is, and the log says why. A browser that
+// opens a page gets the 403 as the page signin, which tells how to get the
+// address.
 func (s *Server) refuse(w http.ResponseWriter, r *http.Request, f localweb.Refusal) {
 	s.log.Warn("refused a request", "path", r.URL.Path, "why", f.Reason)
 	if f.Status == http.StatusForbidden {
+		if opensPage(r) && s.signIn(w, f) {
+			return
+		}
 		f.Message += "\n" + openHint
 	}
 	localweb.Refuse(w, r, f)
+}
+
+// opensPage reports whether r is a browser that opens a page: a GET or HEAD
+// of a document, and not a request of a page's script.
+func opensPage(r *http.Request) bool {
+	if !localweb.SafeMethod(r.Method) {
+		return false
+	}
+	if dest := r.Header.Get("Sec-Fetch-Dest"); dest != "" {
+		return dest == "document"
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
+}
+
+// signInPage is what the page signin shows.
+type signInPage struct {
+	Asset   func(string) string
+	Message string
+}
+
+// signIn answers with the page signin, and reports whether it could.
+func (s *Server) signIn(w http.ResponseWriter, f localweb.Refusal) bool {
+	err := s.tmpl.Respond(w, f.Status, "signin", signInPage{Asset: s.assets.URL, Message: f.Message})
+	if err != nil {
+		s.log.Error("rendering the sign-in page", "err", err)
+	}
+	return err == nil
 }
 
 // Env returns what the server shares with the services.
@@ -333,17 +369,31 @@ func (s *Server) load(f Fragment, v *View) error {
 }
 
 // Fail answers a request whose Load or route failed: ErrNotFound with the
-// Not found page, ErrBadRequest with 400 and its message, anything else
-// with 500 and a line in the log.
+// Not found page and what a Miss in err says; ErrBadRequest with 400 and
+// its message, in the layout when a browser navigated to the address;
+// anything else with 500 and a line in the log.
 func (s *Server) Fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		s.notFound(w, r)
+		var m *Miss
+		if !errors.As(err, &m) {
+			m = &Miss{Links: []MissLink{missOverview}}
+		}
+		s.errorPage(w, r, http.StatusNotFound, m)
+	case errors.Is(err, ErrBadRequest) && navigation(r):
+		s.errorPage(w, r, http.StatusBadRequest, &Miss{What: userMessage(err), Links: []MissLink{missOverview}})
 	case errors.Is(err, ErrBadRequest):
 		http.Error(w, userMessage(err), http.StatusBadRequest)
 	default:
 		s.fail500(w, r, err)
 	}
+}
+
+// navigation reports whether a browser asked for r as a page to show, not
+// htmx nor a script.
+func navigation(r *http.Request) bool {
+	return r.Method == http.MethodGet && r.Header.Get("HX-Request") == "" &&
+		strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
 // userMessage returns what an ErrBadRequest says to the user: the message of
@@ -397,13 +447,26 @@ func (s *Server) keys(own, fragments []string) []string {
 	return keys
 }
 
-// notFound answers with the Not found page.
+// notFound answers an address that no route serves with the Not found
+// page, which offers what the address names and the pages whose address
+// is close to it.
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
+	s.errorPage(w, r, http.StatusNotFound, missForPath(s.Store().Snapshot(), r.URL.Path))
+}
+
+// errorPage answers with the error page in the layout: the Not found page
+// for status 404, the page of a bad address for 400. It names the address
+// of r and shows what m says.
+func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m *Miss) {
 	v := s.newView(Params{})
 	v.CSRF = session.CSRF(r.Context())
 	v.Title, v.Content = "Not found", "page-notfound"
+	if status != http.StatusNotFound {
+		v.Title = "Bad address"
+	}
+	v.Data = &errorPage{Status: status, Address: missAddress(r), What: m.What, Hint: m.Hint, Links: m.Links}
 	v.Events = s.eventsURL(nil, v)
-	if err := s.respond(w, http.StatusNotFound, "layout", v); err != nil {
+	if err := s.respond(w, status, "layout", v); err != nil {
 		s.fail500(w, r, err)
 	}
 }

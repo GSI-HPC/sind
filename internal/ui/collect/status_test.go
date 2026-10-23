@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -215,6 +216,42 @@ func TestStatusIsNotStoredForAClusterThatWasClosedWhileRead(t *testing.T) {
 	assert.True(t, f.has(devKey))
 }
 
+func TestStatusReadsWhatSlurmSays(t *testing.T) {
+	f := newStatusFixture(t)
+	f.watched.Watch([]store.Topic{devKey.Topic()})
+	f.status.read(t.Context(), devKey)
+	sl := f.st.Snapshot().Slurm("sind", "dev")
+	require.NotNil(t, sl)
+	assert.Empty(t, sl.Err)
+	assert.Equal(t, "idle", sl.Info.Nodes[0].State)
+	assert.Equal(t, "all", sl.Info.Partitions[0].Name)
+	assert.Equal(t, "# /etc/slurm/slurm.conf\n", sl.Info.Files[0].Content)
+
+	// sinfo fails: the status is kept, and what Slurm says holds the error
+	// and the files.
+	f.fake.set(func() { f.fake.failing = "sinfo" })
+	f.status.read(t.Context(), devKey)
+	sl = f.st.Snapshot().Slurm("sind", "dev")
+	assert.Empty(t, sl.Info.Nodes)
+	assert.NotEmpty(t, sl.Info.Files)
+	assert.Equal(t, "boom", sl.Err)
+	assert.True(t, f.has(devKey))
+
+	// A read that was cancelled stores nothing; one of a cluster whose page
+	// closed neither.
+	f.st.SetSlurm("sind", "dev", nil)
+	ctx, cancel := cancelled(t.Context())
+	defer cancel()
+	f.status.readSlurm(ctx, devKey)
+	f.status.readSlurm(t.Context(), prodKey)
+	assert.Empty(t, f.st.Snapshot().Slurms)
+
+	// The cluster is gone: both go.
+	f.fake.set(func() { f.fake.failing = ""; delete(f.fake.clusters, "sind/dev") })
+	f.status.read(t.Context(), devKey)
+	assert.Nil(t, f.st.Snapshot().Slurm("sind", "dev"))
+}
+
 func TestStatusLogsAFailedReadUnlessCancelled(t *testing.T) {
 	f := newStatusFixture(t)
 	log, out := debugLog()
@@ -276,4 +313,70 @@ func TestStatusDefaultsAndReadEachDeduplicates(t *testing.T) {
 	stop := start(t, f.status.Run)
 	f.fake.settle()
 	stop()
+}
+
+func TestStatusReadsEveryListedCluster(t *testing.T) {
+	f := newStatusFixture(t)
+	f.status.All = time.Hour
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "prod"}})
+	start(t, f.status.Run)
+	waitFor(t, "the listed clusters at start", func() bool { return f.has(devKey) && f.has(prodKey) })
+	assert.False(t, f.has(ciKey), "not listed, no page")
+
+	// A cluster that the store newly lists is read at once.
+	f.st.SetClusters("ci", []cluster.Summary{{Name: "a"}})
+	waitFor(t, "a new cluster", func() bool { return f.has(ciKey) })
+	f.fake.settle()
+
+	// An event of a listed cluster reads it, although no page is open.
+	n := f.reads()
+	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	waitFor(t, "read", func() bool { return f.reads() > n })
+
+	// A cluster that the store no longer lists loses its status.
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	waitFor(t, "dropped", func() bool { return !f.has(prodKey) })
+	assert.True(t, f.has(devKey))
+
+	// One that comes back is new again.
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "prod"}})
+	waitFor(t, "back", func() bool { return f.has(prodKey) })
+}
+
+func TestStatusReadsEveryClusterWhileAPageIsOpen(t *testing.T) {
+	f := newStatusFixture(t)
+	f.status.All = 30 * time.Millisecond
+	f.status.Viewers = NewViewers()
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	start(t, f.status.Run)
+	waitFor(t, "status at start", func() bool { return f.has(devKey) })
+	f.fake.settle()
+
+	n := f.reads()
+	never(t, "a read with no page open", 150*time.Millisecond, func() bool { return f.reads() != n })
+	f.status.Viewers.Watch(nil)
+	waitFor(t, "read when the first page opens, and every All", func() bool { return f.reads() >= n+3 })
+}
+
+func TestStatusWithoutViewersReadsEveryClusterAlways(t *testing.T) {
+	f := newStatusFixture(t)
+	f.status.All = 30 * time.Millisecond
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	start(t, f.status.Run)
+	waitFor(t, "read every All", func() bool { return f.reads() >= 3 })
+}
+
+func TestStatusReadsWhatSlurmSaysOnlyWhileThePageIsOpen(t *testing.T) {
+	f := newStatusFixture(t)
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	start(t, f.status.Run)
+	waitFor(t, "status", func() bool { return f.has(devKey) })
+	f.fake.settle()
+	assert.Nil(t, f.st.Snapshot().Slurm("sind", "dev"), "no page of dev is open")
+
+	release := f.watched.Watch([]store.Topic{devKey.Topic()})
+	waitFor(t, "what Slurm says", func() bool { return f.st.Snapshot().Slurm("sind", "dev") != nil })
+	release()
+	waitFor(t, "dropped with the page", func() bool { return f.st.Snapshot().Slurm("sind", "dev") == nil })
+	assert.True(t, f.has(devKey), "the status stays: the store lists dev")
 }

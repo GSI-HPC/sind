@@ -51,9 +51,12 @@ type Snapshot struct {
 	Networks map[string][]cluster.NetworkSummary
 	Volumes  map[string][]cluster.VolumeSummary
 	Meshes   map[string]Mesh
-	// Statuses are keyed by realm and cluster, for the clusters whose page
-	// is open.
-	Statuses    map[StatusKey]*cluster.Status
+	// Statuses are keyed by realm and cluster, for the clusters listed
+	// and the ones whose page is open.
+	Statuses map[StatusKey]*cluster.Status
+	// Slurms are what Slurm says about the clusters whose page is open,
+	// keyed alike.
+	Slurms      map[StatusKey]*Slurm
 	Locks       map[string]*state.LockHolder
 	Monitorings map[string]*cluster.Monitoring
 	// Doctor is the last host check, nil before the first.
@@ -73,6 +76,11 @@ type Store struct {
 	// runs end with them even when the log has no end.
 	ended map[string]Task
 }
+
+// MaxEndedTasks is how many tasks that have ended the store keeps, the
+// newest by start; an older one is dropped once another ends, and its run
+// shows without its command.
+const MaxEndedTasks = 25
 
 // New returns an empty store.
 func New() *Store {
@@ -187,7 +195,8 @@ func (s *Store) AddTask(t Task) {
 
 // UpdateTask changes the task with the ID id with fn. A task that is gone
 // is left alone. When the task ends, the runs of its trace that the log has
-// not ended end with it, and their topics are notified.
+// not ended end with it, and the tasks that ended before the newest
+// MaxEndedTasks are dropped; the topics of the runs of both are notified.
 func (s *Store) UpdateTask(id string, fn func(*Task)) {
 	s.updateTopics(func(sn *Snapshot) []Topic {
 		i := slices.IndexFunc(sn.Tasks, func(t Task) bool { return t.ID == id })
@@ -197,17 +206,28 @@ func (s *Store) UpdateTask(id string, fn func(*Task)) {
 		sn.Tasks = slices.Clone(sn.Tasks)
 		fn(&sn.Tasks[i])
 		t := sn.Tasks[i]
-		if !t.Done() || t.Trace == "" {
+		if !t.Done() {
 			return []Topic{TopicTasks}
 		}
-		s.ended[t.Trace] = t
 		ts := []Topic{TopicTasks}
-		for _, r := range s.logRuns {
-			if r.Trace == t.Trace && !r.Done() {
+		var dropped []string
+		sn.Tasks, dropped = pruneTasks(sn.Tasks)
+		for _, r := range sn.Runs {
+			if r.Trace != "" && slices.Contains(dropped, r.Trace) {
 				ts = append(ts, RunTopic(r.ID))
 			}
 		}
-		if len(ts) == 1 {
+		if t.Trace == "" {
+			return ts
+		}
+		s.ended[t.Trace] = Task{End: t.End, Status: t.Status, Err: t.Err}
+		ended := false
+		for _, r := range s.logRuns {
+			if r.Trace == t.Trace && !r.Done() {
+				ts, ended = append(ts, RunTopic(r.ID)), true
+			}
+		}
+		if !ended {
 			return ts
 		}
 		sn.Runs = s.endRuns(s.logRuns)
@@ -215,10 +235,34 @@ func (s *Store) UpdateTask(id string, fn func(*Task)) {
 	})
 }
 
-// RemoveTask removes the task with the ID id from the tasks shown.
-func (s *Store) RemoveTask(id string) {
+// pruneTasks drops from tasks, which it may change, the tasks that ended
+// before the newest MaxEndedTasks of them, and returns the traces of those
+// it dropped.
+func pruneTasks(tasks []Task) ([]Task, []string) {
+	var dropped []string
+	n := 0
+	for i := len(tasks) - 1; i >= 0; i-- {
+		if !tasks[i].Done() {
+			continue
+		}
+		if n++; n > MaxEndedTasks {
+			dropped = append(dropped, tasks[i].Trace)
+			tasks = slices.Delete(tasks, i, i+1)
+		}
+	}
+	return tasks, dropped
+}
+
+// HideTasks hides the cards of the tasks that hide reports true of, as the
+// user closed them: the tasks stay, for their run pages.
+func (s *Store) HideTasks(hide func(Task) bool) {
 	s.update(func(sn *Snapshot) {
-		sn.Tasks = slices.DeleteFunc(slices.Clone(sn.Tasks), func(t Task) bool { return t.ID == id })
+		sn.Tasks = slices.Clone(sn.Tasks)
+		for i := range sn.Tasks {
+			if hide(sn.Tasks[i]) {
+				sn.Tasks[i].Hidden = true
+			}
+		}
 	}, TopicTasks)
 }
 

@@ -186,7 +186,7 @@ func TestStart_RunsTheBinaryWithTheEnvironment(t *testing.T) {
 	assert.Equal(t, spec.Argv[1:], c.args)
 	assert.Equal(t, []string{
 		"PATH=/bin", "SIND_PROGRESS=none", "TRACEPARENT=00-" + wantTrace + "-" + wantSpan + "-01",
-		"SIND_PROGRESS_LOG=/state/activity.jsonl",
+		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl",
 	}, c.env)
 	f.ex.results <- result{}
 	f.waitDone(t, id)
@@ -403,5 +403,5 @@ func TestNew_Defaults(t *testing.T) {
 
 func TestChildEnv(t *testing.T) {
 	got := childEnv([]string{"A=1", "SIND_REALM=x", "TRACESTATE=y", "B=2=3"}, "", "00-t-s-01")
-	assert.Equal(t, []string{"A=1", "B=2=3", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01"}, got)
+	assert.Equal(t, []string{"A=1", "B=2=3", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01", "TRACESTATE=sind=ui"}, got)
 }

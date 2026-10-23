@@ -161,13 +161,22 @@ type Route struct {
 	FetchOnly bool
 }
 
-// NavCount is the count behind a rail entry.
+// NavCount is the badge behind a rail entry: a count with its unit, such
+// as "1 down", or a dot when all is well.
 type NavCount struct {
-	// Text is the count; empty shows none.
+	// Text is the count with its unit; empty shows none, or a dot with
+	// Class ok.
 	Text string
-	// Class colours it: "", "run" or "bad".
+	// Class colours it: "", "run", "warn", "bad", or "ok" for the dot.
 	Class string
+	// Label says what the badge means in words, for screen readers and
+	// as its tooltip, such as "1 node needs a look".
+	Label string
 }
+
+// NavCountFunc returns the badge of a rail entry from the snapshot, at
+// the time of the view.
+type NavCountFunc func(sn store.Snapshot, now time.Time) NavCount
 
 // A Service is background work of sind ui.
 type Service struct {
@@ -201,8 +210,8 @@ type Env struct {
 // A Watcher is told which topics a live stream (/events) watches: when the
 // stream opens it is called with the topics of the stream's fragments, and
 // the function it returns is called when the stream ends. A collector uses
-// it to read only what an open page shows, such as the status of a cluster
-// whose page is open. The topics are the exact ones of the fragments
+// it to read more often what an open page shows, such as the status of a
+// cluster whose page is open. The topics are the exact ones of the fragments
 // (Fragment.Topics) and those their Watch functions return for the
 // stream's Params; a fragment that depends on a prefix names none. The
 // function may be called concurrently and must not block.
@@ -253,7 +262,7 @@ type Registry struct {
 	routes    []Route
 	services  []Service
 	funcs     template.FuncMap
-	navCounts map[string]func(store.Snapshot) NavCount
+	navCounts map[string]NavCountFunc
 }
 
 // NewRegistry returns an empty registry.
@@ -261,7 +270,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		fragments: map[string]Fragment{},
 		funcs:     template.FuncMap{},
-		navCounts: map[string]func(store.Snapshot) NavCount{},
+		navCounts: map[string]NavCountFunc{},
 	}
 }
 
@@ -293,6 +302,10 @@ func AddFuncs(m template.FuncMap) { defaultRegistry.AddFuncs(m) }
 func SetNavCount(key string, fn func(store.Snapshot) NavCount) {
 	defaultRegistry.SetNavCount(key, fn)
 }
+
+// SetNavCountAt sets the count of the rail entry key in the default
+// registry, from a function that needs the time too.
+func SetNavCountAt(key string, fn NavCountFunc) { defaultRegistry.SetNavCountAt(key, fn) }
 
 // AddPage adds a page. It panics for a name or a pattern that is invalid
 // or already taken.
@@ -359,6 +372,12 @@ func (r *Registry) AddFuncs(m template.FuncMap) {
 
 // SetNavCount sets the count behind the rail entry key.
 func (r *Registry) SetNavCount(key string, fn func(store.Snapshot) NavCount) {
+	r.SetNavCountAt(key, func(sn store.Snapshot, _ time.Time) NavCount { return fn(sn) })
+}
+
+// SetNavCountAt sets the count behind the rail entry key, from a function
+// that needs the time too.
+func (r *Registry) SetNavCountAt(key string, fn NavCountFunc) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.navCounts[key] = fn

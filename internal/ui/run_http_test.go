@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -22,7 +23,7 @@ func runStore(t *testing.T, ts *testServer) (mid, ok, failed, canceled store.Run
 	failed = runFixtureAs(t, "create-failed.jsonl", -1, "r-failed", "trace-failed")
 	canceled = runFixtureAs(t, "create-canceled.jsonl", -1, "r-canceled", "trace-canceled")
 	ts.st.SetRuns([]store.Run{mid, ok, failed, canceled})
-	ts.st.AddTask(store.Task{ID: "t-mid", Display: "sind create cluster dev", Trace: "trace-mid", Start: runAt(0), Status: store.TaskRunning})
+	ts.st.AddTask(store.Task{ID: "t-mid", Action: "create-cluster", Cluster: "dev", Display: "sind create cluster dev", Trace: "trace-mid", Start: runAt(0), Status: store.TaskRunning})
 	return mid, ok, failed, canceled
 }
 
@@ -34,16 +35,20 @@ func TestRunPageRenders(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
 	for _, want := range []string{
-		"<title>create cluster · sind ui</title>",
+		"<title>create cluster dev · sind ui</title>",
 		`<div class="crumbs"><a href="/activity">Activity</a> / <span class="mono">r-mid</span></div>`,
 		`<span class="pill run">running</span>`,
 		"from sind ui",
 		`action="/tasks/t-mid/cancel"`,
+		`<summary class="btn" aria-label="Stop create cluster dev…">Stop…</summary>`,
+		`<b>Stop create cluster dev?</b> sind removes the nodes it has made so far (rollback). The saved config stays.`,
+		`data-stop-keep>Keep running</button>`,
 		`name="csrf" value="` + ts.csrf + `"`,
 		"nodes 0/3 · controller ready munge",
 		`data-doc-title="▸ nodes 0/3 · sind ui"`,
 		`<details class="grow-details" id="step-0000000000000007">`,
 		`class="ntile role-controller running"`,
+		`<small data-word="controller">controller</small>`,
 		`stroke-dasharray="3.5 69.1"`,
 		"101 MB / 101 MB",
 		"/events?f=rail&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-more&amp;f=run-nodes&amp;f=run-summary&amp;f=run-timeline&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
@@ -67,6 +72,11 @@ func TestRunPageRenders(t *testing.T) {
 	assert.Contains(t, failed, `<a href="/doctor">Doctor</a>`)
 	assert.Contains(t, failed, `<span class="pill bad">failed</span>`)
 	assert.NotContains(t, failed, "from a terminal, so sind ui cannot stop it", "an ended run has nothing to stop")
+	// From a terminal: the command of its title, and New cluster filled in
+	// from it, with a longer wait after the timeout.
+	assert.Contains(t, failed, `<code>sind create cluster</code>`)
+	assert.Contains(t, failed, `<p class="hint">The event log names the command and what it worked on, not its flags.</p>`)
+	assert.Contains(t, failed, `hx-get="/dialogs/create-cluster?wait=10m" hx-target="#layer" hx-swap="innerHTML">Edit and try again…</a>`)
 
 	canceled := ts.get("/runs/r-canceled").Body.String()
 	assert.Contains(t, canceled, "<h2>Stopped</h2>")
@@ -77,6 +87,36 @@ func TestRunPageRenders(t *testing.T) {
 	assert.Contains(t, ok, `<h2>Other steps</h2>`)
 	assert.Contains(t, ok, "done in 53s")
 	assert.Contains(t, ok, "Show progress", "the dock holds the cards of the other runs")
+}
+
+func TestRunPageOffersToTryAgain(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	runStore(t, ts)
+	end := runAt(60)
+	ts.st.AddTask(store.Task{
+		ID: "t-failed", Action: "create-cluster", Cluster: "dev", Realm: "sind", Trace: "trace-failed",
+		Display:    "sind create cluster --config /c/dev.yaml",
+		Form:       map[string][]string{"realm": {"sind"}, "name": {"dev"}},
+		ConfigPath: "/c/dev.yaml", Config: "name: dev\nrealm: sind\n",
+		Start: runAt(0), End: &end, Status: store.TaskFailed,
+	})
+	body := ts.get("/runs/r-failed").Body.String()
+	head := runFragment(t, ts, runNow, "run-head", "id", "r-failed")
+	for _, want := range []string{
+		`<div class="cmdlabel">Command</div><div class="cmd"><code>sind create cluster --config /c/dev.yaml</code><button type="button" data-pg-copy aria-label="Copy sind create cluster --config /c/dev.yaml">Copy</button></div>`,
+		`<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">/c/dev.yaml</div><pre class="mono">name: dev` + "\n" + `realm: sind` + "\n" + `</pre></details>`,
+		`action="/tasks/t-failed/retry"`,
+		`<button type="submit" class="btn primary">Try again</button>`,
+		`<a class="btn" href="/dialogs/create-cluster?task=t-failed" hx-get="/dialogs/create-cluster?task=t-failed" hx-target="#layer" hx-swap="innerHTML">Edit and try again…</a>`,
+		`<a class="btn" href="/clusters">Open Clusters</a>`,
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.NotContains(t, body, "style=", "the CSP allows no inline style")
+
+	// Clear done hides the card, and the run page keeps all of it.
+	require.Equal(t, http.StatusNoContent, ts.post("/tasks/clear", "").Code)
+	assert.Equal(t, head, runFragment(t, ts, runNow, "run-head", "id", "r-failed"))
 }
 
 func TestRunPageTerminalNote(t *testing.T) {
@@ -91,7 +131,16 @@ func TestRunPageTerminalNote(t *testing.T) {
 
 func TestRunPageNotFound(t *testing.T) {
 	ts := runTestServer(t, runNow)
-	assert.Equal(t, http.StatusNotFound, ts.get("/runs/nope").Code)
+	w := ts.get("/runs/nope")
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "The activity log holds no run nope.")
+	assert.Contains(t, body, `<a class="btn primary" href="/activity">Activity</a>`)
+	assert.NotContains(t, body, "may have been deleted")
+	// A task of that id is the closest match.
+	ts.st.AddTask(store.Task{ID: "t 1", Display: "sind create cluster dev", Start: runAt(0), Status: store.TaskRunning})
+	body = ts.get("/runs/t%201").Body.String()
+	assert.Contains(t, body, `<a class="btn primary" href="/tasks/t%201">Task t 1</a>`)
 }
 
 func TestRunPageTitleOfARunWithoutTitle(t *testing.T) {
@@ -171,7 +220,8 @@ func TestRunFragmentsOfEveryPrefix(t *testing.T) {
 		for n := 1; n <= lines; n += 3 {
 			runs := runFixture(t, file, n)
 			ts.st.SetRuns(runs)
-			ts.st.AddTask(store.Task{ID: "t", Trace: "other", Status: store.TaskRunning, Start: runAt(0)})
+			id := fmt.Sprint(file, n)
+			ts.st.AddTask(store.Task{ID: id, Trace: "other", Status: store.TaskRunning, Start: runAt(0)})
 			for _, run := range runs {
 				for _, now := range []time.Time{runAt(0), runAt(30), runAt(3600)} {
 					for _, name := range runFragments {
@@ -182,7 +232,7 @@ func TestRunFragmentsOfEveryPrefix(t *testing.T) {
 			}
 			runFragment(t, ts, runAt(30), "run-list")
 			runFragment(t, ts, runAt(30), "tasks")
-			ts.st.RemoveTask("t")
+			ts.st.UpdateTask(id, func(t *store.Task) { t.End, t.Status = runPtr(runAt(1)), store.TaskOK })
 		}
 	}
 }

@@ -5,6 +5,8 @@ package ui
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
@@ -41,6 +43,14 @@ type moreDoctorData struct {
 	DockerErr string
 	// CanRecheck is set when something runs the checks on request.
 	CanRecheck bool
+	// Verdict says whether sind can create clusters on this host.
+	Verdict moreVerdict
+}
+
+// moreVerdict is the answer at the top of the Doctor page: Title in bold,
+// then Text; Class colours the callout.
+type moreVerdict struct {
+	Class, Title, Text string
 }
 
 // moreCheck is one check as the page draws it.
@@ -48,6 +58,100 @@ type moreCheck struct {
 	doctor.Check
 	// Class colours the mark and the pill; Mark is the glyph.
 	Class, Mark string
+	// Steps are the remediation, split into sentences and commands.
+	Steps []moreFixStep
+}
+
+// moreFixStep is a step of a fix: the sentences that say what to do, and
+// the command that does it. Either may be empty.
+type moreFixStep struct {
+	Text []string
+	Cmd  string
+}
+
+// Multi reports whether the command has more than one line, which the
+// page shows without a prompt.
+func (s moreFixStep) Multi() bool { return strings.Contains(s.Cmd, "\n") }
+
+// moreFixSteps splits a remediation into its steps, so that Copy takes a
+// command without the sentence before it. A remediation is paragraphs
+// between blank lines: sentences, and the commands they introduce. A
+// paragraph is a command when it starts with a lower-case letter and does
+// not end like a sentence, with ":" or "."; the sentences before a command
+// are its step's Text.
+func moreFixSteps(remediation string) []moreFixStep {
+	var steps []moreFixStep
+	var text []string
+	for _, p := range strings.Split(strings.ReplaceAll(remediation, "\r\n", "\n"), "\n\n") {
+		p = moreDedent(p)
+		switch {
+		case p == "":
+		case moreIsCommand(p):
+			steps = append(steps, moreFixStep{Text: text, Cmd: p})
+			text = nil
+		default:
+			text = append(text, p)
+		}
+	}
+	if len(text) > 0 {
+		steps = append(steps, moreFixStep{Text: text})
+	}
+	return steps
+}
+
+// moreIsCommand reports whether a paragraph of a remediation, which is not
+// empty, is a command.
+func moreIsCommand(p string) bool {
+	return unicode.IsLower([]rune(p)[0]) && !strings.HasSuffix(p, ":") && !strings.HasSuffix(p, ".")
+}
+
+// moreDedent removes the indent that the lines of p share, the spaces at
+// their ends, and the blank lines around them.
+func moreDedent(p string) string {
+	lines := strings.Split(p, "\n")
+	indent := -1
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+		if lines[i] == "" {
+			continue
+		}
+		if n := len(lines[i]) - len(strings.TrimLeft(lines[i], " \t")); indent < 0 || n < indent {
+			indent = n
+		}
+	}
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = l[indent:]
+		}
+	}
+	return strings.Trim(strings.Join(lines, "\n"), "\n")
+}
+
+// moreDoctorVerdict says whether sind can create clusters on this host:
+// a failed check stops create and power on, a warning does not.
+func moreDoctorVerdict(d moreDoctorData) moreVerdict {
+	const (
+		ready    = "Ready: sind can create clusters on this host"
+		notReady = "Not ready: sind cannot create clusters on this host"
+	)
+	switch {
+	case !d.HasReport && d.Running:
+		return moreVerdict{Class: "run", Title: "Checking this host", Text: "The answer shows when the checks end."}
+	case !d.HasReport && d.CanRecheck:
+		return moreVerdict{Title: "Not checked yet", Text: "Press Check again to learn whether sind can create clusters on this host."}
+	case !d.HasReport:
+		return moreVerdict{Title: "Not checked yet", Text: "Run sind doctor in a terminal to learn whether sind can create clusters on this host."}
+	case d.Failures == 1:
+		return moreVerdict{Class: "bad", Title: notReady, Text: "Fix the failed check first. Create and power on stop until it passes."}
+	case d.Failures > 1:
+		return moreVerdict{Class: "bad", Title: notReady,
+			Text: "Fix the " + strconv.Itoa(d.Failures) + " failed checks first. Create and power on stop until they pass."}
+	case d.Warnings == 1:
+		return moreVerdict{Class: "ok", Title: ready, Text: "The warning does not stop sind, but read its fix."}
+	case d.Warnings > 1:
+		return moreVerdict{Class: "ok", Title: ready, Text: "The " + strconv.Itoa(d.Warnings) + " warnings do not stop sind, but read their fixes."}
+	}
+	return moreVerdict{Class: "ok", Title: ready, Text: "Every check passed."}
 }
 
 // moreDoctorFunc returns the func that runs the host checks, nil when no
@@ -74,26 +178,38 @@ func moreCheckMark(status string) (class, mark string) {
 	return "", "?"
 }
 
-// moreDoctorCount is the count behind the rail entry: the checks that did
-// not pass, red when one failed.
+// moreDoctorCount is the badge behind the rail entry: the checks that
+// failed, as "1 failed", else the warnings, as "2 warnings", or a dot when
+// every check passed. Before the first check it shows none.
 func moreDoctorCount(sn store.Snapshot) NavCount {
 	if sn.Doctor == nil {
 		return NavCount{}
 	}
-	n, class := 0, ""
+	failed, warned := 0, 0
 	for _, c := range sn.Doctor.Checks {
-		if c.Status == doctor.StatusOK {
-			continue
-		}
-		n++
-		if c.Status == doctor.StatusFailed {
-			class = "bad"
+		switch c.Status {
+		case doctor.StatusOK:
+		case doctor.StatusFailed:
+			failed++
+		default:
+			warned++
 		}
 	}
-	if n == 0 {
-		return NavCount{}
+	var parts []string
+	if failed > 0 {
+		parts = append(parts, pgPlural(failed, "host check failed", "host checks failed"))
 	}
-	return NavCount{Text: strconv.Itoa(n), Class: class}
+	if warned > 0 {
+		parts = append(parts, pgPlural(warned, "warning", "warnings"))
+	}
+	label := strings.Join(parts, ", ")
+	switch {
+	case failed > 0:
+		return NavCount{Text: strconv.Itoa(failed) + " failed", Class: "bad", Label: label}
+	case warned > 0:
+		return NavCount{Text: pgPlural(warned, "warning", "warnings"), Class: "warn", Label: label}
+	}
+	return NavCount{Class: "ok", Label: "every host check passed"}
 }
 
 // moreDoctorLoad fills the data of the Doctor page.
@@ -105,7 +221,7 @@ func moreDoctorLoad(v *View) error {
 			d.Ago = moreAgo(v.Now, r.Time)
 		}
 		for _, c := range r.Checks {
-			mc := moreCheck{Check: doctor.Check(c)}
+			mc := moreCheck{Check: doctor.Check(c), Steps: moreFixSteps(c.Remediation)}
 			mc.Class, mc.Mark = moreCheckMark(c.Status)
 			switch c.Status {
 			case doctor.StatusWarning:
@@ -116,6 +232,7 @@ func moreDoctorLoad(v *View) error {
 			d.Checks = append(d.Checks, mc)
 		}
 	}
+	d.Verdict = moreDoctorVerdict(d)
 	v.Data = d
 	return nil
 }

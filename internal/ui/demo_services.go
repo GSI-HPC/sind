@@ -27,6 +27,7 @@ func demoServices(d *demo.Demo, registered []Service) []Service {
 				env.Put(actKey{}, &actState{
 					starter: d.Starter(), home: demo.Home, configDir: demo.ConfigDir, writeFile: d.SaveFile,
 					stat: demo.Stat, mkdirAll: d.MkdirAll, images: newActImages(demo.InspectImage, demo.DiscoverVersion),
+					workers: newActWorkers(d.InspectContainer),
 				})
 				return nil
 			}

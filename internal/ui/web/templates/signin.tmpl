@@ -1,0 +1,34 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* signin is the page of a browser that sind ui refuses with 403 when it
+opens a page: it is not signed in, or its link holds an old token, as after
+sind ui started again. .Message is why; the page tells how to get the
+address, and never the token. It has no layout, as a refused browser may
+see no data, but it uses the static files, which need no session. */}}
+{{define "signin"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · sind ui</title>
+<link rel="icon" type="image/svg+xml" href="{{call .Asset "icon.svg"}}">
+<link rel="stylesheet" href="{{call .Asset "app.css"}}">
+<script src="{{call .Asset "app.js"}}"></script>
+</head>
+<body>
+<main class="signin" id="main">
+  <div class="brand"><img src="{{call .Asset "icon.svg"}}" alt="" width="24" height="24">sind <small>ui</small></div>
+  <h1>Open sind ui from its address</h1>
+  <p class="callout warn">{{.Message}}</p>
+  <p>sind ui lets in only the browser that opened the address it printed. That address holds a token, which is new each time sind ui starts. So after a restart, an open tab or a bookmark needs the new address.</p>
+  <h2>Get the address</h2>
+  <ol class="signin-steps">
+    <li><span>In a terminal on the machine that runs sind ui, run:</span>
+      <div class="cmd"><code>sind ui</code><button type="button" data-shell-copy="sind ui">Copy</button></div>
+      <span class="muted">If sind ui runs, this prints its address and opens it in your browser. If not, it starts sind ui.</span></li>
+    <li><span>On another device, such as a phone or a laptop with the port forwarded, add <code class="mono">--no-open</code> and open the address that it prints there.</span></li>
+  </ol>
+</main>
+</body>
+</html>
+{{end}}

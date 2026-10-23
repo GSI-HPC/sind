@@ -1,8 +1,16 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* page-notfound is the page for an address that nothing serves. */}}
-{{define "page-notfound"}}
-<div class="head"><div class="t"><h1>Not found</h1>
-  <div class="sub"><span>Nothing lives at this address. The cluster or node may have been deleted.</span></div></div></div>
-<a class="btn" href="/">Back to the overview</a>
-{{end}}
+{{/* page-notfound is the error page: the Not found page for an address
+that nothing serves, and the page of an address that sind ui cannot read.
+.Data is the errorPage: the address, what is missing or wrong, and the ways
+forward, the closest match first. */}}
+{{define "page-notfound"}}{{with .Data}}
+<div class="head"><div class="t"><h1>{{if .NotFound}}Not found{{else}}Bad address{{end}}</h1>
+  <div class="sub"><span>{{if .NotFound}}Nothing lives at{{else}}sind ui cannot show{{end}} <code class="mono miss-addr">{{.Address}}</code></span></div></div></div>
+<section class="panel miss"><div class="pb stack">
+  {{with .What}}<p class="miss-what">{{.}}</p>{{end}}{{with .Hint}}<p class="muted">{{.}}</p>{{end}}
+  {{with .Links}}<div><p class="cmdlabel">{{if gt (len .) 1}}Go on to{{else}}Go back to{{end}}</p>
+  <ul class="miss-links">{{range $i, $l := .}}<li><a class="btn{{if eq $i 0}} primary{{end}}" href="{{.URL}}">{{.Label}}</a>{{with .Note}} <span class="muted">{{.}}</span>{{end}}</li>{{end}}</ul></div>{{end}}
+  <p class="hint faint">To find a cluster, a node or a page, press <kbd>/</kbd> and type its name.</p>
+</div></section>
+{{end}}{{end}}

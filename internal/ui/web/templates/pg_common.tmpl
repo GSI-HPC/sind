@@ -5,7 +5,7 @@ prefix, pg, is part of the pages, clusters and nodes. */}}
 
 {{/* pg-action is a button of a page; a dialog link opens the dialog in the
 layer, and is a plain link without script. .Class holds btn modifiers. */}}
-{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
+{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{with .Name}} aria-label="{{.}}"{{end}}{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
 
 {{/* pg-docker-note says when Docker does not answer; it takes the view. */}}
 {{define "pg-docker-note"}}{{with .Snap.Docker}}{{if not .Checked}}<div class="callout pg-note">sind ui has not read Docker yet. The pages fill in when it has.</div>{{else if .Err}}<div class="callout bad pg-note"><b>Docker is not reachable.</b> {{.Err}}. The pages show what sind ui read last, and no action works until Docker answers. <a href="/doctor">Doctor</a> checks the host.</div>{{end}}{{end}}{{end}}
@@ -14,13 +14,32 @@ layer, and is a plain link without script. .Class holds btn modifiers. */}}
 {{define "pg-ok"}}{{if .}}<span class="pill ok">ok</span>{{else}}<span class="pill bad">down</span>{{end}}{{end}}
 
 {{/* pg-tile is the tile of a node in a node map; it takes a node. */}}
-{{define "pg-tile"}}<i class="{{.Tile}}" title="{{.Short}} · {{.Role}} · {{.State}}"></i>{{end}}
+{{define "pg-tile"}}<i class="{{.Tile}}" title="{{.TileTitle}}" role="img" aria-label="{{.TileLabel}}"></i>{{end}}
+
+{{/* pg-legend shows what the tiles of a node map mean, with a tile of
+each kind. */}}
+{{define "pg-legend"}}<ul class="pg-legend" aria-label="What the tiles mean">
+  <li><i class="pg-nm pg-nm-controller pg-nm-running" aria-hidden="true"></i>controller</li>
+  <li><i class="pg-nm pg-nm-db pg-nm-running" aria-hidden="true"></i>other service node</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-running" aria-hidden="true"></i>worker</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-stopped" aria-hidden="true"></i>not running</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-paused" aria-hidden="true"></i>paused</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-svcdown" aria-hidden="true"></i>a service is down</li></ul>{{end}}
+
+{{/* pg-copy is a small Copy button for the string it takes. */}}
+{{define "pg-copy"}}<button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="{{.}}" aria-label="Copy {{.}}">Copy</button>{{end}}
 
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
-{{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy>Copy</button></div></div>{{end}}
+{{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}
 
-{{/* pg-realm-filter lets a list switch to one realm; it takes the list. */}}
-{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.Base}}?realm=">All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.Base}}?realm={{.Name}}">{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
+{{/* pg-realm-filter lets a list switch to one realm, with the filters it
+has; it takes the list. */}}
+{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.RealmURL ""}}" data-pg-keep>All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.RealmURL .Name}}" data-pg-keep>{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
+
+{{/* pg-realm-scope says which realm a page shows, with a link to the same
+page with all realms; it takes the view, and is empty on a page that shows
+every realm. */}}
+{{define "pg-realm-scope"}}{{with .PgRealmScope}}{{if .Realm}}<span class="pg-scope">Showing realm <b class="mono">{{.Realm}}</b> · <a href="{{.ShowAll}}">Show all</a></span>{{end}}{{end}}{{end}}
 
 {{/* pg-gone is what a page of a cluster or a node shows after it was deleted. */}}
 {{define "pg-gone"}}<div class="callout warn pg-gone"><b>{{.}}</b> no longer exists. Someone may have deleted it. <a href="/clusters">Back to the clusters</a></div>{{end}}

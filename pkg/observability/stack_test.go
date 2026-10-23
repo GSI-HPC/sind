@@ -320,6 +320,8 @@ func TestStatus(t *testing.T) {
 		IP: "172.30.255.253", DNSName: "grafana.sind.sind", Port: "3000", Ready: true, Checked: true,
 	}, statuses[0])
 	assert.True(t, statuses[1].Ready)
+	assert.Contains(t, f.execs, []string{"sind-grafana", "curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://sind-loki:3100/ready"},
+		"a check has a time limit, not a curl without one")
 	assert.False(t, statuses[2].Ready)
 	assert.True(t, statuses[2].Checked)
 	assert.Equal(t, ServiceStatus{Service: ServiceAlloy, Container: "sind-alloy", State: docker.StateExited, Image: AlloyImage, Port: "12345"}, statuses[3])

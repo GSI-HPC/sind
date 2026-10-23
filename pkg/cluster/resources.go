@@ -42,6 +42,25 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 	return nil
 }
 
+// SlurmConfFiles returns slurm.conf and sind-nodes.conf as
+// WriteClusterConfig writes them for cfg, after ApplyDefaults: what the
+// New cluster dialog of sind ui shows before the cluster exists.
+func SlurmConfFiles(cfg *config.Cluster) (slurmConf, nodesConf string, err error) {
+	workers, err := slurm.ManagedWorkers(cfg.Nodes)
+	if err != nil {
+		return "", "", fmt.Errorf("generating %s: %w", slurm.NodesConfFile, err)
+	}
+	opts := slurm.ConfOptions{
+		BackupController: cfg.HasBackupController(),
+		Accounting:       cfg.HasManagedDB(),
+		Identity:         cfg.Identity.Mode,
+		JWT:              cfg.HasManagedAPI(),
+		DefMemPerCPU:     slurm.DefMemPerCPU(workers),
+		Metrics:          cfg.Monitoring,
+	}
+	return slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, opts), slurm.GenerateNodesConf(workers, cfg.Slurm.Main), nil
+}
+
 // WriteClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
 // cgroup.conf to the config volume. Uses a temporary container to access the
 // volume.
@@ -61,9 +80,9 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 // to give them to SlurmUser with docker exec, and the fragments' directory
 // too, with mode 0700.
 func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
-	workers, err := slurm.ManagedWorkers(cfg.Nodes)
+	slurmConf, nodesConf, err := SlurmConfFiles(cfg)
 	if err != nil {
-		return fmt.Errorf("generating %s: %w", slurm.NodesConfFile, err)
+		return err
 	}
 
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
@@ -110,17 +129,9 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	}
 
-	confOpts := slurm.ConfOptions{
-		BackupController: cfg.HasBackupController(),
-		Accounting:       hasDB,
-		Identity:         cfg.Identity.Mode,
-		JWT:              hasAPI,
-		DefMemPerCPU:     slurm.DefMemPerCPU(workers),
-		Metrics:          cfg.Monitoring,
-	}
 	files := docker.FileContents{
-		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, confOpts)),
-		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(workers, cfg.Slurm.Main)),
+		"slurm.conf":        []byte(slurmConf),
+		slurm.NodesConfFile: []byte(nodesConf),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf(cfg.Slurm.Cgroup)),
 		"plugstack.conf":    []byte(slurm.GeneratePlugstackConf(cfg.Slurm.Plugstack)),
 	}

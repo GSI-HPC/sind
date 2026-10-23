@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,21 +20,27 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
-// The log stream, GET /logs/{realm}/{cluster}?node=&source=&unit=, runs one
-// child per open stream: `docker logs --follow --tail 200` for source
-// docker, and `docker exec NODE journalctl --follow -n 200` (with -u UNIT
-// for one unit) for source journal, the commands of `sind logs -f -n 200`.
+// The log stream, GET /logs/{realm}/{cluster}?node=&source=&unit=&lines=,
+// runs one child per open stream: `docker logs --follow --tail N` for
+// source docker, and `docker exec NODE journalctl --follow -n N` (with -u
+// UNIT for one unit) for source journal, the commands of `sind logs -f -n
+// N`. N is one of logsLineCounts, 200 by default.
 //
 // Events: "line" carries one log line as plain text (the page adds it with
 // textContent), "notice" a line sind ui adds (lines skipped, the end of
 // the stream), "end" closes the stream for good.
 const (
-	// logsTail is how many lines the stream starts with.
-	logsTail = 200
 	// logsMaxLine is the longest line sent, in bytes; the rest is cut.
 	logsMaxLine = 4096
-	// logsMaxRate is the most lines per second sent; the rest is skipped.
+	// logsMaxRate is the most lines per second sent after the first N; the
+	// rest is skipped. The first N wait for the client instead.
 	logsMaxRate = 1000
+	// logsTailPause is how long the input may pause within the first N
+	// lines. A longer pause means the log had fewer lines than N: what
+	// follows is live, and keeps the limit. logsTailStart is the same for
+	// the first line, which waits for the child to start.
+	logsTailPause = 500 * time.Millisecond
+	logsTailStart = 5 * time.Second
 	// logsBuffer is how many lines wait for a slow client before lines are
 	// skipped.
 	logsBuffer = 256
@@ -65,60 +73,73 @@ const (
 	logsJournal logsSource = "journal"
 )
 
+// logsReq is a request of a stream, checked: what to follow and how many
+// lines to start with.
+type logsReq struct {
+	src                        logsSource
+	realm, cluster, node, unit string
+	tail                       int
+}
+
 // logsArgs returns the docker arguments of a stream. Every value in them
 // is a name that the store knows, or a unit that passed logsUnitRE.
-func logsArgs(src logsSource, realm, clusterName, node, unit string) []string {
-	tail := logsTail
+func logsArgs(q logsReq) []string {
+	tail := q.tail
 	opts := cluster.LogOptions{Follow: true, Tail: &tail}
-	if src == logsDocker {
-		return cluster.ContainerLogArgs(realm, node, clusterName, opts)
+	if q.src == logsDocker {
+		return cluster.ContainerLogArgs(q.realm, q.node, q.cluster, opts)
 	}
-	if unit != "" {
-		return cluster.ServiceLogArgs(realm, node, clusterName, unit, opts)
+	if q.unit != "" {
+		return cluster.ServiceLogArgs(q.realm, q.node, q.cluster, q.unit, opts)
 	}
-	return []string{"exec", string(cluster.ContainerName(realm, clusterName, node)),
+	return []string{"exec", string(cluster.ContainerName(q.realm, q.cluster, q.node)),
 		"journalctl", "--follow", "-n", fmt.Sprint(tail)}
 }
 
-// logsCheck validates the request against the store and returns the
-// source, the node's short name and the unit.
-func logsCheck(s *Server, r *http.Request) (src logsSource, realm, clusterName, node, unit string, err error) {
-	v, err := s.View(r, "node", "source", "unit")
+// logsCheck validates the request against the store.
+func logsCheck(s *Server, r *http.Request) (logsReq, error) {
+	v, err := s.View(r, "node", "source", "unit", "lines")
 	if err != nil {
-		return "", "", "", "", "", err
+		return logsReq{}, err
 	}
-	realm, clusterName = v.Params.Get("realm"), v.Params.Get("cluster")
-	node, unit = v.Params.Get("node"), v.Params.Get("unit")
-	prefix := cluster.ContainerPrefix(realm, clusterName)
+	q := logsReq{realm: v.Params.Get("realm"), cluster: v.Params.Get("cluster"),
+		node: v.Params.Get("node"), unit: v.Params.Get("unit"), tail: logsLineCounts[0]}
+	prefix := cluster.ContainerPrefix(q.realm, q.cluster)
 	found := false
-	for _, n := range v.Snap.Nodes[realm] {
-		if n.Cluster == clusterName && n.Container == prefix+node && node != "" {
+	for _, n := range v.Snap.Nodes[q.realm] {
+		if n.Cluster == q.cluster && n.Container == prefix+q.node && q.node != "" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		return "", "", "", "", "", fmt.Errorf("node %s of %s: %w", node, clusterName, ErrNotFound)
+		return logsReq{}, fmt.Errorf("node %s of %s: %w", q.node, q.cluster, ErrNotFound)
 	}
 	switch logsSource(v.Params.Get("source")) {
 	case logsDocker, "":
-		src = logsDocker
-		unit = ""
+		q.src, q.unit = logsDocker, ""
 	case logsJournal:
-		src = logsJournal
+		q.src = logsJournal
 	default:
-		return "", "", "", "", "", fmt.Errorf("source: want docker or journal: %w", ErrBadRequest)
+		return logsReq{}, fmt.Errorf("source: want docker or journal: %w", ErrBadRequest)
 	}
-	if unit != "" && !logsUnitRE.MatchString(unit) {
-		return "", "", "", "", "", fmt.Errorf("unit: not a systemd unit name: %w", ErrBadRequest)
+	if q.unit != "" && !logsUnitRE.MatchString(q.unit) {
+		return logsReq{}, fmt.Errorf("unit: not a systemd unit name: %w", ErrBadRequest)
 	}
-	return src, realm, clusterName, node, unit, nil
+	if l := v.Params.Get("lines"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil || !slices.Contains(logsLineCounts, n) {
+			return logsReq{}, fmt.Errorf("lines: want one of %v: %w", logsLineCounts, ErrBadRequest)
+		}
+		q.tail = n
+	}
+	return q, nil
 }
 
 // logsHandle streams the log of one node until the client leaves, the
 // server stops or the child ends.
 func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
-	src, realm, clusterName, node, unit, err := logsCheck(s, r)
+	q, err := logsCheck(s, r)
 	if err != nil {
 		s.Fail(w, r, err)
 		return
@@ -139,21 +160,22 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	// What the container or journalctl writes to its standard error is
 	// part of the log.
-	proc, err := s.env.Exec.Start(cmdexec.WithStderrMerged(ctx), "docker", logsArgs(src, realm, clusterName, node, unit)...)
+	proc, err := s.env.Exec.Start(cmdexec.WithStderrMerged(ctx), "docker", logsArgs(q)...)
 	if err != nil {
-		s.log.Error("starting the log stream", "node", node, "err", err)
+		s.log.Error("starting the log stream", "node", q.node, "err", err)
 		http.Error(w, "could not start the log stream", http.StatusBadGateway)
 		return
 	}
 	lines := make(chan string, logsBuffer)
 	var dropped atomic.Int64
-	readerDone := make(chan struct{})
+	readerDone, stop := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(readerDone)
 		defer close(lines)
-		logsRead(proc.Stdout, lines, &dropped, time.Now)
+		logsRead(proc.Stdout, lines, &dropped, time.Now, q.tail, stop)
 	}()
 	defer func() {
+		close(stop)      // a reader that waits for the client ends
 		_ = proc.Close() // kills the child; the reader then ends
 		<-readerDone
 	}()
@@ -207,17 +229,37 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// logsRead reads lines of r into out until r ends. It never blocks on a
-// slow reader of out, nor lets through more than logsMaxRate lines a
-// second: it counts the lines it drops in dropped.
-func logsRead(r io.Reader, out chan<- string, dropped *atomic.Int64, now func() time.Time) {
+// logsRead reads lines of r into out until r ends or stop closes. The
+// first lines, as many as first, wait for the reader of out: they are the
+// tail that the stream starts with. The tail also ends when the input
+// pauses (logsTailPause, logsTailStart for the first line): the log had
+// fewer lines. After the tail it never blocks on a slow reader of out, nor
+// lets through more than logsMaxRate lines a second: it counts the lines
+// it drops in dropped.
+func logsRead(r io.Reader, out chan<- string, dropped *atomic.Int64, now func() time.Time, first int, stop <-chan struct{}) {
 	br := bufio.NewReaderSize(r, logsMaxLine)
 	var windowStart time.Time
 	count := 0
+	pause := logsTailStart
 	for {
+		start := now()
 		line, err := logsReadLine(br)
-		if line != "" || err == nil {
-			t := now()
+		t := now()
+		if t.Sub(start) > pause {
+			first = 0
+		}
+		pause = logsTailPause
+		switch {
+		case line == "" && err != nil:
+			// The input ended after a whole line.
+		case first > 0:
+			first--
+			select {
+			case out <- line:
+			case <-stop:
+				return
+			}
+		default:
 			if t.Sub(windowStart) >= time.Second {
 				windowStart, count = t, 0
 			}

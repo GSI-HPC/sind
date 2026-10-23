@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The view models of the main pages. They are built from a snapshot only,
@@ -26,6 +27,14 @@ type pgAction struct {
 	URL    string
 	Class  string
 	Dialog bool
+	// Name is the accessible name, where Label alone does not say what the
+	// button acts on; empty for Label.
+	Name string
+	// Verb is the label without the dots, set on an action of a
+	// selection of nodes and on a row's button; Fit, set on the former,
+	// lists the node states and roles that it acts on, separated by
+	// spaces.
+	Verb, Fit string
 }
 
 // pgDialog returns the URL of the dialog of the action with the query
@@ -148,6 +157,13 @@ type pgNode struct {
 	HA       *cluster.HAStatus
 	// Known is set when the status of the node's cluster was in the store.
 	Known bool
+	// Busy is set while a command works on the node's cluster, such as
+	// one that adds workers or reboots a node (pgRunsOn), Creating while
+	// one creates the cluster.
+	Busy, Creating bool
+	// Slurm is what sinfo says about the node, nil when it does not list
+	// it or was not asked.
+	Slurm *slurm.NodeInfo
 }
 
 // Link returns the address of the node's page.
@@ -170,6 +186,31 @@ func (n pgNode) Running() bool { return n.State == cluster.StateRunning }
 // Worker reports whether the node is a worker, the only role to delete.
 func (n pgNode) Worker() bool { return n.Role == config.RoleWorker }
 
+// RowPower returns the power button of the node's row in the Nodes tab:
+// Start for a node that does not run, Unfreeze for a paused one, and none
+// for a running one, whose verbs the selection offers.
+func (n pgNode) RowPower() *pgAction {
+	power := func(verb, op string) *pgAction {
+		a := pgDialogAction(verb+"…", "", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", op)
+		a.Verb = verb
+		return &a
+	}
+	switch n.State {
+	case cluster.StateRunning:
+		return nil
+	case cluster.StatePaused:
+		return power("Unfreeze", "unpause")
+	}
+	return power("Start", "start")
+}
+
+// SSH returns the command that opens a shell on the node.
+func (n pgNode) SSH() string { return pgSind(n.Realm) + " ssh " + n.Arg }
+
+// Match lists the words that the actions of a selection of nodes fit:
+// the node's state and its role.
+func (n pgNode) Match() string { return string(n.State) + " " + string(n.Role) }
+
 // Tile returns the classes of the node's tile in a node map.
 func (n pgNode) Tile() string {
 	role := string(n.Role)
@@ -181,6 +222,26 @@ func (n pgNode) Tile() string {
 		c += " pg-nm-svcdown"
 	}
 	return c
+}
+
+// TileLabel names the node's tile for screen readers: its name, state and
+// the services that are down, as "worker-4.dev, running, slurmd down".
+func (n pgNode) TileLabel() string {
+	label := n.Arg + ", " + string(n.State)
+	if down := n.Down(); len(down) > 0 {
+		label += ", " + strings.Join(down, " and ") + " down"
+	}
+	return label
+}
+
+// TileTitle is the tooltip of the node's tile: "worker-4 · worker ·
+// running · slurmd down".
+func (n pgNode) TileTitle() string {
+	title := n.Short + " · " + string(n.Role) + " · " + string(n.State)
+	if down := n.Down(); len(down) > 0 {
+		title += " · " + strings.Join(down, " and ") + " down"
+	}
+	return title
 }
 
 // Down returns the services that are down on a running node.
@@ -217,8 +278,55 @@ func (n pgNode) Issues() []pgPill {
 	return out
 }
 
-// Problem reports whether anything is wrong with the node.
-func (n pgNode) Problem() bool { return len(n.Issues()) > 0 }
+// Problem reports whether anything is wrong with the node: its container
+// does not run, or the last probe of its cluster found a service down. It
+// is the one rule of "needs a look" for every page and the rail. A service
+// that is down while a command works on the cluster (Busy) is none yet: the
+// command may be starting it; nor is anything while a command creates the
+// cluster (Creating).
+func (n pgNode) Problem() bool {
+	return !n.Creating && (n.State != cluster.StateRunning || !n.Busy && len(n.Down()) > 0)
+}
+
+// LogsLink returns the address of the Logs tab of the node's cluster, with
+// the node picked.
+func (n pgNode) LogsLink() string {
+	return pgLogsURL(n.Realm, n.Cluster, n.Short, "")
+}
+
+// pgSnapNodes returns the nodes of the realm, or of every realm when realm
+// is empty, with what the status of their cluster tells when the store
+// has it.
+func pgSnapNodes(sn store.Snapshot, realm string) []pgNode {
+	var out []pgNode
+	busy := map[string][2]bool{}
+	for _, r := range pgRealmNames(sn, realm) {
+		for _, ns := range sn.NodesOf(r) {
+			n := pgNodeOf(r, ns, sn.Status(r, ns.Cluster))
+			key := r + "/" + ns.Cluster
+			b, ok := busy[key]
+			if !ok {
+				b[0], b[1] = pgBusy(sn, r, ns.Cluster)
+				busy[key] = b
+			}
+			n.Busy, n.Creating = b[0], b[1]
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// pgProblemNodes counts the nodes of the realm, or of every realm, that
+// need a look (pgNode.Problem).
+func pgProblemNodes(sn store.Snapshot, realm string) int {
+	n := 0
+	for _, node := range pgSnapNodes(sn, realm) {
+		if node.Problem() {
+			n++
+		}
+	}
+	return n
+}
 
 // ServiceUp counts the services that are up.
 func (n pgNode) ServiceUp() int {
@@ -332,7 +440,7 @@ func (c pgCluster) Problems() []pgPill {
 
 // Tabs of a cluster page, in order.
 var pgTabs = []struct{ Key, Label string }{
-	{"summary", "Summary"}, {"nodes", "Nodes"}, {"logs", "Logs"},
+	{"summary", "Summary"}, {"nodes", "Nodes"}, {"slurm", "Slurm"}, {"logs", "Logs"},
 	{"network", "Network and storage"}, {"connect", "Connect"},
 }
 
@@ -359,13 +467,17 @@ func pgClustersOf(sn store.Snapshot, realm string, now time.Time) []pgCluster {
 func pgClusterOf(sn store.Snapshot, realm string, c cluster.Summary, mon *cluster.Monitoring, now time.Time) pgCluster {
 	pc := pgCluster{Realm: realm, Name: c.Name, Slurm: c.SlurmVersion, State: c.State}
 	st := sn.Status(realm, c.Name)
+	busy, creating := pgBusy(sn, realm, c.Name)
 	for _, ns := range sn.ClusterNodes(realm, c.Name) {
-		pc.Nodes = append(pc.Nodes, pgNodeOf(realm, ns, st))
+		n := pgNodeOf(realm, ns, st)
+		n.Busy, n.Creating = busy, creating
+		pc.Nodes = append(pc.Nodes, n)
 	}
+	pgAttachSlurm(pc.Nodes, sn.Slurm(realm, c.Name))
 	if mon != nil {
 		pc.Monitoring = slices.ContainsFunc(mon.Clusters, func(m cluster.MonitoredCluster) bool { return m.Name == c.Name })
 	}
-	pc.Runs = pgRunsOn(sn, c.Name, now)
+	pc.Runs = pgRunsOn(sn, realm, c.Name, now)
 	return pc
 }
 
@@ -395,21 +507,29 @@ func pgRealmNames(sn store.Snapshot, realm string) []string {
 
 // pgRun is a run as the lists show it.
 type pgRun struct {
-	ID       string
-	Title    string
-	Class    string
-	Running  bool
+	ID      string
+	Title   string
+	Class   string
+	Running bool
+	// Source is where the run came from (runSource); Terminal is set for
+	// a run from a terminal.
+	Source   string
 	Terminal bool
-	Time     string
+	// Waiting is set while the run waits for the lock of its realm.
+	Waiting bool
+	Time    string
 }
 
 // Link returns the address of the run's page.
 func (r pgRun) Link() string { return "/runs/" + url.PathEscape(r.ID) }
 
-// pgRunOf builds a run for a list. A run without a parent span started
-// outside sind ui, in a terminal.
-func pgRunOf(r store.Run, now time.Time) pgRun {
-	pr := pgRun{ID: r.ID, Title: r.Title, Running: !r.Done(), Terminal: r.Parent == ""}
+// pgRunOf builds a run for a list, with where it came from.
+func pgRunOf(sn store.Snapshot, r store.Run, now time.Time) pgRun {
+	pr := pgRun{ID: r.ID, Title: r.Title, Running: !r.Done(), Source: runSource(sn, r), Waiting: runWaitsForLock(r)}
+	pr.Terminal = pr.Source == runFromTerminal
+	if t, ok := runTaskOf(sn, r.Trace); ok {
+		pr.Title = runTitle(r, &t)
+	}
 	switch {
 	case !r.Done():
 		pr.Class = "run"
@@ -424,21 +544,95 @@ func pgRunOf(r store.Run, now time.Time) pgRun {
 	return pr
 }
 
-// pgRunsOn returns the runs that work on the cluster now: a run that has
-// not ended and names the cluster after its command words, as in
-// "create worker dev". A run names no realm; the title is all there is.
-func pgRunsOn(sn store.Snapshot, name string, now time.Time) []pgRun {
+// pgRunsOn returns the runs that work on the cluster now, oldest first: a
+// run that has not ended and names the cluster or nodes of it after its
+// command words, as in "create worker dev" or "power reboot worker-1.dev".
+// A run names no realm, so a run of a cluster of the same name in another
+// realm counts too, unless sind ui started it and knows its realm.
+func pgRunsOn(sn store.Snapshot, realm, name string, now time.Time) []pgRun {
 	var out []pgRun
-	for _, r := range sn.Runs {
-		if r.Done() {
-			continue
-		}
-		words := strings.Fields(r.Title)
-		if len(words) > 2 && slices.Contains(words[2:], name) {
-			out = append(out, pgRunOf(r, now))
+	for _, r := range slices.Backward(sn.Runs) {
+		if pgWorksOn(sn, r, realm, name) {
+			out = append(out, pgRunOf(sn, r, now))
 		}
 	}
 	return out
+}
+
+// pgRunBanner is the line of a cluster page about the runs that work on the
+// cluster now: one line for all of them.
+type pgRunBanner struct {
+	// Command is the title of the one run; empty for several.
+	Command string
+	// Count is "3 commands" for several runs.
+	Count string
+	Text  string
+	// Href is the run's page, or Activity with the runs of the cluster
+	// that go on for several; Action labels the link.
+	Href   string
+	Action string
+}
+
+// Banner returns the line about the runs of the cluster, nil for none.
+func (c pgCluster) Banner() *pgRunBanner {
+	switch len(c.Runs) {
+	case 0:
+		return nil
+	case 1:
+		r := c.Runs[0]
+		text := "runs " + runSourceText(r.Source) + "."
+		if r.Source == runFromTerminal {
+			text = "runs in a terminal."
+		}
+		if r.Waiting {
+			text = "waits for the lock of the realm. It runs " + runSourceText(r.Source) + "."
+		}
+		return &pgRunBanner{Command: r.Title, Text: text, Href: r.Link(), Action: "Show progress"}
+	}
+	waiting := 0
+	for _, r := range c.Runs {
+		if r.Waiting {
+			waiting++
+		}
+	}
+	text := "run on " + c.Name + "."
+	if waiting > 0 {
+		verb := "wait"
+		if waiting == 1 {
+			verb = "waits"
+		}
+		text = fmt.Sprintf("run on %s: %d works, %d %s for the lock of the realm.", c.Name, len(c.Runs)-waiting, waiting, verb)
+	}
+	href := runQuery{Status: "running", Realm: c.Realm, Cluster: c.Name}.href()
+	return &pgRunBanner{Count: fmt.Sprintf("%d commands", len(c.Runs)), Text: text, Href: href, Action: "Show them"}
+}
+
+// pgWorksOn reports whether the run works on the cluster now (pgRunsOn):
+// it has not ended, names the cluster, or nodes of it, as "worker-1.dev",
+// and is not a run of sind ui in another realm.
+func pgWorksOn(sn store.Snapshot, r store.Run, realm, name string) bool {
+	if r.Done() {
+		return false
+	}
+	if t, ok := runTaskOf(sn, r.Trace); ok && t.Realm != "" && t.Realm != realm {
+		return false
+	}
+	words := strings.Fields(r.Title)
+	return len(words) > 2 && slices.ContainsFunc(words[2:], func(w string) bool {
+		return w == name || strings.HasSuffix(w, "."+name)
+	})
+}
+
+// pgBusy reports whether a run works on the cluster now (pgRunsOn), and
+// whether one creates it ("create cluster NAME").
+func pgBusy(sn store.Snapshot, realm, name string) (busy, creating bool) {
+	for _, r := range sn.Runs {
+		if pgWorksOn(sn, r, realm, name) {
+			busy = true
+			creating = creating || strings.HasPrefix(r.Title, "create cluster ")
+		}
+	}
+	return busy, creating
 }
 
 // pgAgo says how long ago t was, as "just now", "5 min ago", "3 h ago".

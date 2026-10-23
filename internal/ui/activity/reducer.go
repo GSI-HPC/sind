@@ -67,6 +67,7 @@ func convertRun(ru eventlog.Run) store.Run {
 	}
 	out := store.Run{
 		ID: ru.ID, Trace: ru.Trace.Trace.String(), Parent: spanID(ru.Trace.Parent),
+		FromUI:  store.IsUITraceState(ru.Trace.State),
 		Program: ru.Program, Version: ru.Version,
 		Title: title, Start: root.Queued, End: root.Ended, Last: ru.Last,
 		Status: root.Status, Class: root.Class, Err: root.Err,

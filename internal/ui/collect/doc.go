@@ -2,11 +2,11 @@
 
 // Package collect fills the store of sind ui with what Docker and the host
 // know: the realms, clusters, nodes, networks and volumes, the mesh, the
-// status of the clusters whose page is open, the realm locks, the
-// monitoring stacks and the host checks.
+// status of the clusters, the realm locks, the monitoring stacks and the
+// host checks.
 //
 // sind keeps no state of its own, so the collectors read cheaply and
-// often, read expensively only for what a page shows, and let Docker
+// often, read expensively more often for what a page shows, and let Docker
 // events say when to read again. Events streams `docker events` once and
 // publishes what it sees, debounced, on a Bus; each collector subscribes
 // and reads again for the realm (and cluster) an event names. Every

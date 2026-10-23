@@ -145,7 +145,7 @@ sind get monitoring
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows the services of the stack with their addresses and states, and the clusters that they collect. Use **read every** to set how often sind ui reads them.
+Open **Monitoring**. It shows the clusters that the stack collects, with their Slurm nodes that are up and their running and pending jobs, and the services of the stack with their addresses and states. Press a button of **Read every** to set how often sind ui reads them.
 
 {{< uishot "monitoring" >}}
 

@@ -206,6 +206,116 @@ func runTaskOf(snap store.Snapshot, trace string) (store.Task, bool) {
 	return store.Task{}, false
 }
 
+// Where a run came from, as runSource tells it.
+const (
+	runFromUI       = "ui"
+	runFromTerminal = "terminal"
+	runFromProgram  = "program"
+)
+
+// runSource tells where a run came from: from sind ui when this sind ui has
+// its task or its tracestate says that a sind ui started it; from another
+// program when it continues a trace that its caller handed on, as a CI job
+// or an MCP client does; else from a terminal.
+func runSource(snap store.Snapshot, run store.Run) string {
+	if _, ok := runTaskOf(snap, run.Trace); ok || run.FromUI {
+		return runFromUI
+	}
+	if run.Parent != "" {
+		return runFromProgram
+	}
+	return runFromTerminal
+}
+
+// runLockWait is the name of the wait of a command for the lock of its
+// realm.
+const runLockWait = "realm lock"
+
+// runWaitsForLock reports whether a run that goes on waits for the lock of
+// its realm, so that it has not changed anything yet.
+func runWaitsForLock(run store.Run) bool {
+	if run.Done() {
+		return false
+	}
+	for _, s := range activity.VisibleChildren(run.Root) {
+		if s.Kind == activity.KindWait && s.Name == runLockWait && !s.Done() {
+			return true
+		}
+	}
+	return false
+}
+
+// runStop is the Stop button of a task that runs, with the question that
+// it asks in the page before it stops the command.
+type runStop struct {
+	TaskID string
+	Title  string
+	// Text says what stays when the command stops.
+	Text string
+	// CSRF is the session's token, for the form.
+	CSRF string
+	// Small makes the button small, as in the dock.
+	Small bool
+}
+
+// newRunStop returns the Stop button of the task t, whose run may be nil,
+// with the command's title; nil for a task that has ended or is
+// being stopped.
+func newRunStop(t store.Task, run *store.Run, title, csrf string, small bool) *runStop {
+	if t.Done() || t.Canceling || (run != nil && run.Done()) {
+		return nil
+	}
+	return &runStop{TaskID: t.ID, Title: title, Text: runStopText(t.Action, run), CSRF: csrf, Small: small}
+}
+
+// runStopText says what stays when a command of the action stops: sind
+// stops it as Ctrl-C does, and a command that makes things removes what it
+// has made, while one that removes or changes things leaves what it has
+// done. A command that still waits for the lock of its realm has done
+// nothing.
+func runStopText(action string, run *store.Run) string {
+	if run != nil && runWaitsForLock(*run) {
+		return "It still waits for the lock of its realm and has changed nothing yet."
+	}
+	switch action {
+	case "create-cluster":
+		return "sind removes the nodes it has made so far (rollback). The saved config stays."
+	case "create-worker":
+		return "sind removes the workers it has added so far (rollback)."
+	case "delete-cluster":
+		return "What sind has removed so far stays removed. The rest of the cluster stays, and you can delete it again."
+	case "delete-worker":
+		return "The workers that sind has removed stay removed. The others stay."
+	case "delete-realm":
+		return "What sind has removed so far stays removed. The rest of the realm stays, and you can delete it again."
+	case "power":
+		return "The nodes that sind has handled stay as they are now. The others stay as they were."
+	}
+	return "sind stops the command, as Ctrl-C does in a terminal."
+}
+
+// runSourceText says where a run came from, for its page.
+func runSourceText(source string) string {
+	switch source {
+	case runFromUI:
+		return "from sind ui"
+	case runFromProgram:
+		return "from another program"
+	}
+	return "from a terminal"
+}
+
+// runSourceChip is the chip of a run in a list: none for a run of sind ui.
+func runSourceChip(source string) string {
+	switch source {
+	case runFromTerminal:
+		return "terminal"
+	case runFromProgram:
+		return "other program"
+	}
+	return ""
+}
+
 // runTitle is the title of a run that task t started, with the cluster the
 // task works on, which the log of an older sind does not name.
 func runTitle(run store.Run, t *store.Task) string {
@@ -223,6 +333,95 @@ type runSeg struct {
 	Fill int
 }
 
+// runBar is the bar of a run's steps, a segment for each step.
+type runBar []runSeg
+
+// runSegDone reports whether a segment stands for a step that is over.
+func runSegDone(class string) bool {
+	switch class {
+	case runOK, runFailed, runCanceled, runSkipped, runEnded:
+		return true
+	}
+	return false
+}
+
+// Pct is the part of the bar that is done, in whole percent: the steps that
+// are over, and the part of the running ones that is done. It is the value
+// of the bar's progressbar role.
+func (b runBar) Pct() int {
+	if len(b) == 0 {
+		return 0
+	}
+	sum := 0
+	for _, s := range b {
+		switch {
+		case runSegDone(s.Class):
+			sum += 100
+		case s.Class == runRunning:
+			sum += s.Fill
+		}
+	}
+	return sum / len(b)
+}
+
+// Text says how far the bar is in words, for assistive technology: "2 of 4
+// steps done", or the state of a run without steps.
+func (b runBar) Text() string {
+	if len(b) == 1 && !strings.Contains(b[0].Title, ":") {
+		return b[0].Title
+	}
+	done := 0
+	for _, s := range b {
+		if runSegDone(s.Class) {
+			done++
+		}
+	}
+	return fmt.Sprintf("%d of %d steps done", done, len(b))
+}
+
+// runSayState is the state of a command as the announcements tell it: its
+// class, or stopping while a stop is under way.
+func runSayState(class string, canceling bool) string {
+	if class == runRunning && canceling {
+		return "stopping"
+	}
+	return class
+}
+
+// runSay is the one sentence that the live region of a page gets when a
+// command starts, is being stopped or ends: "create worker dev: done in
+// 12s." A failure adds why, when it is known.
+func runSay(title, state, elapsed, why string) string {
+	switch state {
+	case runRunning:
+		return title + ": started."
+	case "stopping":
+		return title + ": stopping."
+	case runOK:
+		return title + ": done in " + elapsed + "."
+	case runFailed:
+		if why != "" {
+			return title + ": failed. " + why
+		}
+		return title + ": failed."
+	case runCanceled:
+		return title + ": stopped."
+	}
+	return title + ": ended."
+}
+
+// runFailure says in one line why a run failed: the error of its first
+// target that failed, else the error of its command.
+func runFailure(run store.Run) string {
+	if f := activity.FailedTargets(run.Root); len(f) > 0 {
+		if len(f[0].Nodes) == 1 {
+			return strings.ReplaceAll(f[0].Err, "{}", f[0].Nodes[0])
+		}
+		return runFoldNodes(f[0].Nodes) + ": " + f[0].Err
+	}
+	return run.Err
+}
+
 // runStepCounts returns how many targets of the step s are done and how many
 // it expects: its own total, or the targets seen if there are more.
 func runStepCounts(s store.Span) (done, total int) {
@@ -232,8 +431,8 @@ func runStepCounts(s store.Span) (done, total int) {
 
 // runSegs returns the segments of a run: one for each visible step, in the
 // order they started. A run without steps has one segment for the command.
-func runSegs(run store.Run) []runSeg {
-	var segs []runSeg
+func runSegs(run store.Run) runBar {
+	var segs runBar
 	for _, s := range activity.VisibleChildren(run.Root) {
 		if s.Kind != activity.KindStep {
 			continue

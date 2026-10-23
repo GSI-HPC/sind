@@ -3,7 +3,10 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
@@ -11,7 +14,7 @@ func init() {
 	RegisterFragment(Fragment{
 		Name:     "more-mesh",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker},
-		Prefixes: []string{"mesh/", "networks/"},
+		Prefixes: []string{"mesh/", "networks/", "nodes/"},
 		Params:   []string{"realm"},
 		Load:     moreMeshLoad,
 	})
@@ -45,10 +48,34 @@ type moreMeshRealm struct {
 	Info mesh.Info
 	// Subnet is the mesh network's address range, empty when unknown.
 	Subnet   string
-	Records  []mesh.DNSRecord
+	Records  []moreDNSRecord
 	External []moreExternal
 	// ConnectURL and DeleteURL open the dialogs of the realm.
 	ConnectURL, DeleteURL string
+}
+
+// RecordsText counts the realm's DNS records: "1 record" or "2 records".
+func (r moreMeshRealm) RecordsText() string { return pgPlural(len(r.Records), "record", "records") }
+
+// moreDNSRecord is a record of the mesh DNS, with the page of the node
+// that has the name, "" for none.
+type moreDNSRecord struct {
+	mesh.DNSRecord
+	Href string
+}
+
+// moreDNSRecords adds the node pages to the records of a realm.
+func moreDNSRecords(sn store.Snapshot, realm string, records []mesh.DNSRecord) []moreDNSRecord {
+	pages := map[string]string{}
+	for _, n := range sn.NodesOf(realm) {
+		short := strings.TrimPrefix(n.Container, cluster.ContainerPrefix(realm, n.Cluster))
+		pages[n.FQDN] = "/nodes/" + realm + "/" + n.Cluster + "/" + short
+	}
+	out := make([]moreDNSRecord, len(records))
+	for i, r := range records {
+		out[i] = moreDNSRecord{DNSRecord: r, Href: pages[r.Hostname]}
+	}
+	return out
 }
 
 // moreExternal is a container outside sind on the mesh network.
@@ -59,10 +86,7 @@ type moreExternal struct {
 
 // moreMeshLoad fills the data of the Mesh and DNS page from the snapshot.
 func moreMeshLoad(v *View) error {
-	realms, err := moreRealms(v)
-	if err != nil {
-		return err
-	}
+	realms := moreRealms(v)
 	d := moreMeshData{Multi: len(realms) > 1}
 	if len(realms) == 0 {
 		d.Notice = moreNoRealms(v.Snap.Docker)
@@ -76,7 +100,7 @@ func moreMeshLoad(v *View) error {
 			DeleteURL:  moreDialogURL("delete-realm", "realm", name),
 		}
 		if m, ok := v.Snap.MeshOf(name); ok {
-			r.Err, r.Records = m.Err, m.Records
+			r.Err, r.Records = m.Err, moreDNSRecords(v.Snap, name, m.Records)
 			if m.Info != nil {
 				r.Has, r.Info = true, *m.Info
 				for _, n := range v.Snap.NetworksOf(name) {

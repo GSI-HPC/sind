@@ -3,11 +3,9 @@
 package ui
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
 func init() { defaultRegistry.AddFragment(railFragment()) }
@@ -24,9 +22,9 @@ func railFragment() Fragment {
 	}
 }
 
-// pgNavCounts sets the counts of the rail entries of the main pages: the
-// number of clusters, and the number of nodes that are not running, which
-// shows only when there are some.
+// pgNavCounts sets the badges of the rail entries of the main pages: the
+// number of clusters, and the nodes that need a look by the rule of every
+// page (pgNode.Problem), or a dot when every node is fine.
 func pgNavCounts(r *Registry) {
 	r.SetNavCount("clusters", func(sn store.Snapshot) NavCount {
 		n := 0
@@ -36,20 +34,22 @@ func pgNavCounts(r *Registry) {
 		if n == 0 {
 			return NavCount{}
 		}
-		return NavCount{Text: strconv.Itoa(n)}
+		return NavCount{Text: strconv.Itoa(n), Label: pgPlural(n, "cluster", "clusters")}
 	})
 	r.SetNavCount("nodes", func(sn store.Snapshot) NavCount {
-		n := 0
-		for _, ns := range sn.Nodes {
-			for _, x := range ns {
-				if x.State != cluster.StateRunning {
-					n++
-				}
+		nodes := pgSnapNodes(sn, "")
+		problems := 0
+		for _, n := range nodes {
+			if n.Problem() {
+				problems++
 			}
 		}
-		if n == 0 {
-			return NavCount{}
+		switch {
+		case problems > 0:
+			return NavCount{Text: strconv.Itoa(problems) + " down", Class: "bad", Label: pgPlural(problems, "node needs", "nodes need") + " a look"}
+		case len(nodes) > 0:
+			return NavCount{Class: "ok", Label: "every node runs"}
 		}
-		return NavCount{Text: fmt.Sprint(n), Class: "bad"}
+		return NavCount{}
 	})
 }

@@ -1,27 +1,36 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* The parts that help.js loads into the help pane and into hint cards. They
-render a *helpData (see help.go); the texts come from package help, which
-sind help TOPIC prints too. */}}
+{{/* The parts that help.js loads into the help pane and into hint cards, and
+the help page that /help is when the browser opens it. They render a
+*helpData (see help.go); the texts come from package help, which sind help
+TOPIC prints too. A link to a topic is an a with data-help-topic: help.js
+opens it in the pane, and on the help page the browser follows it. */}}
 
-{{define "help-chips"}}{{range .}}<button type="button" class="btn sm" data-help-topic="word/{{.ID}}">{{.Title}}</button>{{end}}{{end}}
+{{define "help-chips"}}{{range .}}<a class="btn sm" href="/help?topic=word/{{.ID}}" data-help-topic="word/{{.ID}}">{{.Title}}</a>{{end}}{{end}}
 
 {{define "help-cmd"}}<div class="cmd"><code>{{.}}</code><button type="button" data-help-copy="{{.}}">Copy</button></div>{{end}}
 
 {{define "help-more"}}{{if .Doc}}<p class="hint"><a href="{{.Doc}}" target="_blank" rel="noopener noreferrer">More in the sind docs ↗</a></p>{{end}}{{end}}
 
-{{define "help-body"}}{{with .Data}}<div data-crumb="{{.Crumb}}">
+{{/* help-keys lists groups of keys, a []helpKeyGroup. A shortcut of one
+key has the class k1, which the setting for single-key shortcuts marks. */}}
+{{define "help-keys"}}{{range .}}<div><h3>{{.Title}}</h3><dl class="keys">{{range .Keys}}{{$j := .Join}}<dt{{if .Single}} class="k1"{{end}}>{{range $i, $k := .Keys}}{{if $i}}{{if eq $j "+"}}+{{else}} <span class="kj">{{$j}}</span> {{end}}{{end}}<kbd>{{$k}}</kbd>{{end}}</dt><dd{{if .Single}} class="k1"{{end}}>{{.Text}}</dd>{{end}}</dl></div>{{end}}{{end}}
+
+{{define "help-body"}}{{with .Data}}{{template "help-entry" .}}{{end}}{{end}}
+
+{{define "help-entry"}}<div data-crumb="{{.Crumb}}">
 {{if eq .Kind "page"}}<div class="kind">This page</div><h2>{{.Page.Title}}</h2><p class="lead">{{.Page.Summary}}</p>
-{{with .Words}}<div><h3>Words on this page</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}
-{{with .Howtos}}<div><h3>How do I…</h3><ul>{{range .}}<li><button type="button" class="link" data-help-topic="howto/{{.ID}}">{{.Title}}</button></li>{{end}}</ul></div>{{end}}
-<div><h3>Keys</h3><dl class="keys"><dt><kbd>/</kbd></dt><dd>Jump to a cluster, node or page</dd><dt><kbd>?</kbd></dt><dd>Help for what the pointer is on</dd><dt><kbd>g</kbd> <kbd>a</kbd></dt><dd>Go to Activity; <kbd>c</kbd> Clusters, <kbd>n</kbd> Nodes, <kbd>o</kbd> Overview, <kbd>d</kbd> Doctor</dd><dt><kbd>Esc</kbd></dt><dd>Close the card, the dialog or this pane</dd></dl></div>
+{{with .Words}}<div><h3>Words on this page</h3><div class="chips">{{template "help-chips" .}}</div><p class="hint touch-only">Tap a dotted word on the page to see what it means.</p></div>{{end}}
+{{with .Howtos}}<div><h3>How do I…</h3><ul>{{range .}}<li><a class="link" href="/help?topic=howto/{{.ID}}" data-help-topic="howto/{{.ID}}">{{.Title}}</a></li>{{end}}</ul></div>{{end}}
+<div><h3>More help</h3><ul><li><a class="link" href="/help?topic=index" data-help-topic="index">All how-tos</a></li><li><a class="link" href="/help?topic=words" data-help-topic="words">All words of sind and Slurm</a></li></ul></div>
+{{with .Keys}}<div class="kbd-only helpkeys-short">{{template "help-keys" .}}<p class="hint k1-off">Single-key shortcuts are off.</p><p class="hint"><a href="/help?topic=keys" data-help-topic="keys">All keys, and the setting for single-key shortcuts</a></p></div>{{end}}
 {{template "help-more" .}}
 {{else if eq .Kind "word"}}<div class="kind">Word</div><h2>{{.Word.Title}}</h2><p class="lead">{{.Word.Summary}}</p>
 {{with .Word.Command}}<div><div class="cmdlabel">In a terminal</div>{{template "help-cmd" .}}</div>{{end}}
 {{with .Words}}<div><h3>Related</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}
-{{template "help-more" .}}<p class="hint">In a terminal: <span class="mono">sind help {{.Word.ID}}</span></p>
+{{template "help-more" .}}<p class="hint">In a terminal: <span class="mono">sind help {{.Word.ID}}</span> · <a href="/help?topic=words" data-help-topic="words">All words</a></p>
 {{else if eq .Kind "action"}}<div class="kind">Action</div><h2>{{.Action.Title}}</h2><p class="lead">{{.Action.Summary}}</p>
-<div class="callout{{if .Action.Irreversible}} bad{{end}}">{{.Action.Undo}}.</div>
+<div class="callout{{if .Action.Irreversible}} bad{{end}}">{{.Action.UndoText}}</div>
 <div><div class="cmdlabel">Runs</div>{{template "help-cmd" .Action.Command}}</div>
 <p class="hint">The dialog shows the exact command before it runs it. Activity keeps it afterwards.</p>
 {{with .Words}}<div><h3>Words</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}
@@ -31,10 +40,32 @@ sind help TOPIC prints too. */}}
 {{with .Howto.Commands}}<div><div class="cmdlabel">In a terminal</div><div class="stack">{{range .}}{{template "help-cmd" .}}{{end}}</div></div>{{end}}
 {{with .Words}}<div><h3>Words</h3><div class="chips">{{template "help-chips" .}}</div></div>{{end}}
 {{template "help-more" .}}
-{{else if eq .Kind "search"}}{{if .Hits}}<ul class="hits">{{range .Hits}}<li><button type="button" class="link" data-help-topic="{{.Topic}}">{{.Title}}<small>{{.Label}}</small></button></li>{{end}}</ul>{{else}}<p class="muted">Nothing in help matches “{{.Query}}”. Try a word from the page, or a command such as create or power.</p>{{end}}
+{{else if eq .Kind "words"}}<div class="kind">Glossary</div><h2>Words</h2><p class="lead">What sind, Slurm and sind ui call things. A word with a dotted line on a page shows its meaning when you point at it, tap it or give it the focus.</p>
+<dl class="gloss">{{range .Words}}<dt><a href="/help?topic=word/{{.ID}}" data-help-topic="word/{{.ID}}">{{.Title}}</a></dt><dd>{{.Summary}}</dd>{{end}}</dl>
+{{template "help-more" .}}
+{{else if eq .Kind "keys"}}<div class="kind">Keyboard</div><h2>Keys</h2><p class="lead">Every key of sind ui. A key does nothing while you type in a field, except Esc and Ctrl+K.</p>
+<label class="kset"><input type="checkbox" role="switch" data-help-keys checked><span><b>Single-key shortcuts</b><span class="hint">/, ? and the g keys. Turn them off when they get in your way, such as with speech input. Ctrl+K and Esc always work.</span></span></label>
+<p class="hint k1-off">Single-key shortcuts are off. The struck-out keys do nothing.</p>
+{{template "help-keys" .Keys}}
+{{template "help-more" .}}
+{{else if eq .Kind "index"}}<div class="kind">Help</div><h2>All help</h2><p class="lead">How to do the common things, what the words mean, and the keys.</p>
+<div><h3>How do I…</h3><ul class="hlist">{{range .Howtos}}<li><a class="link" href="/help?topic=howto/{{.ID}}" data-help-topic="howto/{{.ID}}">{{.Title}}</a><span class="hint">{{.Summary}}</span></li>{{end}}</ul></div>
+<div><h3>More</h3><ul class="hlist"><li><a class="link" href="/help?topic=words" data-help-topic="words">Words</a><span class="hint">What sind, Slurm and sind ui call things.</span></li><li class="kbd-only"><a class="link" href="/help?topic=keys" data-help-topic="keys">Keys</a><span class="hint">Every key, and the setting for single-key shortcuts.</span></li></ul></div>
+{{template "help-more" .}}
+{{else if eq .Kind "search"}}{{if .Hits}}<ul class="hits">{{range .Hits}}<li><a class="link" href="/help?topic={{.Topic}}" data-help-topic="{{.Topic}}">{{.Title}}<small>{{.Label}}</small></a></li>{{end}}</ul>{{else}}<p class="muted">Nothing in help matches “{{.Query}}”. Try a word from the page, or a command such as create or power.</p>{{end}}
 {{end}}
-</div>{{end}}{{end}}
+</div>{{end}}
 
 {{define "help-card"}}{{with .Data}}{{if eq .Kind "word"}}<span class="k">Word</span><b>{{.Word.Title}}</b><span>{{.Word.Summary}}</span>{{if .Word.Command}}<span class="mono muted">$ {{.Word.Command}}</span>{{end}}
 {{else}}<span class="k{{if .Action.Irreversible}} bad{{end}}">Action · {{.Action.Undo}}</span><b>{{.Action.Title}}</b><span>{{.Action.Summary}}</span><span class="mono muted">$ {{.Action.Command}}</span>
-{{end}}<span class="faint more"><kbd>?</kbd> for more</span>{{end}}{{end}}
+{{end}}<span class="faint more kbd-only k1-on"><kbd>?</kbd> for more</span>{{end}}{{end}}
+
+{{/* page-help is the help page: the entry of the address, or the index,
+with a search that works without script. .Data is a *helpPageData. */}}
+{{define "page-help"}}{{with .Data}}
+{{if ne .Entry.Kind "index"}}<div class="crumbs"><a href="/help">Help</a> / {{.Entry.Crumb}}</div>{{end}}
+<div class="head"><div class="t"><h1>Help</h1>
+  <div class="sub"><span>The texts of the help pane, which the ? button at the top opens beside any page.</span></div></div></div>
+<form class="helpsearch" action="/help" method="get" role="search"><input type="search" name="q" value="{{.Query}}" aria-label="Search help" placeholder="Search help: realm, sbatch, clean up…" autocomplete="off" spellcheck="false"><button type="submit" class="btn">Search</button></form>
+<article class="panel helpdoc">{{template "help-entry" .Entry}}</article>
+{{end}}{{end}}

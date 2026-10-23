@@ -56,6 +56,14 @@ type Spec struct {
 	// Realm and Cluster name what the command works on, empty for none.
 	Realm   string
 	Cluster string
+	// Form is the dialog's form that built the command, without the CSRF
+	// token, the fingerprint and the typed confirmation, so that the user
+	// can try the command again; nil for a command that no form built.
+	Form map[string][]string
+	// ConfigPath and Config are the file that the command saved and runs
+	// with, such as the config of a new cluster; empty for none.
+	ConfigPath string
+	Config     string
 }
 
 // Starter starts tasks and stops them. The runner executes them.
@@ -149,8 +157,8 @@ func (r *Runner) Start(s Spec) (string, error) {
 	}
 	trace, span := r.hex(16), r.hex(8)
 	t := store.Task{
-		ID: r.hex(8), Action: s.Action, Display: s.Display, Realm: s.Realm, Cluster: s.Cluster,
-		Trace: trace, Start: r.cfg.Now(), Status: store.TaskRunning,
+		ID: r.hex(8), Action: s.Action, Display: s.Display, Argv: s.Argv, Realm: s.Realm, Cluster: s.Cluster,
+		Form: s.Form, ConfigPath: s.ConfigPath, Config: s.Config, Trace: trace, Start: r.cfg.Now(), Status: store.TaskRunning,
 	}
 	var environ []string
 	if r.cfg.Environ != nil {
@@ -333,13 +341,14 @@ func (r *Runner) hex(n int) string {
 }
 
 // childEnv returns env for a sind child: no progress display, the event log
-// sind ui reads, the trace that tells the child's run, and no SIND_REALM:
+// sind ui reads, the trace that tells the child's run with the tracestate
+// that marks it as a run of sind ui (store.UITraceState), and no SIND_REALM:
 // the dialog's command names any realm but the default one on its command
 // line, and without a name must run in the default realm, whatever the
 // environment of sind ui says. The environment does not change the command
 // line, so what the dialog showed still holds.
 func childEnv(env []string, activityLog, traceparent string) []string {
-	out := make([]string, 0, len(env)+3)
+	out := make([]string, 0, len(env)+4)
 	for _, kv := range env {
 		switch name, _, _ := strings.Cut(kv, "="); name {
 		case "SIND_PROGRESS", "SIND_PROGRESS_LOG", "SIND_REALM", "TRACEPARENT", "TRACESTATE":
@@ -347,7 +356,7 @@ func childEnv(env []string, activityLog, traceparent string) []string {
 			out = append(out, kv)
 		}
 	}
-	out = append(out, "SIND_PROGRESS=none", "TRACEPARENT="+traceparent)
+	out = append(out, "SIND_PROGRESS=none", "TRACEPARENT="+traceparent, "TRACESTATE="+store.UITraceState)
 	if activityLog != "" {
 		out = append(out, "SIND_PROGRESS_LOG="+activityLog)
 	}

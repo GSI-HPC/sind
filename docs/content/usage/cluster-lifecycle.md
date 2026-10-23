@@ -18,7 +18,7 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--moni
 {{< ui >}}
 
 1. Press **New cluster…** on the Overview or on the Clusters page.
-2. Set the name, the image and the nodes. The plan beside the form shows the nodes, the command and the config as you type.
+2. Set the name, the realm, the image and the nodes, or press **Start from YAML…** to paste a config or open a file of one. The plan beside the form shows the nodes, the command and the config as you type.
 3. Press **Create** when the status at the bottom says `Ready`.
 
 {{< uishot "dialog-create-cluster" >}}
@@ -135,9 +135,15 @@ sind delete cluster [NAME]
 {{< /cli >}}
 {{< ui >}}
 
-On the page of the cluster, press **Delete…**. Type the name of the cluster to confirm, and press **Delete**. The dialog deletes one cluster. To delete all clusters of a realm, delete the realm.
+On the page of the cluster, press **Delete cluster…**. The dialog lists what goes, such as the containers, the network and the volumes, and what stays, such as the host directories the cluster mounts. Type the name of the cluster to confirm, and press **Delete cluster NAME**.
 
 {{< uishot "dialog-delete-cluster" >}}
+
+To delete several clusters, tick them on the **Clusters** page and press **Delete 2 clusters…** (it counts the clusters you ticked) in the bar above the table. Type the number of clusters to confirm, and press **Delete 2 clusters**. sind ui runs `sind delete cluster` once for each. To delete all clusters of a realm and its mesh, you can also delete the realm.
+
+{{< uishot "clusters-selected" >}}
+
+{{< uishot "dialog-delete-clusters" >}}
 
 {{< /ui >}}
 {{< /ways >}}
@@ -174,7 +180,7 @@ sind --realm ci-42 delete realm
 {{< /cli >}}
 {{< ui >}}
 
-Open **Mesh and DNS** and press **Delete realm…** for the realm. Type the name of the realm to confirm, and press **Delete**.
+On the Overview, press **Delete realm…** in the realm's row, or open **Mesh and DNS** and press **Delete realm…**. The dialog lists the clusters and the rest that goes, and the containers outside sind that stay. Type the name of the realm to confirm, and press **Delete realm NAME**. The dialog runs `sind --realm NAME delete realm`, so a copy of the command deletes this realm in any shell.
 
 {{< uishot "dialog-delete-realm" >}}
 
@@ -196,7 +202,7 @@ sind disconnect container CONTAINER...
 {{< /cli >}}
 {{< ui >}}
 
-Press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of the container, and press **Connect**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
+Press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of the container. **Realm**, below it, has the realm of the page; type another one to connect the container to its networks, which needs a cluster in that realm. Press **Connect**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
 
 {{< uishot "dialog-connect" >}}
 

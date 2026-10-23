@@ -60,7 +60,7 @@ func (m *Monitoring) Run(ctx context.Context) {
 		},
 	}
 	if m.Viewers != nil {
-		p.paused, p.resume = m.Viewers.None, m.Viewers.arrived
+		p.paused, p.resume = m.Viewers.None, m.Viewers.arrivals()
 	}
 	p.run(ctx)
 }

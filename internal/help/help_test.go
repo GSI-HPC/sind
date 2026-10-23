@@ -16,7 +16,7 @@ import (
 
 // wave2Actions are the action ids that the actions part of sind ui owns.
 var wave2Actions = []string{
-	"create-cluster", "create-worker", "delete-cluster", "delete-worker",
+	"create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-worker",
 	"power", "connect", "disconnect", "delete-realm",
 }
 
@@ -34,6 +34,7 @@ var wave2Paths = map[string]string{
 	"/activity":                "activity",
 	"/runs/0123456789abcdef":   "run",
 	"/tasks/t1":                "task",
+	"/help":                    "help",
 }
 
 func TestEmbeddedTextsAreComplete(t *testing.T) {
@@ -51,9 +52,17 @@ func TestEmbeddedTextsAreComplete(t *testing.T) {
 		assert.Equal(t, id, p.ID, path)
 	}
 	assert.Len(t, h.Pages(), len(wave2Paths))
-	for _, id := range []string{"realm", "mesh", "nodeset", "controller", "worker", "munge", "slurmctld", "lock", "activity-log", "rollback", "trace"} {
+	// Every service and role that the pages of sind ui show is a word.
+	for _, id := range []string{
+		"realm", "mesh", "nodeset", "controller", "worker", "munge", "slurmctld", "lock", "activity-log", "rollback", "trace",
+		"slurmd", "slurmdbd", "slurmrestd", "sackd", "mariadb", "sshd", "submitter", "db", "api", "controller-backup", "job",
+	} {
 		_, ok := h.Word(id)
 		assert.True(t, ok, "word %s", id)
+	}
+	for _, id := range []string{"first-cluster", "job-output", "job-pending", "clean-up"} {
+		_, ok := h.Howto(id)
+		assert.True(t, ok, "howto %s", id)
 	}
 	assert.NotEmpty(t, h.Words())
 	assert.NotEmpty(t, h.Howtos())
@@ -324,4 +333,10 @@ func TestWrap(t *testing.T) {
 	for _, l := range lines {
 		assert.LessOrEqual(t, len(l), width)
 	}
+}
+
+func TestActionUndoText(t *testing.T) {
+	assert.Equal(t, "To undo: delete the workers.", Action{Undo: "Delete the workers"}.UndoText())
+	assert.Equal(t, "Cannot be undone.", Action{Undo: "Cannot be undone", Irreversible: true}.UndoText())
+	assert.Equal(t, ".", Action{}.UndoText())
 }

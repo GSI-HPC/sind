@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -17,7 +18,7 @@ var pgNodePage = Page{
 	Load: func(v *View) error {
 		d := pgLoadNode(v)
 		if !d.Found {
-			return fmt.Errorf("node %s in cluster %s of realm %s: %w", d.Short, d.Cluster, d.Realm, ErrNotFound)
+			return pgNodeMiss(v.Snap, d.Realm, d.Cluster, d.Short)
 		}
 		v.Title = d.Node.Arg
 		return nil
@@ -44,8 +45,10 @@ type pgNodeView struct {
 	Realm, Cluster, Short string
 	Node                  pgNode
 	ClusterState          cluster.State
-	Actions               []pgAction
-	Commands              []pgCmd
+	// Slurm is what Slurm says about the node's cluster.
+	Slurm    *pgSlurmView
+	Actions  []pgAction
+	Commands []pgCmd
 }
 
 // ClusterPillClass returns the class of the pill of the cluster's state.
@@ -78,6 +81,10 @@ func pgLoadNode(v *View) *pgNodeView {
 		}
 		d.Found = true
 		d.Node = pgNodeOf(realm, ns, v.Snap.Status(realm, name))
+		nodes := []pgNode{d.Node}
+		pgAttachSlurm(nodes, v.Snap.Slurm(realm, name))
+		d.Node = nodes[0]
+		d.Slurm = pgSlurmOf(v.Snap.Slurm(realm, name), nodes)
 	}
 	if !d.Found {
 		return d
@@ -98,7 +105,8 @@ func pgLoadNode(v *View) *pgNodeView {
 		d.Actions = []pgAction{power("Start…", "primary", "start")}
 	}
 	if n.Worker() {
-		d.Actions = append(d.Actions, pgDialogAction("Delete…", "danger", "delete-worker", "realm", realm, "cluster", name, "nodes", short))
+		d.Actions = append(d.Actions, power("Drain…", "", "drain"), power("Resume…", "", "resume"),
+			pgDialogAction("Delete worker…", "danger", "delete-worker", "realm", realm, "cluster", name, "nodes", short))
 	}
 	sind := pgSind(realm)
 	d.Commands = []pgCmd{
@@ -111,5 +119,33 @@ func pgLoadNode(v *View) *pgNodeView {
 // ClusterLink returns the address of the node's cluster page.
 func (d *pgNodeView) ClusterLink() string { return pgClusterURL(d.Realm, d.Cluster, "") }
 
-// LogsLink returns the address of the logs tab of the node's cluster.
-func (d *pgNodeView) LogsLink() string { return pgClusterURL(d.Realm, d.Cluster, "logs") }
+// LogsLink returns the address of the Logs tab with the node's log: the
+// journal of its Slurm service while it runs, else its container output,
+// which Docker keeps for a stopped container too.
+func (d *pgNodeView) LogsLink() string {
+	if !d.Node.Running() {
+		return pgLogsURL(d.Realm, d.Cluster, d.Short, "")
+	}
+	return pgLogsURL(d.Realm, d.Cluster, d.Short, pgServiceOf(d.Node.Role))
+}
+
+// IssueLogsLink returns the address of the log that tells most about the
+// node's issues: the journal of a service that is down, its Slurm service
+// first, or else the node's log.
+func (d *pgNodeView) IssueLogsLink() string {
+	down := d.Node.Down()
+	if len(down) == 0 {
+		return d.LogsLink()
+	}
+	unit := down[0]
+	if slurm := pgServiceOf(d.Node.Role); slices.Contains(down, slurm) {
+		unit = slurm
+	}
+	return pgLogsURL(d.Realm, d.Cluster, d.Short, unit)
+}
+
+// ServiceLogsLink returns the address of the journal of one service of the
+// node.
+func (d *pgNodeView) ServiceLogsLink(unit string) string {
+	return pgLogsURL(d.Realm, d.Cluster, d.Short, unit)
+}

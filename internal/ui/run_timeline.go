@@ -20,6 +20,9 @@ type runTick struct {
 	Label string
 	// Pos is the place on the axis, in percent.
 	Pos int
+	// Minor marks a label that a narrow screen leaves out: all but the
+	// first and the last, and the middle one of an odd number.
+	Minor bool
 }
 
 // runRow is a row of the timeline: a span and its bar.
@@ -78,6 +81,12 @@ func runTimelineOf(rc runCtx) *runTimeline {
 	}
 	for t := time.Duration(0); t <= scale && len(tl.Ticks) <= runMaxTicks; t += step {
 		tl.Ticks = append(tl.Ticks, runTick{Label: strings.Replace(runDur(t), ".0s", "s", 1), Pos: runPct(float64(t), float64(scale))})
+	}
+	n := len(tl.Ticks)
+	for i := range tl.Ticks {
+		// The middle label stays when it is in the middle, between as many
+		// labels on each side; next to the last one it would touch it.
+		tl.Ticks[i].Minor = i != 0 && i != n-1 && (n%2 == 0 || i != n/2)
 	}
 	for _, s := range activity.VisibleChildren(run.Root) {
 		tl.Rows = append(tl.Rows, runRowOf(s, run, origin, end, scale, rc.Now, 1))

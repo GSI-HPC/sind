@@ -3,6 +3,7 @@
 package activity
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -380,4 +381,19 @@ func TestUnknownKeysAndValuesAreLeftOut(t *testing.T) {
 	assert.EqualValues(t, 10, odd.Size)
 	assert.EqualValues(t, 3, odd.Amount)
 	assert.Equal(t, at("2026-01-01T00:00:01Z"), odd.Started, "an unknown state is running")
+}
+
+func TestFromUI(t *testing.T) {
+	assert.False(t, only(t, "golden-v1.jsonl").FromUI, "a tracestate of another system")
+	r := NewReducer(5)
+	for i, state := range []string{"sind=ui", "rojo=00f067aa0ba902b7, sind=ui", ""} {
+		run := fmt.Sprintf("00000000000000%02d", i)
+		feed(r, []byte(`{"v":1,"type":"trace","run":"`+run+`","trace":"4bf92f3577b34da6a3ce929d0e0e4736","parent":"00f067aa0ba902b7","traceFlags":"01","traceState":"`+state+`"}
+{"v":1,"run":"`+run+`","trace":"4bf92f3577b34da6a3ce929d0e0e4736","seq":1,"time":"2026-10-14T09:30:0`+fmt.Sprint(i)+`.000000000Z","type":"start","span":"0000000000000001","kind":"command","name":"create cluster","state":"running"}`))
+	}
+	runs := r.Runs()
+	require.Len(t, runs, 3)
+	assert.False(t, runs[0].FromUI, "no tracestate")
+	assert.True(t, runs[1].FromUI, "sind ui among other members")
+	assert.True(t, runs[2].FromUI)
 }

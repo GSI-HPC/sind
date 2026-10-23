@@ -18,12 +18,13 @@ sind power <action> NODES
 {{< ui >}}
 
 1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node.
-2. Press the action, such as **Reboot…**. The dialog lists every action and selects the one that you pressed.
-3. Press **Run**.
+2. Press the action, such as **Reboot…**. The bar offers only the actions that fit the nodes you selected, and when one fits only some of them, its label counts them, such as **Start 2 nodes…**. The dialog groups the actions and selects the one that you pressed. To start one node that does not run, press **Start…** in its row.
+3. Read the warnings: the dialog says when the nodes include the controller in control, the standby controller of a pair, the db node or every running worker of the cluster.
+4. Press the button, which names the action and the nodes, such as **Reboot 3 nodes**.
 
 {{< uishot "dialog-power" >}}
 
-The dialog names the actions as below: Shut down, Start, Reboot, Power-cycle, Cut power, Freeze and Unfreeze.
+The dialog names the actions as below: Start, Shut down, Reboot, Freeze and Unfreeze under **Containers**, and Power-cycle and Cut power under **Can lose data**. Its **Slurm (scontrol)** group has Drain and Resume (see [Drain and resume](#drain-and-resume)).
 
 {{< /ui >}}
 {{< /ways >}}
@@ -88,6 +89,32 @@ This is useful for simulating:
 - Hung or unreachable nodes
 - Network partitions (from the node's perspective)
 - Slurm's node health detection and `SlurmdTimeout` behavior
+
+## Drain and resume
+
+To take workers out of service without stopping them, drain them in Slurm: running jobs go on, and no new job starts on them. Resume lets them take jobs again. sind has no power command for this; run `scontrol` in the cluster.
+
+{{< ways >}}
+{{< cli >}}
+
+```bash
+sind exec dev -- scontrol update 'NodeName=worker-[2-3]' State=DRAIN 'Reason=disk test'
+sind exec dev -- sinfo -R
+sind exec dev -- scontrol update 'NodeName=worker-[2-3]' State=RESUME
+```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Open the cluster, then the **Nodes** tab, and select the workers. Or open the page of one worker.
+2. Press **Drain…** or **Resume…**. The Power dialog opens with that action.
+3. For Drain, write the reason, at most 200 characters on one line. `sinfo -R` shows it.
+4. Press the button, such as **Drain 2 nodes**.
+
+The dialog runs the `sind exec … scontrol update` command above. It writes no progress, so the task has no run page. The buttons appear when you select a worker; when you select other nodes too, they act only on the workers and count them, such as **Drain 2 workers…**. The dialog refuses the workers of an unmanaged cluster, and unmanaged workers, as sind runs no Slurm there.
+
+{{< /ui >}}
+{{< /ways >}}
 
 ## Node failure detection
 

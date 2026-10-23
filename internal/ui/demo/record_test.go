@@ -30,6 +30,15 @@ func TestIDs(t *testing.T) {
 	assert.NotEqual(t, traceHex(traceID(1)), traceHex(traceID(2)))
 }
 
+func TestUITrace_MarksTheRunAsOneOfSindUI(t *testing.T) {
+	rec := recording{id: runID(4), trace: uiTrace(4), title: "create worker", start: t0,
+		work: func(context.Context, play) error { return nil }}
+	log := string(record(rec))
+	assert.Equal(t, traceHex(traceID(4)), traceHex(uiTrace(4)), "the same trace")
+	assert.Contains(t, log, `"traceState":"sind=ui"`)
+	assert.Contains(t, log, `"parent":"5a00000000000004"`)
+}
+
 func TestNormalizeIDs_KeepsTheTraceParent(t *testing.T) {
 	log := `{"v":1,"type":"trace","run":"r","parent":"00f067aa0ba902b7"}
 {"v":1,"type":"start","run":"r","span":"aaaaaaaaaaaaaaaa","parent":"bbbbbbbbbbbbbbbb"}

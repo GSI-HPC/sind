@@ -7,52 +7,74 @@
   /actions/ID/preview for the command as it changes, and runs it with
   /actions/ID/run. A dialog shows the command it runs; it never sends one.
   The views are the *View of the request; the dialog or the preview is its
-  Data.
+  Data. act.js makes the page behind a dialog inert, asks before a close
+  loses changes, and keeps the draft of a dialog with data-act-draft.
 */}}
 
 {{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
 
+{{/* A dialog ignores the morph extension of the page, which a dialog shown
+as a page of its own sits in: with it, htmx would put each element that
+hx-swap-oob="innerHTML" swaps into its target, not its content. */}}
 {{define "act-dialog-page"}}{{template "act-frame" .Data}}{{end}}
 
 {{define "act-frame"}}
-<div class="scrim" id="act-dialog" data-act-scrim>
-<form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-label="{{.Title}}"
+<div class="scrim" id="act-dialog" hx-ext="ignore:morph"{{if not .Spec.Draft}} data-act-scrim{{end}}>
+<form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"
+  {{- if .Spec.Draft}} data-act-draft="{{.ID}}"{{end}}{{if .Draft}} data-act-restored{{end}}
   hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
   {{template "csrf-field" .View}}
-  <input type="hidden" name="realm" value="{{.Realm}}">{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
-  <div class="mh"><div class="mtop"><h2>{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
-    <p>{{.Lead}}</p></div>
+  {{if not .Spec.RealmField}}<input type="hidden" name="realm" value="{{.Realm}}">{{end}}{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
+  <div class="mh"><div class="mtop"><h2 id="act-title">{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
+    <p id="act-lead">{{.Lead}}</p></div>
+  {{if .Draft}}<div class="callout act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>{{end}}
   {{if .Spec.Plan}}
   <div class="mb">
-    <div class="act-form">{{include .Body .}}</div>
+    <div class="act-form{{if .YAMLMode}} act-yamlmode{{end}}">{{include .Body .}}</div>
     <aside class="act-planpane" aria-label="Plan">{{template "act-preview-slot" .}}</aside>
   </div>
   {{else}}
   <div class="mb">
     {{include .Body .}}
-    {{with .Typed}}<div class="fld"><label for="act-confirm">Type <b class="mono">{{.}}</b> to confirm</label><input type="text" id="act-confirm" name="confirm" autocomplete="off" spellcheck="false"></div>{{end}}
     {{template "act-preview-slot" .}}
+    {{with .Typed}}<div class="fld act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
+      <input type="text" id="act-confirm" name="confirm" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
+      <span class="hint act-why" id="act-why" role="status"></span></div>{{end}}
   </div>
   {{end}}
-  <div class="mf">{{if .Spec.Plan}}<span class="act-status" id="act-status" role="status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button><button type="submit" class="btn {{if .Spec.Danger}}danger solid{{else}}primary{{end}}" id="act-ok" disabled>{{.Spec.OK}}</button></div>
+  <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{else}}<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+  <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
+    <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
+    <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
+  </div>
+  {{if .Spec.Plan}}<span class="act-vh" id="act-say" role="status"></span>{{end}}
 </form>
 </div>
 {{end}}
 
+{{/* act-ok is the button that runs the command, an actOK. It is off until
+a preview says that the command can run, and each preview swaps it.
+Ctrl+Enter, or Cmd+Enter on macOS, presses it. */}}
+{{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}{{if .Why}} aria-describedby="act-why"{{end}}>{{.Label}}<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
+
 {{define "act-preview-slot"}}<div id="act-preview" class="stack" hx-post="/actions/{{.ID}}/preview" hx-target="this" hx-swap="innerHTML"
-      hx-trigger="load, input from:closest form delay:150ms, change from:closest form"></div>{{end}}
+      hx-trigger="load, input from:closest form delay:150ms, change from:closest form"{{if not .Spec.Plan}} hx-indicator="#act-checking"{{end}}></div>{{end}}
 
 {{/* act-preview is the answer to a preview: the command, what to know about
 it, and the button and the parts of the dialog that depend on it. */}}
 {{define "act-preview"}}{{with .Data}}{{$p := .}}
 {{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
+{{with .Cmd.Goes}}<div class="callout bad act-list"><b>Goes</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+{{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{template "act-callouts" .}}
+{{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
 {{end}}
-<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" hx-swap-oob="true"{{if .Blocked}} disabled{{end}}>{{.Spec.OK}}</button>
+{{template "act-ok" .OKButton}}
 {{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
 {{if .Spec.Plan}}{{range .NodeViews}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}} hx-swap-oob="true">{{.Chip}}</span>{{if .Group}}<span class="hint" id="act-range-{{.Key}}" hx-swap-oob="true">{{$p.RangeOf .Key}}</span>{{end}}{{end}}
 {{with .Eff}}<span id="act-eff" hidden hx-swap-oob="true" data-image="{{.Image}}" data-cpus="{{.CPUs}}" data-memory="{{.Memory}}" data-tmp="{{.TmpSize}}"></span>{{end}}
@@ -60,7 +82,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 <datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
 {{range .SlurmFiles}}<span class="act-dot" id="act-dot-{{.ID}}" hx-swap-oob="true">{{if $p.SlurmSet .ID}} •{{end}}</span>{{end}}
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
-{{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
+{{if .Spec.Plan}}<span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{template "act-status" .}}</span>{{end}}
 {{end}}{{end}}
 
 {{/* act-callouts are what to know about the command of a preview. */}}
@@ -71,39 +93,63 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
 {{end}}
 
-{{/* act-pill says whether the command can run. */}}
-{{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
+{{/* act-status is the status in the footer of a dialog with a plan: a
+button that goes to the first problem, or Ready, and what the nodes of the
+plan use. act.js says the status to assistive technology when its
+data-act-key changes. */}}
+{{define "act-status"}}
+{{- if not .Blocked}}<span class="pill {{if .Warnings}}warn{{else}}ok{{end}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Ready{{with .Warnings}} · {{.}} warning{{if ne . 1}}s{{end}}{{end}}</span>
+{{- else if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button>
+{{- else}}<span class="pill bad" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Not ready</span>{{end}}
+{{- with .Totals}}<span class="act-tot">{{.}}</span>{{end}}{{end}}
+
+{{/* act-pill says whether the command can run, and with how many
+warnings. */}}
+{{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else if .Warnings}}<span class="pill warn">Ready · {{.Warnings}} warning{{if ne .Warnings 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
 
 {{/* act-plan is the plan pane of a dialog that makes a cluster: it shows
 the nodes, the command and the config also while a field is wrong. */}}
 {{define "act-plan"}}{{$p := .}}
 <div class="act-ph"><h3>Plan</h3>{{template "act-pill" .}}</div>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{else}}
-{{with .Cmd.Problems}}<div class="callout bad act-probs"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
+{{if .Err}}<div class="callout bad" id="act-probs" tabindex="-1">{{.Err}}</div>{{else}}
+<div class="act-tools">{{if not .YAMLMode}}<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>{{end}}<button type="button" class="btn sm" data-copy="{{.Cmd.Config.Content}}">Copy YAML</button></div>
+{{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
 {{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
 <p class="hint">{{.Cmd.Summary}}</p>
 {{with .HostMB}}<div class="act-meter"><meter min="0" max="{{.}}" value="{{$p.Cmd.MemoryMB}}" high="{{$p.HostHigh}}" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">{{$p.MemoryLabel $p.Cmd.MemoryMB}} of the {{$p.MemoryLabel .}} of the Docker host</span></div>{{end}}
+{{if .Cmd.OverHost}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if .Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Create anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
 {{with .Cmd.Images}}<div class="act-imgs"><div class="cmdlabel">Images</div>{{range .}}<div class="act-img"><span class="mono">{{.Image}}</span><small>{{.Of}}</small>
   <span class="hint{{if .Version}} act-ver{{end}}">{{$p.ImageLine .}}</span>{{if .CanCheck}}<button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</div>{{end}}</div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
+{{with .Cmd.After}}<div><div class="cmdlabel">Then sind runs</div><pre class="term act-after">{{range $i, $s := .}}{{if $i}}
+{{end}}# {{.Where}}
+{{range .Lines}}{{.}}
+{{end}}{{end}}</pre></div>{{end}}
 {{template "act-callouts" .}}
-{{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p></div>
-{{else}}<div><div class="cmdlabel act-cfgh">Config <span class="act-path">{{.Cmd.Config.Path}}</span><button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
-  <p class="hint">Edit YAML gives you the whole config, also what the form has no field for, such as Slurm config fragments. The form stays locked until you discard the edits.</p></div>{{end}}
+{{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p>{{template "act-slurmconf" .}}</div>
+{{else}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
+  {{template "act-slurmconf" .}}
+  <p class="hint">Edit YAML, at the top of the plan, gives you the whole config, also what the form has no field for, such as named Slurm config fragments or capabilities of the node defaults. The form stays locked until you discard the edits.</p></div>{{end}}
 {{end}}
 {{end}}
 
+{{/* act-slurmconf is the slurm.conf that sind writes for the config of
+the plan, folded; act.js keeps it open across the previews. */}}
+{{define "act-slurmconf"}}{{with .Cmd.SlurmConf}}<details class="act-conf" id="act-conf" data-act-hold><summary>Preview slurm.conf</summary>
+  <pre class="term act-confpre">{{.}}</pre>
+  <p class="hint">sind's lines, then those of Slurm config, then the include of sind-nodes.conf with the workers and the partition all. The other files of Slurm config are files of their own.</p></details>{{end}}{{end}}
+
 {{/* act-chip is the size button of a node of a new cluster, which opens
 its editor. */}}
-{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Open}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-label="Size of {{.Label}}">{{template "act-chip-text" .}}</button>{{end}}
+{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Open}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-labelledby="act-czl-{{.Key}}{{if .Group}} act-range-{{.Key}}{{end}} act-chip-{{.Key}}"><span class="vh" id="act-czl-{{.Key}}">Size of {{.Label}}</span>{{template "act-chip-text" .}}</button>{{end}}
 
 {{define "act-chip-text"}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}}>{{.Chip}}</span>{{end}}
 
 {{/* act-group is a worker group of a new cluster: its row and editor. */}}
-{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>workers</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
-  <span class="act-k"><span class="act-step"><button type="button" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer workers">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" data-act-step="{{.Key}}-count" data-d="1" aria-label="More workers">+</button></span><button type="button" class="act-x" data-act-wgdel="{{.Key}}" aria-label="Remove this worker group">✕</button></span></div>
+{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>{{.Label}}</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
+  <span class="act-k"><span class="act-step"><button type="button" id="act-{{.Key}}-less" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer in {{.Label}}" aria-labelledby="act-{{.Key}}-less act-range-{{.Key}}">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" id="act-{{.Key}}-more" data-act-step="{{.Key}}-count" data-d="1" aria-label="More in {{.Label}}" aria-labelledby="act-{{.Key}}-more act-range-{{.Key}}">+</button></span><button type="button" class="act-x" id="act-{{.Key}}-del" data-act-wgdel="{{.Key}}" aria-label="Remove {{.Label}}" aria-labelledby="act-{{.Key}}-del act-range-{{.Key}}">✕</button></span></div>
 {{template "act-ned" .}}{{end}}
 
 {{/* act-ned is the editor of the size and more of a node of a new
@@ -132,7 +178,7 @@ placeholder. */}}
     <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as alice" aria-label="User name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
     <input type="number" id="act-{{.Key}}-uid" name="{{.Key}}-uid" value="{{.Val "uid"}}" min="1000" placeholder="UID: auto" aria-label="UID" aria-describedby="act-err-{{.Key}}-uid">
     <input type="text" id="act-{{.Key}}-accounts" name="{{.Key}}-accounts" value="{{.Val "accounts"}}" list="act-dl-accounts" placeholder="Slurm accounts" aria-label="Slurm accounts, the first is the default" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-accounts">
-    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this user">✕</button>
+    <button type="button" class="act-x" id="act-{{.Key}}-del" data-act-rowdel aria-label="Remove the user" aria-labelledby="act-{{.Key}}-del act-{{.Key}}-name">✕</button>
   </div>
   <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-uid"></span><span class="err" id="act-err-{{.Key}}-accounts"></span>
   <details class="act-more"{{if or (.Val "group") (.Val "groups") (.Val "coordinator") (.Val "admin")}} open{{end}}><summary>More: groups, coordinator, admin level</summary>
@@ -151,7 +197,7 @@ placeholder. */}}
   <div class="act-rowf">
     <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as hpc" aria-label="Group name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
     <input type="number" id="act-{{.Key}}-gid" name="{{.Key}}-gid" value="{{.Val "gid"}}" min="1000" placeholder="GID: auto" aria-label="GID" aria-describedby="act-err-{{.Key}}-gid">
-    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this group">✕</button>
+    <button type="button" class="act-x" id="act-{{.Key}}-del" data-act-rowdel aria-label="Remove the group" aria-labelledby="act-{{.Key}}-del act-{{.Key}}-name">✕</button>
   </div>
   <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-gid"></span>
 </div>{{end}}
@@ -162,7 +208,7 @@ limits as pairs of fields. */}}
   <div class="act-rowf">
     <input type="text" id="act-{{.Key}}-name" name="{{.Key}}-name" value="{{.Val "name"}}" placeholder="name, such as physics" aria-label="Account name" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-name">
     <input type="text" id="act-{{.Key}}-parent" name="{{.Key}}-parent" value="{{.Val "parent"}}" list="act-dl-accounts" placeholder="parent: root" aria-label="Parent account" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-parent">
-    <button type="button" class="act-x" data-act-rowdel aria-label="Remove this account">✕</button>
+    <button type="button" class="act-x" id="act-{{.Key}}-del" data-act-rowdel aria-label="Remove the account" aria-labelledby="act-{{.Key}}-del act-{{.Key}}-name">✕</button>
   </div>
   <span class="err" id="act-err-{{.Key}}-name"></span><span class="err" id="act-err-{{.Key}}-parent"></span>
   <div class="act-lims" id="act-lims-{{.Key}}">{{range .Limits}}{{template "act-limit" .}}{{end}}</div>
@@ -170,12 +216,19 @@ limits as pairs of fields. */}}
   <button type="button" class="btn sm" data-act-rowadd="limit" data-act-into="act-lims-{{.Key}}" data-act-key="{{.Key}}">+ Add limit</button>
 </div>{{end}}
 
-{{/* act-limit is a limit of an account: a pair of fields. */}}
+{{/* act-limit is a limit of an account: a pair of fields. The value and the
+button are named after the limit, which act.js keeps up as it is typed. */}}
 {{define "act-limit"}}<div class="act-rowf act-lim" data-act-row>
   <input type="text" name="{{.Row}}-lk" value="{{.Key}}" list="act-dl-limits" placeholder="limit, such as MaxJobs" aria-label="Limit" autocapitalize="off" spellcheck="false">
-  <input type="text" name="{{.Row}}-lv" value="{{.Value}}" placeholder="value, such as 4" aria-label="Value of the limit" autocapitalize="off" spellcheck="false">
-  <button type="button" class="act-x" data-act-rowdel aria-label="Remove this limit">✕</button>
+  <input type="text" name="{{.Row}}-lv" value="{{.Value}}" placeholder="value, such as 4" aria-label="Value of {{with .Key}}{{.}}{{else}}the limit{{end}}" autocapitalize="off" spellcheck="false" data-act-limname="Value of ">
+  <button type="button" class="act-x" data-act-rowdel aria-label="Remove {{with .Key}}{{.}}{{else}}the limit{{end}}" data-act-limname="Remove ">✕</button>
 </div>{{end}}
+
+{{/* act-realm is the realm field of a dialog with Spec.RealmField: the
+realm of the link, another one that sind ui sees, or a new one. */}}
+{{define "act-realm"}}<div class="fld"><label for="act-realm">Realm</label><input type="text" id="act-realm" name="realm" value="{{.Realm}}" list="act-dl-realms" autocapitalize="off" spellcheck="false" aria-describedby="act-err-realm act-hint-realm">
+  <span class="err" id="act-err-realm"></span><span class="hint" id="act-hint-realm">{{.RealmHint}}</span>
+  <datalist id="act-dl-realms">{{range .RealmNames}}<option value="{{.}}"></option>{{end}}</datalist></div>{{end}}
 
 {{/* act-nodes is the picker of the nodes of a cluster. */}}
 {{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
@@ -183,24 +236,27 @@ limits as pairs of fields. */}}
   {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
 
 {{define "act-dlg-create-cluster"}}
-<div class="act-yamled" id="act-yamled" hidden>
-  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1" disabled>
-  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The form is locked, and the plan follows the YAML. Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
-  <label class="lbl" for="act-yaml">Config</label>
-  <textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml" disabled></textarea>
-  <span class="err" id="act-err-yaml"></span>
-</div>
-<div class="row">
-  <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
+<div class="row act-idrow">
+  <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}"{{if .Defaulted "name"}} data-act-select{{end}} autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
     <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>
-  <div class="fld act-wide"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
-    <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
+  {{template "act-realm" .}}
 </div>
+<div class="act-inline act-yamlstart"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><span class="hint">Paste a cluster config, or open a file of one.</span></div>
+<div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
+  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
+  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The plan follows it, and Name and Realm change the name and the realm in it. The rest of the form is locked; Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
+  <div class="act-inline act-yamlhead"><label class="lbl" for="act-yaml">Config</label><button type="button" class="btn sm" data-act-yaml-open aria-describedby="act-hint-yaml">Open a file…</button>
+    <input type="file" id="act-yaml-file" accept=".yaml,.yml,application/yaml,text/yaml,text/plain" hidden></div>
+  <textarea id="act-yaml" name="yaml" rows="26" placeholder="kind: Cluster&#10;name: hpc&#10;nodes:&#10;  - controller&#10;  - worker: 2" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml act-hint-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
+  <span class="err" id="act-err-yaml"></span><span class="hint" id="act-hint-yaml">Paste a config, open a file, or drop one here. At most 64 KiB.</span>
+</div>
+<div class="fld"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
+  <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
 <div class="fld"><span class="lbl">Nodes</span>
 <div class="act-roles" id="act-roles">
-  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b>controller</b><span class="hint">slurmctld. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
+  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b data-word="controller">controller</b><span class="hint"><span data-word="slurmctld">slurmctld</span>. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
   {{template "act-ned" (.Node "controller")}}
-  {{range .Roles}}<div class="act-nr{{if .Sub}} sub{{end}}"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if $.On .Name}} checked{{end}} aria-describedby="act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i><label class="act-lab" for="act-{{.Name}}"><b>{{.Label}}{{with .Small}} <small>{{.}}</small>{{end}}</b><span class="hint">{{.Hint}}</span><span class="err" id="act-err-{{.Name}}"></span></label>{{if not .Sub}}{{template "act-chip" ($.Node .Name)}}{{end}}</div>
+  {{range .Roles}}<div class="act-nr{{if .Sub}} sub{{end}}"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if $.On .Name}} checked{{end}} aria-describedby="act-hint-{{.Name}} act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i><span class="act-lab"><label for="act-{{.Name}}"><b data-word="{{.Word}}">{{.Label}}</b>{{with .Small}} <small>{{.}}</small>{{end}}</label><span class="hint" id="act-hint-{{.Name}}">{{range .Hint}}{{if .Word}}<span data-word="{{.Word}}">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</span><span class="err" id="act-err-{{.Name}}"></span></span>{{if not .Sub}}{{template "act-chip" ($.Node .Name)}}{{end}}</div>
   {{if not .Sub}}{{template "act-ned" ($.Node .Name)}}{{end}}{{end}}
   <div class="act-groups" id="act-groups">{{range .Groups}}{{template "act-group" ($.Node .)}}{{end}}</div>
 </div>
@@ -233,7 +289,7 @@ limits as pairs of fields. */}}
       <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="group" data-act-into="act-rows-group" data-act-prefix="g">+ Add group</button><span class="hint">For the group and groups of a user. Each user has a private group of its own name too.</span></div></div>
     <div class="fld"><span class="lbl">Slurm accounts</span>
       <div class="act-rows" id="act-rows-account">{{range .Rows "account"}}{{template "act-account" .}}{{end}}</div>
-      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children.</span></div></div>
+      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children. A new cluster has only the QOS normal; sind creates no QOS.</span></div></div>
     <datalist id="act-dl-groups"></datalist><datalist id="act-dl-accounts"></datalist>
     <datalist id="act-dl-limits">{{range .LimitKeys}}<option value="{{.}}"></option>{{end}}</datalist>
     <template id="act-tpl-user">{{template "act-user" (.Row "__ROW__")}}</template>
@@ -255,7 +311,7 @@ limits as pairs of fields. */}}
     <div class="seg act-seg act-stabs" role="radiogroup" aria-label="Slurm config file">{{range .SlurmFiles}}<label><input type="radio" name="stab" value="{{.ID}}"{{if $.Is "stab" .ID}} checked{{end}}><span>{{.ID}}<span class="act-dot" id="act-dot-{{.ID}}"></span></span></label>{{end}}</div>
     {{range .SlurmFiles}}<div class="fld act-sl act-sl-{{.ID}}"><label for="act-slurm-{{.ID}}">Lines to add to <span class="mono">{{.File}}</span></label>
       <textarea id="act-slurm-{{.ID}}" name="slurm-{{.ID}}" rows="6" placeholder="such as {{.Example}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-slurm-{{.ID}}">{{$.Val (print "slurm-" .ID)}}</textarea><span class="err" id="act-err-slurm-{{.ID}}"></span></div>{{end}}
-    <span class="hint">sind writes these lines after its own, so a parameter here takes the place of sind's. It refuses parameters that the cluster needs as sind sets them.</span>
+    <span class="hint">sind writes these lines after its own, and Slurm takes the last value of a parameter, so yours wins. sind checks only a few parameters, such as SlurmctldHost with a backup controller and the database ones of slurmdbd.conf. The plan warns when slurm.conf sets ClusterName, SlurmctldHost, SlurmUser, the spool directories or PlugStackConfig, which the cluster needs as sind sets them.</span>
   </div>
 </details>
 <details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>
@@ -290,35 +346,45 @@ limits as pairs of fields. */}}
 {{define "act-dlg-create-worker"}}
 <div class="row">
   <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"></div>
-  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="as the newest worker" min="1"></div>
-  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="as the newest worker" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{.LikeNewest}}" min="1"></div>
+  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{.LikeNewest}}" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
 </div>
 {{end}}
 
-{{define "act-dlg-delete-cluster"}}
-<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{.Cluster}} go with it. A host directory mounted as /data stays as it is; a data volume goes too.</div>
-{{end}}
+{{define "act-dlg-delete-cluster"}}{{end}}
+
+{{define "act-dlg-delete-clusters"}}
+<input type="hidden" name="back" value="{{.Val "back"}}">
+{{if .Clusters}}<div class="fld"><span class="lbl">Clusters</span>
+  <ul class="act-clusters">{{range .Clusters}}<li><input type="hidden" name="clusters" value="{{.Ref}}"><b class="mono">{{.Name}}</b> <small>realm {{.Realm}}, {{.NodesText}}, {{.State}}</small></li>{{end}}</ul></div>
+{{with .Gone}}<div class="callout warn">sind ui no longer sees <span class="mono">{{$.GoneText}}</span>, so the dialog leaves {{if eq (len .) 1}}it{{else}}them{{end}} out.</div>{{end}}
+<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{if eq (len .Clusters) 1}}this cluster go with it{{else}}these clusters go with them{{end}}. A host directory mounted as /data stays as it is; a data volume goes too.</div>
+{{else}}<div class="empty">{{if .Gone}}sind ui no longer sees <span class="mono">{{.GoneText}}</span>. {{end}}No cluster to delete. Tick clusters on <a href="{{.Back}}">the Clusters page</a> and delete them from the bar above the table.</div>
+{{end}}{{end}}
 
 {{define "act-dlg-delete-worker"}}
 {{template "act-nodes" .}}
-<div class="callout bad">Jobs on these workers fail. This cannot be undone; add workers again to get new ones.</div>
 {{end}}
 
 {{define "act-dlg-power"}}
 {{template "act-nodes" .}}
-<div class="fld"><span class="lbl">What to do</span><div class="checks">
+{{range .OpGroups}}<fieldset class="fld act-ops{{if eq .ID "danger"}} act-danger{{end}}"><legend class="lbl">{{.Label}}</legend><div class="checks">
   {{range .Ops}}<label><input type="radio" name="op" value="{{.ID}}"{{if $.Is "op" .ID}} checked{{end}}> <span>{{.Label}} <small>{{.Text}}</small></span></label>{{end}}
-</div></div>
+</div>{{if eq .ID "slurm"}}<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{$.Val "reason"}}" placeholder="such as disk test" maxlength="200"><span class="hint">sinfo -R shows it.</span></div>{{end}}</fieldset>{{end}}
 {{end}}
 
 {{define "act-dlg-connect"}}
-<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false"><span class="hint">The name of a running container that no realm has yet.</span></div>
+<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">The name of a running container that no realm has yet.</span></div>
+{{template "act-realm" .}}
 {{end}}
 
 {{define "act-dlg-disconnect"}}
 <div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false"><span class="hint">The name of a container that is connected to realm {{.Realm}}.</span></div>
 {{end}}
 
-{{define "act-dlg-delete-realm"}}
-<div class="callout bad">This cannot be undone.</div>
-{{end}}
+{{define "act-dlg-delete-realm"}}{{end}}
+
+{{/* act-started is the notice of a command that a dialog started, which
+htmx adds to #act-notes of the layout. act.js takes it away after a while,
+unless the pointer or the focus is on it. */}}
+{{define "act-started"}}{{with .Data}}<div class="act-note" data-act-note><p>Started <code>{{.Display}}</code>. <a href="/tasks/{{.ID}}">Show progress</a></p><button type="button" class="iconbtn" data-act-note-close aria-label="Close this notice" title="Close">×</button></div>{{end}}{{end}}

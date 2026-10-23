@@ -3,7 +3,7 @@
 {{/* page-more-topology is the Topology page. */}}
 {{define "page-more-topology"}}
 <div class="head"><div class="t"><h1>Topology</h1>
-  <div class="sub"><span>From this host through the mesh of a realm to each cluster network and node. sind publishes no ports: the host reaches the nodes by their addresses.</span></div></div></div>
+  <div class="sub">{{template "pg-realm-scope" .}}<span>From this host through the mesh of a realm to each cluster network and node. sind publishes no ports: the host reaches the nodes by their addresses.</span></div></div></div>
 <div class="stack" id="more-topology" hx-swap="morph:innerHTML" sse-swap="more-topology">{{fragment "more-topology" .}}</div>
 {{end}}
 
@@ -11,21 +11,40 @@
 {{define "more-topology"}}{{with .Data}}
 {{template "more-dockerdown" .DockerErr}}
 {{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{if .Topologies}}<div class="more-viewbar"><span id="topo-view-label" class="muted">Show as</span>
+  <span class="seg more-seg" role="group" aria-labelledby="topo-view-label"><a href="{{.DiagramURL}}"{{if not .Table}} class="on" aria-current="true"{{end}}>Diagram</a><a href="{{.TableURL}}"{{if .Table}} class="on" aria-current="true"{{end}}>Table</a></span></div>{{end}}
+{{$table := .Table}}{{$tableURL := .TableURL}}
 {{range .Topologies}}
-<section class="panel more-figure">
-  <div class="ph"><h2>Realm <b class="mono">{{.Realm}}</b></h2><span class="grow"></span>
-    <span class="more-legend faint">
+<section class="panel more-figure" aria-labelledby="topo-{{.Realm}}">
+  <div class="ph"><h2 id="topo-{{.Realm}}">Realm <b class="mono">{{.Realm}}</b></h2><span class="grow"></span>
+    {{if not $table}}<span class="more-legend faint">
       <span><svg width="26" height="8" aria-hidden="true"><path class="e mesh" d="M0 4h26"/></svg> mesh</span>
       <span><svg width="26" height="8" aria-hidden="true"><path class="e net" d="M0 4h26"/></svg> cluster network</span>
       <span><svg width="26" height="10" aria-hidden="true"><rect class="off" x="1" y="1" width="24" height="8" rx="2"/></svg> not running</span>
-    </span></div>
-  <div class="pb more-topo"><svg viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Label}}">
+    </span>{{end}}</div>
+  {{if $table}}{{template "more-topo-table" .}}{{else}}
+  <p class="more-topo-hint faint">Scroll sideways to see the nodes, or <a href="{{$tableURL}}">show the table</a>.</p>
+  <div class="pb more-topo" data-more-scroll="Diagram that scrolls sideways"><svg viewBox="0 0 {{.Width}} {{.Height}}" role="group" aria-label="{{.Label}}">
     {{if .HasMesh}}<rect class="band" x="{{.BandX}}" y="{{.BandY}}" width="{{.BandW}}" height="{{.BandH}}" rx="10"/>{{end}}
-    {{range .Heads}}<text class="colh" x="{{.X}}" y="24">{{.Label}}</text>
+    {{range .Heads}}<text class="colh" x="{{.X}}" y="24" aria-hidden="true">{{.Label}}</text>
     {{end}}{{range .Edges}}<path class="e {{.Class}}" d="{{.D}}"/>
-    {{end}}{{range .Boxes}}<g class="n{{with .Class}} {{.}}{{end}}">{{if .Href}}<a href="{{.Href}}">{{end}}<title>{{.Full}}</title><rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="6"/><text x="{{.TextX}}" y="{{.TextY}}">{{.Label}}</text>{{if .Sub}}<text class="s" x="{{.TextX}}" y="{{.SubY}}">{{.Sub}}</text>{{end}}{{if .Href}}</a>{{end}}</g>
-    {{end}}</svg></div>
+    {{end}}{{range .Boxes}}<g class="n{{with .Class}} {{.}}{{end}}">{{if .Href}}<a href="{{.Href}}" aria-label="{{.Full}}">{{end}}<title>{{.Full}}</title><rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="6"/><text x="{{.TextX}}" y="{{.TextY}}">{{.Label}}</text>{{if .Sub}}<text class="s" x="{{.TextX}}" y="{{.SubY}}">{{.Sub}}</text>{{end}}{{if .Href}}</a>{{end}}</g>
+    {{end}}</svg></div>{{end}}
 </section>
 {{end}}
 {{if .Empty}}<section class="panel"><div class="empty">Nothing to draw for {{range $i, $r := .Empty}}{{if $i}}, {{end}}<span class="mono">{{$r}}</span>{{end}} yet: it has no mesh and no cluster.</div></section>{{end}}
 {{end}}{{end}}
+
+{{/* more-topo-table lists a realm as the diagram draws it, with the same
+links; . is moreTopology. On a phone, each row is a card. */}}
+{{define "more-topo-table"}}<div class="tw"><table class="more-topotable more-cards" role="table">
+  <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Name</th><th scope="col" role="columnheader">Kind</th><th scope="col" role="columnheader">Address</th><th scope="col" role="columnheader">State</th></tr></thead>
+  <tbody role="rowgroup"><tr role="row" class="more-grp"><th scope="colgroup" colspan="4" role="rowheader">Host and mesh</th></tr>
+    {{with .Host}}<tr role="row"><td role="cell"><a href="{{.Href}}">{{.Name}}</a></td><td role="cell">{{.Kind}}</td><td role="cell"></td><td role="cell"></td></tr>{{end}}
+    {{range .Mesh}}{{template "more-topo-row" .}}{{end}}</tbody>
+  {{range .Nets}}<tbody role="rowgroup"><tr role="row" class="more-grp"><th scope="colgroup" colspan="4" role="rowheader"><a href="{{.Href}}" class="mono">{{.Name}}</a> <span class="faint">{{if .Subnet}}<span class="mono">{{.Subnet}}</span> · {{end}}</span><span class="pill {{.Pill}}">{{.State}}</span></th></tr>
+    {{range .Nodes}}{{template "more-topo-row" .}}{{else}}<tr role="row"><td role="cell" colspan="4" class="faint">No nodes.</td></tr>{{end}}</tbody>{{end}}
+</table></div>{{end}}
+
+{{/* more-topo-row is a row of the table; . is moreTopoItem. */}}
+{{define "more-topo-row"}}<tr role="row"><td role="cell" class="mono"><a href="{{.Href}}">{{.Name}}</a></td><td role="cell">{{.Kind}}</td><td role="cell" class="mono">{{.Addr}}</td><td role="cell" class="more-aside">{{if .State}}<span class="pill{{with .Pill}} {{.}}{{end}}">{{.State}}</span>{{end}}</td></tr>{{end}}

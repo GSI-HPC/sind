@@ -4,6 +4,7 @@ package ui
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
+	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -23,7 +25,9 @@ import (
 // actDialogKeys are the query keys that open a dialog with its fields
 // filled in.
 var actDialogKeys = []string{
-	"realm", "cluster", "nodes", "op", "container",
+	"realm", "cluster", "nodes", "op", "reason", "container",
+	// The clusters of a delete of several, and the list to go back to.
+	"clusters", "back",
 	// The fields of the New cluster dialog, which a link may fill in to
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
@@ -92,6 +96,20 @@ type actSpec struct {
 	// Plan puts the preview into a pane beside the fields, which shows
 	// the plan of the command even while a field is wrong.
 	Plan bool
+	// Draft has the browser keep what the user typed until the command
+	// starts or the user discards it, and the dialog opens with it again;
+	// a click beside such a dialog does not close it.
+	Draft bool
+	// Follow opens the run page once the command starts. Other dialogs
+	// close, and the page behind them stays, with a notice of the run.
+	Follow bool
+	// Removes says that the command removes the cluster or the realm of
+	// the link: opened on a page of it, the dialog follows its run, as
+	// the page would show only that it is gone.
+	Removes bool
+	// RealmField shows the realm as a field, filled in with the realm of
+	// the link; other dialogs keep it hidden.
+	RealmField bool
 	// Fields returns the fields of the form that show their own problem.
 	Fields func(f url.Values) []string
 	// Sections are the parts of the form that fold, each with a line
@@ -107,10 +125,10 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
+		OK: "Create", Wide: true, Plan: true, Draft: true, Follow: true, RealmField: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
-		Lead: func(d *actDialog) string {
-			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
+		Lead: func(*actDialog) string {
+			return "sind ui saves the config, then runs sind create cluster with it."
 		},
 		Defaults: func(d *actDialog) {
 			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
@@ -162,45 +180,68 @@ var actSpecs = map[string]actSpec{
 	"create-worker": {
 		OK: "Add", NeedsCluster: true,
 		Title: func(d *actDialog) string { return "Add workers to " + d.Cluster },
-		Lead: func(*actDialog) string {
-			return "New workers take the image, CPUs and memory of the newest worker, unless you change them."
+		Lead: func(d *actDialog) string {
+			if n, ok := action.NewestWorker(d.Snap.ClusterNodes(d.Realm, d.Cluster), d.Snap.Status(d.Realm, d.Cluster)); ok {
+				return "New workers take the image, CPUs and memory of " + action.ShortName(n) + ", the newest worker, unless you change them."
+			}
+			return "New workers take sind's sizes and the image of the controller, unless you change them."
 		},
 		Defaults: func(d *actDialog) {
 			d.def("count", "1")
 		},
 	},
 	"delete-cluster": {
-		OK: "Delete", Danger: true, NeedsCluster: true,
+		OK: "Delete cluster", Danger: true, NeedsCluster: true, Removes: true,
 		Title: func(d *actDialog) string { return "Delete cluster " + d.Cluster },
 		Lead: func(d *actDialog) string {
-			return fmt.Sprintf("Removes its %d containers, its network and its volumes.", len(d.Snap.ClusterNodes(d.Realm, d.Cluster)))
+			return "Deletes cluster " + d.Cluster + " of realm " + d.Realm + ". This cannot be undone."
 		},
+	},
+	"delete-clusters": {
+		OK: "Delete", Danger: true,
+		Title: func(d *actDialog) string {
+			if len(d.Clusters) == 0 {
+				return "Delete clusters"
+			}
+			return "Delete " + pgPlural(len(d.Clusters), "cluster", "clusters")
+		},
+		Lead: func(d *actDialog) string {
+			switch len(d.Clusters) {
+			case 0:
+				return "Deletes several clusters with one confirmation."
+			case 1:
+				return fmt.Sprintf("Removes its %s, its network and its volumes.", pgPlural(d.ClusterNodes(), "container", "containers"))
+			}
+			return fmt.Sprintf("Removes their %s, their networks and their volumes.", pgPlural(d.ClusterNodes(), "container", "containers"))
+		},
+		Defaults: func(d *actDialog) { d.pickClusters() },
 	},
 	"delete-worker": {
 		OK: "Delete", Danger: true, NeedsCluster: true,
 		Title: func(d *actDialog) string { return "Delete workers of " + d.Cluster },
 		Lead: func(*actDialog) string {
-			return "Removes the worker containers and their DNS records, then tells slurmctld."
+			return "Deletes the workers you pick, then tells slurmctld. This cannot be undone; add workers again to get new ones."
 		},
 	},
 	"power": {
 		OK: "Run", NeedsCluster: true,
-		Title: func(d *actDialog) string { return "Power: nodes of " + d.Cluster },
-		Lead:  func(*actDialog) string { return "At most 8 nodes at a time." },
+		Title: func(d *actDialog) string { return "Power and drain: nodes of " + d.Cluster },
+		Lead: func(*actDialog) string {
+			return "Drain and Resume change what Slurm does with the nodes. The other actions change their containers, up to 8 at a time."
+		},
 		Defaults: func(d *actDialog) {
 			op, ok := action.PowerOpOf(d.Form.Get("op"))
 			if !ok {
-				op = action.PowerOps[0]
+				op, _ = action.PowerOpOf("shutdown")
 			}
 			d.Form.Set("op", op.ID)
 		},
 	},
 	"connect": {
-		OK:    "Connect",
+		OK: "Connect", RealmField: true, Fields: actFields("container", "realm"),
 		Title: func(*actDialog) string { return "Connect a container" },
-		Lead: func(d *actDialog) string {
-			return "Attaches a container that sind did not make, such as a kind node, to the mesh and cluster networks of realm " +
-				d.Realm + ". It then resolves the nodes by name."
+		Lead: func(*actDialog) string {
+			return "Attaches a container that sind did not make, such as a kind node, to the mesh and cluster networks of the realm. It then resolves the nodes by name."
 		},
 	},
 	"disconnect": {
@@ -211,11 +252,10 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-realm": {
-		OK: "Delete", Danger: true,
+		OK: "Delete realm", Danger: true, Removes: true,
 		Title: func(d *actDialog) string { return "Delete realm " + d.Realm },
 		Lead: func(d *actDialog) string {
-			r, _ := d.Snap.Realm(d.Realm)
-			return fmt.Sprintf("Deletes all %d clusters of realm %s, its mesh, DNS server, SSH relay, monitoring stack and the exported SSH config. Connected containers stay; sind only detaches them.", r.Clusters, d.Realm)
+			return "Deletes every cluster of realm " + d.Realm + " and what they share. This cannot be undone."
 		},
 	},
 }
@@ -500,7 +540,7 @@ type actNodeView struct {
 func actNodeOf(f url.Values, key string) actNodeView {
 	n := actNodeView{Key: key, Label: key, Eff: actEffOf(f), form: f}
 	if !slices.Contains(action.NodeRoles, key) {
-		n.Group, n.Label = true, "workers"
+		n.Group, n.Label = true, action.GroupLabel(f, key)
 	}
 	return n
 }
@@ -635,12 +675,35 @@ type actDialog struct {
 	Title, Lead, Typed string
 	// Nodes are the nodes of the cluster that the user can pick.
 	Nodes []actNodeChoice
-	// Ops are the power operations.
-	Ops []action.PowerOp
+	// Clusters are the clusters that a delete of several deletes, and Gone
+	// those of its link that sind ui no longer sees, as realm/name.
+	Clusters []actClusterChoice
+	Gone     []string
+	// OpGroups are the power operations, by group.
+	OpGroups []action.PowerGroup
 	// Waits are the choices of the wait for a new cluster.
 	Waits []actChoice
 	// Lock is who holds the realm's lock, if the command will wait for it.
 	Lock *state.LockHolder
+	// Draft says that the fields are those of the user's draft.
+	Draft bool
+	// defaulted are the fields that Spec.Defaults filled.
+	defaulted []string
+}
+
+// actOK is the button of a dialog that runs the command.
+type actOK struct {
+	Label string
+	// Danger paints it red, Off disables it, Swap marks it as a part of a
+	// preview that takes the place of the button of the dialog, and Why
+	// points it at the hint that says why a typed name does not confirm.
+	Danger, Off, Swap, Why bool
+}
+
+// OKButton is the button that runs the command, off until a preview says
+// that it can run.
+func (d *actDialog) OKButton() actOK {
+	return actOK{Label: d.Spec.OK, Danger: d.Spec.Danger, Off: true, Why: d.Typed != ""}
 }
 
 // actChoice is an option of a select.
@@ -655,19 +718,26 @@ var actWaits = []actChoice{
 // actMemories are the memories of a node that the field suggests.
 var actMemories = []string{"512m", "1g", "2g", "4g", "8g"}
 
-// actRole is a role of the New cluster dialog that is a checkbox.
+// actRole is a role of the New cluster dialog that is a checkbox. Word is
+// the help word of the role, and Hint says what it runs, in parts, which
+// name a word of the help where they have one.
 type actRole struct {
-	Name, Label, Small, Hint string
+	Name, Label, Small, Word string
+	Hint                     []actHintPart
 	// Sub sets the row in below the one above it.
 	Sub bool
 }
 
+// actHintPart is a part of a hint: text, which explains itself as the
+// help word Word when it has one.
+type actHintPart struct{ Text, Word string }
+
 // actRoles are the roles of the New cluster dialog that are a checkbox.
 var actRoles = []actRole{
-	{"backup", "backup", "controller-backup", "A second slurmctld that takes over. Same image and size as the controller.", true},
-	{"db", "db", "", "MariaDB and slurmdbd: accounting.", false},
-	{"api", "api", "", "slurmrestd. Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", false},
-	{"submitter", "submitter", "", "The login node. sind enter puts you here.", false},
+	{"backup", "backup", "controller-backup", "controller-backup", []actHintPart{{"A second ", ""}, {"slurmctld", "slurmctld"}, {" that takes over. Same image and size as the controller.", ""}}, true},
+	{"db", "db", "", "db", []actHintPart{{"MariaDB", "mariadb"}, {" and ", ""}, {"slurmdbd", "slurmdbd"}, {": accounting.", ""}}, false},
+	{"api", "api", "", "api", []actHintPart{{"slurmrestd", "slurmrestd"}, {". Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", ""}}, false},
+	{"submitter", "submitter", "", "submitter", []actHintPart{{"The login node. sind enter puts you here.", ""}}, false},
 }
 
 // Roles are the roles of the New cluster dialog that are a checkbox.
@@ -693,18 +763,115 @@ type actNodeChoice struct {
 	On                 bool
 }
 
+// actClusterChoice is a cluster of the dialog that deletes several.
+type actClusterChoice struct {
+	Realm, Name, State string
+	Nodes              int
+}
+
+// Ref names the cluster as the field clusters does: realm/name.
+func (c actClusterChoice) Ref() string { return c.Realm + "/" + c.Name }
+
+// NodesText returns "1 node" or "3 nodes".
+func (c actClusterChoice) NodesText() string { return pgPlural(c.Nodes, "node", "nodes") }
+
+// pickClusters lists the clusters of the link that sind ui knows, and
+// keeps only those in the form, so that the title, the count to type and
+// the form all count the clusters that the dialog deletes. It names the
+// others, which a stale link or a cluster deleted meanwhile leaves.
+func (d *actDialog) pickClusters() {
+	var known []string
+	for _, ref := range action.ClusterRefs(d.Form) {
+		realm, name, _ := strings.Cut(ref, "/")
+		c, ok := d.Snap.Cluster(realm, name)
+		if !ok {
+			d.Gone = append(d.Gone, ref)
+			continue
+		}
+		known = append(known, ref)
+		d.Clusters = append(d.Clusters, actClusterChoice{Realm: realm, Name: name, State: string(c.State), Nodes: len(d.Snap.ClusterNodes(realm, name))})
+	}
+	d.Form["clusters"] = known
+}
+
+// GoneText names the clusters of the link that sind ui no longer sees.
+func (d *actDialog) GoneText() string { return strings.Join(d.Gone, ", ") }
+
+// Back returns the list page that a delete of several clusters goes back
+// to.
+func (d *actDialog) Back() string { return actBack(d.Form) }
+
+// ClusterNodes counts the nodes of the clusters of the dialog.
+func (d *actDialog) ClusterNodes() int {
+	n := 0
+	for _, c := range d.Clusters {
+		n += c.Nodes
+	}
+	return n
+}
+
+// actBack returns the list page that a delete of several clusters goes back
+// to: the address of the form's field back when it is the Clusters page,
+// else that page.
+func actBack(f action.Form) string {
+	back := f.Get("back")
+	if back == "/clusters" || strings.HasPrefix(back, "/clusters?") {
+		return back
+	}
+	return "/clusters"
+}
+
 // def sets the field to v unless the link gave a value for it.
 func (d *actDialog) def(field, v string) {
 	if !d.Form.Has(field) {
 		d.Form.Set(field, v)
+		d.defaulted = append(d.defaulted, field)
 	}
 }
+
+// Defaulted reports whether the field has its default, as the link gives
+// no value: the dialog selects a default name, so that typing replaces it.
+func (d *actDialog) Defaulted(field string) bool { return slices.Contains(d.defaulted, field) }
 
 // Val returns the value of the field.
 func (d *actDialog) Val(field string) string { return d.Form.Get(field) }
 
+// YAMLMode reports whether the user edits the YAML of the config, which
+// only a draft can open the dialog with.
+func (d *actDialog) YAMLMode() bool { return d.Form.Get("yaml_on") != "" }
+
+// LikeNewest is the placeholder of a size of new workers: the newest
+// worker's, which they take when it is empty.
+func (d *actDialog) LikeNewest() string {
+	if n, ok := action.NewestWorker(d.Snap.ClusterNodes(d.Realm, d.Cluster), d.Snap.Status(d.Realm, d.Cluster)); ok {
+		return "as " + action.ShortName(n)
+	}
+	return "sind's default"
+}
+
 // Is reports whether the field has the value.
 func (d *actDialog) Is(field, value string) bool { return d.Form.Get(field) == value }
+
+// RealmNames are the realms that the realm field suggests: those that sind
+// ui sees, and the realm of the dialog.
+func (d *actDialog) RealmNames() []string {
+	names := []string{d.Realm}
+	for _, r := range d.Snap.Realms {
+		if r.Name != d.Realm {
+			names = append(names, r.Name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// RealmHint says what the realm field of the dialog does.
+func (d *actDialog) RealmHint() string {
+	if d.ID == "connect" {
+		return "The realm whose networks the container joins. It needs a cluster, whose mesh comes with it."
+	}
+	return "A group of clusters. A new name makes a new realm."
+}
 
 // Body is the name of the block with the dialog's fields.
 func (d *actDialog) Body() string { return "act-dlg-" + d.ID }
@@ -721,7 +888,9 @@ func actLocks(a action.Action, f action.Form) bool {
 }
 
 // actDialogRoute answers with a dialog, filled in with the fields in the
-// query.
+// query. The script of the dialogs posts the same link with the field
+// draft, the user's draft of a dialog that keeps one, which then fills in
+// the fields where it fits the link (actDraftOf).
 func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	a, ok := actLookup(s, w, r)
 	if !ok {
@@ -736,7 +905,17 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	spec := actSpecs[a.ID]
 	d := &actDialog{
 		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
-		Ops: action.PowerOps, Waits: actWaits,
+		OpGroups: action.PowerGroups(), Waits: actWaits,
+	}
+	if id := r.URL.Query().Get("task"); id != "" {
+		// Edit and try again: the form of the task, which the link may
+		// change.
+		t, ok := v.Snap.Task(id)
+		if !ok || t.Action != a.ID {
+			s.Fail(w, r, fmt.Errorf("task %s of %s: %w", id, a.ID, ErrNotFound))
+			return
+		}
+		d.Form = actKeptForm(t.Form)
 	}
 	for _, k := range keys {
 		if vals := v.Params[k]; len(vals) > 0 {
@@ -749,13 +928,16 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Form.Set("realm", d.Realm)
+	if draft, ok := actDraftOf(spec, r.PostForm.Get("draft"), d.Form); ok {
+		d.Form, d.Draft = draft, true
+	}
 	if spec.NeedsCluster {
 		if err := d.pickCluster(); err != nil {
 			s.Fail(w, r, err)
 			return
 		}
 	}
-	if spec.Defaults != nil {
+	if spec.Defaults != nil && !d.Draft {
 		spec.Defaults(d)
 	}
 	d.Typed = a.Want(d.Form)
@@ -770,6 +952,33 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Write(w, r, http.StatusOK, "act-dialog", v.withData(d))
+}
+
+// actDraftKeys are the fields of a posted form that a draft leaves out:
+// they belong to one post, or to one look at the command.
+var actDraftKeys = []string{"csrf", "shown", "confirm", "draft"}
+
+// actDraftOf returns the fields of the draft that the browser kept of a
+// dialog, raw as a form encodes them, when the dialog keeps drafts and the
+// link fits the draft: the same realm, and no other field filled in, as a
+// link with fields of its own starts from them.
+func actDraftOf(spec actSpec, raw string, link url.Values) (url.Values, bool) {
+	if !spec.Draft || raw == "" {
+		return nil, false
+	}
+	for k := range link {
+		if k != "realm" {
+			return nil, false
+		}
+	}
+	f, err := url.ParseQuery(raw)
+	if err != nil || actCheckForm(f) != nil || action.Realm(f) != link.Get("realm") {
+		return nil, false
+	}
+	for _, k := range actDraftKeys {
+		f.Del(k)
+	}
+	return f, true
 }
 
 // pickCluster reads the cluster of the link, and lists the nodes of it that
@@ -823,6 +1032,38 @@ type actPreview struct {
 	// command will wait for it.
 	Realm string
 	Lock  *state.LockHolder
+	// Typed is what the user must type to confirm, "" for nothing, and Why
+	// says why the typed text does not confirm yet.
+	Typed, Why string
+}
+
+// OK labels the button that runs the command: as the command says, or as
+// the dialog does.
+func (p actPreview) OK() string { return cmp.Or(p.Cmd.OK, p.Spec.OK) }
+
+// OKButton is the button that runs the command, as the preview says.
+func (p actPreview) OKButton() actOK {
+	return actOK{Label: p.OK(), Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
+}
+
+// actWhy says why what the user typed, typed, does not confirm want: a
+// name, or a number, such as the count of clusters that one dialog
+// deletes.
+func actWhy(want, typed string) string {
+	typed = strings.TrimSpace(typed)
+	if want != "" && strings.Trim(want, "0123456789") == "" {
+		if typed == "" {
+			return "The button stays off until you type the number."
+		}
+		return typed + " is not " + want + ". Type the number as it is shown."
+	}
+	switch {
+	case typed == "":
+		return "The button stays off until the name matches."
+	case strings.EqualFold(typed, want):
+		return "Case matters: type " + want + ", not " + typed + "."
+	}
+	return typed + " is not " + want + ". Type the name as it is shown."
 }
 
 // actMaxTiles is the most nodes that a plan draws one by one.
@@ -901,14 +1142,25 @@ func actWorkerIndex(n action.PlannedNode) int {
 	return i
 }
 
-// ProblemOf returns what is wrong with the field, or "".
+// ProblemOf returns what is wrong with the field, or "": a problem of the
+// plan, or the error of the command when it starts with the field.
 func (p actPreview) ProblemOf(field string) string {
 	for _, pr := range p.Cmd.Problems {
 		if pr.Field == field {
 			return pr.Text
 		}
 	}
+	if text, ok := strings.CutPrefix(p.Err, field+": "); ok {
+		return text
+	}
 	return ""
+}
+
+// ErrAtField reports whether the error of the command belongs to a field
+// that shows its own problem, so that the field shows it in place of the
+// preview.
+func (p actPreview) ErrAtField() bool {
+	return slices.ContainsFunc(p.Fields(), func(field string) bool { return strings.HasPrefix(p.Err, field+": ") })
 }
 
 // Problems is how many things keep the command from running.
@@ -918,6 +1170,92 @@ func (p actPreview) Problems() int {
 	}
 	return len(p.Cmd.Problems)
 }
+
+// First is the problem that the status of the dialog leads to: the first
+// problem of the command, or its error, which has no field.
+func (p actPreview) First() action.Problem {
+	if p.Err == "" && len(p.Cmd.Problems) > 0 {
+		return p.Cmd.Problems[0]
+	}
+	return action.Problem{Text: p.Err}
+}
+
+// StatusText is the text of the status button of a command with
+// problems: how many, and the field of the first.
+func (p actPreview) StatusText() string {
+	n, label := p.Problems(), p.First().Label
+	text := fmt.Sprintf("%d problem%s", n, actPlural(n))
+	switch {
+	case label == "":
+	case n == 1:
+		text += ": " + label
+	default:
+		text += ", first: " + label
+	}
+	return text
+}
+
+// StatusGo says where the status button goes: to the field of the first
+// problem, or to the list of problems in the plan.
+func (p actPreview) StatusGo() string {
+	if p.First().Field != "" {
+		return "Go to the field"
+	}
+	return "Show the problems"
+}
+
+// Say is what the dialog tells assistive technology about its status: the
+// first problem and how many there are, or that the command can run.
+func (p actPreview) Say() string {
+	if !p.Blocked {
+		if n := p.Warnings(); n > 0 {
+			return fmt.Sprintf("Ready, with %d warning%s. %s runs the command.", n, actPlural(n), p.Spec.OK)
+		}
+		return "Ready. " + p.Spec.OK + " runs the command."
+	}
+	first, n := p.First(), p.Problems()
+	text := first.Text
+	if first.Label != "" {
+		text = first.Label + ": " + text
+	}
+	if n > 1 {
+		text += fmt.Sprintf(" %d problems in all.", n)
+	}
+	return text
+}
+
+// SayKey changes when the status changes in a way to say: the dialog does
+// not repeat the status for each key that changes the text of a problem.
+func (p actPreview) SayKey() string {
+	if !p.Blocked {
+		return fmt.Sprintf("ready %d", p.Warnings())
+	}
+	return fmt.Sprintf("%d %s", p.Problems(), p.First().Field)
+}
+
+// Totals sums up what the nodes of the plan use: containers, CPUs and
+// memory, against that of the Docker host when known.
+func (p actPreview) Totals() string {
+	if p.Cmd.Containers == 0 {
+		return ""
+	}
+	mem := action.MemoryLabel(p.Cmd.MemoryMB)
+	if host := p.HostMB(); host > 0 {
+		mem += " of " + action.MemoryLabel(host)
+	}
+	return fmt.Sprintf("%d container%s · %d CPU%s · %s", p.Cmd.Containers, actPlural(p.Cmd.Containers), p.Cmd.CPUs, actPlural(p.Cmd.CPUs), mem)
+}
+
+// actPlural is the s of a count other than one.
+func actPlural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// Warnings is how many warnings the command has, which the pill counts.
+func (p actPreview) Warnings() int { return len(p.Cmd.Warns) }
 
 // Defaulted names the fields whose defaults the plan takes, as they are
 // wrong.
@@ -938,6 +1276,9 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	if op, ok := action.PowerOpOf(f.Get("op")); a.ID == "power" && ok && op.Danger {
 		p.Danger = true
 	}
+	if p.Typed = a.Want(f); !a.Confirmed(f) {
+		p.Why = actWhy(p.Typed, f.Get(action.ConfirmField))
+	}
 	cmd, err := a.Build(f, ctx)
 	var missing *action.Missing
 	if errors.As(err, &missing) {
@@ -951,8 +1292,16 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	p.Cmd, p.Shown = cmd, cmd.Fingerprint()
 	p.Blocked = !a.Confirmed(f) || len(cmd.Problems) > 0
 	p.Realm = action.Realm(f)
-	if actLocks(a, f) {
+	if len(cmd.Parts) == 0 && actLocks(a, f) {
 		p.Lock = v.Snap.Lock(p.Realm)
+	}
+	for _, part := range cmd.Parts {
+		// The parts may be of several realms; the first lock that one of
+		// them waits for is the one to show.
+		if l := v.Snap.Lock(part.Realm); l != nil {
+			p.Realm, p.Lock = part.Realm, l
+			break
+		}
 	}
 	return p
 }
@@ -962,6 +1311,9 @@ func actContext(r *http.Request, v *View, st *actState) action.Context {
 	c := action.Context{Snap: v.Snap, Home: st.home, ConfigDir: st.configDir, Stat: st.stat}
 	if st.images != nil {
 		c.Image = func(image string) action.ImageFacts { return st.images.facts(r.Context(), image) }
+	}
+	if st.workers != nil {
+		c.Worker = func(container string) action.WorkerFacts { return st.workers.facts(r.Context(), container) }
 	}
 	return c
 }
@@ -1025,10 +1377,19 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		p.Warn, p.Blocked = "The command changed while you looked. Check it, then press the button again.", false
 		actRejected(s, w, r, v, p)
 		return
+	case len(p.Cmd.Parts) > 0:
+		err := actStartParts(st, p.Cmd)
+		if err == nil {
+			actFollow(w, r, actBack(f))
+			return
+		}
+		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
+		p.Err = err.Error()
 	default:
 		id, err := actStart(st, a, f, p.Cmd)
 		if err == nil {
-			page.Redirect(w, r, "/tasks/"+id)
+			realm, cl := a.Target(f)
+			actStarted(s, w, r, v, p, id, p.Spec.Removes && actOnPageOf(r, realm, cl))
 			return
 		}
 		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
@@ -1036,6 +1397,19 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	}
 	p.Blocked = true
 	actRejected(s, w, r, v, p)
+}
+
+// actStartParts starts a task for each part of a command of several. The
+// browser then goes back to the list that the dialog was opened from,
+// where the task dock shows them.
+func actStartParts(st *actState, cmd action.Command) error {
+	for i, p := range cmd.Parts {
+		if _, err := st.starter.Start(run.Spec{Action: p.Action, Argv: p.Argv, Display: p.Display, Realm: p.Realm, Cluster: p.Cluster,
+			Form: url.Values{"realm": {p.Realm}, "cluster": {p.Cluster}}}); err != nil {
+			return fmt.Errorf("started %d of %d commands: %w", i, len(cmd.Parts), err)
+		}
+	}
+	return nil
 }
 
 // actStart creates the command's directories, saves its file, if it has
@@ -1052,7 +1426,122 @@ func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) 
 		}
 	}
 	realm, cl := a.Target(f)
-	return st.starter.Start(run.Spec{Action: a.ID, Argv: cmd.Argv, Display: cmd.Display, Realm: realm, Cluster: cl})
+	spec := run.Spec{Action: a.ID, Argv: cmd.Argv, Display: cmd.Display, Realm: realm, Cluster: cl, Form: actKeptForm(f)}
+	if cmd.Config != nil {
+		spec.ConfigPath, spec.Config = cmd.Config.Path, cmd.Config.Content
+	}
+	return st.starter.Start(spec)
+}
+
+// actKeptForm is the form that a task keeps, so that the user can try its
+// command again: the fields without the CSRF token, the fingerprint and
+// the typed confirmation, which the user gives again.
+func actKeptForm(f url.Values) url.Values {
+	out := url.Values{}
+	for k, vals := range f {
+		if k != "csrf" && k != "shown" && k != action.ConfirmField {
+			out[k] = slices.Clone(vals)
+		}
+	}
+	return out
+}
+
+// actEditHref is the dialog of a task's action, filled in with the form of
+// the task.
+func actEditHref(t store.Task) string {
+	return "/dialogs/" + t.Action + "?task=" + url.QueryEscape(t.ID)
+}
+
+// actSameCommand reports whether cmd is the command that the task ran:
+// the same command line and the same config.
+func actSameCommand(cmd action.Command, t store.Task) bool {
+	if cmd.Display != t.Display {
+		return false
+	}
+	if cmd.Config == nil {
+		return t.ConfigPath == ""
+	}
+	return cmd.Config.Path == t.ConfigPath && cmd.Config.Content == t.Config
+}
+
+// actRetryRoute tries the command of a task that ended again: it builds
+// the command from the task's form, and starts it when it is the command
+// that ran, with the same config, and needs no typed confirmation. The
+// browser then follows the new task. Otherwise, as when a cluster changed
+// in between, it opens the dialog filled in with the form, to check it.
+func actRetryRoute(s *Server, w http.ResponseWriter, r *http.Request) {
+	st, ok := actStateOf(s, w, r)
+	if !ok {
+		return
+	}
+	v, err := s.View(r)
+	if err != nil {
+		s.Fail(w, r, err)
+		return
+	}
+	id := r.PathValue("id")
+	t, ok := v.Snap.Task(id)
+	if !ok {
+		s.Fail(w, r, fmt.Errorf("task %s: %w", id, ErrNotFound))
+		return
+	}
+	a, ok := action.Lookup(t.Action)
+	if !ok || t.Form == nil {
+		s.Fail(w, r, fmt.Errorf("task %s: no form to try again: %w", id, ErrBadRequest))
+		return
+	}
+	if !t.Done() {
+		http.Error(w, "this command is still running", http.StatusConflict)
+		return
+	}
+	f := actKeptForm(t.Form)
+	p := actEvaluate(v, a, f, actContext(r, v, st))
+	if p.Blocked || !actSameCommand(p.Cmd, t) {
+		page.Redirect(w, r, actEditHref(t))
+		return
+	}
+	nid, err := actStart(st, a, f, p.Cmd)
+	if err != nil {
+		s.Fail(w, r, err)
+		return
+	}
+	page.Redirect(w, r, "/tasks/"+nid)
+}
+
+// actStartedNote is what the notice of a command that started says.
+type actStartedNote struct{ ID, Display string }
+
+// actOnPageOf reports whether htmx sent r from a page of the cluster, or
+// without a cluster of the realm: the cluster page or that of one of its
+// nodes.
+func actOnPageOf(r *http.Request, realm, cluster string) bool {
+	u, err := url.Parse(r.Header.Get("HX-Current-URL"))
+	if err != nil {
+		return false
+	}
+	of := realm
+	if cluster != "" {
+		of += "/" + cluster
+	}
+	return u.Path == "/clusters/"+of || strings.HasPrefix(u.Path, "/clusters/"+of+"/") || strings.HasPrefix(u.Path, "/nodes/"+of+"/")
+}
+
+// actStarted answers a run that started. A dialog that follows its run,
+// one whose page the command removes (gone), or a form posted without
+// script, goes to the run page; any other dialog closes on the event
+// act-started, and htmx adds a notice with a link to the run to the page.
+// The event carries the run page and whether the browser goes there, so
+// that the script of the dialogs drops a draft.
+func actStarted(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview, id string, gone bool) {
+	to := "/tasks/" + id
+	if p.Spec.Follow || gone || !page.IsHTMX(r) {
+		actFollow(w, r, to)
+		return
+	}
+	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": false}})
+	w.Header().Set("HX-Trigger-After-Settle", string(event))
+	page.Retarget(w, "#act-notes", "beforeend")
+	s.Write(w, r, http.StatusOK, "act-started", v.withData(actStartedNote{ID: id, Display: p.Cmd.Display}))
 }
 
 // actRejected answers a run that did not start: htmx puts the preview, with
@@ -1060,4 +1549,12 @@ func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) 
 func actRejected(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview) {
 	page.Retarget(w, "#act-preview", "innerHTML")
 	s.Write(w, r, http.StatusOK, "act-preview", v.withData(p))
+}
+
+// actFollow sends the browser to the page to after a command started, with
+// the event act-started, so that the script of the dialogs drops a draft.
+func actFollow(w http.ResponseWriter, r *http.Request, to string) {
+	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": true}})
+	w.Header().Set("HX-Trigger", string(event))
+	page.Redirect(w, r, to)
 }

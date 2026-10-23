@@ -100,6 +100,8 @@ func TestMonitoring(t *testing.T) {
 	}
 	mon, err := GetMonitoring(ctx, c, realm)
 	require.NoError(t, err)
+	require.Len(t, mon.Clusters, 1)
+	mon.Clusters[0].Slurm = nil // Prometheus may not have scraped slurmctld yet
 	assert.Equal(t, []MonitoredCluster{{Name: name, Nodes: 3, SlurmVersion: version}}, mon.Clusters)
 
 	// Prometheus has slurmctld's metrics and the daemons' probes.
@@ -110,6 +112,12 @@ func TestMonitoring(t *testing.T) {
 		return len(prom(`up{job="slurm_nodes", cluster="`+name+`"} == 1`).Data.Result) == 1 &&
 			len(prom(`slurm_nodes{cluster="`+name+`"}`).Data.Result) > 0
 	}, 2*time.Minute, 2*time.Second, "no slurmctld metrics in Prometheus")
+	// GetMonitoring reads the key numbers from them: the one worker is
+	// Slurm's one node.
+	assert.Eventually(t, func() bool {
+		mon, err := GetMonitoring(ctx, c, realm)
+		return err == nil && len(mon.Clusters) == 1 && mon.Clusters[0].Slurm != nil && mon.Clusters[0].Slurm.Nodes == 1
+	}, time.Minute, 2*time.Second, "no Slurm numbers in GetMonitoring")
 	assert.Eventually(t, func() bool {
 		services := map[string]bool{}
 		for _, r := range prom(`probe_success{cluster="` + name + `"} == 1`).Data.Result {

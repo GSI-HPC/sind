@@ -482,3 +482,8 @@ func TestGetMountPoints_Home(t *testing.T) {
 	assert.Equal(t, MountPoint{Path: "/home", Source: "sind-dev-home", Type: config.StorageVolume, OK: false}, mounts[3])
 	assert.Len(t, m.Calls, 1)
 }
+
+func TestUsersScript(t *testing.T) {
+	assert.Equal(t, testUsersScript, UsersScript(usersCfg()))
+	assert.Empty(t, UsersScript(createCfg()))
+}

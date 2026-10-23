@@ -187,6 +187,10 @@ type MountPoint struct {
 	Subpath string             `json:"subpath,omitempty"` // the volume's directory the nodes mount theirs in, for the journal volume
 	Type    config.StorageType `json:"type"`              // "volume" or "hostPath"
 	OK      bool               `json:"ok"`                // true if the Docker volume exists (always true for hostPath)
+	// Data marks the cluster's data mount, whatever its path
+	// (storage.dataStorage.mountPath), for sind ui. The JSON output leaves
+	// it out.
+	Data bool `json:"-"`
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
@@ -216,6 +220,7 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 	if !ok {
 		data = MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume}
 	}
+	data.Data = true
 	mounts = append(mounts, data)
 
 	// Primary/backup controller pairs share the slurmctld state volume.

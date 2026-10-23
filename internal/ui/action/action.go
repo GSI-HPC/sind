@@ -57,13 +57,51 @@ type Command struct {
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.
 	Summary string
-	// MemoryMB is the memory that Nodes may use together, in MiB.
-	MemoryMB int
+	// Containers, CPUs and MemoryMB are what Nodes may use together: the
+	// containers, the CPUs and the memory in MiB. OverHost says whether
+	// MemoryMB is more than the Docker host has, which the plan asks to
+	// accept.
+	Containers, CPUs, MemoryMB int
+	OverHost                   bool
 	// Images are the images of Nodes and what sind ui knows of them.
 	Images []PlanImage
+	// After is what the command runs once the nodes are up, and SlurmConf
+	// the slurm.conf and sind-nodes.conf that it writes, for the plan of a
+	// new cluster whose config is valid.
+	After     []Step
+	SlurmConf string
 	// Problems are the fields that the command cannot take as they are.
 	// The command does not run while it has any, but its plan shows.
 	Problems []Problem
+	// OK labels the button that runs the command, such as "Delete
+	// worker-5"; empty for the dialog's own label.
+	OK string
+	// Goes and Stays say what a command that deletes removes and what it
+	// keeps.
+	Goes, Stays []string
+	// Parts are the commands of an action that runs several, each as a
+	// task of its own, instead of Argv; Display shows them one per line.
+	Parts []Part
+}
+
+// Part is one of the commands of an action that runs several.
+type Part struct {
+	// Action is the id of the action whose task the part is, as the
+	// task's page shows it.
+	Action string
+	// Realm and Cluster are what the part works on.
+	Realm, Cluster string
+	Argv           []string
+	Display        string
+}
+
+// NewParts returns the command that runs the parts.
+func NewParts(parts []Part) Command {
+	lines := make([]string, len(parts))
+	for i, p := range parts {
+		lines[i] = p.Display
+	}
+	return Command{Display: strings.Join(lines, "\n"), Parts: parts}
 }
 
 // Problem is a field of a form that is wrong. Build reports it, instead of
@@ -168,6 +206,18 @@ type Context struct {
 	Stat func(name string) (fs.FileInfo, error)
 	// Image tells what sind ui knows of an image; nil knows nothing.
 	Image func(image string) ImageFacts
+	// Worker tells the size of a worker container; nil knows nothing.
+	Worker func(container string) WorkerFacts
+}
+
+// WorkerFacts is what sind ui knows of the size of a worker container.
+type WorkerFacts struct {
+	// CPUs is its CPU limit, 0 for none; Memory its memory limit in bytes,
+	// 0 for none.
+	CPUs   int
+	Memory int64
+	// Err says why sind ui cannot look at it.
+	Err string
 }
 
 // Action is a change that a dialog makes by running one command.
@@ -264,7 +314,7 @@ func sindArgv(realm string, words ...string) []string {
 // checkRealm returns the realm of the form once it is a valid name.
 func checkRealm(f Form) (string, error) {
 	realm := Realm(f)
-	if err := config.CheckName("realm", realm); err != nil {
+	if err := nameError("realm", realm); err != nil {
 		return "", fmt.Errorf("realm: %w", err)
 	}
 	return realm, nil

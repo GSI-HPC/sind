@@ -37,6 +37,9 @@ type seed struct {
 	data        string
 	users       []string
 	roles       []roleCount
+	// cpus and memory are the size of its nodes, 0 for sind's defaults.
+	cpus   int
+	memory int64
 }
 
 // seeds are the clusters the demo starts with: two realms, four clusters of
@@ -47,7 +50,7 @@ type seed struct {
 var seeds = []seed{
 	{realm: "sind", name: "default", slurm: slurmNew, data: Home + "/sind-demo",
 		roles: []roleCount{{config.RoleController, 1}, {config.RoleWorker, 1}}},
-	{realm: "sind", name: "dev", slurm: slurmNew, monitoring: true, volume: true, data: "sind-dev-data", users: []string{"alice", "bob"},
+	{realm: "sind", name: "dev", slurm: slurmNew, monitoring: true, volume: true, data: "sind-dev-data", users: []string{"alice", "bob"}, cpus: 2, memory: 1 << 30,
 		roles: []roleCount{{config.RoleController, 2}, {config.RoleDB, 1}, {config.RoleAPI, 1}, {config.RoleSubmitter, 1}, {config.RoleWorker, 6}}},
 	{realm: "sind", name: "legacy", slurm: slurmOld, data: Home + "/legacy",
 		roles: []roleCount{{config.RoleController, 1}, {config.RoleWorker, 2}}},
@@ -63,6 +66,7 @@ func Seeded() *World {
 	for _, s := range seeds {
 		c := w.clusterOf(s.realm, s.name)
 		c.slurm, c.monitoring, c.volume, c.dataPath, c.users = s.slurm, s.monitoring, s.volume, s.data, s.users
+		c.cpus, c.memory = s.cpus, s.memory
 		for _, rc := range s.roles {
 			for i := range rc.count {
 				short := string(rc.role)
@@ -85,7 +89,12 @@ func Seeded() *World {
 	sind.monitoring = true
 	sind.external = []string{"kind-control-plane"}
 	// slurmd of one worker of dev is down: the page shows a failed service.
-	w.lookup("sind", "dev").find("worker-4").up[probe.ServiceSlurmd] = false
+	// Slurm runs jobs on two others and has drained one.
+	dev := w.lookup("sind", "dev")
+	dev.find("worker-4").up[probe.ServiceSlurmd] = false
+	dev.find("worker-0").busy = 2
+	dev.find("worker-1").busy = 1
+	dev.find("worker-5").drain = "memory errors, admin 09:02"
 	// A worker of legacy is stopped: the cluster is mixed.
 	legacy := w.lookup("sind", "legacy").find("worker-1")
 	legacy.state, legacy.up = cluster.StateStopped, map[probe.Service]bool{}
@@ -100,7 +109,8 @@ func Checks() []store.DoctorCheck {
 		{Name: "Docker host", Status: "ok", Detail: "local daemon at unix:///var/run/docker.sock"},
 		{Name: "cgroup v2", Status: "ok", Detail: "cgroup2 with nsdelegate"},
 		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_instances is 128; 9 nodes and more can run out",
-			Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
+			Remediation: "Raise the limit now:\n\nsudo sysctl fs.inotify.max_user_instances=1024\n\n" +
+				"Keep it across reboots:\n\necho fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf"},
 		{Name: "DNS policy", Status: "ok", Detail: "systemd-resolved forwards *.sind to sind-dns"},
 	}
 }

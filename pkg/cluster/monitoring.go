@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -402,9 +403,62 @@ type MonitoringService struct {
 
 // MonitoredCluster is a cluster the realm's monitoring stack collects.
 type MonitoredCluster struct {
-	Name         string `json:"name"`
-	Nodes        int    `json:"nodes"`
-	SlurmVersion string `json:"slurm_version"`
+	Name         string       `json:"name"`
+	Nodes        int          `json:"nodes"`
+	SlurmVersion string       `json:"slurm_version"`
+	Slurm        *SlurmCounts `json:"slurm,omitempty"` // nil while Prometheus has no numbers of the cluster
+}
+
+// SlurmCounts are the key numbers of a monitored cluster, as slurmctld
+// reports them to the realm's Prometheus: its nodes, those that are down
+// and those that drain (a node can be both), and its running and pending
+// jobs.
+type SlurmCounts struct {
+	Nodes       int `json:"nodes"`
+	NodesDown   int `json:"nodes_down"`
+	NodesDrain  int `json:"nodes_drain"`
+	JobsRunning int `json:"jobs_running"`
+	JobsPending int `json:"jobs_pending"`
+}
+
+// slurmCountMetrics are the metrics of slurmctld that SlurmCounts holds,
+// by name.
+var slurmCountMetrics = map[string]func(*SlurmCounts) *int{
+	"slurm_nodes":        func(c *SlurmCounts) *int { return &c.Nodes },
+	"slurm_nodes_down":   func(c *SlurmCounts) *int { return &c.NodesDown },
+	"slurm_nodes_drain":  func(c *SlurmCounts) *int { return &c.NodesDrain },
+	"slurm_jobs_running": func(c *SlurmCounts) *int { return &c.JobsRunning },
+	"slurm_jobs_pending": func(c *SlurmCounts) *int { return &c.JobsPending },
+}
+
+// slurmCountsQuery is the one query that reads the SlurmCounts of every
+// cluster of the realm. The highest value of each cluster wins, as only
+// the controller in control answers the scrape.
+func slurmCountsQuery(realm string) string {
+	names := slices.Sorted(maps.Keys(slurmCountMetrics))
+	return fmt.Sprintf(`max by (cluster, __name__) ({__name__=~%q, realm=%q})`, strings.Join(names, "|"), realm)
+}
+
+// addSlurmCounts asks Prometheus for the SlurmCounts of m's clusters. A
+// failed query leaves them nil: the numbers are extra, and Prometheus
+// has them only once it is ready and has scraped slurmctld.
+func addSlurmCounts(ctx context.Context, stack *observability.Manager, m *Monitoring) {
+	samples, err := stack.Query(ctx, slurmCountsQuery(m.Realm))
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "reading the Slurm numbers", "realm", m.Realm, "err", err)
+		return
+	}
+	for _, s := range samples {
+		i := slices.IndexFunc(m.Clusters, func(mc MonitoredCluster) bool { return mc.Name == s.Labels["cluster"] })
+		field, ok := slurmCountMetrics[s.Labels["__name__"]]
+		if i < 0 || !ok {
+			continue
+		}
+		if m.Clusters[i].Slurm == nil {
+			m.Clusters[i].Slurm = &SlurmCounts{}
+		}
+		*field(m.Clusters[i].Slurm) = int(s.Value)
+	}
 }
 
 // Monitoring is the state of a realm's monitoring stack.
@@ -416,8 +470,9 @@ type Monitoring struct {
 
 // GetMonitoring returns the state of the realm's monitoring stack: its
 // services, and the clusters whose nodes mount the realm's journal
-// volume, sorted by name. A realm without a stack fails with
-// ErrNoMonitoring.
+// volume, sorted by name, with their SlurmCounts while Grafana and
+// Prometheus run and Prometheus has them. A realm without a stack fails
+// with ErrNoMonitoring.
 func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*Monitoring, error) {
 	stack := observability.NewManager(client, realm)
 	statuses, found, err := stack.Status(ctx)
@@ -455,5 +510,11 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 		}
 	}
 	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return natsort.Compare(a.Name, b.Name) })
+	running := func(s observability.Service) bool {
+		return slices.ContainsFunc(m.Services, func(ms MonitoringService) bool { return ms.Name == s && ms.State == docker.StateRunning })
+	}
+	if len(m.Clusters) > 0 && running(observability.ServiceGrafana) && running(observability.ServicePrometheus) {
+		addSlurmCounts(ctx, stack, m)
+	}
 	return m, nil
 }

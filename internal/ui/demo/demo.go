@@ -118,6 +118,11 @@ func DiscoverVersion(_ context.Context, image string) (string, error) {
 	return slurmNew, nil
 }
 
+// InspectContainer answers docker inspect for a node of the demo.
+func (d *Demo) InspectContainer(ctx context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
+	return d.world.InspectContainer(ctx, name)
+}
+
 // Exec returns the executor that answers the log streams.
 func (d *Demo) Exec() cmdexec.Executor {
 	e := &Exec{Now: d.Now}

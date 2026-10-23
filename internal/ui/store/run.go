@@ -2,7 +2,10 @@
 
 package store
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Span statuses, as the event log writes them; "" while a span runs.
 const (
@@ -11,6 +14,22 @@ const (
 	StatusCanceled = "canceled"
 	StatusSkipped  = "skipped"
 )
+
+// UITraceState is the tracestate that sind ui hands the commands it starts
+// in TRACESTATE. The event log keeps it, so that a reader tells their runs
+// from those of a terminal, also after sind ui has forgotten the task.
+const UITraceState = "sind=ui"
+
+// IsUITraceState reports whether the tracestate state holds UITraceState as
+// one of its list members.
+func IsUITraceState(state string) bool {
+	for m := range strings.SplitSeq(state, ",") {
+		if strings.TrimSpace(m) == UITraceState {
+			return true
+		}
+	}
+	return false
+}
 
 // Run is one sind command, as its event log tells it.
 type Run struct {
@@ -21,7 +40,11 @@ type Run struct {
 	// started.
 	Trace string
 	// Parent is the caller's span the run works under, from TRACEPARENT.
-	Parent  string
+	Parent string
+	// FromUI is set for a run whose tracestate says that a sind ui
+	// started it (UITraceState): this one, whose task may be gone, or
+	// another.
+	FromUI  bool
 	Program string
 	Version string
 	// Title is the command as a user would read it, such as
@@ -121,11 +144,21 @@ type Task struct {
 	ID string
 	// Action is the id of the action that built the command.
 	Action string
-	// Display is the command as the dialog showed it, quoted for a shell.
+	// Display is the command as the dialog showed it, quoted for a shell,
+	// and Argv the command line it is made from.
 	Display string
+	Argv    []string
 	// Realm and Cluster name what the command works on, empty for none.
 	Realm   string
 	Cluster string
+	// Form is the dialog's form that built the command, without the CSRF
+	// token, the fingerprint and the typed confirmation, so that the user
+	// can try the command again; nil for a command that no form built.
+	Form map[string][]string
+	// ConfigPath and Config are the file that the command saved and runs
+	// with, such as the config of a new cluster; empty for none.
+	ConfigPath string
+	Config     string
 	// Trace is the trace ID that the command got in TRACEPARENT.
 	Trace string
 	Start time.Time
@@ -141,6 +174,10 @@ type Task struct {
 	// Output is the end of what the command wrote to standard error,
 	// escaped for display.
 	Output string
+	// Hidden is set once the user closed the card of the task after it
+	// ended: the dock leaves it out, and its run page still shows its
+	// command and offers to try it again.
+	Hidden bool
 }
 
 // Done reports whether the command has ended.

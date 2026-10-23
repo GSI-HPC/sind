@@ -240,8 +240,8 @@ func TestRunTaskOf(t *testing.T) {
 func TestRunSegs(t *testing.T) {
 	// No steps yet: a running segment, and the status of the command after.
 	segs := runSegs(runOf(0, ""))
-	assert.Equal(t, []runSeg{{Class: runRunning, Title: "starting"}}, segs)
-	assert.Equal(t, []runSeg{{Class: runFailed, Title: runFailed}}, runSegs(runOf(5, "failed")))
+	assert.Equal(t, runBar{{Class: runRunning, Title: "starting"}}, segs)
+	assert.Equal(t, runBar{{Class: runFailed, Title: runFailed}}, runSegs(runOf(5, "failed")))
 
 	run := runOf(0, "",
 		runSp("step", "pull", runEndedAt(0, 4, "ok"), runWith(func(s *store.Span) { s.Total = 1 })),
@@ -367,4 +367,116 @@ func TestRunDetail(t *testing.T) {
 func TestRunName(t *testing.T) {
 	assert.Equal(t, "n", runName(store.Span{Name: "x", Node: "n"}))
 	assert.Equal(t, "x", runName(store.Span{Name: "x"}))
+}
+
+func TestRunSource(t *testing.T) {
+	run := runOf(0, "")
+	snap := store.Snapshot{}
+	assert.Equal(t, runFromTerminal, runSource(snap, run))
+	assert.Equal(t, "from a terminal", runSourceText(runFromTerminal))
+	assert.Equal(t, "terminal", runSourceChip(runFromTerminal))
+
+	run.Parent = "00f067aa0ba902b7"
+	assert.Equal(t, runFromProgram, runSource(snap, run))
+	assert.Equal(t, "from another program", runSourceText(runFromProgram))
+	assert.Equal(t, "other program", runSourceChip(runFromProgram))
+
+	run.FromUI = true
+	assert.Equal(t, runFromUI, runSource(snap, run), "a run of a sind ui whose task is gone")
+	assert.Equal(t, "from sind ui", runSourceText(runFromUI))
+	assert.Empty(t, runSourceChip(runFromUI))
+
+	run.FromUI, run.Parent = false, ""
+	snap.Tasks = []store.Task{{ID: "t", Trace: run.Trace}}
+	assert.Equal(t, runFromUI, runSource(snap, run), "the run of a task")
+}
+
+func TestRunWaitsForLock(t *testing.T) {
+	lock := runSp(activity.KindWait, runLockWait, runStartedAt(0))
+	assert.True(t, runWaitsForLock(runOf(0, "", lock)))
+	assert.False(t, runWaitsForLock(runOf(0, "", runSp(activity.KindWait, runLockWait, runEndedAt(0, 1, store.StatusOK)))))
+	assert.False(t, runWaitsForLock(runOf(0, "", runSp(activity.KindStep, runLockWait, runStartedAt(0)))))
+	assert.False(t, runWaitsForLock(runOf(2, store.StatusCanceled, lock)), "a run that ended")
+}
+
+func TestRunStopText(t *testing.T) {
+	for action, want := range map[string]string{
+		"create-cluster": "rollback). The saved config stays.",
+		"create-worker":  "removes the workers it has added so far",
+		"delete-cluster": "The rest of the cluster stays",
+		"delete-worker":  "The others stay.",
+		"delete-realm":   "The rest of the realm stays",
+		"power":          "The nodes that sind has handled stay",
+		"connect":        "as Ctrl-C does in a terminal",
+	} {
+		assert.Contains(t, runStopText(action, nil), want, action)
+	}
+	lock := runOf(0, "", runSp(activity.KindWait, runLockWait, runStartedAt(0)))
+	assert.Equal(t, "It still waits for the lock of its realm and has changed nothing yet.", runStopText("delete-cluster", &lock))
+	busy := runOf(0, "", runSp(activity.KindStep, "nodes", runStartedAt(0)))
+	assert.Contains(t, runStopText("delete-cluster", &busy), "stays removed")
+}
+
+func TestNewRunStop(t *testing.T) {
+	run := store.Task{ID: "t", Action: "power", Status: store.TaskRunning}
+	s := newRunStop(run, nil, "power dev", "tok", true)
+	require.NotNil(t, s)
+	assert.Equal(t, runStop{TaskID: "t", Title: "power dev", Text: runStopText("power", nil), CSRF: "tok", Small: true}, *s)
+	stopping := run
+	stopping.Canceling = true
+	assert.Nil(t, newRunStop(stopping, nil, "", "", false), "a stop is under way")
+	ended := run
+	ended.End = runPtr(runAt(1))
+	assert.Nil(t, newRunStop(ended, nil, "", "", false), "the task has ended")
+	done := runOf(2, store.StatusOK, runSp(activity.KindStep, "nodes", runEndedAt(0, 1, store.StatusOK)))
+	assert.Nil(t, newRunStop(run, &done, "", "", false), "the run has ended")
+}
+
+func TestRunBar(t *testing.T) {
+	assert.Equal(t, 0, runBar{}.Pct())
+	assert.Equal(t, "starting", runBar{{Class: runRunning, Title: "starting"}}.Text())
+	b := runBar{
+		{Class: runOK, Title: "pull: ok"}, {Class: runRunning, Title: "nodes: running", Fill: 50},
+		{Class: runQueued, Title: "slurm: queued"}, {Class: runSkipped, Title: "mesh: skipped"},
+	}
+	assert.Equal(t, 62, b.Pct(), "100 + 50 + 0 + 100 of 400")
+	assert.Equal(t, "2 of 4 steps done", b.Text())
+	for _, c := range []string{runOK, runFailed, runCanceled, runSkipped, runEnded} {
+		assert.True(t, runSegDone(c), c)
+	}
+	assert.False(t, runSegDone(runQueued))
+}
+
+func TestRunSay(t *testing.T) {
+	assert.Equal(t, "stopping", runSayState(runRunning, true))
+	assert.Equal(t, runRunning, runSayState(runRunning, false))
+	assert.Equal(t, runOK, runSayState(runOK, true))
+	for state, want := range map[string]string{
+		runRunning:  "create worker dev: started.",
+		"stopping":  "create worker dev: stopping.",
+		runOK:       "create worker dev: done in 12s.",
+		runFailed:   "create worker dev: failed. worker-1 timed out",
+		runCanceled: "create worker dev: stopped.",
+		runEnded:    "create worker dev: ended.",
+	} {
+		assert.Equal(t, want, runSay("create worker dev", state, "12s", "worker-1 timed out"), state)
+	}
+	assert.Equal(t, "x: failed.", runSay("x", runFailed, "1s", ""))
+}
+
+func TestRunFailure(t *testing.T) {
+	failed := func(node string) runSpanOpt {
+		return runWith(func(s *store.Span) {
+			e := runAt(3)
+			s.Node, s.Ended, s.Status, s.Err = node, &e, store.StatusFailed, "node "+node+": timed out"
+		})
+	}
+	one := runOf(5, store.StatusFailed, runSp(activity.KindTarget, "w1", failed("worker-1")))
+	assert.Equal(t, "node worker-1: timed out", runFailure(one))
+	two := runOf(5, store.StatusFailed,
+		runSp(activity.KindTarget, "w1", failed("worker-1")), runSp(activity.KindTarget, "w2", failed("worker-2")))
+	assert.Equal(t, "worker-[1,2]: node {}: timed out", runFailure(two))
+	cmd := runOf(5, store.StatusFailed)
+	cmd.Err = "no such cluster"
+	assert.Equal(t, "no such cluster", runFailure(cmd))
 }

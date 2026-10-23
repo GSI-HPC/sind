@@ -10,6 +10,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // pgClusterPage is the page of one cluster, template pg_cluster.tmpl. Its
@@ -23,11 +24,22 @@ var pgClusterPage = Page{
 			return err
 		}
 		if !d.Found {
-			return fmt.Errorf("cluster %s in realm %s: %w", d.Name, d.Realm, ErrNotFound)
+			return pgClusterMiss(v.Snap, d.Realm, d.Name, "")
 		}
-		v.Title = d.Name
+		v.Title = pgClusterTitle(d)
 		return nil
 	},
+}
+
+// pgClusterTitle is the title of a cluster page: the cluster, after its tab
+// unless that is the summary, so that each tab has a title of its own.
+func pgClusterTitle(d *pgClusterView) string {
+	for _, t := range d.Tabs {
+		if t.On && t.Key != "summary" {
+			return t.Label + " · " + d.Name
+		}
+	}
+	return d.Name
 }
 
 // pgClusterTopics returns the topics a cluster page keeps: the cluster's
@@ -38,10 +50,10 @@ func pgClusterTopics(p Params, tab string) []store.Topic {
 	switch tab {
 	case "", "summary":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name), store.MonitoringTopic(realm), store.MeshTopic(realm)}
-	case "nodes":
+	case "nodes", "slurm":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name)}
 	case "network":
-		return []store.Topic{store.ClustersTopic(realm), store.StatusTopic(realm, name), store.NetworksTopic(realm), store.VolumesTopic(realm)}
+		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name), store.NetworksTopic(realm), store.VolumesTopic(realm), store.MeshTopic(realm)}
 	case "connect":
 		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.MonitoringTopic(realm)}
 	}
@@ -61,7 +73,9 @@ func pgClusterFragments() []Fragment {
 			Load: load,
 		},
 		{
-			Name: "pg-cluster-body", Params: params,
+			// The Logs tab reads its own keys too, so that the body that a
+			// stream sends first is the one that the page holds.
+			Name: "pg-cluster-body", Params: append(slices.Clone(params), logsTabParams...),
 			Watch: func(p Params) []store.Topic { return pgClusterTopics(p, p.Get("tab")) },
 			Load:  load,
 		},
@@ -72,9 +86,11 @@ func pgClusterFragments() []Fragment {
 type pgTabLink struct {
 	Key, Label, URL string
 	On              bool
-	// Count is the number after the label, Bad marks it.
-	Count string
-	Bad   bool
+	// Count is the number after the label, CountLabel the same in words
+	// for screen readers, as "9 nodes"; Problems says how many of them
+	// need a look, as "1 problem".
+	Count, CountLabel string
+	Problems          string
 }
 
 // pgMatrixRow is a node row of the health matrix.
@@ -86,16 +102,38 @@ type pgMatrixRow struct {
 	Cells []pgCell
 }
 
-// pgCell is a cell of the health matrix.
+// pgCell is a cell of the health matrix: the class and sign of its state,
+// and the state in words, for screen readers and the tooltip.
 type pgCell struct {
 	Class string
 	Mark  string
+	Text  string
 }
 
 // pgNetRow is a network of the Network tab.
 type pgNetRow struct {
 	Name, Driver, Subnet, Gateway string
 	Mine                          bool
+}
+
+// pgMount is a mount of the Network tab, with its kind and how the nodes
+// mount it in words.
+type pgMount struct {
+	cluster.MountPoint
+	Kind string
+	Mode string
+}
+
+// Checked reports whether sind checks that the source of the mount is
+// there: a Docker volume, not a directory of the host.
+func (m pgMount) Checked() bool { return m.Type != config.StorageHostPath }
+
+// pgNameRow is a row of the names and keys of the Network tab: a value to
+// copy, and a note on it.
+type pgNameRow struct {
+	Label, Value, Note string
+	// Copy is set when Value is a thing to copy, not a pattern.
+	Copy bool
 }
 
 // pgCmd is a command to copy.
@@ -113,23 +151,30 @@ type pgClusterView struct {
 	Tab     string
 	Cluster pgCluster
 	// Status is the cluster's status, nil until the first probe.
-	Status  *cluster.Status
+	Status *cluster.Status
+	// Slurm is what Slurm says about the cluster.
+	Slurm   *pgSlurmView
 	Tabs    []pgTabLink
 	Actions []pgAction
 	// Services are the columns of the health matrix, Matrix its rows.
 	Services []string
 	Matrix   []pgMatrixRow
 	// Selection holds the dialogs that the nodes tab offers for the
-	// selected nodes.
-	Selection []pgAction
-	Delete    pgAction
+	// selected nodes, WorkerSelection and Delete those it offers while only
+	// workers are selected.
+	Selection       []pgAction
+	WorkerSelection []pgAction
+	Delete          pgAction
 	// Network tab.
 	Networks []pgNetRow
-	Mounts   []cluster.MountPoint
+	Mounts   []pgMount
+	Names    []pgNameRow
 	Volumes  []cluster.VolumeSummary
 	HostData string
 	// Data is the cluster's data mount, when the status has it.
 	Data *cluster.MountPoint
+	// Ready is the "Ready for jobs" card of the Summary.
+	Ready *pgReady
 	// Connect tab.
 	Commands []pgCmd
 	API      string
@@ -144,21 +189,23 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 	d := &pgClusterView{Realm: realm, Name: name, Tab: tab}
 	if tab == "" {
 		d.Tab = "summary"
-	} else if !pgValidTab(tab) {
-		return nil, fmt.Errorf("tab: unknown tab %q: %w", tab, ErrBadRequest)
 	}
 	sn := v.Snap
 	summary, ok := sn.Cluster(realm, name)
 	if !ok {
 		return d, nil
 	}
+	if !pgValidTab(d.Tab) {
+		return nil, pgTabMiss(realm, name, tab)
+	}
 	d.Found = true
 	d.Cluster = pgClusterOf(sn, realm, summary, sn.MonitoringOf(realm), v.Now)
 	d.Status = sn.Status(realm, name)
+	d.Slurm = pgSlurmOf(sn.Slurm(realm, name), d.Cluster.Nodes)
 	d.Tabs = pgTabLinks(d)
 	d.Actions = []pgAction{
 		pgDialogAction("Add workers…", "", "create-worker", "realm", realm, "cluster", name),
-		pgDialogAction("Delete…", "danger", "delete-cluster", "realm", realm, "cluster", name),
+		pgDialogAction("Delete cluster…", "danger", "delete-cluster", "realm", realm, "cluster", name),
 	}
 	switch d.Tab {
 	case "summary":
@@ -184,9 +231,9 @@ func pgTabLinks(d *pgClusterView) []pgTabLink {
 	for _, t := range pgTabs {
 		l := pgTabLink{Key: t.Key, Label: t.Label, URL: pgClusterURL(d.Realm, d.Name, t.Key), On: t.Key == d.Tab}
 		if t.Key == "nodes" {
-			l.Count = fmt.Sprint(len(d.Cluster.Nodes))
+			l.Count, l.CountLabel = fmt.Sprint(len(d.Cluster.Nodes)), d.NodesText()
 			if problems > 0 {
-				l.Count, l.Bad = "!", true
+				l.Problems = pgPlural(problems, "problem", "problems")
 			}
 		}
 		tabs = append(tabs, l)
@@ -208,13 +255,13 @@ func pgSummaryTab(d *pgClusterView) {
 			up, ok := n.Service(s)
 			switch {
 			case !ok:
-				row.Cells = append(row.Cells, pgCell{"na", "·"})
+				row.Cells = append(row.Cells, pgCell{"na", "·", s + ": not on this node"})
 			case n.State != cluster.StateRunning:
-				row.Cells = append(row.Cells, pgCell{"na", "–"})
+				row.Cells = append(row.Cells, pgCell{"na", "–", s + ": node not running"})
 			case up:
-				row.Cells = append(row.Cells, pgCell{"y", "✓"})
+				row.Cells = append(row.Cells, pgCell{"y", "✓", s + ": active"})
 			default:
-				row.Cells = append(row.Cells, pgCell{"n", "✗"})
+				row.Cells = append(row.Cells, pgCell{"n", "✗", s + ": down"})
 			}
 		}
 		d.Matrix = append(d.Matrix, row)
@@ -226,26 +273,45 @@ func pgSummaryTab(d *pgClusterView) {
 			d.HA = append(d.HA, fmt.Sprintf("%s: %s, %s", n.Short, n.HA.Position, role))
 		}
 	}
-	if d.Status != nil {
-		for i, m := range d.Status.Mounts {
-			if m.Path == "/data" {
-				d.Data = &d.Status.Mounts[i]
-			}
+	d.Data = pgDataMount(d.Status)
+	d.Ready = pgReadyOf(d)
+}
+
+// pgDataMount returns the cluster's data mount, whatever its path, nil
+// before the first probe.
+func pgDataMount(st *cluster.Status) *cluster.MountPoint {
+	if st == nil {
+		return nil
+	}
+	for i, m := range st.Mounts {
+		if m.Data {
+			return &st.Mounts[i]
 		}
 	}
+	return nil
 }
 
 // pgNodesTab prepares the dialogs that the selection of nodes opens. The
-// page script appends the selected nodes, as ?nodes=worker-0,worker-1.
+// page script shows those that fit a selected node, and appends the
+// selected nodes that each fits, as ?nodes=worker-0,worker-1.
 func pgNodesTab(d *pgClusterView) {
-	power := func(label, class, op string) pgAction {
-		return pgDialogAction(label, class, "power", "realm", d.Realm, "cluster", d.Name, "op", op)
+	power := func(verb, op, fit string) pgAction {
+		a := pgDialogAction(verb+"…", "", "power", "realm", d.Realm, "cluster", d.Name, "op", op)
+		a.Verb, a.Fit = verb, fit
+		return a
 	}
+	notRunning := string(cluster.StateStopped) + " " + string(cluster.StateUnknown)
+	running := string(cluster.StateRunning)
 	d.Selection = []pgAction{
-		power("Start…", "", "start"), power("Shut down…", "", "stop"), power("Reboot…", "", "reboot"),
-		power("Freeze…", "", "pause"), power("Unfreeze…", "", "unpause"),
+		power("Start", "start", notRunning), power("Shut down", "stop", running), power("Reboot", "reboot", running),
+		power("Freeze", "pause", running), power("Unfreeze", "unpause", string(cluster.StatePaused)),
 	}
+	// Drain and Resume act on workers, as Delete does, which names the
+	// workers that it deletes; the page script counts them in each label.
+	worker := string(config.RoleWorker)
+	d.WorkerSelection = []pgAction{power("Drain", "drain", worker), power("Resume", "resume", worker)}
 	d.Delete = pgDialogAction("Delete…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
+	d.Delete.Verb, d.Delete.Fit = "Delete", worker
 }
 
 // pgNetworkTab fills the networks, the mounts and the volumes. The
@@ -266,10 +332,11 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 			{nh.MeshName, nh.MeshDriver, nh.MeshSubnet, nh.MeshGateway, false},
 		}
 	}
+	d.Names = pgNames(d, sn)
 	if d.Status != nil {
-		d.Mounts = d.Status.Mounts
-		for _, m := range d.Mounts {
-			if m.Path == "/data" && m.Type == config.StorageHostPath {
+		for _, m := range d.Status.Mounts {
+			d.Mounts = append(d.Mounts, pgMount{m, pgMountKind(m), pgMountMode(m)})
+			if m.Data && m.Type == config.StorageHostPath {
 				d.HostData = m.Source
 			}
 		}
@@ -283,17 +350,74 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 	}
 }
 
+// pgMountKind says how a mount reaches the nodes: "Docker volume", "host
+// directory (bind mount)", or the directory of a volume that each node
+// mounts its own part of.
+func pgMountKind(m cluster.MountPoint) string {
+	switch {
+	case m.Type == config.StorageHostPath:
+		return "host directory (bind mount)"
+	case m.Subpath != "":
+		return "Docker volume, directory " + m.Subpath
+	}
+	return "Docker volume"
+}
+
+// pgMountMode says how the nodes mount m, as sind creates them: the
+// controllers write the Slurm config, the other nodes only read it, and
+// the munge key and CVMFS are read-only on every node.
+func pgMountMode(m cluster.MountPoint) string {
+	switch m.Path {
+	case slurm.ConfDir:
+		return "read-write on the controllers, read-only on the other nodes"
+	case slurm.MungeDir, cluster.CVMFSPath:
+		return "read-only"
+	}
+	return "read-write"
+}
+
+// pgNames returns the names and keys of the Network tab: the DNS zone and
+// how nodes are named in it, the DNS server and SSH relay of the realm,
+// and where the munge key is.
+func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
+	zone := d.Realm + ".sind"
+	m, _ := sn.MeshOf(d.Realm)
+	if m.Info != nil && m.Info.DNSZone != "" {
+		zone = m.Info.DNSZone
+	}
+	rows := []pgNameRow{
+		{Label: "DNS zone", Value: zone, Note: "The mesh DNS answers for it, on the nodes and, with the host DNS set up, on this host.", Copy: true},
+		{Label: "node names", Value: "NODE." + d.Name + "." + zone, Note: "Such as controller." + d.Name + "." + zone + "."},
+	}
+	if m.Info != nil {
+		rows = append(rows,
+			pgNameRow{Label: "DNS server", Value: m.Info.DNSIP, Note: "The container " + m.Info.DNSContainer + " on the mesh network.", Copy: true},
+			pgNameRow{Label: "SSH relay", Value: m.Info.SSHContainer, Note: "sind ssh goes through it.", Copy: true},
+		)
+	}
+	munge := pgNameRow{Label: "munge key", Value: slurm.MungeKeyPath, Copy: true,
+		Note: "In the volume " + string(cluster.VolumeName(d.Realm, d.Name, cluster.VolumeMunge)) + ", on every node. sind ui does not show the key."}
+	if d.Status != nil {
+		munge.Note = "None: the nodes use auth/slurm (identity clientIds), not munge."
+		munge.Value, munge.Copy = "none", false
+		for _, mp := range d.Status.Mounts {
+			if mp.Path == slurm.MungeDir {
+				munge.Value, munge.Copy = slurm.MungeKeyPath, true
+				munge.Note = "In the volume " + mp.Source + ", on every node. sind ui does not show the key."
+			}
+		}
+	}
+	return append(rows, munge)
+}
+
 // pgConnectTab writes the commands that enter, run on and log in to the
 // cluster, and the addresses of its services.
 func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 	sind, cl := pgSind(d.Realm), pgClusterArg(d.Name)
-	entry := "controller"
+	entry := pgEntry(d.Cluster.Nodes)
 	var first, api *pgNode
 	for i, n := range d.Cluster.Nodes {
-		switch n.Role {
-		case config.RoleSubmitter:
-			entry = "submitter"
-		case config.RoleAPI:
+		if n.Role == config.RoleAPI {
 			api = &d.Cluster.Nodes[i]
 		}
 		if first == nil || n.Role == config.RoleWorker && first.Role != config.RoleWorker {
@@ -321,6 +445,14 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 			}
 		}
 	}
+}
+
+// ConnectLink returns the address of the Connect tab.
+func (d *pgClusterView) ConnectLink() string { return pgClusterURL(d.Realm, d.Name, "connect") }
+
+// SlurmConfLink returns the address of slurm.conf on the Slurm tab.
+func (d *pgClusterView) SlurmConfLink() string {
+	return pgClusterURL(d.Realm, d.Name, "slurm") + "#slurm-file-slurm-conf"
 }
 
 // NodesText returns "1 node" or "3 nodes".

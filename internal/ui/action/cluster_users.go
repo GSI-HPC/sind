@@ -116,8 +116,8 @@ func clusterUsers(f Form, cfg *config.Cluster, ps *problems) {
 		if name == "" {
 			return
 		}
-		if err := config.CheckUserName(name); err != nil {
-			ps.add(key+"-name", "User", false, err)
+		if config.CheckUserName(name) != nil {
+			ps.add(key+"-name", "User", false, errAccountName)
 			return
 		}
 		u := config.User{
@@ -137,8 +137,8 @@ func clusterUsers(f Form, cfg *config.Cluster, ps *problems) {
 		if name == "" {
 			return
 		}
-		if err := config.CheckGroupName(name); err != nil {
-			ps.add(key+"-name", "Group", false, err)
+		if config.CheckGroupName(name) != nil {
+			ps.add(key+"-name", "Group", false, errAccountName)
 			return
 		}
 		cfg.Groups = append(cfg.Groups, config.Group{Name: name, GID: rowID(f, key+"-gid", "GID of "+name, ps)})
@@ -168,7 +168,7 @@ func clusterUsers(f Form, cfg *config.Cluster, ps *problems) {
 
 // accountLimits reads the limits of the account key: the pairs of the
 // fields KEY-lk and KEY-lv. A pair without a key and value is left out, as
-// is a key that sacctmgr does not take.
+// is a key that sacctmgr does not take and a QOS that a new cluster lacks.
 func accountLimits(f Form, key, name string, ps *problems) config.Limits {
 	keys, values := f[key+"-lk"], f[key+"-lv"]
 	var limits config.Limits
@@ -184,6 +184,10 @@ func accountLimits(f Form, key, name string, ps *problems) config.Limits {
 		i := slices.IndexFunc(config.LimitKeys, func(l string) bool { return strings.EqualFold(l, k) })
 		if i < 0 {
 			ps.add(key+"-lk", "Limits of "+name, false, fmt.Errorf("%q is no limit that sacctmgr takes; pick one of the list, such as MaxJobs", k))
+			continue
+		}
+		if err := qosError(config.LimitKeys[i], v); err != nil {
+			ps.add(key+"-lk", "Limits of "+name, false, err)
 			continue
 		}
 		if limits == nil {

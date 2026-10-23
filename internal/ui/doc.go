@@ -24,7 +24,9 @@
 //     to light, the fragments it keeps live, and a Load function that fills
 //     View.Data from View.Snap (the snapshot) and View.Params (the route's
 //     wildcards and the declared query keys). Load may return ErrNotFound
-//     (404) or an error that wraps ErrBadRequest (400), and only reads.
+//     (404), or a *Miss, which says what is missing and offers the closest
+//     matches on the Not found page, or an error that wraps ErrBadRequest
+//     (400), and only reads.
 //  3. Fragments, registered with RegisterFragment. A fragment is a block of
 //     HTML that live updates morph into its element. Its page places it with
 //     <div hx-swap="morph:innerHTML" sse-swap="NAME">{{fragment "NAME" .}}</div>,
