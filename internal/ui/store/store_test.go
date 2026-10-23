@@ -150,3 +150,10 @@ func TestNotifierIsTheStoresOwn(t *testing.T) {
 	s.AddTask(Task{})
 	assert.Equal(t, []Topic{TopicTasks}, sub.Take(), "a stream subscribes to what the store notifies")
 }
+
+func TestIsUITraceState(t *testing.T) {
+	assert.True(t, IsUITraceState(UITraceState))
+	assert.True(t, IsUITraceState("rojo=1, sind=ui"))
+	assert.False(t, IsUITraceState(""))
+	assert.False(t, IsUITraceState("sind=terminal"))
+}

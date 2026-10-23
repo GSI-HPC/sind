@@ -49,6 +49,14 @@ func TestRunHead(t *testing.T) {
 	assert.True(t, h.Terminal)
 	assert.True(t, h.Running)
 	assert.Equal(t, "from a terminal", h.Origin)
+	assert.Contains(t, h.NoStop, "Ctrl-C")
+	other := run
+	other.Parent = "00f067aa0ba902b7"
+	assert.Contains(t, runHeadOf(runCtx{Run: other, Found: true, Snap: snap, Now: runAt(30)}).NoStop, "Another program started this run")
+	other.FromUI = true
+	h2 := runHeadOf(runCtx{Run: other, Found: true, Snap: snap, Now: runAt(30)})
+	assert.Equal(t, "from sind ui", h2.Origin)
+	assert.Contains(t, h2.NoStop, "Another sind ui started this run")
 	assert.Equal(t, "sind v0.11.0", h.Program)
 	assert.Equal(t, "4bf92f35", h.Trace)
 	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", h.TraceTip)
@@ -61,6 +69,7 @@ func TestRunHead(t *testing.T) {
 	h = runHeadOf(newRunCtx((&View{Snap: snap, Now: runAt(30), Params: Params{}}).runWithRun(run)))
 	assert.False(t, h.Terminal)
 	assert.Equal(t, "from sind ui", h.Origin)
+	assert.Empty(t, h.NoStop)
 	assert.Equal(t, "t1", h.TaskID)
 	assert.Empty(t, h.ClusterHref, "no such cluster yet")
 

@@ -30,11 +30,13 @@ The run page shows the whole run:
 
 {{< uishot "run-failed" "A run that failed. The page says what failed, that the rollback removed everything, and what to try." >}}
 
-The cluster page shows new nodes as dashed tiles while they start, and a banner that links to the run.
+The cluster page shows new nodes as dashed tiles while they start, and one banner for the runs that work on the cluster. It names the command, or says how many commands run and how many of them wait for the realm lock. **Show progress** opens the run.
 
 ## Runs from a terminal
 
 The progress comes from the activity log. sind writes it by default, in `activity.jsonl` in its state directory (see [The activity log]({{< relref "/usage/progress#the-activity-log" >}})). sind ui reads that log, so a command that you start in a terminal also shows up in the UI. Its run is marked with a **terminal** label. sind ui can show it, but it cannot stop it. Press Ctrl-C in that terminal to stop it.
+
+A run that another program started, such as a CI job or an MCP client that hands sind a trace, is marked with an **other program** label. A run that sind ui started stays marked as **from sind ui**, also after you restart sind ui.
 
 The **Activity** page lists the runs, from this UI and from a terminal.
 

@@ -133,8 +133,10 @@ type runHead struct {
 	Title     string
 	Pill      string
 	PillClass string
-	// Terminal is set for a run that sind ui did not start.
+	// Terminal is set for a run that this sind ui did not start, which
+	// it cannot stop; NoStop says why, while the run goes on.
 	Terminal bool
+	NoStop   string
 	Origin   string
 	Program  string
 	Started  string
@@ -156,7 +158,7 @@ type runHead struct {
 func runHeadOf(rc runCtx) *runHead {
 	run := rc.Run
 	h := &runHead{
-		ID: run.ID, Title: run.Title, Terminal: rc.Task == nil, Origin: "from a terminal",
+		ID: run.ID, Title: run.Title, Terminal: rc.Task == nil, Origin: runSourceText(runSource(rc.Snap, run)),
 		Started: runWhen(run.Start, rc.Now), Trace: run.Trace, TraceTip: run.Trace,
 		Running: !run.Done(), Suspended: run.Suspended,
 	}
@@ -170,8 +172,17 @@ func runHeadOf(rc runCtx) *runHead {
 	if run.Root.Exit != nil {
 		h.Exit = "exit " + strconv.Itoa(*run.Root.Exit)
 	}
+	if h.Terminal && h.Running {
+		switch runSource(rc.Snap, run) {
+		case runFromUI:
+			h.NoStop = "Another sind ui started this run, so this one cannot stop it. Stop it there."
+		case runFromProgram:
+			h.NoStop = "Another program started this run, so sind ui cannot stop it. Stop it in that program."
+		default:
+			h.NoStop = "This run was started from a terminal, so sind ui cannot stop it. Press Ctrl-C in that terminal to stop it."
+		}
+	}
 	if t := rc.Task; t != nil {
-		h.Origin = "from sind ui"
 		if h.Running {
 			h.TaskID, h.Canceling = t.ID, t.Canceling
 		}

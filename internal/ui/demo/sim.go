@@ -124,7 +124,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 	s.seq++
 	n := s.seq
 	s.mu.Unlock()
-	tc := traceID(n)
+	tc := uiTrace(n)
 	t := store.Task{
 		ID: fmt.Sprintf("%016x", 0x7a5c000000000000+n), Action: spec.Action, Display: spec.Display, Realm: spec.Realm, Cluster: spec.Cluster,
 		Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,

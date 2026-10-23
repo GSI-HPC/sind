@@ -368,7 +368,7 @@ func pgClusterOf(sn store.Snapshot, realm string, c cluster.Summary, mon *cluste
 	if mon != nil {
 		pc.Monitoring = slices.ContainsFunc(mon.Clusters, func(m cluster.MonitoredCluster) bool { return m.Name == c.Name })
 	}
-	pc.Runs = pgRunsOn(sn, c.Name, now)
+	pc.Runs = pgRunsOn(sn, realm, c.Name, now)
 	return pc
 }
 
@@ -398,21 +398,29 @@ func pgRealmNames(sn store.Snapshot, realm string) []string {
 
 // pgRun is a run as the lists show it.
 type pgRun struct {
-	ID       string
-	Title    string
-	Class    string
-	Running  bool
+	ID      string
+	Title   string
+	Class   string
+	Running bool
+	// Source is where the run came from (runSource); Terminal is set for
+	// a run from a terminal.
+	Source   string
 	Terminal bool
-	Time     string
+	// Waiting is set while the run waits for the lock of its realm.
+	Waiting bool
+	Time    string
 }
 
 // Link returns the address of the run's page.
 func (r pgRun) Link() string { return "/runs/" + url.PathEscape(r.ID) }
 
-// pgRunOf builds a run for a list. A run without a parent span started
-// outside sind ui, in a terminal.
-func pgRunOf(r store.Run, now time.Time) pgRun {
-	pr := pgRun{ID: r.ID, Title: r.Title, Running: !r.Done(), Terminal: r.Parent == ""}
+// pgRunOf builds a run for a list, with where it came from.
+func pgRunOf(sn store.Snapshot, r store.Run, now time.Time) pgRun {
+	pr := pgRun{ID: r.ID, Title: r.Title, Running: !r.Done(), Source: runSource(sn, r), Waiting: runWaitsForLock(r)}
+	pr.Terminal = pr.Source == runFromTerminal
+	if t, ok := runTaskOf(sn, r.Trace); ok {
+		pr.Title = runTitle(r, &t)
+	}
 	switch {
 	case !r.Done():
 		pr.Class = "run"
@@ -427,21 +435,71 @@ func pgRunOf(r store.Run, now time.Time) pgRun {
 	return pr
 }
 
-// pgRunsOn returns the runs that work on the cluster now: a run that has
-// not ended and names the cluster after its command words, as in
-// "create worker dev". A run names no realm; the title is all there is.
-func pgRunsOn(sn store.Snapshot, name string, now time.Time) []pgRun {
+// pgRunsOn returns the runs that work on the cluster now, oldest first: a
+// run that has not ended and names the cluster after its command words, as
+// in "create worker dev". A run names no realm, so a run of a cluster of
+// the same name in another realm counts too, unless sind ui started it and
+// knows its realm.
+func pgRunsOn(sn store.Snapshot, realm, name string, now time.Time) []pgRun {
 	var out []pgRun
-	for _, r := range sn.Runs {
+	for _, r := range slices.Backward(sn.Runs) {
 		if r.Done() {
+			continue
+		}
+		if t, ok := runTaskOf(sn, r.Trace); ok && t.Realm != "" && t.Realm != realm {
 			continue
 		}
 		words := strings.Fields(r.Title)
 		if len(words) > 2 && slices.Contains(words[2:], name) {
-			out = append(out, pgRunOf(r, now))
+			out = append(out, pgRunOf(sn, r, now))
 		}
 	}
 	return out
+}
+
+// pgRunBanner is the line of a cluster page about the runs that work on the
+// cluster now: one line for all of them.
+type pgRunBanner struct {
+	// Command is the title of the one run; empty for several.
+	Command string
+	// Count is "3 commands" for several runs.
+	Count string
+	Text  string
+	// Href is the run's page, or the first run's for several.
+	Href string
+}
+
+// Banner returns the line about the runs of the cluster, nil for none.
+func (c pgCluster) Banner() *pgRunBanner {
+	switch len(c.Runs) {
+	case 0:
+		return nil
+	case 1:
+		r := c.Runs[0]
+		text := "runs " + runSourceText(r.Source) + "."
+		if r.Source == runFromTerminal {
+			text = "runs in a terminal."
+		}
+		if r.Waiting {
+			text = "waits for the lock of the realm. It runs " + runSourceText(r.Source) + "."
+		}
+		return &pgRunBanner{Command: r.Title, Text: text, Href: r.Link()}
+	}
+	waiting := 0
+	for _, r := range c.Runs {
+		if r.Waiting {
+			waiting++
+		}
+	}
+	text := "run on " + c.Name + "."
+	if waiting > 0 {
+		verb := "wait"
+		if waiting == 1 {
+			verb = "waits"
+		}
+		text = fmt.Sprintf("run on %s: %d works, %d %s for the lock of the realm.", c.Name, len(c.Runs)-waiting, waiting, verb)
+	}
+	return &pgRunBanner{Count: fmt.Sprintf("%d commands", len(c.Runs)), Text: text, Href: c.Runs[0].Link()}
 }
 
 // pgAgo says how long ago t was, as "just now", "5 min ago", "3 h ago".

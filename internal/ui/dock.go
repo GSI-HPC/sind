@@ -42,11 +42,11 @@ type dockCard struct {
 	Class string
 	Mark  string
 	Title string
-	// Terminal marks a run of a process other than sind ui.
-	Terminal bool
-	Segs     []runSeg
-	Line     string
-	Elapsed  string
+	// Chip says where a run came from that sind ui did not start.
+	Chip    string
+	Segs    []runSeg
+	Line    string
+	Elapsed string
 	// Since is what run.js counts the clock from; 0 for a clock that
 	// stands still.
 	Since int64
@@ -83,7 +83,7 @@ func dockLoad(v *View) dockData {
 		if _, ok := runTaskOf(v.Snap, run.Trace); ok {
 			continue
 		}
-		cards = append(cards, dockRunCard(run, v.Now))
+		cards = append(cards, dockRunCard(run, runSourceChip(runSource(v.Snap, run)), v.Now))
 	}
 	return dockFit(cards)
 }
@@ -159,10 +159,11 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 	return c
 }
 
-// dockRunCard draws a run that a process other than sind ui writes.
-func dockRunCard(run store.Run, now time.Time) dockCard {
+// dockRunCard draws a run that a process other than this sind ui writes,
+// with the chip that says where it came from.
+func dockRunCard(run store.Run, chip string, now time.Time) dockCard {
 	return dockCard{
-		Class: runRunning, Mark: runMark(runRunning), Title: run.Title, Terminal: true,
+		Class: runRunning, Mark: runMark(runRunning), Title: run.Title, Chip: chip,
 		Segs: runSegs(run), Line: runLine(run, nil, now),
 		Elapsed: runDur(runElapsed(run, now)), Since: runSince(run),
 		Href: "/runs/" + run.ID, Action: "Show progress",

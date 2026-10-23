@@ -2,7 +2,10 @@
 
 package store
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Span statuses, as the event log writes them; "" while a span runs.
 const (
@@ -11,6 +14,22 @@ const (
 	StatusCanceled = "canceled"
 	StatusSkipped  = "skipped"
 )
+
+// UITraceState is the tracestate that sind ui hands the commands it starts
+// in TRACESTATE. The event log keeps it, so that a reader tells their runs
+// from those of a terminal, also after sind ui has forgotten the task.
+const UITraceState = "sind=ui"
+
+// IsUITraceState reports whether the tracestate state holds UITraceState as
+// one of its list members.
+func IsUITraceState(state string) bool {
+	for m := range strings.SplitSeq(state, ",") {
+		if strings.TrimSpace(m) == UITraceState {
+			return true
+		}
+	}
+	return false
+}
 
 // Run is one sind command, as its event log tells it.
 type Run struct {
@@ -21,7 +40,11 @@ type Run struct {
 	// started.
 	Trace string
 	// Parent is the caller's span the run works under, from TRACEPARENT.
-	Parent  string
+	Parent string
+	// FromUI is set for a run whose tracestate says that a sind ui
+	// started it (UITraceState): this one, whose task may be gone, or
+	// another.
+	FromUI  bool
 	Program string
 	Version string
 	// Title is the command as a user would read it, such as

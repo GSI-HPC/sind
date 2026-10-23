@@ -333,13 +333,14 @@ func (r *Runner) hex(n int) string {
 }
 
 // childEnv returns env for a sind child: no progress display, the event log
-// sind ui reads, the trace that tells the child's run, and no SIND_REALM:
+// sind ui reads, the trace that tells the child's run with the tracestate
+// that marks it as a run of sind ui (store.UITraceState), and no SIND_REALM:
 // the dialog's command names any realm but the default one on its command
 // line, and without a name must run in the default realm, whatever the
 // environment of sind ui says. The environment does not change the command
 // line, so what the dialog showed still holds.
 func childEnv(env []string, activityLog, traceparent string) []string {
-	out := make([]string, 0, len(env)+3)
+	out := make([]string, 0, len(env)+4)
 	for _, kv := range env {
 		switch name, _, _ := strings.Cut(kv, "="); name {
 		case "SIND_PROGRESS", "SIND_PROGRESS_LOG", "SIND_REALM", "TRACEPARENT", "TRACESTATE":
@@ -347,7 +348,7 @@ func childEnv(env []string, activityLog, traceparent string) []string {
 			out = append(out, kv)
 		}
 	}
-	out = append(out, "SIND_PROGRESS=none", "TRACEPARENT="+traceparent)
+	out = append(out, "SIND_PROGRESS=none", "TRACEPARENT="+traceparent, "TRACESTATE="+store.UITraceState)
 	if activityLog != "" {
 		out = append(out, "SIND_PROGRESS_LOG="+activityLog)
 	}

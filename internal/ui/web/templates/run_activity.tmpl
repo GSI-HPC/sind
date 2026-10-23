@@ -12,7 +12,7 @@
 <thead><tr><th>Status</th><th>Command</th><th>Started</th><th class="num">Duration</th><th class="hide-s">Targets</th></tr></thead>
 <tbody>{{range .Rows}}<tr>
 <td><span class="pill {{.PillClass}}">{{.Pill}}</span></td>
-<td><a class="mono" href="/runs/{{.ID}}">{{.Title}}</a>{{if .Terminal}} <span class="chip">terminal</span>{{end}}</td>
+<td><a class="mono" href="/runs/{{.ID}}">{{.Title}}</a>{{with .Chip}} <span class="chip">{{.}}</span>{{end}}</td>
 <td class="muted">{{.Started}}</td>
 <td class="num">{{template "run-elapsed" .}}</td>
 <td class="hide-s mono muted">{{.Counts}}</td>

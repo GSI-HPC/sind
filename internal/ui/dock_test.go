@@ -43,7 +43,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 	assert.NotZero(t, c.Since)
 	assert.True(t, c.Cancel)
 	assert.False(t, c.Dismiss)
-	assert.False(t, c.Terminal)
+	assert.Empty(t, c.Chip)
 	assert.Equal(t, "Show progress", c.Action)
 	assert.Len(t, c.Segs, 2)
 
@@ -138,6 +138,7 @@ func runPtr[T any](v T) *T { return &v }
 
 func TestRunDockTerminalRuns(t *testing.T) {
 	run := runFixture(t, "create-ok.jsonl", 59)[0]
+	run.Parent = ""
 	over := runFixture(t, "create-failed.jsonl", -1)[0]
 	over.ID = "over"
 	hasTask := runFixture(t, "interleaved.jsonl", -1)[0]
@@ -149,7 +150,7 @@ func TestRunDockTerminalRuns(t *testing.T) {
 	require.Len(t, d.Cards, 2, "the task and the one run that goes on without one")
 	assert.Equal(t, "t", d.Cards[0].TaskID)
 	c := d.Cards[1]
-	assert.True(t, c.Terminal)
+	assert.Equal(t, "terminal", c.Chip)
 	assert.Empty(t, c.TaskID)
 	assert.False(t, c.Cancel)
 	assert.False(t, c.Dismiss)

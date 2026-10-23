@@ -206,6 +206,67 @@ func runTaskOf(snap store.Snapshot, trace string) (store.Task, bool) {
 	return store.Task{}, false
 }
 
+// Where a run came from, as runSource tells it.
+const (
+	runFromUI       = "ui"
+	runFromTerminal = "terminal"
+	runFromProgram  = "program"
+)
+
+// runSource tells where a run came from: from sind ui when this sind ui has
+// its task or its tracestate says that a sind ui started it; from another
+// program when it continues a trace that its caller handed on, as a CI job
+// or an MCP client does; else from a terminal.
+func runSource(snap store.Snapshot, run store.Run) string {
+	if _, ok := runTaskOf(snap, run.Trace); ok || run.FromUI {
+		return runFromUI
+	}
+	if run.Parent != "" {
+		return runFromProgram
+	}
+	return runFromTerminal
+}
+
+// runLockWait is the name of the wait of a command for the lock of its
+// realm.
+const runLockWait = "realm lock"
+
+// runWaitsForLock reports whether a run that goes on waits for the lock of
+// its realm, so that it has not changed anything yet.
+func runWaitsForLock(run store.Run) bool {
+	if run.Done() {
+		return false
+	}
+	for _, s := range activity.VisibleChildren(run.Root) {
+		if s.Kind == activity.KindWait && s.Name == runLockWait && !s.Done() {
+			return true
+		}
+	}
+	return false
+}
+
+// runSourceText says where a run came from, for its page.
+func runSourceText(source string) string {
+	switch source {
+	case runFromUI:
+		return "from sind ui"
+	case runFromProgram:
+		return "from another program"
+	}
+	return "from a terminal"
+}
+
+// runSourceChip is the chip of a run in a list: none for a run of sind ui.
+func runSourceChip(source string) string {
+	switch source {
+	case runFromTerminal:
+		return "terminal"
+	case runFromProgram:
+		return "other program"
+	}
+	return ""
+}
+
 // runTitle is the title of a run that task t started, with the cluster the
 // task works on, which the log of an older sind does not name.
 func runTitle(run store.Run, t *store.Task) string {

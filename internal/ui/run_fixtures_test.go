@@ -88,7 +88,8 @@ func (v *View) runWithRun(run store.Run) *View {
 func runFixtureAs(t *testing.T, file string, n int, id, trace string) store.Run {
 	t.Helper()
 	run := runFixture(t, file, n)[0]
-	run.ID, run.Trace = id, trace
+	// A run of another trace, which continues none: from a terminal.
+	run.ID, run.Trace, run.Parent = id, trace, ""
 	return run
 }
 

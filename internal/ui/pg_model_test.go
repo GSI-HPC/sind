@@ -152,14 +152,22 @@ func TestPgRunOf(t *testing.T) {
 		{store.Run{ID: "a", End: &end, Status: store.StatusFailed}, "bad", "1 min ago"},
 		{store.Run{ID: "a", End: &end}, "bad", "1 min ago"},
 	} {
-		r := pgRunOf(tc.run, now)
+		r := pgRunOf(store.Snapshot{}, tc.run, now)
 		assert.Equal(t, tc.class, r.Class)
 		assert.Equal(t, tc.time, r.Time)
 		assert.True(t, r.Terminal)
 		assert.Equal(t, !r.Running, tc.run.Done())
 		assert.Equal(t, "/runs/a", r.Link())
 	}
-	assert.False(t, pgRunOf(store.Run{Parent: "p"}, now).Terminal)
+	r := pgRunOf(store.Snapshot{}, store.Run{Parent: "p"}, now)
+	assert.False(t, r.Terminal)
+	assert.Equal(t, runFromProgram, r.Source)
+	r = pgRunOf(store.Snapshot{}, store.Run{Parent: "p", FromUI: true}, now)
+	assert.Equal(t, runFromUI, r.Source)
+	task := store.Task{Trace: "tr", Cluster: "dev"}
+	r = pgRunOf(store.Snapshot{Tasks: []store.Task{task}}, store.Run{Trace: "tr", Title: "create worker"}, now)
+	assert.Equal(t, runFromUI, r.Source)
+	assert.Equal(t, "create worker dev", r.Title, "the cluster of the task")
 }
 
 func TestPgRunsOn(t *testing.T) {
@@ -171,10 +179,36 @@ func TestPgRunsOn(t *testing.T) {
 		{ID: "5", Title: "delete cluster other dev"},
 	}}
 	var ids []string
-	for _, r := range pgRunsOn(sn, "dev", pgNow) {
+	for _, r := range pgRunsOn(sn, "sind", "dev", pgNow) {
 		ids = append(ids, r.ID)
 	}
-	assert.Equal(t, []string{"1", "5"}, ids)
+	assert.Equal(t, []string{"5", "1"}, ids, "oldest first")
+
+	// A run of sind ui counts in the realm of its task only.
+	sn.Tasks = []store.Task{{Trace: "x", Realm: "ci"}}
+	sn.Runs[0].Trace = "x"
+	ids = nil
+	for _, r := range pgRunsOn(sn, "sind", "dev", pgNow) {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []string{"5"}, ids)
+}
+
+func TestPgRunBanner(t *testing.T) {
+	assert.Nil(t, pgCluster{Name: "dev"}.Banner())
+	one := pgCluster{Name: "dev", Runs: []pgRun{{ID: "a", Title: "create worker dev", Source: runFromTerminal}}}
+	assert.Equal(t, &pgRunBanner{Command: "create worker dev", Text: "runs in a terminal.", Href: "/runs/a"}, one.Banner())
+	one.Runs[0].Source = runFromUI
+	assert.Equal(t, "runs from sind ui.", one.Banner().Text)
+	one.Runs[0].Waiting = true
+	assert.Equal(t, "waits for the lock of the realm. It runs from sind ui.", one.Banner().Text)
+
+	several := pgCluster{Name: "dev", Runs: []pgRun{{ID: "a"}, {ID: "b"}}}
+	assert.Equal(t, &pgRunBanner{Count: "2 commands", Text: "run on dev.", Href: "/runs/a"}, several.Banner())
+	several.Runs[1].Waiting = true
+	assert.Equal(t, "run on dev: 1 works, 1 waits for the lock of the realm.", several.Banner().Text)
+	several.Runs = append(several.Runs, pgRun{ID: "c", Waiting: true})
+	assert.Equal(t, "run on dev: 1 works, 2 wait for the lock of the realm.", several.Banner().Text)
 }
 
 func TestPgNodeNeed(t *testing.T) {

@@ -125,7 +125,7 @@ func pgLoadOverview(v *View) (*pgOverview, error) {
 	}
 	d.Needs = pgNeeds(sn, realm, v.Now)
 	for _, r := range sn.Runs[:min(recentRuns, len(sn.Runs))] {
-		d.Runs = append(d.Runs, pgRunOf(r, v.Now))
+		d.Runs = append(d.Runs, pgRunOf(sn, r, v.Now))
 	}
 	d.Actions = pgQuickActions(d)
 	return d, nil

@@ -21,7 +21,7 @@ part is a fragment that /events sends again when the run changes. */}}
 {{else}}<div class="head runhead"><div class="t"><h1>{{.Title}}</h1>
   <div class="sub"><span class="pill {{.PillClass}}">{{.Pill}}</span><span>{{.Origin}}</span>{{if .Program}}<span>{{.Program}}</span>{{end}}<span>started {{.Started}}</span>{{if .Exit}}<span class="mono">{{.Exit}}</span>{{end}}<span class="mono faint" title="trace {{.TraceTip}}"><span data-word="trace">trace</span> {{.Trace}}</span></div></div>
   <div class="actions">{{if .TaskID}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{else}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none" hx-confirm="Stop this command? sind stops it and removes what it made so far.">{{template "csrf-field" $}}<button type="submit" class="btn">Stop</button></form>{{end}}{{end}}{{if .ClusterHref}}<a class="btn" href="{{.ClusterHref}}">Open {{.Cluster}}</a>{{end}}</div></div>
-{{if and .Terminal .Running}}<div class="callout">This run was started from a terminal, so sind ui cannot stop it. Press Ctrl-C in that terminal to stop it.</div>{{end}}
+{{with .NoStop}}<div class="callout">{{.}}</div>{{end}}
 {{end}}{{end}}{{end}}
 
 {{define "run-summary"}}{{with .Data}}<section class="panel"><div class="pb">

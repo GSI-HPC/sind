@@ -368,3 +368,33 @@ func TestRunName(t *testing.T) {
 	assert.Equal(t, "n", runName(store.Span{Name: "x", Node: "n"}))
 	assert.Equal(t, "x", runName(store.Span{Name: "x"}))
 }
+
+func TestRunSource(t *testing.T) {
+	run := runOf(0, "")
+	snap := store.Snapshot{}
+	assert.Equal(t, runFromTerminal, runSource(snap, run))
+	assert.Equal(t, "from a terminal", runSourceText(runFromTerminal))
+	assert.Equal(t, "terminal", runSourceChip(runFromTerminal))
+
+	run.Parent = "00f067aa0ba902b7"
+	assert.Equal(t, runFromProgram, runSource(snap, run))
+	assert.Equal(t, "from another program", runSourceText(runFromProgram))
+	assert.Equal(t, "other program", runSourceChip(runFromProgram))
+
+	run.FromUI = true
+	assert.Equal(t, runFromUI, runSource(snap, run), "a run of a sind ui whose task is gone")
+	assert.Equal(t, "from sind ui", runSourceText(runFromUI))
+	assert.Empty(t, runSourceChip(runFromUI))
+
+	run.FromUI, run.Parent = false, ""
+	snap.Tasks = []store.Task{{ID: "t", Trace: run.Trace}}
+	assert.Equal(t, runFromUI, runSource(snap, run), "the run of a task")
+}
+
+func TestRunWaitsForLock(t *testing.T) {
+	lock := runSp(activity.KindWait, runLockWait, runStartedAt(0))
+	assert.True(t, runWaitsForLock(runOf(0, "", lock)))
+	assert.False(t, runWaitsForLock(runOf(0, "", runSp(activity.KindWait, runLockWait, runEndedAt(0, 1, store.StatusOK)))))
+	assert.False(t, runWaitsForLock(runOf(0, "", runSp(activity.KindStep, runLockWait, runStartedAt(0)))))
+	assert.False(t, runWaitsForLock(runOf(2, store.StatusCanceled, lock)), "a run that ended")
+}

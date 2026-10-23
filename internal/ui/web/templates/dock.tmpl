@@ -5,12 +5,12 @@ ui started, and for each run that a terminal writes to the event log. The
 cards are built in dock.go. */}}
 {{define "tasks"}}{{with .Data}}{{range .Cards}}
 <div class="task {{.Class}}" role="status">
-  <div class="th">{{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}">{{.Mark}}</span>{{end}}<b><a href="{{.Href}}" title="{{.Title}}">{{.Title}}</a></b>{{if .Terminal}}<span class="chip">terminal</span>{{end}}
+  <div class="th">{{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}">{{.Mark}}</span>{{end}}<b><a href="{{.Href}}" title="{{.Title}}">{{.Title}}</a></b>{{with .Chip}}<span class="chip">{{.}}</span>{{end}}
     {{if .Dismiss}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/dismiss" hx-post="/tasks/{{.TaskID}}/dismiss" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="iconbtn" aria-label="Hide this card" title="Hide">×</button></form>{{end}}</div>
   {{template "run-segbar" .Segs}}
   <div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>
   {{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
-  {{if and .Output (not .Terminal)}}{{if eq .Class "failed"}}<pre class="term tout">{{.Output}}</pre>{{end}}{{end}}
+  {{if .Output}}{{if eq .Class "failed"}}<pre class="term tout">{{.Output}}</pre>{{end}}{{end}}
   <div class="tf">{{if .Cancel}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none" hx-confirm="Stop this command? sind stops it and removes what it made so far.">{{template "csrf-field" $}}<button type="submit" class="btn sm">Stop</button></form>{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}">{{.Action}}</a></div>
 </div>
 {{end}}{{if .More}}<a class="task more" href="/activity">{{.More}} more in Activity</a>{{end}}{{end}}{{end}}

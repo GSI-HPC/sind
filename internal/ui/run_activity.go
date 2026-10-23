@@ -71,11 +71,12 @@ type runListRow struct {
 	Title     string
 	Pill      string
 	PillClass string
-	Terminal  bool
-	Started   string
-	Elapsed   string
-	Since     int64
-	Counts    string
+	// Chip says where a run came from that sind ui did not start.
+	Chip    string
+	Started string
+	Elapsed string
+	Since   int64
+	Counts  string
 }
 
 // runList is the Activity page's list.
@@ -129,7 +130,7 @@ func runListOf(v *View) (*runList, error) {
 		}
 		task, hasTask := runTaskOf(v.Snap, run.Trace)
 		row := runListRow{
-			ID: run.ID, Title: run.Title, Terminal: !hasTask,
+			ID: run.ID, Title: run.Title, Chip: runSourceChip(runSource(v.Snap, run)),
 			Started: runWhen(run.Start, v.Now), Elapsed: runDur(runElapsed(run, v.Now)),
 			Since: runSince(run), Counts: runCountsText(run),
 		}
