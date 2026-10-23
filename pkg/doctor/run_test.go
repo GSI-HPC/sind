@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -23,7 +24,7 @@ const (
 	localDockerHost   = "unix:///var/run/docker.sock"
 )
 
-var localHostCheck = Check{Name: "Docker host", Status: StatusOK, Detail: "this machine (unix:///var/run/docker.sock)"}
+var localHostCheck = clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusOK, Detail: "this machine (unix:///var/run/docker.sock)"}
 
 // errMeshDisabled stubs out the DNS check: ResolvedActive returns false.
 var errMeshDisabled = errors.New("mesh disabled in hermetic doctor test")
@@ -74,12 +75,12 @@ func TestRun_AllPass(t *testing.T) {
 	m.AddResult(dockerInfo("29.0.0"), "", nil)
 
 	checks := Run(context.Background(), hermeticDeps(t, &m, resolvedWithPolkit(true), validCgroupMounts))
-	assert.Equal(t, []Check{
-		{Name: "Docker Engine", Status: StatusOK, Detail: "29.0.0 (>= 28.0)"},
-		{Name: "Docker daemon", Status: StatusOK, Detail: "rootful, no userns-remap"},
+	assert.Equal(t, []clidoctor.Check{
+		{Name: "Docker Engine", Status: clidoctor.StatusOK, Detail: "29.0.0 (>= 28.0)"},
+		{Name: "Docker daemon", Status: clidoctor.StatusOK, Detail: "rootful, no userns-remap"},
 		localHostCheck,
-		{Name: "cgroupv2", Status: StatusOK, Detail: "nsdelegate enabled (/sys/fs/cgroup)"},
-		{Name: "DNS policy", Status: StatusOK, Detail: "host resolution available"},
+		{Name: "cgroupv2", Status: clidoctor.StatusOK, Detail: "nsdelegate enabled (/sys/fs/cgroup)"},
+		{Name: "DNS policy", Status: clidoctor.StatusOK, Detail: "host resolution available"},
 	}, checks)
 }
 
@@ -89,7 +90,7 @@ func TestRun_DockerTooOld(t *testing.T) {
 
 	checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
 	require.Len(t, checks, 4)
-	assert.Equal(t, Check{Name: "Docker Engine", Status: StatusFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
+	assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
 }
 
 func TestRun_UnparseableVersion(t *testing.T) {
@@ -97,7 +98,7 @@ func TestRun_UnparseableVersion(t *testing.T) {
 	m.AddResult(dockerInfo("bogus"), "", nil)
 
 	checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
-	assert.Equal(t, StatusFailed, checks[0].Status)
+	assert.Equal(t, clidoctor.StatusFailed, checks[0].Status)
 	assert.Contains(t, checks[0].Detail, "unable to parse")
 }
 
@@ -106,11 +107,11 @@ func TestRun_DockerNotReachable(t *testing.T) {
 	m.AddResult("", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n", testutil.ExitCode1(t))
 
 	checks := Run(context.Background(), hermeticDeps(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
-	assert.Equal(t, []Check{
-		{Name: "Docker Engine", Status: StatusFailed,
+	assert.Equal(t, []clidoctor.Check{
+		{Name: "Docker Engine", Status: clidoctor.StatusFailed,
 			Detail:      "not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
 			Remediation: "Start the Docker daemon:\n\nsudo systemctl start docker"},
-		{Name: "cgroupv2", Status: StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
+		{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
 	}, checks)
 }
 
@@ -118,18 +119,18 @@ func TestRun_CgroupMounts(t *testing.T) {
 	tests := []struct {
 		name   string
 		mounts string
-		want   Check
+		want   clidoctor.Check
 	}{
 		{"missing", "tmpfs /tmp tmpfs rw 0 0\n",
-			Check{Name: "cgroupv2", Status: StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation}},
+			clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation}},
 		{"no nsdelegate", "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n",
-			Check{Name: "cgroupv2", Status: StatusFailed, Detail: "nsdelegate not found", Remediation: NsdelegateRemediation("/sys/fs/cgroup")}},
+			clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "nsdelegate not found", Remediation: NsdelegateRemediation("/sys/fs/cgroup")}},
 		// A systemd host in hybrid mode fails although its cgroup2 mount
 		// has nsdelegate: Docker runs containers on cgroup v1 there.
 		{"hybrid", "tmpfs /sys/fs/cgroup tmpfs ro,mode=755 0 0\n" +
 			"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nsdelegate 0 0\n" +
 			"cgroup /sys/fs/cgroup/memory cgroup rw,memory 0 0\n",
-			Check{Name: "cgroupv2", Status: StatusFailed,
+			clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 				Detail:      "hybrid hierarchy: cgroup2 is mounted at /sys/fs/cgroup/unified, not /sys/fs/cgroup (sind requires cgroupv2)",
 				Remediation: unifiedRemediation}},
 	}
@@ -149,13 +150,13 @@ func TestRun_DNSPolicy(t *testing.T) {
 		var m mock.Executor
 		m.AddResult(dockerInfo("29.0.0"), "", nil)
 		checks := Run(context.Background(), hermeticDeps(t, &m, resolvedWithPolkit(true), validCgroupMounts))
-		assert.Equal(t, Check{Name: "DNS policy", Status: StatusOK, Detail: "host resolution available"}, checks[4])
+		assert.Equal(t, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusOK, Detail: "host resolution available"}, checks[4])
 	})
 	t.Run("not authorized", func(t *testing.T) {
 		var m mock.Executor
 		m.AddResult(dockerInfo("29.0.0"), "", nil)
 		checks := Run(context.Background(), hermeticDeps(t, &m, resolvedWithPolkit(false), validCgroupMounts))
-		assert.Equal(t, Check{Name: "DNS policy", Status: StatusWarning, Detail: "not authorized (optional)",
+		assert.Equal(t, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning, Detail: "not authorized (optional)",
 			Remediation: dnsPolicyRemediation}, checks[4])
 		assert.Contains(t, checks[4].Remediation, "subject.active && subject.local) {")
 		assert.True(t, strings.HasSuffix(checks[4].Remediation, "RULES"))
@@ -172,7 +173,7 @@ func TestRun_DNSPolicy(t *testing.T) {
 		t.Setenv("DOCKER_HOST", "ssh://build-host")
 		checks := Run(context.Background(), deps)
 		last := checks[len(checks)-1]
-		assert.Equal(t, Check{Name: "DNS policy", Status: StatusWarning,
+		assert.Equal(t, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning,
 			Detail: "not available: the Docker daemon does not run on this machine (optional)"}, last)
 		assert.Len(t, sys.Calls, 1, "polkit is not asked")
 	})
@@ -195,7 +196,7 @@ func TestRun_DaemonMode(t *testing.T) {
 			m.AddResult(`{"ServerVersion":"29.0.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","`+tt.option+`"]}`, "", nil)
 			checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
 			require.Len(t, checks, 4)
-			assert.Equal(t, Check{Name: "Docker daemon", Status: StatusFailed, Detail: tt.detail, Remediation: tt.remediation}, checks[1])
+			assert.Equal(t, clidoctor.Check{Name: "Docker daemon", Status: clidoctor.StatusFailed, Detail: tt.detail, Remediation: tt.remediation}, checks[1])
 		})
 	}
 }
@@ -209,14 +210,14 @@ func TestRun_DaemonCgroupV1(t *testing.T) {
 
 	checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
 	require.Len(t, checks, 4)
-	assert.Equal(t, Check{Name: "cgroupv2", Status: StatusFailed,
+	assert.Equal(t, clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 		Detail: "Docker runs containers on cgroup v1 (sind requires cgroupv2)", Remediation: unifiedRemediation}, checks[3])
 }
 
 // TestRun_Inotify checks the advisory inotify check: a warning below the
 // limit, left out for a remote daemon.
 func TestRun_Inotify(t *testing.T) {
-	run := func(t *testing.T, limit, dockerHost string) []Check {
+	run := func(t *testing.T, limit, dockerHost string) []clidoctor.Check {
 		t.Helper()
 		var m mock.Executor
 		m.AddResult(dockerInfo("29.0.0"), "", nil)
@@ -234,13 +235,13 @@ func TestRun_Inotify(t *testing.T) {
 
 	checks := run(t, "128\n", "")
 	require.Len(t, checks, 5)
-	assert.Equal(t, Check{Name: "inotify", Status: StatusWarning,
+	assert.Equal(t, clidoctor.Check{Name: "inotify", Status: clidoctor.StatusWarning,
 		Detail:      "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)",
 		Remediation: inotifyRemediation}, checks[4])
 
 	checks = run(t, "8192\n", "unix:///run/docker.sock")
 	require.Len(t, checks, 5)
-	assert.Equal(t, Check{Name: "inotify", Status: StatusOK, Detail: "max_user_instances 8192 (>= 1024)"}, checks[4])
+	assert.Equal(t, clidoctor.Check{Name: "inotify", Status: clidoctor.StatusOK, Detail: "max_user_instances 8192 (>= 1024)"}, checks[4])
 
 	checks = run(t, "128\n", "tcp://build-host:2376")
 	assert.Len(t, checks, 4)
@@ -257,19 +258,19 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 	)
 	noImage := mock.Result{Stderr: "Error: No such image: " + config.DefaultImage + "\n", Err: testutil.ExitCode1(t)}
 	hasImage := mock.Result{Stdout: "{}\n"}
-	elsewhere := func(why string) Check {
-		return Check{Name: "Docker host", Status: StatusWarning, Detail: "not this machine: " + why + " (unsupported)",
+	elsewhere := func(why string) clidoctor.Check {
+		return clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusWarning, Detail: "not this machine: " + why + " (unsupported)",
 			Remediation: elsewhereRemediation}
 	}
-	probed := Check{Name: "cgroupv2", Status: StatusOK, Detail: "nsdelegate enabled (/sys/fs/cgroup, in a container)"}
+	probed := clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusOK, Detail: "nsdelegate enabled (/sys/fs/cgroup, in a container)"}
 	tests := []struct {
 		name       string
 		dockerHost string
 		info       string
 		kernel     string        // this machine's kernel release, empty for unknown
 		results    []mock.Result // after docker info
-		wantHost   Check
-		wantCgroup Check
+		wantHost   clidoctor.Check
+		wantCgroup clidoctor.Check
 	}{
 		{
 			name: "DOCKER_HOST", dockerHost: "tcp://build-host:2376", info: dockerInfo("29.0.0"),
@@ -280,7 +281,7 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 			name: "remote context without the node image", info: dockerInfo("29.0.0"),
 			results:  []mock.Result{{Stdout: `{"Name":"build","Endpoints":{"docker":{"Host":"ssh://ci@build-host"}}}`}, noImage},
 			wantHost: elsewhere(`docker context "build" connects to ssh://ci@build-host, not a unix socket`),
-			wantCgroup: Check{Name: "cgroupv2", Status: StatusWarning,
+			wantCgroup: clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning,
 				Detail:      "nsdelegate not checked: the Docker host has no " + config.DefaultImage + " to probe it with (sind create checks it)",
 				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + config.DefaultImage},
 		},
@@ -290,7 +291,7 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 			kernel:   "6.10.14-linuxkit",
 			results:  []mock.Result{hasImage, {Stdout: withoutNsd}},
 			wantHost: elsewhere("Docker Desktop runs the daemon in a VM"),
-			wantCgroup: Check{Name: "cgroupv2", Status: StatusFailed, Detail: "nsdelegate not found",
+			wantCgroup: clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "nsdelegate not found",
 				Remediation: NsdelegateRemediation("/sys/fs/cgroup")},
 		},
 		{
@@ -300,18 +301,18 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 			results: []mock.Result{hasImage,
 				{Stderr: "docker: Error response from daemon: failed to create task\n\nRun 'docker run --help'\n", Err: testutil.ExitCode1(t)}},
 			wantHost:   elsewhere("the daemon runs kernel 6.12.48+deb13-amd64, this machine 6.8.0-45-generic"),
-			wantCgroup: Check{Name: "cgroupv2", Status: StatusFailed, Detail: "nsdelegate not checked: docker: Error response from daemon: failed to create task"},
+			wantCgroup: clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "nsdelegate not checked: docker: Error response from daemon: failed to create task"},
 		},
 		{
 			name: "image inspect fails", dockerHost: "ssh://ci@build-host", info: dockerInfo("29.0.0"),
 			results:    []mock.Result{{Stderr: "error during connect: EOF\n", Err: testutil.ExitCode1(t)}},
 			wantHost:   elsewhere("DOCKER_HOST is ssh://ci@build-host, not a unix socket"),
-			wantCgroup: Check{Name: "cgroupv2", Status: StatusFailed, Detail: "nsdelegate not checked: error during connect: EOF"},
+			wantCgroup: clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "nsdelegate not checked: error during connect: EOF"},
 		},
 		{
 			name: "context unknown", info: dockerInfo("29.0.0"),
 			results:    []mock.Result{{Stderr: "context \"gone\": context not found\n", Err: testutil.ExitCode1(t)}, hasImage, {Stdout: withNsd}},
-			wantHost:   Check{Name: "Docker host", Status: StatusWarning, Detail: `unknown: context "gone": context not found`},
+			wantHost:   clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusWarning, Detail: `unknown: context "gone": context not found`},
 			wantCgroup: probed,
 		},
 	}
@@ -353,5 +354,5 @@ func TestRun_DaemonElsewhereNotReachable(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://docker.example:2375")
 	checks := Run(context.Background(), deps)
 	require.Len(t, checks, 2)
-	assert.Equal(t, Check{Name: "cgroupv2", Status: StatusWarning, Detail: "nsdelegate not checked: Docker is not reachable"}, checks[1])
+	assert.Equal(t, clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning, Detail: "nsdelegate not checked: Docker is not reachable"}, checks[1])
 }

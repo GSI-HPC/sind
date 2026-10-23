@@ -6,29 +6,12 @@ import (
 	"context"
 	"fmt"
 
+	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
-)
-
-// Check is the result of one host prerequisite check, in the form
-// `sind doctor -o json` prints it: clusterctl's check model, plus the
-// commands that fix a failed check.
-type Check struct {
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	Detail      string `json:"detail,omitempty"`
-	Remediation string `json:"remediation,omitempty"`
-}
-
-// The statuses a check can report. A failed advisory check is a warning,
-// which does not affect the exit status.
-const (
-	StatusOK      = "ok"
-	StatusWarning = "warning"
-	StatusFailed  = "failed"
 )
 
 // Deps are the host handles Run checks through.
@@ -47,19 +30,19 @@ type Deps struct {
 // Engine version, the daemon's mode, where it runs, cgroupv2, the inotify
 // limit and host DNS resolution. A failed check is reported in the result,
 // never as an error.
-func Run(ctx context.Context, d Deps) []Check {
+func Run(ctx context.Context, d Deps) []clidoctor.Check {
 	client, fs, mgr := d.Client, d.Fs, d.Mesh
-	var checks []Check
+	var checks []clidoctor.Check
 
 	// Check Docker Engine version.
-	engine := Check{Name: "Docker Engine", Status: StatusFailed}
+	engine := clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed}
 	info, err := client.Info(ctx)
 	if err != nil {
 		engine.Detail, engine.Remediation = DockerUnreachable(err)
 	} else if vErr := CheckDockerVersion(info.ServerVersion); vErr != nil {
 		engine.Detail = vErr.Error()
 	} else {
-		engine.Status = StatusOK
+		engine.Status = clidoctor.StatusOK
 		engine.Detail = fmt.Sprintf("%s (>= %d.0)", info.ServerVersion, MinDockerMajor)
 	}
 	checks = append(checks, engine)
@@ -67,13 +50,13 @@ func Run(ctx context.Context, d Deps) []Check {
 	// Check that the daemon can start sind's nodes: not rootless and
 	// without userns-remap, which refuse writable cgroups.
 	if info != nil {
-		daemon := Check{Name: "Docker daemon", Status: StatusOK, Detail: "rootful, no userns-remap"}
+		daemon := clidoctor.Check{Name: "Docker daemon", Status: clidoctor.StatusOK, Detail: "rootful, no userns-remap"}
 		switch {
 		case info.HasSecurityOption("rootless"):
-			daemon = Check{Name: "Docker daemon", Status: StatusFailed,
+			daemon = clidoctor.Check{Name: "Docker daemon", Status: clidoctor.StatusFailed,
 				Detail: "rootless mode (sind needs a rootful daemon)", Remediation: rootlessRemediation}
 		case info.HasSecurityOption("userns"):
-			daemon = Check{Name: "Docker daemon", Status: StatusFailed,
+			daemon = clidoctor.Check{Name: "Docker daemon", Status: clidoctor.StatusFailed,
 				Detail: "userns-remap enabled (sind needs a daemon without it)", Remediation: usernsRemediation}
 		}
 		checks = append(checks, daemon)
@@ -94,10 +77,10 @@ func Run(ctx context.Context, d Deps) []Check {
 	// Advisory: enough inotify instances for large clusters. The limit is
 	// the Docker host's, so the check is left out for a daemon elsewhere.
 	if n, ok := InotifyInstances(fs); ok && local {
-		inotify := Check{Name: "inotify", Status: StatusOK,
+		inotify := clidoctor.Check{Name: "inotify", Status: clidoctor.StatusOK,
 			Detail: fmt.Sprintf("max_user_instances %d (>= %d)", n, MinInotifyInstances)}
 		if n < MinInotifyInstances {
-			inotify = Check{Name: "inotify", Status: StatusWarning,
+			inotify = clidoctor.Check{Name: "inotify", Status: clidoctor.StatusWarning,
 				Detail:      fmt.Sprintf("max_user_instances %d (clusters of 10 or more nodes need %d; optional)", n, MinInotifyInstances),
 				Remediation: inotifyRemediation}
 		}
@@ -110,13 +93,13 @@ func Run(ctx context.Context, d Deps) []Check {
 	if mgr.ResolvedActive(ctx) {
 		switch {
 		case !local:
-			checks = append(checks, Check{Name: "DNS policy", Status: StatusWarning,
+			checks = append(checks, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning,
 				Detail: "not available: the Docker daemon does not run on this machine (optional)"})
 		case mgr.DNSPolkitAuthorized(ctx):
-			checks = append(checks, Check{Name: "DNS policy", Status: StatusOK,
+			checks = append(checks, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusOK,
 				Detail: "host resolution available"})
 		default:
-			checks = append(checks, Check{Name: "DNS policy", Status: StatusWarning,
+			checks = append(checks, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning,
 				Detail: "not authorized (optional)", Remediation: dnsPolicyRemediation})
 		}
 	}
@@ -126,15 +109,15 @@ func Run(ctx context.Context, d Deps) []Check {
 // hostCheck reports where the Docker daemon runs (LocateDaemon). A
 // daemon elsewhere is a warning: sind does not support it, but every
 // required check asks the daemon or probes its kernel, so they still hold.
-func hostCheck(loc DaemonLocation, err error) Check {
+func hostCheck(loc DaemonLocation, err error) clidoctor.Check {
 	switch {
 	case err != nil:
-		return Check{Name: "Docker host", Status: StatusWarning, Detail: "unknown: " + ErrorLine(err)}
+		return clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusWarning, Detail: "unknown: " + ErrorLine(err)}
 	case !loc.Local():
-		return Check{Name: "Docker host", Status: StatusWarning,
+		return clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusWarning,
 			Detail: "not this machine: " + loc.Elsewhere + " (unsupported)", Remediation: elsewhereRemediation}
 	}
-	return Check{Name: "Docker host", Status: StatusOK, Detail: "this machine (" + loc.Endpoint.Host + ")"}
+	return clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusOK, Detail: "this machine (" + loc.Endpoint.Host + ")"}
 }
 
 // cgroupCheck checks that the Docker host runs the unified cgroup2
@@ -143,10 +126,10 @@ func hostCheck(loc DaemonLocation, err error) Check {
 // fs, as the kernel is the same; for one elsewhere, from a throwaway
 // container of the default node image (ProbeCgroupInfo), if the
 // daemon has that image: doctor pulls none.
-func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *docker.DaemonInfo, local bool) Check {
+func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *docker.DaemonInfo, local bool) clidoctor.Check {
 	log := sindlog.From(ctx)
 	if info != nil && info.CgroupVersion != "" && info.CgroupVersion != "2" {
-		return Check{Name: "cgroupv2", Status: StatusFailed,
+		return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 			Detail:      fmt.Sprintf("Docker runs containers on cgroup v%s (sind requires cgroupv2)", info.CgroupVersion),
 			Remediation: unifiedRemediation}
 	}
@@ -157,12 +140,12 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 		log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
 		mountPath, hasV2, hasNsd = CgroupInfo(fs)
 	case info == nil:
-		return Check{Name: "cgroupv2", Status: StatusWarning, Detail: "nsdelegate not checked: Docker is not reachable"}
+		return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning, Detail: "nsdelegate not checked: Docker is not reachable"}
 	default:
 		image := config.DefaultImage
 		_, present, err := client.ImageLabels(ctx, image)
 		if err == nil && !present {
-			return Check{Name: "cgroupv2", Status: StatusWarning,
+			return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning,
 				Detail:      fmt.Sprintf("nsdelegate not checked: the Docker host has no %s to probe it with (sind create checks it)", image),
 				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + image}
 		}
@@ -170,24 +153,24 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 			mountPath, hasV2, hasNsd, err = ProbeCgroupInfo(ctx, client, image)
 		}
 		if err != nil {
-			return Check{Name: "cgroupv2", Status: StatusFailed, Detail: "nsdelegate not checked: " + ErrorLine(err)}
+			return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "nsdelegate not checked: " + ErrorLine(err)}
 		}
 		where = ", in a container"
 	}
 	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd, "local", local)
 	switch {
 	case !hasV2 && mountPath != "":
-		return Check{Name: "cgroupv2", Status: StatusFailed,
+		return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 			Detail:      fmt.Sprintf("hybrid hierarchy: cgroup2 is mounted at %s, not %s (sind requires cgroupv2)", mountPath, CgroupRoot),
 			Remediation: unifiedRemediation}
 	case !hasV2:
-		return Check{Name: "cgroupv2", Status: StatusFailed,
+		return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 			Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation}
 	case !hasNsd:
-		return Check{Name: "cgroupv2", Status: StatusFailed,
+		return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 			Detail: "nsdelegate not found", Remediation: NsdelegateRemediation(mountPath)}
 	}
-	return Check{Name: "cgroupv2", Status: StatusOK, Detail: fmt.Sprintf("nsdelegate enabled (%s%s)", mountPath, where)}
+	return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusOK, Detail: fmt.Sprintf("nsdelegate enabled (%s%s)", mountPath, where)}
 }
 
 // unifiedRemediation is shown when the host does not run the unified

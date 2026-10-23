@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/observability"
 )
 

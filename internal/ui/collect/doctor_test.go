@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,7 @@ func TestDoctorChecksAtStartAndOnRequest(t *testing.T) {
 	assert.Equal(t, d.Now(), first.Time)
 	require.NotEmpty(t, first.Checks)
 	assert.Equal(t, "Docker Engine", first.Checks[0].Name)
-	assert.Equal(t, "failed", first.Checks[0].Status)
+	assert.Equal(t, doctor.StatusFailed, first.Checks[0].Status)
 	assert.Contains(t, first.Checks[0].Detail, "not reachable")
 
 	// Again, on request: the last outcome stays while it runs.

@@ -86,10 +86,6 @@ func (d *Doctor) check(ctx context.Context) {
 		now = d.Now
 	}
 	report := store.DoctorReport{Time: now()}
-	for _, c := range checks {
-		report.Checks = append(report.Checks, store.DoctorCheck{
-			Name: c.Name, Status: c.Status, Detail: c.Detail, Remediation: c.Remediation,
-		})
-	}
+	report.Checks = checks
 	d.Store.SetDoctor(&report)
 }
