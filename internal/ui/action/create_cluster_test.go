@@ -257,6 +257,8 @@ func TestBuildCreateCluster_HostMemory(t *testing.T) {
 	cmd, err := a.Build(valid("w0-count", "4", "size", "m"), st.ctx())
 	require.NoError(t, err)
 	assert.Equal(t, 5*1024, cmd.MemoryMB)
+	assert.Equal(t, 5, cmd.Containers, "controller and four workers")
+	assert.Equal(t, 10, cmd.CPUs)
 	assert.Contains(t, cmd.Warns, "The nodes may use 5 GiB of memory, 125% of the 4 GiB of the Docker host, which then can run out of memory.")
 
 	cmd, err = a.Build(valid("w0-count", "2", "size", "m"), st.ctx())

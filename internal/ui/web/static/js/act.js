@@ -3,8 +3,8 @@
 // The script of the dialogs of the actions: the steppers, the editors of the
 // nodes, the worker groups and the rows of users, groups and accounts of a
 // new cluster, the directory that follows the name, the pull that follows
-// the image, Edit YAML, the links to a field with a problem, the Copy
-// button, and closing. The dialogs are the server's HTML, which htmx puts into #layer;
+// the image, Edit YAML, the links to a field with a problem, the status
+// that leads to the first problem, the Copy button, and closing. The dialogs are the server's HTML, which htmx puts into #layer;
 // nothing here evaluates text.
 (() => {
   'use strict';
@@ -29,6 +29,24 @@
     return el instanceof RadioNodeList ? el[0] : el;
   }
 
+  // goTo opens what hides the field name and gives it the focus; without a
+  // name, the list of problems of the plan takes it.
+  function goTo(form, name) {
+    const el = name ? field(form, name) : document.getElementById('act-probs');
+    if (!(el instanceof HTMLElement)) return;
+    // A field in a folded section or a closed editor: open it first.
+    for (let d = el.closest('details'); d; d = d.parentElement.closest('details')) d.open = true;
+    const panel = el.closest('.act-ned');
+    if (panel && panel.hidden) {
+      panel.hidden = false;
+      const button = document.querySelector('[aria-controls="' + panel.id + '"]');
+      if (button) button.setAttribute('aria-expanded', 'true');
+    }
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: 'center' });
+  }
+
+
   document.addEventListener('click', ev => {
     const t = ev.target;
     if (!(t instanceof Element)) return;
@@ -37,6 +55,8 @@
       close();
       return;
     }
+    const go = t.closest('[data-act-go]');
+    if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
 
     const step = t.closest('[data-act-step]');
     if (step) {
@@ -147,17 +167,7 @@
     const jump = t.closest('[data-act-jump]');
     if (jump) {
       ev.preventDefault();
-      const el = field(jump.closest('form'), jump.dataset.actJump);
-      if (!el) return;
-      // A field in a folded section or a closed editor: open it first.
-      for (let d = el.closest('details'); d; d = d.parentElement.closest('details')) d.open = true;
-      const panel = el.closest('.act-ned');
-      if (panel && panel.hidden) {
-        panel.hidden = false;
-        const button = document.querySelector('[aria-controls="' + panel.id + '"]');
-        if (button) button.setAttribute('aria-expanded', 'true');
-      }
-      el.focus();
+      goTo(jump.closest('form'), jump.dataset.actJump);
       return;
     }
 
@@ -243,16 +253,34 @@
     });
   }
 
+  // The status said last, of the dialog that is open.
+  let said = null;
+
+  // say tells assistive technology the status of a dialog with a plan when
+  // it changes: the first problem, or that the command can run. The first
+  // status of a dialog it says only when the command cannot run.
+  function say() {
+    const live = document.getElementById('act-say');
+    const src = document.querySelector('#act-status [data-act-key]');
+    if (!live || !src || src.dataset.actKey === said) return;
+    const first = said === null;
+    said = src.dataset.actKey;
+    if (first && said === 'ready') return;
+    live.textContent = src.dataset.actSay;
+  }
+
   // A dialog that has just come in gets the focus on its first field; the
   // swaps of its preview, which target parts of it, leave the focus alone.
   document.addEventListener('htmx:afterSettle', ev => {
     const l = layer();
     if (l && ev.target === l) {
+      said = null;
       const first = l.querySelector('input[type=text], input[type=number], select, input[type=checkbox]');
       if (first) first.focus();
     }
     markProblems(document);
     followPull();
     placeholders();
+    say();
   });
 })();

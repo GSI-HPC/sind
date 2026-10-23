@@ -12,7 +12,8 @@
 .scrim .mh h2{font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em;flex:1;min-width:0;overflow-wrap:anywhere}
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
 .scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
-.scrim .mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.scrim .act-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
 .scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
 .scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}
@@ -153,7 +154,11 @@
 .scrim .act-planpane .callout{overflow-wrap:anywhere}
 .scrim .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
 .scrim .act-yaml{max-height:320px;margin:0;overflow:auto}
-.scrim .act-status{margin-right:auto;display:flex;align-items:center}
+.scrim .act-status{margin-right:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
+.scrim button.pill{cursor:pointer}
+.scrim .act-go:hover{text-decoration:underline}
+.scrim .act-tot{font-size:var(--t-sm);color:var(--muted)}
+@media (pointer:coarse){.scrim button.pill{min-height:32px}}
 .scrim .act-imgs{display:grid;gap:6px}
 .scrim .act-img{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel)}
 .scrim .act-img .mono{font-size:var(--t-sm);overflow-wrap:anywhere}
@@ -167,6 +172,11 @@
   .scrim .act-form,.scrim .act-planpane{overflow:visible}
   .scrim .act-planpane{border-left:0;border-top:1px solid var(--line-2)}
   .scrim .modal.split .mf{position:sticky;bottom:0;background:var(--panel);border-radius:0 0 10px 10px}
+  /* The status button and the buttons share a line, the totals take the
+     next. */
+  .scrim .act-status{display:contents}
+  .scrim .act-status>.pill{margin-right:auto}
+  .scrim .act-tot{order:3;flex-basis:100%}
   .scrim .act-wide{grid-column:auto}
   .scrim .act-edg,.scrim .act-more .act-edg{grid-template-columns:repeat(2,minmax(0,1fr))}
   .scrim .act-ned{padding-left:12px}

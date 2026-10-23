@@ -57,8 +57,9 @@ type Command struct {
 	Nodes []PlannedNode
 	// Summary is a line about Nodes.
 	Summary string
-	// MemoryMB is the memory that Nodes may use together, in MiB.
-	MemoryMB int
+	// Containers, CPUs and MemoryMB are what Nodes may use together: the
+	// containers, the CPUs and the memory in MiB.
+	Containers, CPUs, MemoryMB int
 	// Images are the images of Nodes and what sind ui knows of them.
 	Images []PlanImage
 	// Problems are the fields that the command cannot take as they are.

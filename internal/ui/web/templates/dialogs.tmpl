@@ -34,7 +34,8 @@
     {{template "act-preview-slot" .}}
   </div>
   {{end}}
-  <div class="mf">{{if .Spec.Plan}}<span class="act-status" id="act-status" role="status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button><button type="submit" class="btn {{if .Spec.Danger}}danger solid{{else}}primary{{end}}" id="act-ok" disabled>{{.Spec.OK}}</button></div>
+  <div class="mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button><button type="submit" class="btn {{if .Spec.Danger}}danger solid{{else}}primary{{end}}" id="act-ok" disabled>{{.Spec.OK}}</button></div>
+  {{if .Spec.Plan}}<span class="act-vh" id="act-say" role="status"></span>{{end}}
 </form>
 </div>
 {{end}}
@@ -60,7 +61,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 <datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
 {{range .SlurmFiles}}<span class="act-dot" id="act-dot-{{.ID}}" hx-swap-oob="true">{{if $p.SlurmSet .ID}} •{{end}}</span>{{end}}
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
-{{if .Spec.Plan}}<span class="act-status" id="act-status" role="status" hx-swap-oob="true">{{template "act-pill" .}}</span>{{end}}
+{{if .Spec.Plan}}<span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{template "act-status" .}}</span>{{end}}
 {{end}}{{end}}
 
 {{/* act-callouts are what to know about the command of a preview. */}}
@@ -71,6 +72,16 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
 {{end}}
 
+{{/* act-status is the status in the footer of a dialog with a plan: a
+button that goes to the first problem, or Ready, and what the nodes of the
+plan use. act.js says the status to assistive technology when its
+data-act-key changes. */}}
+{{define "act-status"}}
+{{- if not .Blocked}}<span class="pill ok" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Ready</span>
+{{- else if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button>
+{{- else}}<span class="pill bad" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Not ready</span>{{end}}
+{{- with .Totals}}<span class="act-tot">{{.}}</span>{{end}}{{end}}
+
 {{/* act-pill says whether the command can run. */}}
 {{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
 
@@ -78,8 +89,8 @@ it, and the button and the parts of the dialog that depend on it. */}}
 the nodes, the command and the config also while a field is wrong. */}}
 {{define "act-plan"}}{{$p := .}}
 <div class="act-ph"><h3>Plan</h3>{{template "act-pill" .}}</div>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{else}}
-{{with .Cmd.Problems}}<div class="callout bad act-probs"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
+{{if .Err}}<div class="callout bad" id="act-probs" tabindex="-1">{{.Err}}</div>{{else}}
+{{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
 {{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
 <p class="hint">{{.Cmd.Summary}}</p>

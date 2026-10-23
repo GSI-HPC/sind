@@ -152,7 +152,7 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 	}{
 		{"create-cluster", "", []string{"New cluster", `id="act-name" name="name" value="hpc"`, `data-act-step="w0-count"`, `id="act-w0-count" name="w0-count" value="2"`,
 			`id="act-db" name="db" checked`, `id="act-submitter" name="submitter" checked`, `id="act-backup" name="backup" aria-`, `id="act-pull" name="pull" checked`,
-			`<aside class="act-planpane" aria-label="Plan">`, `id="act-status" role="status"`, `value="~/sind/hpc"`, `data-act-follow`,
+			`<aside class="act-planpane" aria-label="Plan">`, `<span class="act-status" id="act-status"></span>`, `id="act-say" role="status"`, `value="~/sind/hpc"`, `data-act-follow`,
 			"ghcr.io/gsi-hpc/sind-node", `value="5m" checked`, `id="act-pull-auto" name="pull_auto" value="1"`, "In realm sind",
 			// A size chip is named by its node and its value; the controls of a
 			// worker group by the workers it makes.
@@ -890,7 +890,7 @@ func TestActPreview_NewClusterThatCannotBuild(t *testing.T) {
 	body := f.post("/actions/create-cluster/preview", actForm("realm", "Bad Realm")).Body.String()
 
 	assert.Contains(t, body, `<span class="pill bad">Not ready · 1 problem</span>`)
-	assert.Contains(t, body, `<div class="callout bad">realm: `)
+	assert.Contains(t, body, `<div class="callout bad" id="act-probs" tabindex="-1">realm: `)
 	assert.NotContains(t, body, "act-yaml")
 }
 

@@ -919,6 +919,86 @@ func (p actPreview) Problems() int {
 	return len(p.Cmd.Problems)
 }
 
+// First is the problem that the status of the dialog leads to: the first
+// problem of the command, or its error, which has no field.
+func (p actPreview) First() action.Problem {
+	if p.Err == "" && len(p.Cmd.Problems) > 0 {
+		return p.Cmd.Problems[0]
+	}
+	return action.Problem{Text: p.Err}
+}
+
+// StatusText is the text of the status button of a command with
+// problems: how many, and the field of the first.
+func (p actPreview) StatusText() string {
+	n, label := p.Problems(), p.First().Label
+	text := fmt.Sprintf("%d problem%s", n, actPlural(n))
+	switch {
+	case label == "":
+	case n == 1:
+		text += ": " + label
+	default:
+		text += ", first: " + label
+	}
+	return text
+}
+
+// StatusGo says where the status button goes: to the field of the first
+// problem, or to the list of problems in the plan.
+func (p actPreview) StatusGo() string {
+	if p.First().Field != "" {
+		return "Go to the field"
+	}
+	return "Show the problems"
+}
+
+// Say is what the dialog tells assistive technology about its status: the
+// first problem and how many there are, or that the command can run.
+func (p actPreview) Say() string {
+	if !p.Blocked {
+		return "Ready. " + p.Spec.OK + " runs the command."
+	}
+	first, n := p.First(), p.Problems()
+	text := first.Text
+	if first.Label != "" {
+		text = first.Label + ": " + text
+	}
+	if n > 1 {
+		text += fmt.Sprintf(" %d problems in all.", n)
+	}
+	return text
+}
+
+// SayKey changes when the status changes in a way to say: the dialog does
+// not repeat the status for each key that changes the text of a problem.
+func (p actPreview) SayKey() string {
+	if !p.Blocked {
+		return "ready"
+	}
+	return fmt.Sprintf("%d %s", p.Problems(), p.First().Field)
+}
+
+// Totals sums up what the nodes of the plan use: containers, CPUs and
+// memory, against that of the Docker host when known.
+func (p actPreview) Totals() string {
+	if p.Cmd.Containers == 0 {
+		return ""
+	}
+	mem := action.MemoryLabel(p.Cmd.MemoryMB)
+	if host := p.HostMB(); host > 0 {
+		mem += " of " + action.MemoryLabel(host)
+	}
+	return fmt.Sprintf("%d container%s · %d CPU%s · %s", p.Cmd.Containers, actPlural(p.Cmd.Containers), p.Cmd.CPUs, actPlural(p.Cmd.CPUs), mem)
+}
+
+// actPlural is the s of a count other than one.
+func actPlural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 // Defaulted names the fields whose defaults the plan takes, as they are
 // wrong.
 func (p actPreview) Defaulted() string {

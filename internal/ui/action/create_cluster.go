@@ -139,7 +139,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cmd.Nodes = plan.planned
 	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
-	cmd.MemoryMB = memoryMB
+	cmd.Containers, cmd.CPUs, cmd.MemoryMB = containers, cpus, memoryMB
 	cmd.Warns = plan.warns
 	cmd.Problems = ps
 	if data.home {
