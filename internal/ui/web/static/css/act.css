@@ -176,7 +176,9 @@
 .scrim .act-tile.more{border-left-color:var(--line);color:var(--muted);font-weight:400}
 .scrim .act-planpane .callout{overflow-wrap:anywhere}
 .scrim .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
-.scrim .act-yaml{max-height:320px;margin:0;overflow:auto}
+.scrim .act-yaml,.scrim .act-after,.scrim .act-confpre{max-height:320px;margin:0;overflow:auto}
+.scrim .act-conf{display:grid;gap:6px;margin-top:8px}
+.scrim .act-conf summary{cursor:pointer;font-weight:500;width:max-content}
 .scrim .act-status{margin-right:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
 .scrim button.pill{cursor:pointer}
 .scrim .act-go:hover{text-decoration:underline}

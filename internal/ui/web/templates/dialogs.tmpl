@@ -112,12 +112,23 @@ the nodes, the command and the config also while a field is wrong. */}}
   <span class="hint{{if .Version}} act-ver{{end}}">{{$p.ImageLine .}}</span>{{if .CanCheck}}<button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</div>{{end}}</div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
+{{with .Cmd.After}}<div><div class="cmdlabel">Then sind runs</div><pre class="term act-after">{{range $i, $s := .}}{{if $i}}
+{{end}}# {{.Where}}
+{{range .Lines}}{{.}}
+{{end}}{{end}}</pre></div>{{end}}
 {{template "act-callouts" .}}
-{{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p></div>
+{{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p>{{template "act-slurmconf" .}}</div>
 {{else}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
+  {{template "act-slurmconf" .}}
   <p class="hint">Edit YAML, at the top of the plan, gives you the whole config, also what the form has no field for, such as named Slurm config fragments or capabilities of the node defaults. The form stays locked until you discard the edits.</p></div>{{end}}
 {{end}}
 {{end}}
+
+{{/* act-slurmconf is the slurm.conf that sind writes for the config of
+the plan, folded; act.js keeps it open across the previews. */}}
+{{define "act-slurmconf"}}{{with .Cmd.SlurmConf}}<details class="act-conf" id="act-conf" data-act-hold><summary>Preview slurm.conf</summary>
+  <pre class="term act-confpre">{{.}}</pre>
+  <p class="hint">sind's lines, then those of Slurm config, then the include of sind-nodes.conf with the workers and the partition all. The other files of Slurm config are files of their own.</p></details>{{end}}{{end}}
 
 {{/* act-chip is the size button of a node of a new cluster, which opens
 its editor. */}}

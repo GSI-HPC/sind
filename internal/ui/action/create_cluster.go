@@ -82,7 +82,9 @@ func (ps problems) has(field string) bool {
 // its YAML give it: the config, its text and sind's warnings, the nodes one
 // by one, and the data storage.
 type clusterPlan struct {
-	cfg     config.Cluster
+	cfg config.Cluster
+	// final is cfg as sind takes it, after ApplyDefaults, once it is valid.
+	final   *config.Cluster
 	content string
 	warns   []string
 	planned []PlannedNode
@@ -137,6 +139,9 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cmd := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
 	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
 	cmd.Nodes = plan.planned
+	if plan.final != nil {
+		cmd.After, cmd.SlurmConf = afterCreate(plan.final)
+	}
 	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
 	cmd.Containers, cmd.CPUs, cmd.MemoryMB = containers, cpus, memoryMB
@@ -191,11 +196,11 @@ func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	data := dataStorage(f, c, ps)
 	cfg.Storage.DataStorage = data.storage
 
-	content, warns, errs := renderConfig(cfg, ps.has("name"))
+	content, final, warns, errs := renderConfig(cfg, ps.has("name"))
 	for _, err := range errs {
 		*ps = append(*ps, configProblem(f, err))
 	}
-	return clusterPlan{cfg: cfg, content: content, warns: warns, planned: planned, data: data}
+	return clusterPlan{cfg: cfg, final: final, content: content, warns: warns, planned: planned, data: data}
 }
 
 // maxPlanned is the most workers of a plan, as the form allows them.
@@ -244,6 +249,9 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	}
 	if len(errs) == 0 {
 		p.warns = parsed.Warnings()
+		if !nps.has("name") {
+			p.final = parsed
+		}
 	}
 	p.planned = plannedOf(p.cfg.Nodes, &yps)
 	if ds := p.cfg.Storage.DataStorage; ds.UsesHostPath() && path.IsAbs(ds.HostPath) {
@@ -499,10 +507,11 @@ var parseConfig = config.Parse
 
 // renderConfig writes the config as YAML and checks it as sind create
 // cluster will: it parses it, applies the defaults and validates it. It
-// returns every error of the check, where sind stops at the first. The
-// warnings are those of sind. A name that is wrong already is a problem of
-// its own: the check puts a valid one in its place.
-func renderConfig(cfg config.Cluster, badName bool) (content string, warns []string, errs []error) {
+// returns every error of the check, where sind stops at the first, or the
+// config as sind takes it. The warnings are those of sind. A name that is
+// wrong already is a problem of its own: the check puts a valid one in its
+// place, and returns no config.
+func renderConfig(cfg config.Cluster, badName bool) (content string, final *config.Cluster, warns []string, errs []error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -512,14 +521,17 @@ func renderConfig(cfg config.Cluster, badName bool) (content string, warns []str
 	content = buf.String()
 	parsed, err := parseConfig(buf.Bytes())
 	if err != nil {
-		return content, nil, []error{err}
+		return content, nil, nil, []error{err}
 	}
 	if badName {
 		parsed.Name = "cluster"
 	}
 	parsed.ApplyDefaults()
 	if errs := parsed.ValidateAll(); len(errs) > 0 {
-		return content, nil, errs
+		return content, nil, nil, errs
 	}
-	return content, parsed.Warnings(), nil
+	if badName {
+		return content, nil, parsed.Warnings(), nil
+	}
+	return content, parsed, parsed.Warnings(), nil
 }

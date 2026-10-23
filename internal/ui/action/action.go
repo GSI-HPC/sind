@@ -62,6 +62,11 @@ type Command struct {
 	Containers, CPUs, MemoryMB int
 	// Images are the images of Nodes and what sind ui knows of them.
 	Images []PlanImage
+	// After is what the command runs once the nodes are up, and SlurmConf
+	// the slurm.conf and sind-nodes.conf that it writes, for the plan of a
+	// new cluster whose config is valid.
+	After     []Step
+	SlurmConf string
 	// Problems are the fields that the command cannot take as they are.
 	// The command does not run while it has any, but its plan shows.
 	Problems []Problem

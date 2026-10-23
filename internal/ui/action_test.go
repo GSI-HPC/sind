@@ -1058,3 +1058,27 @@ func TestActPreview_NewClusterYAML(t *testing.T) {
 	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: dev\n")).Body.String()
 	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML">realm sind has a cluster dev already;`, "a problem of the name shows at Name, which stays beside the YAML")
 }
+
+func TestActPreview_NewClusterAfterCreate(t *testing.T) {
+	f := newActFixture(t)
+
+	form := actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc", "db", "on", "ur", "u0", "u0-name", "alice", "u0-accounts", "physics", "ar", "a0", "a0-name", "physics")
+	body := f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<div class="cmdlabel">Then sind runs</div><pre class="term act-after"># On controller,db,worker-0: the users and groups
+groupadd --gid 1000 alice
+useradd --uid 1000 --gid 1000 --home-dir /home/alice --no-create-home --shell /bin/bash alice
+
+# On the controller, once slurmdbd knows the cluster: the Slurm accounts
+sacctmgr -i add account physics
+sacctmgr -i add user alice account=physics defaultaccount=physics
+</pre>`)
+	assert.Contains(t, body, `<details class="act-conf" id="act-conf" data-act-hold><summary>Preview slurm.conf</summary>`)
+	assert.Contains(t, body, "ClusterName=hpc\n")
+
+	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: lab\n")).Body.String()
+	assert.Contains(t, body, `<details class="act-conf" id="act-conf" data-act-hold>`, "the YAML has the preview too")
+	assert.NotContains(t, body, "Then sind runs")
+
+	body = f.post("/actions/create-cluster/preview", actForm("name", "Hpc")).Body.String()
+	assert.NotContains(t, body, "act-conf", "no preview while the name is wrong")
+}

@@ -615,6 +615,21 @@
     });
   }
 
+  // A part of the preview with data-act-hold, such as Preview slurm.conf,
+  // stays open when a preview takes its place.
+  const keptOpen = new Set();
+  document.addEventListener('toggle', ev => {
+    const d = ev.target;
+    if (!(d instanceof HTMLDetailsElement) || !d.hasAttribute('data-act-hold') || !d.id) return;
+    if (d.open) keptOpen.add(d.id); else keptOpen.delete(d.id);
+  }, true);
+  document.addEventListener('htmx:afterSwap', () => {
+    for (const id of keptOpen) {
+      const d = document.getElementById(id);
+      if (d instanceof HTMLDetailsElement) d.open = true;
+    }
+  });
+
   // followPull ticks the box as the preview says, while it follows the
   // image.
   function followPull() {

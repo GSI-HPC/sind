@@ -188,6 +188,14 @@ func addUsersScript(l LinuxUsers) string {
 	return b.String()
 }
 
+// UsersScript returns the groupadd and useradd commands that sind create
+// cluster runs on each node that gets the users of cfg (see
+// NodeRunConfigs), after ApplyDefaults; "" for a cluster without users and
+// groups.
+func UsersScript(cfg *config.Cluster) string {
+	return addUsersScript(NewLinuxUsers(cfg))
+}
+
 // addUsersStep returns the node setup step (see nodeSetupSteps) that
 // creates the cluster's groups and users on a node. Every node runs the
 // same commands with the same IDs, so a user has one UID and GID across the

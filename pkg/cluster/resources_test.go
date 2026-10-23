@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -550,4 +551,22 @@ func TestWriteMungeKey_SecureError(t *testing.T) {
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.ErrorContains(t, err, "fixing munge key ownership")
+}
+
+func TestSlurmConfFiles(t *testing.T) {
+	cfg := createCfg()
+	cfg.Nodes[0].BackupController = true
+	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleDB}, config.Node{Role: config.RoleAPI})
+	cfg.Monitoring = true
+
+	conf, nodes, err := SlurmConfFiles(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, slurm.GenerateSlurmConf("dev", cfg.Slurm.Main, slurm.ConfOptions{
+		BackupController: true, Accounting: true, JWT: true, DefMemPerCPU: 1024, Metrics: true,
+	}), conf, "the options that WriteClusterConfig writes slurm.conf with")
+	assert.Equal(t, slurm.GenerateNodesConf([]slurm.NodeEntry{{Name: "worker-0", CPUs: 2, MemoryMB: 2048}}, cfg.Slurm.Main), nodes)
+
+	cfg.Nodes[1].Memory = "2x"
+	_, _, err = SlurmConfFiles(cfg)
+	require.ErrorContains(t, err, `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
 }
