@@ -355,6 +355,12 @@ body {
   cursor: pointer;
 }
 
+/* The overview video on the landing page (layouts/_partials/overview-video.html) */
+.sind-overview .sind-video {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
 /* Page list on section pages (layouts/_partials/custom/content-end.html) */
 .sind-pages {
   display: grid;
