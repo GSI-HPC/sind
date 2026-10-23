@@ -51,9 +51,17 @@ func TestEmbeddedTextsAreComplete(t *testing.T) {
 		assert.Equal(t, id, p.ID, path)
 	}
 	assert.Len(t, h.Pages(), len(wave2Paths))
-	for _, id := range []string{"realm", "mesh", "nodeset", "controller", "worker", "munge", "slurmctld", "lock", "activity-log", "rollback", "trace"} {
+	// Every service and role that the pages of sind ui show is a word.
+	for _, id := range []string{
+		"realm", "mesh", "nodeset", "controller", "worker", "munge", "slurmctld", "lock", "activity-log", "rollback", "trace",
+		"slurmd", "slurmdbd", "slurmrestd", "sackd", "mariadb", "sshd", "submitter", "db", "api", "controller-backup", "job",
+	} {
 		_, ok := h.Word(id)
 		assert.True(t, ok, "word %s", id)
+	}
+	for _, id := range []string{"first-cluster", "job-output", "job-pending", "clean-up"} {
+		_, ok := h.Howto(id)
+		assert.True(t, ok, "howto %s", id)
 	}
 	assert.NotEmpty(t, h.Words())
 	assert.NotEmpty(t, h.Howtos())

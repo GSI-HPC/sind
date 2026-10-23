@@ -7,35 +7,35 @@
   route: /
   doc: getting-started/quickstart
   words: [realm, cluster, needs-you, activity-log]
-  howtos: [first-cluster, add-workers]
+  howtos: [first-cluster, add-workers, job-pending, clean-up]
 - id: clusters
   title: Clusters
   summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels.
   route: /clusters
   doc: usage/cluster-lifecycle
   words: [realm, cluster, data]
-  howtos: [first-cluster]
+  howtos: [first-cluster, clean-up]
 - id: cluster
   title: Cluster
   summary: One cluster. Its tabs show the health of its nodes and services, the logs, the network and how to connect.
   route: /clusters/{realm}/{cluster}
   doc: usage/diagnostics#cluster-status
-  words: [cluster, node-roles, managed, nodeset, data, identity]
-  howtos: [add-workers, reach-node, slow-create]
+  words: [cluster, node-roles, managed, nodeset, data, identity, slurmctld, slurmd, munge]
+  howtos: [job-output, job-pending, add-workers, reach-node, slow-create, clean-up]
 - id: nodes
   title: Nodes
   summary: Every node of the realm, with its role and state.
   route: /nodes
   doc: usage/diagnostics#list-nodes
   words: [node-roles, managed, nodeset]
-  howtos: [reach-node]
+  howtos: [reach-node, job-pending]
 - id: node
   title: Node
   summary: One node container, its services and its address. You can power it or delete it here.
   route: /nodes/{realm}/{cluster}/{node}
   doc: usage/diagnostics#node-status
-  words: [node-roles, managed, munge, slurmctld]
-  howtos: [reach-node]
+  words: [node-roles, managed, munge, slurmctld, slurmd, sshd]
+  howtos: [reach-node, job-pending]
 - id: mesh
   title: Mesh and DNS
   summary: What the clusters of a realm share. It shows the mesh network, the DNS records and the containers that you connected.

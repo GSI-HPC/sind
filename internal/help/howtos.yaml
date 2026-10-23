@@ -8,11 +8,56 @@
     - Keep the defaults, or change the nodes. Press Create.
     - When the run is done, open the cluster and its Connect tab.
     - Run a job with the command that the tab shows.
+    - Read its output in slurm-JOBID.out in the data directory of the cluster.
+    - When you are done, press Delete… on the page of the cluster.
   commands:
     - sind create cluster
     - sind exec -- sbatch --wrap hostname
+    - sind delete cluster
   doc: getting-started/quickstart
-  words: [cluster, controller, worker]
+  words: [cluster, controller, worker, job, data]
+- id: job-output
+  title: See the output of a job
+  summary: Where a batch job writes what it prints, and how to tell that it ran.
+  steps:
+    - Run squeue in a terminal. A job that it no longer lists has ended.
+    - A batch job writes what it prints to slurm-JOBID.out, in the directory that you submitted it from. sind exec starts in /data.
+    - /data is the data directory of the cluster, so the file is on your host too. The Network and storage tab of the cluster shows where.
+    - With a db node, sacct lists the jobs that ended, with their state and exit code.
+  commands:
+    - sind exec -- squeue
+    - sind exec -- sh -c 'cat slurm-*.out'
+    - sind exec -- sacct
+  doc: getting-started/quickstart#submit-a-batch-job
+  words: [job, data, db]
+- id: job-pending
+  title: My job does not start
+  summary: What to check when a job stays in the queue, pending or stuck.
+  steps:
+    - Run squeue. The last column says why a job waits, such as Resources when every worker is busy, or Priority when other jobs go first.
+    - Run sinfo. A worker that is down, drained or not responding takes no jobs.
+    - Open the cluster. Its Health table shows a worker whose slurmd failed, and the page of that node shows its logs.
+    - Start a stopped worker with Power, or add workers when all of them are busy.
+  commands:
+    - sind exec -- squeue
+    - sind exec -- sinfo
+    - sind get cluster
+    - sind logs worker-0 slurmd
+  doc: usage/diagnostics#cluster-status
+  words: [job, slurmd, worker, slurmctld]
+- id: clean-up
+  title: Clean up when you are done
+  summary: Delete a cluster, its containers, its network and its volumes.
+  steps:
+    - Open the cluster, or find it on Clusters.
+    - Press Delete…, type the name of the cluster to confirm, and press Delete.
+    - A host directory that the cluster used as /data stays, with the output of your jobs. A Docker volume goes with the cluster.
+    - To delete every cluster of a realm and its mesh, press Delete realm on Mesh and DNS.
+  commands:
+    - sind delete cluster dev
+    - sind delete cluster --all
+  doc: usage/cluster-lifecycle#delete-a-cluster
+  words: [cluster, data, realm]
 - id: slow-create
   title: Find out why a create is slow
   summary: How to see which check a node waits for.

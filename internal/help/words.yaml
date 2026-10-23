@@ -15,22 +15,22 @@
   see: [node-roles, realm]
 - id: node-roles
   title: Node roles
-  summary: Each node has one role. The controller runs slurmctld. A worker runs slurmd. The submitter takes jobs from users. The db node keeps accounting. The api node runs slurmrestd.
+  summary: Each node has one role. The controller runs slurmctld, and a backup controller can stand by. A worker runs slurmd. The submitter takes jobs from users. The db node keeps accounting. The api node runs slurmrestd.
   command: sind get nodes
   doc: configuration/node-definitions#node-roles
-  see: [controller, worker, managed]
+  see: [controller, controller-backup, worker, submitter, db, api, managed]
 - id: controller
   title: Controller
   summary: The node that runs slurmctld, the Slurm scheduler. Every cluster has exactly one, and may have a backup controller.
   command: sind get node controller
   doc: configuration/node-definitions#node-roles
-  see: [slurmctld, worker]
+  see: [slurmctld, controller-backup, worker]
 - id: worker
   title: Worker
   summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster has at least one worker.
   command: sind create worker --count 2
   doc: usage/worker-management
-  see: [managed, slurmctld]
+  see: [managed, slurmd, job]
 - id: submitter
   title: Submitter
   summary: The node where users start jobs. It has the Slurm clients but runs no scheduler. Without one, sind exec and sind enter use the controller.
@@ -48,7 +48,63 @@
   summary: The Slurm controller daemon. It decides which job runs on which node. A node shows slurmctld as ready when the daemon answers.
   command: sind logs controller slurmctld
   doc: architecture/slurm-config
-  see: [controller]
+  see: [controller, slurmd, job]
+- id: slurmd
+  title: slurmd
+  summary: The Slurm daemon on a worker. It starts the jobs that slurmctld sends to its node. A worker whose slurmd is down takes no jobs.
+  command: sind logs worker-0 slurmd
+  doc: architecture/slurm-config
+  see: [worker, slurmctld]
+- id: slurmdbd
+  title: slurmdbd
+  summary: The Slurm database daemon on the db node. It keeps the accounting of jobs, users and accounts in MariaDB, for sacct and sacctmgr.
+  command: sind logs db slurmdbd
+  doc: configuration/node-definitions#database-node
+  see: [db, mariadb]
+- id: slurmrestd
+  title: slurmrestd
+  summary: The Slurm REST API on the api node. Programs ask it over HTTP what squeue or sbatch would tell or do.
+  command: sind logs api slurmrestd
+  doc: configuration/node-definitions#api-node
+  see: [api]
+- id: sackd
+  title: sackd
+  summary: The Slurm authentication daemon on the submitter. It runs in place of munge with the identity mode clientIds.
+  command: sind logs submitter sackd
+  doc: guides/users#clientids
+  see: [identity, submitter]
+- id: mariadb
+  title: MariaDB
+  summary: The database on the db node, in which slurmdbd keeps the accounting.
+  doc: configuration/node-definitions#database-node
+  see: [slurmdbd, db]
+- id: sshd
+  title: sshd
+  summary: The SSH server of a node. sind ssh and the commands of the Connect tab log in through it.
+  command: sind ssh worker-0
+  doc: usage/node-access#ssh
+  see: [submitter]
+- id: db
+  title: db node
+  summary: The node that keeps the Slurm accounting. It runs MariaDB and slurmdbd. A cluster has at most one.
+  doc: configuration/node-definitions#database-node
+  see: [slurmdbd, mariadb, node-roles]
+- id: api
+  title: api node
+  summary: The node that runs slurmrestd, the Slurm REST API. A cluster has at most one.
+  doc: configuration/node-definitions#api-node
+  see: [slurmrestd, node-roles]
+- id: controller-backup
+  title: Backup controller
+  summary: A second controller that runs slurmctld on standby. It takes over the cluster when the first controller stops.
+  doc: configuration/node-definitions#backup-controller
+  see: [controller, slurmctld]
+- id: job
+  title: Job
+  summary: Work that you give to Slurm, as a script with sbatch or a command with srun. It waits in the queue until a worker is free, then runs there. squeue shows the queue.
+  command: sind exec -- squeue
+  doc: getting-started/quickstart#submit-a-batch-job
+  see: [worker, slurmctld, data]
 - id: munge
   title: munge
   summary: The service that signs the requests between Slurm daemons with a key that all nodes of a cluster share. A node is not ready until its munge works.

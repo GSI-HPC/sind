@@ -221,7 +221,7 @@ limits as pairs of fields. */}}
 </div>
 <div class="fld"><span class="lbl">Nodes</span>
 <div class="act-roles" id="act-roles">
-  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b>controller</b><span class="hint">slurmctld. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
+  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b data-word="controller">controller</b><span class="hint"><span data-word="slurmctld">slurmctld</span>. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
   {{template "act-ned" (.Node "controller")}}
   {{range .Roles}}<div class="act-nr{{if .Sub}} sub{{end}}"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if $.On .Name}} checked{{end}} aria-describedby="act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i><label class="act-lab" for="act-{{.Name}}"><b>{{.Label}}{{with .Small}} <small>{{.}}</small>{{end}}</b><span class="hint">{{.Hint}}</span><span class="err" id="act-err-{{.Name}}"></span></label>{{if not .Sub}}{{template "act-chip" ($.Node .Name)}}{{end}}</div>
   {{if not .Sub}}{{template "act-ned" ($.Node .Name)}}{{end}}{{end}}

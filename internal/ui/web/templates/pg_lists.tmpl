@@ -23,7 +23,7 @@ fragment, so that the head follows the realm that the page shows. */}}
 {{template "pg-realm-filter" .}}
 <section class="panel" data-say="{{len .Nodes}} {{if eq (len .Nodes) 1}}node{{else}}nodes{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><div class="tw"><table><thead><tr><th>Node</th><th>Cluster</th>{{if not .Realm}}<th>Realm</th>{{end}}<th>Role</th><th>State</th><th>IP</th><th>Issues</th></tr></thead><tbody>
 {{range .Nodes}}<tr class="click" data-href="{{.Link}}"><td class="mono"><a href="{{.Link}}"><b>{{.Arg}}</b></a></td><td><a href="{{.ClusterLink}}">{{.Cluster}}</a></td>{{if not $d.Realm}}<td class="mono">{{.Realm}}</td>{{end}}
-  <td><span class="chip {{.RoleClass}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Arg}} is {{.State}}." data-say-key="{{.Realm}}/{{.Arg}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
+  <td><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Arg}} is {{.State}}." data-say-key="{{.Realm}}/{{.Arg}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
   <td>{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}</td></tr>
 {{else}}<tr><td colspan="7"><div class="empty">No node{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.</div></td></tr>{{end}}
 </tbody></table></div></section>

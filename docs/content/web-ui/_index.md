@@ -50,7 +50,7 @@ The UI listens on `127.0.0.1` only. Only your user can open it. To use it from a
 - **The top bar** has the jump box, which finds a cluster, a node, a page or a help entry, and the realm switch. **live** shows that the page gets updates. `?` opens the help for the page you are on, and ◐ turns the dark theme on or off.
 - **Connection lost** shows at the top when the page stops getting updates, for example because `sind ui` stopped. The page then dims, and its buttons wait until it is live again. See [Connection lost]({{< relref "/web-ui/troubleshooting#connection-lost" >}}).
 - **The task dock** at the bottom right shows the runs that go on (see [Runs and Progress]({{< relref "/web-ui/runs" >}})).
-- A dotted word explains itself when you point at it.
+- A dotted word explains itself when you point at it, tap it or give it the focus. Services such as slurmctld and slurmd, node roles such as submitter, and words of sind such as realm are dotted.
 - **Skip to content** is the first stop of the Tab key. It skips the top bar and the rail.
 
 {{< uishot "help" "The help pane tells what the page shows, explains its words and links to these docs." >}}

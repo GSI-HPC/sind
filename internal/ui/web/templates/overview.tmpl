@@ -21,7 +21,7 @@ what needs the user, and the latest runs. Each part is a fragment. */}}
 
 {{define "pg-overview-cards"}}{{with .Data}}
 {{if .Empty}}{{template "pg-first-steps" .}}{{else}}
-<section class="panel pg-realms"><div class="ph"><h2>Realms</h2><span class="grow"></span><span class="faint">a realm keeps its clusters apart</span></div>
+<section class="panel pg-realms"><div class="ph"><h2>Realms</h2><span class="grow"></span><span class="faint">a <span data-word="realm">realm</span> keeps its clusters apart</span></div>
   <div class="tw"><table><thead><tr><th>Realm</th><th class="num">Clusters</th><th class="num">Nodes</th><th>Health</th><th></th></tr></thead><tbody>
   {{range .Realms}}<tr{{if .On}} class="sel"{{end}}><td class="mono"><a href="/?realm={{.Name}}"><b>{{.Name}}</b></a></td><td class="num">{{.Clusters}}</td><td class="num">{{.Nodes}}</td>
     <td>{{if .Problems}}<span class="pill bad">{{.ProblemsText}}</span>{{else if .Nodes}}<span class="pill ok">all running</span>{{else}}<span class="faint">–</span>{{end}}</td>

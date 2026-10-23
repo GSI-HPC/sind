@@ -28,19 +28,19 @@
   <p class="hint pg-hint">The controller is the dark teal tile with three lines. Other service nodes are teal, workers sky blue. A red outline is a node that does not run, hatching a paused one, an amber ring a node with a service down.</p></div></section>
 <section class="panel pg-wide"><div class="ph"><h2>Health</h2><span class="grow"></span><span class="faint mono">sind get cluster{{.ClusterArg}}</span></div>
   {{if not .Status}}<div class="pb"><div class="callout">Service health appears once sind ui has probed the cluster.</div></div>{{end}}
-  <div class="tw"><table class="pg-mx"><thead><tr><th>Node</th><th>State</th>{{range .Services}}<th class="mono pg-svc">{{.}}</th>{{end}}</tr></thead><tbody>
+  <div class="tw"><table class="pg-mx"><thead><tr><th>Node</th><th>State</th>{{range .Services}}<th class="mono pg-svc"><span data-word="{{.}}">{{.}}</span></th>{{end}}</tr></thead><tbody>
   {{range .Matrix}}<tr class="click" data-href="{{.Node.Link}}"><td class="mono"><a href="{{.Node.Link}}"><b>{{.Node.Short}}</b></a></td><td><span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></td>{{range .Cells}}<td><span class="pg-ck {{.Class}}">{{.Mark}}</span></td>{{end}}</tr>
   {{end}}</tbody></table></div></section>
 <section class="panel"><div class="ph"><h2>Cluster</h2></div><div class="pb"><dl class="kv">
-  <dt>realm</dt><dd class="mono">{{.Realm}}</dd>
+  <dt><span data-word="realm">realm</span></dt><dd class="mono">{{.Realm}}</dd>
   <dt>state</dt><dd><span class="pill {{.Cluster.StateClass}}">{{.Cluster.State}}</span></dd>
   {{with .Cluster.Slurm}}<dt>Slurm</dt><dd class="mono">{{.}}</dd>{{end}}
-  {{with .Data}}<dt>data</dt><dd class="mono">{{.Source}} <span class="faint">({{if eq (print .Type) "volume"}}volume{{else}}host directory{{end}}) → {{.Path}}</span></dd>{{end}}
-  {{with .HA}}<dt>controllers</dt><dd>{{range .}}<span class="chip">{{.}}</span>{{end}}</dd>{{end}}</dl></div></section>
+  {{with .Data}}<dt><span data-word="data">data</span></dt><dd class="mono">{{.Source}} <span class="faint">({{if eq (print .Type) "volume"}}volume{{else}}host directory{{end}}) → {{.Path}}</span></dd>{{end}}
+  {{with .HA}}<dt><span data-word="controller-backup">controllers</span></dt><dd>{{range .}}<span class="chip">{{.}}</span>{{end}}</dd>{{end}}</dl></div></section>
 <section class="panel"><div class="ph"><h2>Network</h2></div><div class="pb">
   {{with .Status}}{{with .Network}}<dl class="kv">
   <dt>cluster network</dt><dd class="mono">{{.ClusterName}} {{template "pg-ok" .Cluster}}</dd><dt>subnet</dt><dd class="mono">{{.ClusterSubnet}}</dd>
-  <dt>mesh</dt><dd class="mono">{{.MeshName}} {{template "pg-ok" .Mesh}}</dd><dt>DNS</dt><dd>{{template "pg-ok" .DNS}}</dd><dt>SSH relay</dt><dd>{{template "pg-ok" .SSH}}</dd>
+  <dt><span data-word="mesh">mesh</span></dt><dd class="mono">{{.MeshName}} {{template "pg-ok" .Mesh}}</dd><dt>DNS</dt><dd>{{template "pg-ok" .DNS}}</dd><dt>SSH relay</dt><dd>{{template "pg-ok" .SSH}}</dd>
   {{if $.Cluster.Monitoring}}<dt>monitoring</dt><dd>grafana, prometheus, loki, alloy</dd>{{end}}</dl>{{else}}<span class="muted">No network data.</span>{{end}}
   {{else}}<span class="muted">Network health appears once sind ui has probed the cluster.</span>{{end}}</div></section>
 </div>{{end}}
@@ -50,7 +50,7 @@
     {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog>{{.Label}}</a>{{end}}<a class="btn sm danger" href="{{.Delete.URL}}" data-pg-dialog data-pg-workers>{{.Delete.Label}}</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
   <div class="tw"><table><thead><tr><th class="pg-chk"><input type="checkbox" data-pg-all aria-label="Select all"></th><th>Node</th><th>Role</th><th>State</th><th>IP</th><th>Services</th></tr></thead><tbody>
   {{range .Cluster.Nodes}}<tr data-pg-node="{{.Short}}" data-pg-role="{{.Role}}"><td><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"></td>
-    <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
+    <td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
     <td>{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}{{if .Known}}<span class="faint">{{.ServiceUp}} up</span>{{else}}<span class="faint">–</span>{{end}}{{end}}</td></tr>
   {{else}}<tr><td colspan="6"><div class="empty">This cluster has no node.</div></td></tr>{{end}}
   </tbody></table></div></section>
@@ -72,6 +72,6 @@
 {{define "pg-tab-connect"}}<div class="grid g2"><section class="panel"><div class="ph"><h2>From your terminal</h2></div><div class="pb stack">
   {{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
 <section class="panel"><div class="ph"><h2>Services</h2></div><div class="pb stack">
-  {{if .API}}<dl class="kv"><dt>slurmrestd</dt><dd class="mono">{{.API}}</dd></dl>{{else}}<p class="muted pg-flat">No api node, so no slurmrestd. Add <span class="mono">api</span> to the nodes of the config.</p>{{end}}
+  {{if .API}}<dl class="kv"><dt><span data-word="slurmrestd">slurmrestd</span></dt><dd class="mono">{{.API}}</dd></dl>{{else}}<p class="muted pg-flat">No api node, so no slurmrestd. Add <span class="mono">api</span> to the nodes of the config.</p>{{end}}
   {{with .Grafana}}<dl class="kv"><dt>Grafana</dt><dd class="mono">{{.}}</dd></dl>{{end}}</div></section></div>
 <p class="muted pg-hint">There is no terminal in the browser. Each command runs in your own terminal.</p>{{end}}
