@@ -89,13 +89,14 @@ button that goes to the first problem, or Ready, and what the nodes of the
 plan use. act.js says the status to assistive technology when its
 data-act-key changes. */}}
 {{define "act-status"}}
-{{- if not .Blocked}}<span class="pill ok" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Ready</span>
+{{- if not .Blocked}}<span class="pill {{if .Warnings}}warn{{else}}ok{{end}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Ready{{with .Warnings}} · {{.}} warning{{if ne . 1}}s{{end}}{{end}}</span>
 {{- else if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button>
 {{- else}}<span class="pill bad" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Not ready</span>{{end}}
 {{- with .Totals}}<span class="act-tot">{{.}}</span>{{end}}{{end}}
 
-{{/* act-pill says whether the command can run. */}}
-{{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
+{{/* act-pill says whether the command can run, and with how many
+warnings. */}}
+{{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else if .Warnings}}<span class="pill warn">Ready · {{.Warnings}} warning{{if ne .Warnings 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
 
 {{/* act-plan is the plan pane of a dialog that makes a cluster: it shows
 the nodes, the command and the config also while a field is wrong. */}}
@@ -108,6 +109,7 @@ the nodes, the command and the config also while a field is wrong. */}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
 <p class="hint">{{.Cmd.Summary}}</p>
 {{with .HostMB}}<div class="act-meter"><meter min="0" max="{{.}}" value="{{$p.Cmd.MemoryMB}}" high="{{$p.HostHigh}}" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">{{$p.MemoryLabel $p.Cmd.MemoryMB}} of the {{$p.MemoryLabel .}} of the Docker host</span></div>{{end}}
+{{if .Cmd.OverHost}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if .Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Create anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
 {{with .Cmd.Images}}<div class="act-imgs"><div class="cmdlabel">Images</div>{{range .}}<div class="act-img"><span class="mono">{{.Image}}</span><small>{{.Of}}</small>
   <span class="hint{{if .Version}} act-ver{{end}}">{{$p.ImageLine .}}</span>{{if .CanCheck}}<button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</div>{{end}}</div>{{end}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
@@ -277,7 +279,7 @@ realm of the link, another one that sind ui sees, or a new one. */}}
       <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="group" data-act-into="act-rows-group" data-act-prefix="g">+ Add group</button><span class="hint">For the group and groups of a user. Each user has a private group of its own name too.</span></div></div>
     <div class="fld"><span class="lbl">Slurm accounts</span>
       <div class="act-rows" id="act-rows-account">{{range .Rows "account"}}{{template "act-account" .}}{{end}}</div>
-      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children.</span></div></div>
+      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children. A new cluster has only the QOS normal; sind creates no QOS.</span></div></div>
     <datalist id="act-dl-groups"></datalist><datalist id="act-dl-accounts"></datalist>
     <datalist id="act-dl-limits">{{range .LimitKeys}}<option value="{{.}}"></option>{{end}}</datalist>
     <template id="act-tpl-user">{{template "act-user" (.Row "__ROW__")}}</template>
@@ -299,7 +301,7 @@ realm of the link, another one that sind ui sees, or a new one. */}}
     <div class="seg act-seg act-stabs" role="radiogroup" aria-label="Slurm config file">{{range .SlurmFiles}}<label><input type="radio" name="stab" value="{{.ID}}"{{if $.Is "stab" .ID}} checked{{end}}><span>{{.ID}}<span class="act-dot" id="act-dot-{{.ID}}"></span></span></label>{{end}}</div>
     {{range .SlurmFiles}}<div class="fld act-sl act-sl-{{.ID}}"><label for="act-slurm-{{.ID}}">Lines to add to <span class="mono">{{.File}}</span></label>
       <textarea id="act-slurm-{{.ID}}" name="slurm-{{.ID}}" rows="6" placeholder="such as {{.Example}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-slurm-{{.ID}}">{{$.Val (print "slurm-" .ID)}}</textarea><span class="err" id="act-err-slurm-{{.ID}}"></span></div>{{end}}
-    <span class="hint">sind writes these lines after its own, so a parameter here takes the place of sind's. It refuses parameters that the cluster needs as sind sets them.</span>
+    <span class="hint">sind writes these lines after its own, and Slurm takes the last value of a parameter, so yours wins. sind checks only a few parameters, such as SlurmctldHost with a backup controller and the database ones of slurmdbd.conf. The plan warns when slurm.conf sets ClusterName, SlurmctldHost, SlurmUser, the spool directories or PlugStackConfig, which the cluster needs as sind sets them.</span>
   </div>
 </details>
 <details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>

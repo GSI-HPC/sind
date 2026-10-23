@@ -1059,6 +1059,9 @@ func (p actPreview) StatusGo() string {
 // first problem and how many there are, or that the command can run.
 func (p actPreview) Say() string {
 	if !p.Blocked {
+		if n := p.Warnings(); n > 0 {
+			return fmt.Sprintf("Ready, with %d warning%s. %s runs the command.", n, actPlural(n), p.Spec.OK)
+		}
 		return "Ready. " + p.Spec.OK + " runs the command."
 	}
 	first, n := p.First(), p.Problems()
@@ -1076,7 +1079,7 @@ func (p actPreview) Say() string {
 // not repeat the status for each key that changes the text of a problem.
 func (p actPreview) SayKey() string {
 	if !p.Blocked {
-		return "ready"
+		return fmt.Sprintf("ready %d", p.Warnings())
 	}
 	return fmt.Sprintf("%d %s", p.Problems(), p.First().Field)
 }
@@ -1101,6 +1104,9 @@ func actPlural(n int) string {
 	}
 	return "s"
 }
+
+// Warnings is how many warnings the command has, which the pill counts.
+func (p actPreview) Warnings() int { return len(p.Cmd.Warns) }
 
 // Defaulted names the fields whose defaults the plan takes, as they are
 // wrong.

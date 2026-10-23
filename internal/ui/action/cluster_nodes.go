@@ -200,10 +200,10 @@ var nodeLists = []struct {
 func nodeSize(f Form, key, label string, n *config.Node, ps *problems) {
 	get := func(attr string) string { return strings.TrimSpace(f.Get(key + "-" + attr)) }
 	if image := get("image"); image != "" {
-		if imagePattern.MatchString(image) {
+		if err := imageError(image); err == nil {
 			n.Image = image
 		} else {
-			ps.add(key+"-image", label+" image", true, errors.New("write an image reference such as ghcr.io/gsi-hpc/sind-node:26.05"))
+			ps.add(key+"-image", label+" image", true, err)
 		}
 	}
 	if s := get("cpus"); s != "" {

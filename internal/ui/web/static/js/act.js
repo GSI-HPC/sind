@@ -623,10 +623,34 @@
     if (!(d instanceof HTMLDetailsElement) || !d.hasAttribute('data-act-hold') || !d.id) return;
     if (d.open) keptOpen.add(d.id); else keptOpen.delete(d.id);
   }, true);
+  // A checkbox of the preview with data-act-hold, such as Create anyway,
+  // keeps what the user chose when a preview takes its place, also one
+  // that was on its way when the user ticked it, and the next preview
+  // posts it so.
+  const kept = new Map();
+  document.addEventListener('change', ev => {
+    const t = ev.target;
+    if (t instanceof HTMLInputElement && t.type === 'checkbox' && t.hasAttribute('data-act-hold') && t.id) kept.set(t.id, t.checked);
+  });
+  document.addEventListener('htmx:configRequest', ev => {
+    const params = ev.detail && ev.detail.parameters;
+    if (!params) return;
+    for (const [id, on] of kept) {
+      const box = document.getElementById(id);
+      if (!(box instanceof HTMLInputElement) || !box.name) continue;
+      if (on) params[box.name] = box.value; else delete params[box.name];
+    }
+  });
+
   document.addEventListener('htmx:afterSwap', () => {
     for (const id of keptOpen) {
       const d = document.getElementById(id);
       if (d instanceof HTMLDetailsElement) d.open = true;
+    }
+    for (const [id, on] of kept) {
+      const box = document.getElementById(id);
+      if (box instanceof HTMLInputElement) box.checked = on;
+      else kept.delete(id);
     }
   });
 

@@ -38,6 +38,13 @@ const (
 	StateSaveLocation    = "/var/spool/slurmctld"
 )
 
+// FixedParameters are the slurm.conf parameters that GenerateSlurmConf
+// always writes, whatever the main section sets: the cluster name, the
+// controller, SlurmUser, the spool directories and PlugStackConfig, which
+// sind's names, volumes and images depend on. Slurm takes the last value
+// of a parameter, so a main section that sets one of them replaces sind's.
+var FixedParameters = []string{"ClusterName", "SlurmctldHost", "SlurmUser", "StateSaveLocation", "SlurmdSpoolDir", "PlugStackConfig"}
+
 // DefaultSlurmctldTimeout is the SlurmctldTimeout sind writes for a
 // primary/backup controller pair, in seconds. Slurm's default of 120s makes
 // failover tests needlessly slow; users can override it in the main section.

@@ -197,7 +197,7 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	assert.Contains(t, body, ` 2 problems in all." data-act-key="2 name"`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc")).Body.String()
-	assert.Contains(t, body, `<span class="pill ok" data-act-say="Ready. Create runs the command." data-act-key="ready">Ready</span><span class="act-tot">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
+	assert.Contains(t, body, `<span class="pill ok" data-act-say="Ready. Create runs the command." data-act-key="ready 0">Ready</span><span class="act-tot">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
 
 	// An error has no field: the status shows the list of problems.
 	f.state.configDir = ""
@@ -215,7 +215,10 @@ func TestActPreview_StatusParts(t *testing.T) {
 
 	ready := actPreview{View: v, Spec: spec}
 	assert.Equal(t, "Ready. Create runs the command.", ready.Say())
-	assert.Equal(t, "ready", ready.SayKey())
+	assert.Equal(t, "ready 0", ready.SayKey())
+	warned := actPreview{View: v, Spec: spec, Cmd: action.Command{Warns: []string{"a", "b"}}}
+	assert.Equal(t, "Ready, with 2 warnings. Create runs the command.", warned.Say())
+	assert.Equal(t, "ready 2", warned.SayKey())
 	assert.Empty(t, ready.Totals(), "no plan")
 
 	one := actPreview{View: v, Spec: spec, Blocked: true, Cmd: action.Command{

@@ -3,6 +3,7 @@
 package action
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -124,7 +125,7 @@ func TestBuildCreateCluster_APIAndWorkerReleases(t *testing.T) {
 
 func TestImageRef(t *testing.T) {
 	assert.True(t, ImageRef(imgNew))
-	assert.True(t, ImageRef("own:dev@sha256:abc"))
+	assert.True(t, ImageRef("own:dev@sha256:"+strings.Repeat("ab", 32)))
 	assert.False(t, ImageRef("-v"))
 	assert.False(t, ImageRef("a b"))
 }

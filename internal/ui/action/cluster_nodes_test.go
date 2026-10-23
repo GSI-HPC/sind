@@ -96,7 +96,7 @@ func TestBuildCreateCluster_NodeProblems(t *testing.T) {
 	}{
 		{"size", valid("size", "xl"), "size", "pick Small, Medium, Large or Custom", true},
 		{"tmp", valid("size", "x", "tmp", "lots"), "tmp", `invalid /tmp size "lots"`, true},
-		{"image", valid("controller-image", "a b"), "controller-image", "write an image reference", true},
+		{"image", valid("controller-image", "a b"), "controller-image", "use no spaces", true},
 		{"cpus", valid("db", "on", "db-cpus", "0"), "db-cpus", "write a number from 1 to 1024, or nothing", true},
 		{"memory", valid("w0-memory", "1x"), "w0-memory", `invalid memory "1x"`, true},
 		{"tmp of a node", valid("w0-tmp", "1x"), "w0-tmp", `invalid /tmp size "1x"`, true},

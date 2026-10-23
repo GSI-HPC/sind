@@ -34,20 +34,14 @@ func init() {
 var Waits = []string{"2m", "5m", "10m", "0"}
 
 // HostMemoryWarn is the share of the memory of the Docker host, in
-// percent, above which the plan of a new cluster warns.
+// percent, above which the plan of a new cluster warns. Above all of it,
+// the plan has a problem until the field "overcommit" says to create the
+// cluster anyway.
 const HostMemoryWarn = 80
 
 // DefaultWait is the --wait of sind create cluster, which the command line
 // leaves out.
 const DefaultWait = "5m"
-
-// imagePattern is what the image reference of a form may look like: the
-// characters of a registry, repository, tag and digest.
-var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$`)
-
-// ImageRef reports whether s looks like an image reference: the
-// characters of a registry, repository, tag and digest.
-func ImageRef(s string) bool { return imagePattern.MatchString(s) }
 
 // ConfigPath returns where sind ui saves the config of the cluster name.
 func ConfigPath(dir, name string) string { return filepath.Join(dir, name+".yaml") }
@@ -127,6 +121,13 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		monitoring = "yaml"
 	}
 	clusterImages(cfg, pull, c.Image, monitoring, &images, &ps)
+	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
+	host := int(c.Snap.Docker.MemTotal >> 20)
+	over := host > 0 && memoryMB > host
+	if over && !checkbox(f, "overcommit", "Create anyway", &ps) {
+		ps.add("overcommit", "Memory", false, fmt.Errorf("the nodes may use %s, more than the %s of the Docker host; give them less memory, or tick Create anyway",
+			MemoryLabel(memoryMB), MemoryLabel(host)))
+	}
 	order := ClusterFieldsOf(f)
 	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(order, a.Field) - fieldOrder(order, b.Field) })
 	var flags []string
@@ -142,10 +143,10 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if plan.final != nil {
 		cmd.After, cmd.SlurmConf = afterCreate(plan.final)
 	}
-	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
 	cmd.Containers, cmd.CPUs, cmd.MemoryMB = containers, cpus, memoryMB
-	cmd.Warns = plan.warns
+	cmd.OverHost = over
+	cmd.Warns = append(plan.warns, slurmWarnings(cfg)...)
 	cmd.Problems = ps
 	if data.home {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("%s is your home directory. Jobs write their output files there as root. Pick a scratch directory such as %s.",
@@ -154,7 +155,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if data.warn != "" {
 		cmd.Warns = append(cmd.Warns, data.warn)
 	}
-	if host := int(c.Snap.Docker.MemTotal >> 20); host > 0 && memoryMB*100 > host*HostMemoryWarn {
+	if host > 0 && memoryMB*100 > host*HostMemoryWarn && !ps.has("overcommit") {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("The nodes may use %s of memory, %d%% of the %s of the Docker host, which then can run out of memory.",
 			MemoryLabel(memoryMB), memoryMB*100/host, MemoryLabel(host)))
 	}
@@ -180,10 +181,10 @@ func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 		cfg.Realm = realm
 	}
 	if image := strings.TrimSpace(f.Get("image")); image != "" {
-		if imagePattern.MatchString(image) {
+		if err := imageError(image); err == nil {
 			cfg.Defaults.Image = image
 		} else {
-			ps.add("image", "Image", true, errors.New("write an image reference such as ghcr.io/gsi-hpc/sind-node:latest"))
+			ps.add("image", "Image", true, err)
 		}
 	}
 	nodeDefaults(f, &cfg.Defaults, ps)
@@ -232,6 +233,8 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	if parsed.Realm != "" && parsed.Realm != realm {
 		ps.add("realm", "Realm", false, fmt.Errorf("the YAML names realm %s, and this field %s; make them the same, or remove realm from the YAML", parsed.Realm, realm))
 	}
+	yamlImageProblems(parsed, &yps)
+	yamlQOSProblems(parsed, &yps)
 	parsed.ApplyDefaults()
 	var nps problems
 	checkClusterName(c, realm, parsed, &nps)

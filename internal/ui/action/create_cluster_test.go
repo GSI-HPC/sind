@@ -259,7 +259,20 @@ func TestBuildCreateCluster_HostMemory(t *testing.T) {
 	assert.Equal(t, 5*1024, cmd.MemoryMB)
 	assert.Equal(t, 5, cmd.Containers, "controller and four workers")
 	assert.Equal(t, 10, cmd.CPUs)
-	assert.Contains(t, cmd.Warns, "The nodes may use 5 GiB of memory, 125% of the 4 GiB of the Docker host, which then can run out of memory.")
+	assert.True(t, cmd.OverHost)
+	assert.Equal(t, []Problem{{Field: "overcommit", Label: "Memory", Text: "the nodes may use 5 GiB, more than the 4 GiB of the Docker host; give them less memory, or tick Create anyway"}}, cmd.Problems)
+	assert.Empty(t, cmd.Warns, "the problem says it")
+
+	cmd, err = a.Build(valid("w0-count", "4", "size", "m", "overcommit", "on"), st.ctx())
+	require.NoError(t, err)
+	assert.True(t, cmd.OverHost, "the plan keeps the box")
+	assert.Empty(t, cmd.Problems)
+	assert.Equal(t, []string{"The nodes may use 5 GiB of memory, 125% of the 4 GiB of the Docker host, which then can run out of memory."}, cmd.Warns)
+
+	cmd, err = a.Build(valid("w0-count", "3", "size", "m"), st.ctx())
+	require.NoError(t, err)
+	assert.False(t, cmd.OverHost)
+	assert.Equal(t, []string{"The nodes may use 4 GiB of memory, 100% of the 4 GiB of the Docker host, which then can run out of memory."}, cmd.Warns, "all of it is no problem yet")
 
 	cmd, err = a.Build(valid("w0-count", "2", "size", "m"), st.ctx())
 	require.NoError(t, err)
@@ -268,6 +281,7 @@ func TestBuildCreateCluster_HostMemory(t *testing.T) {
 	cmd, err = build(t, "create-cluster", valid("w0-count", "400", "size", "l"))
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns, "a host of unknown size")
+	assert.False(t, cmd.OverHost)
 }
 
 func TestBuildCreateCluster_MonitoringStackNote(t *testing.T) {
@@ -299,7 +313,7 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"name space", valid("name", "My Cluster"), "name", "use only lowercase letters, digits and -, no spaces, such as my-cluster", false},
 		{"name taken", valid("name", "dev"), "name", "realm sind has a cluster dev already; pick another name, or delete that cluster first", false},
 		{"name long with db", valid("name", long, "db", "on"), "name", "with a db node, use at most 40 characters", false},
-		{"image", valid("image", "bad image"), "image", "write an image reference", true},
+		{"image", valid("image", "bad image"), "image", "use no spaces", true},
 		{"image option", valid("image", "-v"), "image", "write an image reference", true},
 		{"cpus", valid("cpus", "0"), "cpus", "write a number from 1 to 1024", true},
 		{"memory", valid("memory", "lots"), "memory", `invalid memory "lots"`, true},

@@ -553,6 +553,22 @@ func TestActPreview_NewClusterMemoryMeter(t *testing.T) {
 	f.st.SetDocker(store.DockerState{Checked: true, MemTotal: 2 << 30})
 	body := f.post("/actions/create-cluster/preview", form).Body.String()
 	assert.Contains(t, body, `<meter min="0" max="2048" value="1536" high="1638" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">1.5 GiB of the 2 GiB of the Docker host</span>`)
+	assert.NotContains(t, body, "act-overcommit")
+
+	form = actForm("name", "hpc", "w0-count", "4", "dir", "/scratch/hpc")
+	body = f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<a href="#act-overcommit" data-act-jump="overcommit">Memory</a>: the nodes may use 2.5 GiB, more than the 2 GiB of the Docker host; give them less memory, or tick Create anyway`)
+	assert.Contains(t, body, `<input type="checkbox" id="act-overcommit" name="overcommit" data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Create anyway</b>`)
+	assert.Contains(t, body, `<span class="pill bad">Not ready · 1 problem</span>`)
+
+	form = actForm("name", "hpc", "w0-count", "4", "overcommit", "on", "dir", "/scratch/hpc")
+	body = f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<input type="checkbox" id="act-overcommit" name="overcommit" checked data-act-hold aria-describedby="act-hint-overcommit">`)
+	assert.Contains(t, body, `<span class="act-status" id="act-status" hx-swap-oob="innerHTML"><span class="pill warn" data-act-say="Ready, with 1 warning. Create runs the command." data-act-key="ready 1">Ready · 1 warning</span>`)
+
+	form = actForm("name", "hpc", "w0-count", "4", "overcommit", "on", "slurm-main", "ClusterName=prod", "dir", "/scratch/hpc")
+	body = f.post("/actions/create-cluster/preview", form).Body.String()
+	assert.Contains(t, body, `<span class="pill warn">Ready · 2 warnings</span>`)
 }
 
 func TestActPreview_NewClusterSumsUpTheSections(t *testing.T) {

@@ -58,8 +58,11 @@ type Command struct {
 	// Summary is a line about Nodes.
 	Summary string
 	// Containers, CPUs and MemoryMB are what Nodes may use together: the
-	// containers, the CPUs and the memory in MiB.
+	// containers, the CPUs and the memory in MiB. OverHost says whether
+	// MemoryMB is more than the Docker host has, which the plan asks to
+	// accept.
 	Containers, CPUs, MemoryMB int
+	OverHost                   bool
 	// Images are the images of Nodes and what sind ui knows of them.
 	Images []PlanImage
 	// After is what the command runs once the nodes are up, and SlurmConf
