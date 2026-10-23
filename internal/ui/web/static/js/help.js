@@ -20,11 +20,18 @@
 
   const SEEN_KEY = 'sind-ui-seen';
   const PANE_KEY = 'sind-ui-help-pane';
+  // KEYS_KEY is "off" when the user turned the single-key shortcuts off.
+  const KEYS_KEY = 'sind-ui-keys';
   const delay = { word: 300, action: 700 };
 
   // PAGE stands for the help of the page that shows; the server finds it by
   // the path.
   const PAGE = 'page';
+  // The topics that the pane may restore: those of help.go.
+  const TOPIC_RE = /^(page|index|words|keys|(word|action|howto)\/[a-z0-9-]+)$/;
+
+  // The pages that g then a key goes to; help.go lists the same keys.
+  const goto = { o: '/', c: '/clusters', n: '/nodes', m: '/mesh', p: '/monitoring', t: '/topology', d: '/doctor', a: '/activity' };
 
   const H = {
     seen: new Set(),
@@ -32,7 +39,12 @@
     stack: [],
     hint: null, timer: 0, over: null,
     jumpTimer: 0, jumpSeq: 0, searchTimer: 0, searchSeq: 0,
-    g: 0,
+    g: 0, gTimer: 0,
+    // The pane element, kept while the pane is open, so that a swap of the
+    // layer does not lose it; where the focus goes back to on close.
+    paneEl: null, paneBack: null,
+    // The dialog of an action that the pane covers, while it is lifted.
+    lifted: null,
   };
   try {
     const seen = JSON.parse(local.get(SEEN_KEY) || '[]');
@@ -43,7 +55,34 @@
   const layer = () => $('layer') || document.body;
   const pane = () => $('helppane');
   const jumpBox = () => $('jump');
-  const typing = () => /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName);
+  const touch = () => matchMedia('(hover: none) and (pointer: coarse)').matches;
+  const typing = () => {
+    const el = document.activeElement;
+    return !!el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable || !!(el.closest && el.closest('[role="textbox"]')));
+  };
+
+  // Single-key shortcuts: /, ? and the g keys. The root has the class
+  // keys-off while they are off, which the help texts show and which hides
+  // the key caps of class k1-on; the buttons of the top bar stop naming
+  // the keys too.
+  const keysOn = () => local.get(KEYS_KEY) !== 'off';
+  function setKeys(on) {
+    local.set(KEYS_KEY, on ? 'on' : 'off');
+    syncKeys();
+  }
+  function syncKeys() {
+    const on = keysOn();
+    document.documentElement.classList.toggle('keys-off', !on);
+    for (const b of document.querySelectorAll('[data-help-keys]')) b.checked = on;
+    for (const b of document.querySelectorAll('[data-help-toggle]')) {
+      b.title = on ? 'Help (?)' : 'Help';
+      if (on) b.setAttribute('aria-keyshortcuts', '?'); else b.removeAttribute('aria-keyshortcuts');
+    }
+  }
+  syncKeys();
+
+  // focusable reports whether el can take the focus back.
+  const focusable = el => !!el && el !== document.body && el.isConnected && !el.closest('[inert]') && typeof el.focus === 'function';
 
   function topicURL(topic, extra) {
     const q = new URLSearchParams({ topic: topic === PAGE ? location.pathname : topic });
@@ -51,8 +90,10 @@
     return '/help?' + q;
   }
 
+  // fetchHTML asks for a part of a page, as htmx does: GET /help opened in
+  // the browser is a page of its own.
   async function fetchHTML(url) {
-    const r = await fetch(url, { headers: { Accept: 'text/html' } });
+    const r = await fetch(url, { headers: { Accept: 'text/html', 'HX-Request': 'true' } });
     if (!r.ok) throw new Error(r.status + ' ' + url);
     return r.text();
   }
@@ -62,6 +103,7 @@
     if (old) old.remove();
     const el = document.createElement('div');
     el.className = 'toast';
+    el.setAttribute('role', 'status');
     el.textContent = text;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 2600);
@@ -75,11 +117,22 @@
     mark();
   }
 
+  // mark gives the dotted words their look. Only the first mark of a word
+  // takes the focus, so that a table of roles adds one stop, not one a row.
   function mark() {
+    const first = new Set();
     for (const el of document.querySelectorAll('[data-word]')) {
+      const id = el.dataset.word;
       el.classList.add('term-word');
-      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
-      el.classList.toggle('seen', H.seen.has(el.dataset.word));
+      el.classList.toggle('seen', H.seen.has(id));
+      if (el.closest('a, button, label, summary')) continue;
+      if (!first.has(id)) {
+        first.add(id);
+        if (!el.hasAttribute('tabindex') || el.dataset.wordTab) { el.setAttribute('tabindex', '0'); el.dataset.wordTab = '1'; }
+      } else if (el.dataset.wordTab) {
+        el.removeAttribute('tabindex');
+        delete el.dataset.wordTab;
+      }
     }
   }
 
@@ -128,7 +181,45 @@
     H.hint = null;
   }
 
-  // The help pane.
+  // The help pane: a dialog beside the page. It takes the focus when it
+  // opens and gives it back when it closes. It stays below the dialog of an
+  // action, so that a pane left open does not cover a dialog that opens
+  // later, until it explains that dialog: then it lifts above it (the class
+  // over) and is the modal dialog, as the dialog that it covers cannot be
+  // used. It drops back when that dialog goes.
+
+  // dialogUnder returns the open dialog of an action, if any.
+  const dialogUnder = () => document.querySelector('#layer .scrim [role="dialog"]');
+
+  // explain opens topic above the open dialog, for something in it; Esc
+  // gives the focus back to the dialog. from is what asked, when it is not
+  // the element with the focus.
+  function explain(topic, from) {
+    const back = from || document.activeElement;
+    open(topic);
+    lift(back);
+  }
+
+  function lift(back) {
+    const p = pane();
+    const dlg = dialogUnder();
+    if (!p || !dlg) return;
+    if (focusable(back) && dlg.contains(back)) H.paneBack = back;
+    dlg.setAttribute('aria-modal', 'false');
+    p.setAttribute('aria-modal', 'true');
+    p.classList.add('over');
+    H.lifted = dlg;
+  }
+
+  function drop() {
+    const dlg = H.lifted;
+    H.lifted = null;
+    if (dlg && dlg.isConnected) dlg.setAttribute('aria-modal', 'true');
+    const p = H.paneEl;
+    if (!p) return;
+    p.classList.remove('over');
+    p.setAttribute('aria-modal', 'false');
+  }
 
   function syncButton() {
     const on = !!pane();
@@ -147,30 +238,53 @@
     if (pane()) return true;
     const shell = $('help-shell');
     if (!shell) return false;
+    const back = document.activeElement;
+    if (focusable(back) && !back.closest('#jump')) H.paneBack = back;
     layer().appendChild(shell.content.cloneNode(true));
+    H.paneEl = pane();
     syncButton();
     return true;
   }
 
+  const current = () => H.stack[H.stack.length - 1];
+
   // open shows topic in the pane: after the current entry with push, else
-  // after the help of this page, so that Back leads there.
+  // after the help of this page, so that Back leads there. The focus goes
+  // into the pane: to its search field, or on a touch screen, whose
+  // keyboard would cover the pane, to its body.
   function open(topic, push) {
     if (!ensurePane()) return;
     if (push && H.stack.length) H.stack.push(topic);
     else H.stack = topic === PAGE ? [PAGE] : [PAGE, topic];
     load();
+    const p = pane();
+    if (!p.contains(document.activeElement)) (touch() ? $('help-body') : $('help-q')).focus();
   }
 
   function close() {
     const p = pane();
     if (!p) return;
+    const inside = p.contains(document.activeElement);
+    drop();
     p.remove();
+    H.paneEl = null;
     syncButton();
     save();
+    if (inside) {
+      const back = focusable(H.paneBack) ? H.paneBack : document.querySelector('[data-help-toggle]');
+      if (back) back.focus();
+    }
+    H.paneBack = null;
+  }
+
+  // say tells a screen reader what the pane shows now, in one short line.
+  function say(text) {
+    const st = $('help-status');
+    if (st) st.textContent = text;
   }
 
   async function load() {
-    const topic = H.stack[H.stack.length - 1];
+    const topic = current();
     const body = $('help-body');
     const q = $('help-q');
     if (q) q.value = '';
@@ -181,6 +295,8 @@
     }
     if (topic.startsWith('word/')) see(topic.slice(5));
     afterLoad();
+    const h2 = body.querySelector('h2');
+    say('Help: ' + (h2 ? h2.textContent : 'not found'));
     body.scrollTop = 0;
     save();
   }
@@ -190,6 +306,7 @@
     const crumb = body.querySelector('[data-crumb]');
     $('help-crumb').textContent = crumb ? 'Help · ' + crumb.dataset.crumb : 'Help';
     pane().querySelector('[data-help-back]').hidden = H.stack.length < 2;
+    syncKeys();
   }
 
   function search(q) {
@@ -202,20 +319,28 @@
         if (seq !== H.searchSeq || !pane()) return;
         $('help-body').innerHTML = html;
         afterLoad();
+        const n = $('help-body').querySelectorAll('.hits li').length;
+        say(n ? n + (n === 1 ? ' result' : ' results') : 'Nothing in help matches.');
       } catch (e) { /* keep what shows */ }
     }, 120);
   }
 
   // ? explains what the pointer or the focus is on, else the open dialog,
-  // else the page; a second ? closes the help of the page.
+  // else the page; ? closes the pane when it has nothing else to explain.
   function help() {
-    if (H.hint) { const t = H.hint.topic; hideHint(); open(t); return; }
-    const t = topicOf(target(document.activeElement)) || topicOf(H.over);
+    // Over a dialog, the pane has to come above it to be seen.
+    const show = dialogUnder() ? explain : open;
+    if (H.hint) { const t = H.hint.topic; hideHint(); show(t); return; }
     const el = target(document.activeElement) || H.over;
-    if (t && !(el && el.closest('#helppane'))) { open(t); return; }
-    const dlg = document.querySelector('#layer [data-help-dialog]');
-    if (dlg) { open('action/' + dlg.dataset.helpDialog); return; }
-    if (pane() && H.stack.length === 1) { close(); return; }
+    const t = topicOf(el);
+    if (t && !el.closest('#helppane')) { show(t); return; }
+    const dlg = document.querySelector('#layer [data-help-open]');
+    if (dlg) {
+      const dt = 'action/' + dlg.dataset.helpOpen;
+      if (H.lifted && current() === dt) close(); else explain(dt);
+      return;
+    }
+    if (pane()) { close(); return; }
     open(PAGE);
   }
 
@@ -268,6 +393,30 @@
     if (on) on.click();
   }
 
+  // The hint of a g chord: the keys that may follow, for a moment.
+  function chordHint(on) {
+    clearTimeout(H.gTimer);
+    const old = document.querySelector('.chordhint');
+    if (old) old.remove();
+    if (!on) return;
+    const el = document.createElement('div');
+    el.className = 'chordhint';
+    el.setAttribute('aria-hidden', 'true');
+    const names = { o: 'Overview', c: 'Clusters', n: 'Nodes', m: 'Mesh', p: 'Monitoring', t: 'Topology', d: 'Doctor', a: 'Activity' };
+    const b = document.createElement('b');
+    b.textContent = 'g then';
+    el.appendChild(b);
+    for (const k of Object.keys(goto)) {
+      const s = document.createElement('span');
+      const kbd = document.createElement('kbd');
+      kbd.textContent = k;
+      s.append(kbd, ' ' + names[k]);
+      el.appendChild(s);
+    }
+    document.body.appendChild(el);
+    H.gTimer = setTimeout(() => chordHint(false), 1200);
+  }
+
   // Events. They are added in the capture phase, so that ? and Esc reach
   // the help before anything else on the page.
 
@@ -293,10 +442,13 @@
 
   document.addEventListener('click', ev => {
     const t = ev.target;
+    if (!(t instanceof Element)) return;
     if (H.hint) hideHint();
     if (t.closest('[data-help-toggle]')) { if (pane()) close(); else open(PAGE); return; }
     if (t.closest('[data-help-close]')) { close(); return; }
     if (t.closest('[data-help-back]')) { H.stack.pop(); load(); return; }
+    const helpOpen = t.closest('[data-help-open]');
+    if (helpOpen) { explain('action/' + helpOpen.dataset.helpOpen); return; }
     if (t.closest('[data-palette-open]')) { openJump(''); return; }
     const copy = t.closest('[data-help-copy]');
     if (copy) {
@@ -306,7 +458,8 @@
       return;
     }
     const topic = t.closest('[data-help-topic]');
-    if (topic) {
+    // On the help page, a topic is a link that the browser follows.
+    if (topic && !topic.closest('.helpdoc')) {
       ev.preventDefault();
       const fromJump = !!topic.closest('#jump');
       if (fromJump) closeJump();
@@ -316,7 +469,14 @@
     const jumpBg = t.closest('#jump');
     if (jumpBg && !t.closest('.box')) { closeJump(); return; }
     const word = t.closest('[data-word]');
-    if (word && !word.closest('#helppane, a, button')) { open('word/' + word.dataset.word); return; }
+    if (word && !word.closest('#helppane, a, button, label, summary')) {
+      // The word explains itself; a row that it sits in does not open.
+      ev.preventDefault();
+      ev.stopPropagation();
+      const dlg = dialogUnder();
+      if (dlg && dlg.contains(word)) explain('word/' + word.dataset.word, word);
+      else open('word/' + word.dataset.word);
+    }
   }, true);
 
   document.addEventListener('input', ev => {
@@ -324,8 +484,10 @@
     if (ev.target.id === 'jump-q') { clearTimeout(H.jumpTimer); H.jumpTimer = setTimeout(refreshJump, 60); }
   });
 
-  // The pages that g then a key goes to.
-  const goto = { a: '/activity', c: '/clusters', o: '/', d: '/doctor', n: '/nodes' };
+  document.addEventListener('change', ev => {
+    const t = ev.target;
+    if (t instanceof HTMLInputElement && t.matches('[data-help-keys]')) setKeys(t.checked);
+  });
 
   window.addEventListener('keydown', ev => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 'k') {
@@ -342,27 +504,47 @@
     }
     if (ev.key === 'Escape') {
       if (H.hint) { hideHint(); ev.preventDefault(); ev.stopImmediatePropagation(); return; }
-      // An open dialog takes Esc first.
-      if (pane() && !document.querySelector('#layer [role="dialog"]')) { close(); ev.preventDefault(); }
+      const p = pane();
+      // Esc in the pane closes it, also over a dialog; elsewhere an open
+      // dialog takes Esc first.
+      if (p && (p.contains(document.activeElement) || !document.querySelector('#layer [role="dialog"]:not(#helppane)'))) {
+        close();
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+      }
       return;
     }
-    if (typing() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (typing() || ev.ctrlKey || ev.metaKey || ev.altKey || !keysOn()) return;
     if (ev.key === '/') { ev.preventDefault(); openJump(''); return; }
     if (ev.key === '?') { ev.preventDefault(); help(); return; }
-    if (ev.key === 'g') { H.g = Date.now(); return; }
-    if (Date.now() - H.g < 1200 && goto[ev.key]) { H.g = 0; location.href = goto[ev.key]; return; }
+    const pending = Date.now() - H.g < 1200;
+    if (ev.key === 'g' && !pending) { H.g = Date.now(); chordHint(true); return; }
+    const chord = pending && goto[ev.key];
     H.g = 0;
+    chordHint(false);
+    if (chord) location.href = chord;
   }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
+    // A change of the layer that takes the open pane with it, as a dialog
+    // that htmx swaps in, puts it back, below the new dialog; a pane lifted
+    // above a dialog that went drops back.
+    const l = $('layer');
+    if (l) {
+      new MutationObserver(() => {
+        if (H.lifted && !H.lifted.isConnected) drop();
+        if (H.paneEl && !H.paneEl.isConnected) l.appendChild(H.paneEl);
+      }).observe(l, { childList: true });
+    }
     mark();
+    syncKeys();
     const st = session.get(PANE_KEY);
     if (st && st.open && Array.isArray(st.stack) && st.stack.length && ensurePane()) {
-      H.stack = st.stack.filter(t => typeof t === 'string' && (t === PAGE || /^(word|action|howto)\/[a-z0-9-]+$/.test(t)));
+      H.stack = st.stack.filter(t => typeof t === 'string' && TOPIC_RE.test(t));
       if (!H.stack.length) H.stack = [PAGE];
       load();
     }
-    const changed = () => { mark(); if (H.hint && !H.hint.anchor.isConnected) hideHint(); };
+    const changed = () => { mark(); syncKeys(); if (H.hint && !H.hint.anchor.isConnected) hideHint(); };
     document.body.addEventListener('htmx:afterSwap', changed);
     document.body.addEventListener('htmx:sseMessage', changed);
   });

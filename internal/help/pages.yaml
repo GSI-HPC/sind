@@ -85,3 +85,10 @@
   doc: usage/progress
   words: [run, activity-log]
   howtos: []
+- id: help
+  title: Help
+  summary: Every how-to, word and key of sind ui in one place. The help pane, which ? opens, shows the same texts beside any page.
+  route: /help
+  doc: web-ui/pages#help
+  words: [realm, cluster, node-roles]
+  howtos: [first-cluster]

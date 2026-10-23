@@ -44,6 +44,8 @@ The UI listens on `127.0.0.1` only. Only your user can open it. To use it from a
 
 {{< uishot "overview" "The Overview of two realms. The task dock at the bottom right shows a run that goes on." >}}
 
+To try the UI without Docker, run `sind ui --demo`. It shows made-up clusters, and its dialogs play the commands instead of running them. The screenshots in these docs come from it.
+
 ## The parts of the window
 
 - **The rail** on the left lists the pages. A number shows how many items a page has, or how many need you. On a phone, and in a window that is not high, the rail is a bar at the bottom of the screen: Overview, Clusters, Nodes, Doctor and **More**, which opens the other pages.
@@ -53,6 +55,23 @@ The UI listens on `127.0.0.1` only. Only your user can open it. To use it from a
 - A dotted word explains itself when you point at it, tap it or give it the focus. Services such as slurmctld and slurmd, node roles such as submitter, and words of sind such as realm are dotted.
 - **Skip to content** is the first stop of the Tab key. It skips the top bar and the rail.
 
+## Find things and get help
+
+The help pane shows the help of the page: what it shows, the words on it and how to do the common things. The **?** button of a dialog opens the help of that dialog, above it. A pane that you left open stays beside a dialog that opens later, or behind it on a narrow screen. The pane takes the focus, and Esc closes it and takes you back to where you were. **All how-tos** and **All words** list every how-to and every word, such as how to see the output of a job, what to do when a job does not start, and how to clean up when you are done.
+
+The address `/help` opens the same texts as a page of their own, with a search that works without script, so that you can bookmark or share an entry.
+
 {{< uishot "help" "The help pane tells what the page shows, explains its words and links to these docs." >}}
 
-To try the UI without Docker, run `sind ui --demo`. It shows made-up clusters, and its dialogs play the commands instead of running them. The screenshots in these docs come from it.
+## Keys
+
+| Key | What it does |
+|-----|--------------|
+| `/` or `Ctrl+K` | Open the jump box. On a Mac, `⌘ K`. |
+| `?` | Help for the item under the pointer or with the focus, else for the open dialog or the page |
+| `g` then `o`, `c`, `n`, `m`, `p`, `t`, `d` or `a` | Go to Overview, Clusters, Nodes, Mesh and DNS, Monitoring, Topology, Doctor or Activity |
+| `↑` `↓`, `Enter` | Move through the results of the jump box, and open one |
+| `Ctrl+Enter` | Run the command of the dialog. On a Mac, `⌘ Enter`. |
+| `Esc` | Close the hint card, the jump box, the help pane or the dialog. A dialog with changes asks first. |
+
+Keys do nothing while you type in a field, except `Esc`, `Ctrl+K` and `Ctrl+Enter`. To turn off the shortcuts of one key (`/`, `?` and the `g` keys), as speech input can press them by accident, open **Keys** in the help pane and clear **Single-key shortcuts**. `Ctrl+K` and `Esc` still work, and the buttons and hint cards stop showing `/` and `?`. Your browser keeps the setting.

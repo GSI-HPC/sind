@@ -34,6 +34,7 @@ var wave2Paths = map[string]string{
 	"/activity":                "activity",
 	"/runs/0123456789abcdef":   "run",
 	"/tasks/t1":                "task",
+	"/help":                    "help",
 }
 
 func TestEmbeddedTextsAreComplete(t *testing.T) {

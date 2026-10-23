@@ -1,31 +1,64 @@
-/* sind ui help: the help pane, hint cards and the jump box. */
+/* sind ui help: the help pane, the help page, hint cards and the jump box. */
 
+/* The pane stands below the dialog of an action (z-index 50), so that a
+   pane left open does not cover a dialog that opens later; it lifts above
+   the dialog (over) when it explains it. It stays below the jump box. */
 .helppane{position:fixed;top:0;right:0;bottom:0;width:min(370px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:45;display:flex;flex-direction:column;box-shadow:var(--shadow);padding-bottom:env(safe-area-inset-bottom,0px)}
+.helppane.over{z-index:52}
 .helppane .hh{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
 .helppane .hh .crumb{flex:1;font:600 var(--t-xs) var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
 .helppane .hs{padding:8px 14px;border-bottom:1px solid var(--line-2)}
 .helppane .hs input{width:100%;border:1px solid var(--line);border-radius:var(--r);padding:6px 10px;background:var(--panel-2);outline:0}
-.helppane .hs input:focus{border-color:var(--accent)}
+.helppane .hs input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .helppane .hb{padding:14px 16px;overflow-y:auto;flex:1;display:grid;gap:14px;align-content:start}
+.helppane .hb:focus{outline:0}
 .helppane .hb>div{display:grid;gap:12px;align-content:start}
-.helppane .kind{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
-.helppane h2{font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em;margin:0}
-.helppane h3{margin:0 0 6px;font:600 var(--t-xs) var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
-.helppane p{margin:0}
-.helppane .lead{font-size:var(--t-base)}
-.helppane ul{margin:0;padding:0;list-style:none;display:grid}
-.helppane li{padding:7px 0;border-bottom:1px solid var(--line-2)}
-.helppane .steps{margin:0;padding-left:18px;display:grid;gap:6px}
-.helppane .chips{display:flex;gap:6px;flex-wrap:wrap}
-.helppane .stack{display:grid;gap:8px}
-.helppane .link{display:flex;align-items:baseline;gap:10px;width:100%;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--accent)}
-.helppane .link:hover{text-decoration:underline}
-.helppane .link small{margin-left:auto;font:var(--t-xs) var(--f-mono);color:var(--faint)}
-.helppane .hint{font-size:var(--t-sm);color:var(--muted)}
+#help-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* The texts of an entry, in the pane and on the help page. */
+:is(.helppane,.helpdoc) .kind{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+:is(.helppane,.helpdoc) h2{font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em;margin:0}
+:is(.helppane,.helpdoc) h3{margin:0 0 6px;font:600 var(--t-xs) var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+:is(.helppane,.helpdoc) p{margin:0}
+:is(.helppane,.helpdoc) .lead{font-size:var(--t-base)}
+:is(.helppane,.helpdoc) ul{margin:0;padding:0;list-style:none;display:grid}
+:is(.helppane,.helpdoc) li{padding:7px 0;border-bottom:1px solid var(--line-2)}
+:is(.helppane,.helpdoc) .hlist li{display:grid;gap:2px}
+:is(.helppane,.helpdoc) .steps{margin:0;padding-left:18px;display:grid;gap:6px}
+:is(.helppane,.helpdoc) .steps li{padding:0;border:0}
+:is(.helppane,.helpdoc) .chips{display:flex;gap:6px;flex-wrap:wrap}
+:is(.helppane,.helpdoc) .chips a:hover{text-decoration:none}
+:is(.helppane,.helpdoc) .stack{display:grid;gap:8px}
+:is(.helppane,.helpdoc) .link{display:flex;align-items:baseline;gap:10px;width:100%;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--accent)}
+:is(.helppane,.helpdoc) .link:hover{text-decoration:underline}
+:is(.helppane,.helpdoc) .link small{margin-left:auto;font:var(--t-xs) var(--f-mono);color:var(--faint)}
+:is(.helppane,.helpdoc) .hint{font-size:var(--t-sm);color:var(--muted)}
+.gloss{display:grid;gap:4px;margin:0}
+.gloss dt{font-weight:600;margin-top:8px}
+.gloss dd{margin:0;color:var(--muted);font-size:var(--t-md)}
 .keys{display:grid;grid-template-columns:max-content 1fr;gap:6px 12px;font-size:var(--t-md);margin:0}
 .keys dt{white-space:nowrap}
 .keys dd{margin:0}
+.keys .kj{font-size:var(--t-xs);color:var(--faint)}
 .help-open .iconbtn[data-help-toggle]{background:var(--accent-soft);color:var(--accent)}
+
+/* The setting for single-key shortcuts, and how the texts show it off. */
+.kset{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);cursor:pointer}
+.kset input{margin-top:3px;accent-color:var(--accent)}
+.kset>span{display:grid;gap:2px}
+.k1-off{display:none}
+.keys-off .k1-off{display:block}
+.keys-off .k1-on{display:none!important}
+.keys-off .helpkeys-short .k1{display:none}
+.keys-off .keys dt.k1{opacity:.5}
+.keys-off .keys dd.k1{color:var(--faint);text-decoration:line-through}
+
+/* The help page. */
+.helpsearch{display:flex;gap:8px;margin-bottom:16px;max-width:760px}
+.helpsearch input{flex:1;min-width:0;border:1px solid var(--line);border-radius:var(--r);padding:7px 10px;background:var(--panel)}
+.helpdoc{max-width:760px}
+.helpdoc>div{padding:16px 20px;display:grid;gap:14px}
+.helpdoc>div>div{display:grid;gap:12px}
 
 .hintcard{position:fixed;z-index:60;width:300px;max-width:calc(100% - 16px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:10px 12px;font-size:var(--t-md);display:grid;gap:6px;pointer-events:none}
 .hintcard .k{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--info)}
@@ -43,5 +76,19 @@
 .palette .pi.on{background:var(--accent-soft)}
 .palette .empty{padding:14px;color:var(--muted)}
 
+/* The keys that may follow g, while the chord waits. */
+.chordhint{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;max-width:calc(100% - 32px);padding:8px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-size:var(--t-sm)}
+.chordhint kbd{color:var(--fg)}
 
-@media (min-width:1100px){.help-open .app{width:calc(100% - 370px)}.help-open .tasks{right:386px}}
+/* Keys mean nothing on a touch screen, and taps on one. */
+.touch-only{display:none}
+@media (hover:none) and (pointer:coarse){
+  .kbd-only{display:none!important}
+  .touch-only{display:revert}
+}
+
+@media (max-width:600px){
+  .helppane{width:100%}
+  .helppane .hh .iconbtn{min-width:44px;min-height:44px}
+}
+@media (min-width:1100px){.help-open .app{width:calc(100% - 370px)}.help-open .tasks{right:386px}.help-open .scrim{right:370px}}
