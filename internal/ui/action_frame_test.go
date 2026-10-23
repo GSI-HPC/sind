@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,68 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
+
+func TestActDialog_LayoutHasTheNotices(t *testing.T) {
+	f := newActFixture(t)
+	assert.Contains(t, f.get("/dialogs/connect").Body.String(), `<div id="layer"></div>`+"\n"+`<div class="act-notes" id="act-notes" role="status"></div>`)
+}
+
+// postFrom is postHTMX from the page at path, which htmx names in the
+// header HX-Current-URL.
+func (ts *testServer) postFrom(path, target, form string) *httptest.ResponseRecorder {
+	r := request("POST", target)
+	r.Header.Set("HX-Request", "true")
+	r.Header.Set("HX-Current-URL", "http://127.0.0.1:7878"+path)
+	r.Body = nopCloser(form)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "http://127.0.0.1:7878")
+	r.Header.Set(csrfHeader, ts.csrf)
+	r.AddCookie(ts.cookie)
+	return ts.do(r)
+}
+
+func TestActRun_LeavesThePageOfWhatItRemoves(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("cluster", "dev")
+	run := form + "&shown=" + f.shown(t, "delete-cluster", form) + "&confirm=dev"
+
+	// On the page of the cluster, or of one of its nodes, the dialog
+	// follows its run, as the page would only say that the cluster went.
+	for _, path := range []string{"/clusters/sind/dev", "/nodes/sind/dev/worker-0"} {
+		w := f.postFrom(path, "/actions/delete-cluster/run", run)
+		assert.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), path)
+		assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": true}}`, w.Header().Get("HX-Trigger"), path)
+	}
+
+	// Elsewhere it stays, with a notice.
+	w := f.postFrom("/clusters", "/actions/delete-cluster/run", run)
+	assert.Empty(t, w.Header().Get("HX-Redirect"))
+	assert.Equal(t, "#act-notes", w.Header().Get("HX-Retarget"))
+}
+
+func TestActOnPageOf(t *testing.T) {
+	for _, c := range []struct {
+		url, realm, cluster string
+		want                bool
+	}{
+		{"http://h/clusters/ci/dev", "ci", "dev", true},
+		{"http://h/clusters/ci/dev/logs?x=1", "ci", "dev", true},
+		{"http://h/nodes/ci/dev/worker-0", "ci", "dev", true},
+		{"http://h/clusters/ci/devx", "ci", "dev", false},
+		{"http://h/clusters/ci", "ci", "dev", false},
+		{"http://h/nodes/ci/dev", "ci", "dev", false},
+		{"http://h/clusters/ci/dev", "ci", "", true},
+		{"http://h/nodes/ci/hpc/db", "ci", "", true},
+		{"http://h/clusters/cix/dev", "ci", "", false},
+		{"http://h/clusters", "ci", "", false},
+		{"", "ci", "dev", false},
+		{"%zz", "ci", "dev", false},
+	} {
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r.Header.Set("HX-Current-URL", c.url)
+		assert.Equal(t, c.want, actOnPageOf(r, c.realm, c.cluster), c.url+" "+c.cluster)
+	}
+}
 
 func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	f := newActFixture(t)

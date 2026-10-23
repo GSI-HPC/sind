@@ -4,6 +4,7 @@ package ui
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -92,6 +93,13 @@ type actSpec struct {
 	// Plan puts the preview into a pane beside the fields, which shows
 	// the plan of the command even while a field is wrong.
 	Plan bool
+	// Follow opens the run page once the command starts. Other dialogs
+	// close, and the page behind them stays, with a notice of the run.
+	Follow bool
+	// Removes says that the command removes the cluster or the realm of
+	// the link: opened on a page of it, the dialog follows its run, as
+	// the page would show only that it is gone.
+	Removes bool
 	// Fields returns the fields of the form that show their own problem.
 	Fields func(f url.Values) []string
 	// Sections are the parts of the form that fold, each with a line
@@ -107,7 +115,7 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
+		OK: "Create", Wide: true, Plan: true, Follow: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
 		Lead: func(d *actDialog) string {
 			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
@@ -170,7 +178,7 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-cluster": {
-		OK: "Delete", Danger: true, NeedsCluster: true,
+		OK: "Delete", Danger: true, NeedsCluster: true, Removes: true,
 		Title: func(d *actDialog) string { return "Delete cluster " + d.Cluster },
 		Lead: func(d *actDialog) string {
 			return fmt.Sprintf("Removes its %d containers, its network and its volumes.", len(d.Snap.ClusterNodes(d.Realm, d.Cluster)))
@@ -211,7 +219,7 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-realm": {
-		OK: "Delete", Danger: true,
+		OK: "Delete", Danger: true, Removes: true,
 		Title: func(d *actDialog) string { return "Delete realm " + d.Realm },
 		Lead: func(d *actDialog) string {
 			r, _ := d.Snap.Realm(d.Realm)
@@ -1108,7 +1116,8 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	default:
 		id, err := actStart(st, a, f, p.Cmd)
 		if err == nil {
-			page.Redirect(w, r, "/tasks/"+id)
+			realm, cl := a.Target(f)
+			actStarted(s, w, r, v, p, id, p.Spec.Removes && actOnPageOf(r, realm, cl))
 			return
 		}
 		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
@@ -1133,6 +1142,44 @@ func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) 
 	}
 	realm, cl := a.Target(f)
 	return st.starter.Start(run.Spec{Action: a.ID, Argv: cmd.Argv, Display: cmd.Display, Realm: realm, Cluster: cl})
+}
+
+// actStartedNote is what the notice of a command that started says.
+type actStartedNote struct{ ID, Display string }
+
+// actOnPageOf reports whether htmx sent r from a page of the cluster, or
+// without a cluster of the realm: the cluster page or that of one of its
+// nodes.
+func actOnPageOf(r *http.Request, realm, cluster string) bool {
+	u, err := url.Parse(r.Header.Get("HX-Current-URL"))
+	if err != nil {
+		return false
+	}
+	of := realm
+	if cluster != "" {
+		of += "/" + cluster
+	}
+	return u.Path == "/clusters/"+of || strings.HasPrefix(u.Path, "/clusters/"+of+"/") || strings.HasPrefix(u.Path, "/nodes/"+of+"/")
+}
+
+// actStarted answers a run that started. A dialog that follows its run,
+// one whose page the command removes (gone), or a form posted without
+// script, goes to the run page; any other dialog closes on the event
+// act-started, and htmx adds a notice with a link to the run to the page.
+// The event carries the run page and whether the browser goes there, so
+// that the script of the dialogs drops a draft.
+func actStarted(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview, id string, gone bool) {
+	to := "/tasks/" + id
+	follow := p.Spec.Follow || gone || !page.IsHTMX(r)
+	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": follow}})
+	if follow {
+		w.Header().Set("HX-Trigger", string(event))
+		page.Redirect(w, r, to)
+		return
+	}
+	w.Header().Set("HX-Trigger-After-Settle", string(event))
+	page.Retarget(w, "#act-notes", "beforeend")
+	s.Write(w, r, http.StatusOK, "act-started", v.withData(actStartedNote{ID: id, Display: p.Cmd.Display}))
 }
 
 // actRejected answers a run that did not start: htmx puts the preview, with

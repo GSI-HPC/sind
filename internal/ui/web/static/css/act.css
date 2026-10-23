@@ -2,7 +2,8 @@
 
 /* Dialogs of the actions (dialogs.tmpl). Every rule sits below .scrim, so
    that the names of the form parts, which the mock shares with other
-   screens, stay these dialogs' own. */
+   screens, stay these dialogs' own; only the notices of the commands that
+   the dialogs start, which outlive them, are .act-notes. */
 
 .scrim{position:fixed;inset:0;background:rgba(6,11,22,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow-y:auto}
 .scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line)}
@@ -194,3 +195,10 @@
   .scrim .act-sec>summary{min-height:44px;align-items:center}
   .scrim .act-more>summary{padding:12px 0}
 }
+/* The notices of the commands that dialogs started, with a link to the
+   run, below the top bar. */
+.act-notes{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:60;display:grid;gap:8px;width:min(560px,calc(100% - 32px))}
+.act-notes:empty{display:none}
+.act-note{display:flex;align-items:flex-start;gap:10px;padding:8px 8px 8px 12px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;box-shadow:var(--shadow);font-size:var(--t-md)}
+.act-note p{flex:1;margin:4px 0;min-width:0}
+.act-note code{font:var(--t-sm) var(--f-mono);overflow-wrap:anywhere}

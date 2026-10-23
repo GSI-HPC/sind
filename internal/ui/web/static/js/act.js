@@ -4,7 +4,8 @@
 // nodes, the worker groups and the rows of users, groups and accounts of a
 // new cluster, the directory that follows the name, the pull that follows
 // the image, Edit YAML, the links to a field with a problem, the status
-// that leads to the first problem, the Copy button, and closing. The dialogs are the server's HTML, which htmx puts into #layer;
+// that leads to the first problem, the Copy button, closing, and the
+// notice of a command that started. The dialogs are the server's HTML, which htmx puts into #layer;
 // nothing here evaluates text.
 (() => {
   'use strict';
@@ -57,6 +58,8 @@
     }
     const go = t.closest('[data-act-go]');
     if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
+    const note = t.closest('[data-act-note-close]');
+    if (note) { note.closest('[data-act-note]').remove(); return; }
 
     const step = t.closest('[data-act-step]');
     if (step) {
@@ -268,6 +271,22 @@
     if (first && said === 'ready') return;
     live.textContent = src.dataset.actSay;
   }
+
+  // A command started: a dialog that does not follow its run closes, while
+  // its notice stays for a while. One opened as a page of its own goes to
+  // the run.
+  document.addEventListener('act-started', ev => {
+    const det = ev.detail || {};
+    for (const n of document.querySelectorAll('#act-notes [data-act-note]:not([data-act-timed])')) {
+      n.dataset.actTimed = '';
+      const tick = () => { if (n.matches(':hover, :focus-within')) setTimeout(tick, 2000); else n.remove(); };
+      setTimeout(tick, 10000);
+    }
+    if (det.follow) return;
+    const d = document.getElementById('act-dialog');
+    if (d && !d.closest('#layer')) { location.assign(det.url); return; }
+    close();
+  });
 
   // A dialog that has just come in gets the focus on its first field; the
   // swaps of its preview, which target parts of it, leave the focus alone.

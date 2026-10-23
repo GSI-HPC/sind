@@ -333,3 +333,8 @@ limits as pairs of fields. */}}
 {{define "act-dlg-delete-realm"}}
 <div class="callout bad">This cannot be undone.</div>
 {{end}}
+
+{{/* act-started is the notice of a command that a dialog started, which
+htmx adds to #act-notes of the layout. act.js takes it away after a while,
+unless the pointer or the focus is on it. */}}
+{{define "act-started"}}{{with .Data}}<div class="act-note" data-act-note><p>Started <code>{{.Display}}</code>. <a href="/tasks/{{.ID}}">Show progress</a></p><button type="button" class="iconbtn" data-act-note-close aria-label="Close this notice" title="Close">×</button></div>{{end}}{{end}}
