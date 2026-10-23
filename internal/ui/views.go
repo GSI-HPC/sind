@@ -49,12 +49,11 @@ func (t *templates) render(name string, data any) (string, error) {
 
 // NavItem is an entry of the rail.
 type NavItem struct {
-	// Key is what Page.Nav names.
+	// Key is what Page.Nav names, and the ID of the entry's icon in
+	// web/static/icons.svg.
 	Key   string
 	Label string
 	Href  string
-	// Glyph is the character before the label.
-	Glyph string
 	// Group is the heading it stands under.
 	Group string
 }
@@ -62,14 +61,14 @@ type NavItem struct {
 // navItems are the entries of the rail, in order. The pages that they link
 // to come from other parts of sind ui.
 var navItems = []NavItem{
-	{"overview", "Overview", "/", "◎", "Overview"},
-	{"clusters", "Clusters", "/clusters", "▦", "Realm"},
-	{"nodes", "Nodes", "/nodes", "▪", "Realm"},
-	{"mesh", "Mesh and DNS", "/mesh", "⋔", "Realm"},
-	{"monitoring", "Monitoring", "/monitoring", "◔", "Realm"},
-	{"topology", "Topology", "/topology", "⋈", "Realm"},
-	{"doctor", "Doctor", "/doctor", "✓", "Host"},
-	{"activity", "Activity", "/activity", "≡", "Host"},
+	{"overview", "Overview", "/", "Overview"},
+	{"clusters", "Clusters", "/clusters", "Realm"},
+	{"nodes", "Nodes", "/nodes", "Realm"},
+	{"mesh", "Mesh and DNS", "/mesh", "Realm"},
+	{"monitoring", "Monitoring", "/monitoring", "Realm"},
+	{"topology", "Topology", "/topology", "Realm"},
+	{"doctor", "Doctor", "/doctor", "Host"},
+	{"activity", "Activity", "/activity", "Host"},
 }
 
 // navGroup is a heading of the rail and the entries below it.

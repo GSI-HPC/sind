@@ -3,5 +3,5 @@
 {{/* rail is the fragment of the page list; .Data holds the groups. */}}
 {{define "rail"}}{{range .Data}}
 <h6>{{.Title}}</h6>
-{{range .Items}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><span class="g">{{.Glyph}}</span>{{.Label}}{{if .Count.Text}}<span class="n{{with .Count.Class}} {{.}}{{end}}">{{.Count.Text}}</span>{{end}}</a>
+{{range .Items}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{call $.Asset "icons.svg"}}#{{.Key}}"></use></svg>{{.Label}}{{if .Count.Text}}<span class="n{{with .Count.Class}} {{.}}{{end}}">{{.Count.Text}}</span>{{end}}</a>
 {{end}}{{end}}{{end}}

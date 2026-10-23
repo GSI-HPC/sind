@@ -240,7 +240,7 @@ func TestEventsRailFollowsAnyTopicAndNav(t *testing.T) {
 	ts.st.SetRuns([]store.Run{{ID: "a"}, {ID: "b"}})
 	e := c.next()
 	assert.Equal(t, "rail", e.name)
-	assert.Contains(t, e.data, `<a class="nav on" href="/nodes" aria-current="page"><span class="g">▪</span>Nodes<span class="n">2</span></a>`)
+	assert.Regexp(t, `<a class="nav on" href="/nodes" aria-current="page"><svg class="g" aria-hidden="true"><use href="/static/[0-9a-f]{12}/icons.svg#nodes"></use></svg>Nodes<span class="n">2</span></a>`, e.data)
 }
 
 func TestEventsKeepAliveAndDisconnect(t *testing.T) {

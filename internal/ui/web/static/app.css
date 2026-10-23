@@ -84,10 +84,11 @@ nav.rail h6{margin:14px 10px 6px;font:600 10.5px var(--f-body);text-transform:up
 nav.rail h6:first-child{margin-top:2px}
 .nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:var(--r);color:var(--fg);cursor:pointer;white-space:nowrap}
 .nav:hover{background:var(--panel-2);text-decoration:none}
-.nav .g{width:16px;text-align:center;font:14px var(--f-mono);color:var(--faint)}
-.nav .n{margin-left:auto;font:11px var(--f-mono);color:var(--faint)}
-.nav .n.run{color:var(--run-ink);font-weight:700}
-.nav .n.bad{color:var(--bad);font-weight:700}
+.nav .g{width:16px;height:16px;flex:none;color:var(--faint)}
+.nav:hover .g{color:var(--fg)}
+.nav .n{margin-left:auto;min-width:20px;padding:0 6px;border-radius:99px;background:var(--panel-2);font:500 11px/18px var(--f-mono);text-align:center;color:var(--faint)}
+.nav .n.run{background:var(--run-soft);color:var(--run-ink);font-weight:600}
+.nav .n.bad{background:var(--bad-soft);color:var(--bad);font-weight:600}
 .nav.on{background:var(--accent-soft);font-weight:600}
 .nav.on .g{color:var(--accent)}
 
