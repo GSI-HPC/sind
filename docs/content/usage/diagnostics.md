@@ -610,7 +610,7 @@ sind get monitoring
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows Grafana, Prometheus, Loki and Alloy with their addresses and states, and the clusters that they collect.
+Open **Monitoring**. It shows the clusters that the stack collects, with their key numbers from Prometheus, and Grafana, Prometheus, Loki and Alloy with their addresses and states.
 
 {{< uishot "monitoring" >}}
 

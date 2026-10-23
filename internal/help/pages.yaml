@@ -45,7 +45,7 @@
   howtos: [connect-container]
 - id: monitoring
   title: Monitoring
-  summary: The Prometheus, Loki, Grafana and Alloy of the realm, when a cluster asks for them.
+  summary: The key numbers of each monitored cluster, such as its jobs, and the Prometheus, Loki, Grafana and Alloy of the realm, when a cluster asks for them.
   route: /monitoring
   doc: guides/monitoring
   words: [realm]

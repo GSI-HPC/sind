@@ -85,7 +85,7 @@ shots:
     page: mesh
 
   - name: monitoring
-    alt: "Monitoring: Grafana, Prometheus, Loki and Alloy of a realm, and the clusters they collect"
+    alt: "Monitoring: the key numbers of a monitored cluster, and Grafana, Prometheus, Loki and Alloy of its realm with their addresses"
     path: /monitoring
     hide: "#tasks"
     page: monitoring

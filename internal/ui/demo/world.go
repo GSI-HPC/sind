@@ -381,7 +381,7 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 			volumes = append(volumes, cluster.VolumeSummary{Name: c.dataPath, Driver: "local"})
 		}
 		if c.monitoring {
-			watched = append(watched, cluster.MonitoredCluster{Name: c.name, Nodes: len(c.nodes), SlurmVersion: c.slurm})
+			watched = append(watched, cluster.MonitoredCluster{Name: c.name, Nodes: len(c.nodes), SlurmVersion: c.slurm, Slurm: slurmCountsOf(c)})
 		}
 		st.SetStatus(r.name, c.name, w.statusOf(r, c, m))
 		st.SetSlurm(r.name, c.name, slurmOf(c))
@@ -405,6 +405,29 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 	} else {
 		st.SetMonitoring(r.name, nil)
 	}
+}
+
+// demoPending is how many jobs wait in the queue of a monitored cluster
+// of the demo.
+const demoPending = 3
+
+// slurmCountsOf returns the numbers that Prometheus would have of a
+// monitored cluster: its workers are Slurm's nodes, one whose slurmd does
+// not run is down, and each other one runs a job.
+func slurmCountsOf(c *clusterState) *cluster.SlurmCounts {
+	s := &cluster.SlurmCounts{JobsPending: demoPending}
+	for _, n := range c.nodes {
+		if n.role != config.RoleWorker {
+			continue
+		}
+		s.Nodes++
+		if n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd] {
+			s.NodesDown++
+			continue
+		}
+		s.JobsRunning++
+	}
+	return s
 }
 
 // monitoringOf returns the monitoring stack of the realm.

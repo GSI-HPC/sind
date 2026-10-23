@@ -22,6 +22,25 @@
 .more-fix .cmd{margin-bottom:10px}
 .more-fix .cmd:last-child{margin-bottom:0}
 
+/* monitoring: the interval picker in the head, the services and the
+   clusters */
+.more-iv{display:grid;grid-template-columns:auto auto;align-items:center;justify-content:end;gap:6px 10px;max-width:360px}
+.more-ivform{display:flex;align-items:center;gap:8px;font:var(--t-sm) var(--f-body);color:var(--muted)}
+.more-saved{font-size:var(--t-sm);color:var(--ok)}
+.more-ivnote{grid-column:1/-1;margin:0;font-size:var(--t-sm);color:var(--faint);text-align:right}
+.more-addr{display:inline-flex;align-items:center;gap:6px;margin-top:3px}
+.more-dns{border-top:1px solid var(--line-2)}
+.more-dns code,.more-nowrap{white-space:nowrap}
+.more-note{margin:0}
+.more-nonum{white-space:normal}
+@media (max-width:760px){
+  .more-iv{justify-content:start;max-width:none}
+  .more-ivnote{text-align:left}
+  /* a long address or image takes the width of the card, below its label */
+  .more-cards td[data-label].more-long{padding-left:0}
+  .more-cards td[data-label].more-long::before{float:none;display:block;width:auto;margin:0;font-family:var(--f-body)}
+}
+
 /* On a phone, a table of class more-cards shows each row as a card, so
    that no column hides off-screen: the cells sit in two columns, and a
    cell with data-label takes a line of its own, with the label before
@@ -37,7 +56,7 @@
   .more-cards td[colspan],.more-cards td[data-label]{grid-column:1/-1}
   .more-cards td[data-label]{padding-left:7.5rem}
   .more-cards td[data-label]::before{content:attr(data-label);content:attr(data-label) / "";float:left;width:7.5rem;margin-left:-7.5rem;font-size:var(--t-sm);color:var(--muted)}
-  .more-dnscards td.act{grid-row:1;grid-column:2}
+  .more-dnscards td.act,.more-moncards td.more-aside{grid-row:1;grid-column:2}
 }
 /* What a Copy copies, while the browser copies it the old way, and the
    lines of Copy list, shown for Ctrl+C when the browser copies nothing */

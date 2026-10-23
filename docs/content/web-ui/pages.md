@@ -79,7 +79,11 @@ The mesh network, the DNS server and its records, and the containers that are co
 
 ## Monitoring
 
-The state and addresses of Grafana, Prometheus, Loki and Alloy, if the realm runs them. Use **read every** to set how often sind ui reads them. The change lasts until sind ui stops.
+The key numbers of each monitored cluster, and the state and addresses of Grafana, Prometheus, Loki and Alloy, if the realm runs them. For each cluster, the page shows its node containers that run, and from Prometheus the Slurm nodes that are up (not down), with how many are down and how many drain and the running and pending jobs. Prometheus has these numbers once it has read slurmctld, a short time after the create. Grafana has the rest.
+
+**Open** uses the names under `.sind`, which resolve only on the Docker host, with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}). Each service also shows its address with the port, with **Copy**. When Doctor says that the host does not resolve the names, the page says that **Open** fails and to use the address. From another machine, forward the address with `ssh -L`, as the page shows for Grafana.
+
+The buttons **Read every** 10s, 30s, 1m and 5m set how often sind ui reads the stacks and their numbers while a page is open. A press saves the interval, and the page says **Saved**. The change lasts until sind ui stops. It does not change how often Prometheus scrapes.
 
 {{< uishot "monitoring" >}}
 

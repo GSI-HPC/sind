@@ -132,6 +132,18 @@ func TestMoreMonitoringPage(t *testing.T) {
 	}
 	assert.Equal(t, 3, strings.Count(body, "Open ↗"), "alloy has no page to open")
 	assert.NotContains(t, body, "no monitoring stack")
+	for _, want := range []string{
+		`aria-label="Open grafana in a new tab"`,
+		`172.18.255.253:3000</span> <button type="button" class="btn sm" data-more-copy-text="172.18.255.253:3000" aria-label="Copy the address of grafana">Copy</button>`,
+		// The host check says host DNS is off, so the Open links fail.
+		`<div class="callout warn">This host does not resolve the names under <span class="mono">.sind</span> (<a href="/doctor">Doctor: DNS policy</a>), so the Open links fail.`,
+		`ssh -L 3000:172.18.255.253:3000 HOST`,
+		// dev has a stopped node, and Prometheus has no numbers of it yet.
+		`data-label="Nodes running">3 of 4</td>`, "No numbers yet: Prometheus has them once it has read slurmctld.",
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.Equal(t, 1, strings.Count(body, "data-more-copy-text="), "only grafana's URL has a name instead of its address")
 
 	one := moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	assert.Contains(t, one, "<h2>Stack</h2>")
@@ -162,6 +174,61 @@ func TestMoreMonitoringEmptyAndEdges(t *testing.T) {
 	assert.Contains(t, body, "No cluster of this realm is monitored")
 	assert.NotContains(t, body, "Open ↗")
 	assert.Contains(t, body, "Docker is not reachable: gone")
+}
+
+func TestMoreMonitoringNumbers(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m.Clusters = []cluster.MonitoredCluster{
+		{Name: "dev", Nodes: 4, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 3, NodesDown: 1, NodesDrain: 1, JobsRunning: 7, JobsPending: 12}},
+		{Name: "default", Nodes: 2, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 1, NodesDown: 2, JobsRunning: 1}},
+	}
+	ts.st.SetMonitoring("sind", &m)
+	body := moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	for _, want := range []string{
+		"Nodes running", "Slurm nodes up", "Jobs running", "Jobs pending",
+		// A draining node is up: the counts do not tell whether the
+		// down one drains too.
+		`<td role="cell" class="num" data-label="Slurm nodes up">2 of 3<br><span class="faint more-nowrap">1 down, 1 draining</span></td>`,
+		`<td role="cell" class="num" data-label="Jobs running">7</td><td role="cell" class="num" data-label="Jobs pending">12</td>`,
+		`<td role="cell" class="num" data-label="Nodes running">2 of 2</td>`, `data-label="Slurm nodes up">0 of 1<br>`,
+		// On a phone, each row is a card with the labels in it.
+		`<table class="more-cards more-moncards" role="table">`, `<td role="cell" class="mono more-aside">26.05.1</td>`,
+	} {
+		assert.Contains(t, body, want)
+	}
+	assert.NotContains(t, body, "No numbers yet")
+
+	// Slurm's nodes all up: no line of down ones.
+	m.Clusters = []cluster.MonitoredCluster{{Name: "dev", Slurm: &cluster.SlurmCounts{Nodes: 3}}}
+	ts.st.SetMonitoring("sind", &m)
+	body = moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `data-label="Slurm nodes up">3 of 3</td>`)
+}
+
+func TestMoreMonitoringHostDNS(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	report := func(checks ...store.DoctorCheck) { ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: checks}) }
+
+	report(store.DoctorCheck{Name: "DNS policy", Status: "ok"})
+	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	assert.Contains(t, body, "which this host resolves. To open Grafana from another machine")
+	assert.NotContains(t, body, "callout warn")
+
+	report(store.DoctorCheck{Name: "Docker Engine", Status: "ok"})
+	body = moreGet(t, ts, "/monitoring", http.StatusOK)
+	assert.Contains(t, body, "which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.")
+
+	// Without an address of Grafana there is no ssh example.
+	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m.Services = []cluster.MonitoringService{{Name: "grafana", URL: "http://grafana.sind.sind:3000", State: "running"}}
+	ts.st.SetMonitoring("sind", &m)
+	ts.st.SetDoctor(nil)
+	body = moreGet(t, ts, "/monitoring", http.StatusOK)
+	assert.Contains(t, body, "with host DNS. If Open fails")
+	assert.NotContains(t, body, "ssh -L")
+
+	assert.Empty(t, moreHostDNS(store.Snapshot{}))
 }
 
 func TestMoreServiceState(t *testing.T) {
@@ -206,17 +273,26 @@ func TestMoreMonitoringCount(t *testing.T) {
 
 func TestMoreMonitoringInterval(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "read every", "nothing reads the stacks")
+	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "Read every", "nothing reads the stacks")
 
 	iv := collect.NewInterval(45 * time.Second)
 	ts.srv.Env().Put(moreIntervalKey, iv)
 	body := moreGet(t, ts, "/monitoring", http.StatusOK)
 	for _, want := range []string{
-		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "read every",
-		`<option value="10s">10s</option><option value="30s">30s</option><option value="45s" selected>45s</option><option value="1m">1m</option><option value="5m">5m</option></select>`,
+		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "Read every", `aria-labelledby="mon-interval-label"`,
+		// The ids let htmx give the focus back to the button pressed.
+		`<button type="submit" id="mon-interval-10s" name="interval" value="10s" aria-pressed="false">10s</button>` +
+			`<button type="submit" id="mon-interval-30s" name="interval" value="30s" aria-pressed="false">30s</button>` +
+			`<button type="submit" id="mon-interval-45s" name="interval" value="45s" aria-pressed="true" class="on">45s</button>` +
+			`<button type="submit" id="mon-interval-1m" name="interval" value="1m" aria-pressed="false">1m</button>` +
+			`<button type="submit" id="mon-interval-5m" name="interval" value="5m" aria-pressed="false">5m</button>`,
+		`<span class="more-saved" role="status"><span id="mon-saved"></span></span>`,
+		"How often sind ui reads the stacks", "The choice lasts until sind ui stops.", "Prometheus keeps its own scrape interval",
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, "Saved:", "a page that set nothing saved nothing")
+	assert.NotContains(t, body, `name="interval"><option`, "buttons save one choice each, not every arrow key")
 
 	post := func(value string, hx bool) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "http://127.0.0.1:7878/monitoring/interval", strings.NewReader("interval="+value))
@@ -233,7 +309,9 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	w := post("5m", true)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, 5*time.Minute, iv.Get())
-	assert.Contains(t, w.Body.String(), `<option value="5m" selected>`)
+	assert.Contains(t, w.Body.String(), `id="mon-interval-5m" name="interval" value="5m" aria-pressed="true" class="on"`)
+	assert.Contains(t, w.Body.String(), `<span id="mon-saved" hx-swap-oob="true">Saved: every 5m</span>`)
+	assert.NotContains(t, w.Body.String(), "more-ivnote", "the note stays on the page")
 	assert.NotContains(t, w.Body.String(), "45s", "a choice that is no longer current goes")
 	assert.NotContains(t, w.Body.String(), "<html")
 
