@@ -11,7 +11,7 @@ form.inline{display:inline;margin:0}
 
 /* states */
 .mark{width:14px;text-align:center;font-weight:700;flex:none}
-.mark.ok,.mark.ended{color:var(--ok)} .mark.failed{color:var(--bad)} .mark.canceled{color:var(--warn)} .mark.running{color:var(--run)} .mark.queued,.mark.skipped{color:var(--queued)}
+.mark.ok,.mark.ended{color:var(--ok)} .mark.failed{color:var(--bad)} .mark.canceled{color:var(--warn)} .mark.running{color:var(--run-ink)} .mark.queued,.mark.skipped{color:var(--queued)}
 
 /* task dock */
 .task{min-width:0;grid-template-columns:minmax(0,1fr);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:12px 14px;display:grid;gap:8px}

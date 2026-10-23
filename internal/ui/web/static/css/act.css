@@ -47,11 +47,11 @@
 .scrim .act-lab b{font:600 12.5px var(--f-mono)}
 .scrim .act-lab small{font:400 11.5px var(--f-mono);color:var(--faint)}
 .scrim .act-nr:has(input[type=checkbox]:not(:checked)) .act-sq{opacity:.4}
-.scrim .act-sq{width:12px;height:12px;border-radius:3px;background:var(--faint)}
+.scrim .act-sq{width:12px;height:12px;border-radius:3px;background:var(--deco)}
 .scrim .act-sq.controller{background:var(--brand)}
 .scrim .act-sq.backup{background:var(--brand-2)}
 .scrim .act-sq.worker{background:var(--brand-sky)}
-.scrim .act-always{font-size:12px;font-weight:600;color:var(--brand);border:1px solid var(--brand);border-radius:99px;padding:1px 8px}
+.scrim .act-always{font-size:12px;font-weight:600;color:var(--brand-ink);border:1px solid var(--brand);border-radius:99px;padding:1px 8px}
 .scrim .act-step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
 .scrim .act-step button{width:28px;height:28px;border:0;background:none;cursor:pointer;font-size:15px;color:var(--fg)}
 .scrim .act-step input[type=number]{width:52px;text-align:center;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);border-radius:0;padding:5px 2px;background:var(--panel);font:13px var(--f-mono);-moz-appearance:textfield;appearance:textfield}
@@ -144,7 +144,7 @@
 .scrim .act-probs ul{margin:4px 0 0;padding-left:18px}
 .scrim .act-probs a{color:var(--bad);font-weight:600}
 .scrim .act-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:5px}
-.scrim .act-tile{border:1px solid var(--line);border-left:4px solid var(--faint);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 11.5px var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scrim .act-tile{border:1px solid var(--line);border-left:4px solid var(--deco);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 11.5px var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scrim .act-tile.controller{border-left-color:var(--brand)}
 .scrim .act-tile.controller-backup{border-left-color:var(--brand-2);border-left-style:dashed}
 .scrim .act-tile.worker{border-left-color:var(--brand-sky)}

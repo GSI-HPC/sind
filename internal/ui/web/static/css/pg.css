@@ -77,7 +77,7 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-mx td:first-child,.pg-mx th:first-child,.pg-mx td:nth-child(2),.pg-mx th:nth-child(2){text-align:left}
 .pg-svc{text-transform:none;letter-spacing:0}
 .pg-ck{font:700 13px var(--f-mono)}
-.pg-ck.y{color:var(--ok)} .pg-ck.n{color:var(--bad)} .pg-ck.na{color:var(--faint)}
+.pg-ck.y{color:var(--ok)} .pg-ck.n{color:var(--bad)} .pg-ck.na{color:var(--deco)}
 
 /* the nodes tab: the selection and its bar */
 .pg-selbar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line-2);flex-wrap:wrap}
