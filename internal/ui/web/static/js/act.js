@@ -114,11 +114,22 @@
     if (next) next.focus({ preventScroll: true }); else focusBack(true);
   }
 
+  // quiet drops a request of a dialog that closes, and the answer to one
+  // that comes after it closed: its parts would find no place to go, as
+  // htmx reports. The dialog hears both, as they bubble up to it, also
+  // once it is out of the page.
+  function quiet(ev) {
+    const d = ev.currentTarget;
+    if (!d.isConnected || d.hasAttribute('data-act-closing')) ev.preventDefault();
+  }
+
   // opened sets up a dialog that has just come in: the page behind it goes
   // inert, and its first field takes the focus, or on a touch screen the
   // dialog itself.
   function opened(d) {
     const form = d.querySelector('form.modal');
+    d.addEventListener('htmx:beforeRequest', quiet);
+    d.addEventListener('htmx:beforeOnLoad', quiet);
     S.dialog = d;
     S.last = null;
     S.dirty = !!form && form.hasAttribute('data-act-restored');
@@ -152,6 +163,11 @@
       if (history.length > 1) history.back(); else location.assign('/');
       return;
     }
+    // The field with the focus asks for a look at the command when it
+    // loses the focus, as it changed: let it lose it while the dialog
+    // still drops such requests (quiet).
+    d.setAttribute('data-act-closing', '');
+    if (d.contains(document.activeElement)) document.activeElement.blur();
     d.remove();
     closed();
   }
