@@ -1,5 +1,5 @@
-github.com/GSI-HPC/go-clikit v0.8.0 h1:UMGHoA9drLkOSbiskpo8AkilSWZWutJpLKaao4Ok1yM=
-github.com/GSI-HPC/go-clikit v0.8.0/go.mod h1:mIsdfL76330b62R90rYcoNUn7ONDGygcf4MkOYI6nME=
+github.com/GSI-HPC/go-clikit v0.9.0 h1:h4VPZQgc+IONJyFqrqx+vJlMnhQq39U0oc2jtn1dCAw=
+github.com/GSI-HPC/go-clikit v0.9.0/go.mod h1:mIsdfL76330b62R90rYcoNUn7ONDGygcf4MkOYI6nME=
 github.com/GSI-HPC/go-nodeset v1.1.0 h1:JZe/AGtAJX18ivgpa/0pOw4o2LJa998QrPzgYyeXJRs=
 github.com/GSI-HPC/go-nodeset v1.1.0/go.mod h1:YG7JOHU9XvWCuIGLSn9yOnR1mprbLASNhQ8SuZKkPpI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
