@@ -1,0 +1,73 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: LGPL-3.0-or-later -->
+<html><head><meta charset="utf-8"><title>sind overview</title>
+<style>
+@font-face { font-family: "Inter"; font-weight: 400; src: url("../../node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url("../../node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url("../../node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2") format("woff2"); }
+:root {
+  --bg: #0a1020; --text: #e2e8f0; --mute: #94a3b8; --dim: #64748b; --line: #22304a;
+  --sky: #38bdf8; --teal: #14b8a6; --mint: #5eead4; --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+  --mono: "JetBrains Mono", "DejaVu Sans Mono", monospace; --sans: "Inter", "DejaVu Sans", sans-serif;
+}
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: var(--sans); color: var(--text);
+  background: radial-gradient(1200px 700px at 18% 8%, #12233f 0%, transparent 60%), radial-gradient(1000px 800px at 92% 100%, #0b2a30 0%, transparent 55%), var(--bg); }
+#grid { position: absolute; inset: -80px; opacity: .5;
+  background-image: radial-gradient(circle at 1px 1px, rgba(148,163,184,.13) 1.2px, transparent 1.6px); background-size: 40px 40px; }
+#vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,.42) 100%); }
+.abs { position: absolute; }
+.tile { position: absolute; border-radius: 16%; box-sizing: border-box; }
+.tile i { position: absolute; left: 30.8%; width: 38.4%; height: 4.8%; background: #fff; opacity: .9; }
+
+.head { position: absolute; left: 100px; top: 54px; width: 1720px; height: 140px; }
+.kicker { font: 600 19px/1 var(--sans); letter-spacing: 5px; text-transform: uppercase; color: var(--sky); }
+.title { position: absolute; left: 0; top: 34px; width: 1720px; font: 600 44px/1.18 var(--sans); letter-spacing: -.4px; color: var(--text); }
+.title code, .card code, .note code { font-family: var(--mono); font-size: .86em; color: var(--mint); }
+.chapbar { position: absolute; left: 100px; right: 100px; bottom: 26px; display: flex; gap: 8px; }
+.chapbar i { flex: 1; height: 3px; border-radius: 2px; background: rgba(148,163,184,.18); overflow: hidden; }
+.chapbar b { display: block; height: 100%; background: var(--teal); }
+.chaplabel { position: absolute; left: 100px; bottom: 40px; font: 500 15px var(--sans); color: var(--dim); letter-spacing: .5px; }
+
+.win { position: absolute; background: #0b1222; border: 1px solid #26344f; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.02) inset; box-sizing: border-box; }
+.win .bar { height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 18px; background: #0f1a2e; border-bottom: 1px solid #1e2b44; }
+.win .bar b { width: 13px; height: 13px; border-radius: 50%; background: #33415c; display: inline-block; flex: none; }
+.win .bar span { margin-left: 14px; font: 500 15px var(--mono); color: var(--dim); }
+.win .bar .url { flex: 1; margin: 0 150px 0 20px; height: 28px; border-radius: 8px; background: #0b1222; border: 1px solid #1e2b44;
+  font: 15px/28px var(--mono); color: var(--mute); padding: 0 12px; }
+.win .body { position: relative; }
+.win .badge { position: absolute; right: 16px; top: 9px; font: 600 15px/26px var(--mono); color: #0b1222; background: var(--amber); padding: 0 10px; border-radius: 6px; opacity: 0; }
+.term { position: absolute; left: 0; top: 0; white-space: pre; color: #d7dee9; padding: 18px 28px; z-index: 1; }
+.mark { position: absolute; left: 14px; right: 14px; display: none; background: rgba(251,191,36,.16); border-left: 4px solid #fbbf24;
+  border-radius: 4px; transform-origin: 0 50%; }
+.browser .vp { position: absolute; left: 0; top: 0; overflow: hidden; background: #0b1222; }
+.browser .inner { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.browser .inner img { display: block; }
+.ring { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--sky); box-sizing: border-box; opacity: 0; }
+
+.card { position: absolute; background: #0d1628; border: 1px solid #26344f; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.45); overflow: hidden; }
+.card .tab { font: 500 15px var(--mono); color: var(--dim); padding: 13px 22px; border-bottom: 1px solid #1e2b44; }
+.card .cbody { padding: 18px 24px; font: 400 21px/1.5 var(--sans); color: #cbd5e1; }
+.card pre { margin: 0; font: 16px/25px var(--mono); white-space: pre; color: #d7dee9; }
+.card.note .cbody { font-size: 20px; }
+.k { color: var(--sky); } .v { color: #a7f3d0; } .c { color: var(--dim); } .hl { color: var(--amber); }
+.chip { display: inline-block; font: 500 17px var(--mono); color: #a7f3d0; background: rgba(20,184,166,.12); border: 1px solid rgba(20,184,166,.35);
+  padding: 3px 11px; border-radius: 999px; white-space: nowrap; margin: 0 6px 8px 0; }
+.big { position: absolute; left: 0; width: 1920px; text-align: center; font: 600 56px/1.1 var(--sans); letter-spacing: -1px; white-space: nowrap; }
+.lbl { position: absolute; font: 500 20px var(--mono); color: var(--mute); text-align: center; }
+.links { position: absolute; left: 0; width: 1920px; text-align: center; font: 500 30px/1.9 var(--mono); color: #cbd5e1; }
+#play { display: none; position: absolute; left: 885px; top: 860px; width: 150px; height: 150px; border-radius: 50%; z-index: 10;
+  background: rgba(14,165,233,.92); box-shadow: 0 16px 50px rgba(0,0,0,.5); }
+#play::after { content: ""; position: absolute; left: 60px; top: 42px; border-style: solid; border-width: 33px 0 33px 52px; border-color: transparent transparent transparent #fff; }
+.thumb #play { display: block; }
+svg text { font-family: var(--mono); } svg .sans { font-family: var(--sans); }
+</style></head>
+<body><div id="stage"><div id="grid"></div><div id="play"></div></div>
+<script src="rec/data.js"></script>
+<script src="term.js"></script>
+<script src="engine.js"></script>
+<script src="acts.js"></script>
+</body></html>
