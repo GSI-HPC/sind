@@ -53,7 +53,10 @@ type Snapshot struct {
 	Meshes   map[string]Mesh
 	// Statuses are keyed by realm and cluster, for the clusters listed
 	// and the ones whose page is open.
-	Statuses    map[StatusKey]*cluster.Status
+	Statuses map[StatusKey]*cluster.Status
+	// Slurms are what Slurm says about the clusters whose page is open,
+	// keyed alike.
+	Slurms      map[StatusKey]*Slurm
 	Locks       map[string]*state.LockHolder
 	Monitorings map[string]*cluster.Monitoring
 	// Doctor is the last host check, nil before the first.

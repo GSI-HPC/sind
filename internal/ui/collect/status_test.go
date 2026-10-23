@@ -216,6 +216,42 @@ func TestStatusIsNotStoredForAClusterThatWasClosedWhileRead(t *testing.T) {
 	assert.True(t, f.has(devKey))
 }
 
+func TestStatusReadsWhatSlurmSays(t *testing.T) {
+	f := newStatusFixture(t)
+	f.watched.Watch([]store.Topic{devKey.Topic()})
+	f.status.read(t.Context(), devKey)
+	sl := f.st.Snapshot().Slurm("sind", "dev")
+	require.NotNil(t, sl)
+	assert.Empty(t, sl.Err)
+	assert.Equal(t, "idle", sl.Info.Nodes[0].State)
+	assert.Equal(t, "all", sl.Info.Partitions[0].Name)
+	assert.Equal(t, "# /etc/slurm/slurm.conf\n", sl.Info.Files[0].Content)
+
+	// sinfo fails: the status is kept, and what Slurm says holds the error
+	// and the files.
+	f.fake.set(func() { f.fake.failing = "sinfo" })
+	f.status.read(t.Context(), devKey)
+	sl = f.st.Snapshot().Slurm("sind", "dev")
+	assert.Empty(t, sl.Info.Nodes)
+	assert.NotEmpty(t, sl.Info.Files)
+	assert.Equal(t, "boom", sl.Err)
+	assert.True(t, f.has(devKey))
+
+	// A read that was cancelled stores nothing; one of a cluster whose page
+	// closed neither.
+	f.st.SetSlurm("sind", "dev", nil)
+	ctx, cancel := cancelled(t.Context())
+	defer cancel()
+	f.status.readSlurm(ctx, devKey)
+	f.status.readSlurm(t.Context(), prodKey)
+	assert.Empty(t, f.st.Snapshot().Slurms)
+
+	// The cluster is gone: both go.
+	f.fake.set(func() { f.fake.failing = ""; delete(f.fake.clusters, "sind/dev") })
+	f.status.read(t.Context(), devKey)
+	assert.Nil(t, f.st.Snapshot().Slurm("sind", "dev"))
+}
+
 func TestStatusLogsAFailedReadUnlessCancelled(t *testing.T) {
 	f := newStatusFixture(t)
 	log, out := debugLog()
@@ -328,4 +364,19 @@ func TestStatusWithoutViewersReadsEveryClusterAlways(t *testing.T) {
 	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
 	start(t, f.status.Run)
 	waitFor(t, "read every All", func() bool { return f.reads() >= 3 })
+}
+
+func TestStatusReadsWhatSlurmSaysOnlyWhileThePageIsOpen(t *testing.T) {
+	f := newStatusFixture(t)
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	start(t, f.status.Run)
+	waitFor(t, "status", func() bool { return f.has(devKey) })
+	f.fake.settle()
+	assert.Nil(t, f.st.Snapshot().Slurm("sind", "dev"), "no page of dev is open")
+
+	release := f.watched.Watch([]store.Topic{devKey.Topic()})
+	waitFor(t, "what Slurm says", func() bool { return f.st.Snapshot().Slurm("sind", "dev") != nil })
+	release()
+	waitFor(t, "dropped with the page", func() bool { return f.st.Snapshot().Slurm("sind", "dev") == nil })
+	assert.True(t, f.has(devKey), "the status stays: the store lists dev")
 }

@@ -230,6 +230,34 @@ func TestKeepStatuses(t *testing.T) {
 	assert.Empty(t, s.Snapshot().Statuses)
 }
 
+func TestSetSlurmAndKeepStatuses(t *testing.T) {
+	s := New()
+	sub := s.Subscribe()
+	defer sub.Close()
+	s.SetSlurm("r", "a", &Slurm{Info: &cluster.SlurmInfo{}})
+	assert.Equal(t, []Topic{StatusTopic("r", "a")}, sub.Take(), "what Slurm says is part of the status")
+	s.SetSlurm("r", "b", &Slurm{Err: "sinfo on the controller: boom"})
+	assert.Equal(t, "sinfo on the controller: boom", s.Snapshot().Slurm("r", "b").Err)
+	assert.Nil(t, s.Snapshot().Slurm("r", "c"))
+
+	s.KeepStatuses(StatusKey{"r", "a"})
+	assert.NotNil(t, s.Snapshot().Slurm("r", "a"))
+	assert.Nil(t, s.Snapshot().Slurm("r", "b"))
+	s.SetSlurm("r", "a", nil)
+	assert.Empty(t, s.Snapshot().Slurms)
+
+	// KeepSlurms leaves the statuses.
+	s.SetStatus("r", "a", &cluster.Status{Name: "a"})
+	s.SetSlurm("r", "a", &Slurm{})
+	s.SetSlurm("r", "b", &Slurm{})
+	sub.Take()
+	s.KeepSlurms(StatusKey{"r", "b"})
+	assert.Empty(t, sub.Take(), "dropping notifies nothing")
+	assert.Nil(t, s.Snapshot().Slurm("r", "a"))
+	assert.NotNil(t, s.Snapshot().Slurm("r", "b"))
+	assert.NotNil(t, s.Snapshot().Status("r", "a"))
+}
+
 func TestSortingAndReaders(t *testing.T) {
 	s := New()
 	s.SetRealms([]cluster.RealmSummary{{Name: "sind-10"}, {Name: "sind-2"}, {Name: "ci"}})

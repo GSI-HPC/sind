@@ -89,7 +89,12 @@ func Seeded() *World {
 	sind.monitoring = true
 	sind.external = []string{"kind-control-plane"}
 	// slurmd of one worker of dev is down: the page shows a failed service.
-	w.lookup("sind", "dev").find("worker-4").up[probe.ServiceSlurmd] = false
+	// Slurm runs jobs on two others and has drained one.
+	dev := w.lookup("sind", "dev")
+	dev.find("worker-4").up[probe.ServiceSlurmd] = false
+	dev.find("worker-0").busy = 2
+	dev.find("worker-1").busy = 1
+	dev.find("worker-5").drain = "memory errors, admin 09:02"
 	// A worker of legacy is stopped: the cluster is mixed.
 	legacy := w.lookup("sind", "legacy").find("worker-1")
 	legacy.state, legacy.up = cluster.StateStopped, map[probe.Service]bool{}

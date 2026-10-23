@@ -85,6 +85,15 @@ type Mesh struct {
 	Err string
 }
 
+// Slurm is what Slurm says about a cluster, read next to its status.
+type Slurm struct {
+	// Info is what sinfo and the config files say; when sinfo did not
+	// answer, the files alone, and nil when none could be read either.
+	Info *cluster.SlurmInfo
+	// Err says in one line why they could not be read.
+	Err string
+}
+
 // DoctorCheck is the outcome of one host check, as `sind doctor -o json`
 // prints it.
 type DoctorCheck struct {
@@ -256,17 +265,42 @@ func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 	}, k.Topic())
 }
 
-// KeepStatuses drops the status of every cluster that is not in keep, as
-// the cluster is gone and no page shows it. It notifies nothing: no page
-// shows a dropped status.
+// SetSlurm replaces what Slurm says about a cluster. A nil value removes
+// it. It is part of the cluster's status topic, as it is read with the
+// status. The value is handed over and must not change afterwards.
+func (s *Store) SetSlurm(realm, name string, sl *Slurm) {
+	k := StatusKey{realm, name}
+	s.change(func(sn *Snapshot) bool {
+		return setEntry(&sn.Slurms, k, sl, sl == nil)
+	}, k.Topic())
+}
+
+// keepEntries drops the entries of m whose key is not in keep, in a copy.
+func keepEntries[V any](m *map[StatusKey]V, keep []StatusKey) {
+	if len(*m) == 0 {
+		return
+	}
+	next := maps.Clone(*m)
+	maps.DeleteFunc(next, func(k StatusKey, _ V) bool { return !slices.Contains(keep, k) })
+	*m = next
+}
+
+// KeepStatuses drops the status, and what Slurm says, of every cluster
+// that is not in keep, as the cluster is gone and no page shows it. It
+// notifies nothing: no page shows a dropped status.
 func (s *Store) KeepStatuses(keep ...StatusKey) {
 	s.change(func(sn *Snapshot) bool {
-		next := maps.Clone(sn.Statuses)
-		maps.DeleteFunc(next, func(k StatusKey, _ *cluster.Status) bool { return !slices.Contains(keep, k) })
-		if len(next) == len(sn.Statuses) {
-			return false
-		}
-		sn.Statuses = next
+		keepEntries(&sn.Statuses, keep)
+		keepEntries(&sn.Slurms, keep)
+		return false
+	})
+}
+
+// KeepSlurms drops what Slurm says of every cluster that is not in keep,
+// as the pages that showed it are closed. It notifies nothing.
+func (s *Store) KeepSlurms(keep ...StatusKey) {
+	s.change(func(sn *Snapshot) bool {
+		keepEntries(&sn.Slurms, keep)
 		return false
 	})
 }
@@ -369,6 +403,11 @@ func (sn Snapshot) MeshOf(realm string) (Mesh, bool) {
 // Status returns the status of a cluster, nil when none is stored.
 func (sn Snapshot) Status(realm, name string) *cluster.Status {
 	return sn.Statuses[StatusKey{realm, name}]
+}
+
+// Slurm returns what Slurm says about a cluster, nil when none is stored.
+func (sn Snapshot) Slurm(realm, name string) *Slurm {
+	return sn.Slurms[StatusKey{realm, name}]
 }
 
 // Lock returns the holder of the realm lock, nil when it is free.

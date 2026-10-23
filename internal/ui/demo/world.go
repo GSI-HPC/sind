@@ -64,6 +64,10 @@ type nodeState struct {
 	state cluster.State
 	// up are the services that run; a node that is not running has none.
 	up map[probe.Service]bool
+	// drain is the reason Slurm does not schedule on the node, empty for
+	// none; busy are the CPUs its jobs hold (see slurmNode).
+	drain string
+	busy  int
 }
 
 // NewWorld returns a world with nothing in it.
@@ -318,6 +322,7 @@ func (w *World) Publish(st *store.Store) {
 	for _, k := range w.statuses {
 		if !slices.Contains(keys, k) {
 			st.SetStatus(k.Realm, k.Cluster, nil)
+			st.SetSlurm(k.Realm, k.Cluster, nil)
 		}
 	}
 	w.published, w.statuses = now, keys
@@ -379,6 +384,7 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 			watched = append(watched, cluster.MonitoredCluster{Name: c.name, Nodes: len(c.nodes), SlurmVersion: c.slurm})
 		}
 		st.SetStatus(r.name, c.name, w.statusOf(r, c, m))
+		st.SetSlurm(r.name, c.name, slurmOf(c))
 		*keys = append(*keys, store.StatusKey{Realm: r.name, Cluster: c.name})
 	}
 	st.SetClusters(r.name, clusters)

@@ -222,6 +222,22 @@ func (f *fake) call(args []string, _ string) mock.Result {
 			return mock.Result{Stdout: "[{}]"}
 		}
 		return mock.Result{Stderr: testutil.NoSuchContainer(name), Err: testutil.ExitCode1(f.t)}
+	case "exec":
+		// What Slurm says: sinfo and the config files on the controller.
+		for c := range f.clusters {
+			if r, name, _ := strings.Cut(c, "/"); args[1] != r+"-"+name+"-controller" {
+				continue
+			}
+			switch {
+			case args[2] == "sinfo" && slices.Contains(args, "--Node"):
+				return mock.Result{Stdout: "worker-0|idle|0/2/0/2|1024|all*|none\n"}
+			case args[2] == "sinfo":
+				return mock.Result{Stdout: "all*|up|infinite|1|worker-0\n"}
+			case args[2] == "cat":
+				return mock.Result{Stdout: "# " + args[3] + "\n"}
+			}
+		}
+		return mock.Result{Stderr: "Error response from daemon: No such container: " + args[1] + "\n", Err: testutil.ExitCode1(f.t)}
 	case "cp":
 		// The mesh DNS records: the Corefile of the DNS container.
 		return mock.Result{Stdout: testutil.TarArchive("Corefile", "hosts {\n  10.0.0.5 controller.dev.sind\n  10.0.0.6 worker-0.dev.sind\n}\n")}
