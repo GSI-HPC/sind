@@ -34,7 +34,7 @@ form.inline{display:inline;margin:0}
 .segbar i.running{background:var(--run-soft)}
 .segbar i.skipped{background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px)}
 .segbar i.running b{position:absolute;inset:0 auto 0 0;background:var(--run);transition:width .3s linear}
-.segbar i.running::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:sweep 1.4s linear infinite}
+.segbar i.running::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--shine),transparent);animation:sweep 1.4s linear infinite}
 @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .rsum .segbar{height:12px}
 
@@ -57,7 +57,7 @@ form.inline{display:inline;margin:0}
 
 /* timeline */
 .gantt{position:relative;font:var(--t-sm) var(--f-mono)}
-.gantt .axis,.grow-row{display:grid;grid-template-columns:200px minmax(0,1fr) 150px;gap:10px;align-items:center}
+.gantt .axis,.grow-row{display:grid;grid-template-columns:200px minmax(0,1fr) 210px;gap:10px;align-items:center}
 .gantt .axis{color:var(--faint);font-size:var(--t-xs);padding:0 0 6px}
 .gantt .axis .ticks{position:relative;height:14px}
 .gantt .axis .ticks span{position:absolute;transform:translateX(-50%)}
@@ -78,7 +78,7 @@ details[open]>summary.grow-row .lbl::before{content:"▾"}
 .bar.ok,.bar.ended{background:var(--ok)} .bar.failed{background:var(--bad)} .bar.canceled{background:var(--warn)} .bar.queued,.bar.skipped{background:var(--queued)}
 .bar.running{background:var(--run);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.25) 0 6px,transparent 6px 12px);background-size:17px 17px;animation:stripes .8s linear infinite}
 @keyframes stripes{to{background-position:17px 0}}
-.grow-row .res{color:var(--muted);text-align:right;white-space:nowrap;font-size:var(--t-sm);overflow:hidden;text-overflow:ellipsis}
+.grow-row .res{color:var(--muted);text-align:right;font-size:var(--t-sm);overflow-wrap:anywhere}
 
 /* nodes */
 .nodegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:10px}
@@ -131,7 +131,7 @@ table.runs td a{overflow-wrap:anywhere}
   .task .tl,.task .tf>:not(:last-child){display:none}
   .task .tf{grid-column:2;grid-row:1/3;align-self:center}
   .gantt .axis,.grow-row{grid-template-columns:110px minmax(0,1fr) 64px;gap:8px}
-  .grow-row .res{white-space:normal;overflow-wrap:anywhere;font-size:var(--t-xs)}
+  .grow-row .res{font-size:var(--t-xs)}
   .grow-row .lbl{white-space:normal}
   .hide-s{display:none}
 }

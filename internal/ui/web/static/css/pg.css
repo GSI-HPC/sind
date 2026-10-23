@@ -48,7 +48,7 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 
 /* recent runs */
 .pg-r{display:flex;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line-2);color:var(--fg)}
-.pg-r:hover{background:var(--panel-2);text-decoration:none}
+.pg-r:hover{background:var(--hover);text-decoration:none}
 .pg-r:last-child{border-bottom:0}
 .pg-c{flex:1;font:var(--t-md) var(--f-mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pg-tm{color:var(--faint);font-size:var(--t-sm);white-space:nowrap}
