@@ -116,8 +116,8 @@ func clusterUsers(f Form, cfg *config.Cluster, ps *problems) {
 		if name == "" {
 			return
 		}
-		if err := config.CheckUserName(name); err != nil {
-			ps.add(key+"-name", "User", false, err)
+		if config.CheckUserName(name) != nil {
+			ps.add(key+"-name", "User", false, errAccountName)
 			return
 		}
 		u := config.User{
@@ -137,8 +137,8 @@ func clusterUsers(f Form, cfg *config.Cluster, ps *problems) {
 		if name == "" {
 			return
 		}
-		if err := config.CheckGroupName(name); err != nil {
-			ps.add(key+"-name", "Group", false, err)
+		if config.CheckGroupName(name) != nil {
+			ps.add(key+"-name", "Group", false, errAccountName)
 			return
 		}
 		cfg.Groups = append(cfg.Groups, config.Group{Name: name, GID: rowID(f, key+"-gid", "GID of "+name, ps)})

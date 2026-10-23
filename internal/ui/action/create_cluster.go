@@ -193,7 +193,7 @@ func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 
 	content, warns, errs := renderConfig(cfg, ps.has("name"))
 	for _, err := range errs {
-		ps.add("", "Config", false, err)
+		*ps = append(*ps, configProblem(f, err))
 	}
 	return clusterPlan{cfg: cfg, content: content, warns: warns, planned: planned, data: data}
 }
@@ -287,11 +287,11 @@ func fieldOrder(order []string, field string) int {
 // sind refuses, one that is too long for accounting, or one that the realm
 // has already.
 func checkClusterName(c Context, realm string, cfg *config.Cluster, ps *problems) {
-	switch err := config.CheckName("cluster", cfg.Name); {
+	switch err := nameError("cluster", cfg.Name); {
 	case err != nil:
 		ps.add("name", "Name", false, err)
 	case len(cfg.Name) > config.MaxAccountingClusterName && slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleDB }):
-		ps.add("name", "Name", false, fmt.Errorf("with a db node the name may have at most %d characters, as slurmdbd builds its table names from it", config.MaxAccountingClusterName))
+		ps.add("name", "Name", false, fmt.Errorf("with a db node, use at most %d characters, as slurmdbd builds its table names from the name", config.MaxAccountingClusterName))
 	default:
 		if _, ok := c.Snap.Cluster(realm, cfg.Name); ok {
 			ps.add("name", "Name", false, fmt.Errorf("realm %s has a cluster %s already; pick another name, or delete that cluster first", realm, cfg.Name))

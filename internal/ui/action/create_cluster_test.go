@@ -309,10 +309,11 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		want  string
 		def   bool
 	}{
-		{"name empty", valid("name", ""), "name", "invalid cluster name", false},
-		{"name upper", valid("name", "Hpc"), "name", "invalid cluster name", false},
+		{"name empty", valid("name", ""), "name", "give the cluster a name, such as hpc", false},
+		{"name upper", valid("name", "Hpc"), "name", "use lowercase letters, such as hpc", false},
+		{"name space", valid("name", "My Cluster"), "name", "use only lowercase letters, digits and -, no spaces, such as my-cluster", false},
 		{"name taken", valid("name", "dev"), "name", "realm sind has a cluster dev already; pick another name, or delete that cluster first", false},
-		{"name long with db", valid("name", long, "db", "on"), "name", "with a db node the name may have at most 40 characters", false},
+		{"name long with db", valid("name", long, "db", "on"), "name", "with a db node, use at most 40 characters", false},
 		{"image", valid("image", "bad image"), "image", "write an image reference", true},
 		{"image option", valid("image", "-v"), "image", "write an image reference", true},
 		{"cpus", valid("cpus", "0"), "cpus", "write a number from 1 to 1024", true},
