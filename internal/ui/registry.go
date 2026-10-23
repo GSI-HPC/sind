@@ -69,6 +69,12 @@ type View struct {
 	// Asset returns the URL of a static file by its path below
 	// web/static, such as "app.css".
 	Asset func(string) string
+	// Vendor returns the URL of a script of go-clikit's localweb/htmx by
+	// its name, such as htmx.Script.
+	Vendor func(string) string
+	// HTMXConfig is the configuration of htmx that the layout puts in the
+	// page, htmx.Config.
+	HTMXConfig string
 	// Styles and Scripts are the URLs of the extra files that every page
 	// links: web/static/css/*.css and web/static/js/*.js.
 	Styles  []string

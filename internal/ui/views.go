@@ -3,49 +3,8 @@
 package ui
 
 import (
-	"bytes"
-	"html/template"
-	"io/fs"
-
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
-
-// templates holds the parsed templates, one set with the blocks of every
-// file in web/templates.
-type templates struct {
-	set *template.Template
-}
-
-// newTemplates parses templates/*.tmpl of fsys with funcs, to which it adds
-// include. include executes a block by name and returns its HTML, so that
-// the layout can place the content block of the page that is rendered.
-func newTemplates(fsys fs.FS, funcs template.FuncMap) (*templates, error) {
-	t := &templates{}
-	fm := template.FuncMap{}
-	for name, fn := range funcs {
-		fm[name] = fn
-	}
-	fm["include"] = func(name string, data any) (template.HTML, error) {
-		html, err := t.render(name, data)
-		return template.HTML(html), err //nolint:gosec // G203: the output of a template, escaped in context
-	}
-	set, err := template.New("").Funcs(fm).ParseFS(fsys, "templates/*.tmpl")
-	if err != nil {
-		return nil, err
-	}
-	t.set = set
-	return t, nil
-}
-
-// has reports whether the block name exists.
-func (t *templates) has(name string) bool { return t.set.Lookup(name) != nil }
-
-// render executes the block name with data.
-func (t *templates) render(name string, data any) (string, error) {
-	var buf bytes.Buffer
-	err := t.set.ExecuteTemplate(&buf, name, data)
-	return buf.String(), err
-}
 
 // NavItem is an entry of the rail.
 type NavItem struct {

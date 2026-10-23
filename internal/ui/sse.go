@@ -135,5 +135,5 @@ func (s *Server) renderFragment(f Fragment, v *View) (string, error) {
 	if err := s.load(f, &fv); err != nil {
 		return "", err
 	}
-	return s.tmpl.render(f.Name, &fv)
+	return s.tmpl.Render(f.Name, &fv)
 }

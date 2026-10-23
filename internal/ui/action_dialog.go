@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -759,7 +760,7 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	}
 	d.Typed = a.Want(d.Form)
 	d.Title, d.Lead = spec.Title(d), spec.Lead(d)
-	if r.Header.Get("HX-Request") != "true" {
+	if !page.IsHTMX(r) {
 		// A dialog opened by its URL, as a link without script or the
 		// jump box does: the dialog over a page of its own.
 		pv := v.withData(d)
@@ -1027,7 +1028,7 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	default:
 		id, err := actStart(st, a, f, p.Cmd)
 		if err == nil {
-			w.Header().Set("HX-Redirect", "/tasks/"+id)
+			page.Redirect(w, r, "/tasks/"+id)
 			return
 		}
 		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
@@ -1057,7 +1058,6 @@ func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) 
 // actRejected answers a run that did not start: htmx puts the preview, with
 // the reason, into the dialog.
 func actRejected(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview) {
-	w.Header().Set("HX-Retarget", "#act-preview")
-	w.Header().Set("HX-Reswap", "innerHTML")
+	page.Retarget(w, "#act-preview", "innerHTML")
 	s.Write(w, r, http.StatusOK, "act-preview", v.withData(p))
 }

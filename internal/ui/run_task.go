@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -79,13 +80,7 @@ func runTaskPage(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if run, ok := v.Snap.RunOfTrace(t.Trace); ok {
-		url := "/runs/" + run.ID
-		if r.Header.Get("HX-Request") == "true" {
-			w.Header().Set("HX-Redirect", url)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		http.Redirect(w, r, url, http.StatusSeeOther)
+		page.Redirect(w, r, "/runs/"+run.ID)
 		return
 	}
 	v.Page, v.Title, v.Nav, v.Content = "run-task", "Starting "+t.Display, "activity", "page-run-task"

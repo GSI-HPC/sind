@@ -40,6 +40,7 @@ of running them: it needs no Docker, starts no process and writes nothing.`,
 				return cobratree.InvalidValue("monitoring-interval", o.MonitoringInterval.String(), "a duration from 5s to 1h")
 			}
 			o.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")
+			o.Getenv = os.Getenv
 			o.Stderr = cmd.ErrOrStderr()
 			return runUI(cmd.Context(), o)
 		},

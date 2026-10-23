@@ -10,12 +10,14 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/launch"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/demo"
@@ -33,9 +35,15 @@ type Options struct {
 	// that a second sind ui opens it instead of starting another. Empty
 	// records nothing.
 	RuntimeDir string
-	// Exec runs the external commands, such as the one that opens the
-	// browser; nil is the real one.
+	// Exec runs the external commands; nil is the real one.
 	Exec cmdexec.Executor
+	// GOOS names the operating system, as runtime.GOOS does; empty is
+	// runtime.GOOS.
+	GOOS string
+	// Getenv reads the variables that tell whether a browser can open
+	// (SSH_CONNECTION, DISPLAY, WAYLAND_DISPLAY), as os.Getenv does; nil
+	// reads every variable as unset, so that on Linux no browser opens.
+	Getenv func(string) string
 	// Stderr gets the URL and the log; nil discards both.
 	Stderr io.Writer
 	// Demo serves made-up clusters and plays the commands of the dialogs:
@@ -53,13 +61,10 @@ type Options struct {
 
 	// registry is what is served; nil is the default registry.
 	registry *Registry
-	// procRoot is the /proc that names the owner of the listener of a
-	// recorded sind ui; empty is /proc.
-	procRoot string
+	// start runs the desktop's opener; nil is launch.Detached.
+	start func(name string, args ...string) error
 	// listen opens the listeners; nil is listen.
 	listen func(ctx context.Context, port int, log *slog.Logger) (*localweb.Bound, error)
-	// flock takes the lock of the runtime directory; nil is flock(2).
-	flock func(fd, how int) error
 }
 
 // shutdownGrace is how long open requests get to finish at shutdown.
@@ -86,36 +91,26 @@ func Run(ctx context.Context, o Options) error {
 	if o.registry == nil {
 		o.registry = defaultRegistry
 	}
-	if o.procRoot == "" {
-		o.procRoot = "/proc"
+	if o.GOOS == "" {
+		o.GOOS = runtime.GOOS
 	}
 	if o.listen == nil {
 		o.listen = listen
 	}
 	log := slog.New(slog.NewTextHandler(o.Stderr, nil))
 
-	var inst *instance
+	var inst *launch.Instance
 	if o.RuntimeDir != "" && !o.Demo {
 		var err error
-		if inst, err = newInstance(o.RuntimeDir); err != nil {
+		if inst, err = launch.Acquire(o.RuntimeDir, "sind"); err != nil {
 			return fmt.Errorf("preparing the runtime directory: %w", err)
 		}
-		inst.procRoot = o.procRoot
-		if o.flock != nil {
-			inst.flock = o.flock
-		}
-		if err := inst.lock(); err != nil {
-			return fmt.Errorf("locking the runtime directory: %w", err)
-		}
 		// The lock is dropped once the record is written, or on an error.
-		defer inst.unlock()
-		if r, ok := inst.running(); ok {
+		defer inst.Release()
+		if r, ok := inst.Running(); ok {
 			_, _ = fmt.Fprintf(o.Stderr, "sind ui is already running: %s\n", r.URL)
 			if !o.NoOpen {
-				select {
-				case <-openBrowser(ctx, o.Exec, inst.dir, r.URL, log):
-				case <-time.After(openWait):
-				}
+				openBrowser(o, inst.Dir(), r.URL, log)
 			}
 			return nil
 		}
@@ -175,11 +170,10 @@ func Run(ctx context.Context, o Options) error {
 	}
 
 	if inst != nil {
-		if err := inst.publish(runtimeRecord{URL: url, PID: os.Getpid()}); err != nil {
+		if err := inst.Publish(url); err != nil {
 			return fmt.Errorf("recording the running sind ui: %w", err)
 		}
-		inst.unlock()
-		defer inst.retire()
+		defer func() { _ = inst.Retire() }()
 	}
 	_, _ = fmt.Fprintf(o.Stderr, "sind ui: %s\nPress Ctrl-C to stop.\n", url)
 	if o.Demo {
@@ -188,7 +182,7 @@ func Run(ctx context.Context, o Options) error {
 	if !o.NoOpen {
 		dir := ""
 		if inst != nil {
-			dir = inst.dir
+			dir = inst.Dir()
 		} else if dir, err = os.MkdirTemp("", "sind-ui-"); err != nil {
 			log.Warn("could not make a directory for the page that opens sind ui; open the URL above yourself", "err", err)
 		} else {
@@ -196,7 +190,9 @@ func Run(ctx context.Context, o Options) error {
 			defer func() { _ = os.RemoveAll(dir) }()
 		}
 		if dir != "" {
-			openBrowser(ctx, o.Exec, dir, url, log)
+			if page := openBrowser(o, dir, url, log); page != "" {
+				defer func() { _ = os.Remove(page) }()
+			}
 		}
 	}
 
@@ -235,6 +231,21 @@ func openListener(ctx context.Context, port int, peer func(l net.Listener, refus
 	return b, nil
 }
 
-// openWait is how long a second sind ui waits for xdg-open before it
-// returns, as xdg-open may stay until the browser ends.
-var openWait = 3 * time.Second
+// openBrowser opens url in the user's browser, through a private file in
+// dir, a directory of the user's alone, and returns the file, which holds
+// the token and which the caller removes when sind ui stops. It returns ""
+// when no browser opened; the reason is only logged, as the URL is printed
+// anyway.
+func openBrowser(o Options, dir, url string, log *slog.Logger) string {
+	op := launch.Opener{Name: "sind ui", GOOS: o.GOOS, Getenv: o.Getenv, Dir: dir, Start: o.start}
+	if why := op.Skip(); why != "" {
+		log.Info("not opening a browser; open the URL above yourself", "why", why)
+		return ""
+	}
+	page, err := op.Open(url)
+	if err != nil {
+		log.Warn("could not open a browser; open the URL above yourself", "err", err)
+		return ""
+	}
+	return page
+}

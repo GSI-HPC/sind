@@ -10,16 +10,16 @@ parts that fill them replace as a whole. */}}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true,"historyCacheSize":0}'>
+<meta name="htmx-config" content='{{.HTMXConfig}}'>
 <meta name="csrf-token" content="{{.CSRF}}">
 <title>{{if .Title}}{{.Title}} · {{end}}sind ui</title>
 <link rel="icon" type="image/svg+xml" href="{{call .Asset "icon.svg"}}">
 <link rel="stylesheet" href="{{call .Asset "app.css"}}">
 {{range .Styles}}<link rel="stylesheet" href="{{.}}">
 {{end}}<script src="{{call .Asset "app.js"}}"></script>
-<script src="{{call .Asset "htmx.min.js"}}" defer></script>
-<script src="{{call .Asset "htmx-ext-sse.js"}}" defer></script>
-<script src="{{call .Asset "idiomorph-ext.min.js"}}" defer></script>
+<script src="{{call .Vendor "htmx.min.js"}}" defer></script>
+<script src="{{call .Vendor "htmx-ext-sse.js"}}" defer></script>
+<script src="{{call .Vendor "idiomorph-ext.min.js"}}" defer></script>
 {{range .Scripts}}<script src="{{.}}" defer></script>
 {{end}}</head>
 <body>

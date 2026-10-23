@@ -16,6 +16,9 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/assets"
+	"github.com/GSI-HPC/go-clikit/localweb/htmx"
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -57,9 +60,18 @@ type Server struct {
 	// sessions lets in the browser that opened the address with the token.
 	sessions *session.Sessions
 	hosts    func(host string) bool
-	tmpl     *templates
-	assets   *assets
-	log      *slog.Logger
+	tmpl     *page.Set
+	// assets serves the static files under /static/VERSION/, where VERSION
+	// is a hash of all of them: a new sind serves them under a new path, so
+	// browsers may cache them for good.
+	assets *assets.Assets
+	// vendor serves htmx, its SSE extension and idiomorph under
+	// /htmx/VERSION/.
+	vendor *assets.Assets
+	// styles and scripts are the extra files of every page, as URLs:
+	// static/css/*.css and static/js/*.js.
+	styles, scripts []string
+	log             *slog.Logger
 	// ctx ends the live update streams when the server stops.
 	ctx context.Context
 	now func() time.Time
@@ -94,12 +106,15 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		c.Now = time.Now
 	}
 	reg := c.Registry.snapshot()
-	a, err := newAssets(c.FS)
+	static, _ := fs.Sub(c.FS, "static") // "static" is a valid directory name
+	a, err := assets.New(static, "/static/", assets.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("static files: %w", err)
 	}
+	vendor, _ := assets.New(htmx.Files(), "/htmx/", assets.Options{}) // the kit's own files are all readable
 	s := &Server{
-		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a,
+		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a, vendor: vendor,
+		styles: a.URLs("css/*.css"), scripts: a.URLs("js/*.js"),
 		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
 		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
 	}
@@ -112,7 +127,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 	for name, fn := range reg.funcs {
 		funcs[name] = fn
 	}
-	if s.tmpl, err = newTemplates(c.FS, funcs); err != nil {
+	if s.tmpl, err = page.Parse(c.FS, page.Options{Funcs: funcs}, "templates/*.tmpl"); err != nil {
 		return nil, fmt.Errorf("templates: %w", err)
 	}
 	if err := s.check(); err != nil {
@@ -128,7 +143,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 // fragment has its template, and every fragment a page names exists.
 func (s *Server) check() error {
 	for _, name := range []string{"layout", "page-notfound"} {
-		if !s.tmpl.has(name) {
+		if !s.tmpl.Has(name) {
 			return fmt.Errorf("template %q is missing", name)
 		}
 	}
@@ -138,12 +153,12 @@ func (s *Server) check() error {
 		}
 	}
 	for name := range s.reg.fragments {
-		if !s.tmpl.has(name) {
+		if !s.tmpl.Has(name) {
 			return fmt.Errorf("fragment %s has no template block of that name", name)
 		}
 	}
 	for _, p := range s.reg.pages {
-		if !s.tmpl.has("page-" + p.Name) {
+		if !s.tmpl.Has("page-" + p.Name) {
 			return fmt.Errorf("page %s has no template block %q", p.Name, "page-"+p.Name)
 		}
 		for _, f := range p.Fragments {
@@ -164,6 +179,7 @@ func (s *Server) routes() (err error) {
 		}
 	}()
 	s.mux.Handle("GET /static/", s.assets)
+	s.mux.Handle("GET /htmx/", s.vendor)
 	s.mux.Handle("GET /events", s.fetchOnly(http.HandlerFunc(s.events)))
 	for _, p := range s.reg.pages {
 		s.mux.HandleFunc(p.Pattern, s.pageHandler(p))
@@ -255,7 +271,7 @@ const maxParamValues = 64
 func (s *Server) newView(p Params) *View {
 	return &View{
 		Snap: s.env.Store.Snapshot(), Now: s.now(), Params: p, Addr: s.env.Addr,
-		Asset: s.assets.url, Styles: s.assets.styles, Scripts: s.assets.scripts, reg: s.reg,
+		Asset: s.assets.URL, Vendor: s.vendor.URL, HTMXConfig: htmx.Config, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
 	}
 }
 
@@ -271,13 +287,9 @@ func (s *Server) Write(w http.ResponseWriter, r *http.Request, status int, name 
 // respond writes the block name rendered with v, or returns the error and
 // writes nothing.
 func (s *Server) respond(w http.ResponseWriter, status int, name string, v *View) error {
-	html, err := s.tmpl.render(name, v)
-	if err != nil {
+	if err := s.tmpl.Respond(w, status, name, v); err != nil {
 		return fmt.Errorf("rendering %s: %w", name, err)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(html)) //nolint:gosec // G705: html/template output, escaped in context
 	return nil
 }
 

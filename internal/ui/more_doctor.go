@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 )
@@ -128,7 +129,7 @@ func moreDoctorCheck(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fn()
-	if r.Header.Get("HX-Request") == "" {
+	if !page.IsHTMX(r) {
 		http.Redirect(w, r, "/doctor", http.StatusSeeOther)
 		return
 	}

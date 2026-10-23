@@ -236,7 +236,19 @@ func (ts *testServer) get(target string) *httptest.ResponseRecorder {
 // post sends a form to target in the session, with the headers that make
 // it pass the checks.
 func (ts *testServer) post(target string, form string) *httptest.ResponseRecorder {
+	return ts.postAs(target, form, false)
+}
+
+// postHTMX is post with the header that htmx sets on its requests.
+func (ts *testServer) postHTMX(target string, form string) *httptest.ResponseRecorder {
+	return ts.postAs(target, form, true)
+}
+
+func (ts *testServer) postAs(target string, form string, htmx bool) *httptest.ResponseRecorder {
 	r := request("POST", target)
+	if htmx {
+		r.Header.Set("HX-Request", "true")
+	}
 	r.Body = io.NopCloser(strings.NewReader(form))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Origin", "http://127.0.0.1:7878")

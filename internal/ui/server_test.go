@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
+	"github.com/GSI-HPC/go-clikit/localweb/htmx"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,7 +73,7 @@ func TestRefusalsAreLoggedAndSayWhereTheAddressIs(t *testing.T) {
 
 func TestSecurityHeaders(t *testing.T) {
 	ts := newTestServer(t).login()
-	for _, target := range []string{"/demo/x", "/nope", "/static/" + ts.srv.assets.version + "/app.css", "/events"} {
+	for _, target := range []string{"/demo/x", "/nope", "/static/" + ts.srv.assets.Version() + "/app.css", "/events"} {
 		h := ts.get(target).Header()
 		for k, want := range map[string]string{
 			"Content-Security-Policy":      contentSecurityPolicy,
@@ -113,15 +114,17 @@ func TestPageShell(t *testing.T) {
 
 	assert.Contains(t, body, "<title>Demo · sind ui</title>")
 	assert.Contains(t, body, `<meta name="csrf-token" content="`+ts.csrf+`">`)
-	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.url("app.css")+`">`)
-	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.url("css/demo.css")+`">`)
-	assert.Less(t, strings.Index(body, a.url("app.css")), strings.Index(body, a.url("css/demo.css")), "extra styles follow app.css")
-	assert.Contains(t, body, `<script src="`+a.url("app.js")+`"></script>`)
-	assert.Contains(t, body, `<script src="`+a.url("htmx.min.js")+`" defer></script>`)
-	assert.Contains(t, body, `<script src="`+a.url("htmx-ext-sse.js")+`" defer></script>`)
-	assert.Contains(t, body, `<script src="`+a.url("idiomorph-ext.min.js")+`" defer></script>`)
+	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("app.css")+`">`)
+	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("css/demo.css")+`">`)
+	assert.Less(t, strings.Index(body, a.URL("app.css")), strings.Index(body, a.URL("css/demo.css")), "extra styles follow app.css")
+	assert.Contains(t, body, `<script src="`+a.URL("app.js")+`"></script>`)
+	v := ts.srv.vendor
+	for _, name := range []string{htmx.Script, htmx.SSE, htmx.Morph} {
+		assert.Contains(t, body, `<script src="`+v.URL(name)+`" defer></script>`, name)
+	}
+	assert.Contains(t, body, `<meta name="htmx-config" content='`+strings.ReplaceAll(htmx.Config, `"`, "&#34;")+`'>`)
 	assert.Contains(t, body, `hx-ext="sse,morph"`)
-	assert.Contains(t, body, `<script src="`+a.url("js/demo.js")+`" defer></script>`)
+	assert.Contains(t, body, `<script src="`+a.URL("js/demo.js")+`" defer></script>`)
 	assert.Contains(t, body, "127.0.0.1:7878</span>", "the address in the top bar")
 
 	// The page names the live updates it needs, with the Params they declare.
@@ -344,21 +347,6 @@ func TestFragmentHTMLUnknown(t *testing.T) {
 	ts := newTestServer(t)
 	_, err := ts.srv.fragmentHTML("nope", &View{})
 	assert.ErrorContains(t, err, `unknown fragment "nope"`)
-}
-
-func TestTemplatesIncludeAndFuncs(t *testing.T) {
-	fsys := fstest.MapFS{"templates/a.tmpl": {Data: []byte(`{{define "a"}}<b>{{include "b" .}}</b>{{upper .}}{{end}}{{define "b"}}<i>{{.}}</i>{{end}}{{define "c"}}{{include "nope" .}}{{end}}`)}}
-	tm, err := newTemplates(fsys, template.FuncMap{"upper": strings.ToUpper})
-	require.NoError(t, err)
-	out, err := tm.render("a", "x<y")
-	require.NoError(t, err)
-	assert.Equal(t, "<b><i>x&lt;y</i></b>X&lt;Y", out, "included output is escaped once")
-	_, err = tm.render("nope", nil)
-	assert.Error(t, err)
-	assert.True(t, tm.has("a"))
-	assert.False(t, tm.has("nope"))
-	_, err = tm.render("c", nil) // an included block that does not exist
-	assert.ErrorContains(t, err, `"nope"`)
 }
 
 func TestRegisteredTemplateFunctions(t *testing.T) {
