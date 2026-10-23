@@ -38,6 +38,20 @@ func TestMoreMeshPage(t *testing.T) {
 		assert.Contains(t, body, want)
 	}
 	assert.NotContains(t, body, "not reachable")
+	// The records can be filtered, copied one by one or as a list, and
+	// lead to their nodes.
+	for _, want := range []string{
+		`data-more-filter="dns-sind" placeholder="Filter by name or address" aria-label="Filter the DNS records of realm sind"`,
+		`<span class="faint" role="status" data-more-count="dns-sind">2 records</span>`,
+		`<table id="dns-sind" class="more-cards more-dnscards" role="table">`,
+		`<tr role="row" data-more-row="172.19.0.2 controller.default.sind.sind"><td role="cell" class="mono"><a href="/nodes/sind/default/controller">controller.default.sind.sind</a></td>`,
+		`data-more-copy-text="worker-0.default.sind.sind" aria-label="Copy worker-0.default.sind.sind">Copy</button>`,
+		`data-more-copy-rows="dns-sind" aria-label="Copy list of realm sind, as lines of /etc/hosts">Copy list</button>`,
+		`data-more-none="dns-sind" hidden>No record matches the filter.`,
+		`<code>dig +short @172.18.255.254 controller.default.sind.sind</code>`,
+	} {
+		assert.Contains(t, body, want)
+	}
 
 	one := moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.NotContains(t, one, "Realm <b")
@@ -57,6 +71,7 @@ func TestMoreMeshStates(t *testing.T) {
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "cannot connect"})
 	body := moreGet(t, ts, "/mesh?realm=ci", http.StatusOK)
 	assert.Contains(t, body, "could not be read: docker inspect failed")
+	assert.NotContains(t, body, "dig +short", "no DNS server to ask")
 	assert.Contains(t, body, "Docker is not reachable: cannot connect")
 	assert.NotContains(t, body, "has no mesh")
 	assert.Contains(t, body, "No DNS records yet")
@@ -68,6 +83,13 @@ func TestMoreMeshStates(t *testing.T) {
 	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.Contains(t, body, `<span class="pill bad">error</span>`)
 	assert.Contains(t, body, "sind-dns")
+
+	// One record is one, not "1 records".
+	m.Records = m.Records[:1]
+	ts.st.SetMesh("sind", m)
+	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `<span class="chip">1 record</span>`)
+	assert.Contains(t, body, `data-more-count="dns-sind">1 record</span>`)
 }
 
 func TestMoreNoRealms(t *testing.T) {

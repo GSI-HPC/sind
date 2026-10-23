@@ -73,7 +73,7 @@ The services, events and power state of one node, what Slurm says about it (stat
 
 ## Mesh and DNS
 
-The mesh network, the DNS server and its records, and the containers that are connected to the realm.
+The mesh network, the DNS server and its records, and the containers that are connected to the realm. Type into the filter above the records to find a name or an address. **Copy** on a row copies its name, and **Copy list** copies the records that show, as lines of `/etc/hosts`; when the browser copies nothing, the lines show in a box to copy with Ctrl+C. A name of a node opens the node. Below the records is a `dig` command that asks the DNS server from the host.
 
 {{< uishot "mesh" >}}
 

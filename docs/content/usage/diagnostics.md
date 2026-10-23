@@ -528,7 +528,7 @@ sind get dns
 {{< /cli >}}
 {{< ui >}}
 
-Open **Mesh and DNS**. It lists the DNS records of the realm.
+Open **Mesh and DNS**. It lists the DNS records of the realm. Type into the filter to find a name or an address; **Copy list** copies the records that show.
 
 {{< uishot "mesh" >}}
 

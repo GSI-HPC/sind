@@ -7,6 +7,8 @@
 .more-scroll{max-height:340px;overflow:auto}
 .more-howto{max-width:460px;margin:0 auto 14px;text-align:left}
 .more-howto .cmd{text-align:left}
+.more-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.more-copied{color:var(--ok)!important}
 
 /* doctor */
 .more-verdict.ok{border-color:var(--ok);background:var(--ok-soft)}
@@ -19,7 +21,33 @@
 .more-fixtext{margin:0 0 6px;white-space:pre-line}
 .more-fix .cmd{margin-bottom:10px}
 .more-fix .cmd:last-child{margin-bottom:0}
-.more-copied{color:var(--ok)!important}
+
+/* On a phone, a table of class more-cards shows each row as a card, so
+   that no column hides off-screen: the cells sit in two columns, and a
+   cell with data-label takes a line of its own, with the label before
+   it. The roles in the markup keep it a table for screen readers, which
+   can lose it when the display of its parts changes. */
+@media (max-width:760px){
+  .more-cards,.more-cards tbody{display:block}
+  .more-cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .more-cards tr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 12px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
+  .more-cards tbody:last-child tr:last-child{border-bottom:0}
+  .more-cards td,.more-cards tbody th{display:block;padding:0;border:0;text-align:left;white-space:normal;overflow-wrap:anywhere}
+  .more-cards td:empty{display:none}
+  .more-cards td[colspan],.more-cards td[data-label]{grid-column:1/-1}
+  .more-cards td[data-label]{padding-left:7.5rem}
+  .more-cards td[data-label]::before{content:attr(data-label);content:attr(data-label) / "";float:left;width:7.5rem;margin-left:-7.5rem;font-size:var(--t-sm);color:var(--muted)}
+  .more-dnscards td.act{grid-row:1;grid-column:2}
+}
+/* What a Copy copies, while the browser copies it the old way, and the
+   lines of Copy list, shown for Ctrl+C when the browser copies nothing */
+.more-clip{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}
+.more-copybox{display:block;box-sizing:border-box;width:calc(100% - 28px);margin:10px 14px 4px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-sm)/1.5 var(--f-mono);color:var(--fg);resize:vertical}
+
+/* mesh: the filter of the DNS records */
+.more-filterbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:4px}
+.more-filter{flex:1 1 200px;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:inherit;color:var(--fg)}
+.more-dig{border-top:1px solid var(--line-2)}
 
 /* topology: the figure scrolls sideways inside its panel, never the page */
 .more-figure .ph{gap:10px 16px}
