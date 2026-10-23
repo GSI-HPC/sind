@@ -93,6 +93,10 @@ type actSpec struct {
 	// Plan puts the preview into a pane beside the fields, which shows
 	// the plan of the command even while a field is wrong.
 	Plan bool
+	// Draft has the browser keep what the user typed until the command
+	// starts or the user discards it, and the dialog opens with it again;
+	// a click beside such a dialog does not close it.
+	Draft bool
 	// Follow opens the run page once the command starts. Other dialogs
 	// close, and the page behind them stays, with a notice of the run.
 	Follow bool
@@ -115,7 +119,7 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Follow: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
+		OK: "Create", Wide: true, Plan: true, Draft: true, Follow: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(*actDialog) string { return "New cluster" },
 		Lead: func(d *actDialog) string {
 			return "In realm " + d.Realm + ". sind ui saves the config, then runs sind create cluster with it."
@@ -649,6 +653,8 @@ type actDialog struct {
 	Waits []actChoice
 	// Lock is who holds the realm's lock, if the command will wait for it.
 	Lock *state.LockHolder
+	// Draft says that the fields are those of the user's draft.
+	Draft bool
 }
 
 // actOK is the button of a dialog that runs the command.
@@ -725,6 +731,10 @@ func (d *actDialog) def(field, v string) {
 // Val returns the value of the field.
 func (d *actDialog) Val(field string) string { return d.Form.Get(field) }
 
+// YAMLMode reports whether the user edits the YAML of the config, which
+// only a draft can open the dialog with.
+func (d *actDialog) YAMLMode() bool { return d.Form.Get("yaml_on") != "" }
+
 // Is reports whether the field has the value.
 func (d *actDialog) Is(field, value string) bool { return d.Form.Get(field) == value }
 
@@ -743,7 +753,9 @@ func actLocks(a action.Action, f action.Form) bool {
 }
 
 // actDialogRoute answers with a dialog, filled in with the fields in the
-// query.
+// query. The script of the dialogs posts the same link with the field
+// draft, the user's draft of a dialog that keeps one, which then fills in
+// the fields where it fits the link (actDraftOf).
 func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	a, ok := actLookup(s, w, r)
 	if !ok {
@@ -771,13 +783,16 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Form.Set("realm", d.Realm)
+	if draft, ok := actDraftOf(spec, r.PostForm.Get("draft"), d.Form); ok {
+		d.Form, d.Draft = draft, true
+	}
 	if spec.NeedsCluster {
 		if err := d.pickCluster(); err != nil {
 			s.Fail(w, r, err)
 			return
 		}
 	}
-	if spec.Defaults != nil {
+	if spec.Defaults != nil && !d.Draft {
 		spec.Defaults(d)
 	}
 	d.Typed = a.Want(d.Form)
@@ -792,6 +807,33 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Write(w, r, http.StatusOK, "act-dialog", v.withData(d))
+}
+
+// actDraftKeys are the fields of a posted form that a draft leaves out:
+// they belong to one post, or to one look at the command.
+var actDraftKeys = []string{"csrf", "shown", "confirm", "draft"}
+
+// actDraftOf returns the fields of the draft that the browser kept of a
+// dialog, raw as a form encodes them, when the dialog keeps drafts and the
+// link fits the draft: the same realm, and no other field filled in, as a
+// link with fields of its own starts from them.
+func actDraftOf(spec actSpec, raw string, link url.Values) (url.Values, bool) {
+	if !spec.Draft || raw == "" {
+		return nil, false
+	}
+	for k := range link {
+		if k != "realm" {
+			return nil, false
+		}
+	}
+	f, err := url.ParseQuery(raw)
+	if err != nil || actCheckForm(f) != nil || action.Realm(f) != link.Get("realm") {
+		return nil, false
+	}
+	for _, k := range actDraftKeys {
+		f.Del(k)
+	}
+	return f, true
 }
 
 // pickCluster reads the cluster of the link, and lists the nodes of it that

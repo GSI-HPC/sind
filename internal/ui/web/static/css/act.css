@@ -29,9 +29,10 @@
 @media (hover:none) and (pointer:coarse){.scrim .act-kbd{display:none}}
 
 /* The question before a close loses changes takes the place of the
-   footer. */
+   footer; the draft bar sits below the heading. */
 .scrim .act-ask{background:var(--warn-soft);border-radius:0 0 10px 10px}
 .scrim .act-askq{flex:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:min(100%,240px)}
+.scrim .act-draftbar{margin:0 18px 10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
 .scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
 .scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
 .scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}

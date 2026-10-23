@@ -144,6 +144,7 @@ func init() {
 func actRoutes() []Route {
 	return []Route{
 		{Pattern: "GET /dialogs/{action}", Handle: actDialogRoute},
+		{Pattern: "POST /dialogs/{action}", Handle: actDialogRoute},
 		{Pattern: "POST /actions/{action}/preview", Handle: actPreviewRoute},
 		{Pattern: "POST /actions/{action}/run", Handle: actRunRoute},
 		{Pattern: "POST /actions/{action}/check", Handle: actCheckRoute},

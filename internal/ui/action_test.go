@@ -135,7 +135,7 @@ func TestActRoutes_AreRegistered(t *testing.T) {
 		patterns = append(patterns, rt.Pattern)
 	}
 	assert.Subset(t, patterns, []string{
-		"GET /dialogs/{action}", "POST /actions/{action}/preview", "POST /actions/{action}/run", "POST /tasks/{id}/cancel",
+		"GET /dialogs/{action}", "POST /dialogs/{action}", "POST /actions/{action}/preview", "POST /actions/{action}/run", "POST /tasks/{id}/cancel",
 	})
 	var services []string
 	for _, s := range defaultRegistry.snapshot().services {

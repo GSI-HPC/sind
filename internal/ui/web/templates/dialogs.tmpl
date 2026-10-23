@@ -7,8 +7,8 @@
   /actions/ID/preview for the command as it changes, and runs it with
   /actions/ID/run. A dialog shows the command it runs; it never sends one.
   The views are the *View of the request; the dialog or the preview is its
-  Data. act.js makes the page behind a dialog inert, and asks before a
-  close loses changes.
+  Data. act.js makes the page behind a dialog inert, asks before a close
+  loses changes, and keeps the draft of a dialog with data-act-draft.
 */}}
 
 {{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
@@ -16,16 +16,18 @@
 {{define "act-dialog-page"}}{{template "act-frame" .Data}}{{end}}
 
 {{define "act-frame"}}
-<div class="scrim" id="act-dialog" data-act-scrim>
+<div class="scrim" id="act-dialog"{{if not .Spec.Draft}} data-act-scrim{{end}}>
 <form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"
+  {{- if .Spec.Draft}} data-act-draft="{{.ID}}"{{end}}{{if .Draft}} data-act-restored{{end}}
   hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
   {{template "csrf-field" .View}}
   <input type="hidden" name="realm" value="{{.Realm}}">{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
   <div class="mh"><div class="mtop"><h2 id="act-title">{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
     <p id="act-lead">{{.Lead}}</p></div>
+  {{if .Draft}}<div class="callout act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>{{end}}
   {{if .Spec.Plan}}
   <div class="mb">
-    <div class="act-form">{{include .Body .}}</div>
+    <div class="act-form{{if .YAMLMode}} act-yamlmode{{end}}">{{include .Body .}}</div>
     <aside class="act-planpane" aria-label="Plan">{{template "act-preview-slot" .}}</aside>
   </div>
   {{else}}
@@ -37,7 +39,7 @@
   {{end}}
   <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
   <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
-    <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span></span>
+    <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
     <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
   </div>
   {{if .Spec.Plan}}<span class="act-vh" id="act-say" role="status"></span>{{end}}
@@ -204,11 +206,11 @@ limits as pairs of fields. */}}
   {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
 
 {{define "act-dlg-create-cluster"}}
-<div class="act-yamled" id="act-yamled" hidden>
-  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1" disabled>
+<div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
+  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
   <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The form is locked, and the plan follows the YAML. Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
   <label class="lbl" for="act-yaml">Config</label>
-  <textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml" disabled></textarea>
+  <textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
   <span class="err" id="act-err-yaml"></span>
 </div>
 <div class="row">

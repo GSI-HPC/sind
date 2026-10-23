@@ -6,9 +6,10 @@
 // the image, Edit YAML, the links to a field with a problem, the Copy
 // button, and the frame of every dialog: the focus, which stays in the
 // dialog and goes back to the button that opened it, the question before a
-// close loses changes, Enter and Ctrl+Enter, the status, and the notice of
-// a command that started. The dialogs are the server's HTML, which htmx
-// puts into #layer; nothing here evaluates text.
+// close loses changes, the draft of a new cluster, Enter and Ctrl+Enter,
+// the status, and the notice of a command that started. The dialogs are the
+// server's HTML, which htmx puts into #layer; nothing here evaluates text,
+// and no storage is needed to work: every access is guarded.
 (() => {
   'use strict';
 
@@ -17,17 +18,24 @@
   const formOf = () => { const d = dialog(); return d && d.querySelector('form.modal'); };
   const inPage = d => !d.closest('#layer');
 
+  const local = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* private window */ } },
+  };
+  const draftKey = id => 'sind-ui-draft-' + id;
+
   // A touch screen gets no focus in a field when a dialog opens, as its
   // keyboard would cover the dialog. macOS shows Cmd in place of Ctrl.
   const touch = () => matchMedia('(pointer: coarse)').matches;
   if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) document.documentElement.classList.add('act-mac');
 
   // What the open dialog needs: the element that opened it and how to find
-  // it again after a swap, the element in it that had the focus last,
-  // whether the user changed a field, the question the footer asks, the
-  // elements made inert, and the status said last. The opener stays after
-  // a close, for the notice that the dialog leaves.
-  const S = { dialog: null, opener: null, find: null, last: null, dirty: false, asking: null, back: null, inert: [], said: null };
+  // it again after a swap, the link it came from, the element in it that
+  // had the focus last, whether the user changed a field, the question the
+  // footer asks, the elements made inert, and the status said last. The
+  // opener stays after a close, for the notice that the dialog leaves.
+  const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0 };
 
   // isolate makes everything but the dialog, the layer, the notices and
   // the page's live region inert, as a modal dialog needs: Tab and the
@@ -104,9 +112,10 @@
   // inert, and its first field takes the focus, or on a touch screen the
   // dialog itself.
   function opened(d) {
+    const form = d.querySelector('form.modal');
     S.dialog = d;
     S.last = null;
-    S.dirty = false;
+    S.dirty = !!form && form.hasAttribute('data-act-restored');
     S.asking = null;
     S.said = null;
     isolate(d);
@@ -116,6 +125,7 @@
 
   // closed forgets the dialog and gives the focus back.
   function closed() {
+    clearTimeout(S.saveTimer);
     S.dialog = S.last = null;
     S.dirty = false;
     S.asking = null;
@@ -138,8 +148,8 @@
     closed();
   }
 
-  // ask shows a question in place of the footer, such as close: close and
-  // lose the changes.
+  // ask shows a question in place of the footer: close and lose the
+  // changes, or start over and lose them.
   function ask(mode) {
     const form = formOf();
     const bar = form && form.querySelector('#act-ask');
@@ -171,16 +181,42 @@
     if (refocus) (S.back && S.back.isConnected && form.contains(S.back) ? S.back : form.querySelector('[data-act-close]')).focus();
   }
 
-  // discard drops the changes and closes the dialog.
+  // discard drops the changes and the draft, then closes the dialog or
+  // opens it again from the start.
   function discard() {
+    const form = formOf();
+    const mode = S.asking;
+    if (form && form.dataset.actDraft) local.del(draftKey(form.dataset.actDraft));
     S.dirty = false;
     unask(false);
-    close(true);
+    if (mode === 'restart') restart(); else close(true);
   }
 
-  // changed marks the dialog as changed by the user.
+  function restart() {
+    const d = dialog();
+    if (!d) return;
+    if (inPage(d) || !window.htmx || !S.path) { location.reload(); return; }
+    window.htmx.ajax('GET', S.path, { target: '#layer', swap: 'innerHTML' });
+  }
+
+  // changed marks the dialog as changed by the user, and keeps its draft.
   function changed() {
     S.dirty = true;
+    const form = formOf();
+    if (!form || !form.dataset.actDraft) return;
+    clearTimeout(S.saveTimer);
+    S.saveTimer = setTimeout(save, 300);
+  }
+
+  function save() {
+    clearTimeout(S.saveTimer);
+    const form = formOf();
+    if (!form || !form.dataset.actDraft || !S.dirty) return;
+    const data = new URLSearchParams();
+    for (const [k, v] of new FormData(form)) {
+      if (typeof v === 'string' && !['csrf', 'shown', 'confirm'].includes(k)) data.append(k, v);
+    }
+    local.set(draftKey(form.dataset.actDraft), data.toString());
   }
 
   // footer keeps the scroll padding of a dialog at the height of its
@@ -260,6 +296,7 @@
     }
     if (t.closest('[data-act-keep]')) { unask(true); return; }
     if (t.closest('[data-act-discard]')) { discard(); return; }
+    if (t.closest('[data-act-restart]')) { ask('restart'); return; }
     const go = t.closest('[data-act-go]');
     if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
     const note = t.closest('[data-act-note-close]');
@@ -522,23 +559,35 @@
     live.textContent = src.dataset.actSay;
   }
 
-  // The element that opens a dialog.
+  // The element that opens a dialog, and the link of it. A dialog that
+  // keeps drafts opens with the user's draft: htmx posts it with the link,
+  // and the server fills the fields in with it where it fits the link.
   document.addEventListener('htmx:configRequest', ev => {
     const d = ev.detail;
     if (!d || d.target !== layer() || d.verb !== 'get' || !/^\/dialogs\/[a-z-]+(\?|$)/.test(d.path)) return;
+    S.path = d.path;
     const el = d.elt instanceof HTMLElement && d.elt !== document.body ? d.elt : document.activeElement;
     S.opener = S.find = null;
     if (el instanceof HTMLElement && el !== document.body && !el.closest('#layer')) {
       S.opener = el;
       S.find = finder(el);
     }
+    const draft = local.get(draftKey(d.path.slice('/dialogs/'.length).split('?')[0]));
+    if (!draft) return;
+    // htmx set the headers for a GET, which has no body.
+    d.verb = 'post';
+    d.useUrlParams = false;
+    d.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    d.parameters.draft = draft;
   });
 
-  // A command started: a dialog that does not follow its run closes, while
-  // its notice stays for a while. One opened as a page of its own goes to
-  // the run.
+  // A command started: the draft goes, and a dialog that does not follow
+  // its run closes, while its notice stays for a while. One opened as a
+  // page of its own goes to the run.
   document.addEventListener('act-started', ev => {
     const det = ev.detail || {};
+    const form = formOf();
+    if (form && form.dataset.actDraft) local.del(draftKey(form.dataset.actDraft));
     S.dirty = false;
     for (const n of document.querySelectorAll('#act-notes [data-act-note]:not([data-act-timed])')) {
       n.dataset.actTimed = '';
@@ -551,10 +600,13 @@
     close(true);
   });
 
-  // A dialog with changes asks the browser to ask before the page goes,
-  // as the jump box, a g key or a link would lose them.
+  // A draft is saved before the page goes, too. A dialog with changes
+  // that keeps no draft asks the browser to ask first, as the jump box, a
+  // g key or a link would lose them.
+  window.addEventListener('pagehide', save);
   window.addEventListener('beforeunload', ev => {
-    if (!S.dirty || !formOf()) return;
+    const form = formOf();
+    if (!S.dirty || !form || form.dataset.actDraft) return;
     ev.preventDefault();
     ev.returnValue = '';
   });
@@ -572,7 +624,16 @@
   });
 
   // A dialog opened as a page of its own, as the jump box does, is set up
-  // now.
+  // now. With a draft, it opens again with it, in its place.
   const d0 = dialog();
-  if (d0) opened(d0);
+  if (d0) {
+    opened(d0);
+    const form = formOf();
+    const draft = form && form.dataset.actDraft && !form.hasAttribute('data-act-restored') && local.get(draftKey(form.dataset.actDraft));
+    if (draft) {
+      document.addEventListener('DOMContentLoaded', () => {
+        if (window.htmx) window.htmx.ajax('POST', location.pathname + location.search, { target: '#act-dialog', swap: 'outerHTML', values: { draft } });
+      });
+    }
+  }
 })();
