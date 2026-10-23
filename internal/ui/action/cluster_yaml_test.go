@@ -4,6 +4,7 @@ package action
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,7 +47,7 @@ func TestBuildCreateCluster_YAMLProblems(t *testing.T) {
 		want       []string
 	}{
 		{"does not parse", "kind: Cluster\nname: [", nil, []string{"YAML: "}},
-		{"empty", "", nil, []string{"YAML: empty configuration"}},
+		{"empty", " \n", nil, []string{"YAML: paste a cluster config, or open a file of one"}},
 		{"other realm", "kind: Cluster\nname: lab\nrealm: ci\n", nil, []string{"Realm: the YAML names realm ci, and this field sind; make them the same, or remove realm from the YAML"}},
 		{"same realm", "kind: Cluster\nname: lab\nrealm: ci\n", []string{"realm", "ci"}, nil},
 		{"name taken", "kind: Cluster\nname: dev\n", nil, []string{"Name: realm sind has a cluster dev already"}},
@@ -61,7 +62,11 @@ func TestBuildCreateCluster_YAMLProblems(t *testing.T) {
 			var got []string
 			for _, p := range cmd.Problems {
 				got = append(got, p.Label+": "+p.Text)
-				if p.Label != "Wait for ready" && p.Label != "Realm" {
+				switch p.Label {
+				case "Wait for ready":
+				case "Realm", "Name":
+					assert.Equal(t, strings.ToLower(p.Label), p.Field, "Name and Realm stay beside the YAML")
+				default:
 					assert.Equal(t, "yaml", p.Field, "a problem of the YAML links to it")
 				}
 			}

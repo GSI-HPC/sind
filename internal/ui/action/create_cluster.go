@@ -202,9 +202,10 @@ func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 const maxPlanned = maxGroups * maxCount
 
 // yamlPlan reads the config of a new cluster from the field "yaml", which
-// sind ui saves as it is. Its problems are those of the YAML. A host
-// directory that is missing is created first, as Create the directory does
-// by default.
+// sind ui saves as it is. Its problems are those of the YAML, but for the
+// name and the realm, whose fields stay beside the YAML. A host directory
+// that is missing is created first, as Create the directory does by
+// default.
 func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	p := clusterPlan{content: strings.ReplaceAll(f.Get("yaml"), "\r\n", "\n")}
 	var yps problems
@@ -214,6 +215,10 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 			*ps = append(*ps, pr)
 		}
 	}()
+	if strings.TrimSpace(p.content) == "" {
+		yps.add("", "YAML", false, errors.New("paste a cluster config, or open a file of one"))
+		return p
+	}
 	parsed, err := parseConfig([]byte(p.content))
 	if err != nil {
 		yps.add("", "YAML", false, err)
@@ -223,9 +228,11 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 		ps.add("realm", "Realm", false, fmt.Errorf("the YAML names realm %s, and this field %s; make them the same, or remove realm from the YAML", parsed.Realm, realm))
 	}
 	parsed.ApplyDefaults()
-	checkClusterName(c, realm, parsed, &yps)
+	var nps problems
+	checkClusterName(c, realm, parsed, &nps)
+	*ps = append(*ps, nps...)
 	name := parsed.Name
-	if yps.has("name") {
+	if nps.has("name") {
 		// As renderConfig does: the name is a problem of its own.
 		parsed.Name = "cluster"
 	}

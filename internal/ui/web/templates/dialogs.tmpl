@@ -102,6 +102,7 @@ the nodes, the command and the config also while a field is wrong. */}}
 {{define "act-plan"}}{{$p := .}}
 <div class="act-ph"><h3>Plan</h3>{{template "act-pill" .}}</div>
 {{if .Err}}<div class="callout bad" id="act-probs" tabindex="-1">{{.Err}}</div>{{else}}
+<div class="act-tools">{{if not .YAMLMode}}<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>{{end}}<button type="button" class="btn sm" data-copy="{{.Cmd.Config.Content}}">Copy YAML</button></div>
 {{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
 {{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
@@ -113,8 +114,8 @@ the nodes, the command and the config also while a field is wrong. */}}
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
 {{template "act-callouts" .}}
 {{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p></div>
-{{else}}<div><div class="cmdlabel act-cfgh">Config <span class="act-path">{{.Cmd.Config.Path}}</span><button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
-  <p class="hint">Edit YAML gives you the whole config, also what the form has no field for, such as Slurm config fragments. The form stays locked until you discard the edits.</p></div>{{end}}
+{{else}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
+  <p class="hint">Edit YAML, at the top of the plan, gives you the whole config, also what the form has no field for, such as named Slurm config fragments or capabilities of the node defaults. The form stays locked until you discard the edits.</p></div>{{end}}
 {{end}}
 {{end}}
 
@@ -212,17 +213,19 @@ realm of the link, another one that sind ui sees, or a new one. */}}
   {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
 
 {{define "act-dlg-create-cluster"}}
-<div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
-  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
-  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The form is locked, and the plan follows the YAML. Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
-  <label class="lbl" for="act-yaml">Config</label>
-  <textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
-  <span class="err" id="act-err-yaml"></span>
-</div>
 <div class="row act-idrow">
   <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
     <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>
   {{template "act-realm" .}}
+</div>
+<div class="act-inline act-yamlstart"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><span class="hint">Paste a cluster config, or open a file of one.</span></div>
+<div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
+  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
+  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The plan follows it, and Name and Realm change the name and the realm in it. The rest of the form is locked; Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
+  <div class="act-inline act-yamlhead"><label class="lbl" for="act-yaml">Config</label><button type="button" class="btn sm" data-act-yaml-open aria-describedby="act-hint-yaml">Open a file…</button>
+    <input type="file" id="act-yaml-file" accept=".yaml,.yml,application/yaml,text/yaml,text/plain" hidden></div>
+  <textarea id="act-yaml" name="yaml" rows="26" placeholder="kind: Cluster&#10;name: hpc&#10;nodes:&#10;  - controller&#10;  - worker: 2" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml act-hint-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
+  <span class="err" id="act-err-yaml"></span><span class="hint" id="act-hint-yaml">Paste a config, open a file, or drop one here. At most 64 KiB.</span>
 </div>
 <div class="fld"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
   <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>

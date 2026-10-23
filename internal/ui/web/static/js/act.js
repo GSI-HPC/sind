@@ -3,11 +3,12 @@
 // The script of the dialogs of the actions: the steppers, the editors of the
 // nodes, the worker groups and the rows of users, groups and accounts of a
 // new cluster, the directory that follows the name, the pull that follows
-// the image, Edit YAML, the links to a field with a problem, the Copy
-// button, and the frame of every dialog: the focus, which stays in the
-// dialog and goes back to the button that opened it, the question before a
-// close loses changes, the draft of a new cluster, Enter and Ctrl+Enter,
-// the status, and the notice of a command that started. The dialogs are the
+// the image, Edit YAML and Start from YAML with the name and realm that
+// follow the YAML, the links to a field with a problem, the Copy button,
+// and the frame of every dialog: the focus, which stays in the dialog and
+// goes back to the button that opened it, the question before a close
+// loses changes, the draft of a new cluster, Enter and Ctrl+Enter, the
+// status, and the notice of a command that started. The dialogs are the
 // server's HTML, which htmx puts into #layer; nothing here evaluates text,
 // and no storage is needed to work: every access is guarded.
 (() => {
@@ -401,9 +402,19 @@
     }
 
     // Edit YAML: the config of the plan goes into the editor, which takes
-    // the place of the form until the user discards the edits.
+    // the place of the form until the user discards the edits. Start from
+    // YAML opens it empty, for a config to paste or a file to open.
     if (t.closest('[data-act-yaml-edit]')) {
       yamlMode(t.closest('form'), true);
+      return;
+    }
+    if (t.closest('[data-act-yaml-start]')) {
+      yamlMode(t.closest('form'), true, '');
+      return;
+    }
+    if (t.closest('[data-act-yaml-open]')) {
+      const file = document.getElementById('act-yaml-file');
+      if (file) file.click();
       return;
     }
     if (t.closest('[data-act-yaml-discard]')) {
@@ -468,22 +479,140 @@
     if (auto && ev.target instanceof Element && ev.target.id === 'act-pull') auto.remove();
   });
 
-  // yamlMode turns the editor of the YAML on, with the config of the plan,
-  // or off. Its fields are disabled while it is off, so the form does not
-  // post them.
-  function yamlMode(form, on) {
+  // yamlMode turns the editor of the YAML on, with start or else the
+  // config of the plan, or off. Its fields are disabled while it is off, so
+  // the form does not post them.
+  // Discard YAML edits puts back the name and the realm that the form had.
+  const formIDs = new Map();
+
+  function yamlMode(form, on, start) {
     const ed = document.getElementById('act-yamled');
     const text = document.getElementById('act-yaml');
     const flag = document.getElementById('act-yaml-on');
     const plan = document.querySelector('.scrim .act-yaml');
     if (!form || !ed || !text || !flag) return;
-    if (on) text.value = plan ? plan.textContent : '';
+    if (on && text.disabled) {
+      formIDs.clear();
+      for (const key of ['name', 'realm']) {
+        const input = form.elements[key];
+        if (input instanceof HTMLInputElement) formIDs.set(key, input.value);
+      }
+    }
+    if (on) text.value = start !== undefined ? start : (plan ? plan.textContent : '');
     ed.hidden = !on;
     text.disabled = flag.disabled = !on;
+    if (!on) {
+      for (const [key, value] of formIDs) {
+        const input = form.elements[key];
+        if (!(input instanceof HTMLInputElement) || input.value === value) continue;
+        input.value = value;
+        // The directory follows the name again.
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      formIDs.clear();
+    }
     form.querySelector('.act-form').classList.toggle('act-yamlmode', on);
     const first = on ? text : form.querySelector('.act-form input[type=text]');
     if (first) first.focus();
     form.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // In YAML mode, Name and Realm stay beside the editor: they show the
+  // name and the realm of the YAML, and a change of either goes into it.
+  // A YAML without a name makes the cluster default, as sind does; one
+  // without a realm takes the realm of the field.
+  const yamlKey = key => new RegExp('^' + key + ':[ \\t]*(.*?)[ \\t]*(#.*)?$', 'm');
+  const unquote = v => v.replace(/^(["'])(.*)\1$/, '$2');
+
+  function inYAMLMode() {
+    const text = document.getElementById('act-yaml');
+    return text instanceof HTMLTextAreaElement && !text.disabled ? text : null;
+  }
+
+  // fromYAML puts the name and the realm of the YAML into their fields.
+  function fromYAML(text) {
+    const form = text.form;
+    for (const key of ['name', 'realm']) {
+      const input = form && form.elements[key];
+      if (!(input instanceof HTMLInputElement)) continue;
+      const m = text.value.match(yamlKey(key));
+      if (m) input.value = unquote(m[1]);
+      else if (key === 'name' && text.value.trim() !== '') input.value = 'default';
+    }
+  }
+
+  // toYAML puts the value of the field Name or Realm into the YAML: in
+  // place of its line, or as a new line after kind, or after name for a
+  // realm. An empty realm adds no line.
+  function toYAML(text, key, value) {
+    const re = yamlKey(key);
+    if (re.test(text.value)) {
+      text.value = text.value.replace(re, (all, v, comment) => key + ': ' + value + (comment ? ' ' + comment : ''));
+      return;
+    }
+    if (key === 'realm' && value === '') return;
+    const after = key === 'realm' && yamlKey('name').test(text.value) ? /^name:.*$/m : /^kind:.*$/m;
+    text.value = after.test(text.value) ? text.value.replace(after, k => k + '\n' + key + ': ' + value) : key + ': ' + value + '\n' + text.value;
+  }
+
+  document.addEventListener('input', ev => {
+    const t = ev.target;
+    const text = inYAMLMode();
+    if (!text) return;
+    if (t === text) fromYAML(text);
+    else if (t instanceof HTMLInputElement && t.form === text.form && (t.name === 'name' || t.name === 'realm')) toYAML(text, t.name, t.value.trim());
+  });
+
+  // loadYAML puts the text of a file into the editor, as a paste would.
+  function loadYAML(file) {
+    const text = inYAMLMode();
+    const err = document.getElementById('act-err-yaml');
+    if (!text || !file) return;
+    const refuse = message => {
+      if (err) {
+        err.textContent = message;
+        err.scrollIntoView({ block: 'center' });
+      }
+      text.setAttribute('aria-invalid', 'true');
+    };
+    if (file.size > 64 * 1024) {
+      refuse(file.name + ' is larger than 64 KiB.');
+      return;
+    }
+    file.text().then(v => {
+      text.value = v;
+      fromYAML(text);
+      text.focus();
+      // A loaded file is a change of the user's, which the draft keeps.
+      changed();
+      text.dispatchEvent(new Event('input', { bubbles: true }));
+    }, () => refuse('sind ui cannot read ' + file.name + '.'));
+  }
+
+  // The input and change events of the file field are not the form's:
+  // they reach no listener of htmx, whose preview would replace a message
+  // of loadYAML at once. A file that loads starts a preview as typing does.
+  const isFile = t => t instanceof HTMLInputElement && t.id === 'act-yaml-file';
+  document.addEventListener('input', ev => {
+    if (isFile(ev.target)) ev.stopPropagation();
+  }, true);
+  document.addEventListener('change', ev => {
+    const t = ev.target;
+    if (!isFile(t)) return;
+    ev.stopPropagation();
+    loadYAML(t.files && t.files[0]);
+    t.value = '';
+  }, true);
+
+  // A file dropped on the editor opens as Open a file does.
+  for (const type of ['dragenter', 'dragover', 'dragleave', 'drop']) {
+    document.addEventListener(type, ev => {
+      const text = inYAMLMode();
+      if (!text || ev.target !== text || !ev.dataTransfer || !Array.from(ev.dataTransfer.types || []).includes('Files')) return;
+      ev.preventDefault();
+      text.classList.toggle('act-drop', type === 'dragenter' || type === 'dragover');
+      if (type === 'drop') loadYAML(ev.dataTransfer.files[0]);
+    });
   }
 
   // followPull ticks the box as the preview says, while it follows the

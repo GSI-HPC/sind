@@ -1032,14 +1032,21 @@ func TestActPreview_NewClusterYAML(t *testing.T) {
 	f := newActFixture(t)
 
 	body := f.get("/dialogs/create-cluster").Body.String()
-	assert.Contains(t, body, `<textarea id="act-yaml" name="yaml" rows="26" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml" disabled></textarea>`)
+	assert.Contains(t, body, `<textarea id="act-yaml" name="yaml" rows="26" placeholder="kind: Cluster&#10;name: hpc`)
+	assert.Contains(t, body, `aria-describedby="act-err-yaml act-hint-yaml" disabled></textarea>`)
 	assert.Contains(t, body, `<input type="hidden" id="act-yaml-on" name="yaml_on" value="1" disabled>`)
+	assert.Contains(t, body, `<button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button>`)
+	assert.Contains(t, body, `<button type="button" class="btn sm" data-act-yaml-open aria-describedby="act-hint-yaml">Open a file…</button>`)
+	assert.Contains(t, body, `<input type="file" id="act-yaml-file" accept=".yaml,.yml,application/yaml,text/yaml,text/plain" hidden>`)
+	assert.Less(t, strings.Index(body, `id="act-name"`), strings.Index(body, `id="act-yamled"`), "Name comes first, and stays beside the YAML")
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
-	assert.Contains(t, body, `<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>`)
+	assert.Contains(t, body, `<div class="act-tools"><button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button><button type="button" class="btn sm" data-copy="kind: Cluster`+"\nname: hpc\n")
+	assert.Less(t, strings.Index(body, "data-act-yaml-edit"), strings.Index(body, "act-tiles"), "Edit YAML is at the top of the plan")
 
 	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: lab # mine\n", "name", "hpc")).Body.String()
 	assert.NotContains(t, body, "data-act-yaml-edit")
+	assert.Contains(t, body, `<div class="act-tools"><button type="button" class="btn sm" data-copy="kind: Cluster`+"\nname: lab # mine\n"+`">Copy YAML</button></div>`)
 	assert.Contains(t, body, "The YAML that you edit, as it is.")
 	assert.Contains(t, body, `<code>sind create cluster --config /state/sind/ui/configs/lab.yaml</code>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
@@ -1047,4 +1054,7 @@ func TestActPreview_NewClusterYAML(t *testing.T) {
 	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: [")).Body.String()
 	assert.Contains(t, body, `<a href="#act-yaml" data-act-jump="yaml">YAML</a>`)
 	assert.Contains(t, body, `<span class="err" id="act-err-yaml" hx-swap-oob="innerHTML">`)
+
+	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: dev\n")).Body.String()
+	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML">realm sind has a cluster dev already;`, "a problem of the name shows at Name, which stays beside the YAML")
 }

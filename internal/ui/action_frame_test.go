@@ -89,7 +89,7 @@ func TestActDialog_OpensWithTheDraft(t *testing.T) {
 	assert.Contains(t, body, `<div class="act-form act-yamlmode">`)
 	assert.Contains(t, body, `<div class="act-yamled" id="act-yamled">`)
 	assert.Contains(t, body, `name="yaml_on" value="1">`)
-	assert.Contains(t, body, `aria-describedby="act-err-yaml">kind: Cluster`+"\n"+`name: y`+"\n"+`</textarea>`)
+	assert.Contains(t, body, `aria-describedby="act-err-yaml act-hint-yaml">kind: Cluster`+"\n"+`name: y`+"\n"+`</textarea>`)
 }
 
 func TestActDialog_IgnoresADraftThatDoesNotFit(t *testing.T) {

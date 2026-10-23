@@ -18,7 +18,7 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--moni
 {{< ui >}}
 
 1. Press **New cluster…** on the Overview or on the Clusters page.
-2. Set the name, the image and the nodes. The plan beside the form shows the nodes, the command and the config as you type.
+2. Set the name, the realm, the image and the nodes, or press **Start from YAML…** to paste a config or open a file of one. The plan beside the form shows the nodes, the command and the config as you type.
 3. Press **Create** when the status at the bottom says `Ready`.
 
 {{< uishot "dialog-create-cluster" >}}
