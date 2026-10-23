@@ -64,6 +64,8 @@ type stackFake struct {
 	logError   string // the probed images' MariaDB log-error option
 	fail       map[string]mock.Result
 	calls      [][]string
+	// query is what Prometheus answers a query, through Grafana's curl.
+	query string
 }
 
 // newStackFake returns a stackFake without a stack, on a mesh with a
@@ -272,6 +274,9 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 		}
 		if c := f.containers[args[1]]; c == nil || c.state != docker.StateRunning {
 			return notFound("Error response from daemon: container " + args[1] + " is not running\n"), true
+		}
+		if strings.HasSuffix(joined, "/api/v1/query") {
+			return mock.Result{Stdout: f.query}, true
 		}
 		return mock.Result{}, true
 	case "network":
@@ -751,7 +756,32 @@ func TestGetMonitoring(t *testing.T) {
 		URL: "http://grafana.sind.sind:3000", State: docker.StateRunning, Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")
-	assert.Equal(t, []MonitoredCluster{{Name: "dev", Nodes: 1}, {Name: "prod", Nodes: 2, SlurmVersion: "26.05.5"}}, m.Clusters)
+	assert.Equal(t, []MonitoredCluster{{Name: "dev", Nodes: 1}, {Name: "prod", Nodes: 2, SlurmVersion: "26.05.5"}}, m.Clusters,
+		"an answer that is no JSON leaves the Slurm numbers out")
+	assert.True(t, f.called(`exec sind-grafana curl -fsS --max-time 5 -G --data-urlencode query=max by (cluster, __name__) `+
+		`({__name__=~"slurm_jobs_pending|slurm_jobs_running|slurm_nodes|slurm_nodes_down|slurm_nodes_drain", realm="sind"}) `+
+		`http://sind-prometheus:9090/api/v1/query`))
+
+	// Prometheus has the numbers of prod, and some it does not know.
+	sample := func(name, cluster, value string) string {
+		return `{"metric":{"__name__":"` + name + `","cluster":"` + cluster + `"},"value":[1,"` + value + `"]}`
+	}
+	f.query = `{"status":"success","data":{"resultType":"vector","result":[` + strings.Join([]string{
+		sample("slurm_nodes", "prod", "2"), sample("slurm_nodes_down", "prod", "1"), sample("slurm_nodes_drain", "prod", "0"),
+		sample("slurm_jobs_running", "prod", "3"), sample("slurm_jobs_pending", "prod", "4"),
+		sample("slurm_jobs_running", "gone", "9"), sample("slurm_other", "prod", "9"),
+	}, ",") + `]}}`
+	m, err = GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Nil(t, m.Clusters[0].Slurm)
+	assert.Equal(t, &SlurmCounts{Nodes: 2, NodesDown: 1, JobsRunning: 3, JobsPending: 4}, m.Clusters[1].Slurm)
+
+	// Without Prometheus running, nothing asks it.
+	f.containers["sind-prometheus"].state = docker.StateExited
+	m, err = GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Nil(t, m.Clusters[1].Slurm)
+	f.containers["sind-prometheus"].state = docker.StateRunning
 
 	f.containers["sind-alloy"].state = docker.StateRunning
 	m, err = GetMonitoring(t.Context(), client, "sind")

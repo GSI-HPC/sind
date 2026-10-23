@@ -598,7 +598,7 @@ default  3      26.05.5
 dev      5      26.05.5
 ```
 
-`ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
+`ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. The JSON output adds each cluster's key numbers under `slurm`, as slurmctld reports them to Prometheus: its nodes, those down and those draining (a node can be both), and its running and pending jobs (`cluster.SlurmCounts`). sind reads them with one instant query through Grafana's `curl` (`observability.Manager.Query`), the highest value of each cluster, as only the controller in control answers the scrape; `slurm` is left out while Grafana or Prometheus does not run, the query fails, or Prometheus has no numbers of the cluster yet. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
 
 ```json
 {
@@ -607,7 +607,8 @@ dev      5      26.05.5
     {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5"}]
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
+                "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```
 
