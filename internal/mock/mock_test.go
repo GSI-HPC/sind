@@ -281,8 +281,8 @@ func TestExecutor_ParsesLines(t *testing.T) {
 		want []line
 	}{
 		{"both", func(ctx context.Context) context.Context { return ctx },
-			[]line{{progress.Stdout, "a"}, {progress.Stdout, "b"}, {progress.Stderr, "d"}}},
-		{"stdout is data", cmdexec.WithStdoutAsData, []line{{progress.Stderr, "d"}}},
+			[]line{{progress.StreamStdout, "a"}, {progress.StreamStdout, "b"}, {progress.StreamStderr, "d"}}},
+		{"stdout is data", cmdexec.WithStdoutAsData, []line{{progress.StreamStderr, "d"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []line

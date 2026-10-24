@@ -199,7 +199,7 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // end canceled with the step.
 func eachExternal(ctx context.Context, step, reason string, infos []*docker.ContainerInfo,
 	work func(ctx context.Context, info *docker.ContainerInfo) (changed bool, err error)) (err error) {
-	ctx, end := startStep(ctx, step, progress.WithFlags(progress.Fold), progress.Total(len(infos)))
+	ctx, end := startStep(ctx, step, progress.Flagged(progress.FlagFold), progress.Total(len(infos)))
 	defer func() { end(err) }()
 	names := make([]string, len(infos))
 	for i, info := range infos {

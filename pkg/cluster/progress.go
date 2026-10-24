@@ -131,7 +131,7 @@ func nodeTargets(ctx context.Context, nodes []RunConfig) ([]context.Context, []*
 // target's otherwise, as fanout.Failure's is; a class of the items' errors
 // does not decide it, since one of them is no more the whole's than
 // another.
-func joinFailures(wrap func(fanout.Failed) error) func(fanout.Summary) error {
+func joinFailures(wrap func(fanout.FailedItem) error) func(fanout.Summary) error {
 	return func(s fanout.Summary) error {
 		if len(s.Failed) == 0 {
 			return nil

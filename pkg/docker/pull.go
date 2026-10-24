@@ -71,7 +71,7 @@ func (l *layerCount) line(_ progress.Stream, line string) {
 		if complete {
 			l.done++
 		}
-		l.span.Update(progress.Work(progress.Items, int64(len(l.seen))))
+		l.span.Update(progress.Work(progress.UnitItems, int64(len(l.seen))))
 	case complete && !finished:
 		l.seen[m[1]] = true
 		l.done++
@@ -90,7 +90,7 @@ func (l *layerCount) finish() {
 	size := len(l.seen)
 	if size == 0 {
 		size = 1
-		l.span.Update(progress.Work(progress.Items, 1))
+		l.span.Update(progress.Work(progress.UnitItems, 1))
 	}
 	l.span.SetAmount(int64(size))
 }

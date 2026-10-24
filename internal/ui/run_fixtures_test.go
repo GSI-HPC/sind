@@ -26,7 +26,7 @@ func runFixture(t *testing.T, file string, n int) []store.Run {
 		if n >= 0 && i >= n {
 			break
 		}
-		red.Line(line)
+		red.Take(line)
 	}
 	return red.Runs()
 }

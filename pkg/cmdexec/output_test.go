@@ -32,7 +32,7 @@ func TestLineParser(t *testing.T) {
 	ctx := WithLineParser(t.Context(), func(st progress.Stream, line string) { got = append(got, st.String()+" "+line) })
 	parse := LineParser(ctx)
 	require.NotNil(t, parse)
-	parse(progress.Stdout, "a3ed95caeb02: Pull complete")
+	parse(progress.StreamStdout, "a3ed95caeb02: Pull complete")
 	assert.Equal(t, []string{"stdout a3ed95caeb02: Pull complete"}, got)
 }
 

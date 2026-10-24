@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"os"
@@ -47,13 +46,13 @@ func withToolProgress(ctx context.Context, req *mcp.CallToolRequest) (context.Co
 	if err != nil {
 		return ctx, func() {}
 	}
-	send := func(done, total float64, message string) error {
+	send := func(ctx context.Context, done, total float64, message string) error {
 		return req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
 			ProgressToken: token, Progress: done, Total: total, Message: message,
 		})
 	}
 	env := append(os.Environ(), "TRACEPARENT="+tc.Traceparent())
-	return cmdexec.WithEnv(ctx, env), followToolProgress(path, tc.Trace, send)
+	return cmdexec.WithEnv(ctx, env), followToolProgress(ctx, path, tc.ID, send)
 }
 
 // followToolProgress reads the event log at path as it grows, until the
@@ -62,13 +61,11 @@ func withToolProgress(ctx context.Context, req *mcp.CallToolRequest) (context.Co
 // before is read and left out first, so that a long log is not read again
 // on the call's time. The returned function reads what is left, sends it,
 // and returns once nothing more will be.
-func followToolProgress(path string, trace progress.TraceID, send func(done, total float64, message string) error) func() {
+func followToolProgress(ctx context.Context, path string, trace progress.TraceID, send func(ctx context.Context, done, total float64, message string) error) func() {
 	n := mcpprogress.New(mcpprogress.Options{Program: "sind", Send: send})
-	feed := &traceFeed{trace: []byte(trace.String()), next: eventlog.Forward(n)}
-	tail := eventlog.NewTail(path, feed)
+	tail := eventlog.NewTail(path, eventlog.NewForwarder(n, trace))
 	// An unreadable log is an empty one: the call has no progress to send.
 	_, _ = tail.Poll()
-	feed.live = true
 
 	stop, done := make(chan struct{}), make(chan struct{})
 	go func() {
@@ -90,27 +87,10 @@ func followToolProgress(path string, trace progress.TraceID, send func(done, tot
 			close(stop)
 			<-done
 			_, _ = tail.Poll()
-			n.Close()
+			_ = n.Close(ctx)
 		})
 	}
 }
-
-// traceFeed gives next the lines of one trace, from the moment it is live.
-type traceFeed struct {
-	trace []byte
-	next  eventlog.Feed
-	live  bool
-}
-
-// Line implements eventlog.Feed.
-func (f *traceFeed) Line(b []byte) {
-	if f.live && bytes.Contains(b, f.trace) {
-		f.next.Line(b)
-	}
-}
-
-// Reset implements eventlog.Feed.
-func (f *traceFeed) Reset() { f.next.Reset() }
 
 // toolProgressRelay carries the progress notifications of the MCP server
 // that `sind mcp stream` forwards its calls to back to the client of the

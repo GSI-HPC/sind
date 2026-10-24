@@ -701,12 +701,27 @@ func TestMCPStreamToken(t *testing.T) {
 		_, _, err := mcpStreamToken()
 		require.ErrorContains(t, err, "creating state directory")
 	})
+	t.Run("token file cannot be narrowed", func(t *testing.T) {
+		stateHome := t.TempDir()
+		t.Setenv(mcpTokenEnv, "")
+		t.Setenv("XDG_STATE_HOME", stateHome)
+		// A link to itself makes chmod fail with an error other than a missing file.
+		dir := filepath.Join(stateHome, "sind")
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		require.NoError(t, os.Symlink(mcpTokenFile, filepath.Join(dir, mcpTokenFile)))
+		_, _, err := mcpStreamToken()
+		require.ErrorContains(t, err, "writing MCP token")
+	})
 	t.Run("token file cannot be written", func(t *testing.T) {
 		stateHome := t.TempDir()
 		t.Setenv(mcpTokenEnv, "")
 		t.Setenv("XDG_STATE_HOME", stateHome)
 		// A directory where the token file goes makes the rename fail.
-		require.NoError(t, os.MkdirAll(filepath.Join(stateHome, "sind", "mcp-token", "x"), 0o700))
+		blocker := filepath.Join(stateHome, "sind", "mcp-token")
+		require.NoError(t, os.MkdirAll(filepath.Join(blocker, "x"), 0o700))
+		// The token file is narrowed to 0600 first, which a directory cannot
+		// be removed with.
+		t.Cleanup(func() { _ = os.Chmod(blocker, 0o700) })
 		_, _, err := mcpStreamToken()
 		require.ErrorContains(t, err, "writing MCP token")
 		entries, err := os.ReadDir(filepath.Join(stateHome, "sind"))

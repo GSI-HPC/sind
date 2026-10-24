@@ -128,7 +128,7 @@ func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...stri
 // for a row that shows what a pull does (cmdexec.WithStdoutAsData).
 func (c *Client) call(ctx context.Context, args []string, exec func(context.Context) (string, string, error)) (string, string, error) {
 	name := callName(args)
-	ctx, span := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.WithFlags(progress.Hidden))
+	ctx, span := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.Flagged(progress.FlagHidden))
 	release, err := c.acquire(ctx)
 	if err != nil {
 		span.End(err)

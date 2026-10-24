@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -28,7 +29,7 @@ const validCgroupMounts = "cgroup2 /sys/fs/cgroup cgroup2 rw,nsdelegate 0 0\n"
 // localHostCheck the Docker host check it gives.
 const localDockerHost = "unix:///var/run/docker.sock"
 
-var localHostCheck = doctor.Check{Name: "Docker host", Status: doctor.StatusOK, Detail: "this machine (unix:///var/run/docker.sock)"}
+var localHostCheck = clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusOK, Detail: "this machine (unix:///var/run/docker.sock)"}
 
 // dockerInfo returns the `docker info --format '{{json .}}'` output of a
 // rootful cgroup v2 daemon with the given version.
@@ -173,7 +174,7 @@ func TestDoctorCommand_WritesToStdout(t *testing.T) {
 	assert.NotContains(t, stderr.String(), "27.5.0")
 }
 
-func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
+func TestDoctorCommand_RemediationAfterTheChecks(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
@@ -184,6 +185,7 @@ func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
 ✓ Docker daemon: rootful, no userns-remap
 ✓ Docker host: this machine (unix:///var/run/docker.sock)
 ✗ cgroupv2: nsdelegate not found
+✓ DNS policy: host resolution available
 
 Enable nsdelegate on the Docker host temporarily:
 
@@ -195,8 +197,6 @@ sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d
 echo -e '[Mount]\nOptions=nsdelegate' \
   | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
 sudo systemctl daemon-reload
-
-✓ DNS policy: host resolution available
 `, out)
 }
 
@@ -208,7 +208,7 @@ func TestDoctorCommand_DNSPolicyNotAuthorized(t *testing.T) {
 	require.NoError(t, err, "the DNS policy check is advisory")
 	assert.Contains(t, out, "! DNS policy: not authorized (optional)\n\nInstall a polkit rule")
 	assert.Contains(t, out, "subject.active && subject.local) {")
-	assert.True(t, strings.HasSuffix(out, "RULES\n\n"), out)
+	assert.True(t, strings.HasSuffix(out, "RULES\n"), out)
 }
 
 func TestDoctorCommand_JSON(t *testing.T) {
@@ -218,14 +218,14 @@ func TestDoctorCommand_JSON(t *testing.T) {
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(true)), t, "-o", "json")
 	require.NoError(t, err)
 
-	var checks []doctor.Check
+	var checks []clidoctor.Check
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
-	assert.Equal(t, []doctor.Check{
-		{Name: "Docker Engine", Status: doctor.StatusOK, Detail: "29.0.0 (>= 28.0)"},
-		{Name: "Docker daemon", Status: doctor.StatusOK, Detail: "rootful, no userns-remap"},
+	assert.Equal(t, []clidoctor.Check{
+		{Name: "Docker Engine", Status: clidoctor.StatusOK, Detail: "29.0.0 (>= 28.0)"},
+		{Name: "Docker daemon", Status: clidoctor.StatusOK, Detail: "rootful, no userns-remap"},
 		localHostCheck,
-		{Name: "cgroupv2", Status: doctor.StatusOK, Detail: "nsdelegate enabled (/sys/fs/cgroup)"},
-		{Name: "DNS policy", Status: doctor.StatusOK, Detail: "host resolution available"},
+		{Name: "cgroupv2", Status: clidoctor.StatusOK, Detail: "nsdelegate enabled (/sys/fs/cgroup)"},
+		{Name: "DNS policy", Status: clidoctor.StatusOK, Detail: "host resolution available"},
 	}, checks)
 	assert.NotContains(t, out, "remediation")
 }
@@ -238,18 +238,18 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 	out, err := executeDoctor(ctx, t, "--output", "json")
 	require.EqualError(t, err, "checks failed: Docker Engine, cgroupv2")
 
-	var checks []doctor.Check
+	var checks []clidoctor.Check
 	require.NoError(t, json.Unmarshal([]byte(out), &checks), "stdout holds only the JSON document")
 	require.Len(t, checks, 5)
-	assert.Equal(t, doctor.Check{Name: "Docker Engine", Status: doctor.StatusFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
-	assert.Equal(t, doctor.Check{Name: "Docker daemon", Status: doctor.StatusOK, Detail: "rootful, no userns-remap"}, checks[1])
+	assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
+	assert.Equal(t, clidoctor.Check{Name: "Docker daemon", Status: clidoctor.StatusOK, Detail: "rootful, no userns-remap"}, checks[1])
 	assert.Equal(t, localHostCheck, checks[2])
 	assert.Equal(t, "cgroupv2", checks[3].Name)
-	assert.Equal(t, doctor.StatusFailed, checks[3].Status)
+	assert.Equal(t, clidoctor.StatusFailed, checks[3].Status)
 	assert.Equal(t, "nsdelegate not found", checks[3].Detail)
 	assert.Equal(t, doctor.NsdelegateRemediation("/sys/fs/cgroup"), checks[3].Remediation)
 	assert.Contains(t, checks[3].Remediation, "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
-	assert.Equal(t, doctor.Check{Name: "DNS policy", Status: doctor.StatusWarning, Detail: "not authorized (optional)",
+	assert.Equal(t, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning, Detail: "not authorized (optional)",
 		Remediation: checks[4].Remediation}, checks[4])
 	assert.Contains(t, checks[4].Remediation, "polkit.addRule")
 }
@@ -262,8 +262,8 @@ func TestDoctorCommand_DockerPermissionDenied(t *testing.T) {
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
 	require.EqualError(t, err, "checks failed: Docker Engine")
-	assert.Contains(t, out, "✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket\\x1b]0;x\\x07\n"+
-		"\nAdd your user to the docker group, then log in again (or run newgrp docker):\n\nsudo usermod -aG docker $USER\n\n")
+	assert.Contains(t, out, "✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket\\x1b]0;x\\x07\n")
+	assert.True(t, strings.HasSuffix(out, "\nAdd your user to the docker group, then log in again (or run newgrp docker):\n\nsudo usermod -aG docker $USER\n"), out)
 }
 
 func TestDoctorCommand_InvalidOutput(t *testing.T) {

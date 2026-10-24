@@ -69,7 +69,7 @@ func (s *Sim) Feed(log []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, line := range bytes.Split(bytes.TrimSuffix(log, []byte("\n")), []byte("\n")) {
-		s.red.Line(line)
+		s.red.Take(line)
 	}
 	s.st.SetRuns(s.red.Runs(), s.red.Changed()...)
 }
@@ -151,7 +151,7 @@ func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, 
 		// no lock.
 		err = p.work(ctx, play{clk: s.clk})
 	} else {
-		log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, Run: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
+		log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, RunID: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
 		bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
 		cctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, p.title, targetOf(p.target)...)
 		pl := play{clk: s.clk, emit: s.emitter(p.realm, nil)}

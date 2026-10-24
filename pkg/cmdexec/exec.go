@@ -67,9 +67,9 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	parse := LineParser(ctx)
 	cmd.Stdout = &outBuf
 	if !StdoutIsData(ctx) {
-		cmd.Stdout = progress.Tee(ctx, &outBuf, progress.Stdout, parse)
+		cmd.Stdout = progress.Tee(ctx, &outBuf, progress.StreamStdout, parse)
 	}
-	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.Stderr, parse)
+	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.StreamStderr, parse)
 	err := cmd.Start()
 	if err == nil {
 		if started := Started(ctx); started != nil {

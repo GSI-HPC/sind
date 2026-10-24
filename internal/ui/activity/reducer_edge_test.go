@@ -30,7 +30,7 @@ func start(r *Reducer, run string, s int, id, parent, kind, name string, extra .
 	for _, e := range extra {
 		rest += "," + e
 	}
-	r.Line(ev("start", run, fmt.Sprintf("2026-01-01T00:00:%02dZ", s), rest))
+	r.Take(ev("start", run, fmt.Sprintf("2026-01-01T00:00:%02dZ", s), rest))
 }
 
 func TestTreeByParent(t *testing.T) {
@@ -74,10 +74,10 @@ func TestRunWithoutCommandSpan(t *testing.T) {
 
 func TestEventsBeforeTheTraceLine(t *testing.T) {
 	r := NewReducer(5)
-	r.Line(ev("start", runA, "2026-01-01T00:00:00Z", `"trace":"`+traceT+`","span":"r","kind":"command","name":"x"`))
+	r.Take(ev("start", runA, "2026-01-01T00:00:00Z", `"trace":"`+traceT+`","span":"r","kind":"command","name":"x"`))
 	assert.Equal(t, traceT, r.Runs()[0].Trace, "the events name the trace too")
 	assert.Empty(t, r.Runs()[0].Program)
-	r.Line(line("trace", runA, `"trace":"`+traceT+`","parent":"`+parentP+`","traceFlags":"01","program":"sind","version":"v2"`))
+	r.Take(line("trace", runA, `"trace":"`+traceT+`","parent":"`+parentP+`","traceFlags":"01","program":"sind","version":"v2"`))
 	run := r.Runs()[0]
 	assert.Equal(t, "sind", run.Program)
 	assert.Equal(t, "v2", run.Version)
@@ -90,7 +90,7 @@ func TestKeepDropsEndedRunsFirst(t *testing.T) {
 	r := NewReducer(2)
 	start(r, runA, 0, "r", "", "command", "a") // running, the oldest
 	start(r, b, 1, "r", "", "command", "b")
-	r.Line(ev("end", b, "2026-01-01T00:00:02Z", `"span":"r","status":"ok"`))
+	r.Take(ev("end", b, "2026-01-01T00:00:02Z", `"span":"r","status":"ok"`))
 	start(r, c, 3, "r", "", "command", "c")
 	assert.Equal(t, []string{"c", "a"}, titles(r), "b ended, so b goes, not the older a")
 	assert.Contains(t, r.Changed(), b, "the drop is a change of the run")
@@ -100,8 +100,8 @@ func TestKeepDropsEndedRunsFirst(t *testing.T) {
 	assert.Equal(t, []string{"d", "c"}, titles(r))
 
 	// A line of a run that was dropped does not bring it back.
-	r.Line(ev("end", runA, "2026-01-01T00:00:05Z", `"span":"r","status":"ok"`))
-	r.Line(ev("start", b, "2026-01-01T00:00:06Z", `"span":"late","kind":"step","name":"late"`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:05Z", `"span":"r","status":"ok"`))
+	r.Take(ev("start", b, "2026-01-01T00:00:06Z", `"span":"late","kind":"step","name":"late"`))
 	assert.Equal(t, []string{"d", "c"}, titles(r))
 }
 
@@ -136,10 +136,10 @@ func TestReset(t *testing.T) {
 
 func TestTextsAreEscaped(t *testing.T) {
 	r := NewReducer(5)
-	r.Line(line("trace", runA, `"program":"si\u001b[31mnd","version":"v1\u0000"`))
-	r.Line(ev("start", runA, "2026-01-01T00:00:00Z",
+	r.Take(line("trace", runA, `"program":"si\u001b[31mnd","version":"v1\u0000"`))
+	r.Take(ev("start", runA, "2026-01-01T00:00:00Z",
 		`"span":"r","kind":"command","name":"cre\u0007ate\tcluster","node":"de\u202ev","host":"h\u0085ost","role":"w\u200eorker","batch":"1\n/2","message":"a\r\nb\u001b]0;x\u0007"`))
-	r.Line(ev("end", runA, "2026-01-01T00:00:01Z", `"span":"r","kind":"command","name":"cre\u0007ate\tcluster","node":"de\u202ev","host":"h\u0085ost","role":"w\u200eorker","batch":"1\n/2","message":"a\r\nb\u001b]0;x\u0007","status":"failed","class":"target","err":"bad\u0000 news\u202d!"`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:01Z", `"span":"r","kind":"command","name":"cre\u0007ate\tcluster","node":"de\u202ev","host":"h\u0085ost","role":"w\u200eorker","batch":"1\n/2","message":"a\r\nb\u001b]0;x\u0007","status":"failed","class":"target","err":"bad\u0000 news\u202d!"`))
 	run := r.Runs()[0]
 	assert.Equal(t, `si\x1b[31mnd`, run.Program, "a control character is shown escaped, never acted on")
 	assert.Equal(t, `v1\x00`, run.Version)
@@ -154,14 +154,14 @@ func TestTextsAreEscaped(t *testing.T) {
 func TestSuspendAndResume(t *testing.T) {
 	r := NewReducer(5)
 	start(r, runA, 0, "r", "", "command", "c")
-	r.Line(ev("suspend", runA, "2026-01-01T00:00:01Z", `"span":"r"`))
+	r.Take(ev("suspend", runA, "2026-01-01T00:00:01Z", `"span":"r"`))
 	run := r.Runs()[0]
 	assert.True(t, run.Suspended)
 	assert.Equal(t, at("2026-01-01T00:00:01Z"), run.Last)
-	r.Line(ev("resume", runA, "2026-01-01T00:00:02Z", ``))
+	r.Take(ev("resume", runA, "2026-01-01T00:00:02Z", ``))
 	assert.False(t, r.Runs()[0].Suspended)
-	r.Line(ev("suspend", runA, "2026-01-01T00:00:03Z", ``))
-	r.Line(ev("end", runA, "2026-01-01T00:00:04Z", `"span":"r","status":"ok"`))
+	r.Take(ev("suspend", runA, "2026-01-01T00:00:03Z", ``))
+	r.Take(ev("end", runA, "2026-01-01T00:00:04Z", `"span":"r","status":"ok"`))
 	assert.False(t, r.Runs()[0].Suspended, "a run that ended asks nothing")
 }
 
@@ -188,16 +188,16 @@ func TestSpanLifecycle(t *testing.T) {
 	assert.Equal(t, spans[2].Queued, spans[2].Started)
 
 	// run starts a queued span, once; the second changes nothing.
-	r.Line(ev("run", runA, "2026-01-01T00:00:03Z", `"span":"q","parent":"r","kind":"target","state":"running"`))
-	r.Line(ev("run", runA, "2026-01-01T00:00:04Z", `"span":"q","parent":"r","kind":"target","state":"running"`))
-	r.Line(ev("run", runA, "2026-01-01T00:00:04Z", `"span":"n","parent":"r","kind":"target","state":"running"`))
+	r.Take(ev("run", runA, "2026-01-01T00:00:03Z", `"span":"q","parent":"r","kind":"target","state":"running"`))
+	r.Take(ev("run", runA, "2026-01-01T00:00:04Z", `"span":"q","parent":"r","kind":"target","state":"running"`))
+	r.Take(ev("run", runA, "2026-01-01T00:00:04Z", `"span":"n","parent":"r","kind":"target","state":"running"`))
 	get()
 	assert.Equal(t, StateRunning, spans[0].State)
 	assert.Equal(t, at("2026-01-01T00:00:03Z"), spans[0].Started)
 	assert.Equal(t, at("2026-01-01T00:00:01Z"), spans[2].Started)
 
 	// A queued span can end without having run.
-	r.Line(ev("end", runA, "2026-01-01T00:00:05Z", `"span":"u","parent":"r","status":"canceled","class":"canceled","err":"stopped"`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:05Z", `"span":"u","parent":"r","status":"canceled","class":"canceled","err":"stopped"`))
 	get()
 	assert.Equal(t, StateEnded, spans[1].State)
 	assert.True(t, spans[1].Started.IsZero())
@@ -206,8 +206,8 @@ func TestSpanLifecycle(t *testing.T) {
 
 	// Once ended, a span is done: a repeated end or a late event is left
 	// out.
-	r.Line(ev("end", runA, "2026-01-01T00:00:09Z", `"span":"u","status":"ok","message":"later","exit":3`))
-	r.Line(ev("line", runA, "2026-01-01T00:00:09Z", `"span":"u","stream":"stderr"`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:09Z", `"span":"u","status":"ok","message":"later","exit":3`))
+	r.Take(ev("line", runA, "2026-01-01T00:00:09Z", `"span":"u","stream":"stderr"`))
 	get()
 	assert.Equal(t, store.StatusCanceled, spans[1].Status)
 	assert.Equal(t, at("2026-01-01T00:00:05Z"), *spans[1].Ended)
@@ -218,8 +218,8 @@ func TestSpanLifecycle(t *testing.T) {
 	assert.Equal(t, at("2026-01-01T00:00:09Z"), r.Runs()[0].Last)
 
 	// A span first met at an update or an end, as after a cut log.
-	r.Line(ev("update", runA, "2026-01-01T00:00:10Z", `"span":"m1","parent":"r","kind":"step","name":"m1","state":"queued","total":4`))
-	r.Line(ev("end", runA, "2026-01-01T00:00:11Z", `"span":"m2","parent":"r","kind":"step","name":"m2","state":"ended","status":"ok","exit":0`))
+	r.Take(ev("update", runA, "2026-01-01T00:00:10Z", `"span":"m1","parent":"r","kind":"step","name":"m1","state":"queued","total":4`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:11Z", `"span":"m2","parent":"r","kind":"step","name":"m2","state":"ended","status":"ok","exit":0`))
 	get()
 	assert.Equal(t, StateQueued, spans[3].State)
 	assert.Equal(t, 4, spans[3].Total)
@@ -235,16 +235,16 @@ func TestLinesAndDropped(t *testing.T) {
 	start(r, runA, 0, "r", "", "command", "c")
 	start(r, runA, 0, "s", "r", "call", "sol", `"flags":["show-lines"]`)
 	for _, extra := range []string{`,"dropped":2`, ``, `,"dropped":-4`, `,"dropped":1`} {
-		r.Line(ev("line", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"call","name":"sol","flags":["show-lines"],"stream":"stdout"`+extra))
+		r.Take(ev("line", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"call","name":"sol","flags":["show-lines"],"stream":"stdout"`+extra))
 	}
 	s := r.Runs()[0].Root.Children[0]
 	assert.Equal(t, 4, s.Lines)
 	assert.Equal(t, 3, s.Dropped)
 	assert.True(t, s.ShowLines)
 	// The end counts all the span's.
-	r.Line(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"s","status":"ok","dropped":5`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"s","status":"ok","dropped":5`))
 	assert.Equal(t, 5, r.Runs()[0].Root.Children[0].Dropped)
-	r.Line(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"r","status":"ok","dropped":-1`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"r","status":"ok","dropped":-1`))
 	assert.Zero(t, r.Runs()[0].Root.Dropped)
 }
 
@@ -255,19 +255,19 @@ func TestWorkOfASpan(t *testing.T) {
 	amount := func() int64 { return r.Runs()[0].Root.Children[0].Amount }
 
 	assert.Zero(t, amount(), "no work yet")
-	r.Line(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"d","parent":"r","kind":"call","size":1000,"unit":"bytes"`))
+	r.Take(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"d","parent":"r","kind":"call","size":1000,"unit":"bytes"`))
 	assert.Zero(t, amount())
 	assert.EqualValues(t, 1000, r.Runs()[0].Root.Children[0].Size)
-	r.Line(ev("advance", runA, "2026-01-01T00:00:02Z", `"span":"d","parent":"r","kind":"call","amount":400,"size":1000,"unit":"bytes"`))
+	r.Take(ev("advance", runA, "2026-01-01T00:00:02Z", `"span":"d","parent":"r","kind":"call","amount":400,"size":1000,"unit":"bytes"`))
 	assert.EqualValues(t, 400, amount())
-	r.Line(ev("advance", runA, "2026-01-01T00:00:03Z", `"span":"d","parent":"r","kind":"call","amount":700,"size":1000,"unit":"bytes","leftOut":9`))
+	r.Take(ev("advance", runA, "2026-01-01T00:00:03Z", `"span":"d","parent":"r","kind":"call","amount":700,"size":1000,"unit":"bytes","leftOut":9`))
 	assert.EqualValues(t, 700, amount())
 	// An event leaves out an amount of 0: the download started over.
-	r.Line(ev("advance", runA, "2026-01-01T00:00:04Z", `"span":"d","parent":"r","kind":"call","size":1000,"unit":"bytes"`))
+	r.Take(ev("advance", runA, "2026-01-01T00:00:04Z", `"span":"d","parent":"r","kind":"call","size":1000,"unit":"bytes"`))
 	assert.Zero(t, amount())
-	r.Line(ev("advance", runA, "2026-01-01T00:00:05Z", `"span":"d","parent":"r","kind":"call","amount":-5,"size":1000,"unit":"bytes"`))
+	r.Take(ev("advance", runA, "2026-01-01T00:00:05Z", `"span":"d","parent":"r","kind":"call","amount":-5,"size":1000,"unit":"bytes"`))
 	assert.Zero(t, amount(), "never negative")
-	r.Line(ev("end", runA, "2026-01-01T00:00:06Z", `"span":"d","parent":"r","kind":"call","amount":1000,"size":1000,"unit":"bytes","status":"ok"`))
+	r.Take(ev("end", runA, "2026-01-01T00:00:06Z", `"span":"d","parent":"r","kind":"call","amount":1000,"size":1000,"unit":"bytes","status":"ok"`))
 	d := r.Runs()[0].Root.Children[0]
 	assert.EqualValues(t, 1000, d.Amount)
 	assert.EqualValues(t, 1000, d.Size)
@@ -283,7 +283,7 @@ func TestCounts(t *testing.T) {
 	r := NewReducer(5)
 	start(r, runA, 0, "r", "", "command", "c")
 	start(r, runA, 0, "s", "r", "step", "s", `"total":7,"limit":3`)
-	r.Line(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"step","name":"s","total":5,"limit":3,"batch":"2/5","message":"working"`))
+	r.Take(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"step","name":"s","total":5,"limit":3,"batch":"2/5","message":"working"`))
 	s := r.Runs()[0].Root.Children[0]
 	assert.Equal(t, 5, s.Total, "the latest event says")
 	assert.Equal(t, 3, s.Limit)

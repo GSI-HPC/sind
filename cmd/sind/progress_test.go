@@ -46,7 +46,7 @@ import (
 type displays struct {
 	mu    sync.Mutex
 	modes []string
-	last  *cliprogress.Run
+	last  *cliprogress.Session
 	clock time.Time
 }
 
@@ -56,7 +56,7 @@ func fakeDisplays(t *testing.T) *displays {
 	c := &displays{clock: time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)}
 	t.Setenv("LC_ALL", "en_US.UTF-8") // the marks of the frames the tests expect
 	saved, savedClock := startRun, displayClock
-	startRun = func(ctx context.Context, o cliprogress.Options) (*cliprogress.Run, error) {
+	startRun = func(ctx context.Context, o cliprogress.Options) (*cliprogress.Session, error) {
 		o.Manual = true
 		o.Now = c.now
 		// The frames compare plain text; TestTheDisplaysDrawClassic
@@ -848,10 +848,10 @@ func TestTheDisplaysDrawClassic(t *testing.T) {
 		env  map[string]string
 		want display.Theme
 	}{
-		"256 colours in TERM": {map[string]string{"TERM": "xterm-256color"}, display.Classic.In(display.Colours256)},
-		"COLORTERM":           {map[string]string{"TERM": "xterm", "COLORTERM": "truecolor"}, display.Classic.In(display.Colours256)},
-		"the terminal's 16":   {map[string]string{"TERM": "xterm"}, display.Classic.In(display.Colours16)},
-		"NO_COLOR":            {map[string]string{"TERM": "xterm-256color", "NO_COLOR": "1"}, display.Classic.In(display.NoColours)},
+		"256 colours in TERM": {map[string]string{"TERM": "xterm-256color"}, display.Classic.In(display.Colors256)},
+		"COLORTERM":           {map[string]string{"TERM": "xterm", "COLORTERM": "truecolor"}, display.Classic.In(display.Colors256)},
+		"the terminal's 16":   {map[string]string{"TERM": "xterm"}, display.Classic.In(display.Colors16)},
+		"NO_COLOR":            {map[string]string{"TERM": "xterm-256color", "NO_COLOR": "1"}, display.Classic.In(display.ColorsNone)},
 		"a dumb terminal":     {map[string]string{"TERM": "dumb"}, display.Theme{}},
 	} {
 		t.Setenv("TERM", "")

@@ -33,7 +33,7 @@ func TestOSExecutor_SimpleCommand(t *testing.T) {
 // as without a span.
 func TestOSExecutor_ShowsLines(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.WithFlags(progress.ShowLines))
+	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.Flagged(progress.FlagShowLines))
 	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(ctx, "sh", "-c", "echo out; echo err >&2")
 	step.End(err)
@@ -54,7 +54,7 @@ func TestOSExecutor_ShowsLines(t *testing.T) {
 // error alone, and its output is kept as without a span.
 func TestOSExecutor_ShowsNoLinesOfData(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.WithFlags(progress.ShowLines))
+	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.Flagged(progress.FlagShowLines))
 	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(cmdexec.WithStdoutAsData(ctx), "sh", "-c", "echo '[{\"Id\": 1}]'; echo pulling >&2")
 	step.End(err)

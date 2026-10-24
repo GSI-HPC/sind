@@ -67,7 +67,7 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
 			for _, e := range w.Events() {
 				if e.Type == progress.TypeStart && e.Kind == progress.KindCall {
 					calls++
-					assert.Equal(t, progress.Hidden|progress.ShowLines, e.Flags, e.Name)
+					assert.Equal(t, progress.FlagHidden|progress.FlagShowLines, e.Flags, e.Name)
 				}
 			}
 			assert.Positive(t, calls)
@@ -82,7 +82,7 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
 // part that failed first fails.
 func TestPart_StoppedByTheGroup(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	ctx, step := progress.Start(ctx, progress.KindStep, "mesh", progress.WithFlags(progress.Fold), progress.Total(2))
+	ctx, step := progress.Start(ctx, progress.KindStep, "mesh", progress.Flagged(progress.FlagFold), progress.Total(2))
 	gctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	dns, volume := startPart(gctx, partDNS), startPart(gctx, partVolume)
@@ -179,7 +179,7 @@ type pullingExecutor struct {
 
 func (e *pullingExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	if strings.HasPrefix(strings.Join(args, " "), "create --name sind-ssh ") {
-		stderr := progress.Tee(ctx, io.Discard, progress.Stderr, nil)
+		stderr := progress.Tee(ctx, io.Discard, progress.StreamStderr, nil)
 		_, _ = fmt.Fprintf(stderr, "Unable to find image '%s' locally\nlatest: Pulling from gsi-hpc/sind-node\n", SSHImage())
 		e.frame = e.screen.draw(2 * time.Second)
 	}
@@ -225,9 +225,9 @@ func (e *teeingExecutor) Run(ctx context.Context, name string, args ...string) (
 		e.created = true
 	}
 	if !cmdexec.StdoutIsData(ctx) {
-		_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.Stdout, nil), stdout)
+		_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStdout, nil), stdout)
 	}
-	_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.Stderr, nil), stderr)
+	_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStderr, nil), stderr)
 	if e.created && strings.Contains(strings.Join(args, " "), "sind-ssh") {
 		e.frames = append(e.frames, e.screen.draw(time.Second))
 	}
