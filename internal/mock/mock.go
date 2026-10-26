@@ -72,8 +72,24 @@ func (m *Executor) AddResult(stdout, stderr string, err error) {
 
 func (m *Executor) record(ctx context.Context, name string, args []string, stdin string) (string, string, error) {
 	stdout, stderr, err := m.dispatch(name, args, stdin)
+	stdout = onTerminal(ctx, stdout)
 	parseLines(ctx, stdout, stderr)
 	return stdout, stderr, err
+}
+
+// onTerminal returns stdout as OSExecutor returns what a command wrote to
+// the terminal of cmdexec.WithTerminal: in plain lines, the one that did
+// not end included. Without a terminal, or when stdout is data, it is
+// stdout itself.
+func onTerminal(ctx context.Context, stdout string) string {
+	if !cmdexec.Terminal(ctx) || cmdexec.StdoutIsData(ctx) {
+		return stdout
+	}
+	var b strings.Builder
+	tl := cmdexec.NewTerminalLines(&b)
+	_, _ = tl.Write([]byte(stdout))
+	_ = tl.Flush()
+	return b.String()
 }
 
 // dispatch records the call and returns its result.

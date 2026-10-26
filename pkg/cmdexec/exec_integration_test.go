@@ -177,3 +177,33 @@ func TestOSExecutor_EnvAndStarted(t *testing.T) {
 	assert.Positive(t, pid)
 	assert.Equal(t, "this "+strconv.Itoa(pid)+"\nnohome\n", stdout)
 }
+
+// A command run WithTerminal writes its standard output to a terminal of
+// TerminalWidth columns, which reaches the caller and the line parser as
+// plain lines; standard error stays a pipe.
+func TestOSExecutor_Terminal(t *testing.T) {
+	var mu sync.Mutex
+	var parsed []string
+	ctx := cmdexec.WithLineParser(cmdexec.WithTerminal(t.Context()), func(st progress.Stream, line string) {
+		mu.Lock()
+		defer mu.Unlock()
+		parsed = append(parsed, st.String()+" "+line)
+	})
+	var e cmdexec.OSExecutor
+	script := `[ -t 1 ] && [ ! -t 2 ] && stty size <&1; printf 'a: one\r\033[1Aa: two\r\033[1B\n'; echo err >&2`
+	stdout, stderr, err := e.Run(ctx, "sh", "-c", script)
+	require.NoError(t, err)
+	assert.Equal(t, "24 "+strconv.Itoa(cmdexec.TerminalWidth)+"\na: one\na: two\n", stdout)
+	assert.Equal(t, "err\n", stderr)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, parsed, "stdout a: two")
+	assert.Contains(t, parsed, "stderr err")
+}
+
+// A command run WithTerminal that cannot start fails as without one.
+func TestOSExecutor_TerminalNotStarted(t *testing.T) {
+	var e cmdexec.OSExecutor
+	_, _, err := e.Run(cmdexec.WithTerminal(t.Context()), "/nonexistent/sind-test")
+	require.Error(t, err)
+}

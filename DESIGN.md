@@ -168,6 +168,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/muesli/termenv` | The colour profiles lipgloss reports, which pick how many colours the progress theme draws in |
 | `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log (`progress`, `progress/display`, `progress/cliprogress`, v0.4.0; see Progress Display); the pools of the power commands and `delete cluster --all` (`fanout`); escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details; the strict command tree, the usage errors that exit 2 and the build info of `sind version` (`cobratree`) |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands and the progress display |
+| `github.com/creack/pty` | The pseudo-terminal of `docker pull`, which writes its byte counts only to a terminal (`cmdexec.WithTerminal`) |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
