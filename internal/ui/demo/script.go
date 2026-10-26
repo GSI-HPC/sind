@@ -117,11 +117,13 @@ func (p play) preflight(ctx context.Context) (context.Context, *progress.Span) {
 	return prep, step
 }
 
-// pull plays the step pull images, whose target counts the layers of the
-// image as sind does (docker gives no bytes off a terminal), next to the
-// preflight. A fail ends the pull with it.
+// pull plays the step pull images, whose target counts the bytes of the
+// image as sind does, next to the preflight. A fail ends the pull with it.
 func (p play) pull(ctx context.Context, image string, fail error) error {
-	const layers = 8
+	const (
+		ticks = 8
+		size  = 412_000_000
+	)
 	pctx, pull := progress.Start(ctx, progress.KindStep, "pull images",
 		progress.Flagged(progress.FlagFold|progress.FlagShowLines), progress.Total(1))
 	_, img := progress.Start(pctx, progress.KindTarget, image,
@@ -136,10 +138,10 @@ func (p play) pull(ctx context.Context, image string, fail error) error {
 		pull.End(fail)
 		return fail
 	}
-	img.Update(progress.Work(progress.UnitItems, layers))
-	for range layers {
+	img.Update(progress.Work(progress.UnitBytes, size))
+	for i := range ticks {
 		p.pause(ctx, 900*time.Millisecond)
-		img.Advance(1)
+		img.SetAmount(size * int64(i+1) / ticks)
 	}
 	preflight.End(nil)
 	p.pause(ctx, 300*time.Millisecond)

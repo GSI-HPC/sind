@@ -69,7 +69,7 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
-  ├── pull.go      The layer count that PullImage reports from the status lines of docker pull
+  ├── pull.go      The work, in bytes or in layers, that PullImage reports from the status lines of docker pull
   ├── info.go      docker info (daemon version, cgroup version, security options, OS and kernel)
   ├── endpoint.go  Daemon endpoint the docker CLI uses (DOCKER_HOST, docker context)
   ├── plugin.go    Volume plugin queries (CVMFS)
