@@ -3,8 +3,10 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -291,6 +293,34 @@ func TestGetNodes_InspectError(t *testing.T) {
 	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
 	assert.Empty(t, nodes[0].IP)
 	assert.Equal(t, []string{"listing the nodes without their IPs: docker daemon busy"}, warned)
+}
+
+// TestGetNodes_InspectContainerGone verifies that a container that went away
+// between the listing and the inspect, as in a cluster being deleted, is no
+// warning: only a debug line says the IPs are missing.
+func TestGetNodes_InspectContainerGone(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+	), "", nil)
+	m.AddResult("", testutil.NoSuchContainer("sind-dev-controller"), testutil.ExitCode1(t))
+	c := docker.NewClient(&m)
+	var warned []string
+	var logs bytes.Buffer
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	ctx = sindlog.WithWarn(ctx, func(msg string) { warned = append(warned, msg) })
+
+	nodes, err := GetNodes(ctx, c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Empty(t, nodes[0].IP)
+	assert.Empty(t, warned)
+	assert.Contains(t, logs.String(), "level=DEBUG")
+	assert.Contains(t, logs.String(), "No such container: sind-dev-controller")
 }
 
 // --- GetAllNodes ---

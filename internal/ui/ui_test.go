@@ -23,6 +23,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/go-clikit/localweb/launch"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -260,6 +261,22 @@ func TestRunLogsAnOpenerThatFails(t *testing.T) {
 	require.NoError(t, r.stop())
 	assert.Contains(t, r.stderr.String(), "could not open a browser; open the URL above yourself")
 	assert.Contains(t, r.stderr.String(), "no xdg-open")
+}
+
+// TestRunLogsTheWarningsOfPkg checks that what pkg/ warns of while sind ui
+// reads goes to the log, not to the stream as a bare "Warning:" line.
+func TestRunLogsTheWarningsOfPkg(t *testing.T) {
+	warned := make(chan struct{})
+	reg := runRegistry()
+	reg.AddService(Service{Name: "warner", Run: func(ctx context.Context, _ *Env) {
+		sindlog.Warn(ctx, "listing the nodes without their IPs: gone")
+		close(warned)
+	}})
+	r := startRun(t, Options{NoOpen: true, registry: reg})
+	<-warned
+	require.NoError(t, r.stop())
+	assert.Contains(t, r.stderr.String(), `level=WARN msg="listing the nodes without their IPs: gone"`)
+	assert.NotContains(t, r.stderr.String(), "Warning:")
 }
 
 // recordAnotherProcess writes the record of a sind ui at url that runs as
