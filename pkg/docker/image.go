@@ -52,7 +52,8 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 // to be running, reports the pull as work (see layerCount). docker pull
 // then writes its standard output to a terminal (cmdexec.WithTerminal),
 // where it tells the bytes of each layer it downloads, and the work is in
-// bytes; where no terminal can be opened, it is in layers. A pull that
+// bytes; where no terminal can be opened, it is in layers. A pull on a
+// terminal that downloads nothing ends in layers too. A pull that
 // finds the image there already, and writes no layer, ends with one item
 // of one done. A pull that fails leaves the work where it was.
 func (c *Client) PullImage(ctx context.Context, image string) error {
@@ -61,7 +62,8 @@ func (c *Client) PullImage(ctx context.Context, image string) error {
 		return c.do(ctx, "pull", image)
 	}
 	layers := &layerCount{span: target}
-	err := c.do(cmdexec.WithLineParser(cmdexec.WithTerminal(ctx), layers.line), "pull", image)
+	ctx = cmdexec.WithTerminalOpened(cmdexec.WithTerminal(ctx), layers.opened)
+	err := c.do(cmdexec.WithLineParser(ctx, layers.line), "pull", image)
 	if err == nil {
 		layers.finish()
 	}

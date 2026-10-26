@@ -86,9 +86,11 @@ const (
 //     to be the mean of those known; and so that the share done never
 //     goes back when a guess turns out short, the size is held down to
 //     what keeps the share where it was until the bytes catch up.
-//   - Layers, when a layer is complete before docker wrote any bytes, as
-//     it does where it is no terminal: the amount is the layers that are
-//     done out of those docker has told of.
+//   - Layers, when a layer is complete before docker wrote any bytes and
+//     docker writes to no terminal, where it writes no bytes at all: the
+//     amount is the layers that are done out of those docker has told of.
+//     On a terminal, a small layer is often complete before docker wrote
+//     the bytes of any, and the pull waits for those of the next.
 //
 // Until the unit is known, nothing is reported. It is safe for concurrent
 // use, as the lines of the two streams are parsed from different
@@ -99,6 +101,8 @@ type layerCount struct {
 	mu     sync.Mutex
 	layers map[string]*layer
 	unit   pullUnit
+	// terminal is set once docker pull has a terminal to write to.
+	terminal bool
 	// size and amount are what was reported last, share the share done
 	// they gave.
 	size, amount int64
@@ -136,10 +140,18 @@ func (l *layerCount) line(_ progress.Stream, line string) {
 	if ly.state >= layerDownloaded {
 		ly.got = ly.size
 	}
-	if l.unit == unitUnknown && ly.state == layerDone && !ly.had {
+	if l.unit == unitUnknown && ly.state == layerDone && !ly.had && !l.terminal {
 		l.unit = unitLayers
 	}
 	l.report()
+}
+
+// opened records that docker pull writes to a terminal
+// (cmdexec.WithTerminalOpened).
+func (l *layerCount) opened() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.terminal = true
 }
 
 // downloadBytes returns the bytes of a line of a layer that downloads, and

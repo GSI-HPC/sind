@@ -77,6 +77,9 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	}
 	if term != nil {
 		cmd.Stdout = term.tty
+		if opened := TerminalOpened(ctx); opened != nil {
+			opened()
+		}
 	}
 	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.StreamStderr, parse)
 	err := cmd.Start()

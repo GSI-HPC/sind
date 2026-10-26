@@ -28,6 +28,25 @@ func Terminal(ctx context.Context) bool {
 	return on
 }
 
+// terminalOpenedKey is the context key of WithTerminalOpened.
+type terminalOpenedKey struct{}
+
+// WithTerminalOpened returns ctx for a command run WithTerminal whose caller
+// needs to know that it got the terminal, as a parser of what docker pull
+// writes does, which reads the bytes only where docker writes them:
+// OSExecutor calls opened once it has opened the terminal, before the
+// command starts, and not at all where it writes to a pipe instead.
+func WithTerminalOpened(ctx context.Context, opened func()) context.Context {
+	return context.WithValue(ctx, terminalOpenedKey{}, opened)
+}
+
+// TerminalOpened returns the function WithTerminalOpened put in ctx, or
+// nil.
+func TerminalOpened(ctx context.Context) func() {
+	opened, _ := ctx.Value(terminalOpenedKey{}).(func())
+	return opened
+}
+
 // TerminalWidth is the width of the pseudo-terminal of WithTerminal, in
 // columns: wide enough for docker pull to write its byte counts and the
 // time left, too narrow for it to draw a bar as well.

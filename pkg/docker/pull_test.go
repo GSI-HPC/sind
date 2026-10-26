@@ -54,15 +54,15 @@ func work(t *testing.T, w *progresstest.Watcher) (end progress.Event, sizes []in
 }
 
 // pullUnder pulls img:1 under the running target "img:1" of a watched Bus
-// against a docker that answers with result, and returns the watcher and
-// the pull's error.
-func pullUnder(t *testing.T, result mock.Result) (*progresstest.Watcher, error) {
+// against a docker that answers with result, on a terminal or a pipe, and
+// returns the watcher and the pull's error.
+func pullUnder(t *testing.T, result mock.Result, terminal bool) (*progresstest.Watcher, error) {
 	t.Helper()
 	ctx, w := progresstest.Watch(t.Context(), t)
 	ctx, step := progress.Start(ctx, progress.KindStep, "pull images", progress.Flagged(progress.FlagFold), progress.Total(1))
 	ctx, target := progress.Start(ctx, progress.KindTarget, "img:1", progress.Queued(), progress.Node("img:1"))
 	target.Run()
-	c := NewClient(&mock.Executor{OnCall: func([]string, string) mock.Result { return result }})
+	c := NewClient(&mock.Executor{NoTerminal: !terminal, OnCall: func([]string, string) mock.Result { return result }})
 
 	err := c.PullImage(ctx, "img:1")
 
@@ -77,7 +77,7 @@ func pullUnder(t *testing.T, result mock.Result) (*progresstest.Watcher, error) 
 // layer counts once however many lines it writes, and the lines that name
 // no layer are ignored. A pull that succeeded ends with every layer done.
 func TestPullImage_CountsLayers(t *testing.T) {
-	w, err := pullUnder(t, mock.Result{Stdout: pullOutput})
+	w, err := pullUnder(t, mock.Result{Stdout: pullOutput}, false)
 
 	require.NoError(t, err)
 	end, sizes := work(t, w)
@@ -96,7 +96,7 @@ latest: Pulling from library/busybox
 Digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 Status: Image is up to date for busybox:latest
 docker.io/library/busybox:latest
-`})
+`}, true)
 
 	require.NoError(t, err)
 	end, sizes := work(t, w)
@@ -122,7 +122,7 @@ func TestPullImage_Fails(t *testing.T) {
 			"a3ed95caeb02: Download complete",
 		Stderr: "c5e2f1a3d0b2: Pull complete\nerror pulling image configuration: download failed\n",
 		Err:    errors.New("exit status 1"),
-	})
+	}, false)
 
 	require.Error(t, err)
 	end, sizes := work(t, w)
@@ -161,7 +161,7 @@ func TestPullImage_AdvancesTheTarget(t *testing.T) {
 	})
 	ctx, target := progress.Start(progress.WithBus(t.Context(), bus), progress.KindTarget, "img:1", progress.Queued(), progress.Node("img:1"))
 	target.Run()
-	c := NewClient(&mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{Stdout: pullOutput} }})
+	c := NewClient(&mock.Executor{NoTerminal: true, OnCall: func([]string, string) mock.Result { return mock.Result{Stdout: pullOutput} }})
 
 	require.NoError(t, c.PullImage(ctx, "img:1"))
 
@@ -220,7 +220,7 @@ func TestPullImage_CountsBytes(t *testing.T) {
 		"b4f1e0d2c9a1: Extracting  5MB/10MB",
 		"b4f1e0d2c9a1: Pull complete",
 		"c5e2f1a3d0b2: Pull complete",
-	) + "Digest: sha256:0123\nStatus: Downloaded newer image for busybox:latest\n"})
+	) + "Digest: sha256:0123\nStatus: Downloaded newer image for busybox:latest\n"}, true)
 
 	require.NoError(t, err)
 	var size int64
@@ -243,6 +243,29 @@ func TestPullImage_CountsBytes(t *testing.T) {
 	assert.Equal(t, progress.UnitBytes, end.Unit)
 	assert.EqualValues(t, 100_000_000, end.Amount)
 	assert.EqualValues(t, 100_000_000, end.Size)
+}
+
+// On a terminal, a small layer that is complete before docker wrote the
+// bytes of any layer, as the daemon with the containerd image store often
+// writes, leaves the unit open: the pull counts bytes once docker writes
+// them, after its bar where its terminal is wide.
+func TestPullImage_SmallLayerFirstOnATerminal(t *testing.T) {
+	w, err := pullUnder(t, mock.Result{Stdout: tty(
+		"a3ed95caeb02: Pulling fs layer",
+		"b4f1e0d2c9a1: Pulling fs layer",
+		"a3ed95caeb02: Download complete",
+		"a3ed95caeb02: Pull complete",
+		"b4f1e0d2c9a1: Downloading [=>        ]  1MB/10MB",
+		"b4f1e0d2c9a1: Download complete",
+		"b4f1e0d2c9a1: Pull complete",
+	)}, true)
+
+	require.NoError(t, err)
+	end, sizes := work(t, w)
+	w.Finish()
+	assert.Equal(t, []int64{10_000_000}, sizes)
+	assert.Equal(t, progress.UnitBytes, end.Unit)
+	assert.EqualValues(t, 10_000_000, end.Amount)
 }
 
 // A line of a layer whose bytes cannot be read, or whose size is none, is a
