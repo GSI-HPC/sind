@@ -23,6 +23,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/demo"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // Options configure Run.
@@ -98,6 +99,9 @@ func Run(ctx context.Context, o Options) error {
 		o.listen = listen
 	}
 	log := slog.New(slog.NewTextHandler(o.Stderr, nil))
+	// What pkg/ warns of while it reads, such as nodes listed without their
+	// IPs, goes to the log like the rest, not as bare lines in it.
+	ctx = sindlog.WithWarn(ctx, func(msg string) { log.Warn(msg) })
 
 	var inst *launch.Instance
 	if o.RuntimeDir != "" && !o.Demo {
