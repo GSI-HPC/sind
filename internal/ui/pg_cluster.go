@@ -369,7 +369,7 @@ func pgMountKind(m cluster.MountPoint) string {
 func pgMountMode(m cluster.MountPoint) string {
 	switch m.Path {
 	case slurm.ConfDir:
-		return "read-write on the controllers, read-only on the other nodes"
+		return "rw on controllers, ro elsewhere"
 	case slurm.MungeDir, cluster.CVMFSPath:
 		return "read-only"
 	}

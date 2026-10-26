@@ -25,6 +25,8 @@ a.pg-sumpill:hover{text-decoration:underline}
 /* the small Copy buttons of the Network tab */
 .pg-copy{padding:0 6px;font-size:var(--t-xs);vertical-align:baseline}
 .pg-names dd{margin-bottom:6px}
+/* a path or source with its Copy button stays on one line */
+td.mono:has(.pg-copy){white-space:nowrap}
 
 /* Ready for jobs: the checks beside the first commands */
 .pg-ready-b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:24px;align-items:start}

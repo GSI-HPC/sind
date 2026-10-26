@@ -84,11 +84,11 @@
 </div>{{end}}
 {{if .Files}}<p class="muted pg-hint">sind wrote these files into the config volume. Change them with the <span class="mono">slurm</span> section of the cluster's config.</p>{{end}}{{end}}{{end}}
 
-{{define "pg-tab-network"}}<div class="grid g2"><section class="panel"><div class="ph"><h2>Networks</h2></div>
+{{define "pg-tab-network"}}<div class="grid g2"><section class="panel pg-wide"><div class="ph"><h2>Networks</h2></div>
   {{if .Networks}}<div class="tw"><table><thead><tr><th>Name</th><th>Driver</th><th>Subnet</th><th>Gateway</th></tr></thead><tbody>
   {{range .Networks}}<tr><td class="mono">{{.Name}}{{if .Mine}} <span class="chip">cluster</span>{{end}}</td><td class="mono">{{.Driver}}</td><td class="mono">{{.Subnet}}</td><td class="mono">{{.Gateway}}</td></tr>{{end}}
   </tbody></table></div>{{else}}<div class="empty">No network read yet.</div>{{end}}</section>
-<section class="panel"><div class="ph"><h2>Volumes and mounts</h2></div>
+<section class="panel pg-wide"><div class="ph"><h2>Volumes and mounts</h2></div>
   {{if .Mounts}}<div class="tw"><table><thead><tr><th>Mount</th><th>Source</th><th>Kind</th><th>Mode</th><th>Volume</th></tr></thead><tbody>
   {{range .Mounts}}<tr><td class="mono">{{.Path}}</td><td class="mono">{{.Source}} {{template "pg-copy" .Source}}</td><td>{{.Kind}}</td><td>{{.Mode}}</td><td>{{if not .Checked}}<span class="faint">not checked</span>{{else if .OK}}<span class="pill ok">exists</span>{{else}}<span class="pill bad">missing</span>{{end}}</td></tr>{{end}}
   </tbody></table></div><p class="pb hint">Volume says whether Docker has the volume. sind does not check a directory of the host.</p>
