@@ -3,8 +3,8 @@ name: Deploy docs
 # Builds the release docs (main, at /) and the preview docs (next, at /next/)
 # together and deploys them as one Pages artifact, so no gh-pages branch
 # accumulates history. Video episodes (video/README.md) are rendered here into
-# each checkout's docs/ before Hugo runs. Renders are cached by a hash of their
-# inputs, so only new or changed episodes are rendered. The overview video
+# each checkout's docs/ before Hugo runs. Renders are cached by the git objects
+# of their inputs, so only new or changed episodes are rendered. The overview video
 # (video/overview/README.md) is recorded from real runs and rendered here
 # too, cached by the git tree of video/overview. The screenshots of
 # sind ui (tools/screenshots) are taken here too, from the sind of each
@@ -50,12 +50,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The cache keys are the git objects of the inputs, not hashFiles: the
+      # post step of actions/cache evaluates its key again, and hashFiles then
+      # fails on the files that the recording leaves under video/overview.
+      - name: Key the video caches
+        id: keys
+        run: |
+          tree() {
+            for branch in main next; do
+              for path in "$@"; do
+                printf '%s-' "$(git -C "$branch" rev-parse --short=12 "HEAD:$path" 2>/dev/null || echo none)"
+              done
+            done
+          }
+          echo "episodes=video-episodes-$(tree video/episodes video/lib video/voice video/tools video/package-lock.json | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          echo "overview=video-overview-$(tree video/overview video/voice | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
       - name: Restore rendered episodes
         id: episodes
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: video-store
-          key: video-episodes-${{ hashFiles('main/video/episodes/**', 'main/video/lib/**', 'main/video/voice/**', 'main/video/tools/**', 'main/video/package-lock.json', 'next/video/episodes/**', 'next/video/lib/**', 'next/video/voice/**', 'next/video/tools/**', 'next/video/package-lock.json') }}
+          key: ${{ steps.keys.outputs.episodes }}
           restore-keys: video-episodes-
 
       - name: Install FFmpeg
@@ -110,7 +126,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: overview-store
-          key: video-overview-${{ hashFiles('main/video/overview/**', 'main/video/voice/**', 'next/video/overview/**', 'next/video/voice/**') }}
+          key: ${{ steps.keys.outputs.overview }}
           restore-keys: video-overview-
 
       # The overview video (video/overview) is recorded from real runs of
