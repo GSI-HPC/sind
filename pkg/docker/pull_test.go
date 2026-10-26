@@ -255,6 +255,9 @@ func TestDownloadBytes(t *testing.T) {
 	}{
 		{"Downloading", "1.049MB/45.6MB 3s", 1_049_000, 45_600_000, true},
 		{"Downloading", "512B/2kB", 512, 2000, true},
+		{"Downloading", "[==>                                                ]  1.049MB/21.33MB", 1_049_000, 21_330_000, true},
+		{"Downloading", "[==================================================>]  21.33MB/21.33MB", 21_330_000, 21_330_000, true},
+		{"Downloading", "[==> 1MB/2MB", 0, 0, false},
 		{"Extracting", "1MB/2MB", 0, 0, false},
 		{"Downloading", "512B", 0, 0, false},
 		{"Downloading", "0B/0B", 0, 0, false},
