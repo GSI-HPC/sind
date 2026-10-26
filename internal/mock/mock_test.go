@@ -276,13 +276,16 @@ func TestExecutor_ParsesLines(t *testing.T) {
 	}
 	result := Result{Stdout: "a\r\nb\nc", Stderr: "d\n"}
 	for _, tc := range []struct {
-		name string
-		ctx  func(context.Context) context.Context
-		want []line
+		name   string
+		ctx    func(context.Context) context.Context
+		want   []line
+		stdout string
 	}{
 		{"both", func(ctx context.Context) context.Context { return ctx },
-			[]line{{progress.StreamStdout, "a"}, {progress.StreamStdout, "b"}, {progress.StreamStderr, "d"}}},
-		{"stdout is data", cmdexec.WithStdoutAsData, []line{{progress.StreamStderr, "d"}}},
+			[]line{{progress.StreamStdout, "a"}, {progress.StreamStdout, "b"}, {progress.StreamStderr, "d"}}, result.Stdout},
+		{"stdout is data", cmdexec.WithStdoutAsData, []line{{progress.StreamStderr, "d"}}, result.Stdout},
+		{"terminal", cmdexec.WithTerminal,
+			[]line{{progress.StreamStdout, "a"}, {progress.StreamStdout, "b"}, {progress.StreamStdout, "c"}, {progress.StreamStderr, "d"}}, "a\nb\nc\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []line
@@ -292,7 +295,7 @@ func TestExecutor_ParsesLines(t *testing.T) {
 			stdout, stderr, err := m.Run(ctx, "docker", "pull", "img")
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
-			assert.Equal(t, result.Stdout, stdout)
+			assert.Equal(t, tc.stdout, stdout)
 			assert.Equal(t, result.Stderr, stderr)
 
 			got = nil

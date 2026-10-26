@@ -3,7 +3,7 @@
 // Script of the progress display. The server draws every page and fragment;
 // this file does six small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
-// milliseconds since 1970), it keeps the details that the user opened open
+// milliseconds since 1970), it keeps the details as the user left them
 // when a fragment is morphed in, it puts the progress of the run in the
 // title of the tab, it announces when a command starts or ends, it opens
 // and closes the task dock, and it closes the question of Stop. It evaluates no text and needs no inline script.
@@ -87,12 +87,21 @@
     });
   }
 
-  // A fragment that /events morphs in brings its details closed, as the
-  // server draws them; the user opens and closes them, so the morph leaves
-  // their open attribute alone.
+  // A fragment that /events morphs in brings its details as the server
+  // draws them: a step's open while it runs and closed once it ended, every
+  // other one closed. The morph follows the server for a step until the
+  // user opens or closes it; from then on, and for every other details, it
+  // leaves the open attribute alone. app.js calls this rule from its own.
+  const chosen = new Set();
+  document.addEventListener('click', ev => {
+    if (!(ev.target instanceof Element)) return;
+    const sum = ev.target.closest('details.grow-details > summary');
+    if (sum && sum.parentElement.id) chosen.add(sum.parentElement.id);
+  });
   if (window.Idiomorph) {
     Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) =>
-      !(name === 'open' && el instanceof HTMLDetailsElement);
+      !(name === 'open' && el instanceof HTMLDetailsElement &&
+        !(el.classList.contains('grow-details') && !chosen.has(el.id)));
   }
 
   function title() {

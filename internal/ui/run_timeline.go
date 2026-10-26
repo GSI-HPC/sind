@@ -41,7 +41,10 @@ type runRow struct {
 	Bar         bool
 	Left, Width int
 	Result      string
-	Children    []runRow
+	// Open draws the details of a row with children open: those of a
+	// span that runs, so that its targets show while they go on.
+	Open     bool
+	Children []runRow
 }
 
 // runTimeline is the Gantt chart of the run's steps.
@@ -99,7 +102,7 @@ func runRowOf(s store.Span, run store.Run, origin, end time.Time, scale time.Dur
 	class := runSpanClass(s, run.Done())
 	row := runRow{
 		ID: s.ID, Label: s.Name, Name: runLabel(s), Class: class, Mark: runMark(class), Kind: s.Kind,
-		Total: s.Total,
+		Total: s.Total, Open: class == runRunning,
 	}
 	if !s.Started.IsZero() && !origin.IsZero() {
 		to := end

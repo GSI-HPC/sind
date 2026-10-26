@@ -36,31 +36,48 @@ const (
 
 // Reducer turns the lines of event logs into runs and their span trees. It
 // is eventlog.Reducer with the runs as store.Run values, whose texts and
-// enumerations are the log's words. A Reducer is not safe for concurrent
-// use.
+// enumerations are the log's words, and the rate of each span that works
+// in bytes. A Reducer is not safe for concurrent use.
 type Reducer struct {
 	*eventlog.Reducer
+	rates rates
 }
 
 // NewReducer returns an empty reducer that keeps at most keep runs, at
 // least one: the newest, and of the older ones those that have not ended.
 func NewReducer(keep int) *Reducer {
-	return &Reducer{eventlog.NewReducer(eventlog.ReducerOptions{KeepRuns: max(keep, 1)})}
+	return &Reducer{Reducer: eventlog.NewReducer(eventlog.ReducerOptions{KeepRuns: max(keep, 1)}), rates: rates{}}
+}
+
+// Take folds one line of a log in, as eventlog.Reducer does, and notes the
+// amount of a span that works in bytes, for its rate.
+func (r *Reducer) Take(b []byte) {
+	r.Reducer.Take(b)
+	r.rates.take(b)
+}
+
+// Reset forgets the runs and the rates, as the log is read again.
+func (r *Reducer) Reset() {
+	r.Reducer.Reset()
+	clear(r.rates)
 }
 
 // Runs returns the runs that have a command span, newest first.
 func (r *Reducer) Runs() []store.Run {
 	runs := r.Reducer.Runs()
 	out := make([]store.Run, len(runs))
+	keep := make(map[string]bool, len(runs))
 	for i, ru := range runs {
-		out[i] = convertRun(ru)
+		out[i] = convertRun(ru, r.rates)
+		keep[ru.ID] = true
 	}
+	r.rates.forget(keep)
 	return out
 }
 
 // convertRun returns the run as sind ui holds it.
-func convertRun(ru eventlog.Run) store.Run {
-	root := convertSpan(ru.Root)
+func convertRun(ru eventlog.Run, rt rates) store.Run {
+	root := convertSpan(ru.Root, func(id progress.SpanID) float64 { return rt.rate(ru.ID, id, ru.Last) })
 	title := root.Name
 	if root.Node != "" {
 		title += " " + root.Node
@@ -77,8 +94,9 @@ func convertRun(ru eventlog.Run) store.Run {
 	return out
 }
 
-// convertSpan returns the span and its descendants as sind ui holds them.
-func convertSpan(s eventlog.Span) store.Span {
+// convertSpan returns the span and its descendants as sind ui holds them,
+// with the rate of each that rate gives.
+func convertSpan(s eventlog.Span, rate func(progress.SpanID) float64) store.Span {
 	out := store.Span{
 		ID: spanID(s.ID), Parent: spanID(s.Parent),
 		Name:      s.Name,
@@ -90,6 +108,7 @@ func convertSpan(s eventlog.Span) store.Span {
 		Total: s.Total, Limit: s.Limit, Batch: s.Batch, Message: s.Message,
 		Timeout: s.Timeout, Amount: s.Amount, Size: s.Size,
 		Err:     s.Err,
+		Rate:    rate(s.ID),
 		Queued:  s.Queued,
 		Started: s.Started,
 		Lines:   s.Lines, Dropped: s.Dropped,
@@ -118,7 +137,7 @@ func convertSpan(s eventlog.Span) store.Span {
 		out.Ended = &ended
 	}
 	for _, c := range s.Children {
-		out.Children = append(out.Children, convertSpan(c))
+		out.Children = append(out.Children, convertSpan(c, rate))
 	}
 	return out
 }

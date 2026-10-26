@@ -118,8 +118,8 @@ func TestCreate_OK(t *testing.T) {
 		"ready controller", "ready worker-0",
 	}, ops)
 	pulled := spanNamed(t, r, "img:1")
-	assert.Equal(t, int64(8), pulled.Amount, "the pull counted all layers")
-	assert.Equal(t, "items", pulled.Unit)
+	assert.Equal(t, int64(412_000_000), pulled.Amount, "the pull counted all bytes")
+	assert.Equal(t, "bytes", pulled.Unit)
 	var units []string
 	for _, sp := range spans(r) {
 		if sp.Name == "ready" && sp.Message != "" {

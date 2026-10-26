@@ -284,7 +284,7 @@ func TestRunMoreTransfers(t *testing.T) {
 	tr := m.Transfers[0]
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", tr.Name)
 	assert.Equal(t, runRunning, tr.Class)
-	assert.Equal(t, "38 MB / 101 MB", tr.Amount)
+	assert.Equal(t, "38 MB / 101 MB · 14 MB/s", tr.Amount, "with the rate of the bytes over the last seconds")
 	assert.True(t, tr.Bar)
 	assert.Equal(t, 38, tr.Pct)
 	assert.Empty(t, m.Steps, "the pull step has the transfer")
