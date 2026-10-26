@@ -523,7 +523,7 @@ func TestPgClusterNetworkTab(t *testing.T) {
 
 	pgFillStatus(ts.st)
 	body = pgBody(t, ts, "/clusters/sind/dev?tab=network", 200)
-	assert.Contains(t, body, `<tr><td class="mono">/etc/slurm</td><td class="mono">sind-dev-config <button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind-dev-config" aria-label="Copy sind-dev-config">Copy</button></td><td>Docker volume</td><td>read-write on the controllers, read-only on the other nodes</td><td><span class="pill ok">exists</span></td></tr>`)
+	assert.Contains(t, body, `<tr><td class="mono">/etc/slurm</td><td class="mono">sind-dev-config <button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind-dev-config" aria-label="Copy sind-dev-config">Copy</button></td><td>Docker volume</td><td>rw on controllers, ro elsewhere</td><td><span class="pill ok">exists</span></td></tr>`)
 	assert.Contains(t, body, `<td>host directory (bind mount)</td><td>read-write</td><td><span class="faint">not checked</span></td>`)
 	assert.Contains(t, body, "Volume says whether Docker has the volume. sind does not check a directory of the host.")
 	assert.Contains(t, body, `<td class="mono">/home</td><td class="mono">sind-dev-home <button`)
