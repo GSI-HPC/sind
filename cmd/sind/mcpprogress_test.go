@@ -51,7 +51,7 @@ func TestFollowToolProgress_OnlyTheCallsTrace(t *testing.T) {
 
 	var mu sync.Mutex
 	var got []string
-	finish := followToolProgress(path, mine.Trace, func(done, total float64, message string) error {
+	finish := followToolProgress(t.Context(), path, mine.ID, func(_ context.Context, done, total float64, message string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		got = append(got, fmt.Sprintf("%v/%v %s", done, total, message))
@@ -73,7 +73,7 @@ func TestFollowToolProgress_OnlyTheCallsTrace(t *testing.T) {
 
 func TestFollowToolProgress_MissingLog(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gone", "activity.jsonl")
-	finish := followToolProgress(path, newTrace(t).Trace, func(float64, float64, string) error {
+	finish := followToolProgress(t.Context(), path, newTrace(t).ID, func(context.Context, float64, float64, string) error {
 		t.Error("sent progress for a log that is not there")
 		return nil
 	})

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
@@ -193,7 +192,7 @@ func loadMCPConfig(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (*mcpconf
 	if err != nil {
 		return nil, err
 	}
-	return mcpconfig.Load(afero.NewOsFs(), path, e.key)
+	return mcpconfig.Load(path, e.key)
 }
 
 // saveMCPConfig writes the configuration back and logs its backup.

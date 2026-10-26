@@ -50,7 +50,7 @@ func clusterImages(cfg *config.Cluster) []string {
 // the lines docker pull writes.
 func pullImages(ctx context.Context, client *docker.Client, images []string) (err error) {
 	sindlog.From(ctx).InfoContext(ctx, "pulling images", "images", strings.Join(images, ","))
-	ctx, end := startStep(ctx, "pull images", progress.WithFlags(progress.Fold|progress.ShowLines), progress.Total(len(images)))
+	ctx, end := startStep(ctx, "pull images", progress.Flagged(progress.FlagFold|progress.FlagShowLines), progress.Total(len(images)))
 	defer func() { end(err) }()
 	g, gctx := errgroup.WithContext(ctx)
 	ctxs, targets := startTargets(gctx, images, func(int) string { return "" })
@@ -322,7 +322,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// The checks and the resources are the hidden progress step
 	// "preflight", which a display shows only once it has run for a
 	// second; the pull is a step of its own beside it.
-	prepCtx, preflight := progress.Start(pullCtx, progress.KindStep, "preflight", progress.WithFlags(progress.Hidden))
+	prepCtx, preflight := progress.Start(pullCtx, progress.KindStep, "preflight", progress.Flagged(progress.FlagHidden))
 
 	// Branch A: preflight → createResources, which connects the SSH relay
 	// to the cluster network. Serialised because createResources only makes
@@ -665,7 +665,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 	log := sindlog.From(ctx)
 	results := make([]nodeResult, len(nodeConfigs))
 
-	ctx, end := startStep(ctx, "nodes", progress.WithFlags(progress.Fold), progress.Total(len(nodeConfigs)))
+	ctx, end := startStep(ctx, "nodes", progress.Flagged(progress.FlagFold), progress.Total(len(nodeConfigs)))
 	defer func() { end(err) }()
 	g, gctx := errgroup.WithContext(ctx)
 	ctxs, targets := nodeTargets(gctx, nodeConfigs)
@@ -822,7 +822,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		}
 	}
 
-	ctx, end := startStep(ctx, "slurm", progress.WithFlags(progress.Fold), progress.Total(len(dbNodes)+len(nodes)))
+	ctx, end := startStep(ctx, "slurm", progress.Flagged(progress.FlagFold), progress.Total(len(dbNodes)+len(nodes)))
 	defer func() { end(err) }()
 	// The group's context is made before the db nodes start, for their
 	// targets to be announced with the others'.

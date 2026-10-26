@@ -160,7 +160,7 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		Limit:    deleteAllConcurrency,
 		Program:  program,
 		PanicLog: panicLog(ctx),
-		Summarize: joinFailures(func(f fanout.Failed) error {
+		Summarize: joinFailures(func(f fanout.FailedItem) error {
 			if !started[index[f.Name]] {
 				// Worded as when every cluster was tried: one tried once
 				// ctx had ended failed at its first lookup.
@@ -403,7 +403,7 @@ func removeEach(ctx context.Context, step, kind string, removals []removal) (err
 	targeted := hasTargets(ctx)
 	var opts []progress.Option
 	if targeted {
-		opts = append(opts, progress.WithFlags(progress.Fold), progress.Total(len(removals)))
+		opts = append(opts, progress.Flagged(progress.FlagFold), progress.Total(len(removals)))
 	}
 	ctx, end := startStep(ctx, step, opts...)
 	defer func() { end(err) }()

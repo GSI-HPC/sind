@@ -44,10 +44,11 @@ Checks system prerequisites and reports pass/fail for each:
 | inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-The results go to stdout, so they can be piped or filtered, with `✓` for a passed check, `✗` for a failed one and `!` for a warning; only the error line naming the failed checks, as the output prints them, goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
+The results go to stdout, so they can be piped or filtered, with `✓` for a passed check, `✗` for a failed one and `!` for a warning; only the error line naming the failed checks, as the output prints them, goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The fixes follow the list of checks, each one once, in the order of the checks that need it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
 
 ```
 ✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
+✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
 
 Add your user to the docker group, then log in again (or run newgrp docker):
 

@@ -21,7 +21,7 @@ const version = "v0.11.0"
 
 // traceID returns the trace the n-th run of the demo belongs to.
 func traceID(n int) progress.TraceContext {
-	return progress.TraceContext{Trace: progress.TraceID{0xde, 0x70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}}
+	return progress.TraceContext{ID: progress.TraceID{0xde, 0x70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}}
 }
 
 // uiTrace returns the trace of the n-th run of the demo as sind ui hands
@@ -35,7 +35,7 @@ func uiTrace(n int) progress.TraceContext {
 
 // traceHex is the hexadecimal form of a trace's ID, as TRACEPARENT and the
 // event log write it.
-func traceHex(tc progress.TraceContext) string { return hex.EncodeToString(tc.Trace[:]) }
+func traceHex(tc progress.TraceContext) string { return hex.EncodeToString(tc.ID[:]) }
 
 // runID returns the ID of the n-th run of the demo: 16 hexadecimal digits.
 func runID(n int) string { return fmt.Sprintf("d3e0%012x", n) }
@@ -77,7 +77,7 @@ func record(r recording) []byte {
 	if r.cancelAfter > 0 {
 		clk.cancelAt, clk.cancel = r.start.Add(r.cancelAfter), cancel
 	}
-	log := progress.NewLog(&out, progress.LogOptions{Program: "sind", Version: version, Run: r.id, AdvanceEvery: -1})
+	log := progress.NewLog(&out, progress.LogOptions{Program: "sind", Version: version, RunID: r.id, AdvanceEvery: -1})
 	bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: clk.Now, Trace: r.trace, Program: "sind"})
 	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, r.title, targetOf(r.target)...)
 	command.End(r.work(ctx, play{clk: clk}))

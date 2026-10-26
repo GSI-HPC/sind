@@ -263,7 +263,7 @@ func TestInterleaved(t *testing.T) {
 		r := NewReducer(5)
 		for _, l := range splitLines(readFixture(t, "interleaved.jsonl")) {
 			if bytesContains(l, `"run":"`+run.ID+`"`) {
-				r.Line(l)
+				r.Take(l)
 			}
 		}
 		require.Len(t, r.Runs(), 1)
@@ -281,9 +281,9 @@ func TestGoldenIsCurrent(t *testing.T) {
 
 func TestChangedAndImmutableRuns(t *testing.T) {
 	r := NewReducer(5)
-	r.Line(line("trace", "aaaaaaaaaaaaaaaa", `"trace":"`+traceT+`","program":"sind"`))
-	r.Line(ev("start", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"create cluster"`))
-	r.Line(ev("start", "bbbbbbbbbbbbbbbb", "2026-01-01T00:00:01Z", `"span":"r1","kind":"command","name":"delete cluster"`))
+	r.Take(line("trace", "aaaaaaaaaaaaaaaa", `"trace":"`+traceT+`","program":"sind"`))
+	r.Take(ev("start", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"create cluster"`))
+	r.Take(ev("start", "bbbbbbbbbbbbbbbb", "2026-01-01T00:00:01Z", `"span":"r1","kind":"command","name":"delete cluster"`))
 	assert.Equal(t, []string{"aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"}, r.Changed())
 	assert.Empty(t, r.Changed(), "forgotten once told")
 
@@ -291,7 +291,7 @@ func TestChangedAndImmutableRuns(t *testing.T) {
 	require.Len(t, first, 2)
 	assert.Equal(t, "bbbbbbbbbbbbbbbb", first[0].ID, "newest first")
 
-	r.Line(ev("start", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:02Z", `"span":"s1","parent":"r1","kind":"step","name":"nodes"`))
+	r.Take(ev("start", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:02Z", `"span":"s1","parent":"r1","kind":"step","name":"nodes"`))
 	assert.Equal(t, []string{"aaaaaaaaaaaaaaaa"}, r.Changed())
 	second := r.Runs()
 	assert.Empty(t, first[1].Root.Children, "a run handed out does not change")
@@ -301,7 +301,7 @@ func TestChangedAndImmutableRuns(t *testing.T) {
 	// What was handed out is the caller's: the reducer builds on.
 	second[1].Root.Children[0].Name = "changed"
 	second[1].Title = "changed"
-	r.Line(ev("update", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:03Z", `"span":"s1","parent":"r1","kind":"step","name":"nodes","message":"hi"`))
+	r.Take(ev("update", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:03Z", `"span":"s1","parent":"r1","kind":"step","name":"nodes","message":"hi"`))
 	third := r.Runs()
 	assert.Equal(t, "nodes", third[1].Root.Children[0].Name)
 	assert.Equal(t, "hi", third[1].Root.Children[0].Message)
@@ -336,7 +336,7 @@ func TestBadLinesAreLeftOut(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := NewReducer(5)
-			r.Line([]byte(bad))
+			r.Take([]byte(bad))
 			assert.Empty(t, r.Runs())
 			assert.Empty(t, r.Changed(), "a line left out makes no run")
 		})
@@ -344,10 +344,10 @@ func TestBadLinesAreLeftOut(t *testing.T) {
 
 	// None of them costs a later line.
 	r := NewReducer(5)
-	r.Line([]byte(`{"v":1,"type":"start"`))
-	r.Line(good)
-	r.Line([]byte("}}garbage{{"))
-	r.Line(ev("end", run, "2026-01-01T00:00:05Z", `"span":"r1","status":"ok","state":"ended"`))
+	r.Take([]byte(`{"v":1,"type":"start"`))
+	r.Take(good)
+	r.Take([]byte("}}garbage{{"))
+	r.Take(ev("end", run, "2026-01-01T00:00:05Z", `"span":"r1","status":"ok","state":"ended"`))
 	runs := r.Runs()
 	require.Len(t, runs, 1)
 	assert.Equal(t, store.StatusOK, runs[0].Status)
@@ -356,12 +356,12 @@ func TestBadLinesAreLeftOut(t *testing.T) {
 func TestUnknownKeysAndValuesAreLeftOut(t *testing.T) {
 	r := NewReducer(5)
 	const run = "aaaaaaaaaaaaaaaa"
-	r.Line(line("trace", run, `"trace":"`+traceT+`","program":"sind","version":"v1","future":{"a":[1]},"traceFlags":"01","traceState":"x=y"`))
-	r.Line(ev("start", run, "2026-01-01T00:00:00Z",
+	r.Take(line("trace", run, `"trace":"`+traceT+`","program":"sind","version":"v1","future":{"a":[1]},"traceFlags":"01","traceState":"x=y"`))
+	r.Take(ev("start", run, "2026-01-01T00:00:00Z",
 		`"span":"r1","kind":"command","name":"cmd","flags":["hidden","sparkly","dry-run"],"state":"running","seq":"one","timeout":"long","exit":"x","newkey":[1,2],"httpStatus":503,"cache":"hit"`))
-	r.Line(ev("start", run, "2026-01-01T00:00:01Z",
+	r.Take(ev("start", run, "2026-01-01T00:00:01Z",
 		`"span":"s1","parent":"r1","kind":"hologram","name":"odd","state":"strange","unit":"furlongs","amount":3,"size":10`))
-	r.Line(ev("end", run, "2026-01-01T00:00:02Z",
+	r.Take(ev("end", run, "2026-01-01T00:00:02Z",
 		`"span":"s1","parent":"r1","kind":"hologram","status":"exploded","class":"cosmic","err":"bang","amount":3,"size":10`))
 	runs := r.Runs()
 	require.Len(t, runs, 1)

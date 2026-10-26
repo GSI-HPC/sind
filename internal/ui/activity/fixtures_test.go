@@ -125,8 +125,8 @@ type node struct {
 
 var (
 	traceUI   = mustTrace("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-	traceTerm = progress.TraceContext{Trace: progress.TraceID{0x7a, 0x1c, 0x9e, 0x42, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}
-	traceTwo  = progress.TraceContext{Trace: progress.TraceID{0x51, 0xd0, 0x3b, 0x77, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}
+	traceTerm = progress.TraceContext{ID: progress.TraceID{0x7a, 0x1c, 0x9e, 0x42, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}
+	traceTwo  = progress.TraceContext{ID: progress.TraceID{0x51, 0xd0, 0x3b, 0x77, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}
 	epoch     = time.Date(2026, 10, 14, 9, 30, 0, 0, time.UTC)
 )
 
@@ -187,7 +187,7 @@ func recordInterleaved(t *testing.T) []byte {
 func (rec recording) record(t *testing.T) []byte {
 	var out bytes.Buffer
 	clk := &clock{t: rec.start}
-	log := progress.NewLog(&out, progress.LogOptions{Program: "sind", Version: "v0.11.0", Run: rec.run})
+	log := progress.NewLog(&out, progress.LogOptions{Program: "sind", Version: "v0.11.0", RunID: rec.run})
 	bus := progress.NewBus(progress.BusOptions{
 		Sinks: []progress.Sink{log}, Now: clk.Now, Trace: rec.trace, Program: "sind",
 	})
@@ -220,7 +220,7 @@ func (rec recording) create(ctx context.Context, clk *clock) error {
 	mesh.End(nil)
 
 	sctx, slurm := progress.Start(ctx, progress.KindStep, "slurm",
-		progress.WithFlags(progress.Fold), progress.Total(len(rec.nodes)))
+		progress.Flagged(progress.FlagFold), progress.Total(len(rec.nodes)))
 	targets := make([]*progress.Span, len(rec.nodes))
 	ctxs := make([]context.Context, len(rec.nodes))
 	for i, n := range rec.nodes {
@@ -251,11 +251,11 @@ func (rec recording) create(ctx context.Context, clk *clock) error {
 func pullAndPreflight(ctx context.Context, clk *clock) {
 	const size = 96 << 20
 	pctx, pull := progress.Start(ctx, progress.KindStep, "pull images",
-		progress.WithFlags(progress.Fold|progress.ShowLines), progress.Total(1))
+		progress.Flagged(progress.FlagFold|progress.FlagShowLines), progress.Total(1))
 	_, image := progress.Start(pctx, progress.KindTarget, "ghcr.io/gsi-hpc/sind-node:latest",
 		progress.Queued(), progress.Node("ghcr.io/gsi-hpc/sind-node:latest"),
-		progress.Work(progress.Bytes, size))
-	prep, preflight := progress.Start(ctx, progress.KindStep, "preflight", progress.WithFlags(progress.Hidden))
+		progress.Work(progress.UnitBytes, size))
+	prep, preflight := progress.Start(ctx, progress.KindStep, "preflight", progress.Flagged(progress.FlagHidden))
 	clk.Advance(80 * time.Millisecond)
 	image.Run()
 	dockerCall(prep, clk, "docker version", 150*time.Millisecond, nil)
@@ -277,7 +277,7 @@ func pullAndPreflight(ctx context.Context, clk *clock) {
 // client, runs for d and ends with err. A call that fails carries docker's
 // exit code.
 func dockerCall(ctx context.Context, clk *clock, name string, d time.Duration, err error) {
-	_, call := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.WithFlags(progress.Hidden))
+	_, call := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.Flagged(progress.FlagHidden))
 	clk.Advance(15 * time.Millisecond)
 	call.Run()
 	clk.Advance(d)
@@ -341,7 +341,7 @@ func (rec recording) fate(n node) fate {
 // error of the node that failed first, or the interrupt.
 func (rec recording) nodesStep(ctx context.Context, clk *clock) error {
 	nctx, nodes := progress.Start(ctx, progress.KindStep, "nodes",
-		progress.WithFlags(progress.Fold), progress.Total(len(rec.nodes)))
+		progress.Flagged(progress.FlagFold), progress.Total(len(rec.nodes)))
 	ctxs := make([]context.Context, len(rec.nodes))
 	targets := make([]*progress.Span, len(rec.nodes))
 	for i, n := range rec.nodes {

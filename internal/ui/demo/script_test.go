@@ -24,7 +24,7 @@ func reduceLog(t *testing.T, log []byte) store.Run {
 	t.Helper()
 	r := activity.NewReducer(10)
 	for _, line := range splitLines(log) {
-		r.Line(line)
+		r.Take(line)
 	}
 	runs := r.Runs()
 	require.Len(t, runs, 1)

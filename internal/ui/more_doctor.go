@@ -8,9 +8,9 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 )
 
 // moreDoctorKey is the Env key of the func that runs the host checks again.
@@ -166,7 +166,7 @@ func moreDoctorFunc() func() {
 }
 
 // moreCheckMark returns the class and glyph of a check status.
-func moreCheckMark(status string) (class, mark string) {
+func moreCheckMark(status doctor.Status) (class, mark string) {
 	switch status {
 	case doctor.StatusOK:
 		return "ok", "✓"
@@ -221,7 +221,7 @@ func moreDoctorLoad(v *View) error {
 			d.Ago = moreAgo(v.Now, r.Time)
 		}
 		for _, c := range r.Checks {
-			mc := moreCheck{Check: doctor.Check(c), Steps: moreFixSteps(c.Remediation)}
+			mc := moreCheck{Check: c, Steps: moreFixSteps(c.Remediation)}
 			mc.Class, mc.Mark = moreCheckMark(c.Status)
 			switch c.Status {
 			case doctor.StatusWarning:

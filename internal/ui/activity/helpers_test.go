@@ -43,7 +43,7 @@ func feed(r *Reducer, data []byte) {
 			n, _ := strconv.Atoi(string(m[2 : len(m)-1]))
 			return []byte(`"` + spanOf(n) + `"`)
 		})
-		r.Line(line)
+		r.Take(line)
 	}
 }
 
