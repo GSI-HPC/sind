@@ -47,6 +47,7 @@ func TestRunPageRenders(t *testing.T) {
 		"nodes 0/3 · controller ready munge",
 		`data-doc-title="▸ nodes 0/3 · sind ui"`,
 		`<details class="grow-details" id="step-0000000000000007" open>`,
+		`<div class="gridlines" aria-hidden="true"><span></span><span><i class="l0"></i>`,
 		`class="ntile role-controller running"`,
 		`<small data-word="controller">controller</small>`,
 		`stroke-dasharray="3.5 69.1"`,

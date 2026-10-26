@@ -91,17 +91,58 @@
   // draws them: a step's open while it runs and closed once it ended, every
   // other one closed. The morph follows the server for a step until the
   // user opens or closes it; from then on, and for every other details, it
-  // leaves the open attribute alone. app.js calls this rule from its own.
+  // leaves the open attribute alone. A step that ended stays open a moment,
+  // so that the user sees how it ended, and then folds away (fold).
+  // app.js calls this rule from its own.
   const chosen = new Set();
+  const folding = new Map();
   document.addEventListener('click', ev => {
     if (!(ev.target instanceof Element)) return;
     const sum = ev.target.closest('details.grow-details > summary');
-    if (sum && sum.parentElement.id) chosen.add(sum.parentElement.id);
+    if (!sum || !sum.parentElement.id) return;
+    chosen.add(sum.parentElement.id);
+    unfold(sum.parentElement);
   });
+  const foldAfter = 1200;
+  const foldFor = 350;
+
+  // fold closes a step that ended: after foldAfter, its height shrinks to
+  // that of its summary over foldFor, unless the user chose its state in
+  // between or asks for less motion.
+  function fold(el) {
+    if (folding.has(el.id)) return;
+    folding.set(el.id, setTimeout(() => {
+      if (chosen.has(el.id) || !el.isConnected) { folding.delete(el.id); return; }
+      const sum = el.querySelector(':scope > summary');
+      if (!sum || matchMedia('(prefers-reduced-motion: reduce)').matches) { done(); return; }
+      el.style.overflow = 'hidden';
+      el.style.height = el.offsetHeight + 'px';
+      el.style.transition = 'height ' + foldFor + 'ms ease';
+      requestAnimationFrame(() => { el.style.height = sum.offsetHeight + 'px'; });
+      folding.set(el.id, setTimeout(done, foldFor));
+      function done() {
+        folding.delete(el.id);
+        el.style.overflow = el.style.height = el.style.transition = '';
+        if (!chosen.has(el.id)) el.open = false;
+      }
+    }, foldAfter));
+  }
+
+  // unfold stops the fold of a step whose state the user chose.
+  function unfold(el) {
+    clearTimeout(folding.get(el.id));
+    folding.delete(el.id);
+    el.style.overflow = el.style.height = el.style.transition = '';
+  }
+
   if (window.Idiomorph) {
-    Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) =>
-      !(name === 'open' && el instanceof HTMLDetailsElement &&
-        !(el.classList.contains('grow-details') && !chosen.has(el.id)));
+    Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el, kind) => {
+      if (name !== 'open' || !(el instanceof HTMLDetailsElement)) return true;
+      if (!el.classList.contains('grow-details') || chosen.has(el.id)) return false;
+      if (kind === 'remove' && el.open) { fold(el); return false; }
+      unfold(el);
+      return true;
+    };
   }
 
   function title() {

@@ -21,8 +21,9 @@ var layerLine = regexp.MustCompile(`^([0-9a-f]{12,64}): ([A-Za-z]+(?: [A-Za-z]+)
 
 // layerBytes matches the bytes of a layer that docker has downloaded, out of
 // its size: "1.05MB/45.6MB", in the decimal units of go-units' HumanSize,
-// with four significant digits.
-var layerBytes = regexp.MustCompile(`^([0-9.]+)([kMGTP]?B)/([0-9.]+)([kMGTP]?B)\b`)
+// with four significant digits, after the bar "[==>   ]" that docker draws
+// first where it finds the terminal wider than 110 columns, or no width.
+var layerBytes = regexp.MustCompile(`^(?:\[[=> ]*\]\s*)?([0-9.]+)([kMGTP]?B)/([0-9.]+)([kMGTP]?B)\b`)
 
 // layerState is how far a layer has got.
 type layerState int
