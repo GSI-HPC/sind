@@ -182,27 +182,13 @@ jobs:
         with:
           hugo-version: "0.167.0"
 
-      # main's docs still use Geekdoc; drop this step once a release brings the
-      # Hextra docs to main. Hextra is a Hugo module: docs/go.mod pins it and
-      # docs/go.sum verifies it when Hugo fetches it with the runner's Go.
-      # Pinned to a release and its checksum: the theme renders every page,
-      # and a new release must not reach the site without a commit.
-      - name: Install Geekdoc
-        env:
-          GEEKDOC_VERSION: v4.1.3
-          GEEKDOC_SHA256: 325d3960e568cb623ee47b498f70ae2da851c6b377b4c6723d5f73dfe24e9d21
-        run: |
-          curl -fsSL -o "$RUNNER_TEMP/hugo-geekdoc.tar.gz" \
-            "https://github.com/thegeeklab/hugo-geekdoc/releases/download/$GEEKDOC_VERSION/hugo-geekdoc.tar.gz"
-          echo "$GEEKDOC_SHA256  $RUNNER_TEMP/hugo-geekdoc.tar.gz" | sha256sum --check -
-          mkdir -p themes/hugo-geekdoc
-          tar -xzf "$RUNNER_TEMP/hugo-geekdoc.tar.gz" -C themes/hugo-geekdoc/
-
+      # Hextra is a Hugo module: docs/go.mod pins it and docs/go.sum verifies it
+      # when Hugo fetches it with the runner's Go.
       - name: Build
         run: |
-          hugo --source main/docs --themesDir "$GITHUB_WORKSPACE/themes" \
+          hugo --source main/docs \
             --baseURL "https://gsi-hpc.github.io/sind/" --destination "$GITHUB_WORKSPACE/site"
-          hugo --source next/docs --themesDir "$GITHUB_WORKSPACE/themes" \
+          hugo --source next/docs \
             --baseURL "https://gsi-hpc.github.io/sind/next/" --destination "$GITHUB_WORKSPACE/site/next"
 
       - name: Upload site
