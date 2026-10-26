@@ -4,6 +4,7 @@ package docker
 
 import (
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -70,7 +71,8 @@ func pullUnder(t *testing.T, result mock.Result) (*progresstest.Watcher, error) 
 	return w, err
 }
 
-// A pull counts its layers: the size is the layers docker has told of, and
+// Where docker writes no bytes, a pull counts its layers, from the first
+// layer that is complete: the size is the layers docker has told of, and
 // the amount those that are done, "Pull complete" and "Already exists"; a
 // layer counts once however many lines it writes, and the lines that name
 // no layer are ignored. A pull that succeeded ends with every layer done.
@@ -80,7 +82,7 @@ func TestPullImage_CountsLayers(t *testing.T) {
 	require.NoError(t, err)
 	end, sizes := work(t, w)
 	w.Finish()
-	assert.Equal(t, []int64{1, 2, 3}, sizes, "the size grows as layers are told of")
+	assert.Equal(t, []int64{3}, sizes, "the layers told of when the first is complete")
 	assert.Equal(t, progress.UnitItems, end.Unit)
 	assert.EqualValues(t, 3, end.Amount)
 	assert.EqualValues(t, 3, end.Size)
@@ -106,9 +108,9 @@ docker.io/library/busybox:latest
 }
 
 // A pull that fails ends where it was, with the layers it had told of.
-// Statuses that docker may write in other releases, and lines of standard
-// error, are ignored; a layer that is complete counts when it is the first
-// line told of it, and once.
+// Statuses that docker may write in other releases are ignored, and lines
+// of standard error count; a layer that is complete counts when it is the
+// first line told of it, and once.
 func TestPullImage_Fails(t *testing.T) {
 	w, err := pullUnder(t, mock.Result{
 		Stdout: "a3ed95caeb02: Pulling fs layer\r\n" +
@@ -125,7 +127,7 @@ func TestPullImage_Fails(t *testing.T) {
 	require.Error(t, err)
 	end, sizes := work(t, w)
 	w.Finish()
-	assert.Equal(t, []int64{1, 2, 3}, sizes)
+	assert.Equal(t, []int64{2, 3}, sizes)
 	assert.EqualValues(t, 2, end.Amount, "the layers of the lines of stdout and stderr that are complete")
 	assert.EqualValues(t, 3, end.Size)
 	assert.Equal(t, progress.StatusFailed, end.Status)
@@ -178,5 +180,91 @@ func TestPullImage_AdvancesTheTarget(t *testing.T) {
 	assert.IsIncreasing(t, amounts)
 	for _, e := range capture.Events() {
 		assert.Empty(t, e.Text, "no output text in the events")
+	}
+}
+
+// tty writes lines as docker pull redraws the line of a layer on a
+// terminal: up to it, erase it, write it, back down.
+func tty(lines ...string) string {
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString("\x1b[1A\x1b[2K\r" + l + " \r\x1b[1B")
+	}
+	return b.String()
+}
+
+// Where docker writes the bytes of the layers, on a terminal, a pull counts
+// bytes: the amount those downloaded, the size that of the layers to
+// download, those the daemon has left out, with the size of the layers
+// still waiting guessed from the mean of those known. The share done never
+// goes back: when a guess is short, the size is held down until the bytes
+// catch up. A pull that succeeded ends with the bytes of every layer.
+func TestPullImage_CountsBytes(t *testing.T) {
+	var shares []float64
+	w, err := pullUnder(t, mock.Result{Stdout: "latest: Pulling from library/busybox\n" + tty(
+		"a3ed95caeb02: Already exists",
+		"b4f1e0d2c9a1: Pulling fs layer",
+		"c5e2f1a3d0b2: Pulling fs layer",
+		"d6f3a2b4e1c3: Pulling fs layer",
+		"c5e2f1a3d0b2: Waiting",
+		"d6f3a2b4e1c3: Waiting",
+		"b4f1e0d2c9a1: Downloading  1MB/10MB 9s",
+		"c5e2f1a3d0b2: Downloading  1MB/40MB",
+		"b4f1e0d2c9a1: Downloading     512B",
+		"b4f1e0d2c9a1: Downloading  1.2.3MB/10MB",
+		"b4f1e0d2c9a1: Downloading  11MB/10MB",
+		"b4f1e0d2c9a1: Download complete",
+		"d6f3a2b4e1c3: Downloading  5MB/50MB",
+		"c5e2f1a3d0b2: Verifying Checksum",
+		"d6f3a2b4e1c3: Downloading  50MB/50MB",
+		"b4f1e0d2c9a1: Extracting  5MB/10MB",
+		"b4f1e0d2c9a1: Pull complete",
+		"c5e2f1a3d0b2: Pull complete",
+	) + "Digest: sha256:0123\nStatus: Downloaded newer image for busybox:latest\n"})
+
+	require.NoError(t, err)
+	var size int64
+	for _, e := range w.Events() {
+		if e.Kind != progress.KindTarget {
+			continue
+		}
+		if e.Type == progress.TypeUpdate {
+			size = e.Size
+		}
+		if e.Type == progress.TypeAdvance && size > 0 {
+			shares = append(shares, float64(e.Amount)/float64(size))
+		}
+	}
+	end, sizes := work(t, w)
+	w.Finish()
+	assert.Equal(t, []int64{30_000_000, 60_000_000, 75_000_000, 100_000_000}, sizes,
+		"guessed, held down, guessed, known")
+	assert.IsNonDecreasing(t, shares)
+	assert.Equal(t, progress.UnitBytes, end.Unit)
+	assert.EqualValues(t, 100_000_000, end.Amount)
+	assert.EqualValues(t, 100_000_000, end.Size)
+}
+
+// A line of a layer whose bytes cannot be read, or whose size is none, is a
+// change of state only.
+func TestDownloadBytes(t *testing.T) {
+	for _, tc := range []struct {
+		status, rest string
+		got, size    int64
+		ok           bool
+	}{
+		{"Downloading", "1.049MB/45.6MB 3s", 1_049_000, 45_600_000, true},
+		{"Downloading", "512B/2kB", 512, 2000, true},
+		{"Extracting", "1MB/2MB", 0, 0, false},
+		{"Downloading", "512B", 0, 0, false},
+		{"Downloading", "0B/0B", 0, 0, false},
+		{"Downloading", "1MB/1.2.3MB", 0, 0, false},
+	} {
+		got, size, ok := downloadBytes(tc.status, tc.rest)
+		assert.Equal(t, tc.ok, ok, tc.rest)
+		if tc.ok {
+			assert.Equal(t, tc.got, got, tc.rest)
+			assert.Equal(t, tc.size, size, tc.rest)
+		}
 	}
 }

@@ -47,7 +47,7 @@ part is a fragment that /events sends again when the run changes. */}}
 
 {{define "run-rowcells"}}<span class="lbl" title="{{.Name}}"><span class="mark {{.Class}}">{{.Mark}}</span>{{.Name}}{{if .Total}} <span class="faint">{{.Total}}</span>{{end}}</span><span class="trk">{{if .Bar}}<span class="bar {{.Class}} l{{.Left}} w{{.Width}}"></span>{{end}}</span><span class="res">{{.Result}}</span>{{end}}
 
-{{define "run-row"}}{{if .Children}}<details class="grow-details" id="step-{{.ID}}"><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
+{{define "run-row"}}{{if .Children}}<details class="grow-details" id="step-{{.ID}}"{{if .Open}} open{{end}}><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
 
 {{define "run-nodes"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">Each node goes from left to right. The ring is the part of the wait limit it used.</span></div><div class="pb nodegrid">
 {{range .Tiles}}<div class="ntile {{.RoleClass}} {{.Class}}"><div class="nt"><span class="mark {{.Class}}">{{.Mark}}</span><b>{{.Name}}</b>{{if .Role}}<small data-word="{{.Role}}">{{.Role}}</small>{{end}}</div>

@@ -107,6 +107,9 @@ type Span struct {
 	Amount int64
 	Size   int64
 	Unit   string
+	// Rate is how many bytes a second the amount of a span that works in
+	// bytes grew over the last seconds while it runs; 0 when not known.
+	Rate float64
 	// Status, Class, Err and Exit are how the span ended; Exit is nil
 	// when the span gave no exit code.
 	Status string

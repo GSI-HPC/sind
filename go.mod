@@ -9,6 +9,7 @@ require (
 	github.com/GSI-HPC/go-nodeset v1.1.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v1.0.0
+	github.com/creack/pty v1.1.24
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/muesli/termenv v0.16.0
 	github.com/njayp/ophis v1.1.4

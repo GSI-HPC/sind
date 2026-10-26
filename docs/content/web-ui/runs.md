@@ -23,9 +23,9 @@ The run page shows the whole run:
 
 - **Summary:** the time that has passed, the step bar, and how many targets are in each state, such as running, ok or failed.
 - **What failed:** the errors of the run, grouped by text, with the nodes they happened on. It also says whether the rollback removed everything. For the logs of a failed service, open the Logs tab of the cluster.
-- **Steps:** a timeline. Steps that overlap ran at the same time.
+- **Steps:** a timeline. Steps that overlap ran at the same time. A step that runs shows its targets, and folds them away once it ends; a step that you open or close stays as you left it.
 - **Nodes:** a tile for each node, with its role, the check that it waits for, and a ring that shows how much of the wait limit it has used. The ring turns amber at 50 % and red at 80 %.
-- **Transfers:** the work done of the work to do, for the steps that report it, such as image pulls.
+- **Transfers:** the work done of the work to do, for the steps that report it, such as image pulls: the bytes downloaded of the image's size, and while it goes on the rate over the last five seconds, such as `38 MB / 101 MB · 14 MB/s`.
 - **What the event log says about this run:** the facts that sind wrote for this run, for a bug report.
 
 A run that sind ui started also shows its command, with **Copy**, and the config it ran with, under **Config used**. sind ui keeps these for the last 25 commands that ended, until it stops. A button leads back to what the command worked on: **Open dev** for the cluster, **Open Clusters** once the cluster is gone, or **Open Mesh and DNS**.

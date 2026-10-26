@@ -46,20 +46,22 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 // PullImage pulls an image from its registry, also when a copy of it is
 // present. What docker pull writes is not kept; a progress span that shows
 // lines, as the targets of the pull images step do, shows the newest of
-// its status lines (one per layer and change, no bars without a terminal).
+// its status lines.
 //
 // The innermost progress span in ctx, which is the image's target and has
-// to be running, reports the pull as work in items, the layers: how many
-// are done out of how many docker has told of so far (see layerCount). A
-// pull that finds the image there already, and writes no layer, ends with
-// one item of one done. A pull that fails leaves the count where it was.
+// to be running, reports the pull as work (see layerCount). docker pull
+// then writes its standard output to a terminal (cmdexec.WithTerminal),
+// where it tells the bytes of each layer it downloads, and the work is in
+// bytes; where no terminal can be opened, it is in layers. A pull that
+// finds the image there already, and writes no layer, ends with one item
+// of one done. A pull that fails leaves the work where it was.
 func (c *Client) PullImage(ctx context.Context, image string) error {
 	target := progress.SpanFrom(ctx)
 	if target == nil {
 		return c.do(ctx, "pull", image)
 	}
 	layers := &layerCount{span: target}
-	err := c.do(cmdexec.WithLineParser(ctx, layers.line), "pull", image)
+	err := c.do(cmdexec.WithLineParser(cmdexec.WithTerminal(ctx), layers.line), "pull", image)
 	if err == nil {
 		layers.finish()
 	}

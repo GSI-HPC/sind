@@ -609,7 +609,8 @@ func runLine(run store.Run, task *store.Task, now time.Time) string {
 }
 
 // runAmount writes the work a span has done of the work it has to do, in
-// its unit: "34 MB / 96 MB", "3 / 7 items", "42 %". It is empty for a span
+// its unit: "34 MB / 96 MB", "3 / 7 items", "42 %". Bytes that move have
+// their rate too: "34 MB / 96 MB · 12 MB/s". It is empty for a span
 // without a unit or without any work.
 func runAmount(s store.Span) string {
 	if s.Unit == "" || (s.Size <= 0 && s.Amount <= 0) {
@@ -617,10 +618,14 @@ func runAmount(s store.Span) string {
 	}
 	switch s.Unit {
 	case "bytes":
+		out := runBytes(s.Amount)
 		if s.Size > 0 {
-			return runBytes(s.Amount) + " / " + runBytes(s.Size)
+			out += " / " + runBytes(s.Size)
 		}
-		return runBytes(s.Amount)
+		if s.Rate > 0 && !s.Done() {
+			out += " · " + runBytes(int64(s.Rate)) + "/s"
+		}
+		return out
 	case "percent":
 		if s.Size > 0 && s.Size != 100 {
 			return fmt.Sprintf("%d %%", runPct(float64(s.Amount), float64(s.Size)))
