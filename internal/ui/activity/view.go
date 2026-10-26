@@ -72,6 +72,31 @@ func VisibleChildren(s store.Span) []store.Span {
 	return out
 }
 
+// RevealAfter is how long a hidden span runs before a display shows it, as
+// the terminal's tree of go-clikit does.
+const RevealAfter = time.Second
+
+// Reveal returns root with the hidden flag taken off each span below it,
+// other than a call, that failed or has run for RevealAfter or longer by
+// now, as the terminal shows a hidden step that takes long, such as the
+// step "mesh" while docker pulls the images of the mesh. A call stays
+// hidden: the terminal shows it only as what a target waits for. root
+// itself is not changed.
+func Reveal(root store.Span, now time.Time) store.Span {
+	if len(root.Children) == 0 {
+		return root
+	}
+	children := make([]store.Span, len(root.Children))
+	for i, c := range root.Children {
+		if c.Hidden && c.Kind != KindCall && (c.Status == store.StatusFailed || Elapsed(c, now) >= RevealAfter) {
+			c.Hidden = false
+		}
+		children[i] = Reveal(c, now)
+	}
+	root.Children = children
+	return root
+}
+
 // Failure is a group of failed targets that failed with the same error.
 type Failure struct {
 	// Err is the error text with the target's own name replaced by "{}",
