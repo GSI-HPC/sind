@@ -128,12 +128,15 @@ jobs:
             *.output=type=image,push-by-digest=true,name-canonical=true,push=true
             ${{ steps.cache.outputs.set }}
 
+      # Read bake's metadata file, not steps.bake.outputs.metadata: with max
+      # provenance it embeds the GitHub event once per target and outgrows the
+      # 128 KiB limit for one environment variable ("Argument list too long").
       - name: Export digests
-        env:
-          METADATA: ${{ steps.bake.outputs.metadata }}
         run: |
+          metadata=$(find "$RUNNER_TEMP" -path '*/docker-actions-toolkit-*/bake-metadata-*.json' | head -n 1)
+          test -n "$metadata" || { echo "::error::bake metadata file not found"; exit 1; }
           jq -r 'to_entries[] | select((.value | type) == "object" and (.value | has("containerimage.digest")))
-            | "\(.key) \(.value["containerimage.digest"])"' <<<"$METADATA" |
+            | "\(.key) \(.value["containerimage.digest"])"' "$metadata" |
             while read -r target digest; do
               mkdir -p "$RUNNER_TEMP/digests/$target"
               touch "$RUNNER_TEMP/digests/$target/${digest#sha256:}"
