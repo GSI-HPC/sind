@@ -1472,7 +1472,7 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 | Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.4` |
 | Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
 | Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
-| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.1` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.2` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
