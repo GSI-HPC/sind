@@ -213,9 +213,13 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 
 	// IPs are best-effort: GetNodes/GetAllNodes drives user-facing listings
 	// and shell completion, so an inspect failure should degrade to empty
-	// IPs rather than fail the whole call, with a warning that says why.
+	// IPs rather than fail the whole call, with a warning that says why. A
+	// container that went away since the listing, as in a cluster being
+	// deleted, is no warning: the next listing leaves it out.
 	ipByName := make(map[docker.ContainerName]map[docker.NetworkName]string, len(names))
-	if infos, err := client.InspectContainers(ctx, names...); err != nil {
+	if infos, err := client.InspectContainers(ctx, names...); docker.IsNotFound(err) {
+		sindlog.From(ctx).DebugContext(ctx, "listing the nodes without their IPs: a container is gone", "err", err)
+	} else if err != nil {
 		sindlog.Warn(ctx, fmt.Sprintf("listing the nodes without their IPs: %v", err))
 	} else {
 		for _, info := range infos {
