@@ -1,0 +1,5 @@
+kind: Cluster
+name: bench
+defaults:
+  image: ghcr.io/gsi-hpc/sind-node:does-not-exist
+nodes: [controller, worker: 2]

@@ -34,6 +34,8 @@ worker-0
     </div>
   </section>
 
+  {{ partial "overview-video.html" . }}
+
   {{ range hugo.Data.features }}
   <section class="sind-sec">
     <h2>{{ .name }}</h2>
