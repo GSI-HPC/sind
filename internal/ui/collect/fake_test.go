@@ -48,6 +48,8 @@ type fake struct {
 
 	// gate, when set, holds the command `docker info` until it closes.
 	gate chan struct{}
+	// waiting counts the commands the gate holds.
+	waiting int
 	// info is the answer of `docker info`; without it, the command fails.
 	info string
 
@@ -75,6 +77,13 @@ func (f *fake) set(fn func()) {
 	fn()
 }
 
+// held returns how many commands the gate holds.
+func (f *fake) held() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.waiting
+}
+
 // count returns how many commands starting with key ran.
 func (f *fake) count(key string) int {
 	f.mu.Lock()
@@ -99,12 +108,19 @@ type lsRow struct {
 func (f *fake) call(args []string, _ string) mock.Result {
 	f.mu.Lock()
 	gate := f.gate
+	held := gate != nil && args[0] == "info"
+	if held {
+		f.waiting++
+	}
 	f.mu.Unlock()
-	if gate != nil && args[0] == "info" {
+	if held {
 		<-gate
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if held {
+		f.waiting--
+	}
 	key := args[0]
 	if len(args) > 1 {
 		key += " " + args[1]
