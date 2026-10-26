@@ -23,10 +23,19 @@ func newDoctorFixture(t *testing.T) (*Doctor, *fake, *store.Store) {
 	return d, f, st
 }
 
+// hold makes `docker info` wait until release is called. A later hold
+// replaces the gate for the calls after it; its release leaves that gate.
 func (f *fake) hold() (release func()) {
 	gate := make(chan struct{})
 	f.set(func() { f.gate = gate })
-	return func() { f.set(func() { f.gate = nil }); close(gate) }
+	return func() {
+		f.set(func() {
+			if f.gate == gate {
+				f.gate = nil
+			}
+		})
+		close(gate)
+	}
 }
 
 func TestDoctorChecksAtStartAndOnRequest(t *testing.T) {
@@ -53,12 +62,20 @@ func TestDoctorChecksAtStartAndOnRequest(t *testing.T) {
 	during := st.Snapshot().Doctor
 	assert.Equal(t, first.Checks, during.Checks)
 	assert.Equal(t, first.Time, during.Time)
-	// Requests during a run are one more run afterwards.
+	// Requests during a run are one more run afterwards. The third run is
+	// held too, so that the test sees it start: the report of the second
+	// run alone does not say whether the third has begun. Its gate is set
+	// once the second run waits at the first, which it would take instead.
 	d.Request()
 	d.Request()
+	waitFor(t, "second run held", func() bool { return f.held() == 1 })
+	releaseThird := f.hold()
 	release()
-	waitFor(t, "second report", func() bool { r := st.Snapshot().Doctor; return !r.Running && r.Time.After(first.Time) })
-	assert.Equal(t, 1, f.count("info")-1-1, "the request made during the run runs once more")
+	waitFor(t, "third run", func() bool { r := st.Snapshot().Doctor; return r.Running && r.Time.After(first.Time) })
+	assert.Empty(t, d.ask, "the requests made during the run are one run")
+	releaseThird()
+	waitFor(t, "third report", func() bool { return !st.Snapshot().Doctor.Running })
+	assert.Equal(t, 3, f.count("info"))
 }
 
 func TestDoctorUsesDefaultRealmWhenSindRealmIsInvalid(t *testing.T) {
