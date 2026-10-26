@@ -278,13 +278,16 @@
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', showTheme);
 
     // The morph keeps what the page holds itself: the open More sheet, and
-    // the tabindex of the element that has the focus.
+    // the tabindex of the element that has the focus. A page's script,
+    // which runs before this, such as run.js for the details of a run,
+    // set its rule first; it still applies.
     if (window.Idiomorph) {
+      const page = Idiomorph.defaults.callbacks.beforeAttributeUpdated;
       Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node, kind) => {
         if (name === 'hidden' && node.id === 'rail-sheet') return false;
         if (name === 'aria-expanded' && node.hasAttribute('data-rail-more')) return false;
         if (name === 'tabindex' && kind === 'remove' && node === document.activeElement) return false;
-        return true;
+        return typeof page !== 'function' || page(name, node, kind) !== false;
       };
     }
 

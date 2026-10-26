@@ -23,7 +23,7 @@ The run page shows the whole run:
 
 - **Summary:** the time that has passed, the step bar, and how many targets are in each state, such as running, ok or failed.
 - **What failed:** the errors of the run, grouped by text, with the nodes they happened on. It also says whether the rollback removed everything. For the logs of a failed service, open the Logs tab of the cluster.
-- **Steps:** a timeline. Steps that overlap ran at the same time.
+- **Steps:** a timeline. Steps that overlap ran at the same time. A step that runs shows its targets, and folds them away once it ends; a step that you open or close stays as you left it.
 - **Nodes:** a tile for each node, with its role, the check that it waits for, and a ring that shows how much of the wait limit it has used. The ring turns amber at 50 % and red at 80 %.
 - **Transfers:** the work done of the work to do, for the steps that report it, such as image pulls.
 - **What the event log says about this run:** the facts that sind wrote for this run, for a bug report.
