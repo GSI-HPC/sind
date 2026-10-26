@@ -65,6 +65,14 @@
       title: Live progress
       text: Create, delete and power draw a live tree of their steps on a terminal, and write plain lines or a JSON event log for CI.
       link: usage/progress
+    - icon: window
+      title: Web UI
+      text: '`sind ui` shows realms, clusters, nodes and runs live in your browser, and its dialogs show the exact `sind` command before they run it.'
+      link: web-ui
+    - icon: link
+      title: Connect outside containers
+      text: Attach containers such as kind nodes to a realm's mesh and cluster networks, so they resolve and reach the nodes by name.
+      link: guides/kind
     - icon: box
       title: Minimal dependencies
       text: Just Docker and a sind container image. Usable as both a CLI tool and a Go library.

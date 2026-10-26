@@ -56,6 +56,14 @@ With `storage.cvmfs`, every node [mounts `/cvmfs`]({{< relref "/guides/cvmfs" >}
 
 With `monitoring: true`, or `sind create cluster --monitoring`, a [monitoring stack]({{< relref "/guides/monitoring" >}}) of Prometheus, Loki and Grafana collects the cluster's Slurm metrics, its nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05). The stack is shared by the realm's clusters.
 
+### Web UI
+
+[`sind ui`]({{< relref "/web-ui" >}}) serves a web UI on 127.0.0.1 that shows the realms, clusters, nodes, networks and the runs of sind commands, and updates live. Its dialogs create clusters, add workers, power nodes and delete, and show the exact `sind` command first, so the UI also teaches the CLI. `sind ui --demo` shows made-up clusters without Docker.
+
+### Connect outside containers
+
+`sind connect container` attaches containers that sind did not create, such as the nodes of a [kind cluster]({{< relref "/guides/kind" >}}), to a realm's mesh and every cluster network, and `sind get coredns-config` prints the CoreDNS server block that forwards the realm's zone to sind's DNS server.
+
 ### Power cycle simulation
 
 Shutdown, reboot, freeze, and power-cycle individual nodes to simulate real-world failure scenarios. Validate your fault-tolerance strategies before they matter.

@@ -28,6 +28,8 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 - **REST API** — slurmrestd on an [api node](https://gsi-hpc.github.io/sind/guides/rest-api/) with JWT authentication (Slurm 26.05)
 - **CVMFS** — [mount `/cvmfs`](https://gsi-hpc.github.io/sind/guides/cvmfs/) read-only on every node, from the Docker host or a volume plugin
 - **Monitoring** — an opt-in [Prometheus, Loki and Grafana stack](https://gsi-hpc.github.io/sind/guides/monitoring/) per realm collects Slurm's metrics, the nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05)
+- **Web UI** — [`sind ui`](https://gsi-hpc.github.io/sind/web-ui/) shows realms, clusters, nodes and runs live in your browser, and its dialogs show the exact `sind` command before they run it
+- **Connect outside containers** — attach containers such as [kind nodes](https://gsi-hpc.github.io/sind/guides/kind/) to a realm's mesh and cluster networks
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
 - **Power cycle simulation** — shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios
 - **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library
