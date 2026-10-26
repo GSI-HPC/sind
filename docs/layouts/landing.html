@@ -36,6 +36,33 @@ worker-0
 
   {{ partial "overview-video.html" . }}
 
+  <section class="sind-sec sind-ui">
+    <h2>A web UI for your clusters</h2>
+    <p class="sind-sec__blurb">Run <code>sind ui</code> to watch clusters, nodes and runs in a browser. It runs the same sind commands as your terminal.</p>
+    <div class="sind-ui__shot" data-sind-tabs>
+      <div class="sind-ui__bar" role="tablist" aria-label="Screenshots of sind ui">
+        <button type="button" role="tab" aria-selected="true">Overview</button>
+        <button type="button" role="tab" aria-selected="false">Cluster</button>
+        <button type="button" role="tab" aria-selected="false">Logs</button>
+        <button type="button" role="tab" aria-selected="false">Connect</button>
+        <button type="button" role="tab" aria-selected="false">New cluster</button>
+      </div>
+      <div role="tabpanel">{{ .RenderString "{{< uishot \"overview\" >}}" }}</div>
+      <div role="tabpanel" hidden>{{ .RenderString "{{< uishot \"cluster\" >}}" }}</div>
+      <div role="tabpanel" hidden>{{ .RenderString "{{< uishot \"cluster-logs\" >}}" }}</div>
+      <div role="tabpanel" hidden>{{ .RenderString "{{< uishot \"cluster-connect\" >}}" }}</div>
+      <div role="tabpanel" hidden>{{ .RenderString "{{< uishot \"dialog-create-cluster\" >}}" }}</div>
+    </div>
+    <ul class="sind-ui__points">
+      <li><strong>See</strong> every realm, cluster and node, and the services that are down.</li>
+      <li><strong>Act</strong> with a dialog: create a cluster, add workers, power nodes. Each dialog shows the exact <code>sind</code> command first.</li>
+      <li><strong>Follow</strong> long commands live, step by step and node by node.</li>
+    </ul>
+    <div class="sind-cta">
+      <a class="sind-btn sind-btn--primary" href="{{ relref . "web-ui" }}">Explore the web UI &rarr;</a>
+    </div>
+  </section>
+
   {{ range hugo.Data.features }}
   <section class="sind-sec">
     <h2>{{ .name }}</h2>
