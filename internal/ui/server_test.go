@@ -112,7 +112,7 @@ func TestPageShell(t *testing.T) {
 	a := ts.srv.assets
 
 	assert.Contains(t, body, "<title>Demo · sind ui</title>")
-	assert.Contains(t, body, `<meta name="csrf-token" content="`+ts.csrf+`">`)
+	assert.Contains(t, body, `<body hx-headers='{"X-Sind-CSRF":"`+ts.csrf+`"}'>`)
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("app.css")+`">`)
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("css/demo.css")+`">`)
 	assert.Less(t, strings.Index(body, a.URL("app.css")), strings.Index(body, a.URL("css/demo.css")), "extra styles follow app.css")

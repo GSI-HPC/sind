@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-// sind ui's own script: the theme switch, the CSRF header of htmx requests,
-// the live indicator and the banner of a lost connection, the More sheet of
-// a phone, and what live updates do to the focus and tell screen readers.
+// sind ui's own script: the theme switch, the live indicator and the banner
+// of a lost connection, the More sheet of a phone, and what live updates do
+// to the focus and tell screen readers.
 // Pages are rendered on the server; htmx swaps their parts. Nothing here
 // evaluates text, and no page has inline script.
 (() => {
@@ -17,11 +17,6 @@
   const root = document.documentElement;
   const saved = store.get('sind-ui-theme');
   if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
-
-  function csrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.content : '';
-  }
 
   function dark() {
     return root.dataset.theme
@@ -41,7 +36,8 @@
   // say tells screen readers a sentence, through the one polite live region
   // of the page. The sentences of one moment are told together, once each,
   // so that one does not cut off another; the same sentence later is told
-  // again. run.js hands its sentences over as the event sind:say.
+  // again. run.js and pg.js hand their sentences over as the event sind:say,
+  // and help.js its toasts as sind:toast.
   let sayTimer = 0;
   let sayLines = [];
   function say(text) {
@@ -56,6 +52,7 @@
     }, 60);
   }
   document.addEventListener('sind:say', e => say(e.detail));
+  document.addEventListener('sind:toast', e => toast(e.detail));
 
   function toast(text) {
     const old = document.querySelector('.toast');
@@ -324,21 +321,13 @@
 
     // While the page is not live, its actions wait: they would act on what
     // the page showed then, or fail without a word.
-    document.body.addEventListener('htmx:beforeRequest', ev => {
+    const hold = ev => {
       if (!stale()) return;
       ev.preventDefault();
       toast('Not connected to sind ui. Try again when it is back.');
-    });
-    document.addEventListener('submit', ev => {
-      if (!stale()) return;
-      ev.preventDefault();
-      toast('Not connected to sind ui. Try again when it is back.');
-    }, true);
-
-    // Every request that htmx sends carries the session's CSRF token.
-    document.body.addEventListener('htmx:configRequest', ev => {
-      ev.detail.headers['X-Sind-CSRF'] = csrfToken();
-    });
+    };
+    document.body.addEventListener('htmx:beforeRequest', hold);
+    document.addEventListener('submit', hold, true);
 
     // The live stream closes when the page goes, before the browser cuts
     // it: a cut stream is an error, which htmx logs and the page would
@@ -353,9 +342,7 @@
     // The page keeps the focus clear of the task dock (app.css), which
     // needs its height.
     const dock = document.getElementById('tasks');
-    if (dock && window.ResizeObserver) {
-      new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', dock.offsetHeight + 'px')).observe(dock);
-    }
+    if (dock) new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', dock.offsetHeight + 'px')).observe(dock);
     document.body.addEventListener('htmx:sseOpen', connBack);
     document.body.addEventListener('htmx:sseError', connLost);
     document.body.addEventListener('htmx:sseBeforeMessage', ev => before(ev.target));

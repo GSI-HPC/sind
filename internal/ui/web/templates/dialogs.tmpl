@@ -68,7 +68,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
 {{with .Cmd.Goes}}<div class="callout bad act-list"><b>Goes</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{template "act-callouts" .}}
 {{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
@@ -111,7 +111,7 @@ the nodes, the command and the config also while a field is wrong. */}}
 {{define "act-plan"}}{{$p := .}}
 <div class="act-ph"><h3>Plan</h3>{{template "act-pill" .}}</div>
 {{if .Err}}<div class="callout bad" id="act-probs" tabindex="-1">{{.Err}}</div>{{else}}
-<div class="act-tools">{{if not .YAMLMode}}<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>{{end}}<button type="button" class="btn sm" data-copy="{{.Cmd.Config.Content}}">Copy YAML</button></div>
+<div class="act-tools">{{if not .YAMLMode}}<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>{{end}}<button type="button" class="btn sm" data-pg-copy-text="{{.Cmd.Config.Content}}">Copy YAML</button></div>
 {{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
 {{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
 <div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
@@ -120,7 +120,7 @@ the nodes, the command and the config also while a field is wrong. */}}
 {{if .Cmd.OverHost}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if .Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Create anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
 {{with .Cmd.Images}}<div class="act-imgs"><div class="cmdlabel">Images</div>{{range .}}<div class="act-img"><span class="mono">{{.Image}}</span><small>{{.Of}}</small>
   <span class="hint{{if .Version}} act-ver{{end}}">{{$p.ImageLine .}}</span>{{if .CanCheck}}<button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</div>{{end}}</div>{{end}}
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Script}}">Copy script</button></div>
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-pg-copy-text="{{.Cmd.Script}}">Copy script</button></div>
   <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
 {{with .Cmd.After}}<div><div class="cmdlabel">Then sind runs</div><pre class="term act-after">{{range $i, $s := .}}{{if $i}}
 {{end}}# {{.Where}}

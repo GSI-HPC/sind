@@ -96,12 +96,10 @@
     });
   }
 
-  if (window.Idiomorph) {
-    // The width that place gave a bar stays until its next tick, so that
-    // the bar does not jump back to its class.
-    Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) =>
-      name !== 'style' || !(el instanceof HTMLElement && 'fill' in el.dataset);
-  }
+  // The width that place gave a bar stays until its next tick, so that the
+  // bar does not jump back to its class.
+  Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) =>
+    name !== 'style' || !(el instanceof HTMLElement && 'fill' in el.dataset);
 
   function title() {
     const el = document.querySelector('[data-doc-title]');

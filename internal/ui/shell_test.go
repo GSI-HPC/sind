@@ -22,7 +22,7 @@ func TestShellSkipLinkAndLiveRegions(t *testing.T) {
 
 	// The skip link is the first thing of the page that takes the focus,
 	// and the content can take it.
-	assert.Contains(t, body, "<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n<div class=\"app\"")
+	assert.Contains(t, body, "\"}'>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n<div class=\"app\"")
 	assert.Contains(t, body, `<main class="main" id="main" tabindex="-1">`)
 	// The banner of a lost connection and the line that tells screen
 	// readers what a live update changed are there, and empty.

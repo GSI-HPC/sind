@@ -17,7 +17,7 @@ so that htmx gives the focus back to the one pressed. It is no live
 fragment, so that an update never takes the focus. */}}
 {{define "more-mon-interval"}}{{with .Data}}<form class="more-ivform" method="post" action="/monitoring/interval" hx-post="/monitoring/interval" hx-swap="outerHTML">{{template "csrf-field" $}}
   <span id="mon-interval-label">Read every</span>
-  <span class="seg" role="group" aria-labelledby="mon-interval-label">{{range .Choices}}<button type="submit" id="mon-interval-{{.Value}}" name="interval" value="{{.Value}}" aria-pressed="{{.Selected}}"{{if .Selected}} class="on"{{end}}>{{.Value}}</button>{{end}}</span>
+  <span class="seg" role="group" aria-labelledby="mon-interval-label">{{range .Choices}}<button type="submit" id="mon-interval-{{.Value}}" name="interval" value="{{.Value}}" aria-pressed="{{.Selected}}">{{.Value}}</button>{{end}}</span>
 </form>{{if .Saved}}<span id="mon-saved" hx-swap-oob="true">Saved: every {{.Saved}}</span>{{else}}<span class="more-saved" role="status"><span id="mon-saved"></span></span>
 <p class="more-ivnote">How often sind ui reads the stacks and their numbers while a page is open. The choice lasts until sind ui stops. Prometheus keeps its own scrape interval.</p>{{end}}{{end}}{{end}}
 

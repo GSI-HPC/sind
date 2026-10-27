@@ -62,7 +62,6 @@
 
 .hintcard{position:fixed;z-index:60;width:300px;max-width:calc(100% - 16px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:10px 12px;font-size:var(--t-md);display:grid;gap:6px;pointer-events:none}
 .hintcard .k{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--info)}
-.hintcard .k.bad{color:var(--bad)}
 .hintcard .more{font-size:var(--t-sm)}
 .hintcard .mono{overflow-wrap:anywhere}
 

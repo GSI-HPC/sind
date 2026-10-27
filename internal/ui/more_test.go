@@ -274,7 +274,7 @@ func TestMoreMonitoringInterval(t *testing.T) {
 		// The ids let htmx give the focus back to the button pressed.
 		`<button type="submit" id="mon-interval-10s" name="interval" value="10s" aria-pressed="false">10s</button>` +
 			`<button type="submit" id="mon-interval-30s" name="interval" value="30s" aria-pressed="false">30s</button>` +
-			`<button type="submit" id="mon-interval-45s" name="interval" value="45s" aria-pressed="true" class="on">45s</button>` +
+			`<button type="submit" id="mon-interval-45s" name="interval" value="45s" aria-pressed="true">45s</button>` +
 			`<button type="submit" id="mon-interval-1m" name="interval" value="1m" aria-pressed="false">1m</button>` +
 			`<button type="submit" id="mon-interval-5m" name="interval" value="5m" aria-pressed="false">5m</button>`,
 		`<span class="more-saved" role="status"><span id="mon-saved"></span></span>`,
@@ -300,7 +300,7 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	w := post("5m", true)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, 5*time.Minute, iv.Get())
-	assert.Contains(t, w.Body.String(), `id="mon-interval-5m" name="interval" value="5m" aria-pressed="true" class="on"`)
+	assert.Contains(t, w.Body.String(), `id="mon-interval-5m" name="interval" value="5m" aria-pressed="true"`)
 	assert.Contains(t, w.Body.String(), `<span id="mon-saved" hx-swap-oob="true">Saved: every 5m</span>`)
 	assert.NotContains(t, w.Body.String(), "more-ivnote", "the note stays on the page")
 	assert.NotContains(t, w.Body.String(), "45s", "a choice that is no longer current goes")

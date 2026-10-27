@@ -277,7 +277,7 @@ func TestActPreview_ShowsTheCommand(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
 	assert.Contains(t, body, `<code>sind power on &#39;worker-[0-1].dev&#39;</code>`)
-	assert.Contains(t, body, `data-copy="sind power on &#39;worker-[0-1].dev&#39;"`)
+	assert.Contains(t, body, `data-pg-copy-text="sind power on &#39;worker-[0-1].dev&#39;"`)
 	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Start 2 nodes<kbd`)
 	assert.NotContains(t, body, `disabled`)
 	assert.NotContains(t, body, "act-yaml")
@@ -554,7 +554,7 @@ func TestActPreview_NewClusterPullsAsTheImageSays(t *testing.T) {
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "wait", "2m")).Body.String()
 	assert.Contains(t, body, `id="act-sum-run" hx-swap-oob="innerHTML">No pull, wait 2m</span>`)
-	assert.Contains(t, body, `data-copy="cfg=`, "Copy gives the script")
+	assert.Contains(t, body, `data-pg-copy-text="cfg=`, "Copy gives the script")
 }
 
 func TestActDialog_NewClusterNodes(t *testing.T) {
@@ -1123,12 +1123,12 @@ func TestActPreview_NewClusterYAML(t *testing.T) {
 	assert.Less(t, strings.Index(body, `id="act-name"`), strings.Index(body, `id="act-yamled"`), "Name comes first, and stays beside the YAML")
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String()
-	assert.Contains(t, body, `<div class="act-tools"><button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button><button type="button" class="btn sm" data-copy="kind: Cluster`+"\nname: hpc\n")
+	assert.Contains(t, body, `<div class="act-tools"><button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button><button type="button" class="btn sm" data-pg-copy-text="kind: Cluster`+"\nname: hpc\n")
 	assert.Less(t, strings.Index(body, "data-act-yaml-edit"), strings.Index(body, "act-tiles"), "Edit YAML is at the top of the plan")
 
 	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: Cluster\nname: lab # mine\n", "name", "hpc")).Body.String()
 	assert.NotContains(t, body, "data-act-yaml-edit")
-	assert.Contains(t, body, `<div class="act-tools"><button type="button" class="btn sm" data-copy="kind: Cluster`+"\nname: lab # mine\n"+`">Copy YAML</button></div>`)
+	assert.Contains(t, body, `<div class="act-tools"><button type="button" class="btn sm" data-pg-copy-text="kind: Cluster`+"\nname: lab # mine\n"+`">Copy YAML</button></div>`)
 	assert.Contains(t, body, "The YAML that you edit, as it is.")
 	assert.Contains(t, body, `<code>sind create cluster --config /state/sind/ui/configs/lab.yaml</code>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)

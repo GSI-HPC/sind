@@ -13,13 +13,12 @@ import (
 )
 
 // sind ui explains itself in layers, each opened by the user: hint cards on
-// the words and buttons that pages mark, the help pane that ? opens, and the
+// the words that pages mark, the help pane that ? opens, and the
 // help entries of the jump box. The texts are those of sind help TOPIC, from
 // package help; help.js does the rest in the browser.
 //
-// A page marks a word with data-word="ID" (class term-word), and an action's
-// button with data-help="ACTION": hovering them shows a card, and ? opens
-// the pane at that word or action.
+// A page marks a word with data-word="ID" (class term-word): hovering it
+// shows a card, and ? opens the pane at that word.
 //
 // GET /help answers help.js, which asks with the header HX-Request, with
 // the part that the pane or a card shows. Opened in the browser, as a link
@@ -165,8 +164,8 @@ func helpHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 	v.Data = d
 	name := "help-body"
 	if v.Params.Get("card") != "" {
-		if d.Kind != "word" && d.Kind != "action" {
-			http.Error(w, "Only words and actions have a hint card.", http.StatusNotFound)
+		if d.Kind != "word" {
+			http.Error(w, "Only words have a hint card.", http.StatusNotFound)
 			return
 		}
 		name = "help-card"

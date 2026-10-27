@@ -90,7 +90,6 @@ kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-botto
 .hostchip i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
 .iconbtn{border:1px solid transparent;background:none;border-radius:var(--r);padding:4px 8px;cursor:pointer;color:var(--muted);font:600 var(--t-base) var(--f-mono)}
 .iconbtn:hover{background:var(--panel-2);border-color:var(--line)}
-.iconbtn.on{background:var(--accent-soft);color:var(--accent)}
 
 /* The banner of a lost connection: empty, and so not drawn, while the page
    is live. The page under it dims, and its actions wait. */
@@ -197,7 +196,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
 .seg button{border:0;background:none;padding:5px 10px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
 .seg button:last-child{border-right:0}
-.seg button.on{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--fg);font-weight:600}
 .callout{padding:9px 12px;border-left:3px solid var(--info);background:var(--info-soft);border-radius:var(--r);font-size:var(--t-md)}
 .callout.warn{border-color:var(--warn);background:var(--warn-soft)}
 .callout.bad{border-color:var(--bad);background:var(--bad-soft)}

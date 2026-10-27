@@ -15,7 +15,6 @@ data-say-state (see "run-say"). */}}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="htmx-config" content='{{.HTMXConfig}}'>
-<meta name="csrf-token" content="{{.CSRF}}">
 <title>{{if .Title}}{{.Title}} · {{end}}sind ui</title>
 <link rel="icon" type="image/svg+xml" href="{{call .Asset "icon.svg"}}">
 <link rel="stylesheet" href="{{call .Asset "app.css"}}">
@@ -26,7 +25,7 @@ data-say-state (see "run-say"). */}}
 <script src="{{call .Vendor "idiomorph-ext.min.js"}}" defer></script>
 {{range .Scripts}}<script src="{{.}}" defer></script>
 {{end}}</head>
-<body>
+<body hx-headers='{"X-Sind-CSRF":"{{.CSRF}}"}'>
 <a class="skip" href="#main">Skip to content</a>
 <div class="app"{{if .Events}} hx-ext="sse,morph" sse-connect="{{.Events}}"{{end}}>
   <div class="conn" id="conn" role="status"></div>
