@@ -77,14 +77,51 @@
     if (el.style[prop] !== value) el.style[prop] = value;
   }
 
+  // The tick distances and the most labels of the axis, as the server's
+  // runTickSteps and runMaxTicks.
+  const tickSteps = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 21600, 86400].map(s => s * 1000);
+  const maxTicks = 8;
+
+  // ticks draws the labels and the gridlines of the axis of g for scale, as
+  // the server's runTimelineOf does, when they are not the ones it has: the
+  // server draws them only when the run changes, and the scale grows with
+  // the clock in between.
+  function ticks(g, scale) {
+    const labels = g.querySelector('.axis .ticks');
+    const lines = g.querySelector('.gridlines > span:last-child');
+    if (!labels || !lines) return;
+    const step = tickSteps.find(s => Math.floor(scale / s) <= maxTicks) || tickSteps[tickSteps.length - 1];
+    const ats = [];
+    for (let t = 0; t <= scale && ats.length <= maxTicks; t += step) ats.push(t);
+    const key = ats.join(',');
+    const has = el => [...el.children].map(c => c.dataset.at).join(',');
+    if (has(labels) === key && has(lines) === key) return;
+    const n = ats.length;
+    labels.replaceChildren(...ats.map((t, i) => {
+      const el = document.createElement('span');
+      if (i === 0) el.className = 'l0';
+      if (i !== 0 && i !== n - 1 && (n % 2 === 0 || i !== Math.floor(n / 2))) el.classList.add('minor');
+      el.dataset.at = t;
+      el.textContent = dur(t).replace('.0s', 's');
+      return el;
+    }));
+    lines.replaceChildren(...ats.map(t => {
+      const el = document.createElement('i');
+      el.dataset.at = t;
+      return el;
+    }));
+  }
+
   // place sizes each bar with a data-fill, in hundredths of a percent, and
   // places the timeline of a run whose clock goes on (data-origin on the
-  // gantt, its start; not data-since, which is a clock that tick writes) from its times, in milliseconds since the start of the run: the
-  // labels and the gridlines at their data-at, the bars from their data-from
-  // to their data-to, or to the clock for a span that goes on. The scale
-  // grows with the clock as the server's does, and is at least eight
-  // seconds, so that all of them move together and smoothly between two
-  // updates. Once the clock stands, the classes of the server place them.
+  // gantt, its start; not data-since, which is a clock that tick writes)
+  // from its times, in milliseconds since the start of the run: the labels
+  // and the gridlines at their data-at, drawn anew as the axis needs others
+  // (ticks), the bars from their data-from to their data-to, or to the
+  // clock for a span that goes on. The scale grows with the clock as the
+  // server's does, and is at least eight seconds, so that all of them move
+  // together and smoothly between two updates. Once the clock stands, the
+  // classes of the server place them.
   function place(now) {
     document.querySelectorAll('[data-fill]').forEach(el => set(el, 'width', Number(el.dataset.fill) / 100 + '%'));
     document.querySelectorAll('.gantt').forEach(g => {
@@ -92,6 +129,7 @@
       const live = since > 0;
       const scale = Math.max(now - since, 8000);
       const pct = ms => Math.min(Math.max(ms / scale * 100, 0), 100) + '%';
+      if (live) ticks(g, scale);
       g.querySelectorAll('[data-at]').forEach(el => set(el, 'left', live ? pct(Number(el.dataset.at)) : ''));
       g.querySelectorAll('[data-from]').forEach(el => {
         const from = Number(el.dataset.from);
