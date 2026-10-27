@@ -11,12 +11,11 @@
   loses changes, and keeps the draft of a dialog with data-act-draft.
 */}}
 
+{{/* "act-dialog" is also the content of a dialog shown as a page of its
+own. A dialog ignores the morph extension of the page, which it then sits
+in: with it, htmx would put each element that hx-swap-oob="innerHTML" swaps
+into its target, not its content. */}}
 {{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
-
-{{/* A dialog ignores the morph extension of the page, which a dialog shown
-as a page of its own sits in: with it, htmx would put each element that
-hx-swap-oob="innerHTML" swaps into its target, not its content. */}}
-{{define "act-dialog-page"}}{{template "act-frame" .Data}}{{end}}
 
 {{define "act-frame"}}
 <div class="scrim" id="act-dialog" hx-ext="ignore:morph"{{if not .Spec.Draft}} data-act-scrim{{end}}>
@@ -30,12 +29,12 @@ hx-swap-oob="innerHTML" swaps into its target, not its content. */}}
   {{if .Draft}}<div class="callout act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>{{end}}
   {{if .Spec.Plan}}
   <div class="mb">
-    <div class="act-form{{if .YAMLMode}} act-yamlmode{{end}}">{{include .Body .}}</div>
+    <div class="act-form{{if .YAMLMode}} act-yamlmode{{end}}">{{include (print "act-dlg-" .ID) .}}</div>
     <aside class="act-planpane" aria-label="Plan">{{template "act-preview-slot" .}}</aside>
   </div>
   {{else}}
   <div class="mb">
-    {{include .Body .}}
+    {{include (print "act-dlg-" .ID) .}}
     {{template "act-preview-slot" .}}
     {{with .Typed}}<div class="fld act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
       <input type="text" id="act-confirm" name="confirm" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
@@ -143,7 +142,7 @@ the plan, folded; act.js keeps it open across the previews. */}}
 
 {{/* act-chip is the size button of a node of a new cluster, which opens
 its editor. */}}
-{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Open}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-labelledby="act-czl-{{.Key}}{{if .Group}} act-range-{{.Key}}{{end}} act-chip-{{.Key}}"><span class="vh" id="act-czl-{{.Key}}">Size of {{.Label}}</span>{{template "act-chip-text" .}}</button>{{end}}
+{{define "act-chip"}}<button type="button" class="act-cz" data-act-ed="{{.Key}}" aria-expanded="{{if .Own}}true{{else}}false{{end}}" aria-controls="act-ed-{{.Key}}" aria-labelledby="act-czl-{{.Key}}{{if .Group}} act-range-{{.Key}}{{end}} act-chip-{{.Key}}"><span class="vh" id="act-czl-{{.Key}}">Size of {{.Label}}</span>{{template "act-chip-text" .}}</button>{{end}}
 
 {{define "act-chip-text"}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}}>{{.Chip}}</span>{{end}}
 
@@ -155,7 +154,7 @@ its editor. */}}
 {{/* act-ned is the editor of the size and more of a node of a new
 cluster. An empty field takes the node defaults, which it shows as its
 placeholder. */}}
-{{define "act-ned"}}<div class="act-ned" id="act-ed-{{.Key}}"{{if not .Open}} hidden{{end}}>
+{{define "act-ned"}}<div class="act-ned" id="act-ed-{{.Key}}"{{if not .Own}} hidden{{end}}>
   <div class="act-edg">
     <div class="fld"><label for="act-{{.Key}}-image">Image</label><input type="text" id="act-{{.Key}}-image" name="{{.Key}}-image" value="{{.Val "image"}}" placeholder="{{.Eff.Image}}" data-act-ph="image" autocapitalize="off" spellcheck="false" aria-describedby="act-err-{{.Key}}-image"><span class="err" id="act-err-{{.Key}}-image"></span></div>
     <div class="fld"><label for="act-{{.Key}}-cpus">CPUs</label><input type="number" id="act-{{.Key}}-cpus" name="{{.Key}}-cpus" value="{{.Val "cpus"}}" min="1" placeholder="{{.Eff.CPUs}}" data-act-ph="cpus" aria-describedby="act-err-{{.Key}}-cpus"><span class="err" id="act-err-{{.Key}}-cpus"></span></div>
@@ -277,7 +276,7 @@ realm of the link, another one that sind ui sees, or a new one. */}}
   </div>
   <span class="err" id="act-err-size"></span>
   <span class="hint">Every node takes these values. The size button of a node changes them for that node or worker group.</span>
-  <datalist id="act-memories">{{range .Memories}}<option value="{{.}}"></option>{{end}}</datalist>
+  <datalist id="act-memories"><option value="512m"></option><option value="1g"></option><option value="2g"></option><option value="4g"></option><option value="8g"></option></datalist>
 </div>
 <details class="act-sec" id="act-sec-users"{{if or (.Rows "user") (.Rows "group") (.Rows "account")}} open{{end}}><summary><span class="act-st">Users and accounts</span><span class="act-ss" id="act-sum-users"></span><span class="act-sb" id="act-bad-users"></span></summary>
   <div class="act-sbody">

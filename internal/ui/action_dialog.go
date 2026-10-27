@@ -328,8 +328,8 @@ type actIdentity struct {
 	Hint string
 }
 
-// actIdentities are the identity modes of a new cluster, as
-// action.IdentityModes orders them.
+// actIdentities are the identity modes of a new cluster, the first the
+// default.
 var actIdentities = []actIdentity{
 	{config.IdentityLocal, "Every node has the users. munge authenticates them."},
 	{config.IdentityNSSSlurm, "Managed workers do not have the users; nss_slurm gives them the job's user. munge authenticates them."},
@@ -353,7 +353,7 @@ func actUsersSum(p actPreview) string {
 		what string
 	}{{action.UserRows, "user"}, {action.GroupRows, "group"}, {action.AccountRows, "account"}} {
 		if n := len(actNames(p.Form, k.rows)); n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s%s", n, k.what, map[bool]string{true: "", false: "s"}[n == 1]))
+			parts = append(parts, pgPlural(n, k.what, k.what+"s"))
 		}
 	}
 	if len(parts) == 0 {
@@ -604,21 +604,12 @@ func (n actNodeView) Chip() string {
 	return strings.Join(parts, " · ")
 }
 
-// Own says that the node has values of its own.
+// Own says that the node has values of its own, and its editor starts
+// open.
 func (n actNodeView) Own() bool { return n.Chip() != "defaults" }
 
-// Open says that the node's editor starts open: where it has values of
-// its own.
-func (n actNodeView) Open() bool { return n.Own() }
-
 // Range names the workers of a group, as the dialog opens.
-func (n actNodeView) Range() string {
-	count, err := strconv.Atoi(strings.TrimSpace(n.Val("count")))
-	if err != nil || count < 1 {
-		count = 1
-	}
-	return actRange(n.first, n.first+count-1)
-}
+func (n actNodeView) Range() string { return actRange(n.first, n.first+n.count()-1) }
 
 // actRange names the workers first to last.
 func actRange(first, last int) string {
@@ -715,9 +706,6 @@ var actWaits = []actChoice{
 	{"2m", "2m"}, {"5m", "5m"}, {"10m", "10m"}, {"0", "No limit"}, {"other", "Other"},
 }
 
-// actMemories are the memories of a node that the field suggests.
-var actMemories = []string{"512m", "1g", "2g", "4g", "8g"}
-
 // actRole is a role of the New cluster dialog that is a checkbox. Word is
 // the help word of the role, and Hint says what it runs, in parts, which
 // name a word of the help where they have one.
@@ -742,9 +730,6 @@ var actRoles = []actRole{
 
 // Roles are the roles of the New cluster dialog that are a checkbox.
 func (d *actDialog) Roles() []actRole { return actRoles }
-
-// Memories are the memories of a node that the field suggests.
-func (d *actDialog) Memories() []string { return actMemories }
 
 // On reports whether the checkbox field is ticked: on, or the 1 of a link.
 func (d *actDialog) On(field string) bool { return actOn(d.Form.Get(field)) }
@@ -873,9 +858,6 @@ func (d *actDialog) RealmHint() string {
 	return "A group of clusters. A new name makes a new realm."
 }
 
-// Body is the name of the block with the dialog's fields.
-func (d *actDialog) Body() string { return "act-dlg-" + d.ID }
-
 // actLocks reports whether the command of the action takes the realm lock,
 // as sind does: every command that changes a realm does, but the power
 // commands that only stop or pause containers.
@@ -946,7 +928,7 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		// A dialog opened by its URL, as a link without script or the
 		// jump box does: the dialog over a page of its own.
 		pv := v.withData(d)
-		pv.Title, pv.Content = d.Title, "act-dialog-page"
+		pv.Title, pv.Content = d.Title, "act-dialog"
 		pv.Events = s.eventsURL(nil, pv)
 		s.Write(w, r, http.StatusOK, "layout", pv)
 		return
@@ -954,14 +936,11 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	s.Write(w, r, http.StatusOK, "act-dialog", v.withData(d))
 }
 
-// actDraftKeys are the fields of a posted form that a draft leaves out:
-// they belong to one post, or to one look at the command.
-var actDraftKeys = []string{"csrf", "shown", "confirm", "draft"}
-
 // actDraftOf returns the fields of the draft that the browser kept of a
 // dialog, raw as a form encodes them, when the dialog keeps drafts and the
 // link fits the draft: the same realm, and no other field filled in, as a
-// link with fields of its own starts from them.
+// link with fields of its own starts from them. The draft leaves out the
+// fields that belong to one post, as a task does, and the draft itself.
 func actDraftOf(spec actSpec, raw string, link url.Values) (url.Values, bool) {
 	if !spec.Draft || raw == "" {
 		return nil, false
@@ -975,9 +954,8 @@ func actDraftOf(spec actSpec, raw string, link url.Values) (url.Values, bool) {
 	if err != nil || actCheckForm(f) != nil || action.Realm(f) != link.Get("realm") {
 		return nil, false
 	}
-	for _, k := range actDraftKeys {
-		f.Del(k)
-	}
+	f = actKeptForm(f)
+	f.Del("draft")
 	return f, true
 }
 
@@ -1037,13 +1015,10 @@ type actPreview struct {
 	Typed, Why string
 }
 
-// OK labels the button that runs the command: as the command says, or as
-// the dialog does.
-func (p actPreview) OK() string { return cmp.Or(p.Cmd.OK, p.Spec.OK) }
-
-// OKButton is the button that runs the command, as the preview says.
+// OKButton is the button that runs the command, as the preview says: its
+// label is the command's, or the dialog's.
 func (p actPreview) OKButton() actOK {
-	return actOK{Label: p.OK(), Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
+	return actOK{Label: cmp.Or(p.Cmd.OK, p.Spec.OK), Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
 }
 
 // actWhy says why what the user typed, typed, does not confirm want: a
@@ -1097,15 +1072,12 @@ func (p actPreview) NodeViews() []actNodeView {
 		out = append(out, actNodeOf(p.Form, key))
 	}
 	for _, g := range action.WorkerGroups(p.Form) {
-		if actGroupPattern.MatchString(g) {
+		if action.GroupPattern.MatchString(g) {
 			out = append(out, actNodeOf(p.Form, g))
 		}
 	}
 	return out
 }
-
-// actGroupPattern is the key of a worker group, which ends up in ids.
-var actGroupPattern = regexp.MustCompile(`^w[0-9a-z]{1,8}$`)
 
 // HostMB is the memory of the Docker host in MiB, 0 when unknown.
 func (p actPreview) HostMB() int { return int(p.Snap.Docker.MemTotal >> 20) }
@@ -1184,7 +1156,7 @@ func (p actPreview) First() action.Problem {
 // problems: how many, and the field of the first.
 func (p actPreview) StatusText() string {
 	n, label := p.Problems(), p.First().Label
-	text := fmt.Sprintf("%d problem%s", n, actPlural(n))
+	text := pgPlural(n, "problem", "problems")
 	switch {
 	case label == "":
 	case n == 1:
@@ -1209,7 +1181,7 @@ func (p actPreview) StatusGo() string {
 func (p actPreview) Say() string {
 	if !p.Blocked {
 		if n := p.Warnings(); n > 0 {
-			return fmt.Sprintf("Ready, with %d warning%s. %s runs the command.", n, actPlural(n), p.Spec.OK)
+			return fmt.Sprintf("Ready, with %s. %s runs the command.", pgPlural(n, "warning", "warnings"), p.Spec.OK)
 		}
 		return "Ready. " + p.Spec.OK + " runs the command."
 	}
@@ -1243,15 +1215,7 @@ func (p actPreview) Totals() string {
 	if host := p.HostMB(); host > 0 {
 		mem += " of " + action.MemoryLabel(host)
 	}
-	return fmt.Sprintf("%d container%s · %d CPU%s · %s", p.Cmd.Containers, actPlural(p.Cmd.Containers), p.Cmd.CPUs, actPlural(p.Cmd.CPUs), mem)
-}
-
-// actPlural is the s of a count other than one.
-func actPlural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
+	return pgPlural(p.Cmd.Containers, "container", "containers") + " · " + pgPlural(p.Cmd.CPUs, "CPU", "CPUs") + " · " + mem
 }
 
 // Warnings is how many warnings the command has, which the pill counts.
@@ -1318,47 +1282,42 @@ func actContext(r *http.Request, v *View, st *actState) action.Context {
 	return c
 }
 
-// actFormView returns the view of a request that posts a dialog's form,
-// once the form passes its limits.
-func actFormView(s *Server, r *http.Request) (*View, error) {
-	if err := actCheckForm(r.PostForm); err != nil {
-		return nil, err
+// actPost returns the action, the state and the view of a request that
+// posts a dialog's form, once the form passes its limits, or fails the
+// request.
+func actPost(s *Server, w http.ResponseWriter, r *http.Request) (action.Action, *actState, *View, bool) {
+	a, ok := actLookup(s, w, r)
+	if !ok {
+		return a, nil, nil, false
 	}
-	return s.View(r)
+	st, ok := actStateOf(s, w, r)
+	if !ok {
+		return a, nil, nil, false
+	}
+	err := actCheckForm(r.PostForm)
+	var v *View
+	if err == nil {
+		v, err = s.View(r)
+	}
+	if err != nil {
+		s.Fail(w, r, err)
+		return a, nil, nil, false
+	}
+	return a, st, v, true
 }
 
 // actPreviewRoute answers with the command that the form would run.
 func actPreviewRoute(s *Server, w http.ResponseWriter, r *http.Request) {
-	a, ok := actLookup(s, w, r)
-	if !ok {
-		return
+	if a, st, v, ok := actPost(s, w, r); ok {
+		s.Write(w, r, http.StatusOK, "act-preview", v.withData(actEvaluate(v, a, r.PostForm, actContext(r, v, st))))
 	}
-	st, ok := actStateOf(s, w, r)
-	if !ok {
-		return
-	}
-	v, err := actFormView(s, r)
-	if err != nil {
-		s.Fail(w, r, err)
-		return
-	}
-	s.Write(w, r, http.StatusOK, "act-preview", v.withData(actEvaluate(v, a, r.PostForm, actContext(r, v, st))))
 }
 
 // actRunRoute builds the command of the form again and runs it as a task,
 // if it is the command the dialog showed. The browser follows the task.
 func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
-	a, ok := actLookup(s, w, r)
+	a, st, v, ok := actPost(s, w, r)
 	if !ok {
-		return
-	}
-	st, ok := actStateOf(s, w, r)
-	if !ok {
-		return
-	}
-	v, err := actFormView(s, r)
-	if err != nil {
-		s.Fail(w, r, err)
 		return
 	}
 	f := r.PostForm

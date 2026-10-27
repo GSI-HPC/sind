@@ -73,7 +73,7 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	for _, n := range added {
 		cmd.Nodes = append(cmd.Nodes, PlannedNode{Short: n, Role: string(config.RoleWorker)})
 	}
-	cmd.OK = "Add " + countWorkers(added)
+	cmd.OK = "Add " + countOr(added, "workers")
 	cmd.Notes = append(cmd.Notes, strings.TrimSpace(size.why+" sind adds the workers, then tells slurmctld about them."))
 	return cmd, nil
 }
@@ -135,14 +135,6 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
-}
-
-// countWorkers names workers for a button: the one worker, or how many.
-func countWorkers(shorts []string) string {
-	if len(shorts) == 1 {
-		return shorts[0]
-	}
-	return fmt.Sprintf("%d workers", len(shorts))
 }
 
 func buildDeleteCluster(f Form, c Context) (Command, error) {
@@ -284,7 +276,7 @@ func buildDeleteWorker(f Form, c Context) (Command, error) {
 	}
 	shorts := shortNames(picked)
 	cmd := NewCommand(sindArgv(realm, append([]string{"delete", "worker"}, nodeWords(cl.Name, shorts)...)...)...)
-	cmd.OK = "Delete " + countWorkers(shorts)
+	cmd.OK = "Delete " + countOr(shorts, "workers")
 	containers := make([]string, len(picked))
 	for i, n := range picked {
 		containers[i] = n.Container

@@ -115,9 +115,9 @@ func TestActDraftOf(t *testing.T) {
 	spec := actSpec{Draft: true}
 	link := url.Values{"realm": {"ci"}}
 
-	f, ok := actDraftOf(spec, actForm("realm", "ci", "name", "x", "confirm", "x", "shown", "s", "csrf", "c", "draft", "d"), link)
+	f, ok := actDraftOf(spec, actForm("realm", "ci", "name", "x", "nodes", "a", "nodes", "b", "confirm", "x", "shown", "s", "csrf", "c", "draft", "d"), link)
 	require.True(t, ok)
-	assert.Equal(t, url.Values{"realm": {"ci"}, "name": {"x"}}, f)
+	assert.Equal(t, url.Values{"realm": {"ci"}, "name": {"x"}, "nodes": {"a", "b"}}, f)
 
 	_, ok = actDraftOf(actSpec{}, actForm("realm", "ci"), link)
 	assert.False(t, ok, "a dialog without drafts")

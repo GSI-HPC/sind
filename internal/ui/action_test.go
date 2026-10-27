@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -506,7 +507,7 @@ func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	// A new cluster follows its run, and its draft goes.
 	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
 	assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": true}}`, w.Header().Get("HX-Trigger"))
-	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, mapKeys(f.saved))
+	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, slices.Collect(maps.Keys(f.saved)))
 	assert.Contains(t, f.saved["/state/sind/ui/configs/hpc.yaml"], "name: hpc\nrealm: ci\n")
 	require.Len(t, f.starter.specs, 1)
 	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --wait 2m", f.starter.specs[0].Display)
@@ -653,14 +654,6 @@ func TestActPreview_NewClusterSumsUpTheSections(t *testing.T) {
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "dir", "rel", "dtype", "nfs")).Body.String()
 	assert.Contains(t, body, `id="act-sum-data" hx-swap-oob="innerHTML">rel</span>`)
 	assert.Contains(t, body, `id="act-bad-data" hx-swap-oob="innerHTML">2 problems</span>`)
-}
-
-func mapKeys(m map[string]string) []string {
-	var keys []string
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }
 
 func TestActRun_RefusesTheFormThatDoesNotBuild(t *testing.T) {
@@ -815,8 +808,7 @@ func TestActSpecs_CoverEveryAction(t *testing.T) {
 func TestActService_Setup(t *testing.T) {
 	cfg, _ := testConfig(t)
 	env := cfg.Env
-	restore := actSeams(t)
-	defer restore()
+	actSeams(t)
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
 	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
@@ -835,8 +827,7 @@ func TestActService_Setup(t *testing.T) {
 
 func TestActService_SetupErrors(t *testing.T) {
 	cfg, _ := testConfig(t)
-	restore := actSeams(t)
-	defer restore()
+	actSeams(t)
 
 	actExecutable = func() (string, error) { return "", errors.New("no /proc") }
 	assert.EqualError(t, actService().Setup(cfg.Env), "finding the sind executable: no /proc")
@@ -849,8 +840,7 @@ func TestActService_SetupErrors(t *testing.T) {
 
 func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 	cfg, _ := testConfig(t)
-	restore := actSeams(t)
-	defer restore()
+	actSeams(t)
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
 	actActivityLog = func() (string, error) { return "", errors.New("read-only home") }
@@ -862,17 +852,15 @@ func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 	assert.Empty(t, got.home)
 }
 
-// actSeams returns the function that puts the seams of Setup back.
-func actSeams(t *testing.T) func() {
-	t.Helper()
+// actSeams puts the seams of Setup back when the test ends.
+func actSeams(t *testing.T) {
 	e, d, l, h, v := actExecutable, actStateDir, actActivityLog, actHome, actEnviron
-	return func() { actExecutable, actStateDir, actActivityLog, actHome, actEnviron = e, d, l, h, v }
+	t.Cleanup(func() { actExecutable, actStateDir, actActivityLog, actHome, actEnviron = e, d, l, h, v })
 }
 
 func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
 	cfg, st := testConfig(t)
-	restore := actSeams(t)
-	defer restore()
+	actSeams(t)
 	actExecutable = func() (string, error) { return "/bin/sh", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
 	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
@@ -1177,11 +1165,6 @@ sacctmgr -i add user alice account=physics defaultaccount=physics
 	assert.NotContains(t, body, "act-conf", "no preview while the name is wrong")
 }
 
-func TestActKeptForm(t *testing.T) {
-	kept := actKeptForm(url.Values{"csrf": {"x"}, "shown": {"y"}, "confirm": {"dev"}, "cluster": {"dev"}, "nodes": {"a", "b"}})
-	assert.Equal(t, url.Values{"cluster": {"dev"}, "nodes": {"a", "b"}}, kept)
-}
-
 func TestActSameCommand(t *testing.T) {
 	task := store.Task{Display: "sind create cluster --config /c/x.yaml", ConfigPath: "/c/x.yaml", Config: "name: x\n"}
 	cmd := action.Command{Display: task.Display, Config: &action.File{Path: "/c/x.yaml", Content: "name: x\n"}}
@@ -1195,10 +1178,7 @@ func TestActSameCommand(t *testing.T) {
 
 // actEndedTask adds a task of the action that failed, with the form.
 func (f *actFixture) actEndedTask(id, act, display string, kv ...string) {
-	form := url.Values{}
-	for i := 0; i+1 < len(kv); i += 2 {
-		form.Add(kv[i], kv[i+1])
-	}
+	form, _ := url.ParseQuery(actForm(kv...))
 	end := time.Unix(10, 0)
 	f.st.AddTask(store.Task{ID: id, Action: act, Display: display, Form: form, Realm: "sind", Start: time.Unix(0, 0), End: &end, Status: store.TaskFailed})
 }

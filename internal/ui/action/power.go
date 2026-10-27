@@ -124,7 +124,7 @@ func buildPower(f Form, c Context) (Command, error) {
 	}
 	shorts := shortNames(picked)
 	cmd := NewCommand(sindArgv(realm, append([]string{"power", op.ID}, nodeWords(cl.Name, shorts)...)...)...)
-	cmd.OK = op.Label + " " + countNodes(shorts)
+	cmd.OK = op.Label + " " + countOr(shorts, "nodes")
 	if stops(op.ID) {
 		cmd.Warns = append(cmd.Warns, powerWarnings(c.Snap.ClusterNodes(realm, cl.Name), picked, c.Snap.Status(realm, cl.Name), cl.Name)...)
 	}
@@ -272,7 +272,7 @@ func buildSlurmState(f Form, c Context, realm, clusterName string, op PowerOp) (
 		cmd = NewCommand(sindArgv(realm, append(words, "State=RESUME")...)...)
 		cmd.Notes = append(cmd.Notes, "The nodes take jobs again. A node that is down because its container stopped comes back once you start it.")
 	}
-	cmd.OK = op.Label + " " + countNodes(shorts)
+	cmd.OK = op.Label + " " + countOr(shorts, "nodes")
 	if !slices.ContainsFunc(c.Snap.ClusterNodes(realm, clusterName), func(n cluster.NodeSummary) bool {
 		return n.Role == config.RoleController && n.State == cluster.StateRunning
 	}) {
@@ -290,12 +290,13 @@ func shortNames(nodes []cluster.NodeSummary) []string {
 	return shorts
 }
 
-// countNodes names the nodes for a button: the one node, or how many.
-func countNodes(shorts []string) string {
+// countOr names nodes for a button: the one node, or how many, such as
+// 3 workers.
+func countOr(shorts []string, many string) string {
 	if len(shorts) == 1 {
 		return shorts[0]
 	}
-	return fmt.Sprintf("%d nodes", len(shorts))
+	return fmt.Sprintf("%d %s", len(shorts), many)
 }
 
 // buildConnect returns the Build of connect container, or with detach of

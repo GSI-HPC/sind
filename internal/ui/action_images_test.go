@@ -75,11 +75,11 @@ func TestActImages_Check(t *testing.T) {
 
 	f.images["own:dev"] = docker.Image{ID: "sha256:3"}
 	f.inspects = 0
-	a.seen = map[string]actSeen{}
+	a.seen = map[string]actSeen[action.ImageFacts]{}
 	assert.Equal(t, action.ImageFacts{Local: true}, a.facts(ctx, "own:dev"), "a new build is another image")
 
 	f.images["own:dev"] = docker.Image{ID: "sha256:2", Labels: docker.Labels{"sind.slurm.version": "26.05.1"}}
-	a.seen = map[string]actSeen{}
+	a.seen = map[string]actSeen[action.ImageFacts]{}
 	assert.Equal(t, action.ImageFacts{Local: true, Version: "26.05.1"}, a.facts(ctx, "own:dev"), "the label wins")
 
 	assert.ErrorContains(t, a.check(ctx, "away:1"), "docker has no such image after the check")

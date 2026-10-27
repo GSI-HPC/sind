@@ -76,9 +76,6 @@ func slug(s string) string {
 	return out
 }
 
-// accountNameText says how the name of a user or a group is made.
-const accountNameText = "start with a lowercase letter or _, then use lowercase letters, digits, _ and -, at most 32 characters"
-
 // configRule turns an error of sind's check of the whole config into a
 // problem at the field of the form that causes it.
 type configRule struct {
@@ -186,5 +183,6 @@ func configProblem(f Form, err error) Problem {
 	return Problem{Label: "Config", Text: err.Error()}
 }
 
-// errAccountName is the problem of the name of a user or a group.
-var errAccountName = errors.New(accountNameText)
+// errAccountName is the problem of the name of a user or a group: how it
+// is made.
+var errAccountName = errors.New("start with a lowercase letter or _, then use lowercase letters, digits, _ and -, at most 32 characters")

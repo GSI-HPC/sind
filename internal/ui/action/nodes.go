@@ -26,7 +26,7 @@ func ShortName(n cluster.NodeSummary) string {
 func nodeNames(f Form) []string {
 	var names []string
 	for _, v := range f["nodes"] {
-		for _, n := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' }) {
+		for _, n := range splitList(v) {
 			if !slices.Contains(names, n) {
 				names = append(names, n)
 			}

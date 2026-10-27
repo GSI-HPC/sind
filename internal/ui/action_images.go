@@ -33,19 +33,19 @@ type actImages struct {
 	now      func() time.Time
 
 	mu      sync.Mutex
-	seen    map[string]actSeen
+	seen    map[string]actSeen[action.ImageFacts]
 	checked map[string]string
 }
 
-// actSeen is what sind ui saw of an image, and when.
-type actSeen struct {
-	facts action.ImageFacts
+// actSeen is what sind ui saw of an image or a container, and when.
+type actSeen[T any] struct {
+	facts T
 	at    time.Time
 }
 
 // newActImages returns the images of client.
 func newActImages(inspect func(context.Context, string) (docker.Image, bool, error), discover func(context.Context, string) (string, error)) *actImages {
-	return &actImages{inspect: inspect, discover: discover, now: time.Now, seen: map[string]actSeen{}, checked: map[string]string{}}
+	return &actImages{inspect: inspect, discover: discover, now: time.Now, seen: map[string]actSeen[action.ImageFacts]{}, checked: map[string]string{}}
 }
 
 // facts tells what sind ui knows of image.
@@ -69,7 +69,7 @@ func (a *actImages) facts(ctx context.Context, image string) action.ImageFacts {
 			f.Version, f.Checked = v, true
 		}
 	}
-	a.seen[image] = actSeen{f, a.now()}
+	a.seen[image] = actSeen[action.ImageFacts]{f, a.now()}
 	return f
 }
 
@@ -127,17 +127,8 @@ const actCheckTimeout = 10 * time.Minute
 // actCheckRoute checks the image of the form's field "check", then answers
 // as a preview does.
 func actCheckRoute(s *Server, w http.ResponseWriter, r *http.Request) {
-	a, ok := actLookup(s, w, r)
+	a, st, v, ok := actPost(s, w, r)
 	if !ok {
-		return
-	}
-	st, ok := actStateOf(s, w, r)
-	if !ok {
-		return
-	}
-	v, err := actFormView(s, r)
-	if err != nil {
-		s.Fail(w, r, err)
 		return
 	}
 	image := strings.TrimSpace(r.PostForm.Get("check"))
