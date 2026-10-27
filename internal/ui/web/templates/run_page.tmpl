@@ -1,18 +1,32 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
 {{/* page-run is the run page: one command of the event log, drawn as the
-header, the summary, what failed, the timeline of its steps, a tile for each
-node, the transfers and the steps without targets, and the raw facts. Each
-part is a fragment that /events sends again when the run changes. */}}
+header, the summary, what failed, the timeline of its steps and the raw
+facts. The header, what failed and the facts are fragments that /events
+sends again when the run changes. The summary and the timeline are drawn by
+gantt.js, from the data of the fragment run-summary, into the elements
+with data-g that this template draws once, so that no live update morphs
+them. */}}
 {{define "page-run"}}
 <div class="crumbs"><a href="/activity">Activity</a> / <span class="mono">{{.Params.Get "id"}}</span></div>
 <div class="rp">
 <div hx-swap="morph:innerHTML" sse-swap="run-head">{{fragment "run-head" .}}</div>
-<div hx-swap="morph:innerHTML" sse-swap="run-summary">{{fragment "run-summary" .}}</div>
+<div class="rdata" hx-swap="morph:innerHTML" sse-swap="run-summary">{{fragment "run-summary" .}}</div>
+<section class="panel"><div class="pb"><div class="rsum">
+  <span class="clock" data-g="clock"></span>
+  <div class="hl" data-g="hl"></div>
+  <div class="counts" data-g="counts"></div>
+  <div class="noteln"><span class="note" data-g="note">&nbsp;</span><span class="eta" data-g="eta"></span></div>
+</div></div></section>
 <div hx-swap="morph:innerHTML" sse-swap="run-failed">{{fragment "run-failed" .}}</div>
-<div hx-swap="morph:innerHTML" sse-swap="run-timeline">{{fragment "run-timeline" .}}</div>
-<div hx-swap="morph:innerHTML" sse-swap="run-nodes">{{fragment "run-nodes" .}}</div>
-<div hx-swap="morph:innerHTML" sse-swap="run-more">{{fragment "run-more" .}}</div>
+<section class="panel rgp"><div class="ph"><h2>Steps</h2><button type="button" class="btn sm" data-g="whole" hidden>Whole run</button><span class="grow"></span>
+  <div class="legend" aria-hidden="true"><span><i class="lg-done"></i>done</span><span><i class="lg-fill"></i>share done</span><span><i class="lg-wait"></i>waiting</span><span><i class="lg-unp"></i>extracting</span><span><i class="lg-lane"></i>MB/s</span><span><i class="lg-now"></i>now</span></div></div>
+<div class="gantt" data-g="gantt">
+  <div class="g-row g-axis"><span class="ttl">step</span><span class="ticks" data-g="ticks"></span><span class="ares">result</span></div>
+  <div class="g-over" data-g="over" aria-hidden="true"></div><div class="g-cur" data-g="cur" aria-hidden="true"></div>
+  <div class="g-body" data-g="body"></div>
+  <p class="g-help faint">Open a step for its targets. Click a bar to zoom to its step, and again for the whole run.</p>
+</div></section>
 <div hx-swap="morph:innerHTML" sse-swap="run-facts">{{fragment "run-facts" .}}</div>
 </div>
 {{end}}
@@ -25,13 +39,7 @@ part is a fragment that /events sends again when the run changes. */}}
 {{with .Command}}<div class="runcmd">{{template "pg-cmd" .}}{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">{{.Label}}</div><pre class="mono">{{.Text}}</pre></details>{{end}}</div>{{end}}
 {{end}}{{end}}{{end}}
 
-{{define "run-summary"}}{{with .Data}}<section class="panel"><div class="pb">
-  <div class="rsum"><span class="clock">{{template "run-elapsed" .}}</span>
-    <div class="rbar">{{template "run-segbar" .}}<div class="mono rline">{{.Line}}</div></div>
-    <div class="counts">{{if .NoTargets}}<span class="faint">no targets</span>{{else}}{{range .Counts}}<span><i class="dot {{.Class}}"></i>{{.N}} {{.Label}}</span>{{end}}{{end}}</div></div>
-  {{range .Hints}}<div class="hint">{{.}}</div>{{end}}
-  <span hidden data-doc-title="{{.DocTitle}}"></span><span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"{{if .SaySince}} data-say-since="{{.SaySince}}"{{end}}></span>
-</div></section>{{end}}{{end}}
+{{define "run-summary"}}{{with .Data}}<span hidden data-gantt="{{.Data}}"></span><span hidden data-doc-title="{{.DocTitle}}"></span><span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"{{if .SaySince}} data-say-since="{{.SaySince}}"{{end}}></span>{{end}}{{end}}
 
 {{define "run-failed"}}{{with .Data}}<section class="panel rfail {{.Class}}"><div class="ph"><h2>{{.Title}}</h2></div><div class="pb stack">
   {{range .Groups}}<div class="callout {{$.Data.Class}}"><b class="mono">{{.Nodes}}</b>{{if .Class}} <span class="chip">{{.Class}}</span>{{end}}<br><span class="mono">{{.Err}}</span></div>{{end}}
@@ -39,32 +47,6 @@ part is a fragment that /events sends again when the run changes. */}}
   {{range .Notes}}<div class="hint">{{.}}</div>{{end}}
   {{if .Doctor}}<div class="hint">A timeout often means that a node needed more time: try again with a longer <span class="mono">--wait</span>, or check the host in <a href="/doctor">Doctor</a>.</div>{{end}}
 </div></section>{{end}}{{end}}
-
-{{define "run-timeline"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Steps</h2><span class="grow"></span><span class="faint">Open a step for its targets. Steps that overlap ran at the same time.</span></div><div class="pb gantt"{{if .Since}} data-origin="{{.Since}}"{{end}}>
-<div class="axis"><span></span><span class="ticks">{{range .Ticks}}<span class="l{{.Pos}}{{if .Minor}} minor{{end}}" data-at="{{.At}}">{{.Label}}</span>{{end}}</span><span></span></div>
-<div class="gridlines" aria-hidden="true"><span></span><span>{{range .Ticks}}<i class="l{{.Pos}}" data-at="{{.At}}"></i>{{end}}</span></div>
-{{range .Rows}}{{template "run-row" .}}{{else}}<div class="faint">No steps yet.</div>{{end}}
-</div></section>{{end}}{{end}}
-
-{{define "run-rowcells"}}<span class="lbl" title="{{.Name}}"><span class="mark {{.Class}}">{{.Mark}}</span>{{.Name}}{{if .Total}} <span class="faint">{{.Total}}</span>{{end}}</span><span class="trk">{{if .Bar}}<span class="bar {{.Class}} l{{.Left}} w{{.Width}}" data-from="{{.From}}"{{if .Ended}} data-to="{{.To}}"{{end}}></span>{{end}}</span><span class="res">{{.Result}}</span>{{end}}
-
-{{define "run-row"}}{{if .Children}}<details class="grow-details" id="step-{{.ID}}"{{if .Open}} open{{end}}><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
-
-{{define "run-nodes"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">Each node goes from left to right. The ring is the part of the wait limit it used.</span></div><div class="pb nodegrid">
-{{range .Tiles}}<div class="ntile {{.RoleClass}} {{.Class}}"><div class="nt"><span class="mark {{.Class}}">{{.Mark}}</span><b>{{.Name}}</b>{{if .Role}}<small data-word="{{.Role}}">{{.Role}}</small>{{end}}</div>
-  <div class="pipe">{{range .Pipe}}<i class="{{.Class}}" title="{{.Title}}"></i>{{end}}</div>
-  <div class="pipelbl">{{range .Pipe}}<span>{{.Label}}</span>{{end}}</div>
-  <div class="msg"><span title="{{.Msg}}">{{.Msg}}</span>{{with .Ring}}<svg class="ring" viewBox="0 0 28 28" role="img" aria-label="{{.Title}} of the wait limit"><circle class="rtrack" cx="14" cy="14" r="11" fill="none" stroke-width="4"/><circle class="rarc {{.Class}}" cx="14" cy="14" r="11" fill="none" stroke-width="4" stroke-dasharray="{{.Dash}}" transform="rotate(-90 14 14)"/></svg>{{end}}</div></div>
-{{end}}</div></section>{{end}}{{end}}
-
-{{define "run-more"}}{{with .Data}}<div class="grid g2">
-{{if .Transfers}}<section class="panel"><div class="ph"><h2>Transfers</h2><span class="grow"></span><span class="faint">work done of work to do, from the advance events</span></div><div class="pb">
-{{range .Transfers}}<div class="pullrow"><span class="pn"><span class="mark {{.Class}}">{{.Mark}}</span>{{.Name}}</span><span class="num amt">{{.Amount}}</span>{{if .Bar}}<div class="meter"><i class="{{.Class}} w{{.Pct}}" data-fill="{{.Fine}}"></i></div>{{end}}{{if .Msg}}<span class="ln">{{.Msg}}</span>{{end}}</div>
-{{end}}</div></section>{{end}}
-{{if .Steps}}<section class="panel"><div class="ph"><h2>Other steps</h2></div><div class="pb"><dl class="kv">
-{{range .Steps}}<dt class="mono">{{.Name}}</dt><dd><span class="pill {{.PillClass}} nodot">{{.Class}}</span>{{if .Text}}<span class="muted">{{.Text}}</span>{{end}}</dd>
-{{end}}</dl></div></section>{{end}}
-</div>{{end}}{{end}}
 
 {{define "run-facts"}}{{with .Data}}<section class="panel"><details class="raw" id="run-facts-raw"><summary>What the event log says about this run</summary><div class="pb"><dl class="kv">
 {{range .Facts}}<dt>{{.Key}}</dt><dd{{if .Mono}} class="mono"{{end}}>{{.Val}}</dd>

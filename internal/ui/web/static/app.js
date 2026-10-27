@@ -279,7 +279,7 @@
 
     // The morph keeps what the page holds itself: the open More sheet, and
     // the tabindex of the element that has the focus. A page's script,
-    // which runs before this, such as run.js for the details of a run,
+    // which runs before this, such as run.js for the widths of its bars,
     // set its rule first; it still applies.
     if (window.Idiomorph) {
       const page = Idiomorph.defaults.callbacks.beforeAttributeUpdated;

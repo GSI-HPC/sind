@@ -2,10 +2,10 @@
    page. It uses the tokens and the building blocks of app.css. Widths and
    places that the server computes are classes (w0..w100, l0..l100), as the
    Content-Security-Policy allows no inline style; run.js refines them from
-   their data, through the style of the element, which the policy allows to
-   a script of the origin. A live update morphs a
-   fragment in and keeps its elements, so a bar or a ring that changes eases
-   to its new size, and an animation goes on. */
+   their data, and gantt.js places the timeline of the run page, through
+   the style of the element, which the policy allows to a script of the
+   origin. A live update morphs a fragment in and keeps its elements, so a
+   bar that changes eases to its new size, and an animation goes on. */
 
 form.inline{display:inline;margin:0}
 .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run-soft);border-top-color:var(--run);animation:spin 1s linear infinite;flex:none}
@@ -85,12 +85,23 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .runcfg>summary{cursor:pointer;width:max-content;font:var(--t-sm) var(--f-body);color:var(--muted)}
 .runcfg-path{margin:6px 0 0;font-size:var(--t-sm);color:var(--muted);overflow-wrap:anywhere}
 .runcfg pre{margin:6px 0 0;max-height:320px;overflow:auto;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font:var(--t-sm)/1.5 var(--f-mono)}
-.rsum{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-.rsum .clock{font:600 var(--t-xl) var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted)}
-.rbar{flex:1 1 320px;display:grid;gap:8px;min-width:0}
-.rline{font-size:var(--t-md);overflow-wrap:anywhere}
-.counts{display:flex;gap:14px;flex-wrap:wrap;font:var(--t-md) var(--f-mono)}
-.counts span{display:flex;align-items:center;gap:6px}
+/* the summary: the clock, line 1 (what leads now), the counts, and line 2
+   (the one fact to know now) on a fixed grid, so that nothing moves as
+   the texts change */
+.rsum{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:24px 22px;column-gap:20px;row-gap:4px;align-items:center}
+.rsum .clock{grid-row:1/3;font:600 30px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--fg);min-width:4ch}
+.rsum .clock.done.ok{color:var(--ok)} .rsum .clock.done.failed{color:var(--bad)} .rsum .clock.done.canceled{color:var(--warn)}
+.rsum .hl{font:var(--t-md) var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rsum .hl .sep,.rsum .hl .faint{color:var(--faint)}
+.rsum .counts{grid-column:3;grid-row:1;justify-content:flex-end;gap:4px 0;color:var(--muted);white-space:nowrap}
+.rsum .counts{gap:4px 16px}
+.rsum .counts .bad{color:var(--bad)}
+.rsum .noteln{grid-column:2/4;grid-row:2;display:flex;gap:14px;min-width:0;font-size:var(--t-md)}
+.rsum .note{flex:1;min-width:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rsum .note.ok{color:var(--ok)} .rsum .note.bad{color:var(--bad)} .rsum .note.warn{color:var(--warn)}
+.rsum .eta{flex:none;color:var(--muted);font:var(--t-sm) var(--f-mono)}
+.rdata{display:none}
+.counts{display:flex;flex-wrap:wrap;font:var(--t-md) var(--f-mono)}
 .hint{font-size:var(--t-sm);color:var(--muted)}
 .rsum+.hint{margin-top:10px}
 .hint+.hint{margin-top:6px}
@@ -98,70 +109,117 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rfail.warn{border-color:var(--warn)}
 .rfail .callout{overflow-wrap:anywhere}
 
-/* timeline */
-.gantt{position:relative;font:var(--t-sm) var(--f-mono)}
-.gantt .axis,.grow-row,.gantt .gridlines{display:grid;grid-template-columns:200px minmax(0,1fr) 210px;gap:10px;align-items:center}
-.gantt .gridlines{align-items:stretch}
-.gantt .axis{color:var(--faint);font-size:var(--t-xs);padding:0 0 6px}
-.gantt .axis .ticks{position:relative;height:14px}
-.gantt .axis .ticks span{position:absolute;transform:translateX(-50%);transition:left .3s linear}
-.gantt .axis .ticks span.l0{transform:none}
-.gantt .axis .ticks span.l100{transform:translateX(-100%)}
-.grow-row{padding:5px 0;border-top:1px solid var(--line-2)}
-summary.grow-row{cursor:pointer;list-style:none}
-summary.grow-row::-webkit-details-marker{display:none}
-summary.grow-row .lbl::before{content:"▸";color:var(--faint);width:10px;flex:none}
-details[open]>summary.grow-row .lbl::before{content:"▾"}
-.grow-row .lbl{display:flex;align-items:center;gap:7px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gantt>.grow-row .lbl{padding-left:17px}
-.gantt>details>.grow-row .lbl,.gantt>details>details>summary .lbl{padding-left:20px;color:var(--muted)}
-.gantt>details>details>.grow-row .lbl,.gantt>details>details>details>summary .lbl{padding-left:40px;color:var(--muted)}
-.grow-row .trk{position:relative;height:16px}
-/* a line down from each label of the axis, over the column of the bars, so
-   that the lines move with the labels as the scale grows */
-.gantt .gridlines{position:absolute;inset:34px 14px 14px;pointer-events:none}
-.gantt .gridlines>span{position:relative}
-.gantt .gridlines i{position:absolute;top:0;bottom:0;width:1px;background:var(--line-2);transition:left .3s linear}
-.grow-row .bar{position:absolute;top:2px;bottom:2px;border-radius:3px;background:var(--queued);min-width:3px;transition:left .3s linear,width .3s linear}
-/* a step's bar is thick, the bars of its targets below it thin */
-.gantt details>div.grow-row .bar,.gantt details details>summary .bar{top:4px;bottom:4px}
-.bar.ok,.bar.ended{background:var(--ok)} .bar.failed{background:var(--bad)} .bar.canceled{background:var(--warn)} .bar.queued,.bar.skipped{background:var(--queued)}
-.bar.running{background:var(--run);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.25) 0 6px,transparent 6px 12px);background-size:17px 17px;animation:stripes .8s linear infinite}
-@keyframes stripes{to{background-position:17px 0}}
-.grow-row .res{color:var(--muted);text-align:right;font-size:var(--t-sm);overflow-wrap:anywhere}
+/* timeline (gantt.js draws it; a step row is 44 px, a target row 26 px) */
+.rgp{--bar-body:color-mix(in srgb,var(--run) 16%,var(--panel));--hatch:color-mix(in srgb,var(--queued) 55%,transparent);--lane:color-mix(in srgb,var(--run) 20%,transparent);--lane-done:color-mix(in srgb,var(--deco) 22%,transparent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font:var(--t-xs) var(--f-body);color:var(--faint)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{display:inline-block;width:18px;height:8px;border-radius:2px}
+.lg-done{background:var(--ok)} .lg-fill{background:linear-gradient(90deg,var(--run) 55%,var(--bar-body) 55%)}
+.lg-wait{background:repeating-linear-gradient(135deg,var(--hatch) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--hatch)}
+.lg-unp{background:radial-gradient(circle,var(--run) 1px,transparent 1.4px) 0 0/4px 4px,var(--bar-body)}
+.lg-lane{background:linear-gradient(0deg,var(--lane) 0 60%,transparent 60%);border-bottom:1.5px solid var(--run)}
+.legend i.lg-now{width:2px;height:12px;background:var(--accent)}
+.gantt{position:relative;font:var(--t-sm) var(--f-mono);padding:4px 14px 10px;--lw:232px;--rw:330px;--gap:12px}
+.rgp .ph [hidden]{display:none}
+.g-row{display:grid;grid-template-columns:var(--lw) minmax(0,1fr) var(--rw);column-gap:var(--gap);position:relative}
+.g-axis{height:26px;align-items:end;color:var(--faint);font-size:var(--t-xs)}
+.g-axis .ttl,.g-axis .ares{font:var(--t-xs) var(--f-body);color:var(--faint);padding-bottom:6px}
+.g-axis .ares{text-align:right}
+.g-axis .ticks{position:relative;height:26px}
+.g-axis .ticks span{position:absolute;bottom:6px;white-space:nowrap;font-variant-numeric:tabular-nums;transition:opacity .2s}
+.g-axis .ticks .gone{opacity:0}
+.g-axis .ticks .nowp{bottom:4px;background:var(--accent);color:var(--accent-fg);font-weight:600;padding:0 5px;border-radius:3px;line-height:16px;z-index:2}
+.g-axis .ticks .nowp.ok{background:var(--ok);color:var(--panel)} .g-axis .ticks .nowp.bad{background:var(--bad);color:#fff} .g-axis .ticks .nowp.warn{background:var(--warn);color:var(--panel)}
+.g-over,.g-cur{position:absolute;top:30px;bottom:34px;left:0;right:0;pointer-events:none}
+.g-over{z-index:0} .g-cur{z-index:2}
+.g-over i,.g-cur i{position:absolute;top:0;bottom:0}
+.g-over i{width:1px;background:var(--line-2)}
+.g-cur i.now{width:2px;margin-left:-1px;background:var(--accent);opacity:.85}
+.g-cur i.now.ok{background:var(--ok);opacity:.6} .g-cur i.now.bad{background:var(--bad)} .g-cur i.now.warn{background:var(--warn)}
+.g-cur i.gone{display:none}
+.g-body{position:relative;z-index:1}
+.g-help{margin:8px 0 0;font:var(--t-xs) var(--f-body)}
+.g-empty{padding:12px 0}
 
-/* nodes */
-.nodegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:10px}
-.ntile{grid-template-columns:minmax(0,1fr);border:1px solid var(--line);border-radius:8px;padding:10px 10px 10px 13px;position:relative;background:var(--panel);display:grid;gap:7px;overflow:hidden;min-width:0}
-.ntile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--brand-sky)}
-.ntile.role-controller::before,.ntile.role-controller-backup::before{background:var(--brand)}
-.ntile.role-db::before,.ntile.role-api::before,.ntile.role-submitter::before{background:var(--brand-2)}
-.ntile.failed{border-color:var(--bad);background:var(--bad-soft)}
-.ntile.canceled{border-color:var(--warn)}
-.ntile .nt{display:flex;align-items:center;gap:6px;min-width:0}
-.ntile .nt b{font:600 var(--t-md) var(--f-mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.ntile .nt small{font:var(--t-xs) var(--f-mono);color:var(--faint);flex:none}
-.pipe{display:flex;gap:3px}
-.pipe i{flex:1;height:5px;border-radius:2px;background:var(--line-2)}
-.pipe i.ok,.pipe i.ended{background:var(--ok)} .pipe i.running{background:var(--run);animation:pulse 1s infinite} .pipe i.failed{background:var(--bad)} .pipe i.canceled{background:var(--warn)}
-.pipelbl{display:flex;gap:3px;font:var(--t-xs) var(--f-mono);color:var(--faint)}
-.pipelbl span{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ntile .msg{font:var(--t-sm) var(--f-mono);color:var(--muted);display:flex;gap:8px;align-items:center;min-height:16px}
-.ntile .msg span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ring{width:28px;height:28px;flex:none}
-.ring .rtrack{stroke:var(--line-2)}
-.ring .rarc{stroke:var(--run);transition:stroke-dasharray .3s linear} .ring .rarc.warn{stroke:var(--warn)} .ring .rarc.bad{stroke:var(--bad)}
+.srow{height:44px;border-top:1px solid var(--line-2)}
+.srow.has{cursor:pointer}
+.srow .trk{cursor:zoom-in}
+.srow:hover{background:var(--hover)}
+.srow .lbl{display:grid;grid-template-rows:22px 14px;align-content:center;min-width:0;padding-left:2px}
+.l1,.l1b{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap}
+.lbl .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.srow .lbl .nm{font-weight:600;font-size:var(--t-md)}
+.lbl .cnt{color:var(--faint);font-variant-numeric:tabular-nums}
+.disc{width:16px;height:16px;flex:none;border:0;background:none;padding:0;color:var(--faint);cursor:pointer;display:grid;place-items:center;border-radius:3px}
+.disc svg{width:10px;height:10px;transition:transform .2s ease}
+.disc[aria-expanded="true"] svg{transform:rotate(90deg)}
+.disc.none{visibility:hidden}
+.strip{display:flex;gap:2px;align-items:center;height:14px;padding-left:22px;min-width:0}
+.strip i{width:7px;height:6px;border-radius:1.5px;flex:none;background:var(--line);box-shadow:inset 0 0 0 1px var(--line)}
+.strip i.q{background:transparent;box-shadow:inset 0 0 0 1px var(--deco)}
+.strip i.w{background:repeating-linear-gradient(135deg,var(--hatch) 0 1.5px,transparent 1.5px 3.5px);box-shadow:inset 0 0 0 1px var(--hatch)}
+.strip i.run{background:var(--run);box-shadow:none;animation:pulse 1.2s infinite}
+.strip i.ok{background:var(--ok);box-shadow:none} .strip i.bad{background:var(--bad);box-shadow:none} .strip i.cx{background:var(--warn);box-shadow:none}
+.strip .more{font-size:var(--t-xs);color:var(--faint);margin-left:4px}
+.strip .cap{font:var(--t-xs) var(--f-body);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes pulse{50%{opacity:.4}}
 
-/* transfers */
-.pullrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:8px 0;border-top:1px solid var(--line-2);font:var(--t-sm) var(--f-mono)}
-.pullrow:first-child{border-top:0;padding-top:0}
-.pullrow .pn{display:flex;gap:7px;min-width:0;overflow-wrap:anywhere}
-.pullrow .amt{text-align:right;white-space:nowrap}
-.pullrow .meter,.pullrow .ln{grid-column:1/-1}
-.pullrow .ln{color:var(--muted);font-size:var(--t-sm)}
-.meter{height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;display:flex}
-.meter i{display:block;height:100%;background:var(--run);transition:width .3s linear}
-.meter i.ok,.meter i.ended{background:var(--ok)} .meter i.failed{background:var(--bad)} .meter i.canceled{background:var(--warn)}
+.trk{position:relative;min-width:0;overflow:hidden}
+.trk>*{position:absolute}
+.srow .bar,.srow .wt{top:8px;height:12px;border-radius:3px}
+.trow .bar,.trow .wt,.trow .up,.trow .phs{top:9px;height:8px;border-radius:2px}
+.bar{background:var(--bar-body);overflow:hidden}
+.bar.ok,.bar.ended{background:var(--ok)} .bar.failed{background:var(--bad)} .bar.canceled{background:var(--warn)}
+.bar.queued,.bar.skipped{background:transparent;box-shadow:inset 0 0 0 1px var(--deco)}
+.bar .f{position:absolute;left:0;top:0;bottom:0;background:var(--run);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.22) 0 5px,transparent 5px 10px);background-size:14px 14px;animation:stripes .9s linear infinite}
+.bar.indet{background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--run) 45%,transparent) 0 5px,transparent 5px 10px);background-size:14px 14px;animation:stripes .9s linear infinite}
+@keyframes stripes{to{background-position:14px 0}}
+.wt{background:repeating-linear-gradient(135deg,var(--hatch) 0 2px,var(--panel) 2px 5px);box-shadow:inset 0 0 0 1px var(--hatch)}
+.up{background:radial-gradient(circle,var(--run) 1px,transparent 1.4px) 0 0/4px 4px,var(--bar-body);animation:upk 1.2s linear infinite}
+.up.done{background:radial-gradient(circle,var(--ok) 1px,transparent 1.4px) 0 0/4px 4px,color-mix(in srgb,var(--ok) 30%,var(--panel));animation:none}
+@keyframes upk{to{background-position:8px 0,0 0}}
+.phs{border-radius:1px;opacity:.55;background:var(--deco)}
+.phs.running{background:var(--run)} .phs.ok,.phs.ended{background:var(--ok)} .phs.failed{background:var(--bad)} .phs.canceled{background:var(--warn)} .phs.lead{background:var(--deco);opacity:.45}
+.phs.c1{opacity:.7} .phs.c2{opacity:.85} .phs.c3{opacity:1}
+.phs.pw{background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.35) 0 2px,transparent 2px 5px)}
+.phs.live{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.25) 0 4px,transparent 4px 8px);background-size:11px 11px;animation:stripes .9s linear infinite}
+.lane{top:24px;height:16px;overflow:visible}
+.lane path.a{fill:var(--lane)} .lane path.l{fill:none;stroke:var(--run);stroke-width:1.25;vector-effect:non-scaling-stroke}
+.lane.done path.a{fill:var(--lane-done)} .lane.done path.l{stroke:var(--deco)}
+
+.g-row .res{display:grid;align-content:center;justify-items:end;min-width:0;text-align:right;font-variant-numeric:tabular-nums}
+.res b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.res small{font-size:var(--t-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.srow .res{grid-template-rows:20px 16px}
+.res .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.res .bad{color:var(--bad)}
+/* the columns of a pull: state, amount, rate, time */
+.trow.pull .res{grid-template-columns:11ch minmax(0,1fr) 10ch 6ch;column-gap:8px;justify-items:end}
+.trow.pull .res span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow.pull .res .st{justify-self:start;color:var(--muted)}
+.trow.pull .res .st.ok{color:var(--ok)} .trow.pull .res .st.failed{color:var(--bad)}
+.trow.pull .res .rt,.trow.pull .res .tm{color:var(--muted)}
+
+.trow{height:26px;overflow:hidden;background:color-mix(in srgb,var(--fg) 2.5%,transparent);border-top:1px solid color-mix(in srgb,var(--line-2) 60%,transparent)}
+.trow .lbl{display:flex;align-items:center;gap:6px;padding-left:24px;min-width:0;white-space:nowrap;color:var(--muted)}
+.trow .lbl small{font-size:var(--t-xs);color:var(--faint);flex:none}
+.trow .res{font-size:var(--t-sm)}
+.trow.last{border-bottom:1px solid var(--line-2)}
+.srow.failed{background:color-mix(in srgb,var(--bad) 5%,transparent)}
+.trow.failed{background:color-mix(in srgb,var(--bad) 9%,transparent)}
+.trow.failed .nm{color:var(--bad)}
+.srow.queued .nm,.srow.skipped .nm{color:var(--faint);font-weight:500}
+
+/* the marks of a row's state; a row that opens has a chevron of its own */
+.mk{width:12px;height:12px;flex:none;display:inline-grid;place-items:center;font:700 11px/1 var(--f-body)}
+.mk.ok{color:var(--ok)} .mk.ok::before{content:"✓"}
+.mk.ended{color:var(--ok)} .mk.ended::before{content:"✓"}
+.mk.failed{color:var(--bad)} .mk.failed::before{content:"✕"}
+.mk.canceled{color:var(--warn)} .mk.canceled::before{content:"–"}
+.mk.running::before{content:"";width:8px;height:8px;border-radius:50%;border:1.5px solid var(--run-soft);border-top-color:var(--run);border-right-color:var(--run);animation:spin .9s linear infinite}
+.mk.queued::before{content:"";width:7px;height:7px;border-radius:50%;box-shadow:inset 0 0 0 1.25px var(--deco)}
+.mk.waiting::before{content:"";width:7px;height:7px;border-radius:50%;box-shadow:inset 0 0 0 1.25px var(--run);background:repeating-linear-gradient(135deg,var(--hatch) 0 1px,transparent 1px 3px)}
+@media (prefers-reduced-motion:reduce){.bar .f,.bar.indet,.phs.live,.up,.strip i.run,.mk.running::before{animation:none}}
 details.raw summary{cursor:pointer;color:var(--muted);font-size:var(--t-md);padding:12px 14px}
 details.raw[open] summary{border-bottom:1px solid var(--line-2)}
 
@@ -179,11 +237,27 @@ table.runs td:nth-child(2){min-width:200px}
   /* a card keeps its line, its clock and Stop; the dock shows one card */
   .task{padding:8px 10px;gap:6px}
   .task .segbar{height:6px}
-  .gantt .axis,.grow-row,.gantt .gridlines{grid-template-columns:110px minmax(0,1fr) 64px;gap:8px}
-  /* the axis keeps its first, middle and last label, which do not overlap */
-  .gantt .axis .ticks span.minor{display:none}
-  .grow-row .res{font-size:var(--t-xs)}
-  .grow-row .lbl{white-space:normal}
+  /* the summary in three lines; a row's result goes under its track */
+  .rsum{grid-template-columns:auto minmax(0,1fr);grid-template-rows:22px 18px auto;column-gap:12px}
+  .rsum .clock{font-size:24px;grid-row:1/3}
+  .rsum .counts{grid-column:1/3;grid-row:3;justify-content:flex-start;flex-wrap:wrap}
+  .rsum .noteln{grid-column:2;grid-row:2}
+  .rsum .eta{display:none}
+  .legend,.g-axis .ares,.g-help{display:none}
+  .gantt{--lw:124px;--gap:8px;padding:2px 10px 8px}
+  .g-row{grid-template-columns:var(--lw) minmax(0,1fr)}
+  .srow{height:auto;min-height:40px;grid-template-rows:40px auto}
+  .g-row .res{grid-column:1/-1;grid-row:2;display:block;justify-items:start;text-align:left;padding:0 0 5px 18px;font-size:var(--t-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .res b,.res small,.res span{display:inline}
+  .srow .res small:not(:empty)::before{content:" · "}
+  .trow{height:auto;grid-template-rows:26px auto}
+  .trow.pull .res{display:block}
+  .trow.pull .res span:not(:first-child):not(:empty)::before{content:" · "}
+  .trow .lbl{padding-left:8px}
+  .trow .res{padding-left:26px}
+  .strip,.srow .lbl{padding-left:0}
+  .disc{display:none}
+  .srow .lbl .nm{font-size:var(--t-sm)}
   .hide-s{display:none}
 }
 

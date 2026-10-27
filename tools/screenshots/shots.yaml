@@ -123,7 +123,7 @@ shots:
     page: run
 
   - name: run-going
-    alt: "A run that goes on: the steps so far, the nodes that wait for their services and how much of the wait limit they used"
+    alt: "A run that goes on: the steps on a timeline, the image pull with its rate, and the nodes that wait for their services with how much of the wait limit they used"
     path: /runs/d3e0000000000063
     hide: "#tasks"
     page: run

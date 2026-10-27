@@ -203,6 +203,11 @@ func runPill(run store.Run, task *store.Task) (label, class string) {
 	return "ended", ""
 }
 
+// runPillClass maps the class of a span to the class of a pill.
+func runPillClass(class string) string {
+	return map[string]string{runOK: "ok", runFailed: "bad", runCanceled: "warn", runRunning: "run"}[class]
+}
+
 // runTaskOf returns the newest task that started a command of the trace.
 func runTaskOf(snap store.Snapshot, trace string) (store.Task, bool) {
 	if trace == "" {
