@@ -67,6 +67,16 @@ func runPct(num, den float64) int {
 	return int(min(num/den*100+.5, 100))
 }
 
+// runFine returns num/den in hundredths of a percent, from 0 to 10000, for
+// the width that run.js gives a bar (data-fill), finer than the whole
+// percent of its class; 0 for a den that is not positive.
+func runFine(num, den float64) int {
+	if den <= 0 || num <= 0 {
+		return 0
+	}
+	return int(min(num/den*10000+.5, 10000))
+}
+
 // runOrigin is the time that a run's clock starts at: the start of its
 // command span, or of the first span that began when the log gave no start
 // for the command. It is the zero time for a run without any.
@@ -329,8 +339,9 @@ func runTitle(run store.Run, t *store.Task) string {
 type runSeg struct {
 	Class string
 	Title string
-	// Fill is the part of a running segment that is done, in percent.
-	Fill int
+	// Fill is the part of a running segment that is done, in percent, and
+	// FillFine in hundredths of a percent (runFine).
+	Fill, FillFine int
 }
 
 // runBar is the bar of a run's steps, a segment for each step.
@@ -445,9 +456,10 @@ func runSegs(run store.Run) runBar {
 		if seg.Class == runRunning {
 			switch {
 			case total > 0:
-				seg.Fill = runPct(float64(done)+runPartial(s), float64(total))
+				part := float64(done) + runPartial(s)
+				seg.Fill, seg.FillFine = runPct(part, float64(total)), runFine(part, float64(total))
 			case s.Size > 0:
-				seg.Fill = runPct(float64(s.Amount), float64(s.Size))
+				seg.Fill, seg.FillFine = runPct(float64(s.Amount), float64(s.Size)), runFine(float64(s.Amount), float64(s.Size))
 			}
 		}
 		segs = append(segs, seg)
@@ -655,16 +667,17 @@ func runBytes(n int64) string {
 	return fmt.Sprintf("%.0f %s", f, units[i])
 }
 
-// runSpanPct is the part of its work that a span has done, in percent, and
-// whether the span knows its size. A span that ended ok has done all.
-func runSpanPct(s store.Span) (int, bool) {
+// runSpanPct is the part of its work that a span has done, in percent and
+// in hundredths of a percent (runFine), and whether the span knows its
+// size. A span that ended ok has done all.
+func runSpanPct(s store.Span) (pct, fine int, ok bool) {
 	if s.Size <= 0 {
-		return 0, false
+		return 0, 0, false
 	}
 	if s.Done() && s.Status == store.StatusOK {
-		return 100, true
+		return 100, 10000, true
 	}
-	return runPct(float64(s.Amount), float64(s.Size)), true
+	return runPct(float64(s.Amount), float64(s.Size)), runFine(float64(s.Amount), float64(s.Size)), true
 }
 
 // runVisit calls fn with each visible span below s, depth first, in start

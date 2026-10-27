@@ -33,10 +33,10 @@ func TestUICommand(t *testing.T) {
 	got := fakeUI(t, nil)
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 
-	_, stderr, err := executeCommand("ui", "--port", "8080", "--no-open")
+	_, stderr, err := executeCommand("ui", "--port", "8080", "--open")
 	require.NoError(t, err)
 	assert.Equal(t, 8080, got.Port)
-	assert.True(t, got.NoOpen)
+	assert.False(t, got.NoOpen)
 	assert.Equal(t, "/run/user/1000", got.RuntimeDir)
 	assert.Equal(t, "sind ui: http://127.0.0.1:1/\n", stderr, "the URL goes to standard error")
 }
@@ -48,7 +48,7 @@ func TestUICommand_Defaults(t *testing.T) {
 	_, _, err := executeCommand("ui")
 	require.NoError(t, err)
 	assert.Zero(t, got.Port, "a free port")
-	assert.False(t, got.NoOpen)
+	assert.True(t, got.NoOpen, "no browser without --open")
 	assert.Empty(t, got.RuntimeDir)
 	assert.Equal(t, 30*time.Second, got.MonitoringInterval)
 }
@@ -73,6 +73,7 @@ func TestUICommand_Demo(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got.Demo)
 	assert.True(t, got.Still)
+	assert.True(t, got.NoOpen, "--no-open, the old default, is still accepted")
 
 	got = fakeUI(t, nil)
 	_, _, err = executeCommand("ui")
@@ -98,7 +99,8 @@ func TestUICommand_Arguments(t *testing.T) {
 func TestUICommand_Help(t *testing.T) {
 	stdout, _, err := executeCommand("ui", "--help")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "--no-open")
+	assert.Contains(t, stdout, "--open")
+	assert.NotContains(t, stdout, "--no-open", "the old flag stays out of the help")
 	assert.Contains(t, stdout, "--port")
 	assert.Contains(t, stdout, "--demo")
 	assert.NotContains(t, stdout, "--still", "--still is for screenshots and stays out of the help")

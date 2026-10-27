@@ -189,10 +189,13 @@ func TestOSExecutor_Terminal(t *testing.T) {
 		defer mu.Unlock()
 		parsed = append(parsed, st.String()+" "+line)
 	})
+	opened := false
+	ctx = cmdexec.WithTerminalOpened(ctx, func() { opened = true })
 	var e cmdexec.OSExecutor
 	script := `[ -t 1 ] && [ ! -t 2 ] && stty size <&1; printf 'a: one\r\033[1Aa: two\r\033[1B\n'; echo err >&2`
 	stdout, stderr, err := e.Run(ctx, "sh", "-c", script)
 	require.NoError(t, err)
+	assert.True(t, opened)
 	assert.Equal(t, "24 "+strconv.Itoa(cmdexec.TerminalWidth)+"\na: one\na: two\n", stdout)
 	assert.Equal(t, "err\n", stderr)
 	mu.Lock()

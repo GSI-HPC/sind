@@ -44,6 +44,36 @@ func TestVisibleChildren(t *testing.T) {
 	assert.Empty(t, VisibleChildren(store.Span{}))
 }
 
+// A hidden span shows once it has run for a second or failed, as in a
+// terminal, and so do those below it; a call does not, and the span given is
+// not changed.
+func TestReveal(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) *time.Time { e := t0.Add(d); return &e }
+	mesh := store.Span{Name: "mesh", Kind: KindStep, Hidden: true, Started: t0, Children: []store.Span{
+		{Name: "dns", Kind: KindTarget, Hidden: true, Started: t0},
+		{Name: "volume", Kind: KindTarget, Hidden: true, Started: t0, Ended: at(10 * time.Millisecond), Status: store.StatusOK},
+		{Name: "docker create", Kind: KindCall, Hidden: true, Started: t0},
+	}}
+	root := store.Span{Children: []store.Span{
+		mesh,
+		{Name: "quick", Kind: KindStep, Hidden: true, Started: t0, Ended: at(time.Millisecond), Status: store.StatusOK},
+		{Name: "broken", Kind: KindStep, Hidden: true, Started: t0, Ended: at(time.Millisecond), Status: store.StatusFailed},
+		{Name: "pull images", Kind: KindStep, Started: t0},
+	}}
+
+	early := Reveal(root, t0.Add(500*time.Millisecond))
+	assert.Equal(t, []string{"broken", "pull images"}, names(VisibleChildren(early)))
+
+	later := Reveal(root, t0.Add(RevealAfter))
+	assert.Equal(t, []string{"mesh", "broken", "pull images"}, names(VisibleChildren(later)))
+	assert.Equal(t, []string{"dns"}, names(VisibleChildren(later.Children[0])))
+	assert.True(t, root.Children[0].Hidden, "the span given is not changed")
+	assert.True(t, root.Children[0].Children[0].Hidden)
+
+	assert.Equal(t, store.Span{Name: "leaf"}, Reveal(store.Span{Name: "leaf"}, t0))
+}
+
 func TestFailedTargetsGroupByErrorText(t *testing.T) {
 	failed := func(name, node, class, err string) store.Span {
 		return store.Span{Name: name, Node: node, Kind: KindTarget, State: StateEnded, Status: store.StatusFailed, Class: class, Err: err}

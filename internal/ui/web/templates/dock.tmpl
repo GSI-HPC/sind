@@ -20,7 +20,7 @@ and its buttons; the run page has the rest. The cards are built in dock.go. */}}
 
 {{/* run-segbar draws the bar of a run's steps, .Segs, as a progressbar
 named after .Title. */}}
-{{define "run-segbar"}}<div class="segbar" role="progressbar" aria-label="Progress of {{.Title}}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{.Segs.Pct}}" aria-valuetext="{{.Segs.Pct}} %, {{.Segs.Text}}">{{range .Segs}}<i class="{{.Class}}" title="{{.Title}}">{{if .Fill}}<b class="w{{.Fill}}"></b>{{end}}</i>{{end}}</div>{{end}}
+{{define "run-segbar"}}<div class="segbar" role="progressbar" aria-label="Progress of {{.Title}}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{.Segs.Pct}}" aria-valuetext="{{.Segs.Pct}} %, {{.Segs.Text}}">{{range .Segs}}<i class="{{.Class}}" title="{{.Title}}">{{if .Fill}}<b class="w{{.Fill}}" data-fill="{{.FillFine}}"></b>{{end}}</i>{{end}}</div>{{end}}
 
 {{/* run-say marks what run.js announces in #say: the sentence data-say,
 once, when the state of the command data-say-key changes. A command that

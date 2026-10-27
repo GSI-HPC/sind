@@ -324,8 +324,8 @@ def record_ui(out, env):
     """Start sind ui as a user would, and record the tour of record_ui.mjs."""
     s = Session("ui", env)
     s.start()
-    s.emit("i", "sind ui --no-open")
-    os.write(s.fd, b"sind ui --no-open\n")
+    s.emit("i", "sind ui")
+    os.write(s.fd, b"sind ui\n")
     seen = s.expect(r"Press Ctrl-C to stop\.", 30)
     url = re.search(r"http://127\.0\.0\.1:\d+/\?token=\S+", plain(seen)).group(0)
     s.pause(1)

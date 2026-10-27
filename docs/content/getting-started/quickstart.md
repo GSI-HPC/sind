@@ -27,7 +27,7 @@ sind create cluster
 {{< /cli >}}
 {{< ui >}}
 
-1. Start the web UI. It opens in your browser:
+1. Start the web UI, and open the URL that it prints in your browser:
 
    ```bash
    sind ui

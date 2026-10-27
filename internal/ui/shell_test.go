@@ -115,7 +115,7 @@ func TestRefusedBrowserGetsTheSignInPage(t *testing.T) {
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+ts.srv.assets.URL("app.css")+`">`)
 	assert.Contains(t, body, `<p class="callout warn">This browser is not signed in.</p>`)
 	assert.Contains(t, body, `<code>sind ui</code><button type="button" data-shell-copy="sind ui">Copy</button>`)
-	assert.Contains(t, body, "--no-open")
+	assert.Contains(t, body, "Open the address that it prints")
 	assert.NotContains(t, body, "the-token")
 	assert.NotRegexp(t, `<script[^>]*>[^<]`, body)
 	assert.NotContains(t, body, " style=")

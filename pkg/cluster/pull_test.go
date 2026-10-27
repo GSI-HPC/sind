@@ -196,13 +196,13 @@ func TestWorkerAdd_LocalImageNotPulled(t *testing.T) {
 	assert.Zero(t, countCalls(m.Calls, "pull"))
 }
 
-// The pull is the step "pull images", with a target for each image that
-// reports its layers as work in items: those done out of those docker has
-// told of, the whole image when it was there already; the output text is no
-// part of the events.
+// The pull is the step "pull images", with a target for each image that,
+// where docker writes to a pipe, reports its layers as work in items: those
+// done out of those docker has told of, the whole image when it was there
+// already; the output text is no part of the events.
 func TestPullImages_ReportsTheLayers(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+	m := &mock.Executor{NoTerminal: true, OnCall: func(args []string, _ string) mock.Result {
 		if args[1] == "img:1" {
 			return mock.Result{Stdout: "latest: Pulling from library/img\n" +
 				"a3ed95caeb02: Pulling fs layer\nb4f1e0d2c9a1: Already exists\n" +
