@@ -17,7 +17,7 @@ The UI can do what your Docker access can do, so sind protects it in these ways:
 
 ## Use it from another machine
 
-The UI does not accept connections from other hosts. To use it from a laptop, start `sind ui --no-open` on the host and forward its port over SSH:
+The UI does not accept connections from other hosts. To use it from a laptop, start `sind ui` on the host and forward its port over SSH:
 
 ```bash
 # on the laptop

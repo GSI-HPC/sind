@@ -112,16 +112,25 @@ func TestRunAmount(t *testing.T) {
 }
 
 func TestRunSpanPct(t *testing.T) {
-	_, ok := runSpanPct(store.Span{Amount: 5})
+	_, _, ok := runSpanPct(store.Span{Amount: 5})
 	assert.False(t, ok)
-	pct, ok := runSpanPct(store.Span{Amount: 5, Size: 20})
+	pct, fine, ok := runSpanPct(store.Span{Amount: 1, Size: 3})
 	assert.True(t, ok)
-	assert.Equal(t, 25, pct)
-	pct, ok = runSpanPct(runSp("target", "x", runEndedAt(0, 1, store.StatusOK), runWith(func(s *store.Span) { s.Size = 20 })))
+	assert.Equal(t, 33, pct)
+	assert.Equal(t, 3333, fine)
+	pct, fine, ok = runSpanPct(runSp("target", "x", runEndedAt(0, 1, store.StatusOK), runWith(func(s *store.Span) { s.Size = 20 })))
 	assert.True(t, ok)
 	assert.Equal(t, 100, pct)
-	pct, _ = runSpanPct(runSp("target", "x", runEndedAt(0, 1, store.StatusFailed), runWith(func(s *store.Span) { s.Size, s.Amount = 20, 5 })))
+	assert.Equal(t, 10000, fine)
+	pct, _, _ = runSpanPct(runSp("target", "x", runEndedAt(0, 1, store.StatusFailed), runWith(func(s *store.Span) { s.Size, s.Amount = 20, 5 })))
 	assert.Equal(t, 25, pct)
+}
+
+func TestRunFine(t *testing.T) {
+	assert.Equal(t, 0, runFine(1, 0))
+	assert.Equal(t, 0, runFine(0, 3))
+	assert.Equal(t, 6667, runFine(2, 3))
+	assert.Equal(t, 10000, runFine(4, 3))
 }
 
 func TestRunSpanClass(t *testing.T) {
@@ -258,8 +267,8 @@ func TestRunSegs(t *testing.T) {
 	segs = runSegs(run)
 	require.Len(t, segs, 5)
 	assert.Equal(t, runSeg{Class: runOK, Title: "pull: ok (0/1)"}, segs[0])
-	assert.Equal(t, runSeg{Class: runRunning, Title: "nodes: running (1/4)", Fill: 25}, segs[1])
-	assert.Equal(t, runSeg{Class: runRunning, Title: "mesh: running", Fill: 30}, segs[2])
+	assert.Equal(t, runSeg{Class: runRunning, Title: "nodes: running (1/4)", Fill: 25, FillFine: 2500}, segs[1])
+	assert.Equal(t, runSeg{Class: runRunning, Title: "mesh: running", Fill: 30, FillFine: 3000}, segs[2])
 	assert.Equal(t, runSeg{Class: runQueued, Title: "slurm: queued"}, segs[3])
 	assert.Equal(t, runSeg{Class: runRunning, Title: "idle: running"}, segs[4].withoutFill())
 
@@ -436,7 +445,7 @@ func TestRunBar(t *testing.T) {
 	assert.Equal(t, 0, runBar{}.Pct())
 	assert.Equal(t, "starting", runBar{{Class: runRunning, Title: "starting"}}.Text())
 	b := runBar{
-		{Class: runOK, Title: "pull: ok"}, {Class: runRunning, Title: "nodes: running", Fill: 50},
+		{Class: runOK, Title: "pull: ok"}, {Class: runRunning, Title: "nodes: running", Fill: 50, FillFine: 5000},
 		{Class: runQueued, Title: "slurm: queued"}, {Class: runSkipped, Title: "mesh: skipped"},
 	}
 	assert.Equal(t, 62, b.Pct(), "100 + 50 + 0 + 100 of 400")

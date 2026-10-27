@@ -22,7 +22,7 @@ The pages of the docs that tell you how to do a task show the steps for the CLI 
 sind ui
 ```
 
-sind prints the URL and opens it in your browser:
+sind prints the URL. Open it in your browser, or add `--open` to have sind open it:
 
 ```
 sind ui: http://127.0.0.1:41873/?token=...
@@ -36,7 +36,7 @@ Useful flags:
 | Flag | Effect |
 |------|--------|
 | `--port PORT` | Listen on this port on `127.0.0.1`. By default sind takes a free one. |
-| `--no-open` | Print the URL, but do not start a browser. |
+| `--open` | Also open the URL in your browser. |
 | `--monitoring-interval DURATION` | How often to read the monitoring stacks while a page is open, from `5s` to `1h`. The default is `30s`. |
 | `--demo` | Show made-up clusters, and play the commands instead of running them. It uses no Docker and changes nothing. |
 

@@ -1,7 +1,9 @@
 /* sind ui, progress display: the task dock, the run page and the Activity
    page. It uses the tokens and the building blocks of app.css. Widths and
    places that the server computes are classes (w0..w100, l0..l100), as the
-   Content-Security-Policy allows no inline style. A live update morphs a
+   Content-Security-Policy allows no inline style; run.js refines them from
+   their data, through the style of the element, which the policy allows to
+   a script of the origin. A live update morphs a
    fragment in and keeps its elements, so a bar or a ring that changes eases
    to its new size, and an animation goes on. */
 
@@ -98,10 +100,11 @@ details.stopc>summary::-webkit-details-marker{display:none}
 
 /* timeline */
 .gantt{position:relative;font:var(--t-sm) var(--f-mono)}
-.gantt .axis,.grow-row{display:grid;grid-template-columns:200px minmax(0,1fr) 210px;gap:10px;align-items:center}
+.gantt .axis,.grow-row,.gantt .gridlines{display:grid;grid-template-columns:200px minmax(0,1fr) 210px;gap:10px;align-items:center}
+.gantt .gridlines{align-items:stretch}
 .gantt .axis{color:var(--faint);font-size:var(--t-xs);padding:0 0 6px}
 .gantt .axis .ticks{position:relative;height:14px}
-.gantt .axis .ticks span{position:absolute;transform:translateX(-50%)}
+.gantt .axis .ticks span{position:absolute;transform:translateX(-50%);transition:left .3s linear}
 .gantt .axis .ticks span.l0{transform:none}
 .gantt .axis .ticks span.l100{transform:translateX(-100%)}
 .grow-row{padding:5px 0;border-top:1px solid var(--line-2)}
@@ -113,9 +116,15 @@ details[open]>summary.grow-row .lbl::before{content:"▾"}
 .gantt>.grow-row .lbl{padding-left:17px}
 .gantt>details>.grow-row .lbl,.gantt>details>details>summary .lbl{padding-left:20px;color:var(--muted)}
 .gantt>details>details>.grow-row .lbl,.gantt>details>details>details>summary .lbl{padding-left:40px;color:var(--muted)}
-.grow-row .trk{position:relative;height:16px;background:repeating-linear-gradient(90deg,var(--line-2) 0 1px,transparent 1px 10%)}
+.grow-row .trk{position:relative;height:16px}
+/* a line down from each label of the axis, over the column of the bars, so
+   that the lines move with the labels as the scale grows */
+.gantt .gridlines{position:absolute;inset:34px 14px 14px;pointer-events:none}
+.gantt .gridlines>span{position:relative}
+.gantt .gridlines i{position:absolute;top:0;bottom:0;width:1px;background:var(--line-2);transition:left .3s linear}
 .grow-row .bar{position:absolute;top:2px;bottom:2px;border-radius:3px;background:var(--queued);min-width:3px;transition:left .3s linear,width .3s linear}
-.gantt details .grow-row .bar{top:4px;bottom:4px}
+/* a step's bar is thick, the bars of its targets below it thin */
+.gantt details>div.grow-row .bar,.gantt details details>summary .bar{top:4px;bottom:4px}
 .bar.ok,.bar.ended{background:var(--ok)} .bar.failed{background:var(--bad)} .bar.canceled{background:var(--warn)} .bar.queued,.bar.skipped{background:var(--queued)}
 .bar.running{background:var(--run);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.25) 0 6px,transparent 6px 12px);background-size:17px 17px;animation:stripes .8s linear infinite}
 @keyframes stripes{to{background-position:17px 0}}
@@ -170,7 +179,7 @@ table.runs td:nth-child(2){min-width:200px}
   /* a card keeps its line, its clock and Stop; the dock shows one card */
   .task{padding:8px 10px;gap:6px}
   .task .segbar{height:6px}
-  .gantt .axis,.grow-row{grid-template-columns:110px minmax(0,1fr) 64px;gap:8px}
+  .gantt .axis,.grow-row,.gantt .gridlines{grid-template-columns:110px minmax(0,1fr) 64px;gap:8px}
   /* the axis keeps its first, middle and last label, which do not overlap */
   .gantt .axis .ticks span.minor{display:none}
   .grow-row .res{font-size:var(--t-xs)}

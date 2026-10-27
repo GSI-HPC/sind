@@ -55,6 +55,11 @@ type Executor struct {
 	// If nil, Start returns an error.
 	OnStart func(args []string) StreamResult
 
+	// NoTerminal makes the mock open no terminal for a command run
+	// cmdexec.WithTerminal, as OSExecutor where it cannot: the command
+	// writes to a pipe.
+	NoTerminal bool
+
 	mu      sync.Mutex
 	Calls   []Call
 	results []Result
@@ -72,18 +77,24 @@ func (m *Executor) AddResult(stdout, stderr string, err error) {
 
 func (m *Executor) record(ctx context.Context, name string, args []string, stdin string) (string, string, error) {
 	stdout, stderr, err := m.dispatch(name, args, stdin)
-	stdout = onTerminal(ctx, stdout)
+	if !m.NoTerminal {
+		stdout = onTerminal(ctx, stdout)
+	}
 	parseLines(ctx, stdout, stderr)
 	return stdout, stderr, err
 }
 
 // onTerminal returns stdout as OSExecutor returns what a command wrote to
 // the terminal of cmdexec.WithTerminal: in plain lines, the one that did
-// not end included. Without a terminal, or when stdout is data, it is
-// stdout itself.
+// not end included, after it called the function of
+// cmdexec.WithTerminalOpened. Without a terminal, or when stdout is data, it
+// is stdout itself.
 func onTerminal(ctx context.Context, stdout string) string {
 	if !cmdexec.Terminal(ctx) || cmdexec.StdoutIsData(ctx) {
 		return stdout
+	}
+	if opened := cmdexec.TerminalOpened(ctx); opened != nil {
+		opened()
 	}
 	var b strings.Builder
 	tl := cmdexec.NewTerminalLines(&b)

@@ -41,7 +41,7 @@
     { "id": "realm", "text": "A realm keeps its clusters apart, for parallel work and CI." },
     { "id": "connect", "text": "Connect other containers, like kind nodes, to the realm's networks." },
 
-    { "id": "ui", "text": "sind ui opens in your browser, and only you can open it." },
+    { "id": "ui", "text": "sind ui prints an address, and only you can open it." },
     { "id": "overview", "text": "The overview shows all realms, clusters and nodes, live." },
     { "id": "dialog", "text": "A new cluster is a form, a plan, and the exact command." },
     { "id": "name", "text": "First, a name. Let's call it lab." },

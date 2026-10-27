@@ -16,6 +16,13 @@ func TestTerminal(t *testing.T) {
 	assert.True(t, Terminal(WithTerminal(t.Context())))
 }
 
+func TestTerminalOpened(t *testing.T) {
+	assert.Nil(t, TerminalOpened(t.Context()))
+	called := false
+	TerminalOpened(WithTerminalOpened(t.Context(), func() { called = true }))()
+	assert.True(t, called)
+}
+
 func TestTerminalLines(t *testing.T) {
 	tests := []struct {
 		name string

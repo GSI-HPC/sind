@@ -18,8 +18,11 @@ const maxTimelineDepth = 3
 // runTick is a label on the time axis of the timeline.
 type runTick struct {
 	Label string
-	// Pos is the place on the axis, in percent.
+	// Pos is the place on the axis, in percent, and At its time since the
+	// start of the run, in milliseconds, from which run.js places it while
+	// the run goes on.
 	Pos int
+	At  int64
 	// Minor marks a label that a narrow screen leaves out: all but the
 	// first and the last, and the middle one of an odd number.
 	Minor bool
@@ -38,8 +41,13 @@ type runRow struct {
 	// Total is the number of targets a step expects; 0 shows none.
 	Total int
 	// Bar is set for a span that has begun; Left and Width are percent.
+	// From and To are its start and end since the start of the run, in
+	// milliseconds, from which run.js places it while the run goes on;
+	// Ended is false for a span that goes on, whose bar ends at the clock.
 	Bar         bool
 	Left, Width int
+	From, To    int64
+	Ended       bool
 	Result      string
 	// Open draws the details of a row with children open: those of a
 	// span that runs, so that its targets show while they go on.
@@ -49,6 +57,12 @@ type runRow struct {
 
 // runTimeline is the Gantt chart of the run's steps.
 type runTimeline struct {
+	// Since is the start of a run whose clock goes on, in milliseconds
+	// since 1970, 0 for one that stands still (runSince): run.js then
+	// places the labels, the gridlines and the bars from their times as
+	// the scale grows, so that they move together and smoothly between
+	// two updates from the server.
+	Since int64
 	Ticks []runTick
 	Rows  []runRow
 }
@@ -74,7 +88,7 @@ func runTimelineOf(rc runCtx) *runTimeline {
 	if origin.IsZero() {
 		scale = 8 * time.Second
 	}
-	tl := &runTimeline{}
+	tl := &runTimeline{Since: runSince(run)}
 	step := runTickSteps[len(runTickSteps)-1]
 	for _, s := range runTickSteps {
 		if int(scale/s) <= runMaxTicks {
@@ -83,7 +97,7 @@ func runTimelineOf(rc runCtx) *runTimeline {
 		}
 	}
 	for t := time.Duration(0); t <= scale && len(tl.Ticks) <= runMaxTicks; t += step {
-		tl.Ticks = append(tl.Ticks, runTick{Label: strings.Replace(runDur(t), ".0s", "s", 1), Pos: runPct(float64(t), float64(scale))})
+		tl.Ticks = append(tl.Ticks, runTick{Label: strings.Replace(runDur(t), ".0s", "s", 1), Pos: runPct(float64(t), float64(scale)), At: t.Milliseconds()})
 	}
 	n := len(tl.Ticks)
 	for i := range tl.Ticks {
@@ -113,6 +127,7 @@ func runRowOf(s store.Span, run store.Run, origin, end time.Time, scale time.Dur
 		row.Bar = true
 		row.Left = runPct(float64(from), float64(scale))
 		row.Width = min(runPct(float64(max(to.Sub(s.Started), 0)), float64(scale)), 100-row.Left)
+		row.From, row.To, row.Ended = from.Milliseconds(), max(to.Sub(origin), from).Milliseconds(), s.Ended != nil
 	}
 	row.Result = runRowResult(s, class, now)
 	if depth < maxTimelineDepth {

@@ -84,6 +84,8 @@ type runCtx struct {
 func newRunCtx(v *View) runCtx {
 	rc := runCtx{Snap: v.Snap, Now: v.Now, CSRF: v.CSRF}
 	rc.Run, rc.Found = v.Snap.Run(v.Params.Get("id"))
+	// A hidden step that takes long shows, as it does in a terminal.
+	rc.Run.Root = activity.Reveal(rc.Run.Root, v.Now)
 	if t, ok := runTaskOf(v.Snap, rc.Run.Trace); rc.Found && ok {
 		// The page names the run as the dock and Activity do, with the
 		// flags that tell it from other runs of the command.

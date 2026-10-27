@@ -19,7 +19,7 @@ Another program listens on that port. Run `sind ui --port 8081`, or leave `--por
 sind ui is already running: http://127.0.0.1:41873/?token=...
 ```
 
-sind ui recorded the running UI in `$XDG_RUNTIME_DIR/sind/ui.json`. The second command opens that UI in your browser and exits. If the browser does not open, copy the URL into it. Normally only one UI runs for your user at a time.
+sind ui recorded the running UI in `$XDG_RUNTIME_DIR/sind/ui.json`. The second command prints the URL of that UI, opens it in your browser with `--open`, and exits. Normally only one UI runs for your user at a time.
 
 To start a new one, press Ctrl-C in the terminal of the running UI. If the UI is gone but the record is left over, the next `sind ui` starts a new one.
 
@@ -31,7 +31,7 @@ The Overview shows **Docker is not reachable**. The pages show the data that sin
 
 ## The page says the link is old or wrong
 
-The page **Open sind ui from its address** says that this browser is not signed in, or that the link holds an old or wrong token. The token is new with each run. Use the URL that the running `sind ui` printed, or the one that the second command printed: run `sind ui` again in a terminal, and it prints the URL of the running UI and opens it. A bookmark of an older run does not work. A tab of an older run that is still open is refused too, as its session is gone. Open the new URL.
+The page **Open sind ui from its address** says that this browser is not signed in, or that the link holds an old or wrong token. The token is new with each run. Use the URL that the running `sind ui` printed, or the one that the second command printed: run `sind ui` again in a terminal, and it prints the URL of the running UI. A bookmark of an older run does not work. A tab of an older run that is still open is refused too, as its session is gone. Open the new URL.
 
 ## Connection lost
 
@@ -53,7 +53,7 @@ The browser sent another host name, so the UI refused the request. Open the URL 
 
 ## The browser does not open
 
-sind ui does not open a browser in an SSH session, or on Linux without a display (`DISPLAY` or `WAYLAND_DISPLAY`). It prints the URL instead: copy it into a browser on this machine, or forward the port as described in [Use it from another machine]({{< relref "/web-ui/security#use-it-from-another-machine" >}}). With `--no-open` it never opens one.
+sind ui opens a browser only with `--open`, and even then not in an SSH session, or on Linux without a display (`DISPLAY` or `WAYLAND_DISPLAY`). It always prints the URL: copy it into a browser on this machine, or forward the port as described in [Use it from another machine]({{< relref "/web-ui/security#use-it-from-another-machine" >}}).
 
 ## A run says "no end recorded"
 

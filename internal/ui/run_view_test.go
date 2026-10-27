@@ -25,6 +25,8 @@ func TestRunTimeline(t *testing.T) {
 	}
 	assert.Equal(t, []string{"0s", "10s", "30s"}[:1], labels[:1])
 	assert.Equal(t, 0, tl.Ticks[0].Pos)
+	assert.EqualValues(t, 10_000, tl.Ticks[1].At)
+	assert.Zero(t, tl.Since, "a run that ended stands still")
 
 	pull := tl.Rows[0]
 	assert.True(t, pull.Bar)
@@ -38,6 +40,8 @@ func TestRunTimeline(t *testing.T) {
 
 	nodes := tl.Rows[1]
 	assert.Equal(t, 13, nodes.Left, "the step starts 6.73 s into 53.6 s")
+	assert.True(t, nodes.Ended)
+	assert.Greater(t, nodes.To, nodes.From)
 	require.Len(t, nodes.Children, 3)
 	assert.Equal(t, []string{"controller", "worker-0", "worker-1"}, []string{nodes.Children[0].Name, nodes.Children[1].Name, nodes.Children[2].Name})
 	assert.Equal(t, "32s · 3 ok", nodes.Result)
@@ -58,6 +62,8 @@ func TestRunTimelineMidRun(t *testing.T) {
 	assert.Equal(t, runRunning, nodes.Class)
 	assert.Equal(t, "0/3 · 18s", nodes.Result)
 	assert.Equal(t, 100, nodes.Left+nodes.Width, "a bar that runs reaches the end of the scale")
+	assert.False(t, nodes.Ended, "run.js ends the bar of a step that runs at the clock")
+	assert.Positive(t, tl.Since, "the clock of a run that goes on")
 	assert.Equal(t, "ready munge", nodes.Children[0].Result)
 	assert.Equal(t, "ready sshd", nodes.Children[1].Result)
 	// The scale grows with the clock.
@@ -305,6 +311,19 @@ func TestRunMoreTransfers(t *testing.T) {
 	assert.False(t, m.Transfers[0].Bar)
 	assert.Equal(t, "2.0 kB", m.Transfers[0].Amount)
 	assert.Equal(t, "fetching", m.Transfers[0].Msg)
+
+	// A target that works in a unit is a transfer before it knows its
+	// size, and no node: it waits, or ended with nothing to tell.
+	pulls := runOf(0, "", runSp("step", "pull images", runStartedAt(0), runKids(
+		runSp("target", "img:1", runStartedAt(0), runWith(func(s *store.Span) { s.Unit = "bytes" })),
+		runSp("target", "img:2", runEndedAt(0, 1, store.StatusOK), runWith(func(s *store.Span) { s.Unit = "bytes" })),
+	)))
+	m = runMoreOf(runCtxOf(pulls, runAt(2)))
+	require.Len(t, m.Transfers, 2)
+	assert.Equal(t, "waiting", m.Transfers[0].Amount)
+	assert.False(t, m.Transfers[0].Bar)
+	assert.Empty(t, m.Transfers[1].Amount)
+	assert.Nil(t, runNodesOf(runCtxOf(pulls, runAt(2))))
 }
 
 func TestRunMoreSteps(t *testing.T) {

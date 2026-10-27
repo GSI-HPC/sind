@@ -308,3 +308,29 @@ func TestExecutor_ParsesLines(t *testing.T) {
 	_, _, err := (&Executor{OnCall: func([]string, string) Result { return result }}).Run(t.Context(), "docker", "ps")
 	require.NoError(t, err)
 }
+
+// The mock calls the function of cmdexec.WithTerminalOpened as OSExecutor
+// does once it opened the terminal: for each command run WithTerminal whose
+// standard output is no data.
+func TestExecutorTerminalOpened(t *testing.T) {
+	opened := 0
+	ctx := cmdexec.WithTerminalOpened(t.Context(), func() { opened++ })
+	m := Executor{OnCall: func([]string, string) Result { return Result{} }}
+
+	_, _, err := m.Run(ctx, "docker", "pull", "img")
+	require.NoError(t, err)
+	_, _, err = m.Run(cmdexec.WithStdoutAsData(cmdexec.WithTerminal(ctx)), "docker", "pull", "img")
+	require.NoError(t, err)
+	assert.Zero(t, opened)
+
+	_, _, err = m.Run(cmdexec.WithTerminal(ctx), "docker", "pull", "img")
+	require.NoError(t, err)
+	assert.Equal(t, 1, opened)
+
+	// Where it opens no terminal, the command writes to a pipe.
+	m = Executor{NoTerminal: true, OnCall: func([]string, string) Result { return Result{Stdout: "a\rb"} }}
+	stdout, _, err := m.Run(cmdexec.WithTerminal(ctx), "docker", "pull", "img")
+	require.NoError(t, err)
+	assert.Equal(t, "a\rb", stdout)
+	assert.Equal(t, 1, opened)
+}

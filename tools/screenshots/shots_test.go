@@ -106,7 +106,7 @@ func TestOptions(t *testing.T) {
 	if n.String() != "a,b" {
 		t.Errorf("names are %q", n.String())
 	}
-	if got := strings.Join(uiArgs(8080), " "); got != "ui --demo --still --no-open --port 8080" {
+	if got := strings.Join(uiArgs(8080), " "); got != "ui --demo --still --port 8080" {
 		t.Errorf("sind runs as %q", got)
 	}
 	if u, ok := urlOf("sind ui: http://127.0.0.1:1/?token=x"); !ok || u != "http://127.0.0.1:1/?token=x" {
