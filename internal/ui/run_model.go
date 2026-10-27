@@ -440,6 +440,14 @@ func runStepCounts(s store.Span) (done, total int) {
 	return c.Done(), max(s.Total, c.Total)
 }
 
+// runRevealed returns the run with the hidden spans that the terminal
+// shows by now taken out of hiding (activity.Reveal), such as the step
+// "mesh" while docker pulls the images of the mesh.
+func runRevealed(run store.Run, now time.Time) store.Run {
+	run.Root = activity.Reveal(run.Root, now)
+	return run
+}
+
 // runSegs returns the segments of a run: one for each visible step, in the
 // order they started. A run without steps has one segment for the command.
 func runSegs(run store.Run) runBar {

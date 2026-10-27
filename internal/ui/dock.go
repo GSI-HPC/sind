@@ -234,7 +234,8 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 		if c.Class == runRunning && run.Done() {
 			c.Class = runStatusClass(run)
 		}
-		c.Segs, c.Line = runSegs(run), runLine(run, &t, now)
+		shown := runRevealed(run, now)
+		c.Segs, c.Line = runSegs(shown), runLine(shown, &t, now)
 		c.Elapsed, c.waiting = runDur(runElapsed(run, now)), runWaitsForLock(run)
 		if c.Class == runRunning {
 			c.Since = runSince(run)
@@ -294,7 +295,7 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 func dockRunCard(run store.Run, chip string, now time.Time) dockCard {
 	return dockCard{
 		Class: runRunning, Mark: runMark(runRunning), Title: run.Title, Chip: chip,
-		Segs: runSegs(run), Line: runLine(run, nil, now),
+		Segs: runSegs(runRevealed(run, now)), Line: runLine(runRevealed(run, now), nil, now),
 		Elapsed: runDur(runElapsed(run, now)), Since: runSince(run),
 		Href: "/runs/" + run.ID, Action: "Show progress",
 		SayKey: "r:" + run.ID, SayState: runRunning, Say: runSay(run.Title, runRunning, "", ""),
