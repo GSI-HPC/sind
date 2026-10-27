@@ -35,17 +35,16 @@ type node struct {
 
 // Effects of a script on the world, for emit.
 const (
-	opCreate   = "create"   // the container exists, stopped
-	opStart    = "start"    // it runs, its services are not up yet
-	opReady    = "ready"    // its services are up
-	opStop     = "stop"     // it is stopped
-	opPause    = "pause"    // its processes are frozen
-	opUnpause  = "unpause"  // they run again
-	opRemove   = "remove"   // the container is gone
-	opConnect  = "connect"  // an outside container joins the mesh network
-	opDisconn  = "disconn"  // it leaves
-	opMonitor  = "monitor"  // the realm's monitoring stack exists
-	opEmptyAll = "emptyall" // the realm has nothing left
+	opCreate  = "create"  // the container exists, stopped
+	opStart   = "start"   // it runs, its services are not up yet
+	opReady   = "ready"   // its services are up
+	opStop    = "stop"    // it is stopped
+	opPause   = "pause"   // its processes are frozen
+	opUnpause = "unpause" // they run again
+	opRemove  = "remove"  // the container is gone
+	opConnect = "connect" // an outside container joins the mesh network
+	opDisconn = "disconn" // it leaves
+	opMonitor = "monitor" // the realm's monitoring stack exists
 )
 
 // play is what a script plays with: a clock, and a function that tells the
@@ -308,20 +307,9 @@ func (p play) each(ctx context.Context, name string, nodes []node, work func(ctx
 func (p play) slurm(ctx context.Context, nodes []node) error {
 	return p.each(ctx, "slurm", nodes, func(ctx context.Context, i int) {
 		p.call(ctx, "docker exec", 400*time.Millisecond, nil)
-		unit := "slurmd"
-		switch nodes[i].role {
-		case "controller", "controller-backup":
-			unit = "slurmctld"
-		case "db":
-			unit = "slurmdbd"
-		case "api":
-			unit = "slurmrestd"
-		case "submitter":
-			unit = "sackd"
-		}
 		_, wait := progress.Start(ctx, progress.KindWait, "ready", progress.Timeout(272*time.Second))
 		p.pause(ctx, 1500*time.Millisecond)
-		wait.Update(progress.Message(unit))
+		wait.Update(progress.Message(daemonOf(nodes[i].role)))
 		p.pause(ctx, 2500*time.Millisecond)
 		wait.End(nil)
 	})
@@ -345,6 +333,11 @@ type createSpec struct {
 	// mesh registers the cluster at the mesh, as create cluster does.
 	mesh  bool
 	nodes []node
+}
+
+// create returns the work of a run that plays create.
+func create(s createSpec) func(context.Context, play) error {
+	return func(ctx context.Context, p play) error { return p.create(ctx, s) }
 }
 
 // create plays create cluster and create worker.

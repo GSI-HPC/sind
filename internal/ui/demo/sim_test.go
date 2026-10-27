@@ -97,7 +97,7 @@ func TestSim_CreateCluster(t *testing.T) {
 		"worker-0": cluster.StateRunning, "worker-1": cluster.StateRunning,
 	}, nodeStates(st, "ci", "nightly"))
 	assert.Equal(t, 2, sn.Realms[0].Clusters, "in the realm the config names")
-	assert.NotNil(t, sn.MonitoringOf("ci"), "the config asked for monitoring")
+	assert.NotNil(t, sn.Monitorings["ci"], "the config asked for monitoring")
 	assert.Nil(t, sn.Locks["ci"], "the lock is free again")
 	var volumes []string
 	for _, v := range sn.Volumes["ci"] {
@@ -225,7 +225,7 @@ func TestSim_Nodes(t *testing.T) {
 	s.startWait(t, st, "power", "shutdown", "worker-3.dev", "controller")
 	assert.Equal(t, cluster.StateStopped, nodeStates(st, "sind", "dev")["worker-3"])
 	assert.Equal(t, cluster.StateStopped, nodeStates(st, "sind", "default")["controller"], "no cluster word: the default cluster")
-	assert.Equal(t, cluster.StateMixed, st.Snapshot().ClustersOf("sind")[0].State)
+	assert.Equal(t, cluster.StateMixed, st.Snapshot().Clusters["sind"][0].State)
 
 	s.startWait(t, st, "power", "on", "worker-3.dev")
 	assert.Equal(t, cluster.StateRunning, nodeStates(st, "sind", "dev")["worker-3"])
@@ -252,10 +252,10 @@ func TestSim_NodeErrors(t *testing.T) {
 func TestSim_Attach(t *testing.T) {
 	s, st := newSim(t)
 	s.startWait(t, st, "connect", "container", "minio")
-	m, _ := st.Snapshot().MeshOf("sind")
+	m := st.Snapshot().Meshes["sind"]
 	assert.Equal(t, []string{"kind-control-plane", "minio"}, m.External)
 	s.startWait(t, st, "disconnect", "container", "kind-control-plane")
-	m, _ = st.Snapshot().MeshOf("sind")
+	m = st.Snapshot().Meshes["sind"]
 	assert.Equal(t, []string{"minio"}, m.External)
 	task := s.startWait(t, st, "connect", "container") // no name
 	assert.Equal(t, store.TaskOK, task.Status)
@@ -281,7 +281,7 @@ func TestSim_ExecWritesNoRun(t *testing.T) {
 	assert.Equal(t, store.TaskOK, task.Status)
 	_, ok := st.Snapshot().RunOfTrace(task.Trace)
 	assert.False(t, ok, "sind exec writes no event log")
-	assert.Nil(t, st.Snapshot().Lock("sind"), "and takes no lock")
+	assert.Nil(t, st.Snapshot().Locks["sind"], "and takes no lock")
 }
 
 func TestSim_ExecCanceled(t *testing.T) {

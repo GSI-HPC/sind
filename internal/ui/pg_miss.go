@@ -44,7 +44,7 @@ func pgClusterMiss(sn store.Snapshot, realm, name, node string) *Miss {
 		}
 	}
 	var names []string
-	for _, c := range sn.ClustersOf(realm) {
+	for _, c := range sn.Clusters[realm] {
 		names = append(names, c.Name)
 	}
 	for _, c := range missClosest(name, names, 3) {
@@ -69,7 +69,7 @@ func pgClusterMiss(sn store.Snapshot, realm, name, node string) *Miss {
 // pgHasNode reports whether the cluster of the realm has the node short.
 func pgHasNode(sn store.Snapshot, realm, name, short string) bool {
 	container := string(cluster.ContainerName(realm, name, short))
-	return slices.ContainsFunc(sn.NodesOf(realm), func(n cluster.NodeSummary) bool { return n.Container == container })
+	return slices.ContainsFunc(sn.Nodes[realm], func(n cluster.NodeSummary) bool { return n.Container == container })
 }
 
 // pgNodeMiss says that a cluster has no node of a name, and offers the
@@ -159,7 +159,7 @@ func pgClusterByNameRoute() Route {
 		var all []string
 		realmOf := map[string][]string{}
 		for _, rn := range pgRealmNames(v.Snap, "") {
-			for _, c := range v.Snap.ClustersOf(rn) {
+			for _, c := range v.Snap.Clusters[rn] {
 				if c.Name == name {
 					links = append(links, MissLink{Label: c.Name, URL: pgClusterURL(rn, c.Name, ""), Note: "in realm " + rn})
 				}
@@ -225,7 +225,7 @@ func pgPathLinks(sn store.Snapshot, segs []string) []MissLink {
 	var links []MissLink
 	if _, ok := sn.Cluster(realm, name); !ok && len(sn.ClusterNodes(realm, name)) == 0 {
 		var names []string
-		for _, c := range sn.ClustersOf(realm) {
+		for _, c := range sn.Clusters[realm] {
 			names = append(names, c.Name)
 		}
 		for _, c := range missClosest(name, names, 3) {

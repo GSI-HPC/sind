@@ -95,14 +95,8 @@ func (s *Store) Snapshot() Snapshot {
 }
 
 // Notifier returns what tells of the topics that change, for a live update
-// stream to subscribe to.
+// stream or a collector to subscribe to.
 func (s *Store) Notifier() *sse.Notifier[Topic] { return &s.changes }
-
-// Subscribe returns a subscription to the topics that change from now on.
-// A subscriber that falls behind loses none: it takes the topics that
-// changed since it last took them, each once, and then reads the snapshot,
-// which holds every change. Close ends the subscription.
-func (s *Store) Subscribe() *sse.Subscription[Topic] { return s.changes.Subscribe() }
 
 // update changes the snapshot with fn under the lock and notifies the
 // subscribers of each of ts.

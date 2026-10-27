@@ -47,8 +47,6 @@ type Sind struct {
 	host *docker.DaemonInfo
 }
 
-func (s *Sind) logger() *slog.Logger { return logOr(s.Log) }
-
 // logOr returns l, or a logger that discards.
 func logOr(l *slog.Logger) *slog.Logger {
 	if l != nil {
@@ -87,9 +85,9 @@ func (s *Sind) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 			all = true
-		case <-sub.C():
+		case <-sub.Changed():
 			timer.Stop()
-			for _, ev := range sub.Drain() {
+			for _, ev := range sub.Take() {
 				switch {
 				case ev.Realm == "":
 					all = true
@@ -196,7 +194,7 @@ func (s *Sind) readRealm(ctx context.Context, realm string) {
 // ok reports that err is nil, and logs what failed otherwise.
 func (s *Sind) ok(ctx context.Context, realm, what string, err error) bool {
 	if err != nil && ctx.Err() == nil {
-		s.logger().Debug("reading "+what, "realm", realm, "err", err)
+		logOr(s.Log).Debug("reading "+what, "realm", realm, "err", err)
 	}
 	return err == nil
 }

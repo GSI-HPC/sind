@@ -186,7 +186,7 @@ func morePlural(n int, one, many string) string {
 // server and SSH relay, the monitoring services and the containers that
 // were connected; and the heading of the mesh column.
 func moreTopoMesh(sn store.Snapshot, realm string) (string, []moreTopoItem) {
-	m, _ := sn.MeshOf(realm)
+	m := sn.Meshes[realm]
 	q := "?realm=" + url.QueryEscape(realm)
 	head := "MESH"
 	var items []moreTopoItem
@@ -196,7 +196,7 @@ func moreTopoMesh(sn store.Snapshot, realm string) (string, []moreTopoItem) {
 			moreTopoItem{Name: m.Info.DNSContainer, Kind: "DNS", Addr: m.Info.DNSIP, Href: "/mesh" + q},
 			moreTopoItem{Name: m.Info.SSHContainer, Kind: "SSH relay", Href: "/mesh" + q})
 	}
-	if mon := sn.MonitoringOf(realm); mon != nil {
+	if mon := sn.Monitorings[realm]; mon != nil {
 		for _, s := range mon.Services {
 			it := moreTopoItem{Name: string(s.Container), Kind: string(s.Name), Addr: s.IP, Href: "/monitoring" + q}
 			it.Pill, it.State = moreServiceState(s)
@@ -212,14 +212,14 @@ func moreTopoMesh(sn store.Snapshot, realm string) (string, []moreTopoItem) {
 // moreTopologyOf lays out the diagram of a realm. It draws nothing when
 // the realm has neither a mesh nor a cluster.
 func moreTopologyOf(sn store.Snapshot, realm string) (moreTopology, bool) {
-	clusters := sn.ClustersOf(realm)
-	m, hasMesh := sn.MeshOf(realm)
+	clusters := sn.Clusters[realm]
+	m, hasMesh := sn.Meshes[realm]
 	if len(clusters) == 0 && (!hasMesh || m.Info == nil) {
 		return moreTopology{}, false
 	}
 	head, meshItems := moreTopoMesh(sn, realm)
 	subnets := map[string]string{}
-	for _, n := range sn.NetworksOf(realm) {
+	for _, n := range sn.Networks[realm] {
 		subnets[n.Name] = n.Subnet
 	}
 

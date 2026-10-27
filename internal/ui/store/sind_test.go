@@ -24,21 +24,6 @@ func TestTopics(t *testing.T) {
 	assert.Equal(t, Topic("monitoring/r"), MonitoringTopic("r"))
 	assert.Equal(t, Topic("status/r/c"), StatusTopic("r", "c"))
 	assert.Equal(t, Topic("status/r/c"), StatusKey{"r", "c"}.Topic())
-
-	for _, tc := range []struct {
-		t, prefix Topic
-		want      bool
-	}{
-		{StatusTopic("a", "b"), StatusPrefix("a"), true},
-		{StatusTopic("a", "b"), "status", true},
-		{StatusTopic("a", "b"), StatusTopic("a", "b"), true},
-		{StatusTopic("ab", "b"), StatusPrefix("a"), false},
-		{"statuses", "status", false},
-		{"status", StatusPrefix("a"), false},
-		{RunTopic("x"), TopicRuns, false},
-	} {
-		assert.Equal(t, tc.want, tc.t.Under(tc.prefix), "%s under %s", tc.t, tc.prefix)
-	}
 }
 
 // setter is one Set call with a value, and its topic.
@@ -61,29 +46,29 @@ func setters() []setter {
 			func(s *Store) { s.SetClusters("r", []cluster.Summary{{Name: "b"}, {Name: "a"}}) },
 			func(s *Store) { s.SetClusters("r", []cluster.Summary{{Name: "a", Workers: 1}}) },
 			func(s *Store) { s.SetClusters("r", nil) },
-			func(sn Snapshot) any { return sn.ClustersOf("r") }},
+			func(sn Snapshot) any { return sn.Clusters["r"] }},
 		{"nodes", NodesTopic("r"),
 			func(s *Store) { s.SetNodes("r", []cluster.NodeSummary{{Container: "x"}}) },
 			func(s *Store) { s.SetNodes("r", []cluster.NodeSummary{{Container: "x", IP: "1"}}) },
 			func(s *Store) { s.SetNodes("r", nil) },
-			func(sn Snapshot) any { return sn.NodesOf("r") }},
+			func(sn Snapshot) any { return sn.Nodes["r"] }},
 		{"networks", NetworksTopic("r"),
 			func(s *Store) { s.SetNetworks("r", []cluster.NetworkSummary{{Name: "n"}}) },
 			func(s *Store) { s.SetNetworks("r", []cluster.NetworkSummary{{Name: "n", Subnet: "s"}}) },
 			func(s *Store) { s.SetNetworks("r", nil) },
-			func(sn Snapshot) any { return sn.NetworksOf("r") }},
+			func(sn Snapshot) any { return sn.Networks["r"] }},
 		{"volumes", VolumesTopic("r"),
 			func(s *Store) { s.SetVolumes("r", []cluster.VolumeSummary{{Name: "v"}}) },
 			func(s *Store) { s.SetVolumes("r", []cluster.VolumeSummary{{Name: "v", Driver: "d"}}) },
 			func(s *Store) { s.SetVolumes("r", nil) },
-			func(sn Snapshot) any { return sn.VolumesOf("r") }},
+			func(sn Snapshot) any { return sn.Volumes["r"] }},
 		{"mesh", MeshTopic("r"),
 			func(s *Store) {
 				s.SetMesh("r", Mesh{Info: &mesh.Info{Network: "r-mesh"}, External: []string{"b", "a"}})
 			},
 			func(s *Store) { s.SetMesh("r", Mesh{Err: "boom"}) },
 			func(s *Store) { s.SetMesh("r", Mesh{Records: []mesh.DNSRecord{}, External: []string{}}) },
-			func(sn Snapshot) any { m, _ := sn.MeshOf("r"); return m }},
+			func(sn Snapshot) any { return sn.Meshes["r"] }},
 		{"status", StatusTopic("r", "c"),
 			func(s *Store) { s.SetStatus("r", "c", &cluster.Status{Name: "c"}) },
 			func(s *Store) { s.SetStatus("r", "c", &cluster.Status{Name: "c", State: cluster.StateRunning}) },
@@ -93,14 +78,14 @@ func setters() []setter {
 			func(s *Store) { s.SetLock("r", &state.LockHolder{Command: "a"}) },
 			func(s *Store) { s.SetLock("r", &state.LockHolder{Command: "b"}) },
 			func(s *Store) { s.SetLock("r", nil) },
-			func(sn Snapshot) any { return sn.Lock("r") }},
+			func(sn Snapshot) any { return sn.Locks["r"] }},
 		{"monitoring", MonitoringTopic("r"),
 			func(s *Store) { s.SetMonitoring("r", &cluster.Monitoring{Realm: "r"}) },
 			func(s *Store) {
 				s.SetMonitoring("r", &cluster.Monitoring{Realm: "r", Clusters: []cluster.MonitoredCluster{{Name: "c"}}})
 			},
 			func(s *Store) { s.SetMonitoring("r", nil) },
-			func(sn Snapshot) any { return sn.MonitoringOf("r") }},
+			func(sn Snapshot) any { return sn.Monitorings["r"] }},
 		{"doctor", TopicDoctor,
 			func(s *Store) { s.SetDoctor(&DoctorReport{Checks: []DoctorCheck{{Name: "x"}}}) },
 			func(s *Store) { s.SetDoctor(&DoctorReport{Running: true}) },
@@ -118,7 +103,7 @@ func TestSettersNotifyOnlyOnChange(t *testing.T) {
 	for _, tc := range setters() {
 		t.Run(tc.name, func(t *testing.T) {
 			s := New()
-			sub := s.Subscribe()
+			sub := s.Notifier().Subscribe()
 			defer sub.Close()
 
 			tc.empty(s)
@@ -171,7 +156,7 @@ func TestPublishedSnapshotNeverChanges(t *testing.T) {
 		s.SetClusters("b", []cluster.Summary{{Name: "y"}})
 		s.SetClusters("a", nil)
 		assert.Len(t, held.Clusters, 1)
-		assert.Equal(t, "x", held.ClustersOf("a")[0].Name)
+		assert.Equal(t, "x", held.Clusters["a"][0].Name)
 		assert.Len(t, s.Snapshot().Clusters, 1)
 	})
 
@@ -181,7 +166,7 @@ func TestPublishedSnapshotNeverChanges(t *testing.T) {
 		recs := []mesh.DNSRecord{{Hostname: "h"}}
 		s.SetMesh("r", Mesh{External: ext, Records: recs})
 		ext[0], recs[0].Hostname = "z", "z"
-		m, ok := s.Snapshot().MeshOf("r")
+		m, ok := s.Snapshot().Meshes["r"]
 		require.True(t, ok)
 		assert.Equal(t, []string{"a", "b"}, m.External)
 		assert.Equal(t, "h", m.Records[0].Hostname)
@@ -194,13 +179,13 @@ func TestPublishedSnapshotNeverChanges(t *testing.T) {
 		cs := []cluster.Summary{{Name: "x"}}
 		s.SetClusters("r", cs)
 		cs[0].Name = "z"
-		assert.Equal(t, "x", s.Snapshot().ClustersOf("r")[0].Name)
+		assert.Equal(t, "x", s.Snapshot().Clusters["r"][0].Name)
 	})
 }
 
 func TestSetRealmsEmptyIsEqual(t *testing.T) {
 	s := New()
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 	s.SetRealms([]cluster.RealmSummary{})
 	assert.Empty(t, sub.Take())
@@ -211,7 +196,7 @@ func TestKeepStatuses(t *testing.T) {
 	s.SetStatus("r", "a", &cluster.Status{Name: "a"})
 	s.SetStatus("r", "b", &cluster.Status{Name: "b"})
 	s.SetStatus("q", "a", &cluster.Status{Name: "qa"})
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 	held := s.Snapshot()
 
@@ -232,7 +217,7 @@ func TestKeepStatuses(t *testing.T) {
 
 func TestSetSlurmAndKeepStatuses(t *testing.T) {
 	s := New()
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 	s.SetSlurm("r", "a", &Slurm{Info: &cluster.SlurmInfo{}})
 	assert.Equal(t, []Topic{StatusTopic("r", "a")}, sub.Take(), "what Slurm says is part of the status")
@@ -287,8 +272,8 @@ func TestSortingAndReaders(t *testing.T) {
 	_, ok = sn.Realm("nope")
 	assert.False(t, ok)
 
-	assert.Equal(t, "a", sn.ClustersOf("r")[0].Name)
-	assert.Equal(t, "dev2", sn.ClustersOf("r")[1].Name)
+	assert.Equal(t, "a", sn.Clusters["r"][0].Name)
+	assert.Equal(t, "dev2", sn.Clusters["r"][1].Name)
 	c, ok := sn.Cluster("r", "dev10")
 	require.True(t, ok)
 	assert.Equal(t, "dev10", c.Name)
@@ -302,30 +287,24 @@ func TestSortingAndReaders(t *testing.T) {
 		got = append(got, n.Container)
 	}
 	assert.Equal(t, []string{"r-dev-controller", "r-dev-sub", "r-dev-worker-2", "r-dev-worker-10", "r-dev-y", "r-dev-x"}, got)
-	assert.Len(t, sn.NodesOf("r"), 7)
-	assert.Equal(t, "r-a-controller", sn.NodesOf("r")[0].Container)
+	assert.Len(t, sn.Nodes["r"], 7)
+	assert.Equal(t, "r-a-controller", sn.Nodes["r"][0].Container)
 	assert.Empty(t, sn.ClusterNodes("r", "nope"))
 	assert.Empty(t, sn.ClusterNodes("nope", "dev"))
 
-	assert.Equal(t, "n2", sn.NetworksOf("r")[0].Name)
-	assert.Equal(t, "v2", sn.VolumesOf("r")[0].Name)
+	assert.Equal(t, "n2", sn.Networks["r"][0].Name)
+	assert.Equal(t, "v2", sn.Volumes["r"][0].Name)
 
-	_, ok = sn.MeshOf("r")
+	_, ok = sn.Meshes["r"]
 	assert.False(t, ok)
 	assert.Nil(t, sn.Status("r", "a"))
-	assert.Nil(t, sn.Lock("r"))
-	assert.Nil(t, sn.MonitoringOf("r"))
-}
-
-func TestDockerState(t *testing.T) {
-	assert.False(t, DockerState{}.Reachable())
-	assert.True(t, DockerState{Checked: true}.Reachable())
-	assert.False(t, DockerState{Checked: true, Err: "x"}.Reachable())
+	assert.Nil(t, sn.Locks["r"])
+	assert.Nil(t, sn.Monitorings["r"])
 }
 
 func TestDoctorTimeEqual(t *testing.T) {
 	s := New()
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 	now := time.Now()
 	s.SetDoctor(&DoctorReport{Time: now})

@@ -216,7 +216,7 @@ func moreMonitoringLoad(v *View) error {
 		d.DockerErr = moreDockerDown(v.Snap.Docker)
 	}
 	for _, name := range realms {
-		m := v.Snap.MonitoringOf(name)
+		m := v.Snap.Monitorings[name]
 		if m == nil {
 			d.Without = append(d.Without, name)
 			continue

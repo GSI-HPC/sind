@@ -301,7 +301,7 @@ func pgSnapNodes(sn store.Snapshot, realm string) []pgNode {
 	var out []pgNode
 	busy := map[string][2]bool{}
 	for _, r := range pgRealmNames(sn, realm) {
-		for _, ns := range sn.NodesOf(r) {
+		for _, ns := range sn.Nodes[r] {
 			n := pgNodeOf(r, ns, sn.Status(r, ns.Cluster))
 			key := r + "/" + ns.Cluster
 			b, ok := busy[key]
@@ -455,8 +455,8 @@ func pgValidTab(tab string) bool {
 func pgClustersOf(sn store.Snapshot, realm string, now time.Time) []pgCluster {
 	var out []pgCluster
 	for _, r := range pgRealmNames(sn, realm) {
-		mon := sn.MonitoringOf(r)
-		for _, c := range sn.ClustersOf(r) {
+		mon := sn.Monitorings[r]
+		for _, c := range sn.Clusters[r] {
 			out = append(out, pgClusterOf(sn, r, c, mon, now))
 		}
 	}

@@ -1293,12 +1293,12 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	p.Blocked = !a.Confirmed(f) || len(cmd.Problems) > 0
 	p.Realm = action.Realm(f)
 	if len(cmd.Parts) == 0 && actLocks(a, f) {
-		p.Lock = v.Snap.Lock(p.Realm)
+		p.Lock = v.Snap.Locks[p.Realm]
 	}
 	for _, part := range cmd.Parts {
 		// The parts may be of several realms; the first lock that one of
 		// them waits for is the one to show.
-		if l := v.Snap.Lock(part.Realm); l != nil {
+		if l := v.Snap.Locks[part.Realm]; l != nil {
 			p.Realm, p.Lock = part.Realm, l
 			break
 		}

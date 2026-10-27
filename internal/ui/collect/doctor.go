@@ -37,12 +37,7 @@ func NewDoctor(st *store.Store, client *docker.Client) *Doctor {
 
 // Request makes Run check again. Requests made while a check runs are one
 // more check afterwards.
-func (d *Doctor) Request() {
-	select {
-	case d.ask <- struct{}{}:
-	default:
-	}
-}
+func (d *Doctor) Request() { poke(d.ask) }
 
 // Run checks at once and then on request, until ctx ends.
 func (d *Doctor) Run(ctx context.Context) {
@@ -85,7 +80,5 @@ func (d *Doctor) check(ctx context.Context) {
 	if d.Now != nil {
 		now = d.Now
 	}
-	report := store.DoctorReport{Time: now()}
-	report.Checks = checks
-	d.Store.SetDoctor(&report)
+	d.Store.SetDoctor(&store.DoctorReport{Time: now(), Checks: checks})
 }

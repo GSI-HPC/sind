@@ -199,7 +199,7 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 		return nil, pgTabMiss(realm, name, tab)
 	}
 	d.Found = true
-	d.Cluster = pgClusterOf(sn, realm, summary, sn.MonitoringOf(realm), v.Now)
+	d.Cluster = pgClusterOf(sn, realm, summary, sn.Monitorings[realm], v.Now)
 	d.Status = sn.Status(realm, name)
 	d.Slurm = pgSlurmOf(sn.Slurm(realm, name), d.Cluster.Nodes)
 	d.Tabs = pgTabLinks(d)
@@ -320,7 +320,7 @@ func pgNodesTab(d *pgClusterView) {
 func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 	mine := string(cluster.NetworkName(d.Realm, d.Name))
 	mesh := d.Realm + "-mesh"
-	for _, n := range sn.NetworksOf(d.Realm) {
+	for _, n := range sn.Networks[d.Realm] {
 		if n.Name == mine || n.Name == mesh {
 			d.Networks = append(d.Networks, pgNetRow{n.Name, n.Driver, n.Subnet, n.Gateway, n.Name == mine})
 		}
@@ -343,7 +343,7 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 		return
 	}
 	prefix := cluster.ContainerPrefix(d.Realm, d.Name)
-	for _, vol := range sn.VolumesOf(d.Realm) {
+	for _, vol := range sn.Volumes[d.Realm] {
 		if strings.HasPrefix(vol.Name, prefix) {
 			d.Volumes = append(d.Volumes, vol)
 		}
@@ -381,7 +381,7 @@ func pgMountMode(m cluster.MountPoint) string {
 // and where the munge key is.
 func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
 	zone := d.Realm + ".sind"
-	m, _ := sn.MeshOf(d.Realm)
+	m := sn.Meshes[d.Realm]
 	if m.Info != nil && m.Info.DNSZone != "" {
 		zone = m.Info.DNSZone
 	}
@@ -438,7 +438,7 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 	if api != nil {
 		d.API = "http://" + api.FQDN + ":6820"
 	}
-	if m := sn.MonitoringOf(d.Realm); m != nil && d.Cluster.Monitoring {
+	if m := sn.Monitorings[d.Realm]; m != nil && d.Cluster.Monitoring {
 		for _, s := range m.Services {
 			if s.Name == "grafana" {
 				d.Grafana = s.URL

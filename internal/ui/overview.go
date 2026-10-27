@@ -176,7 +176,7 @@ func pgNeeds(sn store.Snapshot, realm string, now time.Time) []pgNeed {
 		})
 	}
 	for _, r := range pgRealmNames(sn, realm) {
-		if h := sn.Lock(r); h != nil {
+		if h := sn.Locks[r]; h != nil {
 			out = append(out, pgNeed{
 				Sev: "run", Kind: pgNeedLock, Title: "A command holds the lock of realm " + r,
 				Detail:  h.String() + ". Actions on this realm wait for it.",

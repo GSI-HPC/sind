@@ -67,7 +67,7 @@ type moreDNSRecord struct {
 // moreDNSRecords adds the node pages to the records of a realm.
 func moreDNSRecords(sn store.Snapshot, realm string, records []mesh.DNSRecord) []moreDNSRecord {
 	pages := map[string]string{}
-	for _, n := range sn.NodesOf(realm) {
+	for _, n := range sn.Nodes[realm] {
 		short := strings.TrimPrefix(n.Container, cluster.ContainerPrefix(realm, n.Cluster))
 		pages[n.FQDN] = "/nodes/" + realm + "/" + n.Cluster + "/" + short
 	}
@@ -99,11 +99,11 @@ func moreMeshLoad(v *View) error {
 			ConnectURL: moreDialogURL("connect", "realm", name),
 			DeleteURL:  moreDialogURL("delete-realm", "realm", name),
 		}
-		if m, ok := v.Snap.MeshOf(name); ok {
+		if m, ok := v.Snap.Meshes[name]; ok {
 			r.Err, r.Records = m.Err, moreDNSRecords(v.Snap, name, m.Records)
 			if m.Info != nil {
 				r.Has, r.Info = true, *m.Info
-				for _, n := range v.Snap.NetworksOf(name) {
+				for _, n := range v.Snap.Networks[name] {
 					if n.Name == m.Info.Network {
 						r.Subnet = n.Subnet
 					}

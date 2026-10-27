@@ -77,7 +77,7 @@ func TestMoreMeshStates(t *testing.T) {
 	assert.Contains(t, body, "No DNS records yet")
 
 	// A mesh that was read in part keeps its pill honest.
-	m, _ := ts.st.Snapshot().MeshOf("sind")
+	m := ts.st.Snapshot().Meshes["sind"]
 	m.Err = "dns: timeout"
 	ts.st.SetMesh("sind", m)
 	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
@@ -178,7 +178,7 @@ func TestMoreMonitoringEmptyAndEdges(t *testing.T) {
 
 func TestMoreMonitoringNumbers(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m := *ts.st.Snapshot().Monitorings["sind"]
 	m.Clusters = []cluster.MonitoredCluster{
 		{Name: "dev", Nodes: 4, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 3, NodesDown: 1, NodesDrain: 1, JobsRunning: 7, JobsPending: 12}},
 		{Name: "default", Nodes: 2, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 1, NodesDown: 2, JobsRunning: 1}},
@@ -220,7 +220,7 @@ func TestMoreMonitoringHostDNS(t *testing.T) {
 	assert.Contains(t, body, "which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.")
 
 	// Without an address of Grafana there is no ssh example.
-	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m := *ts.st.Snapshot().Monitorings["sind"]
 	m.Services = []cluster.MonitoringService{{Name: "grafana", URL: "http://grafana.sind.sind:3000", State: "running"}}
 	ts.st.SetMonitoring("sind", &m)
 	ts.st.SetDoctor(nil)

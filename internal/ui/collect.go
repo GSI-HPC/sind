@@ -56,10 +56,10 @@ func colService() Service {
 
 func colSetup(env *Env) error {
 	client := docker.NewClient(env.Exec)
-	bus := collect.NewBus()
+	bus := &collect.Bus{}
 	watched := collect.NewWatched()
 	interval := collect.NewInterval(cmp.Or(env.Opts.MonitoringInterval, collect.MonitoringEvery))
-	viewers := collect.NewViewers()
+	viewers := &collect.Viewers{}
 	set := &colSet{
 		events:     &collect.Events{Exec: env.Exec, Bus: bus, Log: env.Log},
 		sind:       &collect.Sind{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
@@ -69,7 +69,7 @@ func colSetup(env *Env) error {
 		doctor:     collect.NewDoctor(env.Store, client),
 	}
 	env.Put(colKey{}, set)
-	env.Put(ColRefreshKey, func(realm string) { bus.Publish(collect.Event{Kind: collect.KindRefresh, Realm: realm}) })
+	env.Put(ColRefreshKey, func(realm string) { bus.Notify(collect.Event{Kind: collect.KindRefresh, Realm: realm}) })
 	env.Put(ColDoctorKey, set.doctor.Request)
 	env.Put(ColMonitoringIntervalKey, interval)
 	env.AddWatcher(watched.Watch)

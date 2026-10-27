@@ -179,9 +179,6 @@ func (w *World) clustersOf(realm string) []string {
 	return out
 }
 
-// Count returns the number of clusters of the realm.
-func (w *World) Count(realm string) int { return len(w.clustersOf(realm)) }
-
 // InspectContainer answers docker inspect for a node of the world: its
 // image and size.
 func (w *World) InspectContainer(_ context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {

@@ -130,8 +130,8 @@ func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
 		row := pgRealmRow{
-			Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)), Problems: pgProblemNodes(sn, r),
-			Locked: sn.Lock(r) != nil, On: r == realm,
+			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]), Problems: pgProblemNodes(sn, r),
+			Locked: sn.Locks[r] != nil, On: r == realm,
 			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
 		}
 		row.Delete.Name = "Delete realm " + r + "…"
