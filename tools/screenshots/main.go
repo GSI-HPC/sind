@@ -119,7 +119,7 @@ type ui struct {
 
 // uiArgs are the arguments of the sind that serves the pages.
 func uiArgs(port int) []string {
-	return []string{"ui", "--demo", "--still", "--no-open", "--port", strconv.Itoa(port)}
+	return []string{"ui", "--demo", "--still", "--port", strconv.Itoa(port)}
 }
 
 // urlOf returns the address in the line sind ui prints for it.
