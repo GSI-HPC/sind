@@ -123,7 +123,8 @@ details[open]>summary.grow-row .lbl::before{content:"▾"}
 .gantt .gridlines>span{position:relative}
 .gantt .gridlines i{position:absolute;top:0;bottom:0;width:1px;background:var(--line-2);transition:left .3s linear}
 .grow-row .bar{position:absolute;top:2px;bottom:2px;border-radius:3px;background:var(--queued);min-width:3px;transition:left .3s linear,width .3s linear}
-.gantt details .grow-row .bar{top:4px;bottom:4px}
+/* a step's bar is thick, the bars of its targets below it thin */
+.gantt details>div.grow-row .bar,.gantt details details>summary .bar{top:4px;bottom:4px}
 .bar.ok,.bar.ended{background:var(--ok)} .bar.failed{background:var(--bad)} .bar.canceled{background:var(--warn)} .bar.queued,.bar.skipped{background:var(--queued)}
 .bar.running{background:var(--run);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.25) 0 6px,transparent 6px 12px);background-size:17px 17px;animation:stripes .8s linear infinite}
 @keyframes stripes{to{background-position:17px 0}}
