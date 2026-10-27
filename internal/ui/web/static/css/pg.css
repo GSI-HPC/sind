@@ -8,9 +8,7 @@
 .pg-small{font-size:var(--t-sm)}
 .pg-grow{flex:1;min-width:0}
 .pg-wide{grid-column:1/-1}
-.pg-note{margin-bottom:14px}
-.pg-gone{margin-bottom:14px}
-.pg-realms{margin-bottom:0}
+.pg-note,.pg-gone{margin-bottom:14px}
 /* the pill in the head of the Overview that names the problems and goes to
    "Needs you"; it may wrap on a phone */
 a.pg-sumpill{white-space:normal;text-decoration:none}
@@ -36,11 +34,9 @@ td.mono:has(.pg-copy){white-space:nowrap}
 .pg-fix{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 @media (max-width:900px){.pg-ready-b{grid-template-columns:minmax(0,1fr)}}
 
-/* Slurm: the reason of a node's state, and a config file */
-.pg-reason{font-size:var(--t-sm)}
+/* Slurm: a config file */
 .pg-conf{margin:0;padding:12px 14px;max-height:420px;overflow:auto;background:var(--term-bg);color:var(--term-fg);font:var(--t-sm)/1.55 var(--f-mono);white-space:pre;border-radius:0 0 var(--r) var(--r)}
-section[id^="slurm-file-"]:focus{outline:none}
-.pg-attn:focus{outline:none}
+section[id^="slurm-file-"]:focus,.pg-attn:focus{outline:none}
 .pg-attn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* cluster cards */
@@ -91,16 +87,10 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-steps li::before{counter-increment:pg-step;content:counter(pg-step);width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 var(--t-sm) var(--f-mono)}
 
 /* the realm filter of the lists */
-.pg-seg{margin-bottom:14px;max-width:100%;overflow-x:auto}
-.pg-seg a{padding:5px 10px;color:var(--muted);border-right:1px solid var(--line);white-space:nowrap}
-.pg-seg a:last-child{border-right:0}
-.pg-seg a:hover{text-decoration:none;color:var(--fg)}
-.pg-seg a.on{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.pg-seg{margin-bottom:14px;max-width:100%;overflow-x:auto;white-space:nowrap}
 
 /* a cluster's head */
 .pg-run{display:flex;gap:10px;align-items:center;margin-bottom:14px}
-.pg-spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run-soft);border-top-color:var(--run);animation:pg-spin 1s linear infinite;flex:none}
-@keyframes pg-spin{to{transform:rotate(360deg)}}
 
 /* the health matrix */
 .pg-mx td,.pg-mx th{text-align:center;padding:7px 8px}
@@ -133,7 +123,6 @@ tr[data-href]{cursor:pointer}
 .pg-sort.on .pg-arrow{color:var(--accent)}
 .pg-all{display:inline-flex;align-items:center;gap:6px}
 .pg-phone{display:none}
-.pg-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 td.act .btn + .btn{margin-left:4px}
 
 /* a node's issues */

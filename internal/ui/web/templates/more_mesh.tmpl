@@ -9,8 +9,7 @@
 
 {{/* more-mesh is the live body of the page; .Data is moreMeshData. */}}
 {{define "more-mesh"}}{{with .Data}}
-{{template "more-dockerdown" .DockerErr}}
-{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{template "more-top" .}}
 {{range .Realms}}
 <div class="stack more-realm">
   <div class="more-rhead">

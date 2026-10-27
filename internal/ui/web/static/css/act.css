@@ -18,8 +18,7 @@
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
 .scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
 .scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
-.scrim .mf[hidden]{display:none}
-.scrim .act-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.scrim .mf[hidden],.scrim .act-ned[hidden],.scrim .act-yamled[hidden]{display:none}
 
 /* The button that runs the command shows its key, Ctrl+Enter or on macOS
    Cmd+Enter, where there is a keyboard. */
@@ -37,7 +36,6 @@
 .scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
 .scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}
 .scrim .fld input[type=text],.scrim .fld input[type=number],.scrim .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono);width:100%}
-.scrim .hint{font-size:var(--t-sm);color:var(--muted)}
 .scrim .act-missing{margin:0;font-size:var(--t-md)}
 .scrim .checks{display:grid;gap:8px}
 .scrim .checks label{display:flex;gap:8px;align-items:flex-start}
@@ -54,11 +52,10 @@
 .scrim .act-reason{display:none;margin-top:8px}
 .scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
 /* What a delete removes and keeps, and the line about new workers. */
-.scrim .act-list ul{margin:4px 0 0;padding-left:18px}
+.scrim .act-list ul,.scrim .act-probs ul{margin:4px 0 0;padding-left:18px}
 .scrim .act-list li{overflow-wrap:anywhere}
 .scrim .act-sum{margin:0;font-weight:500}
-/* Why the typed name does not confirm yet, and the preview at work. */
-.scrim .act-why:empty{display:none}
+/* The preview at work. */
 .scrim .act-checking{margin-right:auto;align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
 .scrim .act-checking.htmx-request{visibility:visible}
 /* The clusters that a delete of several removes. */
@@ -66,7 +63,7 @@
 .scrim .act-clusters li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:6px 10px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
 .scrim .act-clusters small{color:var(--muted)}
 .scrim .err{font-size:var(--t-sm);color:var(--bad)}
-.scrim .err:empty{display:none}
+.scrim .err:empty,.scrim .act-why:empty,.scrim .act-rows:empty,.scrim .act-lims:empty{display:none}
 .scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}
 
 /* New cluster: the fields at the left, the plan at the right, the footer
@@ -116,7 +113,6 @@
 .scrim .act-nr:has(>input[type=checkbox]:not(:checked)) .act-cz{visibility:hidden}
 .scrim .act-nr:has(>input[type=checkbox]:not(:checked))+.act-ned{display:none}
 .scrim .act-ned{display:grid;gap:8px;padding:10px 12px 12px 40px;border-top:1px dashed var(--line-2);background:var(--panel-2)}
-.scrim .act-ned[hidden]{display:none}
 .scrim .act-edg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .scrim .act-edg label{font-size:var(--t-sm)}
 .scrim .act-full{grid-column:1/-1}
@@ -132,7 +128,7 @@
 .scrim .act-size{display:grid;gap:8px}
 .scrim .act-sizes span{display:grid;line-height:1.3}
 .scrim .act-sizes small{font:var(--t-xs) var(--f-mono);color:var(--faint);font-weight:400}
-.scrim .act-sizes input:checked+span::before{content:none}
+.scrim .act-sizes input:checked+span::before,.scrim .act-stabs input:checked+span::before{content:none}
 .scrim .act-size:not(:has(input[name=size][value=x]:checked)) .act-custom{display:none}
 .scrim .act-sec{border:1px solid var(--line);border-radius:8px;min-width:0}
 .scrim .act-sec>summary{display:flex;gap:8px;align-items:baseline;padding:8px 10px;cursor:pointer;list-style:none}
@@ -147,20 +143,17 @@
 .scrim .act-waits:not(:has(input[value=other]:checked)) input[type=text]{display:none}
 .scrim .act-sbody{display:grid;gap:10px;padding:10px 10px 12px;border-top:1px solid var(--line-2)}
 .scrim .act-rows{display:grid;gap:6px}
-.scrim .act-rows:empty{display:none}
 .scrim .act-row{display:grid;gap:4px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2)}
 .scrim .act-rowf{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:6px;align-items:center}
 .scrim #act-rows-group .act-rowf,.scrim #act-rows-account>.act-row>.act-rowf,.scrim .act-lim{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
 .scrim .act-rowf input,.scrim .act-rowf select{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);font:var(--t-md) var(--f-mono);width:100%;min-width:0}
 .scrim .act-row .act-more .fld input,.scrim .act-row .act-more .fld select{background:var(--panel)}
 .scrim .act-lims{display:grid;gap:4px;padding-left:14px}
-.scrim .act-lims:empty{display:none}
 .scrim .act-row>.btn.sm{justify-self:start}
 .scrim [aria-invalid=true]{border-color:var(--bad)}
 .scrim .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
 .scrim .act-sl{display:none}
 .scrim .act-yamled{display:grid;gap:8px}
-.scrim .act-yamled[hidden]{display:none}
 .scrim .act-yamlbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .scrim .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
 /* In YAML mode the editor takes the place of the form, but for the name
@@ -173,7 +166,6 @@
 .scrim .act-dot{color:var(--accent);font-weight:700}
 .scrim .act-stabs{max-width:100%;overflow-x:auto}
 .scrim .act-stabs label>span{padding:4px 8px;white-space:nowrap}
-.scrim .act-stabs input:checked+span::before{content:none}
 .scrim .act-slurm:has(input[name=stab][value=main]:checked) .act-sl-main,
 .scrim .act-slurm:has(input[name=stab][value=cgroup]:checked) .act-sl-cgroup,
 .scrim .act-slurm:has(input[name=stab][value=gres]:checked) .act-sl-gres,
@@ -187,7 +179,6 @@
 .scrim .act-meter meter{width:100%;height:8px}
 .scrim .act-ph{display:flex;align-items:center;gap:8px}
 .scrim .act-ph h3{flex:1;margin:0}
-.scrim .act-probs ul{margin:4px 0 0;padding-left:18px}
 .scrim .act-probs a{color:var(--bad);font-weight:600}
 .scrim .act-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:5px}
 .scrim .act-tile{border:1px solid var(--line);border-left:4px solid var(--deco);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 var(--t-sm) var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -203,7 +194,6 @@
 .scrim .act-status{margin-right:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
 .scrim button.pill{cursor:pointer}
 .scrim .act-go:hover{text-decoration:underline}
-.scrim .act-tot{font-size:var(--t-sm);color:var(--muted)}
 .scrim .act-imgs{display:grid;gap:6px}
 .scrim .act-img{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel)}
 .scrim .act-img .mono{font-size:var(--t-sm);overflow-wrap:anywhere}

@@ -13,7 +13,6 @@
 .helppane .hb{padding:14px 16px;overflow-y:auto;flex:1;display:grid;gap:14px;align-content:start}
 .helppane .hb:focus{outline:0}
 .helppane .hb>div{display:grid;gap:12px;align-content:start}
-#help-status,.pvh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The texts of an entry, in the pane and on the help page. */
 :is(.helppane,.helpdoc) .kind{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
@@ -27,12 +26,10 @@
 :is(.helppane,.helpdoc) .steps{margin:0;padding-left:18px;display:grid;gap:6px}
 :is(.helppane,.helpdoc) .steps li{padding:0;border:0}
 :is(.helppane,.helpdoc) .chips{display:flex;gap:6px;flex-wrap:wrap}
-:is(.helppane,.helpdoc) .chips a:hover{text-decoration:none}
 :is(.helppane,.helpdoc) .stack{display:grid;gap:8px}
 :is(.helppane,.helpdoc) .link{display:flex;align-items:baseline;gap:10px;width:100%;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--accent)}
 :is(.helppane,.helpdoc) .link:hover{text-decoration:underline}
 :is(.helppane,.helpdoc) .link small{margin-left:auto;font:var(--t-xs) var(--f-mono);color:var(--faint)}
-:is(.helppane,.helpdoc) .hint{font-size:var(--t-sm);color:var(--muted)}
 .gloss{display:grid;gap:4px;margin:0}
 .gloss dt{font-weight:600;margin-top:8px}
 .gloss dd{margin:0;color:var(--muted);font-size:var(--t-md)}

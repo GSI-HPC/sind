@@ -3,17 +3,12 @@
 
 .more-realm{gap:14px}
 .more-rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.more-rhead .grow{flex:1}
 .more-scroll{max-height:340px;overflow:auto}
 .more-howto{max-width:460px;margin:0 auto 14px;text-align:left}
-.more-howto .cmd{text-align:left}
 .more-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .more-copied{color:var(--ok)!important}
 /* a "seg" of links, such as Diagram and Table */
-.more-seg a{padding:5px 12px;color:var(--muted);border-right:1px solid var(--line)}
-.more-seg a:last-child{border-right:0}
-.more-seg a:hover{color:var(--fg);text-decoration:none}
-.more-seg a.on{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.more-seg a{padding:5px 12px}
 
 /* doctor */
 .more-verdict.ok{border-color:var(--ok);background:var(--ok-soft)}
@@ -36,33 +31,7 @@
 .more-addr{display:inline-flex;align-items:center;gap:6px;margin-top:3px}
 .more-dns{border-top:1px solid var(--line-2)}
 .more-dns code,.more-nowrap{white-space:nowrap}
-.more-note{margin:0}
 .more-nonum{white-space:normal}
-@media (max-width:760px){
-  .more-iv{justify-content:start;max-width:none}
-  .more-ivnote{text-align:left}
-  /* a long address or image takes the width of the card, below its label */
-  .more-cards td[data-label].more-long{padding-left:0}
-  .more-cards td[data-label].more-long::before{float:none;display:block;width:auto;margin:0;font-family:var(--f-body)}
-}
-
-/* On a phone, a table of class more-cards shows each row as a card, so
-   that no column hides off-screen: the cells sit in two columns, and a
-   cell with data-label takes a line of its own, with the label before
-   it. The roles in the markup keep it a table for screen readers, which
-   can lose it when the display of its parts changes. */
-@media (max-width:760px){
-  .more-cards,.more-cards tbody{display:block}
-  .more-cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .more-cards tr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 12px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
-  .more-cards tbody:last-child tr:last-child{border-bottom:0}
-  .more-cards td,.more-cards tbody th{display:block;padding:0;border:0;text-align:left;white-space:normal;overflow-wrap:anywhere}
-  .more-cards td:empty{display:none}
-  .more-cards td[colspan],.more-cards td[data-label]{grid-column:1/-1}
-  .more-cards td[data-label]{padding-left:7.5rem}
-  .more-cards td[data-label]::before{content:attr(data-label);content:attr(data-label) / "";float:left;width:7.5rem;margin-left:-7.5rem;font-size:var(--t-sm);color:var(--muted)}
-  .more-dnscards td.act,.more-moncards td.more-aside,.more-topotable td.more-aside{grid-row:1;grid-column:2}
-}
 /* What a Copy copies, while the browser copies it the old way, and the
    lines of Copy list, shown for Ctrl+C when the browser copies nothing */
 .more-clip{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}
@@ -104,7 +73,27 @@
 .more-topotable .more-grp th{background:var(--panel-2);text-transform:none;letter-spacing:0;font:600 var(--t-md) var(--f-body);color:var(--fg);white-space:normal}
 .more-topotable .more-grp th .pill{margin-left:6px}
 .more-topotable td.mono{white-space:nowrap}
+/* On a phone, a table of class more-cards shows each row as a card, so
+   that no column hides off-screen: the cells sit in two columns, and a
+   cell with data-label takes a line of its own, with the label before
+   it. The roles in the markup keep it a table for screen readers, which
+   can lose it when the display of its parts changes. */
 @media (max-width:760px){
+  .more-iv{justify-content:start;max-width:none}
+  .more-ivnote{text-align:left}
+  .more-cards,.more-cards tbody{display:block}
+  .more-cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .more-cards tr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 12px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
+  .more-cards tbody:last-child tr:last-child{border-bottom:0}
+  .more-cards td,.more-cards tbody th{display:block;padding:0;border:0;text-align:left;white-space:normal;overflow-wrap:anywhere}
+  .more-cards td:empty{display:none}
+  .more-cards td[colspan],.more-cards td[data-label]{grid-column:1/-1}
+  .more-cards td[data-label]{padding-left:7.5rem}
+  .more-cards td[data-label]::before{content:attr(data-label);content:attr(data-label) / "";float:left;width:7.5rem;margin-left:-7.5rem;font-size:var(--t-sm);color:var(--muted)}
+  .more-dnscards td.act,.more-moncards td.more-aside,.more-topotable td.more-aside{grid-row:1;grid-column:2}
+  /* a long address or image takes the width of the card, below its label */
+  .more-cards td[data-label].more-long{padding-left:0}
+  .more-cards td[data-label].more-long::before{float:none;display:block;width:auto;margin:0;font-family:var(--f-body)}
   .more-topotable tr.more-grp{background:var(--panel-2)}
   .more-topotable .more-grp th{grid-column:1/-1;background:none}
   .more-topotable td.mono{white-space:normal}

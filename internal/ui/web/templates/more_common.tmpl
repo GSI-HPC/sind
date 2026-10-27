@@ -1,8 +1,7 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* more-notice is what a page of the "more" part says when there is no
-realm to show; .Text is always set. */}}
-{{define "more-notice"}}<section class="panel"><div class="empty">{{.Text}}{{if .Href}} <a href="{{.Href}}">{{.HrefText}}</a>{{end}}</div></section>{{end}}
-
-{{/* more-dockerdown is the callout above data that may be stale. */}}
-{{define "more-dockerdown"}}{{if .}}<div class="callout warn">Docker is not reachable: {{.}}. The page shows what was read last. <a href="/doctor">Open Doctor</a></div>{{end}}{{end}}
+{{/* more-top is what a page of the "more" part says above its data, from
+its .Data: the callout when Docker is not reachable, as the data may be
+stale, and the notice when there is no realm to show. */}}
+{{define "more-top"}}{{with .DockerErr}}<div class="callout warn">Docker is not reachable: {{.}}. The page shows what was read last. <a href="/doctor">Open Doctor</a></div>{{end}}
+{{with .Notice}}{{if .Text}}<section class="panel"><div class="empty">{{.Text}}{{if .Href}} <a href="{{.Href}}">{{.HrefText}}</a>{{end}}</div></section>{{end}}{{end}}{{end}}

@@ -85,7 +85,6 @@ kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-botto
 @keyframes pulse{50%{opacity:.35}}
 .live.off{color:var(--warn)}
 .live.off i{background:var(--warn);animation:none}
-.mockbadge{font:600 var(--t-xs) var(--f-mono);text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:4px;background:var(--warn-soft);color:var(--warn)}
 .hostchip{font:var(--t-sm) var(--f-mono);color:var(--muted);display:flex;gap:6px;align-items:center}
 .hostchip i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
 .iconbtn{border:1px solid transparent;background:none;border-radius:var(--r);padding:4px 8px;cursor:pointer;color:var(--muted);font:600 var(--t-base) var(--f-mono)}
@@ -122,8 +121,7 @@ nav.rail .more,.rail-sheet{display:none}
 
 /* The page scrolls in .main. A control that takes the focus scrolls clear
    of the task dock, whose height app.js keeps in --dock-h. */
-.main{scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 24px)}
-.main{grid-row:3;grid-column:2;overflow-y:auto;padding:20px 24px 200px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0}
+.main{grid-row:3;grid-column:2;overflow-y:auto;padding:20px 24px 200px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0;scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 24px)}
 .crumbs{font:var(--t-sm) var(--f-mono);color:var(--faint);margin-bottom:6px}
 .crumbs a{color:var(--muted)}
 .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}
@@ -137,7 +135,7 @@ h3{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.0
 /* building blocks */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
 .ph{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
-.ph .grow{flex:1}
+.grow{flex:1}
 .pb{padding:14px}
 .grid{display:grid;gap:14px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))}
@@ -158,11 +156,9 @@ h3{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.0
 .pill.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
 .pill.bad{background:var(--bad-soft);border-color:transparent;color:var(--bad)}
 .pill.run{background:var(--run-soft);border-color:transparent;color:var(--run-ink)}
-.pill.info{background:var(--info-soft);border-color:transparent;color:var(--info)}
 .pill.nodot::before{display:none}
 .pill.run::before{animation:pulse 1.2s infinite}
 .chip{display:inline-block;font:var(--t-sm) var(--f-mono);padding:1px 6px;border-radius:4px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-.chip.acc{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
 .chip.brand{background:var(--brand-soft);border-color:transparent;color:var(--brand-ink)}
 dl.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:7px 18px;margin:0}
 dl.kv dt{color:var(--muted)}
@@ -194,9 +190,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tab .n{font:var(--t-xs) var(--f-mono);color:var(--faint);margin-left:4px}
 .tab .n.bad{color:var(--bad);font-weight:700}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
-.seg button{border:0;background:none;padding:5px 10px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
-.seg button:last-child{border-right:0}
-.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.seg :is(button,a){border:0;background:none;padding:5px 10px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
+.seg :is(button,a):last-child{border-right:0}
+.seg :is(button[aria-pressed=true],a.on){background:var(--accent-soft);color:var(--fg);font-weight:600}
+.seg a:hover{color:var(--fg);text-decoration:none}
 .callout{padding:9px 12px;border-left:3px solid var(--info);background:var(--info-soft);border-radius:var(--r);font-size:var(--t-md)}
 .callout.warn{border-color:var(--warn);background:var(--warn-soft)}
 .callout.bad{border-color:var(--bad);background:var(--bad-soft)}
@@ -289,17 +286,6 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   .jump{order:5;flex-basis:100%;max-width:none}
   .realm select{max-width:120px}
 }
-/* On a touch screen, controls are at least 44 px high, as fingers need. A
-   tap anywhere in a table cell that holds only a checkbox ticks it. */
-@media (pointer:coarse){
-  .iconbtn{min-width:44px;min-height:44px}
-  .jump,.realm select,.btn,.seg button,.tab,.nav,.cmd button{min-height:44px}
-  .btn{justify-content:center}
-  .tab{display:inline-flex;align-items:center}
-  .cmd button{min-width:56px}
-  input[type=checkbox],input[type=radio]{width:22px;height:22px}
-  :is(td,th):has(>input[type=checkbox]:only-child){height:48px;cursor:pointer}
-}
 /* A table of class cards shows each row as a card on a phone: the name and
    the state on the first line, the other cells after it, each with its label
    (data-label). The cells say what they are: c-chk is the checkbox, c-name
@@ -330,9 +316,17 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   table.cards td.c-act{gap:8px}
   table.cards td.c-act .btn{min-height:36px}
 }
-/* The phone layout above keeps the row buttons at 44 px on a touch screen
-   too; the logo and the skip link are targets as well. */
+/* On a touch screen, controls are at least 44 px high, as fingers need, the
+   row buttons of the phone layout above, the logo and the skip link too. A
+   tap anywhere in a table cell that holds only a checkbox ticks it. */
 @media (pointer:coarse){
+  .iconbtn{min-width:44px;min-height:44px}
+  .jump,.realm select,.btn,.seg button,.tab,.nav,.cmd button{min-height:44px}
+  .btn{justify-content:center}
+  .tab{display:inline-flex;align-items:center}
+  .cmd button{min-width:56px}
+  input[type=checkbox],input[type=radio]{width:22px;height:22px}
+  :is(td,th):has(>input[type=checkbox]:only-child){height:48px;cursor:pointer}
   table.cards td.c-act .btn{min-height:44px}
   .brand,.skip{display:inline-flex;align-items:center;min-height:44px}
 }

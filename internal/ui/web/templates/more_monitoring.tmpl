@@ -25,8 +25,8 @@ fragment, so that an update never takes the focus. */}}
 names under .sind. .Data is moreMonitoringData. */}}
 {{define "more-mon-dns"}}{{$fwd := .Forward}}
 {{if eq .HostDNS "off"}}<div class="callout warn">This host does not resolve the names under <span class="mono">.sind</span> (<a href="/doctor">Doctor: DNS policy</a>), so the Open links fail. Use the address with its port instead.{{template "more-mon-forward" $fwd}}</div>
-{{else if eq .HostDNS "ok"}}<p class="muted more-note">Open uses the names under <span class="mono">.sind</span>, which this host resolves.{{template "more-mon-forward" $fwd}}</p>
-{{else}}<p class="muted more-note">Open uses the names under <span class="mono">.sind</span>, which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.{{template "more-mon-forward" $fwd}}</p>{{end}}
+{{else if eq .HostDNS "ok"}}<p class="muted pg-flat">Open uses the names under <span class="mono">.sind</span>, which this host resolves.{{template "more-mon-forward" $fwd}}</p>
+{{else}}<p class="muted pg-flat">Open uses the names under <span class="mono">.sind</span>, which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.{{template "more-mon-forward" $fwd}}</p>{{end}}
 {{end}}
 
 {{/* more-mon-forward says how to reach Grafana from another machine; . is
@@ -35,8 +35,7 @@ its address with the port, "" for none. */}}
 
 {{/* more-monitoring is the live body of the page; .Data is moreMonitoringData. */}}
 {{define "more-monitoring"}}{{with .Data}}
-{{template "more-dockerdown" .DockerErr}}
-{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{template "more-top" .}}
 {{if .Empty}}
 <section class="panel"><div class="empty">
   <p>{{if .Realm}}Realm <b class="mono">{{.Realm}}</b> has{{else}}No realm has{{end}} no monitoring stack.</p>
