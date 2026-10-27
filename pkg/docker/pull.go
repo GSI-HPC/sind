@@ -92,7 +92,8 @@ const (
 //     On a terminal, a small layer is often complete before docker wrote
 //     the bytes of any, and the pull waits for those of the next.
 //
-// Until the unit is known, nothing is reported. It is safe for concurrent
+// On a terminal the unit is bytes from the start (opened); elsewhere,
+// until the unit is known, nothing is reported. It is safe for concurrent
 // use, as the lines of the two streams are parsed from different
 // goroutines.
 type layerCount struct {
@@ -147,11 +148,14 @@ func (l *layerCount) line(_ progress.Stream, line string) {
 }
 
 // opened records that docker pull writes to a terminal
-// (cmdexec.WithTerminalOpened).
+// (cmdexec.WithTerminalOpened), where the pull counts bytes: the span says
+// so at once, with a size not yet known, so that a display shows it as a
+// transfer while docker waits to download.
 func (l *layerCount) opened() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.terminal = true
+	l.terminal, l.unit = true, unitBytes
+	l.span.Update(progress.Work(progress.UnitBytes, 0))
 }
 
 // downloadBytes returns the bytes of a line of a layer that downloads, and
@@ -248,7 +252,8 @@ func (l *layerCount) send(size, amount int64) {
 
 // finish reports a pull that succeeded as done: every layer docker told of,
 // in bytes the size of those it downloaded, or the one item that an image
-// the daemon had already is, since docker writes no layer for it.
+// the daemon had already is, since docker writes no layer for it; in bytes,
+// such a pull downloaded nothing, and its size stays unknown.
 func (l *layerCount) finish() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -260,7 +265,7 @@ func (l *layerCount) finish() {
 	}
 	l.share = 0
 	l.report()
-	if l.size == 0 {
+	if l.size == 0 && l.unit == unitLayers {
 		l.send(1, 1)
 	}
 }

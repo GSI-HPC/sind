@@ -278,11 +278,16 @@ func runMoreOf(rc runCtx) *runMore {
 	run := rc.Run
 	m := &runMore{}
 	runVisit(run.Root, func(s store.Span, _ string) {
-		if s.Unit == "" || (s.Size <= 0 && s.Amount <= 0) {
+		// A target that works in a unit is a transfer from the start, such
+		// as a pull that waits for docker to download; it is no node.
+		if s.Unit == "" || (s.Size <= 0 && s.Amount <= 0 && s.Kind != activity.KindTarget) {
 			return
 		}
 		class := runSpanClass(s, run.Done())
 		tr := runTransfer{Name: runName(s), Class: class, Mark: runMark(class), Amount: runAmount(s), Msg: s.Message}
+		if tr.Amount == "" && (class == runRunning || class == runQueued) {
+			tr.Amount = "waiting"
+		}
 		tr.Pct, tr.Fine, tr.Bar = runSpanPct(s)
 		m.Transfers = append(m.Transfers, tr)
 	})

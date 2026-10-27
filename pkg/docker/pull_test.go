@@ -89,15 +89,17 @@ func TestPullImage_CountsLayers(t *testing.T) {
 	assert.Equal(t, progress.StatusOK, end.Status)
 }
 
-// A pull that finds the image there writes no layer: it is one item, done.
+// A pull that finds the image there writes no layer. On a pipe it is one
+// item, done; on a terminal, it works in bytes from the start and
+// downloaded nothing, of a size not known.
 func TestPullImage_UpToDate(t *testing.T) {
-	w, err := pullUnder(t, mock.Result{Stdout: `Using default tag: latest
+	const upToDate = `Using default tag: latest
 latest: Pulling from library/busybox
 Digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 Status: Image is up to date for busybox:latest
 docker.io/library/busybox:latest
-`}, true)
-
+`
+	w, err := pullUnder(t, mock.Result{Stdout: upToDate}, false)
 	require.NoError(t, err)
 	end, sizes := work(t, w)
 	w.Finish()
@@ -105,6 +107,15 @@ docker.io/library/busybox:latest
 	assert.Equal(t, progress.UnitItems, end.Unit)
 	assert.EqualValues(t, 1, end.Amount)
 	assert.EqualValues(t, 1, end.Size)
+
+	w, err = pullUnder(t, mock.Result{Stdout: upToDate}, true)
+	require.NoError(t, err)
+	end, sizes = work(t, w)
+	w.Finish()
+	assert.Equal(t, []int64{0}, sizes)
+	assert.Equal(t, progress.UnitBytes, end.Unit)
+	assert.Zero(t, end.Amount)
+	assert.Zero(t, end.Size)
 }
 
 // A pull that fails ends where it was, with the layers it had told of.
@@ -237,8 +248,8 @@ func TestPullImage_CountsBytes(t *testing.T) {
 	}
 	end, sizes := work(t, w)
 	w.Finish()
-	assert.Equal(t, []int64{30_000_000, 60_000_000, 75_000_000, 100_000_000}, sizes,
-		"guessed, held down, guessed, known")
+	assert.Equal(t, []int64{0, 30_000_000, 60_000_000, 75_000_000, 100_000_000}, sizes,
+		"not known, guessed, held down, guessed, known")
 	assert.IsNonDecreasing(t, shares)
 	assert.Equal(t, progress.UnitBytes, end.Unit)
 	assert.EqualValues(t, 100_000_000, end.Amount)
@@ -263,9 +274,20 @@ func TestPullImage_SmallLayerFirstOnATerminal(t *testing.T) {
 	require.NoError(t, err)
 	end, sizes := work(t, w)
 	w.Finish()
-	assert.Equal(t, []int64{10_000_000}, sizes)
+	assert.Equal(t, []int64{0, 10_000_000}, sizes)
 	assert.Equal(t, progress.UnitBytes, end.Unit)
 	assert.EqualValues(t, 10_000_000, end.Amount)
+}
+
+// Where no terminal was opened but docker writes bytes all the same, the
+// pull counts them.
+func TestPullImage_BytesOnAPipe(t *testing.T) {
+	w, err := pullUnder(t, mock.Result{Stdout: "b4f1e0d2c9a1: Downloading  1MB/10MB\nb4f1e0d2c9a1: Pull complete\n"}, false)
+	require.NoError(t, err)
+	end, sizes := work(t, w)
+	w.Finish()
+	assert.Equal(t, []int64{10_000_000}, sizes)
+	assert.Equal(t, progress.UnitBytes, end.Unit)
 }
 
 // A line of a layer whose bytes cannot be read, or whose size is none, is a

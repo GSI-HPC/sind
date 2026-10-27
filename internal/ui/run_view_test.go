@@ -311,6 +311,19 @@ func TestRunMoreTransfers(t *testing.T) {
 	assert.False(t, m.Transfers[0].Bar)
 	assert.Equal(t, "2.0 kB", m.Transfers[0].Amount)
 	assert.Equal(t, "fetching", m.Transfers[0].Msg)
+
+	// A target that works in a unit is a transfer before it knows its
+	// size, and no node: it waits, or ended with nothing to tell.
+	pulls := runOf(0, "", runSp("step", "pull images", runStartedAt(0), runKids(
+		runSp("target", "img:1", runStartedAt(0), runWith(func(s *store.Span) { s.Unit = "bytes" })),
+		runSp("target", "img:2", runEndedAt(0, 1, store.StatusOK), runWith(func(s *store.Span) { s.Unit = "bytes" })),
+	)))
+	m = runMoreOf(runCtxOf(pulls, runAt(2)))
+	require.Len(t, m.Transfers, 2)
+	assert.Equal(t, "waiting", m.Transfers[0].Amount)
+	assert.False(t, m.Transfers[0].Bar)
+	assert.Empty(t, m.Transfers[1].Amount)
+	assert.Nil(t, runNodesOf(runCtxOf(pulls, runAt(2))))
 }
 
 func TestRunMoreSteps(t *testing.T) {
