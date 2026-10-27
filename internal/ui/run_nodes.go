@@ -244,10 +244,11 @@ type runTransfer struct {
 	Class  string
 	Mark   string
 	Amount string
-	// Bar is set for a span that knows its size; Pct is how much is done.
-	Bar bool
-	Pct int
-	Msg string
+	// Bar is set for a span that knows its size; Pct is how much is done,
+	// and Fine the same in hundredths of a percent (runFine).
+	Bar       bool
+	Pct, Fine int
+	Msg       string
 }
 
 // runOtherStep is a step that has no targets, as the rollback or the mesh
@@ -282,7 +283,7 @@ func runMoreOf(rc runCtx) *runMore {
 		}
 		class := runSpanClass(s, run.Done())
 		tr := runTransfer{Name: runName(s), Class: class, Mark: runMark(class), Amount: runAmount(s), Msg: s.Message}
-		tr.Pct, tr.Bar = runSpanPct(s)
+		tr.Pct, tr.Fine, tr.Bar = runSpanPct(s)
 		m.Transfers = append(m.Transfers, tr)
 	})
 	for _, s := range activity.VisibleChildren(run.Root) {

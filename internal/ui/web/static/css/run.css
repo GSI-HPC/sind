@@ -1,7 +1,9 @@
 /* sind ui, progress display: the task dock, the run page and the Activity
    page. It uses the tokens and the building blocks of app.css. Widths and
    places that the server computes are classes (w0..w100, l0..l100), as the
-   Content-Security-Policy allows no inline style. A live update morphs a
+   Content-Security-Policy allows no inline style; run.js refines them from
+   their data, through the style of the element, which the policy allows to
+   a script of the origin. A live update morphs a
    fragment in and keeps its elements, so a bar or a ring that changes eases
    to its new size, and an animation goes on. */
 

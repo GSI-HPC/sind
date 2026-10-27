@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // Script of the progress display. The server draws every page and fragment;
-// this file does six small things that need the browser: it counts the
+// this file does seven small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
-// milliseconds since 1970), it keeps the details as the user left them
+// milliseconds since 1970), it places the bars and the timeline finer than
+// the whole percent of their classes, it keeps the details as the user left them
 // when a fragment is morphed in, it puts the progress of the run in the
 // title of the tab, it announces when a command starts or ends, it opens
 // and closes the task dock, and it closes the question of Stop. It evaluates no text and needs no inline script.
@@ -71,8 +72,39 @@
     drawDock();
   });
 
+  // set gives a property of the style of el a value, if it has another.
+  function set(el, prop, value) {
+    if (el.style[prop] !== value) el.style[prop] = value;
+  }
+
+  // place sizes each bar with a data-fill, in hundredths of a percent, and
+  // places the timeline of a run whose clock goes on (data-origin on the
+  // gantt, its start; not data-since, which is a clock that tick writes) from its times, in milliseconds since the start of the run: the
+  // labels and the gridlines at their data-at, the bars from their data-from
+  // to their data-to, or to the clock for a span that goes on. The scale
+  // grows with the clock as the server's does, and is at least eight
+  // seconds, so that all of them move together and smoothly between two
+  // updates. Once the clock stands, the classes of the server place them.
+  function place(now) {
+    document.querySelectorAll('[data-fill]').forEach(el => set(el, 'width', Number(el.dataset.fill) / 100 + '%'));
+    document.querySelectorAll('.gantt').forEach(g => {
+      const since = Number(g.dataset.origin);
+      const live = since > 0;
+      const scale = Math.max(now - since, 8000);
+      const pct = ms => Math.min(Math.max(ms / scale * 100, 0), 100) + '%';
+      g.querySelectorAll('[data-at]').forEach(el => set(el, 'left', live ? pct(Number(el.dataset.at)) : ''));
+      g.querySelectorAll('[data-from]').forEach(el => {
+        const from = Number(el.dataset.from);
+        const to = 'to' in el.dataset ? Number(el.dataset.to) : now - since;
+        set(el, 'left', live ? pct(from) : '');
+        set(el, 'width', live ? pct(Math.min(Math.max(to, from), scale) - from) : '');
+      });
+    });
+  }
+
   function tick() {
     const now = Date.now();
+    place(now);
     document.querySelectorAll('[data-hide-at]').forEach(el => {
       if (now >= Number(el.dataset.hideAt) && !el.classList.contains('gone')) el.classList.add('gone');
     });
@@ -137,6 +169,9 @@
 
   if (window.Idiomorph) {
     Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el, kind) => {
+      // The style that place gave stays until its next tick, so that a bar
+      // does not jump back to its class.
+      if (name === 'style') return !(el instanceof HTMLElement && ('fill' in el.dataset || 'at' in el.dataset || 'from' in el.dataset));
       if (name !== 'open' || !(el instanceof HTMLDetailsElement)) return true;
       if (!el.classList.contains('grow-details') || chosen.has(el.id)) return false;
       if (kind === 'remove' && el.open) { fold(el); return false; }
