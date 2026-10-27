@@ -25,6 +25,21 @@ var layerLine = regexp.MustCompile(`^([0-9a-f]{12,64}): ([A-Za-z]+(?: [A-Za-z]+)
 // first where it finds the terminal wider than 110 columns, or no width.
 var layerBytes = regexp.MustCompile(`^(?:\[[=> ]*\]\s*)?([0-9.]+)([kMGTP]?B)/([0-9.]+)([kMGTP]?B)\b`)
 
+// The messages a pull's target carries, that say what a pull does beyond
+// its amount and size, for a view such as sind ui's to draw; the terminal
+// shows the newest line of docker pull instead.
+const (
+	// PullEstimated says that the size counts a guess for the layers
+	// docker has not given a size yet.
+	PullEstimated = "size estimated"
+	// PullExtracting says that docker has downloaded every layer, and
+	// extracts them.
+	PullExtracting = "extracting"
+	// PullUpToDate says that a pull downloaded nothing: the daemon had the
+	// newest image.
+	PullUpToDate = "up to date"
+)
+
 // layerState is how far a layer has got.
 type layerState int
 
@@ -104,10 +119,13 @@ type layerCount struct {
 	unit   pullUnit
 	// terminal is set once docker pull has a terminal to write to.
 	terminal bool
-	// size and amount are what was reported last, share the share done
-	// they gave.
+	// size, amount and message are what was reported last, share the
+	// share done they gave.
+	// sent says the unit was reported.
 	size, amount int64
+	message      string
 	share        float64
+	sent         bool
 }
 
 // line parses a line docker pull wrote, and has the span report the work
@@ -185,30 +203,54 @@ func humanBytes(num, unit string) (int64, bool) {
 	return int64(f * byteUnits[unit]), true
 }
 
-// report has the span report the work in its unit, if it changed. l.mu is
-// held.
+// report has the span report the work in its unit, and what the pull does,
+// if they changed. l.mu is held.
 func (l *layerCount) report() {
-	var size, amount int64
-	switch l.unit {
-	case unitUnknown:
-		return
-	case unitLayers:
+	if l.unit != unitUnknown {
+		l.send(l.measure())
+	}
+}
+
+// measure returns the size and the amount of the work in its unit, and the
+// message that says what the pull does. l.mu is held.
+func (l *layerCount) measure() (size, amount int64, message string) {
+	guessed := false
+	if l.unit == unitBytes {
+		size, amount, guessed = l.bytes()
+	} else {
 		size = int64(len(l.layers))
 		for _, ly := range l.layers {
 			if ly.state == layerDone {
 				amount++
 			}
 		}
-	case unitBytes:
-		size, amount = l.bytes()
 	}
-	l.send(size, amount)
+	switch {
+	case l.extracting():
+		message = PullExtracting
+	case guessed:
+		message = PullEstimated
+	}
+	return size, amount, message
+}
+
+// extracting reports whether docker has downloaded every layer it told of
+// and has not extracted them all yet. l.mu is held.
+func (l *layerCount) extracting() bool {
+	pending := false
+	for _, ly := range l.layers {
+		if ly.state == layerPending {
+			return false
+		}
+		pending = pending || ly.state != layerDone
+	}
+	return pending
 }
 
 // bytes returns the size of the layers to download, guessed for those not
-// known, and the bytes downloaded, with the size held down so that the share
-// done does not go back. l.mu is held.
-func (l *layerCount) bytes() (size, amount int64) {
+// known, the bytes downloaded, and whether the size holds a guess, with the
+// size held down so that the share done does not go back. l.mu is held.
+func (l *layerCount) bytes() (size, amount int64, guessed bool) {
 	var known, sized, waiting int64
 	for _, ly := range l.layers {
 		switch {
@@ -228,22 +270,32 @@ func (l *layerCount) bytes() (size, amount int64) {
 	if share := float64(amount) / float64(max(size, 1)); share < l.share {
 		size = int64(float64(amount) / l.share)
 	}
-	return size, amount
+	return size, amount, waiting > 0
 }
 
-// send reports size and amount, those that changed. l.mu is held.
-func (l *layerCount) send(size, amount int64) {
+// send reports size, amount and message, those that changed. The first
+// report gives the unit before any amount, since a span keeps the unit it
+// was given first; after it, the amount goes first, so that an update of
+// the size carries it (an update carries the newest amount, an advance
+// comes up to 100 ms later). l.mu is held.
+func (l *layerCount) send(size, amount int64, message string) {
 	unit := progress.UnitItems
 	if l.unit == unitBytes {
 		unit = progress.UnitBytes
 	}
-	if size != l.size {
-		l.size = size
-		l.span.Update(progress.Work(unit, size))
+	update := func() {
+		l.size, l.message, l.sent = size, message, true
+		l.span.Update(progress.Work(unit, size), progress.Message(message))
+	}
+	if !l.sent {
+		update()
 	}
 	if amount != l.amount {
 		l.amount = amount
 		l.span.SetAmount(amount)
+	}
+	if size != l.size || message != l.message {
+		update()
 	}
 	if size > 0 {
 		l.share = float64(amount) / float64(size)
@@ -253,7 +305,8 @@ func (l *layerCount) send(size, amount int64) {
 // finish reports a pull that succeeded as done: every layer docker told of,
 // in bytes the size of those it downloaded, or the one item that an image
 // the daemon had already is, since docker writes no layer for it; in bytes,
-// such a pull downloaded nothing, and its size stays unknown.
+// such a pull downloaded nothing, and its size stays unknown, with the
+// message PullUpToDate.
 func (l *layerCount) finish() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -264,8 +317,13 @@ func (l *layerCount) finish() {
 		ly.state, ly.got = layerDone, ly.size
 	}
 	l.share = 0
-	l.report()
-	if l.size == 0 && l.unit == unitLayers {
-		l.send(1, 1)
+	size, amount, message := l.measure()
+	switch {
+	case size > 0:
+	case l.unit == unitLayers:
+		size, amount = 1, 1
+	default:
+		message = PullUpToDate
 	}
+	l.send(size, amount, message)
 }

@@ -178,7 +178,7 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 		want    string
 	}{
 		{"nothing to pull", []string{"img:1", "other:2"}, ""},
-		{"a missing image", []string{"img:1"}, "step pull images total=1 [fold,show-lines]: ok\n  target other:2 unit=bytes [show-lines]: ok\n"},
+		{"a missing image", []string{"img:1"}, "step pull images total=1 [fold,show-lines]: ok\n  target other:2 message=up to date unit=bytes [show-lines]: ok\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, w := progresstest.Watch(t.Context(), t)
