@@ -169,7 +169,8 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 }
 
 // The pull is the step "pull images", with a target for each image it
-// pulls, only when it pulls one.
+// pulls, only when it pulls one; what waits for it shows the wait "images"
+// while the pull inspects and pulls the images.
 func TestStartPull_ReportsThePulls(t *testing.T) {
 	exitErr := testutil.ExitCode1(t)
 	for _, tc := range []struct {
@@ -177,8 +178,8 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 		present []string
 		want    string
 	}{
-		{"nothing to pull", []string{"img:1", "other:2"}, ""},
-		{"a missing image", []string{"img:1"}, "step pull images total=1 [fold,show-lines]: ok\n  target other:2 message=up to date unit=bytes [show-lines]: ok\n"},
+		{"nothing to pull", []string{"img:1", "other:2"}, "wait images: ok\n"},
+		{"a missing image", []string{"img:1"}, "step pull images total=1 [fold,show-lines]: ok\n  target other:2 message=up to date unit=bytes [show-lines]: ok\nwait images: ok\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, w := progresstest.Watch(t.Context(), t)
@@ -194,7 +195,7 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 				return mock.Result{}
 			}}
 			g, gctx := errgroup.WithContext(ctx)
-			p := startPull(gctx, g, docker.NewClient(m), []string{"img:1", "other:2"}, false)
+			p := startPull(gctx, gctx, g, docker.NewClient(m), []string{"img:1", "other:2"}, false)
 			require.NoError(t, g.Wait())
 			require.NoError(t, p.err)
 			w.Finish()
@@ -216,6 +217,7 @@ func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	w.Finish()
 	assert.Equal(t, `step preflight [hidden]: canceled (canceled): pulling img:1: manifest unknown
+  wait images [hidden]: canceled (canceled): pulling img:1: manifest unknown
 step pull images total=1 [fold,show-lines]: failed (target): pulling img:1: manifest unknown
   target img:1 unit=bytes [show-lines]: failed (target): pulling {}: manifest unknown
 step rollback: ok
@@ -234,6 +236,7 @@ func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	require.EqualError(t, err, "inspecting image img:1: docker daemon unavailable")
 	w.Finish()
 	assert.Equal(t, `step preflight [hidden]: failed (target): inspecting image img:1: docker daemon unavailable
+  wait images [hidden]: canceled (canceled): inspecting image img:1: docker daemon unavailable
 step rollback: ok
 `, testutil.WithoutCalls(w.Events()))
 }
@@ -261,6 +264,7 @@ step nodes total=3 [fold]: ok
   target worker-0 role=worker: ok
     wait ready: ok
 step preflight [hidden]: ok
+  wait images [hidden]: ok
 step slurm total=3 [fold]: ok
   target controller role=controller: ok
     wait ready: ok

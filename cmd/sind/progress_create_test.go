@@ -155,6 +155,7 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
     target worker-0 role=worker: ok
       wait ready: ok
   step preflight [hidden]: ok
+    wait images [hidden]: ok
   step slurm total=2 [fold]: ok
     target controller role=controller: ok
       wait ready: ok
@@ -163,9 +164,10 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
 `, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""))
 	// Each node's wait has the whole --wait limit; the waits for Slurm
 	// have what is left of it once the nodes are ready, in whole seconds.
+	// The wait for the images has none.
 	var bounds []time.Duration
 	for _, e := range w.Events() {
-		if e.Kind == progress.KindWait && e.Type == progress.TypeStart {
+		if e.Kind == progress.KindWait && e.Type == progress.TypeStart && e.Name != "images" {
 			bounds = append(bounds, e.Timeout)
 		}
 	}
