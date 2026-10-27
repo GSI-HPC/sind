@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 	assert.Equal(t, "t:t1", c.SayKey)
 	assert.Equal(t, runRunning, c.SayState)
 	assert.Equal(t, "create cluster: started.", c.Say)
-	assert.Len(t, c.Segs, 2)
+	assert.Len(t, c.Segs, 3, "pull images, preflight, which ran for more than a second, and nodes")
 
 	// Stopping: no second Stop.
 	task.Canceling = true
@@ -275,4 +276,27 @@ func TestRunTaskHelpers(t *testing.T) {
 	assert.Equal(t, 5*time.Second, taskElapsed(store.Task{Start: runAt(0)}, runAt(5)))
 	assert.Equal(t, 2*time.Second, taskElapsed(store.Task{Start: runAt(0), End: runPtr(runAt(2))}, runAt(5)))
 	assert.Zero(t, taskElapsed(store.Task{Start: runAt(9)}, runAt(5)))
+}
+
+func TestRunDockShowsAHiddenStepThatTakesLong(t *testing.T) {
+	// The step mesh is hidden; once it has run for a second, as docker
+	// pulls the images of the mesh, the cards show it as the terminal does.
+	mesh := runSp("step", "mesh", runStartedAt(1), runWith(func(s *store.Span) { s.Hidden = true }))
+	run := runOf(0, "", mesh)
+	task := store.Task{ID: "t1", Trace: run.Trace, Start: runAt(0), Status: store.TaskRunning}
+	terminal := run
+	terminal.ID, terminal.Trace = "r2", "tr2"
+	for _, tc := range []struct {
+		now  float64
+		line string
+		segs int
+	}{{1.5, "working", 1}, {3, "mesh", 1}} {
+		d := runDockOf(store.Snapshot{Runs: []store.Run{run, terminal}, Tasks: []store.Task{task}}, runAt(tc.now))
+		require.Len(t, d.Cards, 2)
+		for _, c := range d.Cards {
+			assert.Equal(t, tc.line, c.Line, "%s at %v", c.Title, tc.now)
+			require.Len(t, c.Segs, tc.segs)
+		}
+		assert.Equal(t, tc.line == "mesh", strings.HasPrefix(d.Cards[0].Segs[0].Title, "mesh:"), "%v", d.Cards[0].Segs)
+	}
 }

@@ -92,10 +92,10 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (
 			"-v", string(m.SSHVolumeName()) + ":/root/.ssh",
 		}
 		sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), "ssh")...)
-		if m.Pull {
-			sshArgs = append(sshArgs, "--pull", "always")
-		}
 		sshArgs = append(sshArgs, SSHImage(), "sleep", "infinity")
+		if err := m.pullFor(ctx, SSHImage()); err != nil {
+			return false, err
+		}
 		if _, err := m.Docker.CreateContainer(ctx, sshArgs...); err != nil {
 			return false, fmt.Errorf("creating SSH container: %w", err)
 		}

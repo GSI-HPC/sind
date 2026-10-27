@@ -117,12 +117,7 @@ func TestRunPageNamesTheRunAsTheDock(t *testing.T) {
 func TestRunSummary(t *testing.T) {
 	run := runFixture(t, "create-ok.jsonl", 59)[0]
 	s := runSummaryOf(runCtxOf(run, runAt(25)))
-	assert.Equal(t, "25s", s.Elapsed)
-	assert.NotZero(t, s.Since)
-	assert.Equal(t, "nodes 0/3 · controller ready munge", s.Line)
-	assert.False(t, s.NoTargets)
-	assert.Equal(t, []runCount{{"ok", "ok", 1}, {"running", "run", 3}, {"queued", "", 0}, {"failed", "bad", 0}, {"canceled", "warn", 0}}, s.Counts)
-	assert.Equal(t, []string{"3 waits for a node to become ready. The slowest has used 5 % of its limit (5m00s)."}, s.Hints)
+	assert.Equal(t, runGanttOf(runCtxOf(run, runAt(25))).JSON(), s.Data)
 	assert.Equal(t, "▸ nodes 0/3 · sind ui", s.DocTitle)
 	assert.Equal(t, "r:"+run.ID, s.SayKey)
 	assert.Equal(t, runRunning, s.SayState)
@@ -137,50 +132,12 @@ func TestRunSummary(t *testing.T) {
 	assert.Equal(t, "stopping", s.SayState)
 
 	done := runSummaryOf(runCtxOf(runFixture(t, "create-canceled.jsonl", -1)[0], runAt(25)))
-	assert.Empty(t, done.Hints)
-	assert.Zero(t, done.Since)
 	assert.Equal(t, "~ create cluster · sind ui", done.DocTitle)
 	assert.Equal(t, "create cluster: stopped.", done.Say)
-	assert.Len(t, done.Counts, 5, "no skipped count unless there are some")
 
-	// Without targets there is nothing to count.
 	bare := runSummaryOf(runCtxOf(runOf(0, ""), runAt(5)))
-	assert.True(t, bare.NoTargets)
 	assert.Zero(t, runSummaryOf(runCtxOf(store.Run{ID: "x"}, runAt(5))).SaySince, "a run without a start")
 	assert.Equal(t, "▸ starting · sind ui", bare.DocTitle)
-	skipped := runOf(0, "", runSp("step", "n", runStartedAt(0), runKids(runSp("target", "a", runEndedAt(0, 1, "skipped")))))
-	assert.Contains(t, runSummaryOf(runCtxOf(skipped, runAt(5))).Counts, runCount{"skipped", "", 1})
-}
-
-func TestRunWaitHints(t *testing.T) {
-	waits := func(n int, timeout time.Duration, start float64) []store.Span {
-		var out []store.Span
-		for range n {
-			out = append(out, runSp("wait", "ready", runStartedAt(start), runWith(func(s *store.Span) { s.Timeout = timeout })))
-		}
-		return out
-	}
-	// One wait, at 60 % of its limit; waits without a limit, ended waits
-	// and the waits of the command itself do not count as node waits.
-	tgt := runSp("target", "w", runStartedAt(0), runKids(append(waits(1, 100*time.Second, 0),
-		runSp("wait", "nolimit", runStartedAt(0)),
-		runSp("wait", "old", runEndedAt(0, 5, "ok"), runWith(func(s *store.Span) { s.Timeout = time.Second })))...))
-	run := runOf(0, "", runSp("wait", "realm lock", runStartedAt(0), runWith(func(s *store.Span) { s.Message = "x" })),
-		runSp("wait", "idle", runStartedAt(0)),
-		runSp("step", "nodes", runStartedAt(0), runKids(tgt)))
-	assert.Equal(t, []string{
-		"Waiting for realm lock: x.",
-		"Waiting for idle.",
-		"1 wait for a node to become ready. The slowest has used 60 % of its limit (1m40s).",
-	}, runWaitHints(run, runAt(60)))
-	assert.Empty(t, runWaitHints(runOf(0, ""), runAt(60)))
-
-	// The slowest of several counts.
-	two := runOf(0, "", runSp("step", "nodes", runStartedAt(0), runKids(
-		runSp("target", "a", runStartedAt(0), runKids(waits(1, 100*time.Second, 50)...)),
-		runSp("target", "b", runStartedAt(0), runKids(waits(1, 100*time.Second, 10)...)),
-	)))
-	assert.Equal(t, []string{"2 waits for a node to become ready. The slowest has used 50 % of its limit (1m40s)."}, runWaitHints(two, runAt(60)))
 }
 
 func TestRunFailedPanel(t *testing.T) {

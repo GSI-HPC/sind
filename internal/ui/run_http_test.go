@@ -44,19 +44,13 @@ func TestRunPageRenders(t *testing.T) {
 		`<b>Stop create cluster dev?</b> sind removes the nodes it has made so far (rollback). The saved config stays.`,
 		`data-stop-keep>Keep running</button>`,
 		`name="csrf" value="` + ts.csrf + `"`,
-		"nodes 0/3 · controller ready munge",
 		`data-doc-title="▸ nodes 0/3 · sind ui"`,
-		`<details class="grow-details" id="step-0000000000000007" open>`,
-		`<div class="gridlines" aria-hidden="true"><span></span><span><i class="l0" data-at="0"></i>`,
-		`<div class="pb gantt" data-origin="`,
-		`data-from="0"`,
-		`data-fill="10000"`,
-		`class="ntile role-controller running"`,
-		`<small data-word="controller">controller</small>`,
-		`stroke-dasharray="3.5 69.1"`,
-		"101 MB / 101 MB",
-		"/events?f=rail&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-more&amp;f=run-nodes&amp;f=run-summary&amp;f=run-timeline&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
-		`/css/run.css`, `/js/run.js`,
+		`<span hidden data-gantt="{&#34;origin&#34;:` + fmt.Sprint(runAt(0).UnixMilli()) + `,&#34;last&#34;:`,
+		`&#34;title&#34;:&#34;create cluster dev&#34;`,
+		`&#34;n&#34;:&#34;nodes&#34;`,
+		`<div class="gantt" data-g="gantt">`,
+		"/events?f=rail&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-summary&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
+		`/css/run.css`, `/js/run.js`, `/js/gantt.js`,
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
 	}
@@ -88,8 +82,7 @@ func TestRunPageRenders(t *testing.T) {
 
 	ok := ts.get("/runs/r-ok").Body.String()
 	assert.NotContains(t, ok, "rfail")
-	assert.Contains(t, ok, `<h2>Other steps</h2>`)
-	assert.Contains(t, ok, "done in 53s")
+	assert.Contains(t, ok, `&#34;state&#34;:&#34;ok&#34;`)
 	assert.Contains(t, ok, "Show progress", "the dock holds the cards of the other runs")
 }
 
@@ -153,8 +146,8 @@ func TestRunPageTitleOfARunWithoutTitle(t *testing.T) {
 	w := ts.get("/runs/bare")
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "<title>Run bare · sind ui</title>")
-	// Nothing in it breaks the page: no steps, no clock.
-	assert.Contains(t, w.Body.String(), "No steps yet.")
+	// Nothing in it breaks the page: no spans, no clock.
+	assert.Contains(t, w.Body.String(), `data-gantt="{&#34;origin&#34;:0,&#34;last&#34;:0,&#34;state&#34;:&#34;running&#34;,&#34;title&#34;:&#34;&#34;,&#34;spans&#34;:[{`)
 }
 
 func TestRunFragmentsOfAGoneRun(t *testing.T) {

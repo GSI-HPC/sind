@@ -21,11 +21,9 @@ The browser tab title shows the step that is running, such as `▸ nodes 3/8 · 
 
 The run page shows the whole run:
 
-- **Summary:** the time that has passed, the step bar, and how many targets are in each state, such as running, ok or failed.
+- **Summary:** the time that has passed, the step that goes on with how far it got, such as `nodes · 1 of 3 done` or `pull images · 212 MB at 48 MB/s`, and how many steps and targets are done or failed. A line under it says what the run waits for, such as `worker-0 waits for ready (munge): 19s of its 5m00s limit`, and how long the run usually takes when earlier runs of the same command ended ok. When no new event came for some seconds, it says so and names what runs, such as a `docker create` that reports no progress.
 - **What failed:** the errors of the run, grouped by text, with the nodes they happened on. It also says whether the rollback removed everything. For the logs of a failed service, open the Logs tab of the cluster.
-- **Steps:** a timeline. Steps that overlap ran at the same time. A step that runs shows its targets, and folds them away once it ends; a step that you open or close stays as you left it.
-- **Nodes:** a tile for each node, with its role, the check that it waits for, and a ring that shows how much of the wait limit it has used. The ring turns amber at 50 % and red at 80 %.
-- **Transfers:** the work done of the work to do, for the steps that report it, such as image pulls: the bytes downloaded of the image's size, and while it goes on the rate over the last five seconds, such as `38 MB / 101 MB · 14 MB/s`.
+- **Steps:** a timeline. Steps that overlap ran at the same time, and the line marked with the clock is now. At the end of each row is its result: the targets done, how long it took, and for an image pull the bytes and the rate. The bar of a pull has the rate as a line under it, and shows `extracting` dotted once the download is done. A step with up to eight targets opens while it runs, and a step that failed opens; a step that you open or close stays as you left it. A target shows a bar for each of its phases, its waits hatched, and what it waits for, such as `ready · munge · 19s of 5m00s`. Click a bar to zoom to its step, and **Whole run** or Escape to go back.
 - **What the event log says about this run:** the facts that sind wrote for this run, for a bug report.
 
 A run that sind ui started also shows its command, with **Copy**, and the config it ran with, under **Config used**. sind ui keeps these for the last 25 commands that ended, until it stops. A button leads back to what the command worked on: **Open dev** for the cluster, **Open Clusters** once the cluster is gone, or **Open Mesh and DNS**.

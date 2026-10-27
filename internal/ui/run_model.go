@@ -203,6 +203,11 @@ func runPill(run store.Run, task *store.Task) (label, class string) {
 	return "ended", ""
 }
 
+// runPillClass maps the class of a span to the class of a pill.
+func runPillClass(class string) string {
+	return map[string]string{runOK: "ok", runFailed: "bad", runCanceled: "warn", runRunning: "run"}[class]
+}
+
 // runTaskOf returns the newest task that started a command of the trace.
 func runTaskOf(snap store.Snapshot, trace string) (store.Task, bool) {
 	if trace == "" {
@@ -438,6 +443,14 @@ func runFailure(run store.Run) string {
 func runStepCounts(s store.Span) (done, total int) {
 	c := activity.CountTargets(s)
 	return c.Done(), max(s.Total, c.Total)
+}
+
+// runRevealed returns the run with the hidden spans that the terminal
+// shows by now taken out of hiding (activity.Reveal), such as the step
+// "mesh" while docker pulls the images of the mesh.
+func runRevealed(run store.Run, now time.Time) store.Run {
+	run.Root = activity.Reveal(run.Root, now)
+	return run
 }
 
 // runSegs returns the segments of a run: one for each visible step, in the

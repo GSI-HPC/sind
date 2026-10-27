@@ -43,8 +43,9 @@ type fakeNetwork struct {
 
 // fakeDocker is a stateful stand-in for the docker CLI in mesh unit tests,
 // for code that runs docker calls concurrently, where queued results do not
-// work. It knows networks, volumes and containers, and the files the mesh
-// writes into containers. A network created without --subnet gets the
+// work. It knows networks, volumes, containers and images, and the files
+// the mesh writes into containers; a pull downloads an image of one layer
+// of 2 MB. A network created without --subnet gets the
 // first free 10.N.0.0/16 and the gateway 10.N.0.1. A starting container
 // gets its --ip, or else the lowest free address of the network's ip-range,
 // and loses it when it stops, as Docker does. Calls whose joined arguments
@@ -54,6 +55,7 @@ type fakeDocker struct {
 	networks   map[string]*fakeNetwork
 	volumes    map[string]docker.Labels // existing volumes, with their labels
 	containers map[string]*fakeContainer
+	images     map[string]bool // images the daemon has
 	fail       map[string]mock.Result
 }
 
@@ -64,6 +66,7 @@ func newFake(t *testing.T) *fakeDocker {
 		networks:   map[string]*fakeNetwork{},
 		volumes:    map[string]docker.Labels{},
 		containers: map[string]*fakeContainer{},
+		images:     map[string]bool{},
 		fail:       map[string]mock.Result{},
 	}
 }
@@ -312,6 +315,16 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 			return notFound(f.t, testutil.NoSuchContainer(args[1]))
 		}
 		return mock.Result{Stdout: f.inspectJSON(args[1], c)}
+	case joined == "image inspect --format {{.Id}} "+last:
+		if !f.images[last] {
+			return notFound(f.t, "Error: No such image: "+last+"\n")
+		}
+		return mock.Result{Stdout: "sha256:" + last + "\n"}
+	case joined == "pull "+last:
+		f.images[last] = true
+		return mock.Result{Stdout: "latest: Pulling from " + last + "\n" +
+			"a3ed95caeb02: Downloading  1MB/2MB\na3ed95caeb02: Pull complete\n" +
+			"Status: Downloaded newer image for " + last + "\n"}
 	case args[0] == "create":
 		return f.create(args[1:])
 	case args[0] == "start":

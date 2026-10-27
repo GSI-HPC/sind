@@ -20,23 +20,20 @@ import (
 func init() { registerRun(defaultRegistry) }
 
 // runFragments are the live parts of the run page, in the order the page
-// places them. Each depends on the one run that the page shows.
-var runFragments = []string{
-	"run-head", "run-summary", "run-failed", "run-timeline", "run-nodes", "run-more", "run-facts",
-}
+// places them. Each depends on the one run that the page shows. The
+// summary and the timeline are no fragments: gantt.js draws them from the
+// data of run-summary (runGantt).
+var runFragments = []string{"run-head", "run-summary", "run-failed", "run-facts"}
 
 // registerRun adds the progress display to r: the run page, the Activity
 // page, the page of a task whose run the log does not hold yet, and the
 // routes of the task dock. The dock itself is the shell fragment "tasks".
 func registerRun(r *Registry) {
 	loads := map[string]func(rc runCtx) any{
-		"run-head":     func(rc runCtx) any { return runHeadOf(rc) },
-		"run-summary":  func(rc runCtx) any { return runSummaryOf(rc) },
-		"run-failed":   func(rc runCtx) any { return runFailedOf(rc) },
-		"run-timeline": func(rc runCtx) any { return runTimelineOf(rc) },
-		"run-nodes":    func(rc runCtx) any { return runNodesOf(rc) },
-		"run-more":     func(rc runCtx) any { return runMoreOf(rc) },
-		"run-facts":    func(rc runCtx) any { return runFactsOf(rc) },
+		"run-head":    func(rc runCtx) any { return runHeadOf(rc) },
+		"run-summary": func(rc runCtx) any { return runSummaryOf(rc) },
+		"run-failed":  func(rc runCtx) any { return runFailedOf(rc) },
+		"run-facts":   func(rc runCtx) any { return runFactsOf(rc) },
 	}
 	for _, name := range runFragments {
 		build := loads[name]
@@ -84,8 +81,6 @@ type runCtx struct {
 func newRunCtx(v *View) runCtx {
 	rc := runCtx{Snap: v.Snap, Now: v.Now, CSRF: v.CSRF}
 	rc.Run, rc.Found = v.Snap.Run(v.Params.Get("id"))
-	// A hidden step that takes long shows, as it does in a terminal.
-	rc.Run.Root = activity.Reveal(rc.Run.Root, v.Now)
 	if t, ok := runTaskOf(v.Snap, rc.Run.Trace); rc.Found && ok {
 		// The page names the run as the dock and Activity do, with the
 		// flags that tell it from other runs of the command.
@@ -339,25 +334,11 @@ func runHasCluster(snap store.Snapshot, realm, name string) bool {
 	return false
 }
 
-// runCount is a number of the summary.
-type runCount struct {
-	Label string
-	Class string
-	N     int
-}
-
-// runSummary is the panel with the clock, the bar and the counts.
+// runSummary is what the run page draws its summary and its timeline from,
+// and what it puts in the browser tab and announces.
 type runSummary struct {
-	// Title names the run, for the name of its bar.
-	Title   string
-	Elapsed string
-	Since   int64
-	Segs    runBar
-	Line    string
-	Counts  []runCount
-	// NoTargets is set for a run without targets, which has nothing to count.
-	NoTargets bool
-	Hints     []string
+	// Data is the run as gantt.js reads it (runGantt).
+	Data string
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
 	// SayKey, SayState and Say are what run.js announces when the state
@@ -370,76 +351,25 @@ type runSummary struct {
 	SaySince int64
 }
 
-// runSummaryOf builds the summary.
+// runSummaryOf builds the summary. What the page says of hidden spans,
+// such as the tab's title and what failed, follows the terminal, which
+// shows a hidden step that takes long (activity.Reveal); gantt.js does the
+// same as it draws.
 func runSummaryOf(rc runCtx) *runSummary {
-	run := rc.Run
-	s := &runSummary{
-		Title: run.Title, Elapsed: runDur(runElapsed(run, rc.Now)), Since: runSince(run),
-		Segs: runSegs(run), Line: runLine(run, rc.Task, rc.Now),
-	}
+	s := &runSummary{Data: runGanttOf(rc).JSON()}
+	run := runRevealed(rc.Run, rc.Now)
 	canceling := false
 	s.SayKey = "r:" + run.ID
 	if t := rc.Task; t != nil {
 		canceling, s.SayKey = t.Canceling, "t:"+t.ID
 	}
 	s.SayState = runSayState(runStatusClass(run), canceling)
-	s.Say = runSay(run.Title, s.SayState, s.Elapsed, runFailure(run))
+	s.Say = runSay(run.Title, s.SayState, runDur(runElapsed(run, rc.Now)), runFailure(run))
 	if origin := runOrigin(run); !origin.IsZero() {
 		s.SaySince = origin.UnixMilli()
 	}
-	c := activity.CountTargets(run.Root)
-	s.NoTargets = c.Total == 0
-	s.Counts = []runCount{
-		{"ok", "ok", c.OK}, {"running", "run", c.Running}, {"queued", "", c.Queued},
-		{"failed", "bad", c.Failed}, {"canceled", "warn", c.Canceled},
-	}
-	if c.Skipped > 0 {
-		s.Counts = append(s.Counts, runCount{"skipped", "", c.Skipped})
-	}
-	if !run.Done() {
-		s.Hints = runWaitHints(run, rc.Now)
-	}
 	s.DocTitle = runDocTitle(run)
 	return s
-}
-
-// runWaitHints says what the run waits for: the lock or other waits of the
-// command, and how much of their limit the waits of the targets have used.
-func runWaitHints(run store.Run, now time.Time) []string {
-	var hints []string
-	for _, w := range activity.VisibleChildren(run.Root) {
-		if w.Kind == activity.KindWait && !w.Done() {
-			hint := "Waiting for " + w.Name
-			if w.Message != "" {
-				hint += ": " + w.Message
-			}
-			hints = append(hints, hint+".")
-		}
-	}
-	n, worst := 0, 0.0
-	var limit time.Duration
-	runVisit(run.Root, func(w store.Span, _ string) {
-		if w.Kind != activity.KindWait || w.Done() || w.Parent == run.Root.ID {
-			return
-		}
-		used, ok := activity.WaitUsed(w, now)
-		if !ok {
-			return
-		}
-		if n == 0 || used > worst {
-			worst, limit = used, w.Timeout
-		}
-		n++
-	})
-	if n > 0 {
-		noun := "waits"
-		if n == 1 {
-			noun = "wait"
-		}
-		hints = append(hints, fmt.Sprintf("%d %s for a node to become ready. The slowest has used %d %% of its limit (%s).",
-			n, noun, runPct(worst, 1), runDur(limit)))
-	}
-	return hints
 }
 
 // runDocTitle is the title of the browser tab: the step that goes on while
@@ -483,7 +413,7 @@ type runFailPanel struct {
 
 // runFailedOf builds the panel; nil for a run that has not failed.
 func runFailedOf(rc runCtx) *runFailPanel {
-	run := rc.Run
+	run := runRevealed(rc.Run, rc.Now)
 	failures := activity.FailedTargets(run.Root)
 	failed := run.Done() && run.Status == store.StatusFailed
 	canceled := run.Done() && run.Status == store.StatusCanceled

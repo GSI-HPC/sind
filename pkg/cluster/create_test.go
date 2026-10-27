@@ -252,7 +252,7 @@ func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	t.Helper()
 	m := &mock.Executor{OnCall: happyOnCall(t, nil)}
 	client := docker.NewClient(m)
-	require.NoError(t, createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, startPull(t.Context(), nil, client, nil, false)))
+	require.NoError(t, createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, startPull(t.Context(), t.Context(), nil, client, nil, false)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -897,7 +897,7 @@ func TestResolveInfra_Errors(t *testing.T) {
 			}
 			client := docker.NewClient(&m)
 
-			_, _, _, err := resolveInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), nil, client, nil, false))
+			_, _, _, err := resolveInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), t.Context(), nil, client, nil, false))
 
 			require.ErrorContains(t, err, tt.wantErrSubstr)
 		})
