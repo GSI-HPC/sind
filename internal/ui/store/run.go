@@ -110,6 +110,9 @@ type Span struct {
 	// Rate is how many bytes a second the amount of a span that works in
 	// bytes grew over the last seconds while it runs; 0 when not known.
 	Rate float64
+	// Samples are the amounts and sizes of a span that works in a unit,
+	// as its events gave them, the oldest first (see activity's history).
+	Samples []Sample
 	// Status, Class, Err and Exit are how the span ended; Exit is nil
 	// when the span gave no exit code.
 	Status string
@@ -132,6 +135,14 @@ type Span struct {
 
 // Done reports whether the span has ended.
 func (s Span) Done() bool { return s.Ended != nil }
+
+// Sample is the amount and the size of a span's work at the time of one of
+// its events.
+type Sample struct {
+	At     time.Time
+	Amount int64
+	Size   int64
+}
 
 // Task states.
 const (
