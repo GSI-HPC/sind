@@ -81,22 +81,16 @@ type Span struct {
 	// Kind is command, step, batch, target, call or wait.
 	Kind string
 	Name string
-	// Hidden, Fold, ShowLines and DryRun are the span's flags.
-	Hidden    bool
-	Fold      bool
-	ShowLines bool
-	DryRun    bool
+	// Hidden is the span's flag hidden.
+	Hidden bool
 	// State is queued, running or ended.
 	State string
-	// Node, Host and Role say what a target or a call is for.
+	// Node and Role say what a target or a call is for.
 	Node string
-	Host string
 	Role string
-	// Total, Limit and Batch are a step's or a batch's counts: the
-	// targets it expects, how many run at once, and a batch's place
-	// such as "2/5".
+	// Total and Batch are a step's or a batch's counts: the targets it
+	// expects, and a batch's place such as "2/5".
 	Total int
-	Limit int
 	Batch string
 	// Message is the span's latest one-line message.
 	Message string

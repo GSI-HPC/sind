@@ -230,7 +230,7 @@ func (s *Sim) Cancel(id string) error {
 	return nil
 }
 
-// Running implements run.Starter.
+// Running returns how many commands run.
 func (s *Sim) Running() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

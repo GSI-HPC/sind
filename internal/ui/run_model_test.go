@@ -180,6 +180,7 @@ func TestRunStatusClassAndPill(t *testing.T) {
 		"failed":       {over("failed"), nil, runFailed, "failed", "bad"},
 		"canceled":     {over("canceled"), nil, runCanceled, "canceled", "warn"},
 		"odd status":   {over("weird"), nil, runEnded, "weird", ""},
+		"skipped":      {over("skipped"), nil, runEnded, "skipped", ""},
 		"no status":    {over(""), nil, runEnded, "ended", ""},
 		"no end":       {func() store.Run { r := over(""); r.Unfinished = true; return r }(), nil, runEnded, "no end recorded", "warn"},
 		"no end, task": {func() store.Run { r := over("canceled"); r.Unfinished = true; return r }(), nil, runCanceled, "canceled", "warn"},

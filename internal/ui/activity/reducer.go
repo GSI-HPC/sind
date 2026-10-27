@@ -92,16 +92,15 @@ func convertRun(ru eventlog.Run, rt rates, h history) store.Run {
 	if root.Node != "" {
 		title += " " + root.Node
 	}
-	out := store.Run{
+	// eventlog clears Suspended once the run has ended.
+	return store.Run{
 		ID: ru.ID, Trace: ru.Trace.ID.String(), Parent: spanID(ru.Trace.Parent),
 		FromUI:  store.IsUITraceState(ru.Trace.State),
 		Program: ru.Program, Version: ru.Version,
 		Title: title, Start: root.Queued, End: root.Ended, Last: ru.Last,
 		Status: root.Status, Class: root.Class, Err: root.Err,
-		Root: root,
+		Suspended: ru.Suspended, Root: root,
 	}
-	out.Suspended = ru.Suspended && !out.Done()
-	return out
 }
 
 // convertSpan returns the span and its descendants as sind ui holds them,
@@ -111,13 +110,10 @@ func convertSpan(s eventlog.Span, work func(progress.SpanID) (float64, []store.S
 	rate, samples := work(s.ID)
 	out := store.Span{
 		ID: spanID(s.ID), Parent: spanID(s.Parent),
-		Name:      s.Name,
-		Hidden:    s.Flags&progress.FlagHidden != 0,
-		Fold:      s.Flags&progress.FlagFold != 0,
-		ShowLines: s.Flags&progress.FlagShowLines != 0,
-		DryRun:    s.Flags&progress.FlagDryRun != 0,
-		Node:      s.Node, Host: s.Host, Role: s.Role,
-		Total: s.Total, Limit: s.Limit, Batch: s.Batch, Message: s.Message,
+		Name:   s.Name,
+		Hidden: s.Flags&progress.FlagHidden != 0,
+		Node:   s.Node, Role: s.Role,
+		Total: s.Total, Batch: s.Batch, Message: s.Message,
 		Timeout: s.Timeout, Amount: s.Amount, Size: s.Size,
 		Err:     s.Err,
 		Rate:    rate,

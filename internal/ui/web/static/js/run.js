@@ -48,23 +48,19 @@
   function closeStops(except) {
     document.querySelectorAll('details.stopc[open]').forEach(d => { if (d !== except) d.open = false; });
   }
+  function closeStop(d) {
+    d.open = false;
+    d.querySelector('summary').focus();
+  }
   document.addEventListener('click', ev => {
     if (!(ev.target instanceof Element)) return;
     const keep = ev.target.closest('[data-stop-keep]');
-    if (keep) {
-      const d = keep.closest('details.stopc');
-      d.open = false;
-      d.querySelector('summary').focus();
-      return;
-    }
-    closeStops(ev.target.closest('details.stopc'));
+    if (keep) closeStop(keep.closest('details.stopc'));
+    else closeStops(ev.target.closest('details.stopc'));
   });
   document.addEventListener('keydown', ev => {
-    if (ev.key !== 'Escape' || !(ev.target instanceof Element)) return;
-    const d = ev.target.closest('details.stopc[open]');
-    if (!d) return;
-    d.open = false;
-    d.querySelector('summary').focus();
+    const d = ev.key === 'Escape' && ev.target instanceof Element && ev.target.closest('details.stopc[open]');
+    if (d) closeStop(d);
   });
 
   document.addEventListener('click', ev => {

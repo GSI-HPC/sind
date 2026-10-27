@@ -53,8 +53,6 @@ func (f *actFakeStarter) Cancel(id string) error {
 	return f.cancelErr
 }
 
-func (f *actFakeStarter) Running() int { return 0 }
-
 func (f *actFakeStarter) Shutdown(g time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

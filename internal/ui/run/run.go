@@ -44,27 +44,11 @@ var ErrNotRunning = errors.New("the command is not running")
 // ErrClosing is the error of Start once Shutdown has begun.
 var ErrClosing = errors.New("sind ui is shutting down")
 
-// Spec describes a command to run as a task.
-type Spec struct {
-	// Action is the id of the action that built the command.
-	Action string
-	// Argv is the command line; Argv[0] is "sind", which the runner
-	// replaces by the running binary.
-	Argv []string
-	// Display is Argv quoted for a shell, as the dialog showed it.
-	Display string
-	// Realm and Cluster name what the command works on, empty for none.
-	Realm   string
-	Cluster string
-	// Form is the dialog's form that built the command, without the CSRF
-	// token, the fingerprint and the typed confirmation, so that the user
-	// can try the command again; nil for a command that no form built.
-	Form map[string][]string
-	// ConfigPath and Config are the file that the command saved and runs
-	// with, such as the config of a new cluster; empty for none.
-	ConfigPath string
-	Config     string
-}
+// Spec describes a command to run as a task: the task with what the dialog
+// gives, Action, Argv, Display, Realm, Cluster, Form, ConfigPath and Config.
+// Argv[0] is "sind", which the runner replaces by the running binary. Start
+// sets the ID, the trace, the start and the status.
+type Spec = store.Task
 
 // Starter starts tasks and stops them. The runner executes them.
 type Starter interface {
@@ -73,8 +57,6 @@ type Starter interface {
 	Start(s Spec) (string, error)
 	// Cancel asks the running task to stop, as Ctrl-C does.
 	Cancel(id string) error
-	// Running returns how many tasks run.
-	Running() int
 	// Shutdown asks running tasks to stop and waits for them, up to grace,
 	// then kills those left.
 	Shutdown(grace time.Duration)
@@ -99,8 +81,6 @@ type Config struct {
 	// Kill sends sig to the process group of the child with the process ID
 	// pid; nil is KillGroup.
 	Kill func(pid int, sig syscall.Signal) error
-	// Now is the clock; nil is time.Now.
-	Now func() time.Time
 	// Random fills b with random bytes, for the IDs; nil is crypto/rand.
 	Random func(b []byte)
 }
@@ -134,9 +114,6 @@ func New(cfg Config) *Runner {
 	if cfg.Kill == nil {
 		cfg.Kill = KillGroup
 	}
-	if cfg.Now == nil {
-		cfg.Now = time.Now
-	}
 	if cfg.Random == nil {
 		cfg.Random = func(b []byte) {
 			// crypto/rand never fails; it ends the process when it cannot.
@@ -156,10 +133,8 @@ func (r *Runner) Start(s Spec) (string, error) {
 		return "", errors.New("not a sind command")
 	}
 	trace, span := r.hex(16), r.hex(8)
-	t := store.Task{
-		ID: r.hex(8), Action: s.Action, Display: s.Display, Argv: s.Argv, Realm: s.Realm, Cluster: s.Cluster,
-		Form: s.Form, ConfigPath: s.ConfigPath, Config: s.Config, Trace: trace, Start: r.cfg.Now(), Status: store.TaskRunning,
-	}
+	t := s
+	t.ID, t.Trace, t.Start, t.Status = r.hex(8), trace, time.Now(), store.TaskRunning
 	var environ []string
 	if r.cfg.Environ != nil {
 		environ = r.cfg.Environ()
@@ -213,7 +188,7 @@ func (r *Runner) end(t store.Task, stderr string, err error) {
 	r.mu.Unlock()
 	out := tail(stderr)
 	exit, status := outcome(err)
-	end := r.cfg.Now()
+	end := time.Now()
 	r.cfg.Store.UpdateTask(t.ID, func(t *store.Task) {
 		t.End, t.Output, t.Exit, t.Status = &end, out, exit, status
 		if status == store.TaskFailed {
@@ -324,13 +299,6 @@ func (r *Runner) interruptAll() {
 			_ = r.cfg.Kill(c.pid, syscall.SIGINT)
 		}
 	}
-}
-
-// Running returns how many children run.
-func (r *Runner) Running() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.running)
 }
 
 // hex returns n random bytes as hexadecimal digits.

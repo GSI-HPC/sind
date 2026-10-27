@@ -29,7 +29,7 @@ func (c Counts) Done() int { return c.OK + c.Failed + c.Canceled + c.Skipped }
 // s itself.
 func CountTargets(s store.Span) Counts {
 	var c Counts
-	walk(s, func(t store.Span) {
+	Walk(s, func(t store.Span) {
 		if t.Kind != KindTarget {
 			return
 		}
@@ -52,11 +52,11 @@ func CountTargets(s store.Span) Counts {
 	return c
 }
 
-// walk calls fn with each span below s, depth first, in start order.
-func walk(s store.Span, fn func(store.Span)) {
+// Walk calls fn with each span below s, depth first, in start order.
+func Walk(s store.Span, fn func(store.Span)) {
 	for _, c := range s.Children {
 		fn(c)
-		walk(c, fn)
+		Walk(c, fn)
 	}
 }
 
@@ -113,7 +113,7 @@ type Failure struct {
 // text, in the order of each group's first target.
 func FailedTargets(s store.Span) []Failure {
 	var out []Failure
-	walk(s, func(t store.Span) {
+	Walk(s, func(t store.Span) {
 		if t.Kind != KindTarget || t.Status != store.StatusFailed {
 			return
 		}
@@ -178,13 +178,6 @@ func Elapsed(s store.Span, now time.Time) time.Duration {
 	return max(end.Sub(s.Started), 0)
 }
 
-// Levels of the time a wait has used of its limit.
-const (
-	WaitOK       = "ok"
-	WaitWarn     = "warn"
-	WaitCritical = "crit"
-)
-
 // WaitUsed is the part of its limit, from 0 to 1, that the wait s has used
 // by now. It is false for a span without a Timeout.
 func WaitUsed(s store.Span, now time.Time) (float64, bool) {
@@ -192,35 +185,4 @@ func WaitUsed(s store.Span, now time.Time) (float64, bool) {
 		return 0, false
 	}
 	return min(float64(Elapsed(s, now))/float64(s.Timeout), 1), true
-}
-
-// WaitLevel names how far a wait is: warn from half of its limit, critical
-// from four fifths.
-func WaitLevel(used float64) string {
-	switch {
-	case used >= 0.8:
-		return WaitCritical
-	case used >= 0.5:
-		return WaitWarn
-	}
-	return WaitOK
-}
-
-// SlowestWait returns the wait below s that has used the most of its
-// limit, and that part. It is false when no wait below s has a limit.
-func SlowestWait(s store.Span, now time.Time) (store.Span, float64, bool) {
-	var (
-		slowest store.Span
-		most    float64
-		found   bool
-	)
-	walk(s, func(w store.Span) {
-		if w.Kind != KindWait {
-			return
-		}
-		if used, ok := WaitUsed(w, now); ok && (!found || used > most) {
-			slowest, most, found = w, used, true
-		}
-	})
-	return slowest, most, found
 }

@@ -191,7 +191,7 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 	}
 	if e.realms == nil && e.cluster != "" {
 		for _, realm := range slices.Sorted(maps.Keys(snap.Clusters)) {
-			if runHasCluster(snap, realm, e.cluster) {
+			if _, ok := snap.Cluster(realm, e.cluster); ok {
 				e.realms = append(e.realms, realm)
 			}
 		}
