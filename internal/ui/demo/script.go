@@ -118,7 +118,9 @@ func (p play) preflight(ctx context.Context) (context.Context, *progress.Span) {
 }
 
 // pull plays the step pull images, whose target counts the bytes of the
-// image as sind does, next to the preflight. A fail ends the pull with it.
+// image as sind does, with its docker call, and says when docker extracts
+// it, next to the preflight, which waits for it. A fail ends the pull with
+// it.
 func (p play) pull(ctx context.Context, image string, fail error) error {
 	const (
 		ticks = 8
@@ -126,13 +128,17 @@ func (p play) pull(ctx context.Context, image string, fail error) error {
 	)
 	pctx, pull := progress.Start(ctx, progress.KindStep, "pull images",
 		progress.Flagged(progress.FlagFold|progress.FlagShowLines), progress.Total(1))
-	_, img := progress.Start(pctx, progress.KindTarget, image,
+	ictx, img := progress.Start(pctx, progress.KindTarget, image,
 		progress.Queued(), progress.Node(image))
 	p.pause(ctx, 80*time.Millisecond)
 	img.Run()
-	_, preflight := p.preflight(ctx)
+	prep, preflight := p.preflight(ctx)
+	_, wait := progress.Start(prep, progress.KindWait, "images")
+	_, call := progress.Start(ictx, progress.KindCall, "docker pull", progress.Flagged(progress.FlagHidden))
 	if fail != nil {
 		p.pause(ctx, 700*time.Millisecond)
+		call.End(fail, progress.Exit(1))
+		wait.End(context.Canceled)
 		preflight.End(nil)
 		img.End(fail)
 		pull.End(fail)
@@ -143,6 +149,11 @@ func (p play) pull(ctx context.Context, image string, fail error) error {
 		p.pause(ctx, 900*time.Millisecond)
 		img.SetAmount(size * int64(i+1) / ticks)
 	}
+	img.Update(progress.Message("extracting"))
+	p.pause(ctx, 700*time.Millisecond)
+	call.End(nil)
+	img.Update(progress.Message(""))
+	wait.End(nil)
 	preflight.End(nil)
 	p.pause(ctx, 300*time.Millisecond)
 	img.End(nil)
