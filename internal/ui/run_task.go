@@ -158,7 +158,7 @@ func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 			s.Fail(w, r, fmt.Errorf("the command still runs; stop it first: %w", ErrBadRequest))
 			return
 		}
-		s.Store().HideTasks(func(t store.Task) bool { return t.ID == id })
+		s.env.Store.HideTasks(func(t store.Task) bool { return t.ID == id })
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -166,6 +166,6 @@ func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 // runTaskClear answers POST /tasks/clear, the Clear done of the dock: it
 // hides the cards of all tasks that have ended.
 func runTaskClear(s *Server, w http.ResponseWriter, _ *http.Request) {
-	s.Store().HideTasks(taskEnded)
+	s.env.Store.HideTasks(taskEnded)
 	w.WriteHeader(http.StatusNoContent)
 }

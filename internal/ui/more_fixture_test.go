@@ -87,7 +87,7 @@ func moreTestServer(t *testing.T, fixture, withDoctor bool) (*testServer, *int) 
 	cfg.Registry, cfg.FS = defaultRegistry.snapshot(), webFS()
 	calls := new(int)
 	if withDoctor {
-		cfg.Env.Put(moreDoctorKey, func() { *calls++ })
+		cfg.Env.Put(ColDoctorKey, func() { *calls++ })
 	}
 	moreEnv.Store(cfg.Env)
 	t.Cleanup(func() { moreEnv.Store(nil) })

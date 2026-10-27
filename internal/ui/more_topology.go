@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	RegisterFragment(Fragment{
+	defaultRegistry.AddFragment(Fragment{
 		Name:     "more-topology",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker, store.TopicDoctor},
 		Prefixes: []string{"clusters/", "nodes/", "networks/", "mesh/", "monitoring/"},
@@ -20,7 +20,7 @@ func init() {
 		Load:     moreTopologyLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	RegisterRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgListRoute(Page{
 		Name: "more-topology", Pattern: "GET /topology", Title: "Topology", Nav: "topology",
 		Params: []string{"realm", "view"}, Fragments: []string{"more-topology"},
 	}))

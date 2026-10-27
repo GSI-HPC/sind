@@ -59,7 +59,7 @@ var logsUnitRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,127}$`)
 var logsANSIRE = regexp.MustCompile(`\x1b(\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)?|[@-Z\\-_])`)
 
 func init() {
-	RegisterRoute(logsRoute)
+	defaultRegistry.AddRoute(logsRoute)
 }
 
 // logsRoute is the stream.

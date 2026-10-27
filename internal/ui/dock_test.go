@@ -15,7 +15,6 @@ import (
 
 func TestRunTasksFragmentDeclaration(t *testing.T) {
 	f := tasksFragment()
-	assert.True(t, f.Shell)
 	assert.Equal(t, []string{"run/"}, f.Prefixes)
 	assert.Equal(t, []store.Topic{store.TopicTasks}, f.Topics)
 	assert.Equal(t, []string{"run", "task"}, f.Params)

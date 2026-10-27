@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/GSI-HPC/go-clikit/doctor"
@@ -13,20 +14,17 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
-// moreDoctorKey is the Env key of the func that runs the host checks again.
-const moreDoctorKey = "collect.doctor"
-
 func init() {
-	RegisterFragment(Fragment{
+	defaultRegistry.AddFragment(Fragment{
 		Name:   "more-doctor",
 		Topics: []store.Topic{store.TopicDoctor, store.TopicDocker},
 		Load:   moreDoctorLoad,
 	})
-	RegisterPage(Page{
+	defaultRegistry.AddPage(Page{
 		Name: "more-doctor", Pattern: "GET /doctor", Title: "Doctor", Nav: "doctor",
 		Fragments: []string{"more-doctor"},
 	})
-	RegisterRoute(Route{Pattern: "POST /doctor/check", Handle: moreDoctorCheck})
+	defaultRegistry.AddRoute(Route{Pattern: "POST /doctor/check", Handle: moreDoctorCheck})
 }
 
 // moreDoctorData is what the Doctor page shows.
@@ -161,7 +159,7 @@ func moreDoctorFunc() func() {
 	if env == nil {
 		return nil
 	}
-	fn, _ := env.Get(moreDoctorKey).(func())
+	fn, _ := env.Get(ColDoctorKey).(func())
 	return fn
 }
 
@@ -181,7 +179,7 @@ func moreCheckMark(status doctor.Status) (class, mark string) {
 // moreDoctorCount is the badge behind the rail entry: the checks that
 // failed, as "1 failed", else the warnings, as "2 warnings", or a dot when
 // every check passed. Before the first check it shows none.
-func moreDoctorCount(sn store.Snapshot) NavCount {
+func moreDoctorCount(sn store.Snapshot, _ time.Time) NavCount {
 	if sn.Doctor == nil {
 		return NavCount{}
 	}
@@ -240,7 +238,7 @@ func moreDoctorLoad(v *View) error {
 // moreDoctorCheck runs the host checks again and answers with the fragment
 // that shows them; a browser without script is sent back to the page.
 func moreDoctorCheck(s *Server, w http.ResponseWriter, r *http.Request) {
-	fn, _ := s.Env().Get(moreDoctorKey).(func())
+	fn, _ := s.env.Get(ColDoctorKey).(func())
 	if fn == nil {
 		s.Fail(w, r, ErrNotFound)
 		return

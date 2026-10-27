@@ -129,8 +129,8 @@ func TestHelpTopicsOfTheUI(t *testing.T) {
 	} {
 		assert.Contains(t, body, s)
 	}
-	for _, c := range helpChords {
-		assert.Contains(t, body, "Go to "+c.Label)
+	for _, it := range navItems {
+		assert.Contains(t, body, "Go to "+it.Label)
 	}
 
 	w = ts.part("/help?topic=words")
@@ -168,23 +168,10 @@ func TestHelpChordsMatchTheScript(t *testing.T) {
 		got[string(p[1])] = string(p[2])
 	}
 	want := map[string]string{}
-	for _, c := range helpChords {
-		want[c.Key] = c.Path
+	for _, it := range navItems {
+		want[it.Chord] = it.Href
 	}
 	assert.Equal(t, want, got)
-	for _, it := range navItems {
-		assert.Contains(t, got, firstChordKey(it.Href), "rail entry %s has no g key", it.Label)
-	}
-}
-
-// firstChordKey returns the key of the chord that goes to path.
-func firstChordKey(path string) string {
-	for _, c := range helpChords {
-		if c.Path == path {
-			return c.Key
-		}
-	}
-	return "none"
 }
 
 func TestHelpPage(t *testing.T) {

@@ -36,7 +36,6 @@ func tasksFragment() Fragment {
 		Topics:   []store.Topic{store.TopicTasks},
 		Prefixes: []string{"run/"},
 		Params:   []string{"run", "task"},
-		Shell:    true,
 		Load:     func(v *View) error { v.Data = dockLoad(v); return nil },
 	}
 }

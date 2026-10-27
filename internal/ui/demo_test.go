@@ -185,11 +185,6 @@ func TestDemo_StillNeedsDemo(t *testing.T) {
 	assert.EqualError(t, err, "--still needs --demo")
 }
 
-func TestRun_MonitoringInterval(t *testing.T) {
-	err := Run(context.Background(), Options{MonitoringInterval: time.Second, NoOpen: true})
-	assert.EqualError(t, err, "monitoring interval: the interval must be between 5s and 1h, got 1s")
-}
-
 func TestDemoServices(t *testing.T) {
 	fail := func(*Env) error { t.Fatal("the real Setup ran"); return nil }
 	registered := []Service{

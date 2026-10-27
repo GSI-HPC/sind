@@ -1383,7 +1383,7 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 			actFollow(w, r, actBack(f))
 			return
 		}
-		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
+		s.env.Log.Error("starting a task", "action", a.ID, "err", err)
 		p.Err = err.Error()
 	default:
 		id, err := actStart(st, a, f, p.Cmd)
@@ -1392,7 +1392,7 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 			actStarted(s, w, r, v, p, id, p.Spec.Removes && actOnPageOf(r, realm, cl))
 			return
 		}
-		s.Env().Log.Error("starting a task", "action", a.ID, "err", err)
+		s.env.Log.Error("starting a task", "action", a.ID, "err", err)
 		p.Err = err.Error()
 	}
 	p.Blocked = true

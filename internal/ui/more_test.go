@@ -255,9 +255,9 @@ func TestMoreServiceState(t *testing.T) {
 }
 
 func TestMoreMonitoringCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}), "no stack, no badge")
+	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}, time.Time{}), "no stack, no badge")
 	ts, _ := moreTestServer(t, true, false)
-	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot()))
+	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot(), time.Time{}))
 	stack := func(states ...string) store.Snapshot {
 		m := &cluster.Monitoring{}
 		for _, s := range states {
@@ -265,10 +265,10 @@ func TestMoreMonitoringCount(t *testing.T) {
 		}
 		return store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": m}}
 	}
-	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running")))
-	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused")))
-	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created")).Label)
-	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited")).Label)
+	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running"), time.Time{}))
+	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused"), time.Time{}))
+	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created"), time.Time{}).Label)
+	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited"), time.Time{}).Label)
 }
 
 func TestMoreMonitoringInterval(t *testing.T) {
@@ -276,7 +276,7 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "Read every", "nothing reads the stacks")
 
 	iv := collect.NewInterval(45 * time.Second)
-	ts.srv.Env().Put(moreIntervalKey, iv)
+	ts.srv.env.Put(ColMonitoringIntervalKey, iv)
 	body := moreGet(t, ts, "/monitoring", http.StatusOK)
 	for _, want := range []string{
 		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "Read every", `aria-labelledby="mon-interval-label"`,
@@ -326,7 +326,7 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	assert.Equal(t, 10*time.Second, iv.Get())
 	assert.Equal(t, http.StatusBadRequest, post(strings.Repeat("1", 5000), true).Code, "a value that is too long")
 
-	ts.srv.Env().Put(moreIntervalKey, nil)
+	ts.srv.env.Put(ColMonitoringIntervalKey, nil)
 	assert.Equal(t, http.StatusNotFound, post("30s", true).Code)
 	moreEnv.Store(nil)
 	assert.Nil(t, moreIntervalOf())
@@ -580,15 +580,15 @@ func TestMoreDoctorCheck(t *testing.T) {
 }
 
 func TestMoreDoctorCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}))
+	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}, time.Time{}))
 	ok := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}}}
-	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}))
+	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}, time.Time{}))
 	warn := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}))
+	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}, time.Time{}))
 	bad := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "warning"}, {Status: "failed"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}))
+	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}, time.Time{}))
 	worse := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "failed"}, {Status: "failed"}}}
-	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}))
+	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}, time.Time{}))
 
 	// The rail of any page shows both badges, with their meaning in words.
 	ts, _ := moreTestServer(t, true, false)
@@ -633,7 +633,7 @@ func TestMoreServiceSetup(t *testing.T) {
 	}
 	require.NotNil(t, setup)
 	env := &Env{}
-	env.Put(moreDoctorKey, func() {})
+	env.Put(ColDoctorKey, func() {})
 	require.NoError(t, setup(env))
 	assert.NotNil(t, moreDoctorFunc())
 }

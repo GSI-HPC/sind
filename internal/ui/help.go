@@ -59,13 +59,6 @@ type helpData struct {
 	Keys []helpKeyGroup
 }
 
-// helpPageData is what the help page renders from: the entry, which is the
-// index when the address names none.
-type helpPageData struct {
-	Entry *helpData
-	Query string
-}
-
 // helpKey is a key, or keys pressed one after the other or together, and
 // what it does. Single marks the shortcuts of one key, which the user can
 // turn off.
@@ -83,18 +76,6 @@ type helpKeyGroup struct {
 	Keys  []helpKey
 }
 
-// helpChord is a page that g then Key opens. help.js holds the same list.
-type helpChord struct {
-	Key, Label, Path string
-}
-
-// helpChords are the g chords, in the order of the rail.
-var helpChords = []helpChord{
-	{"o", "Overview", "/"}, {"c", "Clusters", "/clusters"}, {"n", "Nodes", "/nodes"},
-	{"m", "Mesh and DNS", "/mesh"}, {"p", "Monitoring", "/monitoring"}, {"t", "Topology", "/topology"},
-	{"d", "Doctor", "/doctor"}, {"a", "Activity", "/activity"},
-}
-
 // helpKeys returns every key of sind ui, by where it works.
 func helpKeys() []helpKeyGroup {
 	all := helpKeyGroup{Title: "Everywhere", Keys: []helpKey{
@@ -102,8 +83,8 @@ func helpKeys() []helpKeyGroup {
 		{Keys: []string{"Ctrl", "K"}, Join: "+", Text: "Jump, also when single-key shortcuts are off. On a Mac: ⌘ K."},
 		{Keys: []string{"?"}, Text: "Help for the item under the pointer or with the focus, else for the open dialog or the page", Single: true},
 	}}
-	for _, c := range helpChords {
-		all.Keys = append(all.Keys, helpKey{Keys: []string{"g", c.Key}, Join: "then", Text: "Go to " + c.Label, Single: true})
+	for _, it := range navItems {
+		all.Keys = append(all.Keys, helpKey{Keys: []string{"g", it.Chord}, Join: "then", Text: "Go to " + it.Label, Single: true})
 	}
 	all.Keys = append(all.Keys, helpKey{Keys: []string{"Esc"}, Text: "Close the hint card, the jump box, the help pane or the dialog. A dialog with changes asks first."})
 	return []helpKeyGroup{all,
@@ -175,7 +156,7 @@ func helpHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if full {
-		pv := v.withData(&helpPageData{Entry: d, Query: d.Query})
+		pv := v.withData(d)
 		pv.Title, pv.Content = "Help", "page-help"
 		pv.Events = s.eventsURL(nil, pv)
 		s.Write(w, r, http.StatusOK, "layout", pv)

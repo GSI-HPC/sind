@@ -146,7 +146,7 @@ func pgRealmRouteOf(p Page, remember, anyRealm bool) Route {
 	}
 	return Route{Pattern: p.Pattern, Handle: func(s *Server, w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		sn := s.Store().Snapshot()
+		sn := s.env.Store.Snapshot()
 		old := ""
 		if c, err := r.Cookie(realmCookie); err == nil && config.CheckName("realm", c.Value) == nil {
 			old = c.Value

@@ -42,8 +42,8 @@ type colSet struct {
 }
 
 func init() {
-	RegisterService(colService())
-	RegisterService(colActivityService())
+	defaultRegistry.AddService(colService())
+	defaultRegistry.AddService(colActivityService())
 }
 
 // colService is the service that fills the store with what Docker and the

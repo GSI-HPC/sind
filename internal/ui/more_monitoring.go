@@ -18,10 +18,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/observability"
 )
 
-// moreIntervalKey is the Env key of the interval at which the monitoring
-// stacks are read, a moreInterval.
-const moreIntervalKey = "collect.monitoring-interval"
-
 // moreInterval is the interval at which the monitoring stacks are read;
 // Set takes effect at once.
 type moreInterval interface {
@@ -36,7 +32,7 @@ func moreIntervalOf() moreInterval {
 	if env == nil {
 		return nil
 	}
-	iv, _ := env.Get(moreIntervalKey).(moreInterval)
+	iv, _ := env.Get(ColMonitoringIntervalKey).(moreInterval)
 	return iv
 }
 
@@ -45,9 +41,9 @@ var moreIntervalChoices = []time.Duration{10 * time.Second, 30 * time.Second, ti
 
 func init() {
 	// The picker reads the interval that a POST set, to say it saved it.
-	RegisterFragment(Fragment{Name: "more-mon-interval", Params: []string{"interval"}, Load: moreIntervalLoad})
-	RegisterRoute(Route{Pattern: "POST /monitoring/interval", Handle: moreIntervalSet})
-	RegisterFragment(Fragment{
+	defaultRegistry.AddFragment(Fragment{Name: "more-mon-interval", Params: []string{"interval"}, Load: moreIntervalLoad})
+	defaultRegistry.AddRoute(Route{Pattern: "POST /monitoring/interval", Handle: moreIntervalSet})
+	defaultRegistry.AddFragment(Fragment{
 		Name:     "more-monitoring",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker, store.TopicDoctor},
 		Prefixes: []string{"monitoring/", "nodes/"},
@@ -55,7 +51,7 @@ func init() {
 		Load:     moreMonitoringLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	RegisterRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgListRoute(Page{
 		Name: "more-monitoring", Pattern: "GET /monitoring", Title: "Monitoring", Nav: "monitoring",
 		Params: []string{"realm"}, Fragments: []string{"more-monitoring"},
 	}))
@@ -141,7 +137,7 @@ func moreServiceState(s cluster.MonitoringService) (class, text string) {
 // moreMonitoringCount is the badge behind the rail entry: the services of
 // all stacks that are not ready, as "1 down" (or "1 starting" when none
 // is down), or a dot when all are ready. Without a stack it shows none.
-func moreMonitoringCount(sn store.Snapshot) NavCount {
+func moreMonitoringCount(sn store.Snapshot, _ time.Time) NavCount {
 	n, down, starting := 0, 0, 0
 	for _, m := range sn.Monitorings {
 		for _, s := range m.Services {

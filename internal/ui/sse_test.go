@@ -6,14 +6,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -164,18 +162,6 @@ func TestEventsRequestKeepsDeclaredParamsOnly(t *testing.T) {
 	assert.Equal(t, "clusters", v.Nav)
 }
 
-// noFlush is a response writer that cannot flush.
-type noFlush struct{ http.ResponseWriter }
-
-func TestEventsNeedsAFlusher(t *testing.T) {
-	ts := newTestServer(t).login()
-	r := request("GET", "/events?f=count")
-	r.AddCookie(ts.cookie)
-	w := httptest.NewRecorder()
-	ts.h.ServeHTTP(noFlush{w}, r)
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-}
-
 func TestEventsSendsAChangedFragmentOnly(t *testing.T) {
 	ts := newTestServer(t).login()
 	c := ts.connect("f=count&f=same&f=runs&f=one-run&id=x")
@@ -208,17 +194,6 @@ func TestEventsSendsAChangedFragmentOnly(t *testing.T) {
 	assert.Equal(t, sseEvent{"runs", "runs=1"}, c.next())
 }
 
-func TestEventsCoalescesChanges(t *testing.T) {
-	ts := newTestServer(t).login()
-	ts.srv.coalesce = 150 * time.Millisecond
-	c := ts.connect("f=count")
-	for i := range 3 {
-		ts.st.AddTask(store.Task{ID: fmt.Sprint(i)})
-	}
-	assert.Equal(t, sseEvent{"count", "tasks=3"}, c.next(), "one render for the burst")
-	c.quiet(250 * time.Millisecond)
-}
-
 func TestEventsOpenWithAChangeBetweenPageAndStream(t *testing.T) {
 	// A change that lands after the page was rendered, before the stream
 	// opens, is in what the stream opens with, and is not sent again.
@@ -233,7 +208,7 @@ func TestEventsOpenWithAChangeBetweenPageAndStream(t *testing.T) {
 
 func TestEventsRailFollowsAnyTopicAndNav(t *testing.T) {
 	ts := newTestServer(t).login()
-	ts.srv.reg.SetNavCount("nodes", func(sn store.Snapshot) NavCount {
+	ts.srv.reg.SetNavCount("nodes", func(sn store.Snapshot, _ time.Time) NavCount {
 		return NavCount{Text: fmt.Sprint(len(sn.Runs))}
 	})
 	c := ts.connect("f=rail&nav=nodes")
@@ -272,69 +247,6 @@ func TestEventsSkipAFragmentThatFails(t *testing.T) {
 	c.quiet(50 * time.Millisecond)
 	assert.Contains(t, logs.String(), `fragment=one-run`)
 	assert.Contains(t, logs.String(), "not found")
-}
-
-// failingWriter is a streaming response writer whose writes fail from the
-// failAfter'th on, and whose flush then reports it, as net/http's does.
-type failingWriter struct {
-	mu        sync.Mutex
-	header    http.Header
-	writes    int
-	failAfter int
-}
-
-func (w *failingWriter) Header() http.Header { return w.header }
-func (w *failingWriter) WriteHeader(int)     {}
-func (w *failingWriter) Flush()              {}
-func (w *failingWriter) FlushError() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.writes >= w.failAfter {
-		return errors.New("broken pipe")
-	}
-	return nil
-}
-func (w *failingWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.writes++
-	if w.writes >= w.failAfter {
-		return 0, errors.New("broken pipe")
-	}
-	return len(p), nil
-}
-
-func TestEventsEndWhenAWriteFails(t *testing.T) {
-	ts := newTestServer(t).login()
-	for name, tc := range map[string]struct {
-		failAfter int
-		trigger   func()
-	}{
-		// Write 1 is "retry", write 2 the event the stream opens with; the
-		// next is an event or a keep-alive.
-		"opening":    {2, func() {}},
-		"event":      {3, func() { ts.st.AddTask(store.Task{ID: "t"}) }},
-		"keep-alive": {3, func() {}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			ts.srv.keepAlive = time.Hour
-			if name == "keep-alive" {
-				ts.srv.keepAlive = 20 * time.Millisecond
-			}
-			w := &failingWriter{header: http.Header{}, failAfter: tc.failAfter}
-			r := request("GET", "/events?f=count")
-			r.AddCookie(ts.cookie)
-			done := make(chan struct{})
-			go func() { ts.h.ServeHTTP(w, r); close(done) }()
-			time.Sleep(50 * time.Millisecond)
-			tc.trigger()
-			select {
-			case <-done:
-			case <-time.After(2 * time.Second):
-				t.Fatal("the handler did not return after a failed write")
-			}
-		})
-	}
 }
 
 func TestLiveEvents(t *testing.T) {

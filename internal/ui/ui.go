@@ -19,7 +19,6 @@ import (
 	"github.com/GSI-HPC/go-clikit/localweb"
 	"github.com/GSI-HPC/go-clikit/localweb/launch"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
-	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/demo"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -56,8 +55,8 @@ type Options struct {
 	Still bool
 	// MonitoringInterval is how often the monitoring stacks are read
 	// while a page is open, between collect.MinInterval and
-	// collect.MaxInterval; 0 is collect.MonitoringEvery. The Monitoring
-	// page changes it.
+	// collect.MaxInterval (sind ui checks it); 0 is collect.MonitoringEvery.
+	// The Monitoring page changes it.
 	MonitoringInterval time.Duration
 
 	// registry is what is served; nil is the default registry.
@@ -76,12 +75,6 @@ const shutdownGrace = 5 * time.Second
 func Run(ctx context.Context, o Options) error {
 	if o.Still && !o.Demo {
 		return errors.New("--still needs --demo")
-	}
-	if o.MonitoringInterval == 0 {
-		o.MonitoringInterval = collect.MonitoringEvery
-	}
-	if err := collect.CheckInterval(o.MonitoringInterval); err != nil {
-		return fmt.Errorf("monitoring interval: %w", err)
 	}
 	if o.Exec == nil {
 		o.Exec = &cmdexec.OSExecutor{}
@@ -140,7 +133,7 @@ func Run(ctx context.Context, o Options) error {
 	}()
 
 	env := &Env{Store: store.New(), Exec: o.Exec, Log: log, Opts: o, Addr: addr}
-	services := o.registry.snapshot().services
+	services := o.registry.services
 	cfg := serverConfig{Env: env, Token: token, Bound: b, Registry: o.registry}
 	if o.Demo {
 		d := demo.New(env.Store, o.Still)

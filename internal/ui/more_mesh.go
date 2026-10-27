@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	RegisterFragment(Fragment{
+	defaultRegistry.AddFragment(Fragment{
 		Name:     "more-mesh",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker},
 		Prefixes: []string{"mesh/", "networks/", "nodes/"},
@@ -19,7 +19,7 @@ func init() {
 		Load:     moreMeshLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	RegisterRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgListRoute(Page{
 		Name: "more-mesh", Pattern: "GET /mesh", Title: "Mesh and DNS", Nav: "mesh",
 		Params: []string{"realm"}, Fragments: []string{"more-mesh"},
 	}))

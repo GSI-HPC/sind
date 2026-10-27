@@ -20,12 +20,12 @@ import (
 var moreEnv atomic.Pointer[Env]
 
 func init() {
-	RegisterService(Service{
+	defaultRegistry.AddService(Service{
 		Name:  "more",
 		Setup: func(env *Env) error { moreEnv.Store(env); return nil },
 	})
-	SetNavCount("monitoring", moreMonitoringCount)
-	SetNavCount("doctor", moreDoctorCount)
+	defaultRegistry.SetNavCount("monitoring", moreMonitoringCount)
+	defaultRegistry.SetNavCount("doctor", moreDoctorCount)
 }
 
 // moreNotice is the plain statement of a page that has nothing to show,

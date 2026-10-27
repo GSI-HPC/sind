@@ -13,7 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
-func init() { RegisterRoute(pgRealmRoute(overviewPage, false)) }
+func init() { defaultRegistry.AddRoute(pgRealmRoute(overviewPage, false)) }
 
 // overviewPage is the Overview page, template overview.tmpl, served by
 // pgRealmRoute. It spans every realm; ?realm= narrows it to one, which the

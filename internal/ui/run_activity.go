@@ -42,7 +42,7 @@ func registerRunActivity(r *Registry) {
 		Name: "run-activity", Pattern: "GET /activity", Title: "Activity", Nav: "activity",
 		Fragments: []string{"run-list"},
 	}))
-	r.SetNavCountAt("activity", runNavCount)
+	r.SetNavCount("activity", runNavCount)
 }
 
 // runNavCount is the badge behind the Activity entry of the rail: the runs

@@ -110,7 +110,7 @@ func actService() Service {
 			r := run.New(run.Config{
 				Exec: env.Exec, Store: env.Store, Binary: exe, ActivityLog: logPath, Environ: actEnviron,
 				Refresh: func(realm string) {
-					if refresh, ok := env.Get("collect.refresh").(func(string)); ok {
+					if refresh, ok := env.Get(ColRefreshKey).(func(string)); ok {
 						refresh(realm)
 					}
 				},
@@ -153,7 +153,7 @@ func actRoutes() []Route {
 
 // actStateOf returns the state that Setup made, or fails the request.
 func actStateOf(s *Server, w http.ResponseWriter, r *http.Request) (*actState, bool) {
-	st, ok := s.Env().Get(actKey{}).(*actState)
+	st, ok := s.env.Get(actKey{}).(*actState)
 	if !ok {
 		s.Fail(w, r, errors.New("the runner of the actions is not set up"))
 	}
@@ -177,7 +177,7 @@ func actCancelRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if _, ok := s.Store().Snapshot().Task(id); !ok {
+	if _, ok := s.env.Store.Snapshot().Task(id); !ok {
 		s.Fail(w, r, fmt.Errorf("task %s: %w", id, ErrNotFound))
 		return
 	}

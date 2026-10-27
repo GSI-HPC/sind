@@ -186,7 +186,7 @@ func TestRunRoutesAreRegistered(t *testing.T) {
 	assert.Contains(t, routes, "GET /tasks/{id}")
 	assert.Contains(t, routes, "GET /activity")
 	assert.Contains(t, routes, "POST /tasks/{id}/dismiss")
-	assert.NotNil(t, r.navCount("activity"))
+	assert.NotNil(t, r.navCounts["activity"])
 }
 
 func TestRunTaskClear(t *testing.T) {
