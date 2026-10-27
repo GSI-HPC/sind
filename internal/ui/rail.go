@@ -38,12 +38,7 @@ func pgNavCounts(r *Registry) {
 	})
 	r.SetNavCount("nodes", func(sn store.Snapshot, _ time.Time) NavCount {
 		nodes := pgSnapNodes(sn, "")
-		problems := 0
-		for _, n := range nodes {
-			if n.Problem() {
-				problems++
-			}
-		}
+		problems := pgCount(nodes, pgNode.Problem)
 		switch {
 		case problems > 0:
 			return NavCount{Text: strconv.Itoa(problems) + " down", Class: "bad", Label: pgPlural(problems, "node needs", "nodes need") + " a look"}

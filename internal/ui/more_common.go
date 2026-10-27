@@ -4,7 +4,6 @@ package ui
 
 import (
 	"fmt"
-	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +25,15 @@ func init() {
 	})
 	defaultRegistry.SetNavCount("monitoring", moreMonitoringCount)
 	defaultRegistry.SetNavCount("doctor", moreDoctorCount)
+}
+
+// moreEnvGet returns the value of the key in moreEnv, the zero value when
+// no service put one of type T there.
+func moreEnvGet[T any](key string) (v T) {
+	if env := moreEnv.Load(); env != nil {
+		v, _ = env.Get(key).(T)
+	}
+	return v
 }
 
 // moreNotice is the plain statement of a page that has nothing to show,
@@ -67,15 +75,6 @@ func moreRealms(v *View) []string {
 		names[i] = r.Name
 	}
 	return names
-}
-
-// moreDialogURL is the address of a dialog of the actions part.
-func moreDialogURL(action string, kv ...string) string {
-	q := url.Values{}
-	for i := 0; i+1 < len(kv); i += 2 {
-		q.Set(kv[i], kv[i+1])
-	}
-	return "/dialogs/" + action + "?" + q.Encode()
 }
 
 // moreAgo says how long before now t was, as "just now", "3 min ago".

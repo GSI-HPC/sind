@@ -29,7 +29,7 @@
     {{else if .Node.Worker}}<span class="muted">sinfo does not list this node. Slurm runs no job on it.</span>
     {{else}}<span class="muted">Slurm runs jobs on the workers only. This node is a {{.Node.Role}}.</span>{{end}}</div></section>
   <section class="panel"><div class="ph"><h2>Container</h2></div><div class="pb"><dl class="kv">
-    <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
+    <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.Node.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
     <dt>realm</dt><dd class="mono">{{.Realm}}</dd>
     {{if .Node.Known}}<dt>managed</dt><dd>{{if .Node.Managed}}yes{{else}}no{{end}}</dd>{{end}}
     <dt>FQDN</dt><dd class="mono">{{.Node.FQDN}} <button type="button" class="btn sm" data-pg-copy-text="{{.Node.FQDN}}">Copy</button></dd></dl></div></section>

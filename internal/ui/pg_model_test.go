@@ -232,7 +232,7 @@ func TestPgNodesOfABusyClusterAreNoProblem(t *testing.T) {
 		Runs:     []store.Run{{ID: "1", Title: "create cluster nightly", Start: pgNow}},
 	}
 	// dev's worker-0 has slurmd down; the nodes of nightly are being made.
-	assert.Equal(t, 1, pgProblemNodes(sn, ""))
+	assert.Equal(t, 1, pgCount(pgSnapNodes(sn, ""), pgNode.Problem))
 	for _, n := range pgSnapNodes(sn, "sind") {
 		assert.Equal(t, n.Cluster == "nightly", n.Busy && n.Creating, n.Arg)
 	}
@@ -250,7 +250,7 @@ func TestPgNodesOfABusyClusterAreNoProblem(t *testing.T) {
 	// A command that adds workers may start services, but a stopped node
 	// is a problem all the same.
 	sn.Runs = []store.Run{{ID: "2", Title: "create worker nightly", Start: pgNow}}
-	assert.Equal(t, 2, pgProblemNodes(sn, ""))
+	assert.Equal(t, 2, pgCount(pgSnapNodes(sn, ""), pgNode.Problem))
 	c = pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
 	assert.False(t, c.Nodes[0].Problem())
 	assert.True(t, c.Nodes[1].Problem())
@@ -307,12 +307,12 @@ func TestPgRealmNames(t *testing.T) {
 	}
 	assert.Equal(t, []string{"a", "b", "c2", "c10"}, pgRealmNames(sn, ""))
 	assert.Equal(t, []string{"zz"}, pgRealmNames(sn, "zz"))
-	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "cluster"}))
-	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "run"}))
-	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "nodes"}))
-	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "node"}))
-	assert.Equal(t, "/mesh", pgRealmNext(&View{Page: "more-mesh"}))
-	assert.Equal(t, "/", pgRealmNext(&View{Page: "overview"}))
+	assert.Equal(t, "/clusters", (&View{Page: "cluster"}).PgRealmNext())
+	assert.Equal(t, "/clusters", (&View{Page: "run"}).PgRealmNext())
+	assert.Equal(t, "/nodes", (&View{Page: "nodes"}).PgRealmNext())
+	assert.Equal(t, "/nodes", (&View{Page: "node"}).PgRealmNext())
+	assert.Equal(t, "/mesh", (&View{Page: "more-mesh"}).PgRealmNext())
+	assert.Equal(t, "/", (&View{Page: "overview"}).PgRealmNext())
 }
 
 func TestPgClusterTopics(t *testing.T) {

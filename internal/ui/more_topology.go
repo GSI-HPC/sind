@@ -20,10 +20,10 @@ func init() {
 		Load:     moreTopologyLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	defaultRegistry.AddRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgRealmRoute(Page{
 		Name: "more-topology", Pattern: "GET /topology", Title: "Topology", Nav: "topology",
 		Params: []string{"realm", "view"}, Fragments: []string{"more-topology"},
-	}))
+	}, true, false))
 }
 
 // The diagram has four columns in a viewBox 900 wide: this host, the mesh
@@ -174,14 +174,6 @@ func moreNodePill(s cluster.State) string {
 	return "bad"
 }
 
-// morePlural returns "1 thing" or "n things".
-func morePlural(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return fmt.Sprintf("%d %s", n, many)
-}
-
 // moreTopoMesh returns the containers on the mesh of a realm: its DNS
 // server and SSH relay, the monitoring services and the containers that
 // were connected; and the heading of the mesh column.
@@ -237,17 +229,16 @@ func moreTopologyOf(sn store.Snapshot, realm string) (moreTopology, bool) {
 	for _, c := range clusters {
 		g := group{c: c}
 		top := y
-		prefix := cluster.ContainerPrefix(realm, c.Name)
 		nodes := sn.ClusterNodes(realm, c.Name)
 		name := string(cluster.NetworkName(realm, c.Name))
-		net := moreTopoNet{Name: name, Subnet: subnets[name], State: string(c.State), Pill: moreNodePill(c.State), Href: "/clusters/" + realm + "/" + c.Name}
+		net := moreTopoNet{Name: name, Subnet: subnets[name], State: string(c.State), Pill: moreNodePill(c.State), Href: pgClusterURL(realm, c.Name, "")}
 		for _, n := range nodes {
-			short := strings.TrimPrefix(n.Container, prefix)
+			short := pgShort(realm, c.Name, n.Container)
 			class := ""
 			if n.State != cluster.StateRunning {
 				class = "bad off"
 			}
-			href := "/nodes/" + realm + "/" + c.Name + "/" + short
+			href := pgNodeURL(realm, c.Name, short)
 			g.boxes = append(g.boxes, moreBox(3, y, short+"."+c.Name, moreJoin(n.IP, string(n.Role), string(n.State)), class, href))
 			net.Nodes = append(net.Nodes, moreTopoItem{Name: short + "." + c.Name, Kind: string(n.Role), Addr: n.IP,
 				State: string(n.State), Pill: moreNodePill(n.State), Href: href})
@@ -302,24 +293,8 @@ func moreTopologyOf(sn store.Snapshot, realm string) (moreTopology, bool) {
 		t.Boxes = append(t.Boxes, g.boxes...)
 	}
 	t.Label = fmt.Sprintf("Diagram of realm %s: this host, the mesh network with %s, and %s with the nodes",
-		realm, morePlural(len(meshItems), "container", "containers"), morePlural(len(groups), "cluster network", "cluster networks"))
+		realm, pgPlural(len(meshItems), "container", "containers"), pgPlural(len(groups), "cluster network", "cluster networks"))
 	return t, true
-}
-
-// moreTopoURL is the address of the page in a view, with the realm that
-// the request named.
-func moreTopoURL(realm, view string) string {
-	q := url.Values{}
-	if realm != "" {
-		q.Set("realm", realm)
-	}
-	if view != "" {
-		q.Set("view", view)
-	}
-	if len(q) == 0 {
-		return "/topology"
-	}
-	return "/topology?" + q.Encode()
 }
 
 // moreTopologyLoad fills the data of the Topology page.
@@ -329,7 +304,8 @@ func moreTopologyLoad(v *View) error {
 	if view != "" && view != "table" && view != "diagram" {
 		return fmt.Errorf("view %q: %w", view, ErrBadRequest)
 	}
-	d := moreTopoData{Table: view == "table", DiagramURL: moreTopoURL(v.Params.Get("realm"), ""), TableURL: moreTopoURL(v.Params.Get("realm"), "table")}
+	realm := v.Params.Get("realm")
+	d := moreTopoData{Table: view == "table", DiagramURL: pgQueryURL("/topology", "realm", realm), TableURL: pgQueryURL("/topology", "realm", realm, "view", "table")}
 	if len(realms) == 0 {
 		d.Notice = moreNoRealms(v.Snap.Docker)
 	} else {

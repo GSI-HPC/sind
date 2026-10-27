@@ -25,17 +25,6 @@ type moreInterval interface {
 	Set(d time.Duration)
 }
 
-// moreIntervalOf returns the interval at which the monitoring stacks are
-// read, nil when no service provides it.
-func moreIntervalOf() moreInterval {
-	env := moreEnv.Load()
-	if env == nil {
-		return nil
-	}
-	iv, _ := env.Get(ColMonitoringIntervalKey).(moreInterval)
-	return iv
-}
-
 // moreIntervalChoices are the intervals that the Monitoring page offers.
 var moreIntervalChoices = []time.Duration{10 * time.Second, 30 * time.Second, time.Minute, 5 * time.Minute}
 
@@ -51,10 +40,10 @@ func init() {
 		Load:     moreMonitoringLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	defaultRegistry.AddRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgRealmRoute(Page{
 		Name: "more-monitoring", Pattern: "GET /monitoring", Title: "Monitoring", Nav: "monitoring",
 		Params: []string{"realm"}, Fragments: []string{"more-monitoring"},
-	}))
+	}, true, false))
 }
 
 // moreMonitoringData is what the Monitoring page shows.
@@ -209,7 +198,7 @@ func moreMonClusterOf(sn store.Snapshot, realm string, c cluster.MonitoredCluste
 func moreMonitoringLoad(v *View) error {
 	realms := moreRealms(v)
 	d := moreMonitoringData{Multi: len(realms) > 1, Realm: v.Params.Get("realm"), HostDNS: moreHostDNS(v.Snap)}
-	d.NewURL = moreDialogURL("create-cluster", "realm", d.Realm)
+	d.NewURL = pgDialog("create-cluster", "realm", d.Realm)
 	if len(realms) == 0 {
 		d.Notice = moreNoRealms(v.Snap.Docker)
 	} else {
@@ -282,7 +271,7 @@ func moreDuration(d time.Duration) string {
 // moreIntervalLoad fills the picker; with no interval to change, it draws
 // nothing.
 func moreIntervalLoad(v *View) error {
-	iv := moreIntervalOf()
+	iv := moreEnvGet[moreInterval](ColMonitoringIntervalKey)
 	if iv == nil {
 		return nil
 	}
@@ -302,7 +291,7 @@ func moreIntervalLoad(v *View) error {
 // one that the picker offers, and answers with the picker, or a plain form
 // with a 303 to the page.
 func moreIntervalSet(s *Server, w http.ResponseWriter, r *http.Request) {
-	iv := moreIntervalOf()
+	iv := moreEnvGet[moreInterval](ColMonitoringIntervalKey)
 	if iv == nil {
 		s.Fail(w, r, ErrNotFound)
 		return

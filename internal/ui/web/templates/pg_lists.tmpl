@@ -38,7 +38,7 @@ a link. It takes the list. */}}
 
 {{/* pg-list-none is the last row of a list: the row that says that no row
 matches, which the page script shows and hides as the user types. */}}
-{{define "pg-list-none"}}<tr class="pg-none" data-pg-none{{if .Shown}} hidden{{end}}><td colspan="9"><div class="empty">{{if .Total}}No {{.Noun}} matches the filter. <a href="{{.ClearURL}}">Show all</a>{{else}}No {{.Noun}}{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.{{end}}</div></td></tr>{{end}}
+{{define "pg-list-none"}}<tr class="pg-none" data-pg-none{{if .Shown}} hidden{{end}}><td colspan="9"><div class="empty">{{if .Total}}No {{.Noun}} matches the filter. <a href="{{.URL "q" "" "state" ""}}">Show all</a>{{else}}No {{.Noun}}{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.{{end}}</div></td></tr>{{end}}
 
 {{define "pg-clusters-head"}}{{with .Data}}
 <div class="head"><div class="t"><h1>Clusters</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every cluster of every realm. {{end}}sind finds them by their Docker labels.</span></div></div>

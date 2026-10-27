@@ -76,7 +76,7 @@ func runWaitOf(v *View) *runWait {
 		w.Redirect = "/runs/" + run.ID
 	}
 	// The page names the task as its card and its run page do.
-	card := dockTaskCard(t, store.Run{}, false, v.Now)
+	card := dockTaskCard(t, nil, v.Now)
 	w.Title, w.Class, w.Elapsed, w.Since = card.Title, card.Class, card.Elapsed, card.Since
 	w.PillClass = runPillClass(card.Class)
 	w.Canceling = card.Canceling

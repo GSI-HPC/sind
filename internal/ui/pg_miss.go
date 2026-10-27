@@ -69,7 +69,7 @@ func pgClusterMiss(sn store.Snapshot, realm, name, node string) *Miss {
 // pgHasNode reports whether the cluster of the realm has the node short.
 func pgHasNode(sn store.Snapshot, realm, name, short string) bool {
 	container := string(cluster.ContainerName(realm, name, short))
-	return slices.ContainsFunc(sn.Nodes[realm], func(n cluster.NodeSummary) bool { return n.Container == container })
+	return slices.ContainsFunc(sn.ClusterNodes(realm, name), func(n cluster.NodeSummary) bool { return n.Container == container })
 }
 
 // pgNodeMiss says that a cluster has no node of a name, and offers the

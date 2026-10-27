@@ -152,17 +152,6 @@ func moreDoctorVerdict(d moreDoctorData) moreVerdict {
 	return moreVerdict{Class: "ok", Title: ready, Text: "Every check passed."}
 }
 
-// moreDoctorFunc returns the func that runs the host checks, nil when no
-// service provides it.
-func moreDoctorFunc() func() {
-	env := moreEnv.Load()
-	if env == nil {
-		return nil
-	}
-	fn, _ := env.Get(ColDoctorKey).(func())
-	return fn
-}
-
 // moreCheckMark returns the class and glyph of a check status.
 func moreCheckMark(status doctor.Status) (class, mark string) {
 	switch status {
@@ -212,7 +201,7 @@ func moreDoctorCount(sn store.Snapshot, _ time.Time) NavCount {
 
 // moreDoctorLoad fills the data of the Doctor page.
 func moreDoctorLoad(v *View) error {
-	d := moreDoctorData{DockerErr: moreDockerDown(v.Snap.Docker), CanRecheck: moreDoctorFunc() != nil}
+	d := moreDoctorData{DockerErr: moreDockerDown(v.Snap.Docker), CanRecheck: moreEnvGet[func()](ColDoctorKey) != nil}
 	if r := v.Snap.Doctor; r != nil {
 		d.HasReport, d.Running = !r.Time.IsZero(), r.Running
 		if d.HasReport {

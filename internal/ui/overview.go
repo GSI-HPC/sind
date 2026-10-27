@@ -13,7 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
-func init() { defaultRegistry.AddRoute(pgRealmRoute(overviewPage, false)) }
+func init() { defaultRegistry.AddRoute(pgRealmRoute(overviewPage, false, false)) }
 
 // overviewPage is the Overview page, template overview.tmpl, served by
 // pgRealmRoute. It spans every realm; ?realm= narrows it to one, which the
@@ -27,10 +27,7 @@ var overviewPage = Page{
 	Nav:       "overview",
 	Params:    []string{"realm"},
 	Fragments: []string{"pg-overview-head", "pg-overview-cards", "pg-overview-needs", "pg-overview-recent"},
-	Load: func(v *View) error {
-		_, err := pgLoadOverview(v)
-		return err
-	},
+	Load:      func(v *View) (err error) { v.Data, err = pgLoadOverview(v); return },
 }
 
 // recentRuns is how many runs the Overview lists.
@@ -42,19 +39,12 @@ const failedWindow = 6 * time.Hour
 // pgOverviewTopics are what every part of the Overview depends on.
 var pgOverviewTopics = []string{"realms", "clusters/", "nodes/", "status/", "lock/", "monitoring/", "docker", "doctor", "run"}
 
-// pgOverviewFragments returns the fragments of the Overview.
+// pgOverviewFragments returns the fragments of the Overview; the last, the
+// recent runs, depends on the runs only.
 func pgOverviewFragments() []Fragment {
-	load := func(v *View) error {
-		d, err := pgLoadOverview(v)
-		v.Data = d
-		return err
-	}
-	return []Fragment{
-		{Name: "pg-overview-head", Params: []string{"realm"}, Prefixes: pgOverviewTopics, Load: load},
-		{Name: "pg-overview-cards", Params: []string{"realm"}, Prefixes: pgOverviewTopics, Load: load},
-		{Name: "pg-overview-needs", Params: []string{"realm"}, Prefixes: pgOverviewTopics, Load: load},
-		{Name: "pg-overview-recent", Params: []string{"realm"}, Prefixes: []string{"run"}, Load: load},
-	}
+	out := pgPageFragments(overviewPage, pgOverviewTopics)
+	out[len(out)-1].Prefixes = []string{"run"}
+	return out
 }
 
 // pgRealmRow is a realm in the realms panel of the Overview.
@@ -227,9 +217,6 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 		cs = string(c.State)
 	}
 	logs := pgAction{Label: "Logs", URL: n.LogsLink(), Class: "sm ghost"}
-	power := func(label, op string) pgAction {
-		return pgDialogAction(label, "sm", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", op)
-	}
 	switch n.State {
 	case cluster.StateRunning:
 		down := n.Down()
@@ -240,15 +227,15 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 			verb = "are"
 		}
 		need.Detail = fmt.Sprintf("The container runs, but %s %s not active.", pgJoin(down), verb)
-		need.Actions = []pgAction{logs, power("Reboot…", "reboot")}
+		need.Actions = []pgAction{logs, n.power("Reboot…", "sm", "reboot")}
 	case cluster.StateStopped:
 		need.Sev, need.Kind = "bad", pgNeedStopped
 		need.Detail = fmt.Sprintf("The container is not running. The cluster %s is %s.", n.Cluster, cs)
-		need.Actions = []pgAction{power("Start…", "start"), logs}
+		need.Actions = []pgAction{n.power("Start…", "sm", "start"), logs}
 	case cluster.StatePaused:
 		need.Kind = pgNeedPaused
 		need.Detail = fmt.Sprintf("The container is paused. The cluster %s is %s.", n.Cluster, cs)
-		need.Actions = []pgAction{power("Unfreeze…", "unpause"), logs}
+		need.Actions = []pgAction{n.power("Unfreeze…", "sm", "unpause"), logs}
 	default:
 		need.Detail = fmt.Sprintf("Docker reports a state that sind does not know. The cluster %s is %s.", n.Cluster, cs)
 		need.Actions = []pgAction{logs}

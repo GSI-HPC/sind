@@ -28,7 +28,7 @@
   <div class="pb pg-ready-b"><div>{{if .Checked}}<ul class="pg-checks">{{range .Checks}}<li><span class="pg-ck {{.State}}" aria-hidden="true">{{.Mark}}</span><div><span class="vh">{{.Word}}: </span><b>{{.Title}}</b>{{with .Detail}} <span class="muted">{{.}}</span>{{end}}{{with .Actions}}<div class="pg-fix">{{range .}}{{template "pg-action" .}}{{end}}</div>{{end}}</div></li>{{end}}</ul>
     {{else}}<p class="muted pg-flat">sind ui checks the controller, the workers, accounting and the files once it has probed the cluster.</p>{{end}}</div>
   <div class="stack"><div class="cmdlabel">Run a first job</div>{{range .Commands}}{{template "pg-cmd" .}}{{end}}<p class="hint pg-flat">{{.Note}} More commands are on <a href="{{$.ConnectLink}}">Connect</a>.</p></div></div></section>{{end}}
-<section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">{{.NodesText}}</span></div><div class="pb">
+<section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">{{.Cluster.NodesText}}</span></div><div class="pb">
   <div class="pg-nodemap pg-big">{{range .Cluster.Nodes}}<a class="{{.Tile}}" href="{{.Link}}" title="{{.TileTitle}}" aria-label="{{.TileLabel}}"></a>{{else}}<span class="muted">This cluster has no node.</span>{{end}}</div>
   {{if .Cluster.Nodes}}{{template "pg-legend"}}{{end}}</div></section>
 <section class="panel pg-wide"><div class="ph"><h2>Health</h2><span class="grow"></span><span class="faint mono">sind get cluster{{.ClusterArg}}</span></div>

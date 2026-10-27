@@ -194,6 +194,6 @@ func TestPgRealmGoneKeepsLiveUpdates(t *testing.T) {
 	st := store.New()
 	st.SetDocker(store.DockerState{Checked: true})
 	v := &View{Params: Params{"realm": {"gone"}}, Snap: st.Snapshot()}
-	require.NoError(t, pgClustersFragments()[0].Load(v))
+	require.NoError(t, pgPageFragments(pgClustersPage, nil)[0].Load(v))
 	assert.Empty(t, v.Data.(*pgClusterList).Clusters)
 }

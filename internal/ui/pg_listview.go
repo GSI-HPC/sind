@@ -101,9 +101,6 @@ func (q pgListQuery) URL(kv ...string) string {
 	return q.Base + "?" + v.Encode()
 }
 
-// RealmURL returns the address of the list in another realm, "" for all.
-func (q pgListQuery) RealmURL(realm string) string { return q.URL("realm", realm) }
-
 // Words are the words of the text filter, in lower case: a row matches
 // when its text holds each of them.
 func (q pgListQuery) words() []string { return strings.Fields(strings.ToLower(q.Q)) }

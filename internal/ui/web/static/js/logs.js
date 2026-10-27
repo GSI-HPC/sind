@@ -63,7 +63,7 @@
     function showUnit() { unitFld.hidden = sourceSel.value !== 'journal'; }
 
     // showCommand writes the command of a terminal that shows the same log,
-    // as logsCommand in Go does.
+    // as LogsTabView.Command in Go does.
     function showCommand() {
       const arg = nodeSel.value + suffix;
       const n = ' -f -n ' + linesSel.value;

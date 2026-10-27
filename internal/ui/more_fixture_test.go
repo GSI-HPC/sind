@@ -14,9 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// moreNow is the time of the fixture's doctor report.
-var moreNow = time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
-
 // moreNodes returns the nodes of a cluster of the realm: one controller
 // and workers, of which the worker at index down is stopped (-1: none).
 func moreNodes(realm, name string, workers, down int) []cluster.NodeSummary {
@@ -69,7 +66,7 @@ func moreFixture(t *testing.T, st *store.Store) {
 	})
 	st.SetClusters("ci", []cluster.Summary{{Name: "pr-145", SlurmVersion: "26.05.1", State: cluster.StateRunning, NodeCount: 3}})
 	st.SetNodes("ci", moreNodes("ci", "pr-145", 2, -1))
-	st.SetDoctor(&store.DoctorReport{Time: moreNow.Add(-3 * time.Minute), Checks: []store.DoctorCheck{
+	st.SetDoctor(&store.DoctorReport{Time: pgNow.Add(-3 * time.Minute), Checks: []store.DoctorCheck{
 		{Name: "Docker Engine", Status: "ok", Detail: "Docker Engine 28.5.1"},
 		{Name: "cgroup v2", Status: "ok", Detail: "cgroup2 with nsdelegate"},
 		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_instances is 128; 9 nodes and more can run out", Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
@@ -92,7 +89,7 @@ func moreTestServer(t *testing.T, fixture, withDoctor bool) (*testServer, *int) 
 	moreEnv.Store(cfg.Env)
 	t.Cleanup(func() { moreEnv.Store(nil) })
 	ts := newTestServerFrom(t, cfg, st)
-	ts.srv.now = func() time.Time { return moreNow }
+	ts.srv.now = func() time.Time { return pgNow }
 	if fixture {
 		moreFixture(t, st)
 	}

@@ -111,7 +111,7 @@ func TestRunPageNamesTheRunAsTheDock(t *testing.T) {
 	assert.Equal(t, "create worker dev --count 3: started.", runSummaryOf(rc).Say)
 	require.NoError(t, runPageLoad(v))
 	assert.Equal(t, "create worker dev --count 3", v.Title)
-	assert.Equal(t, dockTaskCard(task, run, true, runAt(30)).Title, h.Title)
+	assert.Equal(t, dockTaskCard(task, &run, runAt(30)).Title, h.Title)
 }
 
 func TestRunSummary(t *testing.T) {
