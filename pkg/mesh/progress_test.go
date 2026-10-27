@@ -5,7 +5,6 @@ package mesh
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -35,6 +34,10 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
 		want  string
 	}{
 		{"new", func(*fakeDocker) {}, `step mesh total=4 [hidden,fold,show-lines]: ok
+  target dns,relay amount=2000000 size=2000000 unit=bytes [hidden,show-lines]: ok
+  target network,volume [hidden,show-lines]: ok
+`},
+		{"new, the images there", func(f *fakeDocker) { f.images[DNSImage], f.images[SSHImage()] = true, true }, `step mesh total=4 [hidden,fold,show-lines]: ok
   target dns,network,relay,volume [hidden,show-lines]: ok
 `},
 		{"in place", func(f *fakeDocker) { f.withPinnedMesh(DefaultRealm, docker.StateRunning) }, `step mesh total=4 [hidden,fold,show-lines]: ok
@@ -46,8 +49,9 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
   target network,volume [hidden,show-lines]: skipped: exists
 `},
 		{"relay fails", func(f *fakeDocker) { f.fail["start sind-ssh"] = failure() }, `step mesh total=4 [hidden,fold,show-lines]: failed (target): starting SSH container: connection refused
-  target dns,network,volume [hidden,show-lines]: ok
-  target relay [hidden,show-lines]: failed (target): starting SSH container: connection refused
+  target dns amount=2000000 size=2000000 unit=bytes [hidden,show-lines]: ok
+  target network,volume [hidden,show-lines]: ok
+  target relay amount=2000000 size=2000000 unit=bytes [hidden,show-lines]: failed (target): starting SSH container: connection refused
 `},
 		{"network fails", func(f *fakeDocker) { f.fail["network inspect"] = failure() }, `step mesh total=4 [hidden,fold,show-lines]: failed (target): checking mesh network: connection refused
   target dns,relay,volume [hidden,show-lines]: canceled (canceled): not finished
@@ -168,9 +172,8 @@ func (s *onScreen) end(t *testing.T) string {
 }
 
 // pullingExecutor is the docker CLI of a fake daemon that does not have
-// the relay's image: the docker create of the relay writes the first lines
-// of the pull to its stderr, as docker does, and a frame of the tree is
-// drawn two seconds later.
+// the images of the mesh: the pull of the relay's image writes its first
+// line, and a frame of the tree is drawn two seconds later.
 type pullingExecutor struct {
 	*mock.Executor
 	screen *onScreen
@@ -178,9 +181,9 @@ type pullingExecutor struct {
 }
 
 func (e *pullingExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if strings.HasPrefix(strings.Join(args, " "), "create --name sind-ssh ") {
-		stderr := progress.Tee(ctx, io.Discard, progress.StreamStderr, nil)
-		_, _ = fmt.Fprintf(stderr, "Unable to find image '%s' locally\nlatest: Pulling from gsi-hpc/sind-node\n", SSHImage())
+	if strings.Join(args, " ") == "pull "+SSHImage() {
+		stdout := progress.Tee(ctx, io.Discard, progress.StreamStdout, nil)
+		_, _ = io.WriteString(stdout, "latest: Pulling from gsi-hpc/sind-node\n")
 		e.frame = e.screen.draw(2 * time.Second)
 	}
 	return e.Executor.Run(ctx, name, args...)
@@ -188,7 +191,8 @@ func (e *pullingExecutor) Run(ctx context.Context, name string, args ...string) 
 
 // On a host that has no mesh, the tree draws the last line of the pull of
 // the relay's image in the row of the relay, under the step "mesh", whose
-// row counts the parts, and leaves the line of the step once it ends.
+// row counts the parts and the bytes of the pulls, and leaves the line of
+// the step once it ends.
 func TestEnsureMesh_TreeShowsThePullInThePartsRow(t *testing.T) {
 	ctx, s := treeOnScreen(t)
 	exec := &pullingExecutor{Executor: &mock.Executor{OnCall: newFake(t).onCall}, screen: s}
@@ -196,41 +200,40 @@ func TestEnsureMesh_TreeShowsThePullInThePartsRow(t *testing.T) {
 	require.NoError(t, NewManager(docker.NewClient(exec), DefaultRealm).EnsureMesh(ctx))
 
 	assert.Equal(t, `create cluster · 0:02.0
-  mesh  3/4 · 1 running
+  mesh  3/4 · 1 running · 1.9 MiB · 75% · 0.0 B/s
     ▸ relay  2.0s  latest: Pulling from gsi-hpc/sind-node
     ✓ dns,network,volume
 `, exec.frame)
-	assert.Equal(t, "✓ mesh  2.0s  4 ok\n", s.end(t))
+	assert.Equal(t, "✓ mesh  2.0s  4 ok  3.8 MiB at 1.9 MiB/s\n", s.end(t))
 }
 
 // teeingExecutor is the docker CLI of a fake daemon that does not have the
 // relay's image, whose output reaches the progress spans as OSExecutor's
-// does: standard error always, standard output unless it is data. The
-// docker create of the relay writes the lines of the pull to its standard
-// error and the container's ID to its standard output, and a frame of the
-// tree is drawn at each docker command after it while the relay's part
-// runs.
+// does: standard error always, standard output unless it is data. The pull
+// of the relay's image writes its lines to standard output, the docker
+// create of the relay the container's ID, and a frame of the tree is drawn
+// at each docker command after the pull while the relay's part runs.
 type teeingExecutor struct {
 	*mock.Executor
-	screen  *onScreen
-	created bool
-	frames  []string
+	screen *onScreen
+	pulled bool
+	frames []string
 }
 
 func (e *teeingExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	stdout, stderr, err := e.Executor.Run(ctx, name, args...)
-	if strings.HasPrefix(strings.Join(args, " "), "create --name sind-ssh ") {
-		stderr = fmt.Sprintf("Unable to find image '%s' locally\nlatest: Pulling from gsi-hpc/sind-node\nStatus: Downloaded newer image for %s\n", SSHImage(), SSHImage())
+	joined := strings.Join(args, " ")
+	if strings.HasPrefix(joined, "create --name sind-ssh ") {
 		stdout = strings.Repeat("0123456789abcdef", 4) + "\n"
-		e.created = true
 	}
 	if !cmdexec.StdoutIsData(ctx) {
 		_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStdout, nil), stdout)
 	}
 	_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStderr, nil), stderr)
-	if e.created && strings.Contains(strings.Join(args, " "), "sind-ssh") {
+	if e.pulled && strings.Contains(joined, "sind-ssh") {
 		e.frames = append(e.frames, e.screen.draw(time.Second))
 	}
+	e.pulled = e.pulled || joined == "pull "+SSHImage()
 	return stdout, stderr, err
 }
 
@@ -246,7 +249,7 @@ func TestEnsureMesh_TreeShowsNoDataInThePartsRow(t *testing.T) {
 	require.NotEmpty(t, exec.frames)
 	for _, frame := range exec.frames {
 		assert.Contains(t, frame, "▸ relay", frame)
-		assert.Contains(t, frame, "Status: Downloaded newer image for "+SSHImage(), frame)
+		assert.Contains(t, frame, "Status: Downloaded newer image for ", frame)
 	}
 	s.end(t)
 }

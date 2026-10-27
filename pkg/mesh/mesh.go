@@ -87,7 +87,7 @@ type Manager struct {
 	Docker  *docker.Client
 	Exec    cmdexec.Executor // executor for non-docker system commands (systemctl, resolvectl, etc.)
 	Realm   string
-	Pull    bool // force fresh image pull (--pull always)
+	Pull    bool // pull the images of the containers it creates, also when present
 	HostDNS bool // configure host DNS resolution via systemd-resolved
 
 	// OnWarning receives warnings meant for the user, such as a mesh DNS
@@ -177,8 +177,9 @@ func (m *Manager) ComposeProject() string {
 // so that a mesh in place leaves no trace on a display. The step shows in
 // the row of a part the newest line its docker commands write to standard
 // error, not the data they write to standard output (see docker.Client):
-// the docker create of the DNS container and of the relay writes the lines
-// of the pull of its image there when the daemon does not have it. A part
+// the pull of the image of the DNS container and of the relay, before its
+// docker create, when the daemon does not have it or with Pull, writes its
+// lines there, and reports its bytes as the work of the part. A part
 // not seen to because one before it failed ends canceled with the step.
 func (m *Manager) EnsureMesh(ctx context.Context) (err error) {
 	ctx, step := progress.Start(ctx, progress.KindStep, "mesh",
@@ -285,6 +286,27 @@ func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err 
 		m.WarnStaleDNS(ctx, dnsIP, relay)
 	}
 	return dnsIP, dns != nil, nil
+}
+
+// pullFor pulls image for a container of the mesh that is to be created,
+// with Pull, or when the daemon does not have it, so that the part's target
+// in ctx reports the pull as work (see docker.Client.PullImage): the docker
+// create of the container then finds the image, and pulls nothing that no
+// display could show.
+func (m *Manager) pullFor(ctx context.Context, image string) error {
+	if !m.Pull {
+		exists, err := m.Docker.ImageExists(ctx, image)
+		if err != nil {
+			return fmt.Errorf("inspecting image %s: %w", image, err)
+		}
+		if exists {
+			return nil
+		}
+	}
+	if err := m.Docker.PullImage(ctx, image); err != nil {
+		return fmt.Errorf("pulling %s: %w", image, err)
+	}
+	return nil
 }
 
 // inspectMesh inspects the DNS and the SSH relay container at once; a
@@ -586,10 +608,10 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 		args = append(args, "--ip", pinnedIP)
 	}
 	args = append(args, composeLabelFlags(m.ComposeProject(), "dns")...)
-	if m.Pull {
-		args = append(args, "--pull", "always")
-	}
 	args = append(args, DNSImage)
+	if err := m.pullFor(ctx, DNSImage); err != nil {
+		return nil, err
+	}
 	if _, err := m.Docker.CreateContainer(ctx, args...); err != nil {
 		return nil, fmt.Errorf("creating DNS container: %w", err)
 	}

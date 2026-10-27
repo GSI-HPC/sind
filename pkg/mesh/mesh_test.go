@@ -261,23 +261,52 @@ func TestEnsureMesh(t *testing.T) {
 
 	// The relay starts after the DNS container.
 	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
-	// Without --pull nothing is pulled.
+	// The images the daemon does not have are pulled before the
+	// containers are created, which pull nothing.
+	assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + SSHImage()}, calls(m, "pull"))
 	for _, create := range calls(m, "create") {
 		assert.NotContains(t, create, "--pull")
 	}
 }
 
+// Without Pull, an image the daemon has is not pulled; with it, it is,
+// before the container is created.
 func TestEnsureMesh_Pull(t *testing.T) {
-	_, c, m := newFakeDocker(t)
-	mgr := NewManager(c, DefaultRealm)
-	mgr.Pull = true
+	for _, pull := range []bool{false, true} {
+		f, c, m := newFakeDocker(t)
+		f.images[DNSImage], f.images[SSHImage()] = true, true
+		mgr := NewManager(c, DefaultRealm)
+		mgr.Pull = pull
 
-	require.NoError(t, mgr.EnsureMesh(t.Context()))
+		require.NoError(t, mgr.EnsureMesh(t.Context()))
 
-	creates := calls(m, "create")
-	require.Len(t, creates, 2)
-	for _, create := range creates {
-		assert.Contains(t, create, "--pull always")
+		if pull {
+			assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + SSHImage()}, calls(m, "pull"))
+		} else {
+			assert.Empty(t, calls(m, "pull"))
+		}
+		creates := calls(m, "create")
+		require.Len(t, creates, 2)
+		for _, create := range creates {
+			assert.NotContains(t, create, "--pull")
+		}
+	}
+}
+
+// A pull that fails, or the inspection of an image that fails, fails the
+// part, and no container is created.
+func TestEnsureMesh_PullFails(t *testing.T) {
+	for _, tc := range []struct{ fail, want, container string }{
+		{"pull " + DNSImage, "pulling " + DNSImage + ": connection refused", "sind-dns"},
+		{"image inspect --format {{.Id}} " + SSHImage(), "inspecting image " + SSHImage() + ": connection refused", "sind-ssh"},
+	} {
+		f, c, m := newFakeDocker(t)
+		f.fail[tc.fail] = failure()
+
+		err := NewManager(c, DefaultRealm).EnsureMesh(t.Context())
+
+		require.ErrorContains(t, err, tc.want)
+		assert.Empty(t, calls(m, "create --name "+tc.container+" "))
 	}
 }
 
