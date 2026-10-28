@@ -518,7 +518,7 @@ func TestListContainers_NoLabels(t *testing.T) {
 }
 
 func TestListContainers_Networks(t *testing.T) {
-	const psNetworks = `{"ID":"a","Names":"sind-dev-controller","State":"exited","Image":"img","Networks":"sind-dev-net,sind-mesh"}` + "\n" +
+	const psNetworks = `{"ID":"a","Names":"sind-dev-controller","State":"exited","Status":"Exited (0) 3 days ago","Image":"img","Networks":"sind-dev-net,sind-mesh"}` + "\n" +
 		`{"ID":"b","Names":"sind-dns","State":"running","Image":"img","Networks":"sind-mesh"}`
 	var m mock.Executor
 	m.AddResult(psNetworks, "", nil)
@@ -529,6 +529,7 @@ func TestListContainers_Networks(t *testing.T) {
 	require.Len(t, entries, 2)
 	assert.Equal(t, []NetworkName{"sind-dev-net", "sind-mesh"}, entries[0].Networks)
 	assert.Equal(t, []NetworkName{"sind-mesh"}, entries[1].Networks)
+	assert.Equal(t, "Exited (0) 3 days ago", entries[0].Status)
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "network=sind-mesh", "--filter", "network=sind-dev-net"}, m.Calls[0].Args)
 }
 

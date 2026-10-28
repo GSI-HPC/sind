@@ -270,9 +270,12 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 // ContainerListEntry holds summary information from docker ps. Networks are
 // the networks the container is connected to, also while it is stopped.
 type ContainerListEntry struct {
-	ID       ContainerID
-	Name     ContainerName
-	State    ContainerState
+	ID    ContainerID
+	Name  ContainerName
+	State ContainerState
+	// Status is what docker ps says of the state, for people: "Up 2
+	// hours", "Exited (0) 3 days ago".
+	Status   string
 	Image    string
 	Labels   Labels
 	Networks []NetworkName
@@ -283,6 +286,7 @@ type psEntry struct {
 	ID       string `json:"ID"`
 	Names    string `json:"Names"`
 	State    string `json:"State"`
+	Status   string `json:"Status"`
 	Image    string `json:"Image"`
 	Labels   string `json:"Labels"`
 	Networks string `json:"Networks"`
@@ -304,6 +308,7 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 			ID:     ContainerID(p.ID),
 			Name:   ContainerName(p.Names),
 			State:  ContainerState(p.State),
+			Status: p.Status,
 			Image:  p.Image,
 			Labels: parseLabels(p.Labels),
 		}

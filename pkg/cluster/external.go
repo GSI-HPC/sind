@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -48,18 +49,29 @@ func ExternalContainers(ctx context.Context, client *docker.Client, meshMgr *mes
 // ConnectableContainers returns the containers outside sind that are not
 // attached to the realm's mesh network, sorted: those Connect can attach.
 func ConnectableContainers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) ([]docker.ContainerName, error) {
+	entries, err := Connectable(ctx, client, meshMgr)
+	var names []docker.ContainerName
+	for _, e := range entries {
+		names = append(names, e.Name)
+	}
+	return names, err
+}
+
+// Connectable returns what docker ps says of the containers that
+// ConnectableContainers names, sorted by name, running or not.
+func Connectable(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) ([]docker.ContainerListEntry, error) {
 	entries, err := client.ListContainers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
-	var names []docker.ContainerName
+	var out []docker.ContainerListEntry
 	for _, e := range entries {
 		if !ownContainer(e.Labels, meshMgr) && !slices.Contains(e.Networks, meshMgr.NetworkName()) {
-			names = append(names, e.Name)
+			out = append(out, e)
 		}
 	}
-	slices.Sort(names)
-	return names, nil
+	slices.SortFunc(out, func(a, b docker.ContainerListEntry) int { return strings.Compare(string(a.Name), string(b.Name)) })
+	return out, nil
 }
 
 // realmNetworks returns the realm's mesh and cluster networks, the mesh
