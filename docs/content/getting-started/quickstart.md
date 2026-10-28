@@ -33,12 +33,12 @@ sind create cluster
    sind ui
    ```
 
-2. Press **New cluster…**. The dialog proposes a free name, such as `hpc`, with a controller, a db node, a submitter and two workers. Set the name to `default`, clear **db** and **submitter**, and set **workers** to 1.
-3. Press **Create** when the status at the bottom says `Ready`.
+2. Press **New cluster…**. The New cluster page proposes a free name, such as `hpc`, and starts from **Quick test**: a controller and two workers. Set the name to `default` and set **workers** to 1.
+3. Press **Create** when the status at the bottom of the plan says `Ready`.
 
-{{< uishot "dialog-create-cluster" >}}
+{{< uishot "new-cluster" >}}
 
-The **Runs** line of the dialog shows the command that it starts. The dialog also saves the config of the cluster, so you can run the same command from a terminal.
+The **Runs** block of the plan shows the command that it starts. sind ui also saves the config of the cluster, so you can run the same command from a terminal.
 
 {{< /ui >}}
 {{< /ways >}}

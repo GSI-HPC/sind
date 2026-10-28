@@ -34,9 +34,9 @@ sind create cluster --monitoring
 {{< /cli >}}
 {{< ui >}}
 
-In the New cluster dialog of `sind ui`, tick **Monitoring**. The dialog writes `monitoring: true` into the config. It needs Slurm 26.05 or later in the images, and the plan says so for an older image.
+On the New cluster page of `sind ui`, open **Users, identity, monitoring** under **More options** and tick **Monitoring**. The page writes `monitoring: true` into the config. It needs Slurm 26.05 or later in the images, and the plan says so for an older image.
 
-{{< uishot "dialog-create-cluster" >}}
+{{< uishot "new-cluster" >}}
 
 {{< /ui >}}
 {{< /ways >}}

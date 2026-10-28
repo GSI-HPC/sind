@@ -59,7 +59,7 @@ shots:
     fit: true
 
   - name: cluster-connect
-    alt: "A cluster's Connect tab: the commands that open a shell, run a command, log in to a node or follow its log"
+    alt: "A cluster's Connect tab: the commands that open a shell, run a command, log in to a node or follow its log, and where your files are"
     path: /clusters/sind/dev?tab=connect
     hide: "#tasks"
     page: cluster
@@ -142,21 +142,18 @@ shots:
     page: run
     sizes: [desktop, phone]
 
-  - name: dialog-create-cluster
-    alt: "The New cluster dialog: the form with the nodes and sizes, and the plan with the command and config that sind ui will run"
-    path: /clusters
-    steps:
-      - dialog: create-cluster
-    crop: "#layer [role=dialog]"
-    page: dialogs
+  - name: new-cluster
+    alt: "The New cluster page: the starts, the name and realm, the nodes by what they are for, and the plan with the nodes, what they take of this host and the command that sind ui will run"
+    path: /clusters/new
+    hide: "#tasks"
+    page: new-cluster
+    sizes: [desktop, phone]
 
-  - name: dialog-try-again
+  - name: new-cluster-retry
     alt: "New cluster rebuilt from the failed run of bench: what the event log gave, what keeps the defaults, and a longer wait with the reason"
-    path: /runs/d3e0000000000005
-    steps:
-      - dialog: create-cluster?from=d3e0000000000005&name=bench
-    crop: "#layer [role=dialog]"
-    page: dialogs
+    path: /clusters/new?from=d3e0000000000005&name=bench
+    hide: "#tasks"
+    page: new-cluster
 
   - name: dialog-power
     alt: "The Power dialog confirming a reboot of worker-0.dev: the node with its Slurm state, what keeps running, the other actions, and the command it runs"

@@ -29,6 +29,10 @@ Type in **Filter** to show only the clusters whose name, realm, state or nodes h
 
 Tick clusters to delete several at once. **Delete 2 clusters…** in the bar (it counts them) opens one dialog with a row for each: what goes and what stays of it. You type their number to confirm. sind ui runs one `sind delete cluster` for each.
 
+## New cluster
+
+**New cluster…** opens the page that makes a cluster: a start, the name and realm, the nodes, where your files go and more options, with the plan of what sind runs beside them. [Actions]({{< relref "/web-ui/actions#new-cluster" >}}) describes it.
+
 ## Nodes
 
 Every node of the realm. A node is named as you type it in commands, such as `worker-0.dev`.
@@ -65,7 +69,7 @@ Type in **Filter** to show only the lines with that text, or tick **Errors and w
 
 {{< uishot "cluster-network" >}}
 
-**Connect** shows the commands to open a shell on a node, to run a command, and to use `ssh`. Use **Copy** to copy one.
+**Connect** shows the commands to open a shell on a node, to run a command, and to use `ssh`. Use **Copy** to copy one. **Your files** says where the files of your jobs are: the directory on this host or the Docker volume that every node sees at `/data`, with the command that copies a job script there, `cp` for a directory or `docker cp` through a node for a volume.
 
 {{< uishot "cluster-connect" >}}
 

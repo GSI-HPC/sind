@@ -17,13 +17,14 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--moni
 {{< /cli >}}
 {{< ui >}}
 
-1. Press **New cluster…** on the Overview or on the Clusters page.
-2. Set the name, the realm, the image and the nodes, or press **Start from YAML…** to paste a config or open a file of one. The plan beside the form shows the nodes, the command and the config as you type.
-3. Press **Create** when the status at the bottom says `Ready`.
+1. Press **New cluster…** on the Overview or on the Clusters page. The New cluster page opens.
+2. Pick a start: **Quick test**, **With job history**, **Like a site**, or **Copy a cluster** for the nodes of a cluster you have. **Start from YAML…** takes a config that you paste or open from a file.
+3. Set the name and the realm, and change the nodes, **Your files** or **More options** as you need. The plan at the right shows the nodes, what they take of this host, the command and the config as you type.
+4. Press **Create** when the status at the bottom of the plan says `Ready`.
 
-{{< uishot "dialog-create-cluster" >}}
+{{< uishot "new-cluster" >}}
 
-sind ui saves the config and runs `sind create cluster --config FILE`, with `--pull` when **Pull the image** is on and `--wait` from **Wait for ready**. The data storage and monitoring go into the config. [Actions]({{< relref "/web-ui/actions#new-cluster" >}}) describes each field of the dialog.
+sind ui saves the config and runs `sind create cluster --config FILE`, with `--pull` when **Pull the image** is on and `--wait` from **Wait for ready**. The data storage and monitoring go into the config. [Actions]({{< relref "/web-ui/actions#new-cluster" >}}) describes each part of the page.
 
 {{< /ui >}}
 {{< /ways >}}
