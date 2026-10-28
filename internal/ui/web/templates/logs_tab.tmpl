@@ -4,11 +4,18 @@
 view of that page: View.LogsTab reads the cluster and the choices of the
 address (node, source, unit, lines, q, level). logs.js opens the stream GET
 /logs/{realm}/{cluster} and writes the choices back into the address. */}}
-{{define "logs-tab"}}{{with .LogsTab}}
+{{define "logs-tab"}}{{with .LogsTab}}{{template "logs-panel" .}}{{end}}{{end}}
+
+{{/* node-logs-tab is the Logs tab of a node page: the same panel, with
+the node of the page and no picker of the node. */}}
+{{define "node-logs-tab"}}{{with .NodeLogsTab}}{{template "logs-panel" .}}{{end}}{{end}}
+
+{{/* logs-panel is the log viewer; it takes a LogsTabView. */}}
+{{define "logs-panel"}}
 {{if .Nodes}}
-<section class="panel logs" id="logs-panel" data-logs data-realm="{{.Realm}}" data-cluster="{{.Cluster}}" data-sind="{{.Sind}}" data-suffix="{{.Suffix}}" data-keep="{{.Keep}}">
+<section class="panel logs" id="logs-panel" data-logs data-realm="{{.Realm}}" data-cluster="{{.Cluster}}" data-sind="{{.Sind}}" data-suffix="{{.Suffix}}" data-keep="{{.Keep}}"{{if .Fixed}} data-logs-fixed{{end}}{{with .Ended}} data-logs-ended="{{.}}"{{end}}>
   <div class="ph logs-bar">
-    <div class="fld logs-fld"><label for="logs-node">Node</label>
+    <div class="fld logs-fld"{{if .Fixed}} hidden{{end}}><label for="logs-node">Node</label>
       <select id="logs-node" data-logs-node>
         {{range .Nodes}}<option value="{{.Short}}" data-units="{{.Units}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
         {{end}}
@@ -50,4 +57,4 @@ address (node, source, unit, lines, q, level). logs.js opens the stream GET
 {{else}}
 <section class="panel"><div class="empty">No nodes of {{.Cluster}} are known yet, so there is no log to show.</div></section>
 {{end}}
-{{end}}{{end}}
+{{end}}

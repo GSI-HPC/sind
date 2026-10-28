@@ -282,6 +282,9 @@
       const page = Idiomorph.defaults.callbacks.beforeAttributeUpdated;
       Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node, kind) => {
         if (name === 'hidden' && node.id === 'rail-sheet') return false;
+        // A menu of a page that is open stays open, with its button.
+        if (name === 'open' && node.hasAttribute('data-pg-menu')) return false;
+        if (name === 'aria-expanded' && node.parentElement && node.parentElement.hasAttribute('data-pg-menu')) return false;
         if (name === 'aria-expanded' && node.hasAttribute('data-rail-more')) return false;
         if (name === 'tabindex' && kind === 'remove' && node === document.activeElement) return false;
         return typeof page !== 'function' || page(name, node, kind) !== false;

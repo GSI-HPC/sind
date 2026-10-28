@@ -39,8 +39,9 @@ func TestPgNodeNeed(t *testing.T) {
 	assert.Equal(t, pgNeed{Sev: "bad", Kind: pgNeedService, Title: "has munge, slurmd down", Detail: "The container runs, but munge and slurmd are not active."},
 		pgNeed{Sev: need.Sev, Kind: need.Kind, Title: need.Title, Detail: need.Detail})
 	assert.Equal(t, "Logs of slurmd", need.Actions[0].Label, "the journal of its Slurm service")
-	assert.Equal(t, "Reboot w…", need.Fix.Label)
-	assert.Equal(t, "Reboot w.c…", need.Fix.Name)
+	assert.Equal(t, "Restart munge…", need.Fix.Label, "slurmd needs munge, so munge restarts first")
+	assert.Equal(t, "Restart munge on w.c…", need.Fix.Name)
+	assert.Contains(t, need.Fix.URL, "/dialogs/restart-service?")
 	n.Services = []pgSvc{{"munge", false}, {"slurmd", true}}
 	assert.Equal(t, "Logs of munge", pgNodeNeed(sn, n, nil).Actions[0].Label)
 	// A node that runs and that Slurm sends no jobs.
@@ -49,15 +50,16 @@ func TestPgNodeNeed(t *testing.T) {
 	need = pgNodeNeed(sn, n, nil)
 	assert.Equal(t, pgNeed{Sev: "warn", Kind: pgNeedSlurm, Label: "Slurm", Title: "is drained in Slurm", Detail: "Slurm sends it no new jobs. Reason: disk check."},
 		pgNeed{Sev: need.Sev, Kind: need.Kind, Label: need.Label, Title: need.Title, Detail: need.Detail})
-	assert.Equal(t, "Resume w…", need.Fix.Label)
+	assert.Equal(t, "Resume…", need.Fix.Label)
+	assert.Equal(t, "Resume w.c…", need.Fix.Name)
 	assert.Equal(t, "Logs of slurmd", need.Actions[0].Label)
 	n.Slurm.Reason = ""
 	assert.Equal(t, "Slurm sends it no new jobs.", pgNodeNeed(sn, n, nil).Detail)
 	// Paused and stopped.
 	n.State, n.Slurm = cluster.StatePaused, nil
-	assert.Equal(t, "Unfreeze w…", pgNodeNeed(sn, n, nil).Fix.Label)
+	assert.Equal(t, "Unfreeze…", pgNodeNeed(sn, n, nil).Fix.Label)
 	n.State = cluster.StateStopped
-	assert.Equal(t, "Start w…", pgNodeNeed(sn, n, nil).Fix.Label)
+	assert.Equal(t, "Start…", pgNodeNeed(sn, n, nil).Fix.Label)
 }
 
 func TestPgNodeEffect(t *testing.T) {
@@ -267,4 +269,20 @@ func TestPgDismissRun(t *testing.T) {
 	assert.NotContains(t, body, "create cluster hpc2</b> failed")
 	assert.Contains(t, body, `<span class="dot bad"></span><span class="pg-c">create cluster hpc2</span>`, "Recent activity keeps it")
 	assert.Equal(t, http.StatusBadRequest, ts.post("/needs/runs/"+strings.Repeat("x", maxParamLen+1)+"/dismiss", "").Code)
+}
+
+func TestPgNodeNeedWithFaults(t *testing.T) {
+	sn := store.Snapshot{Clusters: map[string][]cluster.Summary{"r": {{Name: "c", State: cluster.StateMixed}}}}
+	at := time.Date(2026, 10, 21, 9, 2, 0, 0, time.Local)
+	n := pgNode{Realm: "r", Cluster: "c", Short: "w", Arg: "w.c", Role: config.RoleWorker, State: cluster.StateRunning, Services: []pgSvc{{"slurmd", false}}}
+	n.Fault = &store.Fault{Units: []store.Unit{{Name: "slurmd", Status: 1, Since: at}}}
+	assert.Equal(t, "The container runs, but slurmd is not active. slurmd failed at 09:02 with exit status 1.", pgNodeNeed(sn, n, nil).Detail)
+	n.Fault.Units[0].Status = 0
+	assert.Equal(t, "The container runs, but slurmd is not active. slurmd failed at 09:02.", pgNodeNeed(sn, n, nil).Detail)
+	// How its container stopped, and when, if Docker said.
+	n.State = cluster.StateStopped
+	n.Fault = &store.Fault{Exit: &store.Exit{Code: 137, OOMKilled: true, At: at}}
+	assert.Equal(t, "The container stopped at 09:02 with exit code 137: the kernel killed it, as it ran out of memory. The cluster c is mixed.", pgNodeNeed(sn, n, nil).Detail)
+	n.Fault.Exit.At = time.Time{}
+	assert.Equal(t, "The container stopped with exit code 137: the kernel killed it, as it ran out of memory. The cluster c is mixed.", pgNodeNeed(sn, n, nil).Detail)
 }

@@ -209,13 +209,98 @@
     return '/dialogs/delete-clusters?' + q.toString();
   }
 
+  // copy copies the text. The button says Copied for a moment, or, with
+  // data-pg-copy-say, keeps its label and its sign and a toast says what
+  // it copied and what to do with it.
   function copy(text, btn) {
     const done = () => {
+      if (btn.dataset.pgCopySay) {
+        document.dispatchEvent(new CustomEvent('sind:toast', { detail: btn.dataset.pgCopySay }));
+        return;
+      }
       const old = btn.textContent;
       btn.textContent = 'Copied';
       setTimeout(() => { btn.textContent = old; }, 1200);
     };
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {});
+  }
+
+  // The menus of the head of a node page, <details data-pg-menu>: one is
+  // open at a time; the arrow keys, Home and End move between its verbs,
+  // which skip none, as a verb that is off says why; Escape and Tab close
+  // it, and a click beside it too. A verb opens its dialog, which gives the
+  // focus back to the menu's button when it closes.
+  function menuItems(m) { return [...m.querySelectorAll('[role="menuitem"]')]; }
+
+  function closeMenu(m, focus) {
+    if (!m.open) return;
+    m.open = false;
+    if (focus) m.querySelector('summary').focus();
+  }
+
+  function closeMenus(except) {
+    for (const m of document.querySelectorAll('details[data-pg-menu][open]')) if (m !== except) closeMenu(m, false);
+  }
+
+  function menus() {
+    document.addEventListener('toggle', ev => {
+      const m = ev.target;
+      if (!(m instanceof HTMLDetailsElement) || !m.hasAttribute('data-pg-menu')) return;
+      m.querySelector('summary').setAttribute('aria-expanded', String(m.open));
+      if (!m.open) return;
+      closeMenus(m);
+      // A menu opened with the keyboard moves the focus to its first verb.
+      if (m.dataset.pgMenuKey) {
+        delete m.dataset.pgMenuKey;
+        const first = menuItems(m)[0];
+        if (first) first.focus();
+      }
+    }, true);
+    document.addEventListener('keydown', ev => {
+      const m = ev.target.closest && ev.target.closest('details[data-pg-menu]');
+      if (!m) return;
+      const items = menuItems(m);
+      const i = items.indexOf(document.activeElement);
+      if (ev.target.matches('summary')) {
+        if (ev.key === 'ArrowDown' || ev.key === 'Enter' || ev.key === ' ') {
+          if (!m.open) {
+            ev.preventDefault();
+            m.dataset.pgMenuKey = '1';
+            m.open = true;
+          } else if (ev.key === 'ArrowDown' && items[0]) {
+            ev.preventDefault();
+            items[0].focus();
+          }
+        } else if (ev.key === 'Escape') closeMenu(m, true);
+        return;
+      }
+      let next = -1;
+      switch (ev.key) {
+        case 'ArrowDown': next = (i + 1) % items.length; break;
+        case 'ArrowUp': next = (i - 1 + items.length) % items.length; break;
+        case 'Home': next = 0; break;
+        case 'End': next = items.length - 1; break;
+        case 'Escape': ev.preventDefault(); closeMenu(m, true); return;
+        case 'Tab': closeMenu(m, false); return;
+        case ' ': if (document.activeElement.matches('a')) { ev.preventDefault(); document.activeElement.click(); } return;
+        default: return;
+      }
+      ev.preventDefault();
+      items[next].focus();
+    });
+    document.addEventListener('click', ev => {
+      const t = ev.target;
+      const m = t.closest('details[data-pg-menu]');
+      closeMenus(m);
+      if (!m) return;
+      if (t.closest('[role="menuitem"][aria-disabled="true"]')) { ev.preventDefault(); return; }
+      const item = t.closest('a[data-pg-menu-item]');
+      if (!item) return;
+      ev.preventDefault();
+      const summary = m.querySelector('summary');
+      closeMenu(m, true);
+      htmx.ajax('GET', item.getAttribute('href'), { target: '#layer', swap: 'innerHTML', source: summary });
+    });
   }
 
   // realmPicker makes the realm picker of the top bar safe for the keyboard:
@@ -259,6 +344,8 @@
     });
     sel.addEventListener('blur', apply);
   }
+
+  menus();
 
   document.addEventListener('DOMContentLoaded', () => {
     realmPicker();

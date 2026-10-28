@@ -248,3 +248,132 @@ tr.sel .pill.run{border-color:var(--run)}
   a.pg-sumpill{min-height:44px;padding-top:4px;padding-bottom:4px}
   .pg-big .pg-nm{width:44px;height:44px;border-radius:7px}
 }
+
+/* Ready for jobs: a row for each worker that takes no jobs, with why, its
+   log and its fix */
+.pg-rrows{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+.pg-rrows li{display:grid;grid-template-columns:minmax(64px,max-content) minmax(0,1fr) auto;align-items:center;gap:6px 12px;padding:7px 10px}
+.pg-rrows li+li{border-top:1px solid var(--line-2)}
+.pg-rri{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;min-width:0}
+.pg-rra{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.pg-rrn{white-space:nowrap}
+@media (max-width:520px){
+  /* the name and the issue, then the log and the fix on a line of their own */
+  .pg-rrows li{grid-template-columns:max-content minmax(0,1fr)}
+  .pg-rra{grid-column:1/-1;justify-content:flex-start;flex-wrap:wrap}
+}
+
+/* a row's fix, and Copy ssh with its sign */
+td.act .btn:not(.ghost){border-color:var(--accent);color:var(--accent)}
+.pg-ico{width:14px;height:14px;flex:none}
+.btn.sm .pg-ico{width:13px;height:13px}
+
+/* the menus of the head of a node page: a button that opens a list of
+   verbs, grouped, each with a hint, the ones that can lose data red */
+.pg-mw{position:relative;display:inline-block}
+.pg-mw>summary{list-style:none;user-select:none}
+.pg-mw>summary::-webkit-details-marker{display:none}
+.pg-mw[open]>summary{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.pg-caret{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;margin-left:2px}
+.pg-micon{min-width:40px;justify-content:center;font-weight:700;letter-spacing:.05em}
+.pg-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:max-content;min-width:240px;max-width:min(320px,calc(100vw - 32px));padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);display:grid;gap:2px}
+.pg-mg+.pg-mg{border-top:1px solid var(--line-2);margin-top:4px;padding-top:4px}
+.pg-mh{padding:6px 10px 2px;font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+.pg-mi{display:grid;gap:1px;padding:6px 10px;border-radius:var(--r);color:var(--fg);text-decoration:none;cursor:pointer}
+.pg-mi:hover,.pg-mi:focus{background:var(--hover);text-decoration:none;outline:none}
+.pg-mi:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+.pg-ml{font-weight:500}
+.pg-mx{font-size:var(--t-sm);color:var(--muted)}
+.pg-mg.danger .pg-mi:not(.off) .pg-ml{color:var(--bad)}
+.pg-mi.off{cursor:not-allowed}
+.pg-mi.off .pg-ml{color:var(--faint)}
+.pg-mi.off .pg-mx{color:var(--faint)}
+@media (max-width:760px){
+  /* on a phone the buttons sit at the left, on a row of their own: the
+     menus open under that row, from its left edge */
+  .head .actions:has(.pg-mw){position:relative;flex-basis:100%}
+  .head .actions .pg-mw{position:static}
+  .head .actions .pg-menu{left:0;right:auto}
+}
+
+/* the card of a node's problem, or of its fix: a coloured edge, what is
+   wrong, the facts, the fixes to try in order and the end of the journal */
+.pg-diag{margin-bottom:14px;border-left:4px solid var(--bad)}
+.pg-diag.warn{border-left-color:var(--warn)}
+.pg-diag.ok{border-left-color:var(--ok)}
+.pg-diag.run{border-left-color:var(--run)}
+/* run.js hides the card of a fix at its data-hide-at, and shows the card of
+   the problem that waited for it at its data-show-at */
+.pg-diag.gone,[data-show-at]:not(.shown){display:none}
+.pg-diag .ph h2{font-size:var(--t-lg)}
+.pg-dmark{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;border-radius:99px;font-weight:700;font-size:var(--t-md);background:var(--bad-soft);color:var(--bad)}
+.pg-dmark.warn{background:var(--warn-soft);color:var(--warn)}
+.pg-dmark.ok{background:var(--ok-soft);color:var(--ok)}
+.pg-dmark.run{background:var(--run-soft);color:var(--run)}
+.pg-diag-b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"text journal" "ladder ladder";gap:16px 24px;align-items:start}
+.pg-diag.ok .pg-diag-b,.pg-diag.run .pg-diag-b{grid-template-areas:"text journal"}
+.pg-diag-b:not(:has(.pg-jr)){grid-template-areas:"text ladder"}
+.pg-diag.ok .pg-diag-b:not(:has(.pg-jr)),.pg-diag.run .pg-diag-b:not(:has(.pg-jr)){grid-template-areas:"text journal"}
+.pg-diag-l{grid-area:text;display:grid;gap:10px;line-height:1.55}
+.pg-diag-r{grid-area:journal}
+.pg-facts{grid-template-columns:max-content minmax(0,1fr);font-size:var(--t-md);row-gap:4px}
+.pg-facts dt{color:var(--muted)}
+.pg-facts dd.mono{font-size:var(--t-sm)}
+.pg-ladder{grid-area:ladder;min-width:0}
+.pg-ladder ol{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:10px}
+.pg-rung{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)}
+.pg-rung.first{border-color:var(--accent);background:var(--accent-soft)}
+.pg-rn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:99px;border:1px solid var(--line);background:var(--panel);font-size:var(--t-sm);font-weight:600;color:var(--muted)}
+.pg-rung.first .pg-rn{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.pg-rt{display:grid;gap:2px;min-width:0}
+.pg-rt .chip{justify-self:start}
+.pg-rt b .chip,.pg-rt>b+.chip{margin-left:6px}
+.pg-rx{font-size:var(--t-md);color:var(--muted)}
+.pg-rc{font:var(--t-sm) var(--f-mono);color:var(--faint);overflow-wrap:anywhere}
+.pg-rung .btn{justify-self:end}
+.pg-jr{grid-area:journal;min-width:0;display:grid;gap:6px}
+.pg-jh{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+pre.pg-jl{max-height:220px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+.pg-jt{color:var(--term-dim)}
+.pg-jline.err{color:#fca5a5}
+.pg-jline.warn{color:#fcd34d}
+@media (max-width:1100px){
+  .pg-diag-b,.pg-diag-b:not(:has(.pg-jr)),.pg-diag.ok .pg-diag-b,.pg-diag.run .pg-diag-b{grid-template-columns:minmax(0,1fr);grid-template-areas:"text" "ladder" "journal"}
+}
+@media (max-width:760px){
+  /* on a phone, the first fix is a full button in the first screen */
+  .pg-rung{grid-template-columns:24px minmax(0,1fr)}
+  .pg-rung .btn{grid-column:2;justify-self:start;min-height:44px;padding:8px 16px;font-size:var(--t-base)}
+  .pg-diag .ph{display:grid;grid-template-columns:24px minmax(0,1fr);gap:2px 10px;align-items:start}
+  .pg-diag .ph .grow{display:none}
+  .pg-diag .ph>.faint{grid-column:2;font-size:var(--t-sm)}
+  /* the text says what these facts say: the fixes come first */
+  .pg-diag .pg-facts .rep{display:none}
+}
+.pg-strip{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 14px}
+@media (max-width:760px){.pg-strip .pg-grow{flex-basis:100%}}
+.pg-strip-x{display:block;margin-top:2px;color:var(--muted);font-size:var(--t-sm)}
+
+/* the services of a node, each with its state, its restart, its journal
+   and since when */
+.pg-svcs{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.pg-svcs li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.pg-svcn{min-width:86px}
+.pg-svcnote{flex-basis:100%;padding-left:94px;font-size:var(--t-sm)}
+.pg-fqdn{overflow-wrap:anywhere}
+.pg-node-more{margin-top:14px}
+
+/* Recent changes: when, what, and where sind ui saw it */
+.pg-chl{list-style:none;margin:0;padding:0}
+.pg-chl li{display:grid;grid-template-columns:max-content 8px minmax(0,1fr) max-content;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid var(--line-2)}
+.pg-chl li:first-child{border-top:0}
+.pg-chw{font-size:var(--t-sm)}
+.pg-chs{font-size:var(--t-sm)}
+@media (max-width:760px){
+  .pg-chl li{grid-template-columns:8px minmax(0,1fr) max-content;row-gap:2px}
+  .pg-chw{grid-column:2/-1;grid-row:1}
+  .pg-chl .dot{grid-row:2}
+}
+
+/* the Slurm tab: the rows are cards on a phone, as in the Nodes tab */
+td.act{white-space:nowrap}

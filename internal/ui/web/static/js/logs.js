@@ -77,7 +77,9 @@
       const u = new URL(location.href);
       const q = u.searchParams;
       q.set('tab', 'logs');
-      q.set('node', nodeSel.value);
+      // The Logs tab of a node page has its node in the path.
+      if (root.hasAttribute('data-logs-fixed')) q.delete('node');
+      else q.set('node', nodeSel.value);
       if (sourceSel.value === 'journal') {
         q.set('source', 'journal');
         q.set('unit', unitSel.value);
@@ -188,8 +190,20 @@
       if (es) { es.close(); es = null; }
     }
 
+    // ended says that the stream ended: no new line comes, so Follow and
+    // Pause are off, and the tab of a node that does not run says where
+    // its log ends (data-logs-ended).
+    function ended() {
+      flush();
+      for (const b of [followBtn, pauseBtn]) { b.disabled = true; b.setAttribute('aria-pressed', 'false'); }
+      setState(root.dataset.logsEnded || 'The log ended');
+    }
+
     function start() {
       stop();
+      followBtn.disabled = pauseBtn.disabled = false;
+      followBtn.setAttribute('aria-pressed', String(!paused));
+      pauseBtn.setAttribute('aria-pressed', String(paused));
       const q = new URLSearchParams({ node: nodeSel.value, source: sourceSel.value, lines: linesSel.value });
       if (sourceSel.value === 'journal' && unitSel.value) q.set('unit', unitSel.value);
       es = new EventSource('/logs/' + encodeURIComponent(realm) + '/' + encodeURIComponent(cluster) + '?' + q);
@@ -198,7 +212,7 @@
       mine.onopen = () => setState(paused ? 'Paused' : 'Following');
       mine.addEventListener('line', ev => push(ev.data, lineClass(ev.data)));
       mine.addEventListener('notice', ev => push(ev.data, 'logs-notice'));
-      mine.addEventListener('end', () => { mine.close(); setState('The log ended'); });
+      mine.addEventListener('end', () => { mine.close(); ended(); });
       // The browser would reconnect and send the first lines again.
       mine.onerror = () => { mine.close(); if (es === mine) { es = null; setState('Not connected. Change a choice to connect again.'); } };
     }

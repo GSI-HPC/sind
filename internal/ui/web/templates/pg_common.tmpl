@@ -32,6 +32,9 @@ which adds the tile of such a node. */}}
 {{/* pg-copy is a small Copy button for the string it takes. */}}
 {{define "pg-copy"}}<button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="{{.}}" aria-label="Copy {{.}}">Copy</button>{{end}}
 
+{{/* pg-copy-icon is the sign of a button that copies. */}}
+{{define "pg-copy-icon"}}<svg class="pg-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></svg>{{end}}
+
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}
 

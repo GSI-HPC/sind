@@ -25,7 +25,14 @@ type pgReadyCheck struct {
 	Title   string
 	Detail  string
 	Actions []pgAction
+	// Nodes are the nodes that fail the check, each in a row of its own
+	// with why and its fix; More counts those that do not show.
+	Nodes []pgNode
+	More  string
 }
+
+// pgReadyRows is how many nodes a check lists in rows.
+const pgReadyRows = 6
 
 // Mark returns the sign of the check's state.
 func (c pgReadyCheck) Mark() string {
@@ -84,36 +91,14 @@ func pgEnterCmd(d *pgClusterView) pgCmd {
 	return pgCmd{"Open a shell on the " + entry, pgSind(d.Realm) + " enter" + pgClusterArg(d.Name)}
 }
 
-// pgPowerFix returns the power dialog that may fix a node that does not
-// take jobs, and whether there is one, named after the node: Start for a
-// stopped node, Unfreeze for a paused one, Reboot for one with a service
-// down, Resume for a worker that Slurm sends no jobs.
-func pgPowerFix(n pgNode) (pgAction, bool) {
-	verb, op := "Reboot", "reboot"
-	_, slurm := n.SlurmIssue()
-	switch {
-	case n.State == cluster.StatePaused:
-		verb, op = "Unfreeze", "unpause"
-	case n.State != cluster.StateRunning:
-		verb, op = "Start", "start"
-	case len(n.Down()) > 0:
-	case slurm:
-		verb, op = "Resume", "resume"
-	default:
-		return pgAction{}, false
-	}
-	return n.power(verb+" "+n.Short+"…", "sm ghost", op), true
-}
-
-// pgFixActions returns the links that help with the nodes, the first of
-// which tells the most: its logs, and for each node the power dialog that
-// may fix it.
-func pgFixActions(nodes ...pgNode) []pgAction {
-	acts := []pgAction{{Label: "Logs of " + nodes[0].Short, URL: nodes[0].LogsLink(), Class: "sm ghost"}}
-	for _, n := range nodes {
-		if fix, ok := pgPowerFix(n); ok {
-			acts = append(acts, fix)
-		}
+// pgFixActions returns the links that help with a node of a check: its
+// logs, and its first fix (pgLadder). The check speaks of the cluster, so
+// the fix names the node: "Start controller…".
+func pgFixActions(n pgNode) []pgAction {
+	acts := []pgAction{n.LogsAction("Logs of " + n.Short)}
+	if fix := pgFix(n, "sm"); fix != nil {
+		fix.Label = strings.TrimSuffix(fix.Name, n.Arg+"…") + n.Short + "…"
+		acts = append(acts, *fix)
 	}
 	return acts
 }
@@ -284,7 +269,11 @@ func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
 	case took == of:
 		return pgReadyCheck{State: "ok", Title: fmt.Sprintf("All %d workers take jobs", of)}, took, of
 	}
-	c = pgReadyCheck{State: "warn", Title: fmt.Sprintf("%d of %d workers take jobs", took, of), Detail: strings.Join(why, "; ") + ".", Actions: pgFixActions(broken[:min(len(broken), 3)]...)}
+	c = pgReadyCheck{State: "warn", Title: fmt.Sprintf("%d of %d workers take jobs", took, of), Nodes: broken[:min(len(broken), pgReadyRows)]}
+	c.Detail = pgPlural(len(broken), "worker takes", "workers take") + " no jobs:"
+	if len(broken) > pgReadyRows {
+		c.More = fmt.Sprintf("and %d more: %s.", len(broken)-pgReadyRows, strings.Join(why[pgReadyRows:], "; "))
+	}
 	if took == 0 {
 		c.State, c.Title = "bad", "No worker takes jobs"
 	}

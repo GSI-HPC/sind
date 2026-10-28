@@ -320,7 +320,7 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 
 	// The Slurm tab waits for the create too.
 	body = pgBody(t, ts, "/clusters/ci/nightly?tab=slurm", 200)
-	assert.Contains(t, body, `<b>worker-0</b></a></td><td><span class="pill run">starting</span></td><td><span class="faint">waits for munge · 19s of 5m</span></td>`)
+	assert.Contains(t, body, `<b>worker-0</b></a></td><td class="c-state"><span class="pill run">starting</span></td><td data-label="Reason"><span class="faint">waits for munge · 19s of 5m</span></td>`)
 	assert.NotContains(t, body, "Not responding")
 	// And the Slurm column of the health matrix.
 	body = pgBody(t, ts, "/clusters/ci/nightly", 200)
@@ -343,8 +343,8 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 		Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{pgProbe("munge"): true, pgProbe("slurmd"): false}},
 	}}})
 	body = pgBody(t, ts, "/nodes/ci/nightly/worker-0", 200)
-	assert.Contains(t, body, `<span data-word="munge">munge</span></dt><dd><span class="pill ok">active</span>`)
-	assert.Contains(t, body, `<span data-word="slurmd">slurmd</span></dt><dd><span class="pill run">starting</span>`, "a service of a node sind creates is not down")
+	assert.Contains(t, body, `<span data-word="munge">munge</span></span><span class="pill ok">active</span>`)
+	assert.Contains(t, body, `<span data-word="slurmd">slurmd</span></span><span class="pill run">starting</span><a class="btn sm ghost"`, "a service of a node sind creates is not down")
 
 	ts.st.SetLock("ci", &state.LockHolder{Command: "sind create cluster nightly", PID: 9})
 	body = pgBody(t, ts, "/?realm=", 200)

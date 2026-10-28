@@ -214,12 +214,8 @@ func pgNodeNeed(sn store.Snapshot, n pgNode, nodes []pgNode) pgNeed {
 	if c, ok := sn.Cluster(n.Realm, n.Cluster); ok {
 		cs = string(c.State)
 	}
-	logs := pgAction{Label: "Logs", URL: n.LogsLink(), Class: "sm ghost"}
-	fix := func(verb, op string) *pgAction {
-		a := n.power(verb+" "+n.Short+"…", "sm", op)
-		a.Name = verb + " " + n.Arg + "…"
-		return &a
-	}
+	need.Actions = []pgAction{n.LogsAction(n.LogsLabel())}
+	need.Fix = pgFix(n, "sm")
 	switch {
 	case n.State == cluster.StateRunning && len(n.Down()) == 0:
 		// Slurm sends the node no jobs (pgNode.SlurmIssue).
@@ -229,8 +225,6 @@ func pgNodeNeed(sn store.Snapshot, n pgNode, nodes []pgNode) pgNeed {
 		if n.Slurm.Reason != "" {
 			need.Detail += " Reason: " + n.Slurm.Reason + "."
 		}
-		need.Actions = []pgAction{{Label: "Logs of slurmd", URL: pgLogsURL(n.Realm, n.Cluster, n.Short, "slurmd"), Class: "sm ghost"}}
-		need.Fix = fix("Resume", "resume")
 	case n.State == cluster.StateRunning:
 		down := n.Down()
 		need.Sev, need.Kind = "bad", pgNeedService
@@ -240,27 +234,40 @@ func pgNodeNeed(sn store.Snapshot, n pgNode, nodes []pgNode) pgNeed {
 			verb = "are"
 		}
 		need.Detail = fmt.Sprintf("The container runs, but %s %s not active.", pgJoin(down), verb)
-		unit := down[0]
-		if svc := pgServiceOf(n.Role); slices.Contains(down, svc) {
-			unit = svc
+		if u, ok := n.Unit(n.FailedUnit()); ok && !u.Since.IsZero() {
+			need.Detail = fmt.Sprintf("The container runs, but %s %s not active. %s failed at %s%s.", pgJoin(down), verb, u.Name, pgHM(u.Since), pgUnitStatus(u, " with "))
 		}
-		need.Actions = []pgAction{{Label: "Logs of " + unit, URL: pgLogsURL(n.Realm, n.Cluster, n.Short, unit), Class: "sm ghost"}}
-		need.Fix = fix("Reboot", "reboot")
 	case n.State == cluster.StateStopped:
 		need.Sev, need.Kind, need.Title = "bad", pgNeedStopped, "is stopped"
 		need.Detail = fmt.Sprintf("The container does not run. The cluster %s is %s.", n.Cluster, cs)
-		need.Actions = []pgAction{logs}
-		need.Fix = fix("Start", "start")
+		if e := n.Exit(); e != nil {
+			need.Detail = fmt.Sprintf("The container stopped%s with exit code %d: %s. The cluster %s is %s.", pgAt(e.At), e.Code, pgExitText(*e), n.Cluster, cs)
+		}
 	case n.State == cluster.StatePaused:
 		need.Kind, need.Title = pgNeedPaused, "is paused"
 		need.Detail = fmt.Sprintf("The container is paused. The cluster %s is %s.", n.Cluster, cs)
-		need.Actions = []pgAction{logs}
-		need.Fix = fix("Unfreeze", "unpause")
 	default:
 		need.Detail = fmt.Sprintf("Docker reports a state that sind does not know. The cluster %s is %s.", n.Cluster, cs)
-		need.Actions = []pgAction{logs}
 	}
 	return need
+}
+
+// pgUnitStatus says how a unit ended, after sep: with sep " with ", " with
+// exit status 1"; empty when it gave no status.
+func pgUnitStatus(u store.Unit, sep string) string {
+	if u.Status != 0 {
+		return fmt.Sprintf("%sexit status %d", sep, u.Status)
+	}
+	return ""
+}
+
+// pgAt says when, after a verb: " at 08:12", or empty for a time not
+// known.
+func pgAt(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return " at " + pgHM(t)
 }
 
 // pgNodeEffect says what a node that needs a look means for the jobs of
@@ -386,10 +393,10 @@ func pgRunNeed(sn store.Snapshot, f pgFailure, e runEntry, now time.Time) pgNeed
 var pgFixOps = []string{"start", "on", "reboot", "restart", "cycle", "unpause", "unfreeze", "resume"}
 
 // pgFixes returns the nodes, by short name, that a command of sind ui may
-// fix: those that a power command that brings nodes back names, and that
-// need a look in the snapshot, as it starts. Its task keeps them (Fixes).
+// fix: those that a power command that brings nodes back or a restart of
+// a service names, and that need a look in the snapshot, as it starts. Its task keeps them (Fixes).
 func pgFixes(sn store.Snapshot, t store.Task, now time.Time) []string {
-	if t.Action != "power" || !slices.Contains(pgFixOps, pgFormValue(t.Form, "op")) {
+	if t.Action != "restart-service" && (t.Action != "power" || !slices.Contains(pgFixOps, pgFormValue(t.Form, "op"))) {
 		return nil
 	}
 	names := action.NodeNames(t.Form)

@@ -4,7 +4,6 @@ package ui
 
 import (
 	"fmt"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,6 +53,23 @@ type LogsTabView struct {
 	Sind, Suffix string
 	// Keep is how many lines the tab keeps.
 	Keep int
+	// Fixed is set on the Logs tab of a node page, whose node is that of
+	// the page: the tab has no picker of the node. Ended is what the tab
+	// says in place of Follow once the log of a node that does not run
+	// ended, empty for one that runs.
+	Fixed bool
+	Ended string
+}
+
+// NodeLogsTab returns what the Logs tab of the view's node page shows:
+// LogsTab, with the node of the page.
+func (v *View) NodeLogsTab() *LogsTabView {
+	d := v.LogsTab()
+	d.Fixed = true
+	if nv, ok := v.Data.(*pgNodeView); ok {
+		d.Ended = nv.LogsEnded()
+	}
+	return d
 }
 
 // logsNodeOption is a node of the node picker.
@@ -153,18 +169,6 @@ func logsThousands(n int) string {
 		s = s[:i] + "," + s[i:]
 	}
 	return s
-}
-
-// pgLogsURL returns the address of the Logs tab of a cluster that shows the
-// log of one node: the journal of unit, or the output of its container
-// for no unit.
-func pgLogsURL(realm, name, short, unit string) string {
-	q := url.Values{"tab": {"logs"}, "node": {short}}
-	if unit != "" {
-		q.Set("source", string(logsJournal))
-		q.Set("unit", unit)
-	}
-	return "/clusters/" + url.PathEscape(realm) + "/" + url.PathEscape(name) + "?" + q.Encode()
 }
 
 // KeepText is Keep for a sentence: 10,000.

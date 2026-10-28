@@ -319,7 +319,20 @@ func TestPgSlurmIssue(t *testing.T) {
 	c.State = cluster.StateRunning
 	assert.Equal(t, pgPill{"running", "ok"}, c.Pill())
 	assert.Empty(t, c.Nodes[0].Sev())
-	assert.Equal(t, pgPill{"running", "ok"}, c.Nodes[0].HeadPill())
+	assert.Equal(t, pgPill{"running · takes jobs", "ok"}, c.Nodes[0].HeadPill(), "a worker says that it takes jobs")
+	c.Nodes[0].Slurm = nil
+	assert.Equal(t, pgPill{"running", "ok"}, c.Nodes[0].HeadPill(), "until sinfo lists it")
+	w := pgNode{Role: config.RoleWorker, State: cluster.StateRunning, Known: true, Managed: true, Services: []pgSvc{{"munge", false}, {"slurmd", false}}}
+	assert.Equal(t, pgPill{"running · takes no jobs", "bad"}, w.HeadPill(), "a worker whose slurmd is down")
+	// While a command works on the cluster, a drained worker, or one with a
+	// service down, needs no look yet, but it does not say that it takes
+	// jobs either.
+	w.Busy, w.Slurm = true, &slurm.NodeInfo{State: "drained"}
+	assert.Equal(t, pgPill{"running", "ok"}, w.HeadPill(), "a busy worker with slurmd down")
+	w.Services = []pgSvc{{"munge", true}, {"slurmd", true}}
+	assert.Equal(t, pgPill{"running", "ok"}, w.HeadPill(), "a busy worker that Slurm drained")
+	w.Slurm.State = "idle"
+	assert.Equal(t, pgPill{"running · takes jobs", "ok"}, w.HeadPill(), "a busy worker that takes jobs")
 	assert.Equal(t, "1 node needs a look", pgLookText(1))
 	assert.Equal(t, "2 nodes need a look", pgLookText(2))
 	assert.Equal(t, "1 needs a look", pgLookShort(1))

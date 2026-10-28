@@ -8,8 +8,9 @@
 // of their classes, it puts the progress of the run in the title of the
 // tab, it announces when a command starts or ends, it opens and closes the
 // task dock, it closes the question of Stop, and it hides the rows of
-// "Needs you" that are fixed. It evaluates no text and needs no inline
-// script.
+// "Needs you" that are fixed and the cards of a fix (data-hide-at), shows
+// what waits for them (data-show-at), and counts down their seconds
+// (data-until). It evaluates no text and needs no inline script.
 (() => {
   'use strict';
 
@@ -111,6 +112,14 @@
     place();
     document.querySelectorAll('[data-hide-at]').forEach(el => {
       if (now >= Number(el.dataset.hideAt) && !el.classList.contains('gone')) el.classList.add('gone');
+    });
+    document.querySelectorAll('[data-show-at]').forEach(el => {
+      if (now >= Number(el.dataset.showAt) && !el.classList.contains('shown')) el.classList.add('shown');
+    });
+    // The seconds that a card still shows, as "12 s".
+    document.querySelectorAll('[data-until]').forEach(el => {
+      const text = Math.max(0, Math.ceil((Number(el.dataset.until) - now) / 1000)) + ' s';
+      if (el.textContent !== text) el.textContent = text;
     });
     recount();
     document.querySelectorAll('[data-since]').forEach(el => {
