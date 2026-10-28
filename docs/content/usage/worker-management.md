@@ -17,9 +17,12 @@ sind create worker [CLUSTER] [FLAGS]
 {{< /cli >}}
 {{< ui >}}
 
-1. On the page of the cluster, press **Add workers…**.
+1. On the page of the cluster, press **Add workers…**. From the Overview or the jump box, with several clusters, the dialog first lists the clusters by realm with their health and workers: pick one. **Change…** goes back to the list.
 2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker. The dialog shows the size and the names of the new workers, such as `3 × 2 CPUs, 1 GiB: worker-6 … worker-8`.
-3. Press the button, such as **Add 3 workers**. The task dock shows the progress of the run.
+3. Check the host: a bar sets the memory limits of the nodes that run now, in every realm, and of the new workers against the memory of the Docker host. Above 80 % the dialog warns. When the limits come to more than the host has, **How many** says how many more workers fit, and the button stays off until you tick **Add anyway**. It also warns when the nodes reach the inotify limit that `sind doctor` reports.
+4. Press the button, such as **Add 3 workers**. The task dock shows the progress of the run.
+
+The new workers join the partition `all`; your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure`, and running jobs go on.
 
 {{< uishot "dialog-create-worker" >}}
 
@@ -125,7 +128,7 @@ sind delete worker NODES
 1. Open the cluster, then the **Nodes** tab.
 2. Select the workers. The selection shows as a node set, such as `worker-[2-4]`.
 3. Press the delete button in the selection bar, such as **Delete 3 workers…**. If you selected other nodes too, it counts only the workers and deletes only them. The dialog lists what goes and what stays.
-4. Type the name of the worker when you delete one worker, else the name of the cluster, and press the button, such as **Delete 3 workers**.
+4. Type the name of the worker when you delete one worker, else the number of workers, such as `3`, in the field beside the button, and press the button, such as **Delete 3 workers**.
 
 {{< uishot "dialog-delete-worker" >}}
 

@@ -182,7 +182,7 @@ mark("nodes");
 await click('a.tab[href$="tab=nodes"]', "Nodes"); await wait(1500);
 for (const w of ["worker-1", "worker-2", "worker-3"]) { await click(`input[data-pg-sel="${w}"]`, w); await wait(500); }
 await wait(1800);
-mark("power"); await click('a[href*="/dialogs/power"][href*="op=reboot"]', "Reboot…"); await wait(3500);
+mark("power"); await click('[data-pg-selbar] a[data-pg-fit="reboot"]', "Reboot 3 workers…"); await wait(3500);
 await page.keyboard.press("Escape"); await page.evaluate(() => document.querySelector("[data-act-close]")?.click()); await wait(800);
 
 mark("logs");

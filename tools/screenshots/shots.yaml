@@ -145,7 +145,7 @@ shots:
     page: dialogs
 
   - name: dialog-power
-    alt: "The Power dialog: Drain and Resume, the container actions and those that can lose data, and the command it runs"
+    alt: "The Power dialog confirming a reboot of worker-0.dev: the node with its Slurm state, what keeps running, the other actions, and the command it runs"
     path: /clusters/sind/dev
     steps:
       - dialog: power?realm=sind&cluster=dev&op=reboot&nodes=worker-0
@@ -198,7 +198,7 @@ shots:
 
   # The shots of the docs' steps for the web UI (shortcode uishot).
   - name: dialog-create-worker
-    alt: "The Add workers dialog: how many workers, their size and names, and the command it runs"
+    alt: "The Add workers dialog: how many workers, their size and names, their memory beside that of the nodes that run against the Docker host, and the command it runs"
     path: /clusters/sind/dev
     steps:
       - dialog: create-worker?realm=sind&cluster=dev
@@ -206,7 +206,7 @@ shots:
     page: dialogs
 
   - name: cluster-nodes-selected
-    alt: "A cluster's Nodes tab with three workers selected, and what you can do with them"
+    alt: "A cluster's Nodes tab with three workers selected, and the bar at the bottom: their node set and the actions that fit them, each naming the workers it acts on"
     path: /clusters/sind/dev?tab=nodes
     hide: "#tasks"
     steps:
@@ -217,7 +217,7 @@ shots:
     fit: true
 
   - name: dialog-delete-worker
-    alt: "The Delete workers dialog for three workers: what goes, what stays, and the name of the cluster to type to confirm"
+    alt: "The Delete workers dialog for three workers: the workers with their Slurm state, what goes, what stays, and the number of workers to type to confirm"
     path: /clusters/sind/dev?tab=nodes
     steps:
       - dialog: delete-worker?realm=sind&cluster=dev&nodes=worker-2,worker-3,worker-4

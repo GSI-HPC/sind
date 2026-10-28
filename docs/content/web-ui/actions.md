@@ -61,19 +61,25 @@ The plan lists the images of the nodes with their Slurm release, which sind ui r
 
 **Add workers** shows the size and the names of the new workers, such as `3 × 2 CPUs, 1 GiB: worker-6 … worker-8`. New workers copy the newest worker of the cluster that is managed like its controller, which sind ui reads from its container; the CPUs and memory fields name that worker in grey. A cluster without workers gets sind's defaults, and so does a limit that the newest worker has none of. The button names what it adds: **Add worker-6** or **Add 3 workers**.
 
+Opened without a cluster, as from the Overview or the jump box while there are several, the dialog first lists the clusters by realm, with their health, their workers and the size that new ones copy. A cluster that a command creates or deletes now is off, with why. Once you pick one, it shows as a row with **Change…**, which goes back to the list and keeps what you filled in.
+
+The dialog sets the memory limits of the new workers and of the nodes that run now, in every realm, against the memory of the Docker host, and counts the nodes. A bar shows the nodes that run now and the new workers, and marks the end of the host's memory once they come to more. Docker caps the memory of each node but sets none aside, so the limits can come to more than the host has; above 80 % the dialog warns, and above all of it **How many** says how many more workers fit, and the button stays off until you tick **Add anyway**. It warns when a worker asks for more CPUs than the host has, and when the nodes reach the inotify limit that the Doctor reports, with a link to the Doctor. A note says that the new workers join the partition `all` and that sind reconfigures slurmctld, which running jobs survive.
+
 While the dialog checks a change of its fields, its footer shows **Checking…**.
 
 ## Power
 
-The power buttons of a page, such as **Reboot…**, open the Power dialog. It sorts the actions into three groups and selects the one of the button:
+The power buttons of a page, such as **Reboot…** in a node's **Power** menu or **Reboot 3 nodes…** in the bar of the Nodes tab, open the Power dialog as a short confirmation: its title names the action and the nodes, such as **Reboot worker-4.dev** or **Reboot 3 workers of dev**, its lead says what the action does, and it lists the nodes with their Slurm state and issues, and what keeps running. **Change nodes…** opens the picker, and **Other actions** the other actions.
+
+Opened without an action or nodes, as from the jump box, the dialog is the picker: quick picks (**Need a look**, **Idle**, **Drained**, **All workers**), a node set field that ticks the nodes it names, such as `worker-[0-3]`, and a table of the nodes with their role, Slurm state and reason, and issues. An action that fits none of the ticked nodes is off, and a line says why, such as `Start (worker-4 runs already)`. A link for an action that fits none of its nodes opens the picker, and the button stays off. Until you pick an action, the button stays off. The dialog sorts the actions into three groups:
 
 - **Slurm (scontrol)**: **Drain** and **Resume** change what Slurm does with workers and leave their containers running. Drain lets the running jobs end and starts no new ones on the nodes; it needs a reason, which `sinfo -R` shows. Resume lets the nodes take jobs again. Both run `scontrol update` in the cluster with `sind exec`, which writes no progress, so their task has no run page.
 - **Containers**: power on, shut down, reboot, freeze and unfreeze change the containers, up to 8 at a time.
 - **Can lose data**: power-cycle and cut power kill the containers at once. Run them only when you need to.
 
-Before an action that stops nodes, the dialog warns when they include the controller in control, the standby controller of a pair, the db node or every running worker of a cluster, and says what that does to jobs, failover and accounting. The button names the action and the nodes, such as **Shut down 3 nodes**.
+Before an action that stops nodes, the dialog warns when they include the controller in control, the standby controller of a pair, the db node or every running worker of a cluster, and says what that does to jobs, failover and accounting. The button names the action and the nodes, such as **Shut down 3 nodes** or **Drain 2 workers**.
 
-{{< uishot "dialog-power" "The Power dialog groups the actions, and shows the command of the one that you selected." >}}
+{{< uishot "dialog-power" "Opened for an action and a node, the Power dialog confirms it in short: the node with its Slurm state, what keeps running, and the command." >}}
 
 ## Restart a service
 
@@ -83,7 +89,9 @@ Before an action that stops nodes, the dialog warns when they include the contro
 
 **Delete cluster**, **Delete workers** and **Delete realm** list what goes and what stays: the containers, the network, the volumes and the Slurm state of a cluster go, and the host directories it mounts stay. The button names what it deletes, such as **Delete worker-5** or **Delete cluster dev**.
 
-To confirm, type the name of the worker when you delete one worker, else the name of the cluster or the realm. The name must match with its case; spaces around it do not count. Until it matches, a hint below the field says why the button stays off.
+To confirm, type the name of the worker when you delete one worker, the number of workers when you delete several, else the name of the cluster or the realm, in the field beside the button. The name must match with its case; spaces around it do not count. Until it matches, a hint in the footer says why the button stays off. Delete workers lists the workers in a table with their Slurm state and issues, and names the workers that go and those that stay as node sets, such as `worker-[4-5]`.
+
+Every dialog keeps its footer in view: the button, Cancel, what to type, and the status, such as **1 problem: How many** or **1 warning**, which takes you to it, with the first problem or warning in words beside it.
 
 Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. Its list of what stays names the host directories of its clusters and those containers. Open it from the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell.
 

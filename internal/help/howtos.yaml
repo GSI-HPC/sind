@@ -76,8 +76,8 @@
   summary: Grow a running cluster.
   steps:
     - Open the cluster.
-    - Press Add workers and choose how many.
-    - Press Add. The card at the bottom right shows the progress.
+    - Press Add workers and choose how many. The dialog shows what they take of the Docker host.
+    - Press Add, such as Add 2 workers. The card at the bottom right shows the progress.
   commands:
     - sind create worker dev --count 2
   doc: usage/worker-management
