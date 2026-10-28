@@ -204,7 +204,7 @@ sind disconnect container CONTAINER...
 {{< /cli >}}
 {{< ui >}}
 
-Press **Connect a container…** on the Overview or on **Mesh and DNS**, or in the **⋯** menu of a realm's row on the Overview. The dialog lists the containers that sind did not make, those that run first, with their image and state; pick one, or pick **Another name…** and type it. It connects the container to the realm in its title; with more than one realm, the buttons above the list switch it and keep the container you picked. It refuses a container that sind made, warns of a container that does not run or that sind ui does not see, and says which nodes a container that it sees then reaches. Press **Connect NAME**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
+Press **Connect a container…** on **Mesh and DNS**, which shows the realm that the switcher of the rail picked, or in the **⋯** menu of a realm's row on the Overview. The dialog lists the containers that sind did not make, those that run first, with their image and state; pick one, or pick **Another name…** and type it. It connects the container to the realm in its title; with more than one realm, the buttons above the list switch it and keep the container you picked. It refuses a container that sind made, warns of a container that does not run or that sind ui does not see, and says which nodes a container that it sees then reaches. Press **Connect NAME**. The dialog connects one container. To detach a container, press **Disconnect…** next to it on **Mesh and DNS**.
 
 {{< uishot "dialog-connect" >}}
 
