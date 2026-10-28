@@ -137,7 +137,9 @@ func compareKeys(a, b store.StatusKey) int {
 // The status of a cluster that the store no longer lists, and that no page
 // watches, is dropped. With the status of each cluster it reads what Slurm
 // says (cluster.GetSlurmInfo), as every page counts a worker that Slurm
-// sends no jobs, such as a drained one, too; it goes with the status.
+// sends no jobs, such as a drained one, too; it goes with the status, as
+// does why the nodes that need a look do (readFaults), which the node page
+// explains.
 type Status struct {
 	Store   *store.Store
 	Client  *docker.Client
@@ -307,9 +309,10 @@ func (s *Status) readEach(ctx context.Context, keys []store.StatusKey) {
 }
 
 // read reads the status of one cluster into the store and what Slurm says
-// (cluster.GetSlurmInfo), at the same time. It stores each as soon as it
-// has it, so a slurmctld that is slow to answer does not hold up the
-// status. A cluster that is gone has neither; what cannot be read otherwise
+// (cluster.GetSlurmInfo), at the same time, and after the status why the
+// nodes that need a look do (readFaults). It stores each as soon as it has
+// it, so a slurmctld that is slow to answer does not hold up the status. A
+// cluster that is gone has none of them; what cannot be read otherwise
 // stays as it is. What the store would not keep (keep), as the cluster went
 // while it was read, is not stored.
 func (s *Status) read(ctx context.Context, k store.StatusKey) {
@@ -322,13 +325,19 @@ func (s *Status) read(ctx context.Context, k store.StatusKey) {
 		slurm.Wait()
 		s.Store.SetStatus(k.Realm, k.Cluster, nil)
 		s.Store.SetSlurm(k.Realm, k.Cluster, nil)
+		s.Store.SetFaults(k.Realm, k.Cluster, nil)
 	case err != nil:
 		if ctx.Err() == nil {
 			logOr(s.Log).Debug("reading the status", "realm", k.Realm, "cluster", k.Cluster, "err", err)
 		}
 	default:
-		if slices.Contains(s.keep(), k) {
-			s.Store.SetStatus(k.Realm, k.Cluster, st)
+		if !slices.Contains(s.keep(), k) {
+			return
+		}
+		s.Store.SetStatus(k.Realm, k.Cluster, st)
+		faults := readFaults(ctx, s.Client, k.Realm, k.Cluster, st)
+		if ctx.Err() == nil && slices.Contains(s.keep(), k) {
+			s.Store.SetFaults(k.Realm, k.Cluster, faults)
 		}
 	}
 }

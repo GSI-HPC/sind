@@ -11,6 +11,7 @@ package store
 import (
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -60,13 +61,18 @@ type Snapshot struct {
 	// and the ones whose page is open.
 	Statuses map[StatusKey]*cluster.Status
 	// Slurms are what Slurm says about the clusters, keyed alike; the
-	// store keeps them with the statuses.
+	// store keeps them with the statuses, and so the Faults of their
+	// nodes, by short name.
 	Slurms      map[StatusKey]*Slurm
+	Faults      map[StatusKey]map[string]Fault
 	Locks       map[string]*state.LockHolder
 	Monitorings map[string]*cluster.Monitoring
 	// Doctor is the last host check, nil before the first.
 	Doctor *DoctorReport
 	Docker DockerState
+	// NodeChanges are what changed on each node while sind ui ran, the
+	// newest first (Changes).
+	NodeChanges map[NodeKey][]Change
 }
 
 // Store holds the current Snapshot and notifies subscribers of changes.
@@ -80,6 +86,8 @@ type Store struct {
 	// ended holds the tasks that have ended, by their trace, so that their
 	// runs end with them even when the log has no end.
 	ended map[string]Task
+	// now is the clock of the changes of the nodes, nil for time.Now.
+	now func() time.Time
 }
 
 // MaxEndedTasks is how many tasks that have ended the store keeps, the

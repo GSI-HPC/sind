@@ -175,7 +175,17 @@ func (s *Store) SetClusters(realm string, clusters []cluster.Summary) {
 func (s *Store) SetNodes(realm string, nodes []cluster.NodeSummary) {
 	nodes = slices.SortedStableFunc(slices.Values(nodes), compareNodes)
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Nodes, realm, nodes, len(nodes) == 0)
+		old := sn.Nodes[realm]
+		if !setEntry(&sn.Nodes, realm, nodes, len(nodes) == 0) {
+			return false
+		}
+		record(sn, s.clock(), nodeChanges(realm, old, nodes))
+		forget(sn, realm, "", func(k NodeKey) bool {
+			return slices.ContainsFunc(nodes, func(n cluster.NodeSummary) bool {
+				return n.Container == string(cluster.ContainerName(realm, k.Cluster, k.Node))
+			})
+		})
+		return true
 	}, NodesTopic(realm))
 }
 
@@ -243,7 +253,14 @@ func (s *Store) SetMesh(realm string, m Mesh) {
 func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 	k := StatusKey{realm, name}
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Statuses, k, st, st == nil)
+		old := sn.Statuses[k]
+		if !setEntry(&sn.Statuses, k, st, st == nil) {
+			return false
+		}
+		if old != nil && st != nil {
+			record(sn, s.clock(), statusChanges(realm, name, old, st))
+		}
+		return true
 	}, k.Topic())
 }
 
@@ -253,7 +270,14 @@ func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 func (s *Store) SetSlurm(realm, name string, sl *Slurm) {
 	k := StatusKey{realm, name}
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Slurms, k, sl, sl == nil)
+		old := sn.Slurms[k]
+		if !setEntry(&sn.Slurms, k, sl, sl == nil) {
+			return false
+		}
+		if old != nil && sl != nil {
+			record(sn, s.clock(), slurmChanges(realm, name, old, sl))
+		}
+		return true
 	}, k.Topic())
 }
 
@@ -267,13 +291,14 @@ func keepEntries[V any](m *map[StatusKey]V, keep []StatusKey) {
 	*m = next
 }
 
-// KeepStatuses drops the status, and what Slurm says, of every cluster
-// that is not in keep, as the cluster is gone and no page shows it. It
-// notifies nothing: no page shows a dropped status.
+// KeepStatuses drops the status, what Slurm says and the faults of the
+// nodes of every cluster that is not in keep, as the cluster is gone and no
+// page shows it. It notifies nothing: no page shows a dropped status.
 func (s *Store) KeepStatuses(keep ...StatusKey) {
 	s.change(func(sn *Snapshot) bool {
 		keepEntries(&sn.Statuses, keep)
 		keepEntries(&sn.Slurms, keep)
+		keepEntries(&sn.Faults, keep)
 		return false
 	})
 }
