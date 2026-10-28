@@ -17,7 +17,7 @@ a.pg-sumpill:hover{text-decoration:underline}
 .pg-legend{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:var(--t-sm);color:var(--muted)}
 .pg-legend li{display:flex;align-items:center;gap:6px}
 .pg-legend .pg-nm{width:14px;height:14px;border-radius:3px}
-.pg-legend .pg-nm-svcdown{margin:0 4px}
+.pg-legend :is(.pg-nm-svcdown,.pg-nm-slurm){margin:0 4px}
 .pg-mx-key{padding:0 14px 12px;font-size:var(--t-sm)}
 
 /* the small Copy buttons of the Network tab */
@@ -49,7 +49,8 @@ section[id^="slurm-file-"]:focus,.pg-attn:focus{outline:none}
 
 /* node tiles: they echo the logo; the controller is deep teal with three
    lines, service nodes teal, workers sky; a stopped node is an outline, a
-   paused one hatched, one with a service down has an amber ring */
+   paused one hatched, one with a service down has a red ring, and one that
+   Slurm sends no jobs an amber one */
 .pg-nodemap{display:flex;flex-wrap:wrap;gap:4px}
 .pg-nm{display:inline-block;width:20px;height:20px;border-radius:4px;background:var(--brand-sky);position:relative;flex:none}
 a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
@@ -62,7 +63,8 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-nm-stopped::after{display:none}
 .pg-nm-paused{background:repeating-linear-gradient(45deg,var(--warn) 0 3px,transparent 3px 6px)!important;border:1px solid var(--warn);opacity:1}
 .pg-nm-unknown{background:transparent!important;border:2px dotted var(--warn);opacity:1}
-.pg-nm-svcdown{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--warn)}
+.pg-nm-svcdown{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--bad)}
+.pg-nm-slurm{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--warn)}
 
 /* Needs you */
 .pg-it{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;padding:10px 14px 10px 0;border-bottom:1px solid var(--line-2);align-items:center}
@@ -94,7 +96,7 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 
 /* the health matrix */
 .pg-mx td,.pg-mx th{text-align:center;padding:7px 8px}
-.pg-mx td:first-child,.pg-mx th:first-child,.pg-mx td:nth-child(2),.pg-mx th:nth-child(2){text-align:left}
+.pg-mx td:first-child,.pg-mx th:first-child,.pg-mx td:nth-child(2),.pg-mx th:nth-child(2),.pg-mx .pg-mx-sl{text-align:left}
 .pg-svc{text-transform:none;letter-spacing:0}
 .pg-ck{font:700 var(--t-md) var(--f-mono)}
 .pg-ck.y{color:var(--ok)} .pg-ck.n{color:var(--bad)} .pg-ck.na{color:var(--deco)}

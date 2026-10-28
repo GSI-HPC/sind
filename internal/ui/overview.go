@@ -52,9 +52,12 @@ type pgRealmRow struct {
 	Name     string
 	Clusters int
 	Nodes    int
-	Problems int
-	Locked   bool
-	On       bool
+	// Look counts the nodes that need a look (pgNode.Problem), LookClass
+	// is the class of that count (pgLook).
+	Look      int
+	LookClass string
+	Locked    bool
+	On        bool
 	// Delete opens the Delete realm dialog.
 	Delete pgAction
 }
@@ -79,23 +82,26 @@ const (
 	pgNeedPaused  = "paused"
 	pgNeedUnknown = "unknown"
 	pgNeedService = "service"
+	pgNeedSlurm   = "slurm"
 	pgNeedRun     = "run"
 	pgNeedFailed  = "check-failed"
 	pgNeedWarning = "check-warning"
 )
 
 // pgNeedWords say how many items of a kind there are, in the order of the
-// head of the Overview: the kind, then the words for one and for more. A
-// lock is work that goes on, not a problem, so it has none.
-var pgNeedWords = []struct{ Kind, One, Many string }{
-	{pgNeedDocker, "Docker is not reachable", "Docker is not reachable"},
-	{pgNeedStopped, "node is stopped", "nodes are stopped"},
-	{pgNeedPaused, "node is paused", "nodes are paused"},
-	{pgNeedUnknown, "node is in an unknown state", "nodes are in an unknown state"},
-	{pgNeedService, "node has a service down", "nodes have a service down"},
-	{pgNeedRun, "run failed", "runs failed"},
-	{pgNeedFailed, "host check failed", "host checks failed"},
-	{pgNeedWarning, "host warning", "host warnings"},
+// head of the Overview: the kinds, then the words for one and for more.
+// Every item of a node counts as one node that needs a look, as the rail
+// and the realms count them. A lock is work that goes on, not a problem,
+// so it has none.
+var pgNeedWords = []struct {
+	Kinds     []string
+	One, Many string
+}{
+	{[]string{pgNeedDocker}, "Docker is not reachable", "Docker is not reachable"},
+	{[]string{pgNeedStopped, pgNeedPaused, pgNeedUnknown, pgNeedService, pgNeedSlurm}, "node needs a look", "nodes need a look"},
+	{[]string{pgNeedRun}, "run failed", "runs failed"},
+	{[]string{pgNeedFailed}, "host check failed", "host checks failed"},
+	{[]string{pgNeedWarning}, "host warning", "host warnings"},
 }
 
 // pgOverview is what the Overview shows.
@@ -217,8 +223,17 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 		cs = string(c.State)
 	}
 	logs := pgAction{Label: "Logs", URL: n.LogsLink(), Class: "sm ghost"}
-	switch n.State {
-	case cluster.StateRunning:
+	switch {
+	case n.State == cluster.StateRunning && len(n.Down()) == 0:
+		// Slurm sends the node no jobs (pgNode.SlurmIssue).
+		need.Sev, need.Kind = "warn", pgNeedSlurm
+		need.Title = fmt.Sprintf("%s is %s in Slurm", n.Arg, n.Slurm.State)
+		need.Detail = "Slurm sends it no new jobs."
+		if n.Slurm.Reason != "" {
+			need.Detail += " Reason: " + n.Slurm.Reason + "."
+		}
+		need.Actions = []pgAction{logs, n.power("Resume…", "sm", "resume")}
+	case n.State == cluster.StateRunning:
 		down := n.Down()
 		need.Sev, need.Kind = "bad", pgNeedService
 		need.Title = fmt.Sprintf("%s has %s down", n.Arg, strings.Join(down, ", "))
@@ -228,11 +243,11 @@ func pgNodeNeed(sn store.Snapshot, n pgNode) pgNeed {
 		}
 		need.Detail = fmt.Sprintf("The container runs, but %s %s not active.", pgJoin(down), verb)
 		need.Actions = []pgAction{logs, n.power("Reboot…", "sm", "reboot")}
-	case cluster.StateStopped:
+	case n.State == cluster.StateStopped:
 		need.Sev, need.Kind = "bad", pgNeedStopped
 		need.Detail = fmt.Sprintf("The container is not running. The cluster %s is %s.", n.Cluster, cs)
 		need.Actions = []pgAction{n.power("Start…", "sm", "start"), logs}
-	case cluster.StatePaused:
+	case n.State == cluster.StatePaused:
 		need.Kind = pgNeedPaused
 		need.Detail = fmt.Sprintf("The container is paused. The cluster %s is %s.", n.Cluster, cs)
 		need.Actions = []pgAction{n.power("Unfreeze…", "sm", "unpause"), logs}
@@ -256,7 +271,7 @@ func (d *pgOverview) NodesText() string { return pgPlural(d.Nodes, "node", "node
 func (d *pgOverview) NeedsText() string { return pgPlural(len(d.Needs), "item", "items") }
 
 // Summary names the problems of "Needs you" for the head of the Overview,
-// as "1 node is stopped · 1 run failed"; empty when there is none.
+// as "2 nodes need a look · 1 run failed"; empty when there is none.
 func (d *pgOverview) Summary() string {
 	count := map[string]int{}
 	for _, n := range d.Needs {
@@ -264,9 +279,13 @@ func (d *pgOverview) Summary() string {
 	}
 	var parts []string
 	for _, w := range pgNeedWords {
-		switch c := count[w.Kind]; {
+		c := 0
+		for _, k := range w.Kinds {
+			c += count[k]
+		}
+		switch {
 		case c == 0:
-		case w.Kind == pgNeedDocker:
+		case w.Kinds[0] == pgNeedDocker:
 			parts = append(parts, w.One)
 		default:
 			parts = append(parts, pgPlural(c, w.One, w.Many))
@@ -284,7 +303,5 @@ func (d *pgOverview) SummaryClass() string {
 	return "warn"
 }
 
-// ProblemsText returns "2 nodes need a look".
-func (r pgRealmRow) ProblemsText() string {
-	return pgPlural(r.Problems, "node needs", "nodes need") + " a look"
-}
+// LookText returns "2 nodes need a look".
+func (r pgRealmRow) LookText() string { return pgLookText(r.Look) }

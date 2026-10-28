@@ -54,6 +54,9 @@ type navGroup struct {
 	// the phone's bar.
 	Main  int
 	Items []navEntry
+	// AllRealms is set when a count of its entries spans more than one
+	// realm (NavCount.AllRealms), which its label says.
+	AllRealms bool
 }
 
 // navEntry is an entry of the rail as the template draws it.
@@ -113,6 +116,7 @@ func (r *Registry) rail(v *View) railData {
 			i++
 		}
 		d.Groups[i].Items = append(d.Groups[i].Items, e)
+		d.Groups[i].AllRealms = d.Groups[i].AllRealms || e.Count.AllRealms
 		if it.Main {
 			d.Groups[i].Main++
 		}

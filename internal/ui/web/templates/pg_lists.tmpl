@@ -52,9 +52,9 @@ matches, which the page script shows and hides as the user types. */}}
 <div class="pg-selbar" data-pg-selbar hidden><span>Selection: <span class="pg-expr" data-pg-expr></span></span><span class="pg-grow"></span>
   <a class="btn sm danger" href="/dialogs/delete-clusters" data-pg-bulk data-pg-verb="Delete">Delete…</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
 <div class="tw" data-say="{{.Total}} {{if eq .Total 1}}cluster{{else}}clusters{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><table class="cards sorts chk"><thead><tr><th class="pg-chk c-chk"><label class="pg-all"><input type="checkbox" data-pg-all aria-label="Select all clusters shown"><span class="pg-phone">All</span></label></th>{{template "pg-list-head" .}}<th><span class="vh">Actions</span></th></tr></thead><tbody>
-{{range .Clusters}}<tr class="click" data-href="{{.Link}}" data-pg-item="{{.Key}}" data-pg-label="{{.Label}}" data-pg-one="{{.DeleteURL}}" data-pg-text="{{.Text}}"{{if .Hidden}} hidden{{end}}>
+{{range .Clusters}}{{$c := .}}<tr class="click" data-href="{{.Link}}" data-pg-item="{{.Key}}" data-pg-label="{{.Label}}" data-pg-one="{{.DeleteURL}}" data-pg-text="{{.Text}}"{{if .Hidden}} hidden{{end}}>
   <td class="c-chk"><input type="checkbox" data-pg-sel="{{.Key}}" aria-label="Select {{.Label}}"></td>
-  <td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}<td class="c-state"><span class="pill {{.StateClass}}" data-say="{{.Name}} is {{.State}}." data-say-key="{{.Realm}}/{{.Name}}">{{.State}}</span></td><td class="mono" data-label="Slurm">{{.Slurm}}</td><td class="num" data-label="Nodes">{{len .Nodes}}</td>
+  <td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}<td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$c.Name}} is {{.Text}}." data-say-key="{{$c.Realm}}/{{$c.Name}}">{{.Text}}</span>{{end}}</td><td class="mono" data-label="Slurm">{{.Slurm}}</td><td class="num" data-label="Nodes">{{len .Nodes}}</td>
   <td class="c-wide" data-label="Roles"><div class="pg-nodemap">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div></td><td data-label="Monitoring">{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</td>
   <td class="act c-act"><a class="btn sm danger" href="{{.DeleteURL}}" hx-get="{{.DeleteURL}}" hx-target="#layer" hx-push-url="false" aria-label="Delete {{.Label}}…">Delete…</a></td></tr>
 {{end}}{{template "pg-list-none" (.None "cluster")}}
@@ -72,7 +72,7 @@ matches, which the page script shows and hides as the user types. */}}
 <div class="tw" data-say="{{.Total}} {{if eq .Total 1}}node{{else}}nodes{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><table class="cards sorts"><thead><tr>{{template "pg-list-head" .}}</tr></thead><tbody>
 {{range .Nodes}}<tr class="click" data-href="{{.Link}}" data-pg-text="{{.Text}}"{{if .Hidden}} hidden{{end}}><td class="mono c-name"><a href="{{.Link}}"><b>{{.Arg}}</b></a></td><td data-label="Cluster"><a href="{{.ClusterLink}}">{{.Cluster}}</a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}
   <td data-label="Role"><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td class="c-state"><span class="pill {{.StateClass}}" data-say="{{.Arg}} is {{.State}}." data-say-key="{{.Realm}}/{{.Arg}}">{{.State}}</span></td><td class="mono" data-label="IP">{{.IP}}</td>
-  <td data-label="Issues">{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}</td></tr>
+  <td data-label="Issues">{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}{{with .SlurmReason}}<span class="faint pg-small">{{.}}</span>{{end}}</td></tr>
 {{end}}{{template "pg-list-none" (.None "node")}}
 </tbody></table></div>
 {{end}}{{end}}

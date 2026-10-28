@@ -107,10 +107,11 @@ func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
 		row := pgRealmRow{
-			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]), Problems: pgCount(pgSnapNodes(sn, r), pgNode.Problem),
+			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]),
 			Locked: sn.Locks[r] != nil, On: r == realm,
 			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
 		}
+		row.Look, row.LookClass = pgLook(pgSnapNodes(sn, r))
 		row.Delete.Name = "Delete realm " + r + "…"
 		rows = append(rows, row)
 	}

@@ -176,6 +176,21 @@ func (n pgNode) Link() string { return pgNodeURL(n.Realm, n.Cluster, n.Short) }
 // StateClass returns the class of the node's state pill.
 func (n pgNode) StateClass() string { return pgStateClass(n.State) }
 
+// HeadPill is the state pill of the node's page: Pill, but for a running
+// node that needs a look, which says why in the class of its problem, as
+// "running · slurmd down" or "running · drained", so that green means that
+// nothing needs the user.
+func (n pgNode) HeadPill() pgPill {
+	if n.State != cluster.StateRunning || !n.Problem() {
+		return pgPill{string(n.State), n.StateClass()}
+	}
+	var words []string
+	for _, i := range n.Issues() {
+		words = append(words, i.Text)
+	}
+	return pgPill{string(n.State) + " · " + strings.Join(words, ", "), n.Sev()}
+}
+
 // RoleClass returns the class of the node's role chip.
 func (n pgNode) RoleClass() string {
 	if n.Role == config.RoleController {
@@ -218,25 +233,42 @@ func (n pgNode) SSH() string { return pgSind(n.Realm) + " ssh " + n.Arg }
 // the node's state and its role.
 func (n pgNode) Match() string { return string(n.State) + " " + string(n.Role) }
 
-// Tile returns the classes of the node's tile in a node map.
+// Tile returns the classes of the node's tile in a node map. One with a
+// service down has a red ring, one that Slurm sends no jobs an amber one.
 func (n pgNode) Tile() string {
 	role := string(n.Role)
 	if n.Short == cluster.ControllerBackupShortName {
 		role = "controller-backup"
 	}
 	c := "pg-nm pg-nm-" + role + " pg-nm-" + string(n.State)
-	if n.State == cluster.StateRunning && len(n.Down()) > 0 {
+	switch {
+	case n.State == cluster.StateRunning && len(n.Down()) > 0:
 		c += " pg-nm-svcdown"
+	case n.slurmWords() != "":
+		c += " pg-nm-slurm"
 	}
 	return c
 }
 
-// TileLabel names the node's tile for screen readers: its name, state and
-// the services that are down, as "worker-4.dev, running, slurmd down".
+// slurmWords says that Slurm sends the node no jobs (SlurmIssue), as
+// "drained in Slurm", for its tile; empty when it does not say so.
+func (n pgNode) slurmWords() string {
+	if i, ok := n.SlurmIssue(); ok {
+		return i.Text + " in Slurm"
+	}
+	return ""
+}
+
+// TileLabel names the node's tile for screen readers: its name, state,
+// the services that are down, and what Slurm says of a node that it sends
+// no jobs, as "worker-4.dev, running, slurmd down".
 func (n pgNode) TileLabel() string {
 	label := n.Arg + ", " + string(n.State)
 	if down := n.Down(); len(down) > 0 {
 		label += ", " + strings.Join(down, " and ") + " down"
+	}
+	if w := n.slurmWords(); w != "" {
+		label += ", " + w
 	}
 	return label
 }
@@ -247,6 +279,9 @@ func (n pgNode) TileTitle() string {
 	title := n.Short + " · " + string(n.Role) + " · " + string(n.State)
 	if down := n.Down(); len(down) > 0 {
 		title += " · " + strings.Join(down, " and ") + " down"
+	}
+	if w := n.slurmWords(); w != "" {
+		title += " · " + w
 	}
 	return title
 }
@@ -271,10 +306,10 @@ type pgPill struct {
 	Class string
 }
 
-// Issues says what is wrong with the node, in short words: a node that is
-// paused or in an unknown state is a warning, one that does not run or has a
-// service down a failure.
-func (n pgNode) Issues() []pgPill {
+// ServiceIssues says what is wrong with the node's container and services,
+// in short words: a node that is paused or in an unknown state is a
+// warning, one that does not run or has a service down a failure.
+func (n pgNode) ServiceIssues() []pgPill {
 	var out []pgPill
 	if n.State != cluster.StateRunning {
 		out = append(out, pgPill{string(n.State), pgStateClass(n.State)})
@@ -285,14 +320,95 @@ func (n pgNode) Issues() []pgPill {
 	return out
 }
 
-// Problem reports whether anything is wrong with the node: its container
-// does not run, or the last probe of its cluster found a service down. It
-// is the one rule of "needs a look" for every page and the rail. A service
-// that is down while a command works on the cluster (Busy) is none yet: the
-// command may be starting it; nor is anything while a command creates the
-// cluster (Creating).
+// SlurmIssue returns the state of a node that runs with its services up
+// but that Slurm sends no jobs, as sinfo writes it ("drained", "down*"),
+// and whether there is one. A node with an issue of its container or its
+// services has none of its own: that issue is why Slurm sends it no jobs.
+func (n pgNode) SlurmIssue() (pgPill, bool) {
+	if n.Slurm == nil || len(n.ServiceIssues()) > 0 || slurm.NodeStateTakesJobs(n.Slurm.State) {
+		return pgPill{}, false
+	}
+	return pgPill{n.Slurm.State, pgSlurmClass(n.Slurm.State)}, true
+}
+
+// SlurmReason is the reason that Slurm gives for the state of a node that
+// it sends no jobs (SlurmIssue), as "memory errors"; empty for none.
+func (n pgNode) SlurmReason() string {
+	if _, ok := n.SlurmIssue(); ok {
+		return n.Slurm.Reason
+	}
+	return ""
+}
+
+// Issues says what is wrong with the node, in short words: the issues of
+// its container and services, or else the state of a worker that Slurm
+// sends no jobs (SlurmIssue).
+func (n pgNode) Issues() []pgPill {
+	out := n.ServiceIssues()
+	if i, ok := n.SlurmIssue(); ok {
+		out = append(out, i)
+	}
+	return out
+}
+
+// Problem reports whether the node needs a look: it has an issue (Issues),
+// such as a container that does not run, a service that the last probe of
+// its cluster found down, or a worker that Slurm sends no jobs, as a
+// drained one. It is the one rule of "needs a look" for every page and the
+// rail. A service or a Slurm state is none yet while a command works on the
+// cluster (Busy): the command may be starting it; nor is anything while a
+// command creates the cluster (Creating).
 func (n pgNode) Problem() bool {
-	return !n.Creating && (n.State != cluster.StateRunning || !n.Busy && len(n.Down()) > 0)
+	return !n.Creating && (n.State != cluster.StateRunning || !n.Busy && len(n.Issues()) > 0)
+}
+
+// Sev says how bad the node's problem is (Problem): bad for a container
+// that does not run or a service that is down, warn for a paused node, one
+// in a state that sind does not know, or one that Slurm sends no jobs; empty
+// for a node that needs no look.
+func (n pgNode) Sev() string {
+	switch {
+	case !n.Problem():
+		return ""
+	case n.State == cluster.StateStopped || len(n.Down()) > 0:
+		return "bad"
+	}
+	return "warn"
+}
+
+// pgLook counts the nodes that need a look (pgNode.Problem), with the class
+// that every count of them has: bad when one of them is bad (pgNode.Sev),
+// else warn.
+func pgLook(nodes []pgNode) (n int, class string) {
+	class = "warn"
+	for _, x := range nodes {
+		switch x.Sev() {
+		case "bad":
+			class = "bad"
+			n++
+		case "warn":
+			n++
+		}
+	}
+	return n, class
+}
+
+// pgLookText says how many nodes need a look: "1 node needs a look", "3
+// nodes need a look". Every page that counts them says it so, and
+// pgLookShort where the word nodes is clear.
+func pgLookText(n int) string { return pgPlural(n, "node needs", "nodes need") + " a look" }
+
+// pgLookShort says how many need a look, where it is clear that it counts
+// nodes: "1 needs a look", "3 need a look".
+func pgLookShort(n int) string { return pgPlural(n, "needs", "need") + " a look" }
+
+// pgLookUnit is the unit after the count of pgLookShort: "needs a look"
+// for one, "need a look" for more.
+func pgLookUnit(n int) string {
+	if n == 1 {
+		return "needs a look"
+	}
+	return "need a look"
 }
 
 // LogsLink returns the address of the Logs tab of the node's cluster, with
@@ -302,22 +418,25 @@ func (n pgNode) LogsLink() string {
 }
 
 // pgSnapNodes returns the nodes of the realm, or of every realm when realm
-// is empty, with what the status of their cluster tells when the store
-// has it.
+// is empty, with what the status of their cluster and Slurm tell when the
+// store has them.
 func pgSnapNodes(sn store.Snapshot, realm string) []pgNode {
 	var out []pgNode
-	busy := map[string][2]bool{}
 	for _, r := range pgRealmNames(sn, realm) {
+		start := len(out)
+		busy := map[string][2]bool{}
 		for _, ns := range sn.Nodes[r] {
 			n := pgNodeOf(r, ns, sn.Status(r, ns.Cluster))
-			key := r + "/" + ns.Cluster
-			b, ok := busy[key]
+			b, ok := busy[ns.Cluster]
 			if !ok {
 				b[0], b[1] = pgBusy(sn, r, ns.Cluster)
-				busy[key] = b
+				busy[ns.Cluster] = b
 			}
 			n.Busy, n.Creating = b[0], b[1]
 			out = append(out, n)
+		}
+		for name := range busy {
+			pgAttachSlurm(out[start:], name, sn.Slurm(r, name))
 		}
 	}
 	return out
@@ -396,8 +515,19 @@ type pgCluster struct {
 // Link returns the address of the cluster's page.
 func (c pgCluster) Link() string { return pgClusterURL(c.Realm, c.Name, "") }
 
-// StateClass returns the class of the cluster's state pill.
-func (c pgCluster) StateClass() string { return pgClusterClass(c.State) }
+// Look counts the nodes of the cluster that need a look (pgNode.Problem).
+func (c pgCluster) Look() int { n, _ := pgLook(c.Nodes); return n }
+
+// Pill is the state pill of the cluster: its state, and the count of the
+// nodes that need a look when some do, as "running · 2 need a look", in
+// the class of that count (pgLook), so that green means that nothing needs
+// the user.
+func (c pgCluster) Pill() pgPill {
+	if n, class := pgLook(c.Nodes); n > 0 {
+		return pgPill{string(c.State) + " · " + pgLookShort(n), class}
+	}
+	return pgPill{string(c.State), pgClusterClass(c.State)}
+}
 
 // Roles summarizes the nodes by role: "1 controller · 4 workers".
 func (c pgCluster) Roles() string {
@@ -471,7 +601,7 @@ func pgClusterOf(sn store.Snapshot, realm string, c cluster.Summary, mon *cluste
 		n.Busy, n.Creating = busy, creating
 		pc.Nodes = append(pc.Nodes, n)
 	}
-	pgAttachSlurm(pc.Nodes, sn.Slurm(realm, c.Name))
+	pgAttachSlurm(pc.Nodes, c.Name, sn.Slurm(realm, c.Name))
 	if mon != nil {
 		pc.Monitoring = slices.ContainsFunc(mon.Clusters, func(m cluster.MonitoredCluster) bool { return m.Name == c.Name })
 	}

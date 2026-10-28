@@ -159,16 +159,23 @@ type Route struct {
 }
 
 // NavCount is the badge behind a rail entry: a count with its unit, such
-// as "1 down", or a dot when all is well.
+// as "1 warning", or a dot when all is well.
 type NavCount struct {
 	// Text is the count with its unit; empty shows none, or a dot with
 	// Class ok.
 	Text string
+	// Unit, when set, follows Text, which is then the number alone: the
+	// bar of a phone, which has no room for it, leaves it out, as "3" of
+	// "3 need a look".
+	Unit string
 	// Class colours it: "", "run", "warn", "bad", or "ok" for the dot.
 	Class string
 	// Label says what the badge means in words, for screen readers and
 	// as its tooltip, such as "1 node needs a look".
 	Label string
+	// AllRealms says that the count spans more than one realm; the label
+	// of the entry's group says so.
+	AllRealms bool
 }
 
 // NavCountFunc returns the badge of a rail entry from the snapshot, at

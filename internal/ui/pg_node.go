@@ -77,7 +77,7 @@ func pgLoadNode(v *View) *pgNodeView {
 		d.Found = true
 		d.Node = pgNodeOf(realm, ns, v.Snap.Status(realm, name))
 		nodes := []pgNode{d.Node}
-		pgAttachSlurm(nodes, v.Snap.Slurm(realm, name))
+		pgAttachSlurm(nodes, name, v.Snap.Slurm(realm, name))
 		d.Node = nodes[0]
 		d.Slurm = pgSlurmOf(v.Snap.Slurm(realm, name), nodes)
 	}

@@ -88,10 +88,10 @@ type pgTabLink struct {
 	Key, Label, URL string
 	On              bool
 	// Count is the number after the label, CountLabel the same in words
-	// for screen readers, as "9 nodes"; Problems says how many of them
-	// need a look, as "1 problem".
+	// for screen readers, as "9 nodes"; Look says how many of them need a
+	// look, as "1 needs a look", in the class LookClass (pgLook).
 	Count, CountLabel string
-	Problems          string
+	Look, LookClass   string
 }
 
 // pgMatrixRow is a node row of the health matrix.
@@ -222,14 +222,14 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 }
 
 func pgTabLinks(d *pgClusterView) []pgTabLink {
-	problems := pgCount(d.Cluster.Nodes, pgNode.Problem)
+	look, class := pgLook(d.Cluster.Nodes)
 	var tabs []pgTabLink
 	for _, t := range pgTabs {
 		l := pgTabLink{Key: t.Key, Label: t.Label, URL: pgClusterURL(d.Realm, d.Name, t.Key), On: t.Key == d.Tab}
 		if t.Key == "nodes" {
 			l.Count, l.CountLabel = fmt.Sprint(len(d.Cluster.Nodes)), d.Cluster.NodesText()
-			if problems > 0 {
-				l.Problems = pgPlural(problems, "problem", "problems")
+			if look > 0 {
+				l.Look, l.LookClass = pgLookShort(look), class
 			}
 		}
 		tabs = append(tabs, l)
@@ -453,3 +453,7 @@ func (d *pgClusterView) SlurmConfLink() string {
 // ClusterArg returns the CLUSTER argument of a command: " dev", empty for
 // the default cluster.
 func (d *pgClusterView) ClusterArg() string { return pgClusterArg(d.Name) }
+
+// ClusterStateClass returns the class of the pill of the cluster's
+// container state, which its Summary names beside its realm.
+func (d *pgClusterView) ClusterStateClass() string { return pgClusterClass(d.Cluster.State) }

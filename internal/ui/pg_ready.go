@@ -76,27 +76,35 @@ func pgEnterCmd(d *pgClusterView) pgCmd {
 }
 
 // pgPowerFix returns the power dialog that may fix a node that does not
-// take jobs, and whether there is one: Start for a stopped node, Unfreeze
-// for a paused one, Reboot for one with a service down.
+// take jobs, and whether there is one, named after the node: Start for a
+// stopped node, Unfreeze for a paused one, Reboot for one with a service
+// down, Resume for a worker that Slurm sends no jobs.
 func pgPowerFix(n pgNode) (pgAction, bool) {
-	op, label := "reboot", "Reboot…"
+	verb, op := "Reboot", "reboot"
+	_, slurm := n.SlurmIssue()
 	switch {
 	case n.State == cluster.StatePaused:
-		op, label = "unpause", "Unfreeze…"
+		verb, op = "Unfreeze", "unpause"
 	case n.State != cluster.StateRunning:
-		op, label = "start", "Start…"
-	case len(n.Down()) == 0:
+		verb, op = "Start", "start"
+	case len(n.Down()) > 0:
+	case slurm:
+		verb, op = "Resume", "resume"
+	default:
 		return pgAction{}, false
 	}
-	return n.power(label, "sm ghost", op), true
+	return n.power(verb+" "+n.Short+"…", "sm ghost", op), true
 }
 
-// pgFixActions returns the links that help with a node: its logs, and
-// the power dialog that may fix it.
-func pgFixActions(n pgNode) []pgAction {
-	acts := []pgAction{{Label: "Logs of " + n.Short, URL: n.LogsLink(), Class: "sm ghost"}}
-	if fix, ok := pgPowerFix(n); ok {
-		acts = append(acts, fix)
+// pgFixActions returns the links that help with the nodes, the first of
+// which tells the most: its logs, and for each node the power dialog that
+// may fix it.
+func pgFixActions(nodes ...pgNode) []pgAction {
+	acts := []pgAction{{Label: "Logs of " + nodes[0].Short, URL: nodes[0].LogsLink(), Class: "sm ghost"}}
+	for _, n := range nodes {
+		if fix, ok := pgPowerFix(n); ok {
+			acts = append(acts, fix)
+		}
 	}
 	return acts
 }
@@ -215,17 +223,15 @@ func pgControllerCheck(d *pgClusterView) pgReadyCheck {
 // slurmd is up, and Slurm schedules on them.
 func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
 	var why []string
-	var first *pgNode
-	for i, n := range d.Cluster.Nodes {
+	var broken []pgNode
+	for _, n := range d.Cluster.Nodes {
 		if n.Role != config.RoleWorker || !n.Managed {
 			continue
 		}
 		of++
 		if w := pgWhyNot(n, "slurmd"); w != "" {
 			why = append(why, n.Short+": "+w)
-			if first == nil {
-				first = &d.Cluster.Nodes[i]
-			}
+			broken = append(broken, n)
 			continue
 		}
 		took++
@@ -239,7 +245,7 @@ func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
 	case took == of:
 		return pgReadyCheck{State: "ok", Title: fmt.Sprintf("All %d workers take jobs", of)}, took, of
 	}
-	c = pgReadyCheck{State: "warn", Title: fmt.Sprintf("%d of %d workers take jobs", took, of), Detail: strings.Join(why, "; ") + ".", Actions: pgFixActions(*first)}
+	c = pgReadyCheck{State: "warn", Title: fmt.Sprintf("%d of %d workers take jobs", took, of), Detail: strings.Join(why, "; ") + ".", Actions: pgFixActions(broken[:min(len(broken), 3)]...)}
 	if took == 0 {
 		c.State, c.Title = "bad", "No worker takes jobs"
 	}

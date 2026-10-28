@@ -1,10 +1,11 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
 {{/* rail is the fragment of the page list; .Data is a railData. Each group
-is a list that its label names. On a phone the rail is a bar at the bottom
+is a list that its label names; the label says when the counts of the group
+span every realm. On a phone the rail is a bar at the bottom
 of the screen with the Main entries and More, which opens the sheet of the
 other entries; app.js keeps the sheet open across live updates. */}}
-{{define "rail"}}{{with .Data}}{{range .Groups}}<span class="rgl" id="{{.ID}}">{{.Title}}</span>
+{{define "rail"}}{{with .Data}}{{range .Groups}}<span class="rgl" id="{{.ID}}">{{.Title}}{{if .AllRealms}}<span class="rgs">counts all realms</span>{{end}}</span>
 <ul class="rg rg-{{.Main}}" aria-labelledby="{{.ID}}">{{range .Items}}<li{{if not .Main}} class="sec"{{end}}>{{template "rail-link" .}}</li>{{end}}</ul>
 {{end}}{{with .More}}<button type="button" class="nav more{{if .On}} on{{end}}" data-rail-more aria-expanded="false" aria-controls="rail-sheet"><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>More{{if .Count.Text}}<span class="n {{.Count.Class}}" aria-hidden="true">{{.Count.Text}}</span><span class="vh">, {{.Note}}</span>{{end}}</button>{{end}}
 <div class="rail-sheet" id="rail-sheet" hidden><ul aria-label="More pages">{{range .Sheet}}<li>{{template "rail-link" .}}</li>{{end}}</ul></div>{{end}}{{end}}
@@ -13,5 +14,6 @@ other entries; app.js keeps the sheet open across live updates. */}}
 {{define "rail-link"}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>{{.Label}}{{template "rail-count" .Count}}</a>{{end}}
 
 {{/* rail-count is the badge of a rail entry: its count with a unit, or a
-dot when all is well. Label says the same in words, for screen readers. */}}
-{{define "rail-count"}}{{if .Label}}<span class="n{{with .Class}} {{.}}{{end}}" title="{{.Label}}">{{with .Text}}<span aria-hidden="true">{{.}}</span>{{end}}<span class="vh">, {{.Label}}</span></span>{{else if .Text}}<span class="n{{with .Class}} {{.}}{{end}}">{{.Text}}</span>{{end}}{{end}}
+dot when all is well. Label says the same in words, for screen readers. A
+Unit of its own (class u) is left out in the bar of a phone. */}}
+{{define "rail-count"}}{{if .Label}}<span class="n{{with .Class}} {{.}}{{end}}" title="{{.Label}}">{{with .Text}}<span aria-hidden="true">{{.}}{{with $.Unit}}<span class="u"> {{.}}</span>{{end}}</span>{{end}}<span class="vh">, {{.Label}}</span></span>{{else if .Text}}<span class="n{{with .Class}} {{.}}{{end}}">{{.Text}}</span>{{end}}{{end}}

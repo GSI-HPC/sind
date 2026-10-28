@@ -127,10 +127,15 @@ func TestPgReadyWorkers(t *testing.T) {
 	c := r.Checks[1]
 	assert.Equal(t, "1 of 4 workers take jobs", c.Title)
 	assert.Equal(t, "worker-1: slurmd is down; worker-2: drained in Slurm (disk check); worker-3: down* in Slurm.", c.Detail)
-	require.Len(t, c.Actions, 2)
-	assert.Equal(t, "Logs of worker-1", c.Actions[0].Label)
+	// The logs of the first, and a fix for each: Resume for a worker that
+	// Slurm sends no jobs.
+	var labels []string
+	for _, a := range c.Actions {
+		labels = append(labels, a.Label)
+	}
+	assert.Equal(t, []string{"Logs of worker-1", "Reboot worker-1…", "Resume worker-2…", "Resume worker-3…"}, labels)
 	assert.Equal(t, "/clusters/sind/dev?node=worker-1&tab=logs", c.Actions[0].URL)
-	assert.Equal(t, "Reboot…", c.Actions[1].Label)
+	assert.Contains(t, c.Actions[2].URL, "op=resume")
 
 	// None takes jobs: no.
 	stopped := readyNode("worker-5", config.RoleWorker, "slurmd")
@@ -138,12 +143,18 @@ func TestPgReadyWorkers(t *testing.T) {
 	r = pgReadyOf(readyView(ctl, stopped, drained))
 	assert.Equal(t, "no", r.Verdict)
 	assert.Equal(t, pgReadyCheck{State: "bad", Title: "No worker takes jobs", Detail: "worker-5: stopped; worker-2: drained in Slurm (disk check).", Actions: r.Checks[1].Actions}, r.Checks[1])
-	assert.Equal(t, "Start…", r.Checks[1].Actions[1].Label)
+	assert.Equal(t, "Start worker-5…", r.Checks[1].Actions[1].Label)
 	paused := stopped
 	paused.State = cluster.StatePaused
-	assert.Equal(t, "Unfreeze…", pgReadyOf(readyView(ctl, paused)).Checks[1].Actions[1].Label)
+	assert.Equal(t, "Unfreeze worker-5…", pgReadyOf(readyView(ctl, paused)).Checks[1].Actions[1].Label)
 	r = pgReadyOf(readyView(ctl, drained))
-	assert.Len(t, r.Checks[1].Actions, 1, "a drained node has no power fix")
+	assert.Equal(t, "Resume worker-2…", r.Checks[1].Actions[1].Label)
+	// A fix for the first three only.
+	r = pgReadyOf(readyView(ctl, ok, svcDown, drained, notResp, stopped))
+	assert.Len(t, r.Checks[1].Actions, 4)
+	// A node that needs no look has no fix.
+	_, has := pgPowerFix(ok)
+	assert.False(t, has)
 
 	// No worker at all.
 	r = pgReadyOf(readyView(ctl))
@@ -179,7 +190,7 @@ func TestPgReadyController(t *testing.T) {
 	r = pgReadyOf(readyView(stopped, down(backup, "slurmctld"), w))
 	assert.Equal(t, "no", r.Verdict)
 	assert.Equal(t, pgReadyCheck{State: "bad", Title: "The controller does not answer", Detail: "controller: stopped; controller-backup: slurmctld is down.", Actions: r.Checks[0].Actions}, r.Checks[0])
-	assert.Equal(t, "Start…", r.Checks[0].Actions[1].Label)
+	assert.Equal(t, "Start controller…", r.Checks[0].Actions[1].Label)
 
 	// slurmctld runs, but sinfo fails.
 	d := readyView(ctl, w)

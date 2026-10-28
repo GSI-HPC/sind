@@ -8,7 +8,7 @@
 {{end}}
 
 {{define "pg-node-head"}}{{with .Data}}{{if .Found}}
-<div class="head"><div class="t"><h1>{{.Node.Arg}} <span class="pill {{.Node.StateClass}}" data-say="{{.Node.Arg}} is {{.Node.State}}.">{{.Node.State}}</span></h1>
+<div class="head"><div class="t"><h1>{{.Node.Arg}} {{with .Node.HeadPill}}<span class="pill {{.Class}}" data-say="{{$.Data.Node.Arg}} is {{.Text}}.">{{.Text}}</span>{{end}}</h1>
   <div class="sub"><span class="chip {{.Node.RoleClass}}" data-word="{{.Node.Role}}">{{.Node.Role}}</span>{{with .Node.IP}}<span class="mono">{{.}}</span>{{end}}{{with .Node.HA}}<span>HA position {{.Position}}{{if .InControl}} · in control{{else}} · standby{{end}}</span>{{end}}</div></div>
   <div class="actions"><a class="btn" href="{{.LogsLink}}">Logs</a>{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{else}}{{template "pg-gone" .Short}}{{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
@@ -18,7 +18,7 @@
     {{range .Node.Issues}}<div class="pg-issue"><span class="pill {{.Class}}">{{.Text}}</span></div>{{end}}
     <div><a class="btn sm" href="{{.IssueLogsLink}}">Logs</a></div></div></section>{{end}}
   <section class="panel"><div class="ph"><h2>Services</h2><span class="grow"></span><span class="faint">systemd</span></div><div class="pb">
-    {{if .Node.Known}}<dl class="kv">{{range .Node.Services}}<dt class="mono"><span data-word="{{.Name}}">{{.Name}}</span></dt><dd>{{if not $d.Node.Running}}<span class="pill">not running</span>{{else if .OK}}<span class="pill ok">active</span>{{else}}<span class="pill bad">failed</span>{{end}}{{if $d.Node.Running}} <a class="btn sm ghost" href="{{$d.ServiceLogsLink .Name}}" aria-label="Logs of {{.Name}}">Logs</a>{{end}}</dd>
+    {{if .Node.Known}}<dl class="kv">{{range .Node.Services}}<dt class="mono"><span data-word="{{.Name}}">{{.Name}}</span></dt><dd>{{if not $d.Node.Running}}<span class="pill">not running</span>{{else if .OK}}<span class="pill ok">active</span>{{else}}<span class="pill bad">down</span>{{end}}{{if $d.Node.Running}} <a class="btn sm ghost" href="{{$d.ServiceLogsLink .Name}}" aria-label="Logs of {{.Name}}">Logs</a>{{end}}</dd>
       {{else}}<dt>none</dt><dd class="muted">This node has no service that sind checks.</dd>{{end}}</dl>
     {{else}}<span class="muted">No probe result yet. sind ui probes the nodes of every cluster while a page is open.</span>{{end}}</div></section>
   <section class="panel"><div class="ph"><h2>Slurm</h2><span class="grow"></span><span class="faint mono">sinfo</span></div><div class="pb">

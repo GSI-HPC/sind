@@ -230,7 +230,7 @@ func pgClusterRank(c pgCluster) int {
 	case cluster.StatePaused:
 		return 3
 	case cluster.StateRunning:
-		if len(c.Problems()) > 0 {
+		if c.Look() > 0 {
 			return 4
 		}
 		return 5
@@ -322,7 +322,7 @@ func pgNodeRank(n pgNode) int {
 	case cluster.StatePaused:
 		return 2
 	case cluster.StateRunning:
-		if len(n.Down()) > 0 {
+		if len(n.Issues()) > 0 {
 			return 3
 		}
 		return 4
