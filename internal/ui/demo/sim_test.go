@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -282,6 +283,34 @@ func TestSim_ExecWritesNoRun(t *testing.T) {
 	_, ok := st.Snapshot().RunOfTrace(task.Trace)
 	assert.False(t, ok, "sind exec writes no event log")
 	assert.Nil(t, st.Snapshot().Locks["sind"], "and takes no lock")
+}
+
+func TestSim_ExecDrainsAndResumes(t *testing.T) {
+	s, st := newSim(t)
+	slurmOf := func(name string) slurm.NodeInfo {
+		for _, n := range st.Snapshot().Slurm("sind", "dev").Info.Nodes {
+			if n.Name == name {
+				return n
+			}
+		}
+		return slurm.NodeInfo{}
+	}
+	require.Equal(t, "drained", slurmOf("worker-5").State)
+	s.startWait(t, st, "--realm", "sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-5", "State=RESUME")
+	assert.NotEqual(t, "drained", slurmOf("worker-5").State, "Resume puts the node back")
+	s.startWait(t, st, "--realm", "sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-0,worker-1", "State=DRAIN", "Reason=disk test")
+	// Both run jobs, which go on.
+	assert.Equal(t, slurm.NodeInfo{State: "draining", Reason: "disk test"}, slurm.NodeInfo{State: slurmOf("worker-1").State, Reason: slurmOf("worker-1").Reason})
+	assert.Equal(t, "draining", slurmOf("worker-0").State)
+	// Any other command changes nothing.
+	for _, argv := range [][]string{
+		{"exec", "dev", "--", "scontrol", "update", "NodeName=worker-0", "State=IDLE"},
+		{"exec", "dev", "--", "sinfo"},
+		{"exec", "dev"},
+	} {
+		s.startWait(t, st, append([]string{"--realm", "sind"}, argv...)...)
+	}
+	assert.Equal(t, "draining", slurmOf("worker-0").State)
 }
 
 func TestSim_ExecCanceled(t *testing.T) {

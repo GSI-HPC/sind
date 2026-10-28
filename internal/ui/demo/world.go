@@ -68,6 +68,9 @@ type nodeState struct {
 	// none; busy are the CPUs its jobs hold (see slurmNode).
 	drain string
 	busy  int
+	// calm is how many times Drift leaves the node alone, as after a
+	// reboot that fixed it.
+	calm int
 }
 
 // NewWorld returns a world with nothing in it.
@@ -239,10 +242,14 @@ func (w *World) apply(realmName, op string, n node) {
 	case opStart:
 		ns.state, ns.up = cluster.StateRunning, map[probe.Service]bool{}
 	case opReady:
-		ns.state, ns.up = cluster.StateRunning, map[probe.Service]bool{}
+		ns.state, ns.up, ns.calm = cluster.StateRunning, map[probe.Service]bool{}, readyCalm
 		for _, s := range services(ns.role) {
 			ns.up[s] = true
 		}
+	case opDrain:
+		ns.drain = cmp.Or(n.reason, "drained")
+	case opResume:
+		ns.drain = ""
 	case opStop:
 		ns.state, ns.up = cluster.StateStopped, map[probe.Service]bool{}
 	case opPause:
@@ -264,9 +271,14 @@ func (w *World) prune() {
 	w.realms = slices.DeleteFunc(w.realms, func(r *realm) bool { return len(r.clusters) == 0 })
 }
 
+// readyCalm is how many times Drift leaves a node alone once its services
+// are up, so that a reboot that fixed it shows as a fix for a while.
+const readyCalm = 2
+
 // Drift flips the slurmd of the node worker-4 of dev, as a flaky service
-// does, so that a demo that nobody touches still changes. It returns
-// whether it changed anything.
+// does, so that a demo that nobody touches still changes; but not while the
+// node is calm, after its services came up. It returns whether it changed
+// anything.
 func (w *World) Drift() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -276,6 +288,10 @@ func (w *World) Drift() bool {
 	}
 	n := c.find("worker-4")
 	if n == nil || n.state != cluster.StateRunning {
+		return false
+	}
+	if n.calm > 0 {
+		n.calm--
 		return false
 	}
 	n.up[probe.ServiceSlurmd] = !n.up[probe.ServiceSlurmd]

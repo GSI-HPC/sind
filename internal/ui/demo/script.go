@@ -31,6 +31,8 @@ type node struct {
 	// ready is when the node's probes pass, counted from the start of the
 	// wait; zero for a node that never gets ready within the limit.
 	ready time.Duration
+	// reason is why Slurm drains the node, for opDrain.
+	reason string
 }
 
 // Effects of a script on the world, for emit.
@@ -45,6 +47,8 @@ const (
 	opConnect = "connect" // an outside container joins the mesh network
 	opDisconn = "disconn" // it leaves
 	opMonitor = "monitor" // the realm's monitoring stack exists
+	opDrain   = "drain"   // Slurm starts no new job on it
+	opResume  = "resume"  // Slurm schedules on it again
 )
 
 // play is what a script plays with: a clock, and a function that tells the

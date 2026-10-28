@@ -197,6 +197,14 @@ func TestWorld_Drift(t *testing.T) {
 	w.Publish(st)
 	assert.False(t, slurmdUp(st))
 
+	// Once its services came up, as after a reboot, the node stays calm
+	// for a while.
+	w.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
+	for range readyCalm {
+		assert.False(t, w.Drift())
+	}
+	assert.True(t, w.Drift())
+
 	w.apply("sind", opStop, node{name: "worker-4", cluster: "dev"})
 	assert.False(t, w.Drift(), "a node that is stopped has nothing to flip")
 	w.apply("sind", opRemove, node{name: "worker-4", cluster: "dev"})

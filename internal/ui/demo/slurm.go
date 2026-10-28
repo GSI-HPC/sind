@@ -69,13 +69,16 @@ func slurmInfoOf(c *clusterState) *cluster.SlurmInfo {
 }
 
 // slurmNode returns a worker as sinfo reports it: down when slurmd does not
-// answer, drained when the demo drained it, else idle, mixed or allocated
-// by the CPUs its jobs hold.
+// answer, draining when the demo drained it while its jobs hold CPUs,
+// drained when they do not, else idle, mixed or allocated by the CPUs its
+// jobs hold.
 func slurmNode(n *nodeState) slurm.NodeInfo {
 	sn := slurm.NodeInfo{Name: n.short, State: "idle", CPUs: workerCPUs, MemoryMB: workerMemoryMB, Partitions: []string{"all"}}
 	switch {
 	case n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd]:
 		sn.State, sn.Reason = "down*", "Not responding"
+	case n.drain != "" && n.busy > 0:
+		sn.State, sn.Reason, sn.AllocCPUs = "draining", n.drain, min(n.busy, workerCPUs)
 	case n.drain != "":
 		sn.State, sn.Reason = "drained", n.drain
 	case n.busy >= workerCPUs:

@@ -127,7 +127,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 	tc := uiTrace(n)
 	t := store.Task{
 		ID: fmt.Sprintf("%016x", 0x7a5c000000000000+n), Action: spec.Action, Display: spec.Display, Argv: spec.Argv, Realm: spec.Realm, Cluster: spec.Cluster,
-		Form: spec.Form, ConfigPath: spec.ConfigPath, Config: spec.Config, Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,
+		Form: spec.Form, Fixes: spec.Fixes, ConfigPath: spec.ConfigPath, Config: spec.Config, Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,
 	}
 	s.st.AddTask(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,7 +149,7 @@ func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, 
 	if p.silent {
 		// A command that writes no event log, such as sind exec, and takes
 		// no lock.
-		err = p.work(ctx, play{clk: s.clk})
+		err = p.work(ctx, play{clk: s.clk, emit: s.emitter(p.realm, nil)})
 	} else {
 		log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, RunID: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
 		bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
@@ -302,6 +302,38 @@ func clusterWord(words []string) string {
 	return config.DefaultClusterName
 }
 
+// scontrol plays what the scontrol update of a drain or a resume, which
+// the power dialog runs through sind exec with args, does to the nodes it
+// names: "[CLUSTER] -- scontrol update NodeName=a,b State=DRAIN
+// Reason=why". It does nothing to any other command.
+func scontrol(p play, args []string) {
+	i := slices.Index(args, "--")
+	if i < 0 || len(args) < i+5 || args[i+1] != "scontrol" || args[i+2] != "update" {
+		return
+	}
+	n := node{cluster: clusterWord(positional(args[:i]))}
+	names := ""
+	op := ""
+	for _, a := range args[i+3:] {
+		k, v, _ := strings.Cut(a, "=")
+		switch strings.ToLower(k) {
+		case "nodename":
+			names = v
+		case "state":
+			op = map[string]string{"drain": opDrain, "resume": opResume}[strings.ToLower(v)]
+		case "reason":
+			n.reason = v
+		}
+	}
+	if op == "" {
+		return
+	}
+	for _, name := range strings.Split(names, ",") {
+		n.name = name
+		p.do(op, n)
+	}
+}
+
 // plan reads the command line of a command that a dialog built and makes
 // the script that plays it. A command it does not know plays as one step.
 func (s *Sim) plan(argv []string) (plan, error) {
@@ -313,7 +345,11 @@ func (s *Sim) plan(argv []string) (plan, error) {
 		// sind exec runs a command in a node, such as the scontrol of a
 		// drain, and draws no progress.
 		return plan{title: "exec", realm: realm, silent: true, work: func(ctx context.Context, p play) error {
-			return p.clk.Sleep(ctx, 600*time.Millisecond)
+			if err := p.clk.Sleep(ctx, 600*time.Millisecond); err != nil {
+				return err
+			}
+			scontrol(p, argv[1:])
+			return nil
 		}}, nil
 	}
 	if len(argv) < 2 {
