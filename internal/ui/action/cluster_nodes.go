@@ -131,15 +131,15 @@ func nodeDefaults(f Form, d *config.Defaults, ps *problems) {
 		ps.add("cpus", "CPUs per node", true, fmt.Errorf("write a number from 1 to %d", maxCPUs))
 		d.CPUs = small.CPUs
 	}
-	sizeOf(f, "memory", "Memory per node", config.CheckMemory, "memory", &d.Memory, ps)
-	sizeOf(f, "tmp", "/tmp per node", config.CheckTmpSize, "/tmp size", &d.TmpSize, ps)
+	sizeOf(f, "memory", "Memory per node", memorySize, &d.Memory, ps)
+	sizeOf(f, "tmp", "/tmp per node", tmpSize, &d.TmpSize, ps)
 }
 
-// sizeOf reads the memory or /tmp size of field, which check takes as
-// name, into v, which keeps its value where the field is empty or wrong.
-func sizeOf(f Form, field, label string, check func(name, value string) error, name string, v *string, ps *problems) {
+// sizeOf reads the memory or /tmp size of field with read into v, which
+// keeps its value where the field is empty or wrong.
+func sizeOf(f Form, field, label string, read func(string) (string, error), v *string, ps *problems) {
 	if s := strings.TrimSpace(f.Get(field)); s != "" {
-		if err := check(name, s); err != nil {
+		if s, err := read(s); err != nil {
 			ps.add(field, label, true, err)
 		} else {
 			*v = s
@@ -224,8 +224,8 @@ func nodeSize(f Form, key, label string, n *config.Node, ps *problems) {
 	} else {
 		n.CPUs = cpus
 	}
-	sizeOf(f, key+"-memory", label+" memory", config.CheckMemory, "memory", &n.Memory, ps)
-	sizeOf(f, key+"-tmp", label+" /tmp", config.CheckTmpSize, "/tmp size", &n.TmpSize, ps)
+	sizeOf(f, key+"-memory", label+" memory", memorySize, &n.Memory, ps)
+	sizeOf(f, key+"-tmp", label+" /tmp", tmpSize, &n.TmpSize, ps)
 	if key != "submitter" && checkbox(f, key+"-unmanaged", label+" unmanaged", ps) {
 		n.Managed = new(bool)
 	}

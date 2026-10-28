@@ -283,19 +283,30 @@ func TestBuildCreateWorker_Sizes(t *testing.T) {
 }
 
 func TestBuildCreateWorker_Errors(t *testing.T) {
-	for field, tc := range map[string]struct{ f, want string }{
-		"count":  {"count=0", "How many: write a number from 1 to 1024"},
-		"count2": {"", "How many: write a number from 1 to 1024"},
-		"cpus":   {"count=1&cpus=x", "CPUs: write a number from 1 to 1024"},
-		"memory": {"count=1&memory=lots", `memory: invalid memory "lots"`},
+	for field, tc := range map[string]struct{ f, field, want, argv string }{
+		"count":  {"count=0", "count", "write a number from 1 to 1024", "sind create worker dev"},
+		"count2": {"", "count", "write a number from 1 to 1024", "sind create worker dev"},
+		"cpus":   {"count=2&cpus=x", "cpus", "write a number from 1 to 1024", "sind create worker dev --count 2"},
+		"memory": {"count=1&memory=lots", "memory", "write a size such as 2g or 512m", "sind create worker dev"},
 	} {
 		t.Run(field, func(t *testing.T) {
 			f, _ := url.ParseQuery(tc.f)
 			f.Set("cluster", "dev")
-			_, err := build(t, "create-worker", f)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.want)
+			cmd, err := build(t, "create-worker", f)
+			require.NoError(t, err, "a wrong field keeps the command, with its default")
+			require.NotEmpty(t, cmd.Problems)
+			assert.Equal(t, Problem{Field: tc.field, Label: cmd.Problems[0].Label, Text: tc.want, Default: true}, cmd.Problems[0])
+			assert.Equal(t, tc.argv, cmd.Display)
 		})
+	}
+}
+
+func TestBuildCreateWorker_MemoryAsPeopleWriteIt(t *testing.T) {
+	for in, want := range map[string]string{"2 GB": "2g", "512 MiB": "512m", "1.5g": "1.5g", "2048 m": "2048m", "1 GiB": "1g"} {
+		cmd, err := build(t, "create-worker", form("cluster", "dev", "count", "1", "memory", in))
+		require.NoError(t, err)
+		assert.Empty(t, cmd.Problems, in)
+		assert.Equal(t, "sind create worker dev --memory "+want, cmd.Display, in)
 	}
 }
 

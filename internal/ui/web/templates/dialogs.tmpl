@@ -61,6 +61,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
 {{if .Cmd.Budget}}{{template "act-budget" .}}{{end}}
 {{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>{{$p.ProblemsText}}</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
+{{with .Defaulted}}<p class="hint">The command takes the defaults for {{.}} until you fix them.</p>{{end}}
 {{if .Cmd.Losses}}{{template "act-losses" .}}
 {{else if .Cmd.Goes}}<div class="act-gs"><div class="callout bad act-list"><b>Goes</b><ul>{{range .Cmd.Goes}}<li>{{.}}</li>{{end}}</ul></div>
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>

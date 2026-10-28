@@ -599,8 +599,10 @@ func TestActPreview_AddWorkersShowsTheHost(t *testing.T) {
 
 	// A field that is wrong says so in place.
 	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "1", "memory", "lots")).Body.String()
-	assert.Contains(t, body, `<span class="err" id="act-err-memory" hx-swap-oob="innerHTML">invalid memory`)
-	assert.Contains(t, body, "Fix the field above to see the command.")
+	assert.Contains(t, body, `<span class="err" id="act-err-memory" hx-swap-oob="innerHTML">write a size such as 2g or 512m</span>`)
+	assert.Contains(t, body, "The command takes the defaults for Memory until you fix them.")
+	assert.Contains(t, body, `<div class="cmdlabel">Runs</div>`, "the command stays")
+	assert.NotContains(t, body, "Fix the field above to see the command.")
 }
 
 func TestActPreview_Warnings(t *testing.T) {

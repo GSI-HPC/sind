@@ -46,9 +46,13 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
+	// A wrong field is a problem at the field, and the command takes its
+	// default until the user fixes it, as New cluster does.
+	var ps problems
 	count, err := number(f, "count", "How many", 1, maxCount, -1)
 	if err != nil {
-		return Command{}, err
+		ps.add("count", "How many", true, fmt.Errorf("write a number from 1 to %d", maxCount))
+		count = 1
 	}
 	words := append([]string{"create", "worker"}, clusterWord(cl.Name)...)
 	if count != 1 {
@@ -57,19 +61,20 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	nodes := c.Snap.ClusterNodes(realm, cl.Name)
 	size := templateSize(c, nodes, c.Snap.Status(realm, cl.Name))
 	if s := strings.TrimSpace(f.Get("cpus")); s != "" {
-		cpus, err := number(f, "cpus", "CPUs", 1, maxCPUs, -1)
-		if err != nil {
-			return Command{}, err
+		if cpus, err := number(f, "cpus", "CPUs", 1, maxCPUs, -1); err != nil {
+			ps.add("cpus", "CPUs", true, fmt.Errorf("write a number from 1 to %d", maxCPUs))
+		} else {
+			words = append(words, "--cpus", fmt.Sprint(cpus))
+			size.cpus = cpus
 		}
-		words = append(words, "--cpus", fmt.Sprint(cpus))
-		size.cpus = cpus
 	}
 	if m := strings.TrimSpace(f.Get("memory")); m != "" {
-		if err := config.CheckMemory("memory", m); err != nil {
-			return Command{}, fmt.Errorf("memory: %w", err)
+		if m, err := memorySize(m); err != nil {
+			ps.add("memory", "Memory", true, err)
+		} else {
+			words = append(words, "--memory", m)
+			size.memoryMB, _ = config.MemoryMB(m) // checked
 		}
-		words = append(words, "--memory", m)
-		size.memoryMB, _ = config.MemoryMB(m) // checked
 	}
 	cmd := NewCommand(sindArgv(realm, words...)...)
 	added := nextWorkers(nodes, count)
@@ -86,7 +91,6 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 		cmd.Notes = append(cmd.Notes, size.why)
 	}
 	cmd.Notes = append(cmd.Notes, workerSlurmNote(c.Snap.Status(realm, cl.Name)))
-	var ps problems
 	b := hostBudget(c, count, count*size.memoryMB, count*size.cpus)
 	budgetProblems(f, &cmd, b, workersOver(size.memoryMB), &ps)
 	cpuWarning(&cmd, b, "Each new worker", size.cpus)
