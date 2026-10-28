@@ -7,8 +7,9 @@
 // follow the YAML, the links to a field with a problem, and the frame of
 // every dialog: the focus, which stays in the dialog and goes back to the
 // button that opened it, the question before a close loses changes, the
-// draft of a new cluster, Enter and Ctrl+Enter, the status, and Back, which
-// closes the dialog. The dialogs are the server's HTML, which htmx
+// draft of a new cluster, Enter and Ctrl+Enter, the status, Back, which
+// closes the dialog, and the history of a command that started, which the
+// tab leaves in one Back. The dialogs are the server's HTML, which htmx
 // puts into #layer; nothing here evaluates text, and no storage is needed to
 // work: every access is guarded.
 (() => {
@@ -35,9 +36,9 @@
   // it again after a swap, the link it came from, the element in it that
   // had the focus last, whether the user changed a field, the question the
   // footer asks, the elements made inert, and the status said last; popped
-  // is set while Back closes the dialog, and skip while the dialog takes
-  // its own entry of the history away.
-  const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0, popped: false, skip: false };
+  // is set while Back closes the dialog, skip while the dialog takes its
+  // own entry of the history away, and then is what to do after that.
+  const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0, popped: false, skip: false, then: null };
 
   // isolate makes everything but the dialog, the layer and the page's live
   // region inert, marked data-act-inert, as a modal dialog needs: Tab and the
@@ -154,10 +155,14 @@
   // when it has changes; the dialog then keeps its entry.
   window.addEventListener('popstate', ev => {
     if (S.skip) {
+      const then = S.then;
       S.skip = false;
+      S.then = null;
+      if (then) then();
       return;
     }
     const d = dialog();
+    if (ev.state && ev.state.actDialog && (!d || inPage(d))) { stale(); return; }
     if (!d || inPage(d) || (ev.state && ev.state.actDialog)) return;
     if (S.dirty) {
       history.pushState({ actDialog: true }, '');
@@ -166,6 +171,46 @@
     }
     S.popped = true;
     close(true);
+  });
+
+  // stale leaves an entry of a dialog that is no longer open, as after a
+  // reload of the page or Forward past a dialog that closed: the entry has
+  // nothing to close, and would cost one more Back.
+  function stale() {
+    S.skip = true;
+    S.then = null;
+    history.back();
+  }
+  if (history.state && history.state.actDialog && (!dialog() || inPage(dialog()))) stale();
+
+  // leave goes to the page to, the run of a command that started, in the
+  // place of the dialog in the history of the tab, so that one Back goes to
+  // the page that the dialog was opened on. To that page itself, as after a
+  // delete of clusters from their list, the tab goes back and loads it again.
+  function leave(to) {
+    dropDraft();
+    const d = dialog();
+    const own = history.state && history.state.actDialog;
+    if (own && new URL(to, location.href).href === location.href) {
+      S.skip = true;
+      S.then = () => location.reload();
+      history.back();
+    } else if (own || (d && inPage(d))) {
+      location.replace(to);
+    } else {
+      location.assign(to);
+    }
+  }
+
+  // The answer to a dialog that sends the browser on (HX-Redirect) leaves
+  // the dialog in its place, not after it.
+  document.addEventListener('htmx:beforeOnLoad', ev => {
+    const xhr = ev.detail && ev.detail.xhr;
+    const to = xhr && xhr.getResponseHeader('HX-Redirect');
+    const d = dialog();
+    if (!to || !d || !(ev.target instanceof Element) || !d.contains(ev.target)) return;
+    ev.preventDefault();
+    leave(to);
   });
 
   // close closes the dialog. One with changes asks first, unless force.
@@ -219,6 +264,14 @@
     form.querySelector('#act-ask').hidden = true;
     form.querySelector('#act-mf').hidden = false;
     if (refocus) (S.back && S.back.isConnected && form.contains(S.back) ? S.back : form.querySelector('[data-act-close]')).focus();
+  }
+
+  // dropDraft forgets the changes and the draft of the dialog, as its
+  // command started.
+  function dropDraft() {
+    const form = formOf();
+    if (form && form.dataset.actDraft) local.del(draftKey(form.dataset.actDraft));
+    S.dirty = false;
   }
 
   // discard drops the changes and the draft, then closes the dialog or
@@ -830,13 +883,22 @@
   // own goes to the run.
   document.addEventListener('act-started', ev => {
     const det = ev.detail || {};
-    const form = formOf();
-    if (form && form.dataset.actDraft) local.del(draftKey(form.dataset.actDraft));
-    S.dirty = false;
+    dropDraft();
     if (det.follow) return;
     const d = dialog();
-    if (d && inPage(d)) { location.assign(det.url); return; }
+    if (d && inPage(d)) { leave(det.url); return; }
     close(true);
+  });
+
+  // A link of the dialog in the layer opens its page in the place of the
+  // dialog in the history, as a command that started does.
+  document.addEventListener('click', ev => {
+    const a = ev.target instanceof Element && ev.target.closest('#layer #act-dialog a[href]');
+    if (!a || ev.defaultPrevented || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+    if (a.target || a.matches('[download], [hx-get], [data-help-topic], [data-act-jump]') || a.getAttribute('href').startsWith('#') || a.origin !== location.origin) return;
+    if (!(history.state && history.state.actDialog)) return;
+    ev.preventDefault();
+    location.replace(a.href);
   });
 
   // A draft is saved before the page goes, too. A dialog with changes

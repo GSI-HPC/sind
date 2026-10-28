@@ -52,12 +52,13 @@ func TestRunTaskPageWaits(t *testing.T) {
 	}
 	assert.NotContains(t, body, `class="tstrip`, "the strip does not repeat the task of the page")
 	assert.Contains(t, body, `<div class="cmds-r running">`, "the list of the dock has it")
-	assert.NotContains(t, body, `hx-trigger="load"`, "no run to go to yet")
+	assert.NotContains(t, body, `data-run-open`, "no run to go to yet")
 
-	// The run shows up: the fragment asks for the redirect.
+	// The run shows up: the fragment holds it, for run.js to open in the
+	// place of the page.
 	ts.st.SetRuns([]store.Run{{ID: "r1", Trace: "tr", Title: "x"}})
 	html := runFragment(t, ts, runNow, "run-wait", "id", "t1")
-	assert.Contains(t, html, `hx-get="/tasks/t1" hx-trigger="load" hx-swap="none"`)
+	assert.Contains(t, html, `<div class="callout run" data-run-open="/runs/r1">Opening the run… <a href="/runs/r1">Open it</a></div>`)
 }
 
 func TestRunTaskPageEndedWithoutRun(t *testing.T) {

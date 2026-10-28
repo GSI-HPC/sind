@@ -2,16 +2,17 @@
 
 // Script of the progress display. The server draws every page and fragment
 // but the summary and the timeline of the run page, which gantt.js draws;
-// this file does seven small things that need the browser: it counts the
+// this file does eight small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
 // milliseconds since 1970), it sizes the bars finer than the whole percent
 // of their classes, it puts the progress of the run in the title of the
 // tab, it announces when a command starts or ends, it opens and closes the
-// list of the task dock, it closes the question of Stop, and it hides the
-// rows of "Needs you" that are fixed, the cards of a fix and the strip of
-// the dock (data-hide-at), shows what waits for them (data-show-at), and
-// counts down their seconds (data-until). It evaluates no text and needs
-// no inline script.
+// list of the task dock, it closes the question of Stop, it opens the run
+// of the page of a task once there is one, and it hides the rows of "Needs
+// you" that are fixed, the cards of a fix and the strip of the dock
+// (data-hide-at), shows what waits for them (data-show-at), and counts down
+// their seconds (data-until). It evaluates no text and needs no inline
+// script.
 (() => {
   'use strict';
 
@@ -150,6 +151,18 @@
     cleared = '';
   }
 
+  // The page of a task opens its run once the event log holds it, in its
+  // place in the history (data-run-open), so that Back leaves the run in one
+  // step.
+  let leaving = false;
+  function openRun() {
+    const el = document.querySelector('[data-run-open]');
+    const to = el && el.dataset.runOpen;
+    if (leaving || !to || !to.startsWith('/runs/')) return;
+    leaving = true;
+    location.replace(to);
+  }
+
   // set gives a property of the style of el a value, if it has another.
   function set(el, prop, value) {
     if (el.style[prop] !== value) el.style[prop] = value;
@@ -256,6 +269,7 @@
     title();
     tick();
     announce();
+    openRun();
   }
 
   document.addEventListener('DOMContentLoaded', () => {

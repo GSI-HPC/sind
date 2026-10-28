@@ -2,8 +2,9 @@
 
 {{/* page-run-task is the page of a task whose run the event log does not hold
 yet. It goes to the run page by itself as soon as the run shows up: the
-fragment then holds an element that asks for /tasks/ID on load, which
-answers with HX-Redirect. */}}
+fragment then holds the run page in data-run-open, which run.js opens in
+place of this page in the history of the tab, so that Back leaves the run
+page in one step. */}}
 {{define "page-run-task"}}
 <div class="crumbs"><a href="/activity">Activity</a> / task</div>
 <div hx-swap="morph:innerHTML" sse-swap="run-wait">{{fragment "run-wait" .}}</div>
@@ -14,7 +15,7 @@ answers with HX-Redirect. */}}
   <div class="sub"><span class="pill {{.PillClass}}">{{.Class}}</span><span>from sind ui</span></div></div>
   <div class="actions">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{end}}{{template "run-retry" .}}</div></div>
 {{with .Command}}<div class="runcmd">{{template "pg-cmd" .}}</div>{{end}}
-{{if .Redirect}}<div class="callout run" hx-get="/tasks/{{.TaskID}}" hx-trigger="load" hx-swap="none">Opening the run…</div>
+{{if .Redirect}}<div class="callout run" data-run-open="{{.Redirect}}">Opening the run… <a href="{{.Redirect}}">Open it</a></div>
 {{else if eq .Class "running"}}<section class="panel"><div class="pb waiting"><span class="spin" aria-hidden="true"></span><span>{{if .NoRun}}The command runs. It writes no progress, so it has no run page: this page shows how it ends.{{else}}Waiting for the command to write its first progress event. This page opens the run as soon as it does.{{end}}</span>{{template "run-elapsed" .}}</div></section>
 {{else if and (eq .Class "ok") (not .Output)}}<section class="panel"><div class="pb"><div class="callout">The command ended without errors. Commands such as Drain and Resume write no progress, so they have no run page.</div></div></section>
 {{else}}<section class="panel"><div class="pb stack">
