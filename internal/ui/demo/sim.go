@@ -4,6 +4,7 @@ package demo
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -334,6 +335,19 @@ func scontrol(p play, args []string) {
 	}
 }
 
+// systemctl plays what the restart of a service, which the restart dialog
+// runs through sind ssh with args, does to the node it names:
+// "NODE[.CLUSTER] -- systemctl restart UNIT". It does nothing to any other
+// command.
+func systemctl(p play, args []string) {
+	i := slices.Index(args, "--")
+	if i != 1 || len(args) != 5 || args[2] != "systemctl" || args[3] != "restart" {
+		return
+	}
+	short, cl, _ := strings.Cut(args[0], ".")
+	p.do(opRestart, node{name: short, cluster: cmp.Or(cl, config.DefaultClusterName), unit: args[4]})
+}
+
 // plan reads the command line of a command that a dialog built and makes
 // the script that plays it. A command it does not know plays as one step.
 func (s *Sim) plan(argv []string) (plan, error) {
@@ -349,6 +363,17 @@ func (s *Sim) plan(argv []string) (plan, error) {
 				return err
 			}
 			scontrol(p, argv[1:])
+			return nil
+		}}, nil
+	}
+	if len(argv) > 0 && argv[0] == "ssh" {
+		// sind ssh runs a command in a node, such as the systemctl restart
+		// of a service, and draws no progress either.
+		return plan{title: "ssh", realm: realm, silent: true, work: func(ctx context.Context, p play) error {
+			if err := p.clk.Sleep(ctx, 900*time.Millisecond); err != nil {
+				return err
+			}
+			systemctl(p, argv[1:])
 			return nil
 		}}, nil
 	}

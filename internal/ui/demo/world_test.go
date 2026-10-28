@@ -4,6 +4,7 @@ package demo
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,23 +191,23 @@ func TestWorld_Connect(t *testing.T) {
 func TestWorld_Drift(t *testing.T) {
 	w, st := seededStore(t)
 	require.False(t, slurmdUp(st))
-	assert.True(t, w.Drift())
-	w.Publish(st)
-	assert.True(t, slurmdUp(st))
-	assert.True(t, w.Drift())
-	w.Publish(st)
-	assert.False(t, slurmdUp(st))
+	assert.False(t, w.Drift(), "a failure stays until a fix")
 
 	// Once its services came up, as after a reboot, the node stays calm
-	// for a while.
+	// for a while, then slurmd fails again.
 	w.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
+	w.Publish(st)
+	require.True(t, slurmdUp(st))
 	for range readyCalm {
 		assert.False(t, w.Drift())
 	}
 	assert.True(t, w.Drift())
+	w.Publish(st)
+	assert.False(t, slurmdUp(st))
+	assert.False(t, w.Drift())
 
 	w.apply("sind", opStop, node{name: "worker-4", cluster: "dev"})
-	assert.False(t, w.Drift(), "a node that is stopped has nothing to flip")
+	assert.False(t, w.Drift(), "a node that is stopped has nothing to fail")
 	w.apply("sind", opRemove, node{name: "worker-4", cluster: "dev"})
 	assert.False(t, w.Drift())
 	for _, n := range w.nodesOf("sind", "dev") {
@@ -237,4 +238,81 @@ func TestServices(t *testing.T) {
 		assert.Contains(t, got, probe.ServiceMunge, role)
 		assert.Len(t, got, n, role)
 	}
+}
+
+func TestWorld_Faults(t *testing.T) {
+	w := Seeded()
+	w.now = func() time.Time { return t0 }
+	st := store.New()
+	w.Publish(st)
+	sn := st.Snapshot()
+
+	// What was wrong before the demo started gets a time of its own.
+	f, ok := sn.Fault("sind", "dev", "worker-4")
+	require.True(t, ok)
+	require.Len(t, f.Units, 1)
+	u := f.Units[0]
+	assert.Equal(t, "slurmd", u.Name)
+	assert.Equal(t, "failed", u.State)
+	assert.Equal(t, t0.Add(-seededFailed), u.Since)
+	assert.Equal(t, "systemd[1]: slurmd.service: Failed with result 'exit-code'.", u.Journal[len(u.Journal)-1].Text)
+	f, ok = sn.Fault("sind", "legacy", "worker-1")
+	require.True(t, ok)
+	assert.Equal(t, &store.Exit{Code: 137, OOMKilled: true, At: t0.Add(-seededStopped)}, f.Exit)
+	_, ok = sn.Fault("sind", "dev", "worker-0")
+	assert.False(t, ok)
+
+	at, down := w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.True(t, down)
+	assert.Equal(t, t0.Add(-seededFailed), at)
+	_, down = w.FailedSince("sind-dev-worker-4", "munge")
+	assert.False(t, down)
+	_, down = w.FailedSince("sind-dev-nobody", "slurmd")
+	assert.False(t, down)
+
+	// A restart brings the service up; one of a node that does not run,
+	// or of a service the node has not, does nothing.
+	w.apply("sind", opRestart, node{name: "worker-4", cluster: "dev", unit: "slurmctld"})
+	_, down = w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.True(t, down)
+	w.apply("sind", opRestart, node{name: "worker-4", cluster: "dev", unit: "slurmd"})
+	_, down = w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.False(t, down)
+	w.apply("sind", opRestart, node{name: "worker-1", cluster: "legacy", unit: "slurmd"})
+	w.Publish(st)
+	_, ok = st.Snapshot().Fault("sind", "dev", "worker-4")
+	assert.False(t, ok, "the restart fixed it")
+	assert.True(t, slurmdUp(st))
+
+	// A stop is timed by the world's clock, and a fault of a cluster that
+	// went goes too.
+	w.apply("sind", opStop, node{name: "worker-0", cluster: "dev"})
+	w.Publish(st)
+	f, _ = st.Snapshot().Fault("sind", "dev", "worker-0")
+	assert.Equal(t, &store.Exit{At: t0}, f.Exit)
+	for _, n := range w.nodesOf("sind", "legacy") {
+		w.apply("sind", opRemove, n)
+	}
+	w.Publish(st)
+	_, ok = st.Snapshot().Fault("sind", "legacy", "worker-1")
+	assert.False(t, ok)
+}
+
+func TestWorld_DriftTimesTheFailure(t *testing.T) {
+	w, _ := seededStore(t)
+	w.now = func() time.Time { return t0 }
+	w.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
+	_, down := w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.False(t, down)
+	for range readyCalm {
+		w.Drift()
+	}
+	require.True(t, w.Drift())
+	at, down := w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.True(t, down)
+	assert.Equal(t, t0, at)
+}
+
+func TestWorld_ClockDefault(t *testing.T) {
+	assert.WithinDuration(t, time.Now(), NewWorld().clock(), time.Minute)
 }

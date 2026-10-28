@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
@@ -26,6 +27,10 @@ type Exec struct {
 	// Every is the time between two new lines; 0 sends none after the
 	// first lines, as a still demo does.
 	Every time.Duration
+	// Failed tells when a unit of a container failed, and whether it is
+	// down: its journal then ends with the lines of its failure. nil for
+	// none.
+	Failed func(container, unit string) (time.Time, bool)
 }
 
 // Run implements cmdexec.Executor.
@@ -63,6 +68,8 @@ func (e *Exec) Start(ctx context.Context, name string, args ...string) (*cmdexec
 }
 
 // stream writes the lines of the stream until ctx ends or the reader goes.
+// The journal of a unit that failed ends with its failure, and gets no new
+// lines.
 func (e *Exec) stream(ctx context.Context, w io.Writer, journal bool, container, unit string) error {
 	short := shortName(container)
 	daemon := unit
@@ -70,11 +77,28 @@ func (e *Exec) stream(ctx context.Context, w io.Writer, journal bool, container,
 		daemon = daemonOf(short)
 	}
 	now := e.Now()
-	for i := range head {
-		at := now.Add(-time.Duration(head-i) * 3 * time.Second)
+	failed, down := time.Time{}, false
+	if journal && e.Failed != nil {
+		failed, down = e.Failed(container, daemon)
+	}
+	first := head
+	if down {
+		now, first = failed.Add(-failureSpan), head-len(failureLines(daemon))
+	}
+	for i := range first {
+		at := now.Add(-time.Duration(first-i) * 3 * time.Second)
 		if _, err := io.WriteString(w, logLine(journal, short, daemon, i, at)+"\n"); err != nil {
 			return err
 		}
+	}
+	if down {
+		for _, l := range failureJournal(daemon, failed) {
+			if _, err := io.WriteString(w, l.At.UTC().Format("Jan _2 15:04:05")+" "+short+" "+l.Text+"\n"); err != nil {
+				return err
+			}
+		}
+		<-ctx.Done()
+		return nil
 	}
 	if e.Every <= 0 {
 		<-ctx.Done()
@@ -169,4 +193,40 @@ func logLine(journal bool, short, daemon string, i int, at time.Time) string {
 		return fmt.Sprintf("[%s] %s", at.UTC().Format("15:04:05"), msg)
 	}
 	return fmt.Sprintf("%s %s %s[%d]: %s", at.UTC().Format("Jan _2 15:04:05"), short, daemon, 100+i%300, strings.TrimPrefix(msg, daemon+": "))
+}
+
+// failureSpan is how long before its failure a unit of the demo started.
+const failureSpan = 6 * time.Second
+
+// failures are what each daemon of the demo writes as it fails, before
+// systemd says that it did: slurmd cannot reach slurmctld.
+var failures = map[string][]string{
+	"slurmd": {
+		"slurmd version 26.05.4 started",
+		"error: Unable to register: Unable to contact slurm controller (connect failure)",
+		"fatal: Unable to register with slurm controller, retry limit reached",
+	},
+}
+
+// failureLines returns what a unit writes as it fails, before systemd's
+// lines.
+func failureLines(unit string) []string {
+	if l, ok := failures[unit]; ok {
+		return l
+	}
+	return []string{unit + " started", "error: " + unit + ": Address already in use", "fatal: " + unit + " cannot listen"}
+}
+
+// failureJournal returns the end of the journal of a unit that failed at
+// at: its last lines, then systemd's.
+func failureJournal(unit string, at time.Time) []store.JournalLine {
+	var out []store.JournalLine
+	lines := failureLines(unit)
+	for i, l := range lines {
+		out = append(out, store.JournalLine{At: at.Add(-failureSpan + time.Duration(i+1)*failureSpan/time.Duration(len(lines)+1)), Text: unit + "[212]: " + l})
+	}
+	return append(out,
+		store.JournalLine{At: at, Text: "systemd[1]: " + unit + ".service: Main process exited, code=exited, status=1/FAILURE"},
+		store.JournalLine{At: at, Text: "systemd[1]: " + unit + ".service: Failed with result 'exit-code'."},
+	)
 }

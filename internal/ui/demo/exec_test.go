@@ -153,3 +153,60 @@ func TestLogLine(t *testing.T) {
 		}
 	}
 }
+
+func TestExec_JournalOfAFailedUnit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	at := t0.Add(-13 * time.Minute)
+	e := testExec(time.Millisecond)
+	e.Failed = func(container, unit string) (time.Time, bool) {
+		return at, container == "sind-dev-worker-4" && unit == "slurmd"
+	}
+	args := cluster.ServiceLogArgs("sind", "worker-4", "dev", "slurmd", cluster.LogOptions{Follow: true})
+	p, err := e.Start(ctx, "docker", args...)
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+	sc := bufio.NewScanner(p.Stdout)
+	var lines []string
+	for len(lines) < head+2 && sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	require.Len(t, lines, head+2)
+	assert.Equal(t, "Oct 14 09:17:00 worker-4 systemd[1]: slurmd.service: Failed with result 'exit-code'.", lines[head+1])
+	assert.Contains(t, lines[head-1], "fatal: Unable to register")
+	// And then nothing: the unit is down.
+	cancel()
+	assert.False(t, sc.Scan())
+
+	// Other units, and the container's log, go on as ever.
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	other := readLines(ctx, t, e, head+3, cluster.ServiceLogArgs("sind", "worker-4", "dev", "munge", cluster.LogOptions{Follow: true})...)
+	assert.NotContains(t, strings.Join(other, "\n"), "FAILURE")
+	other = readLines(ctx, t, e, head+3, cluster.ContainerLogArgs("sind", "worker-4", "dev", cluster.LogOptions{Follow: true})...)
+	assert.NotContains(t, strings.Join(other, "\n"), "FAILURE")
+}
+
+func TestExec_JournalOfAFailedUnit_ReaderGone(t *testing.T) {
+	e := testExec(0)
+	e.Failed = func(string, string) (time.Time, bool) { return t0, true }
+	for _, n := range []int{0, head - 2} {
+		p, err := e.Start(context.Background(), "docker", cluster.ServiceLogArgs("sind", "worker-4", "dev", "slurmd", cluster.LogOptions{})...)
+		require.NoError(t, err)
+		sc := bufio.NewScanner(p.Stdout)
+		for range n {
+			require.True(t, sc.Scan())
+		}
+		require.NoError(t, p.Close())
+	}
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestFailureLines(t *testing.T) {
+	assert.Contains(t, failureLines("slurmd")[1], "Unable to contact slurm controller")
+	assert.Equal(t, "fatal: sshd cannot listen", failureLines("sshd")[2])
+	j := failureJournal("sshd", t0)
+	require.Len(t, j, 5)
+	assert.True(t, j[0].At.Before(j[1].At))
+	assert.Equal(t, t0, j[4].At)
+}

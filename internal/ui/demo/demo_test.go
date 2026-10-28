@@ -153,8 +153,11 @@ func TestDemo_Drifts(t *testing.T) {
 	d := New(st, false)
 	d.driftEvery = time.Millisecond
 	d.Setup()
+	d.world.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
+	d.world.Publish(st)
+	require.True(t, slurmdUp(st))
 	stop := running(d)
-	require.Eventually(t, func() bool { return slurmdUp(st) }, 5*time.Second, time.Millisecond, "a service flips by itself")
+	require.Eventually(t, func() bool { return !slurmdUp(st) }, 5*time.Second, time.Millisecond, "a service fails again by itself")
 	stop()
 
 	// Where nothing can flip, nothing is published.

@@ -6,9 +6,11 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -30,6 +32,9 @@ type World struct {
 	// one clears those that are gone.
 	published map[string]bool
 	statuses  []store.StatusKey
+	// now is the clock of what the world times, such as when a service
+	// failed; nil is time.Now.
+	now func() time.Time
 }
 
 type realm struct {
@@ -71,6 +76,14 @@ type nodeState struct {
 	// calm is how many times Drift leaves the node alone, as after a
 	// reboot that fixed it.
 	calm int
+	// failed is when each service that is down failed, and stopped when
+	// the container stopped, with its exit code and whether the kernel
+	// killed it for want of memory; zero for a time before the demo
+	// started, which Publish sets (stamp).
+	failed  map[probe.Service]time.Time
+	stopped time.Time
+	exit    int
+	oom     bool
 }
 
 // NewWorld returns a world with nothing in it.
@@ -240,18 +253,24 @@ func (w *World) apply(realmName, op string, n node) {
 	}
 	switch op {
 	case opStart:
-		ns.state, ns.up = cluster.StateRunning, map[probe.Service]bool{}
+		ns.state, ns.up, ns.failed = cluster.StateRunning, map[probe.Service]bool{}, nil
 	case opReady:
-		ns.state, ns.up, ns.calm = cluster.StateRunning, map[probe.Service]bool{}, readyCalm
+		ns.state, ns.up, ns.calm, ns.failed = cluster.StateRunning, map[probe.Service]bool{}, readyCalm, nil
 		for _, s := range services(ns.role) {
 			ns.up[s] = true
+		}
+	case opRestart:
+		if svc := probe.Service(n.unit); ns.state == cluster.StateRunning && slices.Contains(services(ns.role), svc) {
+			ns.up[svc], ns.calm = true, readyCalm
+			delete(ns.failed, svc)
 		}
 	case opDrain:
 		ns.drain = cmp.Or(n.reason, "drained")
 	case opResume:
 		ns.drain = ""
 	case opStop:
-		ns.state, ns.up = cluster.StateStopped, map[probe.Service]bool{}
+		ns.state, ns.up, ns.failed = cluster.StateStopped, map[probe.Service]bool{}, nil
+		ns.stopped, ns.exit, ns.oom = w.clock(), 0, false
 	case opPause:
 		ns.state = cluster.StatePaused
 	case opUnpause:
@@ -272,13 +291,14 @@ func (w *World) prune() {
 }
 
 // readyCalm is how many times Drift leaves a node alone once its services
-// are up, so that a reboot that fixed it shows as a fix for a while.
-const readyCalm = 2
+// are up, so that a fix holds a while before the service fails again.
+const readyCalm = 6
 
-// Drift flips the slurmd of the node worker-4 of dev, as a flaky service
-// does, so that a demo that nobody touches still changes; but not while the
-// node is calm, after its services came up. It returns whether it changed
-// anything.
+// Drift fails the slurmd of the node worker-4 of dev again a while after it
+// came up, as a flaky service does: not while the node is calm, after its
+// services came up. A failure stays until a restart or a reboot fixes it, so
+// that the page of the node shows it steadily. It returns whether it
+// changed anything.
 func (w *World) Drift() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -287,15 +307,90 @@ func (w *World) Drift() bool {
 		return false
 	}
 	n := c.find("worker-4")
-	if n == nil || n.state != cluster.StateRunning {
+	if n == nil || n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd] {
 		return false
 	}
 	if n.calm > 0 {
 		n.calm--
 		return false
 	}
-	n.up[probe.ServiceSlurmd] = !n.up[probe.ServiceSlurmd]
+	n.up[probe.ServiceSlurmd] = false
+	n.markFailed(probe.ServiceSlurmd, w.clock())
 	return true
+}
+
+// clock returns the time of the world.
+func (w *World) clock() time.Time {
+	if w.now == nil {
+		return time.Now()
+	}
+	return w.now()
+}
+
+// markFailed notes that the service failed at at.
+func (n *nodeState) markFailed(svc probe.Service, at time.Time) {
+	if n.failed == nil {
+		n.failed = map[probe.Service]time.Time{}
+	}
+	n.failed[svc] = at
+}
+
+// The ages of what was wrong before the demo started, as Publish stamps
+// them (stamp): a service failed seededFailed before, a container stopped
+// seededStopped before.
+const (
+	seededFailed  = 13 * time.Minute
+	seededStopped = 43 * time.Minute
+)
+
+// stamp gives a time to what went wrong with the node before the demo
+// started: the services that are down and the stop of its container.
+func (n *nodeState) stamp(now time.Time) {
+	if n.state == cluster.StateStopped && n.stopped.IsZero() {
+		n.stopped = now.Add(-seededStopped)
+	}
+	if n.state != cluster.StateRunning {
+		return
+	}
+	for _, svc := range services(n.role) {
+		if !n.up[svc] && n.failed[svc].IsZero() && len(n.up) > 0 {
+			n.markFailed(svc, now.Add(-seededFailed))
+		}
+	}
+}
+
+// fault returns what sind ui would read of why the node needs a look, and
+// whether it does: the exit of its stopped container, or each service of
+// it that failed, with the end of its journal.
+func (n *nodeState) fault() (store.Fault, bool) {
+	if n.state == cluster.StateStopped && !n.stopped.IsZero() {
+		return store.Fault{Exit: &store.Exit{Code: n.exit, OOMKilled: n.oom, At: n.stopped}}, true
+	}
+	var f store.Fault
+	for _, svc := range slices.Sorted(maps.Keys(n.failed)) {
+		at := n.failed[svc]
+		f.Units = append(f.Units, store.Unit{Name: string(svc), State: "failed", Result: "exit-code", Status: 1, Since: at, Journal: failureJournal(string(svc), at)})
+	}
+	return f, len(f.Units) > 0
+}
+
+// FailedSince returns when the unit of the container failed, and whether it
+// is down, for the journal of the demo.
+func (w *World) FailedSince(container, unit string) (time.Time, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, r := range w.realms {
+		for _, c := range r.clusters {
+			for _, n := range c.nodes {
+				if string(cluster.ContainerName(r.name, c.name, n.short)) != container {
+					continue
+				}
+				at, ok := n.failed[probe.Service(unit)]
+				return at, ok
+			}
+		}
+	}
+	return time.Time{}, false
 }
 
 // clusterStateOf returns the state of a cluster from the states of its
@@ -336,6 +431,7 @@ func (w *World) Publish(st *store.Store) {
 		if !slices.Contains(keys, k) {
 			st.SetStatus(k.Realm, k.Cluster, nil)
 			st.SetSlurm(k.Realm, k.Cluster, nil)
+			st.SetFaults(k.Realm, k.Cluster, nil)
 		}
 	}
 	w.published, w.statuses = now, keys
@@ -398,6 +494,14 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 		}
 		st.SetStatus(r.name, c.name, w.statusOf(r, c, m))
 		st.SetSlurm(r.name, c.name, slurmOf(c))
+		faults := map[string]store.Fault{}
+		for _, n := range c.nodes {
+			n.stamp(w.clock())
+			if f, ok := n.fault(); ok {
+				faults[n.short] = f
+			}
+		}
+		st.SetFaults(r.name, c.name, faults)
 		*keys = append(*keys, store.StatusKey{Realm: r.name, Cluster: c.name})
 	}
 	st.SetClusters(r.name, clusters)

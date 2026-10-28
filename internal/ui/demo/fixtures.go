@@ -96,8 +96,9 @@ func Seeded() *World {
 	dev.find("worker-1").busy = 1
 	dev.find("worker-5").drain = "memory errors, admin 09:02"
 	// A worker of legacy is stopped: the cluster is mixed.
+	// The kernel killed it, as it ran out of memory.
 	legacy := w.lookup("sind", "legacy").find("worker-1")
-	legacy.state, legacy.up = cluster.StateStopped, map[probe.Service]bool{}
+	legacy.state, legacy.up, legacy.exit, legacy.oom = cluster.StateStopped, map[probe.Service]bool{}, 137, true
 	return w
 }
 
