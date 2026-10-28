@@ -135,11 +135,11 @@ func TestAction_Confirmation(t *testing.T) {
 	assert.Equal(t, "sind", realm.Want(form()))
 	assert.Equal(t, "ci", realm.Want(form("realm", " ci ")))
 
-	// One worker is confirmed with its name, more with the cluster's.
+	// One worker is confirmed with its name, more with their count.
 	workers, _ := Lookup("delete-worker")
 	assert.Equal(t, "worker-1", workers.Want(form("cluster", "dev", "nodes", "worker-1")))
-	assert.Equal(t, "dev", workers.Want(form("cluster", "dev", "nodes", "worker-1,worker-2")))
-	assert.Equal(t, "dev", workers.Want(form("cluster", "dev")))
+	assert.Equal(t, "2", workers.Want(form("cluster", "dev", "nodes", "worker-1,worker-2")))
+	assert.Empty(t, workers.Want(form("cluster", "dev")))
 }
 
 func TestAction_Target(t *testing.T) {
@@ -387,8 +387,8 @@ func TestBuildDeleteWorker(t *testing.T) {
 	assert.Equal(t, []string{"sind", "delete", "worker", "worker-[2-3].dev"}, cmd.Argv)
 	assert.Equal(t, "sind delete worker 'worker-[2-3].dev'", cmd.Display)
 	assert.Equal(t, "Delete 2 workers", cmd.OK)
-	assert.Equal(t, []string{"the containers sind-dev-worker-3, sind-dev-worker-2 and their DNS records", "their Slurm nodes: jobs on them fail"}, cmd.Goes)
-	assert.Equal(t, []string{"dev with 2 workers, its controller and its data"}, cmd.Stays)
+	assert.Equal(t, []string{"the containers of worker-[2-3] and their DNS records", "their Slurm nodes: jobs on them fail"}, cmd.Goes)
+	assert.Equal(t, []string{"dev with 2 workers (worker-[0-1]), its controller and its data"}, cmd.Stays)
 
 	cmd, err = build(t, "delete-worker", form("cluster", "default", "nodes", "worker-0"))
 	require.NoError(t, err)
@@ -399,7 +399,7 @@ func TestBuildDeleteWorker(t *testing.T) {
 
 	cmd, err = build(t, "delete-worker", form("cluster", "dev", "nodes", "worker-1"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"dev with 3 workers, its controller and its data"}, cmd.Stays)
+	assert.Equal(t, []string{"dev with 3 workers (worker-[0,2-3]), its controller and its data"}, cmd.Stays)
 
 	_, err = build(t, "delete-worker", form("cluster", "dev"))
 	assert.EqualError(t, err, "nodes: pick at least one node of dev")

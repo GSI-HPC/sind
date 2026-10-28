@@ -335,14 +335,35 @@ func actPowerHead(sn store.Snapshot, realm, clusterName string, f action.Form) a
 	return actHead{op.Heading("nodes of " + clusterName), op.Text}
 }
 
-// Head is the title and the lead of a Power dialog for the form of the
-// preview, which the preview swaps in as the user changes the action or
-// the nodes; nil for another dialog, whose title stays.
+// actDeleteWorkersHead returns the title of the Delete workers dialog for
+// the form f: the worker, as "Delete worker-4.dev", or how many, as
+// "Delete 3 workers of dev".
+func actDeleteWorkersHead(clusterName string, f action.Form) actHead {
+	lead := "Deletes the workers you pick, then tells slurmctld. This cannot be undone; add workers again to get new ones."
+	switch names := action.NodeNames(f); len(names) {
+	case 0:
+		return actHead{"Delete workers of " + clusterName, lead}
+	case 1:
+		return actHead{"Delete " + pgArg(clusterName, names[0]), lead}
+	default:
+		return actHead{fmt.Sprintf("Delete %d workers of %s", len(names), clusterName), lead}
+	}
+}
+
+// Head is the title and the lead of a dialog whose title names what it
+// acts on, Power and Delete workers, for the form of the preview, which
+// the preview swaps in as the user changes the action or the nodes; nil
+// for another dialog, whose title stays.
 func (p actPreview) Head() *actHead {
-	if p.ID != "power" {
+	var h actHead
+	switch p.ID {
+	case "power":
+		h = actPowerHead(p.Snap, action.Realm(p.Form), p.Form.Get("cluster"), p.Form)
+	case "delete-worker":
+		h = actDeleteWorkersHead(p.Form.Get("cluster"), p.Form)
+	default:
 		return nil
 	}
-	h := actPowerHead(p.Snap, action.Realm(p.Form), p.Form.Get("cluster"), p.Form)
 	return &h
 }
 

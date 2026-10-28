@@ -220,10 +220,8 @@ var actSpecs = map[string]actSpec{
 	},
 	"delete-worker": {
 		OK: "Delete", Danger: true, NeedsCluster: true,
-		Title: func(d *actDialog) string { return "Delete workers of " + d.Cluster },
-		Lead: func(*actDialog) string {
-			return "Deletes the workers you pick, then tells slurmctld. This cannot be undone; add workers again to get new ones."
-		},
+		Title: func(d *actDialog) string { return actDeleteWorkersHead(d.Cluster, d.Form).Title },
+		Lead:  func(d *actDialog) string { return actDeleteWorkersHead(d.Cluster, d.Form).Lead },
 	},
 	"power": {
 		OK: "Run", NeedsCluster: true,
@@ -670,6 +668,9 @@ type actDialog struct {
 	// Title, Lead and Typed are the heading, the line below it and what the
 	// user must type to confirm, if anything.
 	Title, Lead, Typed string
+	// Confirms says that the action asks the user to type something,
+	// which may be nothing yet, as for workers before one is picked.
+	Confirms bool
 	// Nodes are the nodes of the cluster that the user can pick.
 	Nodes []actNodeChoice
 	// Clusters are the clusters that a delete of several deletes, and Gone
@@ -703,7 +704,7 @@ type actOK struct {
 // OKButton is the button that runs the command, off until a preview says
 // that it can run.
 func (d *actDialog) OKButton() actOK {
-	return actOK{Label: cmp.Or(actPendingOK(d.ID, d.Snap, d.Realm, d.Cluster, d.Form), d.Spec.OK), Danger: d.Spec.Danger, Off: true, Why: d.Typed != ""}
+	return actOK{Label: cmp.Or(actPendingOK(d.ID, d.Snap, d.Realm, d.Cluster, d.Form), d.Spec.OK), Danger: d.Spec.Danger, Off: true, Why: d.Confirms}
 }
 
 // actPendingOK names the button of a dialog whose form lacks a part, as
@@ -1003,7 +1004,7 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	if spec.Defaults != nil && !d.Draft {
 		spec.Defaults(d)
 	}
-	d.Typed = a.Want(d.Form)
+	d.Typed, d.Confirms = a.Want(d.Form), a.Typed != nil
 	d.Title, d.Lead = spec.Title(d), spec.Lead(d)
 	if !page.IsHTMX(r) {
 		// A dialog opened by its URL, as a link without script or the
@@ -1091,15 +1092,17 @@ type actPreview struct {
 	Realm string
 	Lock  *state.LockHolder
 	// Typed is what the user must type to confirm, "" for nothing, and Why
-	// says why the typed text does not confirm yet.
+	// says why the typed text does not confirm yet. Confirms says that the
+	// action asks for it.
 	Typed, Why string
+	Confirms   bool
 }
 
 // OKButton is the button that runs the command, as the preview says: its
 // label is the command's, or what the command would be, or the dialog's.
 func (p actPreview) OKButton() actOK {
 	label := cmp.Or(p.Cmd.OK, actPendingOK(p.ID, p.Snap, action.Realm(p.Form), p.Form.Get("cluster"), p.Form), p.Spec.OK)
-	return actOK{Label: label, Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
+	return actOK{Label: label, Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Confirms}
 }
 
 // actWhy says why what the user typed, typed, does not confirm want: a
@@ -1351,6 +1354,7 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	if op, ok := action.PowerOpOf(f.Get("op")); a.ID == "power" && ok && op.Danger {
 		p.Danger = true
 	}
+	p.Confirms = a.Typed != nil
 	if p.Typed = a.Want(f); !a.Confirmed(f) {
 		p.Why = actWhy(p.Typed, f.Get(action.ConfirmField))
 	}

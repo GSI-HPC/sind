@@ -185,8 +185,10 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"create-worker", "cluster=default", []string{"sind&#39;s sizes and the image of the controller", `placeholder="sind&#39;s default"`}},
 		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Deletes cluster dev of realm sind. This cannot be undone.", `Type <b class="mono" id="act-confirm-word">dev</b> to confirm`,
 			`autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"`, `btn danger solid`, `disabled aria-describedby="act-why">Delete cluster<kbd`}},
-		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, `id="act-confirm-word">worker-1</b>`}},
-		{"delete-worker", "cluster=dev&nodes=worker-0,worker-1", []string{`id="act-confirm-word">dev</b>`}},
+		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete worker-1.dev", `value="worker-1" id="act-n-worker-1" checked`, `value="worker-0" id="act-n-worker-0">`, `id="act-confirm-word">worker-1</b>`,
+			"<th>Slurm</th>", `<span class="lbl">Workers of dev</span>`}},
+		{"delete-worker", "cluster=dev&nodes=worker-0,worker-1", []string{"Delete 2 workers of dev", `id="act-confirm-word">2</b>`}},
+		{"delete-worker", "cluster=gone", []string{"Delete workers of gone", "sind ui sees no worker of gone."}},
 		// Opened for an action and nodes, the dialog is a short confirmation,
 		// with the picker folded away.
 		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Cut power to 2 workers of dev", "Kills the containers at once", `value="worker-0" id="act-n-worker-0" checked`, `value="worker-1" id="act-n-worker-1" checked`, `value="controller" id="act-n-controller">`,
@@ -370,14 +372,22 @@ func TestActPreview_Refusals(t *testing.T) {
 	assert.Contains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=Dev").Body.String(), "Case matters: type dev, not Dev.")
 	assert.Contains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=de").Body.String(), "de is not dev. Type the name as it is shown.")
 
-	// One worker is confirmed with its own name, more with the cluster's.
+	// One worker is confirmed with its own name, more with their count:
+	// the cluster stays.
 	body = f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0")).Body.String()
 	assert.Contains(t, body, `id="act-confirm-word" hx-swap-oob="true">worker-0</b>`)
 	assert.Contains(t, body, `>Delete worker-0<kbd`)
 	assert.NotContains(t, f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0", "confirm", "worker-0 ")).Body.String(), "disabled")
 	body = f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0,worker-1")).Body.String()
-	assert.Contains(t, body, `id="act-confirm-word" hx-swap-oob="true">dev</b>`)
+	assert.Contains(t, body, `id="act-confirm-word" hx-swap-oob="true">2</b>`)
 	assert.Contains(t, body, `>Delete 2 workers<kbd`)
+	assert.Contains(t, body, `<span id="act-why" hx-swap-oob="innerHTML">The button stays off until you type the number.</span>`)
+	assert.Contains(t, body, `<h2 id="act-title" hx-swap-oob="true">Delete 2 workers of dev</h2>`)
+	assert.NotContains(t, f.post("/actions/delete-worker/preview", actForm("cluster", "dev", "nodes", "worker-0,worker-1", "confirm", "2")).Body.String(), "disabled")
+	// Before a worker is picked, there is nothing to type.
+	body = f.post("/actions/delete-worker/preview", actForm("cluster", "dev")).Body.String()
+	assert.Contains(t, body, `id="act-confirm-word" hx-swap-oob="true"></b>`)
+	assert.Contains(t, body, `<h2 id="act-title" hx-swap-oob="true">Delete workers of dev</h2>`)
 }
 
 func TestActPreview_ListsWhatGoesAndStays(t *testing.T) {

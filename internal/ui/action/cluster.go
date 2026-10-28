@@ -25,12 +25,18 @@ func init() {
 }
 
 // deleteWorkerTyped is what the user types to delete workers: the name of
-// the worker when one goes, else the name of the cluster.
+// the worker when one goes, else how many go, so that the confirmation
+// names what goes and not the cluster, which stays; nothing while the form
+// names no worker.
 func deleteWorkerTyped(f Form) string {
-	if names := NodeNames(f); len(names) == 1 {
+	switch names := NodeNames(f); len(names) {
+	case 0:
+		return ""
+	case 1:
 		return names[0]
+	default:
+		return strconv.Itoa(len(names))
 	}
-	return formCluster(f)
 }
 
 func buildCreateWorker(f Form, c Context) (Command, error) {
@@ -277,24 +283,19 @@ func buildDeleteWorker(f Form, c Context) (Command, error) {
 	shorts := shortNames(picked)
 	cmd := NewCommand(sindArgv(realm, append([]string{"delete", "worker"}, nodeWords(cl.Name, shorts)...)...)...)
 	cmd.OK = "Delete " + countOr(shorts, "workers")
-	containers := make([]string, len(picked))
-	for i, n := range picked {
-		containers[i] = n.Container
-	}
 	if len(picked) == 1 {
-		cmd.Goes = append(cmd.Goes, "the container "+containers[0]+" and its DNS record", "its Slurm node: jobs on it fail")
+		cmd.Goes = append(cmd.Goes, "the container "+picked[0].Container+" and its DNS record", "its Slurm node: jobs on it fail")
 	} else {
-		cmd.Goes = append(cmd.Goes, "the containers "+strings.Join(containers, ", ")+" and their DNS records", "their Slurm nodes: jobs on them fail")
+		cmd.Goes = append(cmd.Goes, "the containers of "+NodeSet(shorts)+" and their DNS records", "their Slurm nodes: jobs on them fail")
 	}
-	left := 0
+	var left []string
 	for _, n := range c.Snap.ClusterNodes(realm, cl.Name) {
-		if n.Role == config.RoleWorker {
-			left++
+		if n.Role == config.RoleWorker && !slices.Contains(shorts, ShortName(n)) {
+			left = append(left, ShortName(n))
 		}
 	}
-	left -= len(picked)
-	if left > 0 {
-		cmd.Stays = append(cmd.Stays, fmt.Sprintf("%s with %s, its controller and its data", cl.Name, countOf(left, "worker")))
+	if len(left) > 0 {
+		cmd.Stays = append(cmd.Stays, fmt.Sprintf("%s with %s (%s), its controller and its data", cl.Name, countOf(len(left), "worker"), NodeSet(left)))
 	} else {
 		cmd.Stays = append(cmd.Stays, cl.Name+" with no worker, its controller and its data: jobs wait until you add workers")
 	}

@@ -59,11 +59,11 @@ func TestActDeleteClusters_Dialog(t *testing.T) {
 	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">1</b> to confirm`)
 
 	// Without a cluster it knows, the dialog sends the user to the list,
-	// and asks nothing to type.
+	// and asks nothing to type: the field hides while its word is empty.
 	body = f.get("/dialogs/delete-clusters?clusters=sind/gone").Body.String()
 	assert.Contains(t, body, "<h2 id=\"act-title\">Delete clusters</h2>")
 	assert.Contains(t, body, `<div class="empty">sind ui no longer sees <span class="mono">sind/gone</span>. No cluster to delete. Tick clusters on <a href="/clusters">the Clusters page</a> and delete them from the bar above the table.</div>`)
-	assert.NotContains(t, body, "to confirm")
+	assert.Contains(t, body, `<b class="mono" id="act-confirm-word"></b> to confirm`)
 	body = f.get("/dialogs/delete-clusters").Body.String()
 	assert.Contains(t, body, "Deletes several clusters with one confirmation.")
 	assert.Contains(t, body, `<div class="empty">No cluster to delete.`)

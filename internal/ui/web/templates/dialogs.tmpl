@@ -39,10 +39,10 @@ into its target, not its content. */}}
   </div>
   {{end}}
   <div class="mf" id="act-mf"><span class="act-status" id="act-status"></span>{{if not .Spec.Plan}}<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>{{end}}
-    {{- with .Typed}}<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
-      <input type="text" id="act-confirm" name="confirm" placeholder=" " autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
-      <span class="hint act-why" id="act-why" role="status"></span></div>{{end -}}
-    <button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+    {{- if .Confirms}}<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.Typed}}</b> to confirm</label>
+      <input type="text" id="act-confirm" name="confirm" placeholder=" " autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"></div>{{end -}}
+    <button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}
+    {{- if .Confirms}}<span class="hint act-why" id="act-why" role="status"></span>{{end}}</div>
   <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
     <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
     <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
@@ -75,7 +75,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{range $i, $w := .CmdWords}}{{if $i}} {{end}}<span class="act-cw">{{$w}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
-{{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
+{{if .Confirms}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
 {{end}}
 {{template "act-ok" .OKButton}}
 {{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
@@ -244,11 +244,6 @@ realm of the link, another one that sind ui sees, or a new one. */}}
   <span class="err" id="act-err-realm"></span><span class="hint" id="act-hint-realm">{{.RealmHint}}</span>
   <datalist id="act-dl-realms">{{range .RealmNames}}<option value="{{.}}"></option>{{end}}</datalist></div>{{end}}
 
-{{/* act-nodes is the picker of the nodes of a cluster. */}}
-{{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
-  {{if .Nodes}}<div class="checks act-nodes">{{range .Nodes}}<label><input type="checkbox" name="nodes" value="{{.Short}}"{{if .On}} checked{{end}}> <span class="mono">{{.Short}}</span> <small>{{.Role}}, {{.State}}</small></label>{{end}}</div>
-  {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
-
 {{define "act-dlg-create-cluster"}}
 <div class="row act-idrow">
   <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}"{{if .Defaulted "name"}} data-act-select{{end}} autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
@@ -376,8 +371,8 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 {{else}}<div class="empty">{{if .Gone}}sind ui no longer sees <span class="mono">{{.GoneText}}</span>. {{end}}No cluster to delete. Tick clusters on <a href="{{.Back}}">the Clusters page</a> and delete them from the bar above the table.</div>
 {{end}}{{end}}
 
-{{define "act-dlg-delete-worker"}}
-{{template "act-nodes" .}}
+{{define "act-dlg-delete-worker"}}<div class="fld"><span class="lbl">Workers of {{.Cluster}}</span>
+{{if .Nodes}}{{template "act-ntable" .}}{{else}}<div class="empty">sind ui sees no worker of {{.Cluster}}.</div>{{end}}</div>
 {{end}}
 
 {{/* act-dlg-power is the Power dialog: a short confirmation of the
@@ -419,11 +414,11 @@ reason. */}}
 
 {{/* act-ntable is the table of the nodes of a picker, whose boxes the
 form posts as nodes. */}}
-{{define "act-ntable"}}<div class="act-nt" role="group" aria-label="Nodes of {{.Cluster}}"><table class="act-ntab"><thead><tr><th><span class="vh">Tick</span></th><th>Node</th><th>Role</th><th>Slurm</th><th>Issues</th></tr></thead><tbody>
+{{define "act-ntable"}}{{$roles := ne .ID "delete-worker"}}<div class="act-nt" role="group" aria-label="Nodes of {{.Cluster}}"><table class="act-ntab"><thead><tr><th><span class="vh">Tick</span></th><th>Node</th>{{if $roles}}<th>Role</th>{{end}}<th>Slurm</th><th>Issues</th></tr></thead><tbody>
 {{range .Nodes}}<tr data-act-node="{{.Short}}" data-act-offs="{{.Offs}}"><td><input type="checkbox" name="nodes" value="{{.Short}}" id="act-n-{{.Short}}"{{if .On}} checked{{end}}></td>
-  <td class="mono act-nn"><label for="act-n-{{.Short}}"><b>{{.Short}}</b></label></td><td class="act-nrole"><span class="chip {{.Node.RoleClass}}">{{.Role}}</span></td>
+  <td class="mono act-nn"><label for="act-n-{{.Short}}"><b>{{.Short}}</b></label></td>{{if $roles}}<td class="act-nrole"><span class="chip {{.Node.RoleClass}}">{{.Role}}</span></td>{{end}}
   {{with .Node}}<td class="act-nslurm">{{if .Life}}<span class="pill run">{{.Pill.Text}}</span>{{else if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint act-why2">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td>
-  <td class="act-nissues">{{if .Life}}<span class="faint">–</span>{{else}}{{range .ServiceIssues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">{{.State}}</span>{{end}}{{end}}</td>{{end}}</tr>{{end}}
+  <td class="act-nissues">{{if .Life}}<span class="faint">–</span>{{else}}{{range .ServiceIssues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}{{end}}</td>{{end}}</tr>{{end}}
 </tbody></table></div>{{end}}
 
 {{define "act-dlg-restart-service"}}{{if .Val "nodes"}}<input type="hidden" name="nodes" value="{{.Val "nodes"}}">

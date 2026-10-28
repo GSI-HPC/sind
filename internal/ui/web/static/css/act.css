@@ -23,10 +23,11 @@
 /* The name or number to type sits in the footer, beside the button that
    it guards; why the button stays off shows once the user typed. */
 .scrim .act-confirm{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:var(--t-md)}
+.scrim .act-confirm:has(#act-confirm-word:empty){display:none}
 .scrim .act-confirm label{font-weight:500}
 .scrim .act-confirm input{width:9em;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono)}
-.scrim .act-confirm .act-why{flex-basis:100%;text-align:right}
-.scrim .act-confirm:has(#act-confirm:placeholder-shown) .act-why{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.scrim .mf>.act-why{flex-basis:100%;text-align:right;order:9;margin-top:-2px}
+.scrim .mf:has(#act-confirm:placeholder-shown)>.act-why{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The button that runs the command shows its key, Ctrl+Enter or on macOS
    Cmd+Enter, where there is a keyboard. */
@@ -48,9 +49,6 @@
 .scrim .checks{display:grid;gap:8px}
 .scrim .checks label{display:flex;gap:8px;align-items:flex-start}
 .scrim .checks small{color:var(--muted);display:block}
-.scrim .checks.act-nodes label{flex-wrap:wrap}
-.scrim .checks.act-nodes{grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))}
-.scrim .checks.act-nodes small{display:inline}
 /* Power and drain. A short confirmation names the nodes, with the other
    actions folded away; the picker has the action segment in groups, the
    ones that can lose data in red, the quick picks, the node set and the
@@ -276,7 +274,7 @@
   .scrim .mf.act-ask{background:var(--warn-soft)}
   .scrim .act-confirm{flex-basis:100%;order:-1}
   .scrim .act-confirm input{flex:1}
-  .scrim .act-confirm .act-why{text-align:left}
+  .scrim .mf>.act-why{text-align:left}
   /* The status button and the buttons share a line, the totals take the
      next. */
   .scrim .act-status{display:contents}
