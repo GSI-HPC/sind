@@ -124,6 +124,13 @@
     }
   }
 
+  // selectable reports whether a row can be selected: its checkbox is not
+  // off, as it is while a command creates or deletes what the row shows.
+  function selectable(r) {
+    const box = r.querySelector('input[data-pg-sel]');
+    return !!box && !box.disabled;
+  }
+
   // draw shows the selection in the table and in its bar, with only the
   // actions that fit the selected rows.
   function draw() {
@@ -131,10 +138,11 @@
     if (!root) return;
     ensure();
     const rows = [...root.querySelectorAll('tr[data-pg-item]')];
-    // A row that is gone is no longer selected; before the first rows
+    // A row that is gone is no longer selected, nor one that a command
+    // creates or deletes, whose checkbox is off; before the first rows
     // arrive, the selection stays.
     if (rows.length) {
-      const names = new Set(rows.map(r => r.dataset.pgItem));
+      const names = new Set(rows.filter(selectable).map(r => r.dataset.pgItem));
       for (const n of [...sel.items]) if (!names.has(n)) sel.items.delete(n);
     }
     for (const r of rows) {
@@ -143,9 +151,11 @@
       r.querySelector('input[data-pg-sel]').checked = on;
     }
     const chosen = rows.filter(r => sel.items.has(r.dataset.pgItem));
-    const shown = rows.filter(r => !r.hidden);
+    const shown = rows.filter(r => !r.hidden && selectable(r));
     const all = root.querySelector('input[data-pg-all]');
     if (all) {
+      // Off while no row shown can be selected, as during a create.
+      all.disabled = shown.length === 0;
       all.checked = shown.length > 0 && chosen.length === shown.length;
       all.indeterminate = chosen.length > 0 && chosen.length < shown.length;
     }
@@ -261,7 +271,7 @@
       } else if (t.matches('input[data-pg-all]')) {
         ensure();
         for (const r of t.closest('[data-pg-select]').querySelectorAll('tr[data-pg-item]')) {
-          if (t.checked && !r.hidden) sel.items.add(r.dataset.pgItem); else sel.items.delete(r.dataset.pgItem);
+          if (t.checked && !r.hidden && selectable(r)) sel.items.add(r.dataset.pgItem); else sel.items.delete(r.dataset.pgItem);
         }
         draw();
       }
@@ -325,7 +335,7 @@
       // A row of a list is a link, for the mouse; its first link is for
       // the keyboard. Its checkbox cell is not.
       const row = t.closest('tr[data-href]');
-      if (row && !t.closest('a, button, input, select, label, .c-chk')) {
+      if (row && !t.closest('a, button, input, select, label, details, .c-chk')) {
         const a = row.querySelector('a[href]');
         if (a) a.click();
       }

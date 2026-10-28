@@ -72,7 +72,7 @@ func TestDemo_Still(t *testing.T) {
 	assert.Equal(t, store.TaskRunning, task.Status)
 	assert.NotNil(t, a.Locks["ci"])
 	assert.Equal(t, 5, len(a.Clusters["sind"])+len(a.Clusters["ci"]), "nightly is there, half made")
-	assert.Equal(t, cluster.StateMixed, a.Clusters["ci"][0].State)
+	assert.Equal(t, cluster.StateRunning, a.Clusters["ci"][0].State, "its containers run, as the run started them")
 	for _, r := range a.Runs {
 		assert.False(t, r.Start.After(Epoch))
 		if r.End != nil {

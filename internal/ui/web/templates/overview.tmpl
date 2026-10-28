@@ -21,15 +21,16 @@ runs. Each part is a fragment. */}}
 {{define "pg-overview-cards"}}{{with .Data}}
 {{if .Empty}}{{template "pg-first-steps" .}}{{else}}
 <section class="panel"><div class="ph"><h2>Realms</h2><span class="grow"></span><span class="faint">a <span data-word="realm">realm</span> keeps its clusters apart</span></div>
-  <div class="tw"><table><thead><tr><th>Realm</th><th class="num">Clusters</th><th class="num">Nodes</th><th>Health</th><th></th></tr></thead><tbody>
+  <div class="tw"><table class="pg-realms"><thead><tr><th>Realm</th><th class="num">Clusters</th><th class="num">Nodes</th><th>Health</th><th></th></tr></thead><tbody>
   {{range .Realms}}<tr{{if .On}} class="sel"{{end}}><td class="mono"><a href="/?realm={{.Name}}"><b>{{.Name}}</b></a></td><td class="num">{{.Clusters}}</td><td class="num">{{.Nodes}}</td>
-    <td>{{if .Look}}<span class="pill bad">{{.LookText}}</span>{{else if .Nodes}}<span class="pill ok">all running</span>{{else}}<span class="faint">–</span>{{end}}</td>
-    <td class="act">{{if .Locked}}<span class="pill run">a command runs</span> {{end}}<a class="btn sm ghost" href="/clusters?realm={{.Name}}">Clusters<span class="vh"> of {{.Name}}</span></a> {{template "pg-action" .Delete}}</td></tr>
+    <td>{{range .Lives}}<span class="pill {{.Class}}">{{.Text}}</span> {{end}}{{if .Look}}<span class="pill {{.LookClass}}">{{.LookText}}</span>{{else if .Lives}}{{else if .Nodes}}<span class="pill ok">all running</span>{{else}}<span class="faint">–</span>{{end}}</td>
+    <td class="act">{{if and .Locked (not .Lives)}}<span class="pill run">a command runs</span> {{end}}<a class="btn sm ghost" href="/clusters?realm={{.Name}}">Clusters<span class="vh"> of {{.Name}}</span></a> {{template "pg-action" .Delete}}</td></tr>
   {{end}}</tbody></table></div></section>
 {{if .Clusters}}<div class="grid g3 pg-block">{{range .Clusters}}<a class="panel pg-ccard" href="{{.Link}}">
   <div class="pg-top"><span class="pg-name">{{.Name}}</span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}<span class="pg-ver">{{with .Slurm}}Slurm {{.}}{{end}}</span></div>
+  {{with .Life}}<div class="pg-lifebar">{{template "run-segbar" .}}</div>{{end}}
   <div class="pg-nodemap" aria-label="{{.NodesText}}">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div>
-  {{range .Runs}}<div class="mono muted pg-small">{{.Title}} runs now</div>{{end}}
+  {{with .Life}}<div class="muted pg-small"><span class="mono">{{.Title}}</span> started {{.Started}} {{.Source}}</div>{{else}}{{range .Runs}}<div class="mono muted pg-small">{{.Title}} runs now</div>{{end}}{{end}}
   <dl class="kv"><dt>realm</dt><dd class="mono">{{.Realm}}</dd><dt>nodes</dt><dd>{{with .Roles}}{{.}}{{else}}<span class="faint">none</span>{{end}}</dd>
     <dt>monitoring</dt><dd>{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</dd></dl>
   {{with .Problems}}<div class="pg-pills">{{range .}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}

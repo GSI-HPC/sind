@@ -322,7 +322,7 @@ func TestRunLine(t *testing.T) {
 			runSp("step", "mesh", runStartedAt(1)),
 			runSp("step", "done", runEndedAt(0, 1, "ok")),
 			runSp("step", "later"),
-		), nil, "waiting for realm lock create cluster (pid 4) on host  |  docker info  |  nodes 0/1 · worker-2 ready munge  |  mesh"},
+		), nil, "waiting for realm lock create cluster (pid 4) on host  |  docker info  |  nodes 0/1 · worker-2 waits for munge  |  mesh"},
 	} {
 		assert.Equal(t, tc.want, runLine(tc.run, tc.task, now), name)
 	}

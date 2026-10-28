@@ -34,6 +34,6 @@ page opens. */}}
 {{/* run-stop is the Stop button of a task that runs, from a runStop: it asks
 in the page what stays when the command stops, before it posts the stop.
 run.js closes the question on Keep running and Escape. */}}
-{{define "run-stop"}}<details class="stopc{{if .Small}} sm{{end}}"><summary class="btn{{if .Small}} sm{{end}}" aria-label="Stop {{.Title}}…">Stop…</summary>
+{{define "run-stop"}}<details class="stopc{{if .Small}} sm{{end}}"><summary class="btn{{if .Small}} sm{{end}}" aria-label="Stop {{.Title}}…">{{or .Label "Stop…"}}</summary>
 <div class="stopc-pop" role="group" aria-label="Stop {{.Title}}?"><p><b>Stop {{.Title}}?</b> {{.Text}}</p>
 <div class="stopc-b"><button type="button" class="btn sm" data-stop-keep>Keep running</button><form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn sm danger">Stop it</button></form></div></div></details>{{end}}

@@ -153,7 +153,7 @@ h3{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.0
 .btn.danger.solid{background:var(--bad);border-color:var(--bad);color:#fff}
 .btn.ghost{border-color:transparent;background:none}
 .btn.sm{padding:3px 8px;font-size:var(--t-sm)}
-.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn[disabled],.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 .pill{display:inline-flex;align-items:center;vertical-align:middle;line-height:18px;gap:6px;padding:1px 9px 1px 8px;border-radius:99px;font:500 var(--t-sm) var(--f-body);background:var(--panel-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap;letter-spacing:0}
 .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .pill.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
@@ -314,8 +314,11 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   table.cards tr.click:hover{background:var(--hover)}
   table.cards tr td.c-chk,table.cards tr.click:hover td.c-chk{position:absolute;left:0;top:0;width:46px;height:48px;align-items:center;justify-content:center;cursor:pointer}
   table.cards .c-chk input{width:24px;height:24px;margin:0}
-  table.cards td.c-name{order:-2;flex:1 1 50%;font-size:var(--t-base);overflow-wrap:anywhere}
-  table.cards td.c-state{order:-1;margin-left:auto}
+  table.cards td.c-name{order:-2;flex:1 1 0;font-size:var(--t-base);overflow-wrap:anywhere}
+  table.cards td.c-state{order:-1;flex:0 1 auto;max-width:65%;justify-content:flex-end}
+  table.cards td.c-state .pill{white-space:normal}
+  /* the name and the state make the first line of a card */
+  table.cards tbody tr:has(> td.c-name)::after{content:"";order:-1;flex-basis:100%;height:0;margin-top:-6px}
   table.cards td.c-wide,table.cards td.c-act,table.cards td[colspan]{flex:1 1 100%}
   table.cards td[data-label]::before{content:attr(data-label);font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
   table.cards td.c-act{gap:8px}

@@ -260,6 +260,8 @@ type runStop struct {
 	CSRF string
 	// Small makes the button small, as in the dock.
 	Small bool
+	// Label is the text of the button; empty for "Stop…".
+	Label string
 }
 
 // newRunStop returns the Stop button of the task t, whose run may be nil,
@@ -490,8 +492,8 @@ func runPartial(s store.Span) float64 {
 }
 
 // runDetail says what a span that goes on is doing now: its message, or the
-// visible span below it that goes on with its message, or how far its
-// transfer is.
+// visible span below it that goes on with its message, as "waits for
+// munge" for a wait, or how far its transfer is.
 func runDetail(s store.Span) string {
 	if s.Message != "" {
 		return s.Message
@@ -500,11 +502,15 @@ func runDetail(s store.Span) string {
 		if c.Done() || c.State == activity.StateQueued {
 			continue
 		}
-		if c.Kind == activity.KindBatch {
+		switch c.Kind {
+		case activity.KindBatch:
 			if d := runDetail(c); d != "" {
 				return d
 			}
 			continue
+		case activity.KindWait:
+			// As the pages of a cluster say it (pgPhaseText).
+			return "waits for " + pgOr(c.Message, c.Name)
 		}
 		return strings.TrimSpace(c.Name + " " + c.Message)
 	}

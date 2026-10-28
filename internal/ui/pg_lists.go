@@ -4,6 +4,7 @@ package ui
 
 import (
 	"slices"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -103,7 +104,7 @@ type pgNodeList struct {
 }
 
 // pgRealmRows returns the realms with their counts, the one named realm lit.
-func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
+func pgRealmRows(sn store.Snapshot, realm string, now time.Time) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
 		row := pgRealmRow{
@@ -111,7 +112,12 @@ func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
 			Locked: sn.Locks[r] != nil, On: r == realm,
 			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
 		}
-		row.Look, row.LookClass = pgLook(pgSnapNodes(sn, r))
+		for _, c := range sn.Clusters[r] {
+			if l := pgWorkOf(sn, r, c.Name, now).Life; l != nil {
+				row.Lives = append(row.Lives, pgPill{l.Kind + " " + c.Name, "run"})
+			}
+		}
+		row.Look, row.LookClass = pgLook(pgSnapNodes(sn, r, now))
 		row.Delete.Name = "Delete realm " + r + "…"
 		rows = append(rows, row)
 	}
@@ -124,7 +130,7 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 		return nil, err
 	}
 	all := pgClustersOf(v.Snap, q.Realm, v.Now)
-	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
+	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm, v.Now), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgClusterChips, func(key string) int {
 		return pgCount(all, func(c pgCluster) bool { return pgClusterIn(c, key) })
 	})
@@ -136,6 +142,11 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 		row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name}
 		if q.Realm == "" {
 			row.Label = c.Name + " (" + c.Realm + ")"
+		}
+		if l := c.Life; l != nil && l.Kind == pgCreating && l.Stop != nil {
+			stop := *l.Stop
+			stop.CSRF, stop.Small, stop.Label = v.CSRF, true, ""
+			row.Stop = &stop
 		}
 		row.Hidden = !pgMatch(row.Text, words)
 		if !row.Hidden {
@@ -158,7 +169,7 @@ func pgLoadNodes(v *View) (*pgNodeList, error) {
 	for _, c := range pgClustersOf(v.Snap, q.Realm, v.Now) {
 		all = append(all, c.Nodes...)
 	}
-	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
+	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm, v.Now), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgNodeChips, func(key string) int {
 		return pgCount(all, func(n pgNode) bool { return pgNodeIn(n, key) })
 	})

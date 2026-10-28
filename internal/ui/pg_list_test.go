@@ -154,6 +154,7 @@ func TestPgRanks(t *testing.T) {
 		{State: cluster.StateMixed},
 		{State: cluster.StatePaused},
 		{State: cluster.StateRunning, Nodes: []pgNode{{State: cluster.StateRunning, Services: down}}},
+		{State: cluster.StateStopped, Life: &pgLife{Kind: pgCreating}},
 		{State: cluster.StateRunning},
 	} {
 		assert.Equal(t, want, pgClusterRank(c), c.State)
@@ -169,6 +170,7 @@ func TestPgRanks(t *testing.T) {
 	}
 	assert.True(t, pgCluster{State: cluster.StateRunning, Nodes: []pgNode{{State: cluster.StateStopped}}}.NeedsLook())
 	assert.False(t, pgCluster{State: cluster.StateRunning}.NeedsLook())
+	assert.False(t, pgCluster{State: cluster.StateMixed, Life: &pgLife{Kind: pgCreating}}.NeedsLook(), "it is not up yet")
 	assert.Equal(t, 1, pgIP(pgNode{IP: ""}).Compare(pgIP(pgNode{IP: "10.0.0.1"})), "a node without an address sorts last")
 	assert.Equal(t, 0, pgClusterCmp("name")(pgCluster{Name: "a", Realm: "r"}, pgCluster{Name: "a", Realm: "r"}))
 	assert.Equal(t, -1, pgNodeCmp("role")(pgNode{Role: config.RoleDB}, pgNode{Role: config.RoleWorker}))

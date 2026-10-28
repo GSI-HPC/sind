@@ -56,8 +56,11 @@ type pgRealmRow struct {
 	// is the class of that count (pgLook).
 	Look      int
 	LookClass string
-	Locked    bool
-	On        bool
+	// Lives say which clusters of the realm a command creates or deletes
+	// now, as "creating nightly".
+	Lives  []pgPill
+	Locked bool
+	On     bool
 	// Delete opens the Delete realm dialog.
 	Delete pgAction
 }
@@ -126,7 +129,7 @@ func pgLoadOverview(v *View) (*pgOverview, error) {
 	}
 	sn := v.Snap
 	d := &pgOverview{Realm: realm}
-	d.Realms = pgRealmRows(sn, realm)
+	d.Realms = pgRealmRows(sn, realm, v.Now)
 	d.Empty = len(d.Realms) == 0
 	for _, c := range pgClustersOf(sn, realm, v.Now) {
 		d.Clusters = append(d.Clusters, c)
@@ -179,7 +182,7 @@ func pgNeeds(sn store.Snapshot, realm string, now time.Time) []pgNeed {
 				Actions: []pgAction{{Label: "Show activity", URL: "/activity", Class: "sm ghost"}},
 			})
 		}
-		for _, n := range pgSnapNodes(sn, r) {
+		for _, n := range pgSnapNodes(sn, r, now) {
 			if n.Problem() {
 				out = append(out, pgNodeNeed(sn, n))
 			}

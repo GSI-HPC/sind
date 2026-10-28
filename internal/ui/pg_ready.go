@@ -18,7 +18,9 @@ import (
 
 // pgReadyCheck is one check of the card.
 type pgReadyCheck struct {
-	// State is ok, warn, bad, or none for a check that does not apply.
+	// State is ok, warn, bad, wait for a check that waits for the
+	// command that creates the cluster, or none for one that does not
+	// apply.
 	State   string
 	Title   string
 	Detail  string
@@ -34,6 +36,8 @@ func (c pgReadyCheck) Mark() string {
 		return "!"
 	case "bad":
 		return "✗"
+	case "wait":
+		return "○"
 	}
 	return "–"
 }
@@ -47,6 +51,8 @@ func (c pgReadyCheck) Word() string {
 		return "warning"
 	case "bad":
 		return "failed"
+	case "wait":
+		return "waiting"
 	}
 	return "does not apply"
 }
@@ -63,6 +69,9 @@ type pgReady struct {
 	// files go.
 	Commands []pgCmd
 	Note     string
+	// Wait replaces the commands while a command creates or deletes the
+	// cluster: it says when they show.
+	Wait string
 }
 
 // pgEnterCmd returns the command that opens a shell on the cluster, on
@@ -144,6 +153,9 @@ func pgReadyOf(d *pgClusterView) *pgReady {
 	if d.Data != nil && d.Data.Type == config.StorageHostPath {
 		r.Note = "Put job scripts in " + data + ": it is " + d.Data.Source + " on this host, and the output of the test job lands there."
 	}
+	if l := d.Cluster.Life; l != nil {
+		return pgReadyLife(r, d, l)
+	}
 	if d.Status == nil {
 		return r
 	}
@@ -167,13 +179,40 @@ func pgReadyOf(d *pgClusterView) *pgReady {
 			}
 		}
 	}
-	if r.Class != "ok" && slices.ContainsFunc(d.Cluster.Nodes, func(n pgNode) bool { return n.Creating }) {
-		// A command creates the cluster: what is not ready may be starting,
-		// and a fix would get in its way.
-		r.Verdict, r.Class = "not yet: the cluster is being created", "run"
-		for i := range r.Checks {
-			r.Checks[i].Actions = nil
+	return r
+}
+
+// pgReadyLife fills the card while a command creates or deletes the
+// cluster: what is not up yet is no fault, and a fix would get in the
+// command's way. Each check waits for the create, and the first commands
+// show once it has ended ok.
+func pgReadyLife(r *pgReady, d *pgClusterView, l *pgLife) *pgReady {
+	r.Checked, r.Class = true, "run"
+	if l.Kind == pgDeleting {
+		r.Verdict, r.Wait = "no: sind deletes the cluster", "sind deletes the cluster and its nodes. Jobs no longer run on it."
+		return r
+	}
+	r.Verdict = "not yet: sind creates the cluster"
+	r.Wait = "The commands to open a shell and submit a test job show here when the create ends ok."
+	var workers []string
+	db := ""
+	for _, n := range d.Cluster.Nodes {
+		switch n.Role {
+		case config.RoleWorker:
+			workers = append(workers, n.Short)
+		case config.RoleDB:
+			db = n.Short
 		}
+	}
+	wait := "Waits for the create."
+	r.Checks = []pgReadyCheck{{State: "wait", Title: "The controller answers", Detail: wait}}
+	wk := pgReadyCheck{State: "wait", Title: "Workers take jobs", Detail: wait}
+	if len(workers) > 0 {
+		wk.Detail = "Waits for " + pgJoin(workers) + "."
+	}
+	r.Checks = append(r.Checks, wk)
+	if db != "" {
+		r.Checks = append(r.Checks, pgReadyCheck{State: "wait", Title: "Accounting works", Detail: "Waits for " + db + "."})
 	}
 	return r
 }

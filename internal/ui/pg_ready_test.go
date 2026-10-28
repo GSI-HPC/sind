@@ -205,18 +205,32 @@ func TestPgReadyWhileTheClusterIsCreated(t *testing.T) {
 	ctl := down(readyNode("controller", config.RoleController, "slurmctld"), "slurmctld")
 	w := readyNode("worker-0", config.RoleWorker, "slurmd")
 	w.State = cluster.StateStopped
-	ctl.Creating, w.Creating = true, true
-	r := pgReadyOf(readyView(ctl, w))
-	assert.Equal(t, "not yet: the cluster is being created", r.Verdict)
+	d := readyView(ctl, w, readyNode("worker-1", config.RoleWorker, "slurmd"))
+	d.Status = nil
+	d.Cluster.Life = &pgLife{Kind: pgCreating}
+	r := pgReadyOf(d)
+	assert.Equal(t, "not yet: sind creates the cluster", r.Verdict)
 	assert.Equal(t, "run", r.Class)
-	assert.Equal(t, "bad", r.Checks[0].State, "the checks say what is not ready")
-	for _, c := range r.Checks {
-		assert.Empty(t, c.Actions, "no fix while the command runs")
-	}
+	assert.True(t, r.Checked, "the checks wait, before the first probe too")
+	assert.Equal(t, []pgReadyCheck{
+		{State: "wait", Title: "The controller answers", Detail: "Waits for the create."},
+		{State: "wait", Title: "Workers take jobs", Detail: "Waits for worker-0 and worker-1."},
+	}, r.Checks, "no fault and no fix while the command runs")
+	assert.Equal(t, "○", r.Checks[0].Mark())
+	assert.Equal(t, "waiting", r.Checks[0].Word())
+	assert.Contains(t, r.Wait, "show here when the create ends ok")
 
-	// Once all is up, the verdict is yes, as it is.
-	ctl = readyNode("controller", config.RoleController, "slurmctld")
-	w = readyNode("worker-0", config.RoleWorker, "slurmd")
-	ctl.Creating, w.Creating = true, true
-	assert.Equal(t, "yes", pgReadyOf(readyView(ctl, w)).Verdict)
+	// A cluster with a db node and no worker yet.
+	d = readyView(readyNode("controller", config.RoleController, "slurmctld"), readyNode("db", config.RoleDB, "slurmdbd"))
+	d.Cluster.Life = &pgLife{Kind: pgCreating}
+	r = pgReadyOf(d)
+	assert.Equal(t, "Waits for the create.", r.Checks[1].Detail)
+	assert.Equal(t, pgReadyCheck{State: "wait", Title: "Accounting works", Detail: "Waits for db."}, r.Checks[2])
+
+	// A cluster that sind deletes takes no jobs.
+	d.Cluster.Life.Kind = pgDeleting
+	r = pgReadyOf(d)
+	assert.Equal(t, "no: sind deletes the cluster", r.Verdict)
+	assert.Empty(t, r.Checks)
+	assert.Contains(t, r.Wait, "Jobs no longer run on it.")
 }

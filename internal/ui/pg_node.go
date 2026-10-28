@@ -39,15 +39,17 @@ type pgNodeView struct {
 	Found                 bool
 	Realm, Cluster, Short string
 	Node                  pgNode
-	ClusterState          cluster.State
+	// ClusterPill is the state pill of the node's cluster, as its pages
+	// show it: "creating · nodes 1/3" while a command creates it.
+	ClusterPill pgPill
 	// Slurm is what Slurm says about the node's cluster.
 	Slurm    *pgSlurmView
 	Actions  []pgAction
 	Commands []pgCmd
+	// Run is the command that creates or deletes the node now, nil for
+	// none; the node then has no actions.
+	Run *pgRun
 }
-
-// ClusterPillClass returns the class of the pill of the cluster's state.
-func (d *pgNodeView) ClusterPillClass() string { return pgClusterClass(d.ClusterState) }
 
 // pgServiceOf returns the Slurm service that a role runs.
 func pgServiceOf(r config.Role) string {
@@ -76,6 +78,11 @@ func pgLoadNode(v *View) *pgNodeView {
 		}
 		d.Found = true
 		d.Node = pgNodeOf(realm, ns, v.Snap.Status(realm, name))
+		w := pgWorkOf(v.Snap, realm, name, v.Now)
+		w.apply(&d.Node)
+		if r, ok := w.runOf(short); ok && d.Node.Life() {
+			d.Run = &r
+		}
 		nodes := []pgNode{d.Node}
 		pgAttachSlurm(nodes, name, v.Snap.Slurm(realm, name))
 		d.Node = nodes[0]
@@ -85,9 +92,19 @@ func pgLoadNode(v *View) *pgNodeView {
 		return d
 	}
 	if c, ok := v.Snap.Cluster(realm, name); ok {
-		d.ClusterState = c.State
+		d.ClusterPill = pgClusterOf(v.Snap, realm, c, v.Snap.Monitorings[realm], v.Now).Pill()
 	}
 	n := d.Node
+	sind := pgSind(realm)
+	d.Commands = []pgCmd{
+		{"Log in to the node", fmt.Sprintf("%s ssh %s", sind, n.Arg)},
+		{"Follow its journal", fmt.Sprintf("%s logs %s %s -f -n 200", sind, n.Arg, pgServiceOf(n.Role))},
+	}
+	if d.Run != nil {
+		// A command creates or deletes the node: an action would get in
+		// its way.
+		return d
+	}
 	switch n.State {
 	case cluster.StateRunning:
 		d.Actions = []pgAction{n.power("Shut down…", "", "stop"), n.power("Reboot…", "", "reboot"), n.power("Freeze…", "", "pause")}
@@ -99,11 +116,6 @@ func pgLoadNode(v *View) *pgNodeView {
 	if n.Worker() {
 		d.Actions = append(d.Actions, n.power("Drain…", "", "drain"), n.power("Resume…", "", "resume"),
 			pgDialogAction("Delete worker…", "danger", "delete-worker", "realm", realm, "cluster", name, "nodes", short))
-	}
-	sind := pgSind(realm)
-	d.Commands = []pgCmd{
-		{"Log in to the node", fmt.Sprintf("%s ssh %s", sind, n.Arg)},
-		{"Follow its journal", fmt.Sprintf("%s logs %s %s -f -n 200", sind, n.Arg, pgServiceOf(n.Role))},
 	}
 	return d
 }

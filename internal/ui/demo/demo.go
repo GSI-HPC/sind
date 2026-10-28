@@ -158,7 +158,9 @@ func (d *Demo) Setup() {
 }
 
 // startMidRun shows the create cluster nightly of the realm ci half way: its
-// run, its task, the lock it holds and the nodes it has made.
+// run, its task, the lock it holds and the nodes it has made, as the run
+// has them: the controller ready, the workers started and waiting for
+// munge.
 func (d *Demo) startMidRun(now time.Time) {
 	d.sim.Feed(midRun(now))
 	d.st.AddTask(store.Task{
@@ -169,8 +171,12 @@ func (d *Demo) startMidRun(now time.Time) {
 	d.st.SetLock("ci", &state.LockHolder{Command: "sind --realm ci create cluster", Host: "demo", PID: 4242, Since: now.Add(-midRunAge)})
 	for _, n := range nodeSet("nightly", 0, 0, 0) {
 		d.world.apply("ci", opCreate, n)
+		op := opStart
+		if n.role == "controller" {
+			op = opReady
+		}
+		d.world.apply("ci", op, n)
 	}
-	d.world.apply("ci", opStart, node{name: "controller", cluster: "nightly", role: "controller"})
 	d.world.Publish(d.st)
 }
 

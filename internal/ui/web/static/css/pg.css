@@ -31,6 +31,7 @@ td.mono:has(.pg-copy){white-space:nowrap}
 .pg-checks{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .pg-checks li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:baseline}
 .pg-ck.ok{color:var(--ok)} .pg-ck.warn{color:var(--warn)} .pg-ck.bad{color:var(--bad)} .pg-ck.none{color:var(--faint)}
+.pg-ready .pg-checks li:has(.pg-ck.wait) b{font-weight:500;color:var(--muted)}
 .pg-fix{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 @media (max-width:900px){.pg-ready-b{grid-template-columns:minmax(0,1fr)}}
 
@@ -65,6 +66,38 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-nm-unknown{background:transparent!important;border:2px dotted var(--warn);opacity:1}
 .pg-nm-svcdown{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--bad)}
 .pg-nm-slurm{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--warn)}
+/* a node that a command creates or deletes: dashed in the colour of work
+   that goes on, and the one it works on now pulses */
+.pg-nm-creating,.pg-nm-deleting{background:var(--run-soft)!important;border:2px dashed var(--run);opacity:1}
+.pg-nm-creating::after,.pg-nm-deleting::after{display:none}
+.pg-nm-deleting{opacity:.6}
+.pg-nm-now{animation:pulse 1.4s ease-in-out infinite}
+
+/* the command that creates or deletes a cluster, at the top of its page */
+.pg-life{padding:14px;margin-bottom:14px;display:grid;gap:10px;border-color:color-mix(in srgb,var(--run) 45%,var(--line))}
+.pg-life-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pg-life-h .grow{flex:1}
+.pg-life-h .num{font:var(--t-md) var(--f-mono);color:var(--muted)}
+.pg-life-steps{list-style:none;margin:0;padding:0;display:flex;gap:2px;font-size:var(--t-xs);color:var(--faint)}
+.pg-life-steps li{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-life-steps li.running{color:var(--run-ink);font-weight:600}
+.pg-life-steps li.ok{color:var(--muted)} .pg-life-steps li.failed{color:var(--bad)}
+.pg-life-nodes{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.pg-ph{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:baseline;padding:8px 10px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+.pg-ph.running{border-color:color-mix(in srgb,var(--run) 50%,var(--line));background:var(--run-soft)}
+.pg-ph.failed{border-color:var(--bad);background:var(--bad-soft)}
+.pg-ph-t{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;min-width:0}
+.pg-ph-d{flex-basis:100%;min-width:0;font-size:var(--t-sm);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-ph.failed .pg-ph-d{white-space:normal;overflow-wrap:anywhere}
+.pg-ph.running .pg-ph-d{color:var(--run-ink)}
+.pg-ck.running,.pg-ck.queued,.pg-ck.wait{color:var(--run)} .pg-ck.failed{color:var(--bad)} .pg-ck.canceled,.pg-ck.skipped{color:var(--warn)}
+.pg-ph.running .pg-ck{animation:pulse 1.4s ease-in-out infinite}
+/* the thin bar of such a command in a list and on a card */
+.pg-lifebar{margin-top:6px;max-width:180px}
+.pg-lifebar .segbar{height:4px}
+.pg-ccard .pg-lifebar{max-width:none;margin-top:-4px}
+/* what the card says while the create goes on, in place of the commands */
+.pg-wait{margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:var(--r);color:var(--muted);font-size:var(--t-md)}
 
 /* Needs you */
 .pg-it{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;padding:10px 14px 10px 0;border-bottom:1px solid var(--line-2);align-items:center}
@@ -129,6 +162,10 @@ td.act .btn + .btn{margin-left:4px}
 /* a node's issues */
 .pg-issue{display:flex;gap:8px;align-items:center}
 
+/* a pill of work that goes on keeps its shape on a selected row, whose
+   colour it shares */
+tr.sel .pill.run{border-color:var(--run)}
+
 /* the realm a page shows */
 .pg-scope b{color:var(--fg)}
 
@@ -154,6 +191,12 @@ td.act .btn + .btn{margin-left:4px}
   table.cards tr.pg-sel{background:var(--accent-soft)}
   table.cards tr.pg-sel td{background:none}
   table.cards td .pg-nodemap{flex:1 1 0;min-width:0}
+  /* the state of a card takes the rest of its line, or a line of its own,
+     with the bar of a command that creates or deletes the cluster */
+  table.cards td.c-state:has(.pg-lifebar){flex-direction:column;align-items:flex-end}
+  table.cards td.c-state .pg-lifebar{width:140px;margin-top:2px}
+  /* the health of a realm wraps rather than leave the screen */
+  .pg-realms td .pill{white-space:normal}
   td.act .btn + .btn{margin-left:0}
 }
 /* On a touch screen, the chips, the realm links, the filter, the heads that

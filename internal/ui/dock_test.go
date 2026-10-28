@@ -38,7 +38,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 	assert.Equal(t, runRunning, c.Class)
 	assert.Equal(t, "create cluster", c.Title, "the command as the log names it")
 	assert.Equal(t, "/runs/"+run.ID, c.Href)
-	assert.Equal(t, "nodes 0/3 · controller ready munge", c.Line)
+	assert.Equal(t, "nodes 0/3 · controller waits for munge", c.Line)
 	assert.Equal(t, "25s", c.Elapsed)
 	assert.NotZero(t, c.Since)
 	assert.NotNil(t, c.Stop)
@@ -166,7 +166,7 @@ func TestRunDockTerminalRuns(t *testing.T) {
 	assert.Nil(t, c.Stop)
 	assert.False(t, c.Dismiss)
 	assert.Equal(t, "/runs/"+run.ID, c.Href)
-	assert.Equal(t, "nodes 0/3 · controller ready munge", c.Line)
+	assert.Equal(t, "nodes 0/3 · controller waits for munge", c.Line)
 	// The page of the run draws its card no more, and the bar still
 	// counts it.
 	d = runDockOf(snap, runAt(25), "run", run.ID)
@@ -209,6 +209,12 @@ func TestRunDockFit(t *testing.T) {
 	waits := card(runRunning, 1)
 	waits.waiting = true
 	assert.Equal(t, []string{"2", "1"}, titles(dockFit([]dockCard{waits, card(runRunning, 2)}, now)))
+	// The bar counts it apart: it has not started its work yet.
+	d = dockFit([]dockCard{waits, card(runRunning, 2)}, now)
+	assert.Equal(t, []dockPart{{"1 running", true}, {"1 waiting", false}}, d.Parts)
+	d = dockFit([]dockCard{waits, card(runOK, 2)}, now)
+	assert.True(t, d.Running, "the spinner turns while a command waits")
+	assert.Equal(t, []dockPart{{"1 waiting", false}, {"1 done", false}}, d.Parts)
 
 	// A card of a command that ended ok a while ago is counted, not drawn.
 	gone := card(runOK, 7)

@@ -5,7 +5,7 @@ prefix, pg, is part of the pages, clusters and nodes. */}}
 
 {{/* pg-action is a button of a page; a dialog link opens the dialog in the
 layer, and is a plain link without script. .Class holds btn modifiers. */}}
-{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{with .Name}} aria-label="{{.}}"{{end}}{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
+{{define "pg-action"}}{{if .Off}}<button type="button" class="btn{{with .Class}} {{.}}{{end}}" aria-disabled="true" title="{{.Off}}"{{with .Name}} aria-label="{{.}}"{{end}}>{{.Label}}<span class="vh"> ({{.Off}})</span></button>{{else}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{with .Name}} aria-label="{{.}}"{{end}}{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}{{end}}
 
 {{/* pg-docker-note says when Docker does not answer; it takes the view. */}}
 {{define "pg-docker-note"}}{{with .Snap.Docker}}{{if not .Checked}}<div class="callout pg-note">sind ui has not read Docker yet. The pages fill in when it has.</div>{{else if .Err}}<div class="callout bad pg-note"><b>Docker is not reachable.</b> {{.Err}}. The pages show what sind ui read last, and no action works until Docker answers. <a href="/doctor">Doctor</a> checks the host.</div>{{end}}{{end}}{{end}}
@@ -17,7 +17,8 @@ layer, and is a plain link without script. .Class holds btn modifiers. */}}
 {{define "pg-tile"}}<i class="{{.Tile}}" title="{{.TileTitle}}" role="img" aria-label="{{.TileLabel}}"></i>{{end}}
 
 {{/* pg-legend shows what the tiles of a node map mean, with a tile of
-each kind. */}}
+each kind; it takes whether a command creates or deletes a node of the map,
+which adds the tile of such a node. */}}
 {{define "pg-legend"}}<ul class="pg-legend" aria-label="What the tiles mean">
   <li><i class="pg-nm pg-nm-controller pg-nm-running" aria-hidden="true"></i>controller</li>
   <li><i class="pg-nm pg-nm-db pg-nm-running" aria-hidden="true"></i>other service node</li>
@@ -25,7 +26,8 @@ each kind. */}}
   <li><i class="pg-nm pg-nm-worker pg-nm-stopped" aria-hidden="true"></i>not running</li>
   <li><i class="pg-nm pg-nm-worker pg-nm-paused" aria-hidden="true"></i>paused</li>
   <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-svcdown" aria-hidden="true"></i>a service is down</li>
-  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-slurm" aria-hidden="true"></i>takes no jobs</li></ul>{{end}}
+  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-slurm" aria-hidden="true"></i>takes no jobs</li>{{if .}}
+  <li><i class="pg-nm pg-nm-worker pg-nm-creating" aria-hidden="true"></i>being created or deleted</li>{{end}}</ul>{{end}}
 
 {{/* pg-copy is a small Copy button for the string it takes. */}}
 {{define "pg-copy"}}<button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="{{.}}" aria-label="Copy {{.}}">Copy</button>{{end}}

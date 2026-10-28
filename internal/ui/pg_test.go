@@ -669,7 +669,7 @@ func TestPgNodePage(t *testing.T) {
 	assert.Contains(t, body, `<div class="actions"><a class="btn" href="/clusters/sind/dev?node=worker-3&amp;tab=logs">Logs</a>`)
 	assert.Contains(t, body, "No probe result yet.")
 	assert.Contains(t, body, `<dt>name</dt><dd class="mono">sind-dev-worker-3</dd>`)
-	assert.Contains(t, body, `<a href="/clusters/sind/dev">dev</a> <span class="pill warn">mixed</span>`)
+	assert.Contains(t, body, `<a href="/clusters/sind/dev">dev</a> <span class="pill bad">mixed · 1 needs a look</span>`)
 	assert.Contains(t, body, `<dd class="mono">worker-3.dev.sind.sind <button type="button" class="btn sm" data-pg-copy-text="worker-3.dev.sind.sind">Copy</button></dd>`)
 	assert.Contains(t, body, "<code>sind ssh worker-3.dev</code>")
 	assert.Contains(t, body, "<code>sind logs worker-3.dev slurmd -f -n 200</code>")

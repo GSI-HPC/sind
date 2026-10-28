@@ -43,11 +43,12 @@ func pgClusterTitle(d *pgClusterView) string {
 }
 
 // pgClusterTopics returns the topics a cluster page keeps: the cluster's
-// own, and the ones that tab shows. The logs tab keeps none, as a new
-// render of it would end the stream that it holds.
+// own, the runs, which say what a command creates or deletes, and the ones
+// that tab shows. The logs tab keeps none, as a new render of it would end
+// the stream that it holds.
 func pgClusterTopics(p Params, tab string) []store.Topic {
 	realm := p.Get("realm")
-	topics := []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, p.Get("cluster"))}
+	topics := []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, p.Get("cluster")), store.TopicRuns}
 	switch tab {
 	case "", "summary":
 		return append(topics, store.MonitoringTopic(realm), store.MeshTopic(realm))
@@ -62,7 +63,7 @@ func pgClusterTopics(p Params, tab string) []store.Topic {
 }
 
 // pgClusterWatch returns the topics of the head of a cluster or node page:
-// those of the cluster, its nodes and its status.
+// those of the cluster, its nodes, its status and the runs.
 func pgClusterWatch(p Params) []store.Topic { return pgClusterTopics(p, "nodes") }
 
 func pgClusterFragments() []Fragment {
@@ -70,8 +71,7 @@ func pgClusterFragments() []Fragment {
 	load := func(v *View) (err error) { v.Data, err = pgLoadCluster(v); return }
 	return []Fragment{
 		{
-			Name: "pg-cluster-head", Params: params, Topics: []store.Topic{store.TopicRuns},
-			Watch: pgClusterWatch, Load: load,
+			Name: "pg-cluster-head", Params: params, Watch: pgClusterWatch, Load: load,
 		},
 		{
 			// The Logs tab reads its own keys too, so that the body that a
@@ -204,10 +204,7 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 	d.Status = sn.Status(realm, name)
 	d.Slurm = pgSlurmOf(sn.Slurm(realm, name), d.Cluster.Nodes)
 	d.Tabs = pgTabLinks(d)
-	d.Actions = []pgAction{
-		pgDialogAction("Add workers…", "", "create-worker", "realm", realm, "cluster", name),
-		pgDialogAction("Delete cluster…", "danger", "delete-cluster", "realm", realm, "cluster", name),
-	}
+	d.Actions = pgClusterActions(d, v.CSRF)
 	switch d.Tab {
 	case "summary":
 		pgSummaryTab(d)
@@ -219,6 +216,33 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 		pgConnectTab(d, sn)
 	}
 	return d, nil
+}
+
+// pgClusterActions returns the buttons of the head of a cluster page: Add
+// workers and Delete cluster. While a command creates or deletes the
+// cluster, they are off, with why, and a command of sind ui that creates
+// it has its Stop button.
+func pgClusterActions(d *pgClusterView, csrf string) []pgAction {
+	add := pgDialogAction("Add workers…", "", "create-worker", "realm", d.Realm, "cluster", d.Name)
+	del := pgDialogAction("Delete cluster…", "danger", "delete-cluster", "realm", d.Realm, "cluster", d.Name)
+	l := d.Cluster.Life
+	if l == nil {
+		return []pgAction{add, del}
+	}
+	if l.Stop != nil {
+		l.Stop.CSRF = csrf
+	}
+	if l.Kind == pgDeleting {
+		add.Off = "sind deletes the cluster."
+		del.Off = "sind deletes the cluster already."
+		return []pgAction{add, del}
+	}
+	add.Off = "sind creates the cluster. Add workers once it is ready."
+	if l.Stop != nil {
+		return []pgAction{add}
+	}
+	del.Off = "sind creates the cluster in a terminal. Stop it there, or delete the cluster once the create ends."
+	return []pgAction{add, del}
 }
 
 func pgTabLinks(d *pgClusterView) []pgTabLink {
@@ -252,6 +276,10 @@ func pgSummaryTab(d *pgClusterView) {
 			switch {
 			case !ok:
 				row.Cells = append(row.Cells, pgCell{"na", "·", s + ": not on this node"})
+			case n.Life() && !up:
+				// A service of a node that a command creates or deletes is
+				// starting or stopping, not down.
+				row.Cells = append(row.Cells, pgCell{"wait", "○", s + ": " + n.ServiceWord()})
 			case n.State != cluster.StateRunning:
 				row.Cells = append(row.Cells, pgCell{"na", "–", s + ": node not running"})
 			case up:
@@ -453,7 +481,3 @@ func (d *pgClusterView) SlurmConfLink() string {
 // ClusterArg returns the CLUSTER argument of a command: " dev", empty for
 // the default cluster.
 func (d *pgClusterView) ClusterArg() string { return pgClusterArg(d.Name) }
-
-// ClusterStateClass returns the class of the pill of the cluster's
-// container state, which its Summary names beside its realm.
-func (d *pgClusterView) ClusterStateClass() string { return pgClusterClass(d.Cluster.State) }

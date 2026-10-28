@@ -233,15 +233,16 @@ func TestPgNodesOfABusyClusterAreNoProblem(t *testing.T) {
 		Runs:     []store.Run{{ID: "1", Title: "create cluster nightly", Start: pgNow}},
 	}
 	// dev's worker-0 has slurmd down; the nodes of nightly are being made.
-	assert.Equal(t, 1, pgCount(pgSnapNodes(sn, ""), pgNode.Problem))
-	for _, n := range pgSnapNodes(sn, "sind") {
+	assert.Equal(t, 1, pgCount(pgSnapNodes(sn, "", pgNow), pgNode.Problem))
+	for _, n := range pgSnapNodes(sn, "sind", pgNow) {
 		assert.Equal(t, n.Cluster == "nightly", n.Busy && n.Creating, n.Arg)
 	}
 	c := pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
 	assert.True(t, c.Nodes[0].Creating)
 	assert.False(t, c.Nodes[0].Problem())
 	assert.False(t, c.Nodes[1].Problem())
-	assert.Equal(t, []pgPill{{"slurmd down", "bad"}}, c.Nodes[0].Issues(), "the cluster page still lists what it found")
+	assert.Empty(t, c.Nodes[0].Issues(), "a node that is not up yet has no fault")
+	assert.Equal(t, pgPill{"creating", "run"}, c.Pill())
 	var titles []string
 	for _, need := range pgNeeds(sn, "", pgNow) {
 		titles = append(titles, need.Title)
@@ -251,18 +252,17 @@ func TestPgNodesOfABusyClusterAreNoProblem(t *testing.T) {
 	// A command that adds workers may start services, but a stopped node
 	// is a problem all the same.
 	sn.Runs = []store.Run{{ID: "2", Title: "create worker nightly", Start: pgNow}}
-	assert.Equal(t, 2, pgCount(pgSnapNodes(sn, ""), pgNode.Problem))
+	assert.Equal(t, 2, pgCount(pgSnapNodes(sn, "", pgNow), pgNode.Problem))
 	c = pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
 	assert.False(t, c.Nodes[0].Problem())
 	assert.True(t, c.Nodes[1].Problem())
 
 	// A command on a node of the cluster works on the cluster.
 	sn.Runs = []store.Run{{ID: "3", Title: "power reboot worker-0.dev", Start: pgNow}}
-	busy, creating := pgBusy(sn, "sind", "dev")
-	assert.True(t, busy)
-	assert.False(t, creating)
-	busy, _ = pgBusy(sn, "sind", "nightly")
-	assert.False(t, busy)
+	w := pgWorkOf(sn, "sind", "dev", pgNow)
+	assert.True(t, w.Busy)
+	assert.Nil(t, w.Life)
+	assert.False(t, pgWorkOf(sn, "sind", "nightly", pgNow).Busy)
 }
 
 func TestPgNodeNeed(t *testing.T) {
@@ -435,4 +435,13 @@ func TestPgFragmentsDependOnWhatTheyShow(t *testing.T) {
 	assert.True(t, dep("pg-node-body", p, store.StatusTopic("r", "c")))
 	assert.True(t, dep("pg-node-head", p, store.NodesTopic("r")))
 	assert.False(t, dep("pg-node-head", p, store.NodesTopic("other")))
+	// A run that starts, goes on or ends changes what a command creates or
+	// deletes: the pill, the phase and the actions of the node and cluster
+	// pages, but for the logs tab, whose stream a render would end.
+	assert.True(t, dep("pg-node-head", p, store.TopicRuns))
+	assert.True(t, dep("pg-node-body", p, store.TopicRuns))
+	for _, tab := range []string{"", "summary", "nodes", "slurm", "network"} {
+		assert.True(t, dep("pg-cluster-body", Params{"realm": {"r"}, "cluster": {"c"}, "tab": {tab}}, store.TopicRuns), tab)
+	}
+	assert.False(t, dep("pg-cluster-body", Params{"realm": {"r"}, "cluster": {"c"}, "tab": {"logs"}}, store.TopicRuns))
 }

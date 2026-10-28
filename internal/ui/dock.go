@@ -171,16 +171,26 @@ func dockRank(c dockCard) int {
 	return 2
 }
 
-// dockFit sums the cards up for the bar, leaves out the card of what the
-// page shows and the cards of commands that ended ok a while ago, and
-// orders the rest (dockRank): the commands that run oldest first, those
-// that ended newest first. At most dockMax are drawn, and the rest counted.
+// dockWaiting is the key of the bar's count of the commands that wait for
+// the lock of their realm: they have not started their work yet.
+const dockWaiting = "waiting"
+
+// dockFit sums the cards up for the bar, with the commands that wait for
+// the lock of their realm apart from those that run, as "1 running · 1
+// waiting". It leaves out the card of what the page shows and the cards of
+// commands that ended ok a while ago, and orders the rest (dockRank): the
+// commands that run oldest first, those that ended newest first. At most
+// dockMax are drawn, and the rest counted.
 func dockFit(cards []dockCard, now time.Time) dockData {
 	var d dockData
 	counts := map[string]int{}
 	var shown []dockCard
 	for _, c := range cards {
-		counts[c.Class]++
+		key := c.Class
+		if c.Class == runRunning && c.waiting {
+			key = dockWaiting
+		}
+		counts[key]++
 		d.Clear = d.Clear || c.Dismiss
 		if c.here || (c.HideAt > 0 && now.UnixMilli() >= c.HideAt) {
 			continue
@@ -198,12 +208,12 @@ func dockFit(cards []dockCard, now time.Time) dockData {
 	})
 	d.More = max(len(shown)-dockMax, 0)
 	d.Cards = shown[:len(shown)-d.More]
-	d.Running = counts[runRunning] > 0
+	d.Running = counts[runRunning]+counts[dockWaiting] > 0
 	d.Bar = len(shown) > 0 && len(cards) > 1
 	d.Toggle = len(shown) > 1
 	for _, p := range []struct {
 		class, label string
-	}{{runRunning, "running"}, {runFailed, "failed"}, {runCanceled, "stopped"}, {runEnded, "ended"}, {runOK, "done"}} {
+	}{{runRunning, "running"}, {dockWaiting, "waiting"}, {runFailed, "failed"}, {runCanceled, "stopped"}, {runEnded, "ended"}, {runOK, "done"}} {
 		if n := counts[p.class]; n > 0 {
 			d.Parts = append(d.Parts, dockPart{Text: fmt.Sprintf("%d %s", n, p.label), Strong: p.class == runRunning})
 		}

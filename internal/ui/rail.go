@@ -39,8 +39,8 @@ func pgNavCounts(r *Registry) {
 		in, all := pgAllRealms(sn)
 		return NavCount{Text: strconv.Itoa(n), Label: pgPlural(n, "cluster", "clusters") + in, AllRealms: all}
 	})
-	r.SetNavCount("nodes", func(sn store.Snapshot, _ time.Time) NavCount {
-		nodes := pgSnapNodes(sn, "")
+	r.SetNavCount("nodes", func(sn store.Snapshot, now time.Time) NavCount {
+		nodes := pgSnapNodes(sn, "", now)
 		problems, class := pgLook(nodes)
 		in, all := pgAllRealms(sn)
 		switch {
