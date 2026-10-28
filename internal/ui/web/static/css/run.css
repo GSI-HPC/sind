@@ -118,7 +118,6 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .lg-lane{background:linear-gradient(0deg,var(--lane) 0 60%,transparent 60%);border-bottom:1.5px solid var(--run)}
 .legend i.lg-now{width:2px;height:12px;background:var(--accent)}
 .gantt{position:relative;font:var(--t-sm) var(--f-mono);padding:4px 14px 10px;--lw:232px;--rw:330px;--gap:12px}
-.rgp .ph [hidden]{display:none}
 .g-row{display:grid;grid-template-columns:var(--lw) minmax(0,1fr) var(--rw);column-gap:var(--gap);position:relative}
 .g-axis{height:26px;align-items:end;color:var(--faint);font-size:var(--t-xs)}
 .g-axis .ttl,.g-axis .ares{font:var(--t-xs) var(--f-body);color:var(--faint);padding-bottom:6px}

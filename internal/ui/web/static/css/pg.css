@@ -101,7 +101,6 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 
 /* the nodes tab: the selection and its bar */
 .pg-selbar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line-2);flex-wrap:wrap}
-.pg-selbar[hidden],.pg-selbar [hidden]{display:none}
 .pg-expr{font:600 var(--t-md) var(--f-mono);overflow-wrap:anywhere}
 .pg-chk{width:30px}
 tr.pg-sel td{background:var(--accent-soft)}

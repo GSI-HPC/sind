@@ -63,6 +63,8 @@ button,input,select,textarea{font:inherit;color:inherit}
    the corner of its containing block, so that text in a box that scrolls
    sideways does not widen the page. */
 .vh{position:absolute!important;top:0;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* hidden hides, whatever display a rule gives the element. */
+[hidden]{display:none!important}
 /* The skip link is the first stop of Tab, and shows only then. */
 .skip{position:fixed;left:8px;top:8px;z-index:100;padding:8px 14px;border:2px solid var(--accent);border-radius:var(--r);background:var(--panel);color:var(--accent);font-weight:600;transform:translateY(-300%)}
 .skip:focus{transform:none;text-decoration:none}
@@ -176,7 +178,6 @@ table{width:100%;border-collapse:collapse;font-size:var(--t-md)}
 th{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:middle}
 tr:last-child td{border-bottom:0}
-tr[hidden]{display:none}
 tr.click{cursor:pointer}
 tr.click:hover td{background:var(--hover)}
 tr.sel td{background:var(--accent-soft)}
@@ -304,7 +305,6 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   table.cards tbody tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;position:relative;padding:12px 14px;border-bottom:1px solid var(--line-2)}
   table.cards.chk tbody tr{padding-left:46px}
   table.cards tbody tr:last-child{border-bottom:0}
-  table.cards tbody tr[hidden]{display:none}
   table.cards td,table.cards tr.click:hover td{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;min-width:0;padding:0;border:0;background:none;text-align:left}
   table.cards tr.click:hover{background:var(--hover)}
   table.cards tr td.c-chk,table.cards tr.click:hover td.c-chk{position:absolute;left:0;top:0;width:46px;height:48px;align-items:center;justify-content:center;cursor:pointer}

@@ -68,7 +68,6 @@
 .palette input{flex:1;min-width:0;border:0;padding:12px 14px;font-size:var(--t-lg);background:var(--panel);outline:0}
 .palette .pin .iconbtn{margin-right:8px}
 .palette .pstep{display:flex;gap:8px;align-items:center;padding:10px 14px 0;font-size:var(--t-sm)}
-.palette .pstep[hidden]{display:none}
 .palette .pstep .link{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font:inherit}
 .palette .pl{max-height:50vh;overflow-y:auto}
 .palette .pi{display:flex;gap:10px;padding:9px 14px;cursor:pointer;align-items:center;color:var(--fg);width:100%;border:0;background:none;font:inherit;text-align:left}
