@@ -152,7 +152,8 @@ func runHasStep(run store.Run, name string) bool {
 }
 
 // runUsual returns the median duration of each step, and of the whole
-// run, in the newest earlier runs of the same command that ended ok, at
+// run, in the newest earlier runs of the same command (runCommandOf) that
+// ended ok, at
 // most ganttUsualRuns of them, and how many runs that is. A run that
 // pulls images takes much longer than one that does not, so only runs
 // that pulled as this one does so far count.
@@ -164,7 +165,7 @@ func runUsual(snap store.Snapshot, run store.Run) (map[string]int64, int64, int)
 		if len(runs) == ganttUsualRuns {
 			break
 		}
-		if o.ID == run.ID || o.Title != run.Title || !o.Done() || o.Status != store.StatusOK || runHasStep(o, "pull images") != pulls {
+		if o.ID == run.ID || runCommandOf(o) != runCommandOf(run) || !o.Done() || o.Status != store.StatusOK || runHasStep(o, "pull images") != pulls {
 			continue
 		}
 		runs = append(runs, runElapsed(o, *o.End).Milliseconds())

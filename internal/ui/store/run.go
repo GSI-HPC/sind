@@ -48,9 +48,15 @@ type Run struct {
 	Program string
 	Version string
 	// Title is the command as a user would read it, such as
-	// "create cluster dev": the name of the root span.
+	// "create cluster dev": the name of the root span and what it works
+	// on, the nodes of a command that works on nodes, as "power reboot
+	// worker-[0-2].dev".
 	Title string
-	Start time.Time
+	// Command is the command as the log names it: the name of the root
+	// span and its target, the cluster of a command that works on nodes,
+	// as "power reboot dev".
+	Command string
+	Start   time.Time
 	// End is when the root span ended, nil while the run goes on.
 	End *time.Time
 	// Last is the time of the newest event of the run.

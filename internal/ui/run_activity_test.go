@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
@@ -140,9 +141,13 @@ func runSearchStore(ts *testServer) {
 		}
 		return r
 	}
+	power := run("r-dev", "power reboot dev", "dev", "ok")
+	power.Root.Children = []store.Span{{Kind: activity.KindStep, Name: "stopping", Children: []store.Span{
+		{Kind: activity.KindTarget, Node: "worker-0", Role: "worker"}, {Kind: activity.KindTarget, Node: "worker-1", Role: "worker"},
+	}}}
 	ts.st.SetRuns([]store.Run{
 		run("r-ui", "create worker dev", "dev", ""),
-		run("r-dev", "power reboot dev", "dev", "ok"),
+		power,
 		run("r-lab", "create cluster lab", "lab", "failed"),
 		run("r-none", "doctor", "", "ok"),
 	})
@@ -191,6 +196,11 @@ func TestRunActivitySearch(t *testing.T) {
 	assert.Contains(t, body, `href="/runs/r-ui"`)
 	assert.Contains(t, body, `href="/runs/r-dev"`, "a terminal run on a cluster of that name")
 	assert.NotContains(t, body, `href="/runs/r-lab"`)
+
+	// The names of the nodes find a run whose title folds them.
+	body = ts.get("/activity?q=worker-1").Body.String()
+	assert.Contains(t, body, `href="/runs/r-dev"`)
+	assert.Equal(t, 1, strings.Count(body, `<a class="mono" href="/runs/`))
 
 	body = ts.get("/activity?q=nothing").Body.String()
 	assert.Contains(t, body, `No run matches this filter. <a href="/activity">Clear filter</a>`)

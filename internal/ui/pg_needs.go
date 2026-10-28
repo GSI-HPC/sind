@@ -334,7 +334,7 @@ func pgFailures(sn store.Snapshot, now time.Time) []pgFailure {
 		f := pgFailure{Run: r}
 		realms := runEntryOf(sn, r).realms
 		if j := slices.IndexFunc(sn.Runs[:i], func(o store.Run) bool {
-			return o.Done() && o.Status == store.StatusOK && o.Title == r.Title && pgSameRealm(realms, runEntryOf(sn, o).realms)
+			return o.Done() && o.Status == store.StatusOK && runCommandOf(o) == runCommandOf(r) && pgSameRealm(realms, runEntryOf(sn, o).realms)
 		}); j >= 0 {
 			if now.Sub(*sn.Runs[j].End) >= fixedFor {
 				continue

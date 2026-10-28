@@ -183,12 +183,14 @@ func TestPgRunsOn(t *testing.T) {
 		{ID: "3", Title: "dev"},
 		{ID: "4", Title: "create cluster dev", End: &time.Time{}},
 		{ID: "5", Title: "delete cluster other dev"},
+		{ID: "6", Title: "power on worker-0", Root: store.Span{Node: "dev"}},
 	}}
 	var ids []string
 	for _, r := range pgRunsOn(sn, "sind", "dev", pgNow) {
 		ids = append(ids, r.ID)
 	}
-	assert.Equal(t, []string{"5", "1"}, ids, "oldest first")
+	assert.Equal(t, []string{"6", "5", "1"}, ids, "oldest first; the target of the command names the cluster")
+	sn.Runs = sn.Runs[:5]
 
 	// A run of sind ui counts in the realm of its task only.
 	sn.Tasks = []store.Task{{Trace: "x", Realm: "ci"}}

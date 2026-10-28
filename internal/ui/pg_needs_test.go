@@ -120,6 +120,14 @@ func TestPgFailures(t *testing.T) {
 	assert.False(t, pgSameRealm([]string{"ci"}, []string{"sind"}))
 	assert.True(t, pgSameRealm([]string{"ci", "sind"}, []string{"sind"}))
 	assert.True(t, pgSameRealm(nil, []string{"sind"}))
+	// A create worker that failed before the log named its node is fixed
+	// by one that ended ok, whose title names it.
+	early := store.Run{ID: "w1", Title: "create worker legacy", Command: "create worker legacy", End: end(time.Hour), Status: store.StatusFailed}
+	later := store.Run{ID: "w2", Title: "create worker worker-2.legacy", Command: "create worker legacy", End: end(10 * time.Second), Status: store.StatusOK}
+	f = pgFailures(store.Snapshot{Runs: []store.Run{later, early}}, pgNow)
+	require.Len(t, f, 1)
+	require.NotNil(t, f[0].Fixed)
+	assert.Equal(t, "w2", f[0].Fixed.ID)
 	// A dismissed one.
 	sn.Runs = []store.Run{failed}
 	sn.Dismissed = map[string]bool{"f": true}

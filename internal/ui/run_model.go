@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -323,15 +324,24 @@ func runSourceChip(source string) string {
 	return ""
 }
 
+// runCommandOf is the command of a run as the log names it, which tells
+// the runs of one command from others: "create worker legacy" for every
+// create worker of legacy, whatever nodes each one made. A run whose log
+// gives no command has its title.
+func runCommandOf(r store.Run) string { return cmp.Or(r.Command, r.Title) }
+
 // runTitle is the title of a run that task t started, with the nodes or
 // the cluster the task works on, which the log may not name: "power reboot
 // worker-4.dev" from the command words of the task when the run's title
-// starts them, else the title and the cluster.
+// starts them or are the title, else the title and the cluster, unless
+// the title names the nodes of the cluster already, as that of a node
+// command on the default cluster does: "power reboot worker-4".
 func runTitle(run store.Run, t *store.Task) string {
-	if words, _ := taskWords(t.Argv); run.Title != "" && strings.HasPrefix(strings.Join(words, " "), run.Title+" ") {
+	if words, _ := taskWords(t.Argv); run.Title != "" && (strings.Join(words, " ") == run.Title || strings.HasPrefix(strings.Join(words, " "), run.Title+" ")) {
 		return strings.Join(words, " ")
 	}
-	if run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) || slices.ContainsFunc(strings.Fields(run.Title), func(w string) bool { return strings.HasSuffix(w, "."+t.Cluster) }) {
+	named := run.Root.Node == t.Cluster && run.Command != "" && run.Title != run.Command
+	if named || run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) || slices.ContainsFunc(strings.Fields(run.Title), func(w string) bool { return strings.HasSuffix(w, "."+t.Cluster) }) {
 		return run.Title
 	}
 	return run.Title + " " + t.Cluster

@@ -225,7 +225,7 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 	if run.Title == "" {
 		return
 	}
-	h.Command = &pgCmd{Label: "Command", Text: strings.Join(sindArgvOf(e.realm, strings.Fields(run.Title)...), " ")}
+	h.Command = &pgCmd{Label: "Command", Text: strings.Join(sindArgvOf(e.realm, strings.Fields(cmp.Or(run.Command, run.Title))...), " ")}
 	h.CmdNote = "The event log names the command and what it worked on, not its flags."
 	if e.cluster != "" {
 		h.Back = &runLink{Label: "Open Clusters", Href: "/clusters"}

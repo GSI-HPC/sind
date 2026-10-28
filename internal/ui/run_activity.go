@@ -193,7 +193,9 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 		e.realm = e.realms[0]
 	}
 	e.title = cmp.Or(e.title, run.ID)
-	e.hay = strings.ToLower(strings.Join([]string{e.title, display, run.ID, e.realm}, "\n"))
+	// The names of the nodes find a run whose title folds them, as
+	// worker-[0-2].dev.
+	e.hay = strings.ToLower(strings.Join(append([]string{e.title, display, run.ID, e.realm}, activity.NodeNames(run.Root)...), "\n"))
 	return e
 }
 

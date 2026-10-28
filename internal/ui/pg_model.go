@@ -844,7 +844,8 @@ func (c pgCluster) Banner() *pgRunBanner {
 
 // pgWorksOn reports whether the run works on the cluster now (pgRunsOn):
 // it has not ended, names the cluster, or nodes of it, as "worker-1.dev",
-// and is not a run of sind ui in another realm.
+// in its title or as the target of its command, and is not a run of sind
+// ui in another realm.
 func pgWorksOn(sn store.Snapshot, r store.Run, realm, name string) bool {
 	if r.Done() {
 		return false
@@ -853,7 +854,7 @@ func pgWorksOn(sn store.Snapshot, r store.Run, realm, name string) bool {
 		return false
 	}
 	words := strings.Fields(r.Title)
-	return len(words) > 2 && slices.ContainsFunc(words[2:], func(w string) bool {
+	return slices.Contains(strings.Split(r.Root.Node, ","), name) || len(words) > 2 && slices.ContainsFunc(words[2:], func(w string) bool {
 		return w == name || strings.HasSuffix(w, "."+name)
 	})
 }

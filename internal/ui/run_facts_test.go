@@ -49,4 +49,12 @@ func TestRunTitleNamesTheClusterOfTheTask(t *testing.T) {
 	assert.Equal(t, "create cluster dev", runTitle(store.Run{Title: "create cluster dev"}, task))
 	assert.Equal(t, "delete realm", runTitle(store.Run{Title: "delete realm"}, &store.Task{}))
 	assert.Empty(t, runTitle(store.Run{}, task))
+	// A node command on the default cluster names its nodes without the
+	// cluster, and the title stays so.
+	def := &store.Task{Cluster: "default", Argv: []string{"sind", "power", "reboot", "worker-4"}}
+	reboot := store.Run{Title: "power reboot worker-4", Command: "power reboot default", Root: store.Span{Name: "power reboot", Node: "default"}}
+	assert.Equal(t, "power reboot worker-4", runTitle(reboot, def))
+	add := store.Task{Cluster: "default", Argv: []string{"sind", "create", "worker", "--count", "2"}}
+	workers := store.Run{Title: "create worker worker-[2-3]", Command: "create worker default", Root: store.Span{Name: "create worker", Node: "default"}}
+	assert.Equal(t, "create worker worker-[2-3] --count 2", taskTitle(add, &workers))
 }

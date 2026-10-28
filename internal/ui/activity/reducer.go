@@ -88,16 +88,16 @@ func convertRun(ru eventlog.Run, rt rates, h history) store.Run {
 	root := convertSpan(ru.Root, func(id progress.SpanID) (float64, []store.Sample) {
 		return rt.rate(ru.ID, id, ru.Last), h[spanKey{ru.ID, id}]
 	})
-	title := root.Name
+	command := root.Name
 	if root.Node != "" {
-		title += " " + root.Node
+		command += " " + root.Node
 	}
 	// eventlog clears Suspended once the run has ended.
 	return store.Run{
 		ID: ru.ID, Trace: ru.Trace.ID.String(), Parent: spanID(ru.Trace.Parent),
 		FromUI:  store.IsUITraceState(ru.Trace.State),
 		Program: ru.Program, Version: ru.Version,
-		Title: title, Start: root.Queued, End: root.Ended, Last: ru.Last,
+		Title: title(root), Command: command, Start: root.Queued, End: root.Ended, Last: ru.Last,
 		Status: root.Status, Class: root.Class, Err: root.Err,
 		Suspended: ru.Suspended, Root: root,
 	}

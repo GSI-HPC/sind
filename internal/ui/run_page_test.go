@@ -285,6 +285,9 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	assert.Equal(t, &runLink{Label: "Open bench", Href: "/clusters/ci/bench"}, h.Back)
 	snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "bench"}}}
 	assert.Equal(t, "sind create cluster bench", runHeadOf(runCtx{Run: run, Snap: snap}).Command.Text, "the default realm needs no flag")
+	power := run
+	power.Title, power.Command = "power reboot worker-[0-1].bench", "power reboot bench"
+	assert.Equal(t, "sind power reboot bench", runHeadOf(runCtx{Run: power, Snap: snap}).Command.Text, "the command as the log names it")
 
 	// A stopped create worker opens Add workers of its cluster, a timed
 	// out node too; other commands get no dialog.
