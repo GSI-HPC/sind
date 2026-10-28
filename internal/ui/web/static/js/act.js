@@ -7,8 +7,8 @@
 // follow the YAML, the links to a field with a problem, and the frame of
 // every dialog: the focus, which stays in the dialog and goes back to the
 // button that opened it, the question before a close loses changes, the
-// draft of a new cluster, Enter and Ctrl+Enter, and the status. The
-// dialogs are the server's HTML, which htmx
+// draft of a new cluster, Enter and Ctrl+Enter, the status, and Back, which
+// closes the dialog. The dialogs are the server's HTML, which htmx
 // puts into #layer; nothing here evaluates text, and no storage is needed to
 // work: every access is guarded.
 (() => {
@@ -34,8 +34,10 @@
   // What the open dialog needs: the element that opened it and how to find
   // it again after a swap, the link it came from, the element in it that
   // had the focus last, whether the user changed a field, the question the
-  // footer asks, the elements made inert, and the status said last.
-  const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0 };
+  // footer asks, the elements made inert, and the status said last; popped
+  // is set while Back closes the dialog, and skip while the dialog takes
+  // its own entry of the history away.
+  const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0, popped: false, skip: false };
 
   // isolate makes everything but the dialog, the layer and the page's live
   // region inert, marked data-act-inert, as a modal dialog needs: Tab and the
@@ -127,12 +129,16 @@
     S.said = null;
     keptOpen.clear();
     kept.clear();
+    // A dialog in the layer has an entry of its own in the history of the
+    // tab, so that Back closes it, as on a phone.
+    if (!inPage(d) && !(history.state && history.state.actDialog)) history.pushState({ actDialog: true }, '');
     isolate(d);
     footer(d);
     focusIn(d);
   }
 
-  // closed forgets the dialog and gives the focus back.
+  // closed forgets the dialog and gives the focus back. The entry of the
+  // dialog in the history goes too, unless Back took it already.
   function closed() {
     clearTimeout(S.saveTimer);
     S.dialog = S.last = null;
@@ -140,7 +146,27 @@
     S.asking = null;
     release();
     focusBack(false);
+    if (S.popped) S.popped = false;
+    else if (history.state && history.state.actDialog) { S.skip = true; history.back(); }
   }
+
+  // Back closes the dialog in the layer, or asks first, as Escape does,
+  // when it has changes; the dialog then keeps its entry.
+  window.addEventListener('popstate', ev => {
+    if (S.skip) {
+      S.skip = false;
+      return;
+    }
+    const d = dialog();
+    if (!d || inPage(d) || (ev.state && ev.state.actDialog)) return;
+    if (S.dirty) {
+      history.pushState({ actDialog: true }, '');
+      if (!S.asking) ask('close');
+      return;
+    }
+    S.popped = true;
+    close(true);
+  });
 
   // close closes the dialog. One with changes asks first, unless force.
   function close(force) {
