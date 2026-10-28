@@ -432,7 +432,7 @@ func pgNodeActs(sn store.Snapshot, n pgNode, now time.Time) []pgNodeAct {
 		out = append(out, a)
 	}
 	for i, a := range out {
-		out[i].When = runWhen(a.Start, now)
+		out[i].When = runClock(a.Start, now)
 		if a.End != nil {
 			out[i].Took = runDur(a.End.Sub(a.Start))
 		}
@@ -549,7 +549,7 @@ func pgChangeRows(sn store.Snapshot, n pgNode, acts []pgNodeAct, now time.Time) 
 	slices.SortStableFunc(out, func(a, b pgChangeRow) int { return b.At.Compare(a.At) })
 	out = out[:min(len(out), pgChangesShown)]
 	for i := range out {
-		out[i].When = runWhen(out[i].At, now)
+		out[i].When = runClock(out[i].At, now)
 	}
 	return out
 }

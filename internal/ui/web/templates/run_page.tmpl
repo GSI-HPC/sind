@@ -34,7 +34,7 @@ them. */}}
 
 {{define "run-head"}}{{with .Data}}{{if .Gone}}<div class="callout warn">This run is gone: sind ui keeps the newest runs of the event log only. <a href="/activity">Back to Activity</a></div>
 {{else}}<div class="head runhead"><div class="t"><h1>{{.Title}}</h1>
-  <div class="sub"><span class="pill {{.PillClass}}">{{.Pill}}</span>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}<span>{{.Origin}}</span>{{if .Program}}<span>{{.Program}}</span>{{end}}<span>started {{.Started}}</span>{{if .Exit}}<span class="mono">{{.Exit}}</span>{{end}}<span class="mono faint" title="trace {{.TraceTip}}"><span data-word="trace">trace</span> {{.Trace}}</span></div></div>
+  <div class="sub"><span class="pill {{.PillClass}}">{{.Pill}}</span>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}<span>{{.Origin}}</span>{{if .Program}}<span>{{.Program}}</span>{{end}}<span>started {{.Started}}</span>{{if .Exit}}<span class="mono">{{.Exit}}</span>{{end}}</div></div>
   <div class="actions">{{if .TaskID}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{else}}{{with .Stop}}{{template "run-stop" .}}{{end}}{{end}}{{end}}{{template "run-retry" .}}</div></div>
 {{with .NoStop}}<div class="callout">{{.}}</div>{{end}}
 {{end}}{{end}}{{end}}

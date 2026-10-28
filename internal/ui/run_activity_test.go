@@ -33,8 +33,11 @@ func TestRunActivityPage(t *testing.T) {
 		`<a class="mono" href="/runs/r-mid">create cluster dev</a>`,
 		`<span class="pill run">running</span>`,
 		`<span class="pill bad">failed</span>`,
-		"3 ok · 2 failed · 1 stopped",
-		"1 ok · 3 running",
+		`<th class="hide-s">Result</th>`,
+		`<td class="hide-s muted" data-label="Result">3 nodes ready for jobs</td>`,
+		`<td class="hide-s bad" data-label="Result">worker-[1,2] timed out · rolled back</td>`,
+		`<td class="hide-s warn" data-label="Result">stopped in services of worker-[0,1] · nothing left</td>`,
+		`<td class="hide-s muted" data-label="Result">nodes 0/3 · controller waits for munge</td>`,
 		`<span class="chip">terminal</span>`,
 		"/events?f=rail&amp;f=run-list&amp;f=tasks&amp;nav=activity",
 	} {
@@ -111,7 +114,7 @@ func TestRunNavCount(t *testing.T) {
 	assert.Equal(t, "2 commands run now", runNavCount(store.Snapshot{Runs: []store.Run{{}, {}}}, runNow).Label)
 }
 
-func TestRunMatchesAndCounts(t *testing.T) {
+func TestRunMatches(t *testing.T) {
 	ok := store.Run{End: runPtr(runAt(1)), Status: "ok"}
 	assert.True(t, runMatches(ok, ""))
 	assert.True(t, runMatches(ok, "ok"))
@@ -119,12 +122,6 @@ func TestRunMatchesAndCounts(t *testing.T) {
 	assert.False(t, runMatches(ok, "running"))
 	assert.True(t, runMatches(store.Run{}, "running"))
 	assert.False(t, runMatches(store.Run{}, "ok"), "a run that goes on has no status")
-	assert.Equal(t, "–", runCountsText(runOf(0, "")))
-	assert.Equal(t, "1 ok · 1 running · 1 queued · 1 failed · 1 stopped · 1 skipped",
-		runCountsText(runOf(0, "", runSp("step", "s", runStartedAt(0), runKids(
-			runSp("target", "a", runEndedAt(0, 1, "ok")), runSp("target", "b", runStartedAt(0)), runSp("target", "c"),
-			runSp("target", "d", runEndedAt(0, 1, "failed")), runSp("target", "e", runEndedAt(0, 1, "canceled")),
-			runSp("target", "f", runEndedAt(0, 1, "skipped")))))))
 }
 
 // runSearchStore fills the store with runs on clusters of two realms: a

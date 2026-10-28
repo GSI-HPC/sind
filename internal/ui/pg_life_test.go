@@ -80,7 +80,7 @@ func TestPgWorkOfACreate(t *testing.T) {
 	assert.Equal(t, "create cluster nightly", l.Title())
 	assert.Equal(t, "from sind ui", l.Source())
 	assert.Equal(t, "nightly", l.Name)
-	assert.Equal(t, "11:59:00", l.Started)
+	assert.Equal(t, "today 11:59", l.Started)
 	assert.Equal(t, []pgPill{{"pull images", runOK}, {"nodes", runRunning}, {"slurm", runQueued}}, l.Steps)
 	assert.Equal(t, l.Segs.Pct(), l.Pct())
 	require.NotNil(t, l.Stop)
@@ -285,7 +285,7 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 
 	body := pgBody(t, ts, "/clusters/ci/nightly", 200)
 	assert.Contains(t, body, `<span class="pill run" data-say="nightly is creating · nodes 1/3.">creating · nodes 1/3</span>`)
-	assert.Contains(t, body, `<span>started 11:59:00 from sind ui</span>`)
+	assert.Contains(t, body, `<span>started today 11:59 from sind ui</span>`)
 	assert.Contains(t, body, `<button type="button" class="btn" aria-disabled="true" title="sind creates the cluster. Add workers once it is ready.">Add workers…<span class="vh"> (sind creates the cluster. Add workers once it is ready.)</span></button>`)
 	assert.Contains(t, body, `aria-label="Stop create cluster nightly…">Stop the create…</summary>`)
 	assert.NotContains(t, body, "Delete cluster…")
@@ -350,7 +350,7 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 	body = pgBody(t, ts, "/?realm=", 200)
 	assert.Contains(t, body, `<td><span class="pill run">creating nightly</span> </td>`)
 	assert.NotContains(t, body, "a command runs", "the health says it already")
-	assert.Contains(t, body, `<span class="mono">create cluster nightly</span> started 11:59:00 from sind ui</div>`)
+	assert.Contains(t, body, `<span class="mono">create cluster nightly</span> started today 11:59 from sind ui</div>`)
 }
 
 func TestPgPagesWhileACommandDeletesANode(t *testing.T) {

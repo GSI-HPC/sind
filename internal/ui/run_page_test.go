@@ -56,8 +56,6 @@ func TestRunHead(t *testing.T) {
 	assert.Equal(t, "from sind ui", h2.Origin)
 	assert.Contains(t, h2.NoStop, "Another sind ui started this run")
 	assert.Equal(t, "sind v0.11.0", h.Program)
-	assert.Equal(t, "4bf92f35", h.Trace)
-	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", h.TraceTip)
 	assert.Empty(t, h.TaskID)
 	assert.Equal(t, "running", h.Pill)
 
@@ -87,7 +85,6 @@ func TestRunHead(t *testing.T) {
 	assert.Empty(t, h.TaskID)
 	assert.Equal(t, "exit 130", h.Exit)
 	assert.Equal(t, "stopped", h.Pill)
-	assert.Equal(t, "1", runHeadOf(runCtx{Run: store.Run{Trace: "1"}}).Trace)
 	assert.Empty(t, runHeadOf(runCtx{Run: store.Run{}}).Program)
 }
 

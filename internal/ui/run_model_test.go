@@ -230,7 +230,7 @@ func TestRunClockOfARun(t *testing.T) {
 func TestRunWhen(t *testing.T) {
 	now := runAt(30)
 	assert.Equal(t, "–", runWhen(time.Time{}, now))
-	assert.Equal(t, runAt(5).Local().Format("15:04:05"), runWhen(runAt(5), now))
+	assert.Equal(t, "today "+runAt(5).Local().Format("15:04"), runWhen(runAt(5), now))
 	assert.Equal(t, runAt(-86400).Local().Format("Jan 2 15:04"), runWhen(runAt(-86400), now))
 	assert.Equal(t, "", runStamp(time.Time{}))
 	assert.Contains(t, runStamp(runAt(1)), "2026-10-14")

@@ -84,7 +84,9 @@ type runListRow struct {
 	Started string
 	Elapsed string
 	Since   int64
-	Counts  string
+	// Result says what came of the run (runResult), in the class
+	// ResultClass.
+	Result, ResultClass string
 }
 
 // runWord is a word of a run's title; Flag marks a flag with its value,
@@ -256,8 +258,9 @@ func runListOf(v *View) (*runList, error) {
 		row := runListRow{
 			ID: run.ID, Title: e.title, Realm: e.realm, Chip: runSourceChip(runSource(v.Snap, run)),
 			Started: runWhen(run.Start, v.Now), Elapsed: runDur(runElapsed(run, v.Now)),
-			Since: runSince(run), Counts: runCountsText(run),
+			Since: runSince(run),
 		}
+		row.Result, row.ResultClass = runResult(run, v.Now)
 		row.Pill, row.PillClass = runPill(run, nil)
 		list.Rows = append(list.Rows, row)
 	}
@@ -311,22 +314,4 @@ func runChips(entries []runEntry, q runQuery) (realms, clusters []runTab) {
 		clusters = append(clusters, runTab{Label: name, Href: chip.href(), N: clusterN[name], On: name == q.Cluster, Tip: tip})
 	}
 	return realms, clusters
-}
-
-// runCountsText sums up a run's targets: "3 ok · 1 failed", "–" for none.
-func runCountsText(run store.Run) string {
-	c := activity.CountTargets(run.Root)
-	var parts []string
-	for _, p := range []struct {
-		n    int
-		what string
-	}{{c.OK, "ok"}, {c.Running, "running"}, {c.Queued, "queued"}, {c.Failed, "failed"}, {c.Canceled, "stopped"}, {c.Skipped, "skipped"}} {
-		if p.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.what))
-		}
-	}
-	if len(parts) == 0 {
-		return "–"
-	}
-	return strings.Join(parts, " · ")
 }

@@ -124,16 +124,27 @@ func runPageLoad(v *View) error {
 	return nil
 }
 
-// runWhen writes a time of day, with the date for a time before today.
+// runWhen writes when something happened: "today 09:14" for a time of
+// today, with the date for a time before today.
 func runWhen(t, now time.Time) string {
 	if t.IsZero() {
 		return "–"
 	}
 	t, now = t.Local(), now.Local()
 	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return t.Format("15:04:05")
+		return "today " + t.Format("15:04")
 	}
 	return t.Format("Jan 2 15:04")
+}
+
+// runClock writes a time of day to the second, with the date for a time
+// before today, for the rows of a list of what happened to a node.
+func runClock(t, now time.Time) string {
+	w := runWhen(t, now)
+	if strings.HasPrefix(w, "today ") {
+		return t.Local().Format("15:04:05")
+	}
+	return w
 }
 
 // runHead is the head of the run page.
@@ -145,13 +156,11 @@ type runHead struct {
 	PillClass string
 	// NoStop says why sind ui cannot stop a run that goes on and that it
 	// did not start.
-	NoStop   string
-	Origin   string
-	Program  string
-	Started  string
-	Exit     string
-	Trace    string
-	TraceTip string
+	NoStop  string
+	Origin  string
+	Program string
+	Started string
+	Exit    string
 	// Back leads to what the run's task worked on: its cluster, the list
 	// of clusters once the cluster is gone, or the mesh.
 	Back *runLink
@@ -189,12 +198,9 @@ func runHeadOf(rc runCtx) *runHead {
 	run := rc.Run
 	h := &runHead{
 		Title: run.Title, Origin: runSourceText(runSource(rc.Snap, run)),
-		Started: runWhen(run.Start, rc.Now), Trace: run.Trace, TraceTip: run.Trace,
+		Started: runWhen(run.Start, rc.Now),
 	}
 	h.Pill, h.PillClass = runPill(run, rc.Task)
-	if len(h.Trace) > 8 {
-		h.Trace = h.Trace[:8]
-	}
 	if run.Program != "" {
 		h.Program = strings.TrimSpace(run.Program + " " + run.Version)
 	}

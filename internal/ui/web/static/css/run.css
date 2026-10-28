@@ -130,6 +130,7 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rsum .counts{grid-column:3;grid-row:1;justify-content:flex-end;gap:4px 0;color:var(--muted);white-space:nowrap}
 .rsum .counts{gap:4px 16px}
 .rsum .counts .bad{color:var(--bad)}
+.rsum .counts .warn{color:var(--warn)}
 .rsum .noteln{grid-column:2/4;grid-row:2;display:flex;gap:14px;min-width:0;font-size:var(--t-md)}
 .rsum .note{flex:1;min-width:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rsum .note.ok{color:var(--ok)} .rsum .note.bad{color:var(--bad)} .rsum .note.warn{color:var(--warn)}
@@ -262,13 +263,17 @@ table.runs td a{overflow-wrap:anywhere}
 table.runs td a .flag{white-space:nowrap}
 /* the command keeps room for its flags; the table scrolls on a phone */
 table.runs td:nth-child(2){min-width:200px}
+table.runs td.bad{color:var(--bad)}
+table.runs td.warn{color:var(--warn)}
 
 @media (max-width:760px){
   /* a card keeps its line, its clock and Stop; the dock shows one card */
   .task{padding:8px 10px;gap:6px}
   .task .segbar{height:6px}
   /* the summary in three lines; a row's result goes under its track */
-  .rsum{grid-template-columns:auto minmax(0,1fr);grid-template-rows:22px 18px auto;column-gap:12px}
+  /* on a phone the lines wrap rather than lose their ends */
+  .rsum{grid-template-columns:auto minmax(0,1fr);grid-template-rows:minmax(22px,auto) minmax(18px,auto) auto;column-gap:12px}
+  .rsum .hl,.rsum .note{white-space:normal;overflow:visible;overflow-wrap:anywhere}
   .rsum .clock{font-size:24px;grid-row:1/3}
   .rsum .counts{grid-column:1/3;grid-row:3;justify-content:flex-start;flex-wrap:wrap}
   .rsum .noteln{grid-column:2;grid-row:2}
