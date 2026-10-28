@@ -38,7 +38,7 @@ Realm is determined by the following precedence (highest first):
 {{< /cli >}}
 {{< ui >}}
 
-The realm switch in the top bar selects the realm that the pages show, or all realms. A dialog acts in the realm of its cluster and says so. **New cluster** and **Connect a container** have a **Realm** field instead, filled in with the realm of the page: type another realm there, or in New cluster a new name, which makes a new realm. Connect needs a realm with a cluster, as the container joins its mesh, and warns of one that it does not see. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci delete realm`.
+The realm switch in the top bar selects the realm that the pages show, or all realms. A dialog acts in the realm of its cluster and says so. **New cluster** has a **Realm** field instead, filled in with the realm of the page: type another realm there, or a new name, which makes a new realm. **Connect a container** connects to the realm in its title, and has a button for each realm to switch it, as the container joins the mesh of a realm with a cluster. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci delete realm`.
 
 {{< /ui >}}
 {{< /ways >}}

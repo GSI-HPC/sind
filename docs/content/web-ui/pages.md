@@ -25,9 +25,9 @@ Every cluster of the realm. sind keeps no list of clusters. It finds them by the
 
 {{< uishot "clusters" >}}
 
-Type in **Filter** to show only the clusters whose name, realm, state or nodes hold every word you type. **Esc** clears it. The chips above the table show the clusters that need a look, those that run, or those with monitoring, each with its count. While a command creates or deletes a cluster, a **Creating** or **Deleting** chip shows it, and **Running** leaves it out. Such a cluster has a thin progress bar under its pill and, in place of **Delete…**, **Stop…** while it is created or **Show progress** while it is deleted, and you cannot select it. Select a column head to sort by it, and again to reverse the order. Sort by state puts the clusters that need a look first. The address keeps the filter, the chip and the order, so a link or a reload shows the same list.
+Type in **Filter** to show only the clusters whose name, realm, state or nodes hold every word you type. **Esc** clears it. The chips above the table show the clusters that need a look, those that run, or those with monitoring, each with its count. While a command creates or deletes a cluster, a **Creating** or **Deleting** chip shows it, and **Running** leaves it out. Such a cluster has a thin progress bar under its pill and, in place of its **⋯** menu, **Stop…** while it is created or **Show progress** while it is deleted, and you cannot select it. The **⋯** menu of a row has **Add workers…** and **Power…**, and apart, under **Can lose data**, **Delete cluster…**, which says when files on a data volume go too. Select a column head to sort by it, and again to reverse the order. Sort by state puts the clusters that need a look first. The address keeps the filter, the chip and the order, so a link or a reload shows the same list.
 
-Tick clusters to delete several at once. **Delete 2 clusters…** in the bar (it counts them) opens one dialog that lists them, and you type their number to confirm. sind ui runs one `sind delete cluster` for each.
+Tick clusters to delete several at once. **Delete 2 clusters…** in the bar (it counts them) opens one dialog with a row for each: what goes and what stays of it. You type their number to confirm. sind ui runs one `sind delete cluster` for each.
 
 ## Nodes
 
@@ -81,7 +81,7 @@ Below are the services, each with its state, its **Logs** and, when it is down, 
 
 ## Mesh and DNS
 
-The mesh network, the DNS server and its records, and the containers that are connected to the realm. Type into the filter above the records to find a name or an address. **Copy** on a row copies its name, and **Copy list** copies the records that show, as lines of `/etc/hosts`; when the browser copies nothing, the lines show in a box to copy with Ctrl+C. A name of a node opens the node. Below the records is a `dig` command that asks the DNS server from the host.
+The mesh network, the DNS server and its records, and the containers that are connected to the realm. The records show the first 10; **Show all N records** shows the rest, and the filter above them always looks in all of them for a name or an address. **Copy** on a row copies its name, and **Copy list** copies the records that match the filter, as lines of `/etc/hosts`; when the browser copies nothing, the lines show in a box to copy with Ctrl+C. A name of a node opens the node. Below the records is a `dig` command that asks the DNS server from the host. While no container outside sind is connected, **Other containers** lists the ones that could be, with their image and state, each with **Connect…**.
 
 {{< uishot "mesh" >}}
 

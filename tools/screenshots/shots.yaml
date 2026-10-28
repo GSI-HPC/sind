@@ -24,7 +24,7 @@ shots:
     sizes: [desktop, phone]
 
   - name: clusters
-    alt: "Clusters: one row for each cluster of every realm, with its state, nodes and Slurm version"
+    alt: "Clusters: one row for each cluster of every realm, with its state, nodes and Slurm version, and a ⋯ menu of its actions"
     path: /clusters
     hide: "#tasks"
     page: clusters
@@ -86,7 +86,7 @@ shots:
     fit: true
 
   - name: mesh
-    alt: "Mesh and DNS: the mesh network, the DNS and SSH containers, the records and the containers that are connected"
+    alt: "Mesh and DNS: the mesh network, the DNS and SSH containers, the first records, and the containers that are connected"
     path: /mesh
     hide: "#tasks"
     page: mesh
@@ -192,8 +192,17 @@ shots:
     page: clusters
     fit: true
 
+  - name: clusters-row-menu
+    alt: "Clusters with the ⋯ menu of a row open: Add workers and Power, and apart, under Can lose data, Delete cluster with what goes too"
+    path: /clusters
+    hide: "#tasks"
+    steps:
+      - click: 'tr[data-pg-item="sind/dev"] summary'
+    page: clusters
+    fit: true
+
   - name: dialog-delete-clusters
-    alt: "The Delete clusters dialog: the clusters, the number to type and one command for each"
+    alt: "The Delete clusters dialog: a row for each cluster with what goes, its data volume in red, and what stays, the box to tick for the data, the number to type and one command for each"
     path: /clusters
     steps:
       - dialog: delete-clusters?clusters=sind/legacy&clusters=ci/pr-145
@@ -239,15 +248,15 @@ shots:
     page: dialogs
 
   - name: dialog-connect
-    alt: "The Connect a container dialog: the container to connect to the realm's mesh, and the command it runs"
+    alt: "The Connect a container dialog: the containers that sind did not make to pick from, with their image and state, what the container then reaches, and the command it runs"
     path: /mesh
     steps:
-      - dialog: connect?realm=sind&container=kind-control-plane
+      - dialog: connect?realm=ci&container=kind-control-plane
     crop: "#layer [role=dialog]"
     page: dialogs
 
   - name: dialog-delete-realm
-    alt: "The Delete realm dialog: the clusters and the rest that goes, what stays, and the name of the realm to type to confirm"
+    alt: "The Delete realm dialog: a row for each cluster and one for the realm with what goes and what stays, the box to tick for the data, and the name of the realm to type to confirm"
     path: /mesh
     steps:
       - dialog: delete-realm?realm=sind

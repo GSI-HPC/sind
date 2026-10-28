@@ -87,17 +87,17 @@ Before an action that stops nodes, the dialog warns when they include the contro
 
 ## Delete
 
-**Delete cluster**, **Delete workers** and **Delete realm** list what goes and what stays: the containers, the network, the volumes and the Slurm state of a cluster go, and the host directories it mounts stay. The button names what it deletes, such as **Delete worker-5** or **Delete cluster dev**.
+**Delete cluster**, **Delete workers** and **Delete realm** list what goes and what stays: the containers, the network, the volumes and the Slurm state of a cluster go, and the host directories it mounts stay. A data or home volume comes first and in red, with what is on it, such as `the data volume sind-dev-data: every file in /data`, and a box below the command names it again, such as **I know that the data volume `sind-dev-data` of dev goes, with every file in /data.** The button stays off until you tick it. The button names what it deletes, such as **Delete worker-5** or **Delete cluster dev**.
 
 To confirm, type the name of the worker when you delete one worker, the number of workers when you delete several, else the name of the cluster or the realm, in the field beside the button. The name must match with its case; spaces around it do not count. Until it matches, a hint in the footer says why the button stays off. Delete workers lists the workers in a table with their Slurm state and issues, and names the workers that go and those that stay as node sets, such as `worker-[4-5]`.
 
 Every dialog keeps its footer in view: the button, Cancel, what to type, and the status, such as **1 problem: How many** or **1 warning**, which takes you to it, with the first problem or warning in words beside it.
 
-Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. Its list of what stays names the host directories of its clusters and those containers. Open it from the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell.
+Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. It shows a table with a row for each cluster and one for the realm: what goes of each, its data volumes in red, and what stays, the host directories of the cluster or the containers that sind detaches. Open it from the **⋯** menu of the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell.
 
 {{< uishot "dialog-delete-cluster" "A delete lists what goes and what stays, and asks you to type the name of the cluster." >}}
 
-**Delete clusters** deletes the clusters that you ticked on the Clusters page, up to 32. It asks you to type their number, and its button, such as **Delete 2 clusters**, starts one `sind delete cluster` for each. A cluster that is gone by the time the dialog opens is named and left out. Delete clusters in the jump box takes you to the Clusters page to tick them. The commands of one realm run one after the other, as each waits for the realm lock. The page goes back to the list, and the list of the task dock shows each command.
+**Delete clusters** deletes the clusters that you ticked on the Clusters page, up to 32. It shows the same table as Delete realm, with a row for each realm that goes with its last clusters, and its title names those realms, such as **Delete 3 clusters and realm sind**. When the clusters come from several realms, each row names the realm of its cluster. It asks you to type their number, and its button, such as **Delete 2 clusters**, starts one `sind delete cluster` for each. A cluster that is gone by the time the dialog opens is named and left out. Delete clusters in the jump box takes you to the Clusters page to tick them. The commands of one realm run one after the other, as each waits for the realm lock. The page goes back to the list, and the list of the task dock shows each command.
 
 {{< uishot "dialog-delete-clusters" "Deleting several clusters asks you to type their number." >}}
 
