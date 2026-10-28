@@ -751,12 +751,13 @@
   // A checkbox of the preview with data-act-hold, such as Create anyway,
   // keeps what the user chose when a preview takes its place, also one
   // that was on its way when the user ticked it, and the next preview
-  // posts it so.
+  // posts it so. It listens before htmx does, whose preview of the change
+  // would else post the state from before it.
   const kept = new Map();
   document.addEventListener('change', ev => {
     const t = ev.target;
     if (t instanceof HTMLInputElement && t.type === 'checkbox' && t.hasAttribute('data-act-hold') && t.id) kept.set(t.id, t.checked);
-  });
+  }, true);
   document.addEventListener('htmx:configRequest', ev => {
     const params = ev.detail && ev.detail.parameters;
     if (!params) return;
