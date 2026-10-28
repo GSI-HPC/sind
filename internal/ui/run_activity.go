@@ -184,7 +184,7 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 			e.realms = []string{t.Realm}
 		}
 	}
-	if e.realms == nil && e.cluster != "" {
+	if e.realms == nil && e.cluster != "" && !runOutlived(run) {
 		for _, realm := range slices.Sorted(maps.Keys(snap.Clusters)) {
 			if _, ok := snap.Cluster(realm, e.cluster); ok {
 				e.realms = append(e.realms, realm)
@@ -199,6 +199,23 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 	// worker-[0-2].dev.
 	e.hay = strings.ToLower(strings.Join(append([]string{e.title, display, run.ID, e.realm}, activity.NodeNames(run.Root)...), "\n"))
 	return e
+}
+
+// runOutlived reports whether the cluster of a run is gone since the run
+// ended: a create cluster that did not end ok made none to keep, and a
+// delete cluster that did removed it. A cluster of the name that exists now
+// is another one, whose realm says nothing about the run's, which the log
+// does not keep.
+func runOutlived(run store.Run) bool {
+	switch {
+	case !run.Done():
+		return false
+	case run.Root.Name == "create cluster":
+		return run.Status != store.StatusOK
+	case run.Root.Name == "delete cluster":
+		return run.Status == store.StatusOK
+	}
+	return false
 }
 
 // matches reports whether the entry passes the query, but for its status.

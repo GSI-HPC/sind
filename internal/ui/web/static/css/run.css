@@ -119,16 +119,15 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rout-doc li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:baseline}
 @media (max-width:900px){.rout-fail{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:700px){.rout-h,.rout>.pb{padding-left:16px}.rout-meta{flex-basis:100%}.rout-next .grow{display:none}.rout-next .hint{flex-basis:100%}}
-/* the summary: the clock, line 1 (what leads now), the counts, and line 2
-   (the one fact to know now) on a fixed grid, so that nothing moves as
+/* the summary: the clock, line 1 (what leads now), line 2 (the one fact
+   to know now) and the counts on a fixed grid, so that nothing moves as
    the texts change */
-.rsum{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:24px 22px;column-gap:20px;row-gap:4px;align-items:center}
+.rsum{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:24px 22px auto;column-gap:20px;row-gap:4px;align-items:center}
 .rsum .clock{grid-row:1/3;font:600 30px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--fg);min-width:4ch}
 .rsum .clock.done.ok{color:var(--ok)} .rsum .clock.done.failed{color:var(--bad)} .rsum .clock.done.canceled{color:var(--warn)}
-.rsum .hl{font:var(--t-md) var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rsum .hl{grid-column:2/4;font:var(--t-md) var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .rsum .hl .sep,.rsum .hl .faint{color:var(--faint)}
-.rsum .counts{grid-column:3;grid-row:1;justify-content:flex-end;gap:4px 0;color:var(--muted);white-space:nowrap}
-.rsum .counts{gap:4px 16px}
+.rsum .counts{grid-column:2/4;grid-row:3;justify-content:flex-start;gap:4px 16px;color:var(--muted);font-size:var(--t-sm)}
 .rsum .counts .bad{color:var(--bad)}
 .rsum .counts .warn{color:var(--warn)}
 .rsum .noteln{grid-column:2/4;grid-row:2;display:flex;gap:14px;min-width:0;font-size:var(--t-md)}

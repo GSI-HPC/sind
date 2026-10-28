@@ -259,7 +259,7 @@ func runHeadOf(rc runCtx) *runHead {
 // terminal or one whose task sind ui no longer keeps: the command that its
 // title names, with the realm when only one realm has its cluster; once it
 // failed or was stopped, the dialog that does it again where there is one,
-// filled in from the title; and the way to its cluster.
+// filled in from its log; and the way to its cluster.
 func runHeadNoTask(rc runCtx, h *runHead) {
 	run := rc.Run
 	e := runEntryOf(rc.Snap, run)
@@ -290,12 +290,17 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 	words := strings.Fields(run.Title)
 	switch strings.Join(words[:min(2, len(words))], " ") {
 	case "create cluster":
-		h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-cluster", "realm", e.realm, "name", e.cluster)}
-		if runTimedOut(run) {
-			// Nodes ran out of the wait: a longer one is what to try.
-			kv, word := runRetryWait(run)
-			h.Edit = &runLink{Label: "Try again with a " + word + " wait…", Href: pgDialog("create-cluster", append([]string{"realm", e.realm, "name", e.cluster}, kv...)...), Primary: true}
+		// New cluster rebuilt from the log of the run (actRetry).
+		label := "Try again…"
+		switch {
+		case class == runFailed && runTimedOut(run):
+			// Nodes ran out of the wait: the dialog sets a longer one.
+			_, word := runRetryWait(run)
+			label = "Try again with a " + word + " wait…"
+		case e.cluster != "":
+			label = "Try " + e.cluster + " again…"
 		}
+		h.Edit = &runLink{Label: label, Href: pgDialog("create-cluster", "from", run.ID, "realm", e.realm, "name", e.cluster), Primary: true}
 	case "create worker":
 		if e.realm != "" {
 			// Add workers, for as many workers as the run made.

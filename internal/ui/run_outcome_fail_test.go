@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +107,7 @@ func TestRunFailOutcome(t *testing.T) {
 	assert.Equal(t, "Doctor: 1 failed, 1 warning", o.DoctorText)
 	assert.Equal(t, []pgAction{{Label: "Fix the host in Doctor", URL: "/doctor"}}, o.Next)
 	assert.Equal(t, "setting up nodes: node worker-1: timed out", o.CopyErr)
-	assert.Equal(t, "Try again, at the top, opens the form of this run.", o.NextNote)
+	assert.Equal(t, "Try again with a 10m wait, at the top, opens New cluster, rebuilt from the event log.", o.NextNote)
 	assert.Equal(t, []runPlain{{Word: "munge", Text: " on worker-1 did not start in time. Without munge, the node cannot talk to slurmctld."}}, o.Fail.Says)
 
 	// Another command, a timeout without a wait, a host that passes every
@@ -120,6 +121,17 @@ func TestRunFailOutcome(t *testing.T) {
 	assert.Empty(t, o.DoctorText)
 	assert.Equal(t, []pgAction{{Label: "Check the host in Doctor", URL: "/doctor"}}, o.Next)
 	assert.Empty(t, o.NextNote)
+
+	// Warnings alone: Check the host. A create worker from a terminal
+	// opens its dialog, and one of a task the form of the run.
+	snap.Doctor = &store.DoctorReport{Checks: []store.DoctorCheck{{Name: "inotify", Status: "warning"}}}
+	snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "dev"}}}
+	grow := runOf(9, "failed", runSp("step", "nodes", runEndedAt(0, 9, "failed"), runKids(timedOut("worker-1", "slurmd", 0))))
+	grow.Title, grow.Root.Name, grow.Root.Node = "create worker worker-1.dev", "create worker", "dev"
+	o = at(grow)
+	assert.Equal(t, []pgAction{{Label: "Check the host in Doctor", URL: "/doctor"}}, o.Next)
+	assert.Equal(t, "Add a worker again, at the top, opens its dialog.", o.NextNote)
+	assert.Equal(t, "opens the form of this run", runEditWhat(runCtx{Run: grow, Task: &store.Task{}}))
 
 	// A failure without a target that timed out: how long it took, and
 	// the rollback.

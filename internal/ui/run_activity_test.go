@@ -229,3 +229,22 @@ func TestRunListRowWords(t *testing.T) {
 		{"create", false}, {"cluster", false}, {"--pull", true}, {"--wait 5m", true}, {"--memory=8g", true}, {"x", false},
 	}, r.Words())
 }
+
+func TestRunOutlived(t *testing.T) {
+	of := func(name, status string) store.Run {
+		run := runOf(9, status)
+		run.Root.Name = name
+		return run
+	}
+	assert.True(t, runOutlived(of("create cluster", "failed")), "a failed create left no cluster")
+	assert.False(t, runOutlived(of("create cluster", "ok")))
+	assert.True(t, runOutlived(of("delete cluster", "ok")), "a delete removed it")
+	assert.False(t, runOutlived(of("delete cluster", "failed")))
+	assert.False(t, runOutlived(of("create worker", "failed")))
+	assert.False(t, runOutlived(runOf(0, "")), "a run that goes on")
+	// Its realm then does not come from a cluster of the name now.
+	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"sind": {{Name: "dev"}}}}
+	failed := of("create cluster", "failed")
+	failed.Root.Node = "dev"
+	assert.Empty(t, runEntryOf(snap, failed).realm)
+}

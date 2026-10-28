@@ -268,7 +268,15 @@ realm of the link, another one that sind ui sees, or a new one. */}}
     <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>
   {{template "act-realm" .}}
 </div>
-<div class="act-inline act-yamlstart"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><span class="hint">Paste a cluster config, or open a file of one.</span></div>
+{{with .Retry}}<input type="hidden" name="from" value="{{.ID}}">
+<div class="callout act-retry"><b>This run came from {{.Source}}. {{.Lack}}</b>
+  <ul><li>Nodes: {{if .HasNodes}}{{.Nodes}}, as the run had them.{{else}}not in the log, so the defaults of New cluster.{{end}}</li>
+  <li>Image: {{with .Image}}<span class="mono">{{.}}</span>, as the run pulled it.{{else}}not in the log, so the default.{{end}}</li>
+  {{with .OldWait}}<li>Wait: {{.}} → {{$.Retry.NewWaitWord}}, as {{$.Retry.Why}}.</li>{{end}}
+  <li>Not in the log: CPUs, memory, /data, users and Slurm lines. They have the defaults of New cluster.</li></ul>
+  <div class="act-inline"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><a class="btn sm" href="/runs/{{.ID}}">Show the {{.Word}} run</a></div></div>
+<p class="hint act-retry-yaml">Try again runs your YAML in place of the {{.Word}} run {{.ID}}. Run options keep its wait and its pull.</p>{{end}}
+{{if not .Retry}}<div class="act-inline act-yamlstart"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><span class="hint">Paste a cluster config, or open a file of one.</span></div>{{end}}
 <div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
   <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
   <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The plan follows it, and Name and Realm change the name and the realm in it. The rest of the form is locked; Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
@@ -277,9 +285,9 @@ realm of the link, another one that sind ui sees, or a new one. */}}
   <textarea id="act-yaml" name="yaml" rows="26" placeholder="kind: Cluster&#10;name: hpc&#10;nodes:&#10;  - controller&#10;  - worker: 2" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml act-hint-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
   <span class="err" id="act-err-yaml"></span><span class="hint" id="act-hint-yaml">Paste a config, open a file, or drop one here. At most 64 KiB.</span>
 </div>
-<div class="fld"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
+<div class="fld"><label for="act-image">Image{{if .FromRun "image"}} <span class="chip act-fromrun">from the run</span>{{end}}</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
   <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
-<div class="fld"><span class="lbl">Nodes</span>
+<div class="fld"><span class="lbl">Nodes{{if .FromRun "nodes"}} <span class="chip act-fromrun">from the run</span>{{end}}</span>
 <div class="act-roles" id="act-roles">
   <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b data-word="controller">controller</b><span class="hint"><span data-word="slurmctld">slurmctld</span>. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
   {{template "act-ned" (.Node "controller")}}
@@ -357,14 +365,15 @@ realm of the link, another one that sind ui sees, or a new one. */}}
     <span class="hint">sind ui writes the data storage into the config, so the saved file alone makes the same cluster again.</span>
   </div>
 </details>
-<details class="act-sec" id="act-sec-run"><summary><span class="act-st">Run options</span><span class="act-ss" id="act-sum-run"></span><span class="act-sb" id="act-bad-run"></span></summary>
+<details class="act-sec" id="act-sec-run"{{with .Retry}}{{if .OldWait}} open{{end}}{{end}}><summary><span class="act-st">Run options</span><span class="act-ss" id="act-sum-run"></span><span class="act-sb" id="act-bad-run"></span></summary>
   <div class="act-sbody">
     {{if .Val "pull_auto"}}<input type="hidden" id="act-pull-auto" name="pull_auto" value="1">{{end}}
     <label class="act-nr act-box"><input type="checkbox" id="act-pull" name="pull"{{if .On "pull"}} checked{{end}} aria-describedby="act-err-pull act-pull-hint"><span class="act-lab"><b>Pull the image</b><span class="hint" id="act-pull-hint">Gets the newest image first, even if Docker has one.</span><span class="err" id="act-err-pull"></span></span></label>
-    <div class="fld"><span class="lbl" id="act-wait-lbl">Wait for ready</span>
+    <div class="fld"><span class="lbl" id="act-wait-lbl">Wait for ready{{with .Retry}}{{with .OldWait}} <span class="chip act-fromrun">was {{.}}</span>{{end}}{{end}}</span>
       <div class="act-waits"><div class="seg act-seg" role="radiogroup" aria-labelledby="act-wait-lbl">{{range .Waits}}<label><input type="radio" name="wait" value="{{.Value}}"{{if $.Is "wait" .Value}} checked{{end}}{{if eq .Value "2m"}} id="act-wait"{{end}}><span>{{.Label}}</span></label>{{end}}</div>
       <input type="text" id="act-wait_other" name="wait_other" value="{{.Val "wait_other"}}" placeholder="such as 15m" autocapitalize="off" spellcheck="false" aria-label="Other time to wait" aria-describedby="act-err-wait_other"></div>
       <span class="err" id="act-err-wait"></span><span class="err" id="act-err-wait_other"></span>
+      {{with .Retry}}{{if .OldWait}}<span class="hint act-retry-wait">sind ui set {{.NewWaitWord}} because {{.Why}}. Pick {{.OldWait}} to keep the wait of the run.</span>{{end}}{{end}}
       <span class="hint">For each node, from the start of its container; pulls do not count. If a node is not ready in time, sind removes the cluster again.</span></div>
   </div>
 </details>

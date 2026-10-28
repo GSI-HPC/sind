@@ -34,6 +34,8 @@ var actDialogKeys = []string{
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
 	"dtype", "dir", "mkdir", "mount", "monitoring", "pull", "wait_other",
+	// The run that New cluster tries again (actRetry).
+	"from",
 }
 
 // actRowFieldPattern is a field of a node, a worker group or a row of a
@@ -131,11 +133,22 @@ type actSpec struct {
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
 		OK: "Create", Wide: true, Plan: true, Draft: true, Follow: true, RealmField: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
-		Title: func(*actDialog) string { return "New cluster" },
-		Lead: func(*actDialog) string {
+		Title: func(d *actDialog) string {
+			if d.Retry != nil {
+				return "Try " + cmp.Or(d.Form.Get("name"), "the cluster") + " again"
+			}
+			return "New cluster"
+		},
+		Lead: func(d *actDialog) string {
+			if d.Retry != nil {
+				return "Rebuilt from the run " + d.Retry.ID + ". Try again saves the config, then runs sind create cluster with it."
+			}
 			return "sind ui saves the config, then runs sind create cluster with it."
 		},
 		Defaults: func(d *actDialog) {
+			if d.Retry != nil {
+				d.Retry.defaults(d)
+			}
 			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
 			d.def("image", config.DefaultImage)
 			if w := d.Form.Get("wait"); w != "" && w != "other" && !slices.Contains(action.Waits, w) {
@@ -701,6 +714,9 @@ type actDialog struct {
 	// Short says that the Power dialog is a short confirmation of the
 	// action and the nodes of its link, with the picker folded away.
 	Short bool
+	// Retry is the run that New cluster tries again, from the link's
+	// field from; nil for none.
+	Retry *actRetry
 	// defaulted are the fields that Spec.Defaults filled.
 	defaulted []string
 }
@@ -724,6 +740,10 @@ func (d *actDialog) OKButton() actOK {
 // its command would: that of the Power dialog names the action and the
 // nodes; "" for another dialog, whose button keeps its name.
 func actPendingOK(id string, sn store.Snapshot, realm, clusterName string, f action.Form) string {
+	if id == "create-cluster" && f.Get("from") != "" {
+		// New cluster tries a run again.
+		return "Try again"
+	}
 	if id != "power" {
 		return ""
 	}
@@ -943,6 +963,9 @@ func (d *actDialog) RealmNames() []string {
 
 // RealmHint says what the realm field of the dialog does.
 func (d *actDialog) RealmHint() string {
+	if d.Retry != nil && d.Retry.Realm == "" {
+		return "The run names no realm. sind is the default realm of a terminal."
+	}
 	if d.ID == "connect" {
 		return "The realm whose networks the container joins. It needs a cluster, whose mesh comes with it."
 	}
@@ -1005,6 +1028,11 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Form.Set("realm", d.Realm)
+	if a.ID == "create-cluster" {
+		if d.Retry = actRetryOf(v.Snap, d.Form.Get("from")); d.Retry == nil {
+			d.Form.Del("from")
+		}
+	}
 	if draft, ok := actDraftOf(spec, r.PostForm.Get("draft"), d.Form); ok {
 		d.Form, d.Draft = draft, true
 	}
@@ -1295,9 +1323,9 @@ func (p actPreview) StatusGo() string {
 func (p actPreview) Say() string {
 	if !p.Blocked {
 		if n := p.Warnings(); n > 0 {
-			return fmt.Sprintf("Ready, with %s. %s runs the command.", pgPlural(n, "warning", "warnings"), p.Spec.OK)
+			return fmt.Sprintf("Ready, with %s. %s runs the command.", pgPlural(n, "warning", "warnings"), p.OKButton().Label)
 		}
-		return "Ready. " + p.Spec.OK + " runs the command."
+		return "Ready. " + p.OKButton().Label + " runs the command."
 	}
 	text, n := p.FirstText(), p.Problems()
 	if n > 1 {
@@ -1325,7 +1353,15 @@ func (p actPreview) Totals() string {
 	if host := p.HostMB(); host > 0 {
 		mem += " of " + action.MemoryLabel(host)
 	}
-	return pgPlural(p.Cmd.Containers, "container", "containers") + " · " + pgPlural(p.Cmd.CPUs, "CPU", "CPUs") + " · " + mem
+	out := pgPlural(p.Cmd.Containers, "container", "containers") + " · " + pgPlural(p.Cmd.CPUs, "CPU", "CPUs") + " · " + mem
+	if w := p.Form.Get("wait"); p.ID == "create-cluster" && p.Form.Get("from") != "" && w != "" {
+		// New cluster tries a run again, often with a longer wait.
+		if w == "other" {
+			w = p.Form.Get("wait_other")
+		}
+		out += " · wait " + w
+	}
+	return out
 }
 
 // Warnings is how many warnings the command has, which the pill counts.
@@ -1590,11 +1626,12 @@ func actStart(st *actState, v *View, a action.Action, f action.Form, cmd action.
 
 // actKeptForm is the form that a task keeps, so that the user can try its
 // command again: the fields without the CSRF token, the fingerprint and
-// the typed confirmation, which the user gives again.
+// the typed confirmation, which the user gives again, and without the run
+// that New cluster tried again, whose log the form has replaced.
 func actKeptForm(f url.Values) url.Values {
 	out := url.Values{}
 	for k, vals := range f {
-		if k != "csrf" && k != "shown" && k != action.ConfirmField {
+		if k != "csrf" && k != "shown" && k != action.ConfirmField && k != "from" {
 			out[k] = slices.Clone(vals)
 		}
 	}

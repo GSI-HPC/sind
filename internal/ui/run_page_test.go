@@ -267,9 +267,9 @@ func TestRunRetry(t *testing.T) {
 }
 
 func TestRunHeadWithoutTask(t *testing.T) {
-	// A failed run from a terminal: the command of its title, a dialog
-	// filled in from it, with a longer wait after a timeout, and the list
-	// of clusters, as no realm has the cluster.
+	// A failed run from a terminal: the command of its title, New cluster
+	// rebuilt from its log, and the list of clusters, as no realm has the
+	// cluster.
 	run := runOf(9, "failed")
 	run.Title, run.Root.Node, run.Class = "create cluster bench", "bench", "timeout"
 	h := runHeadOf(runCtx{Run: run, Found: true, Snap: store.Snapshot{}, Now: runAt(30)})
@@ -277,21 +277,30 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	assert.Equal(t, "Its flags and config are not in the log.", h.CmdNote)
 	assert.Equal(t, "# The event log keeps no flags of this command; add them, such as --config FILE.\nsind create cluster bench", h.CopyNote)
 	assert.Empty(t, h.Realm)
-	assert.Equal(t, &runLink{Label: "Try again with a 10m wait…", Href: "/dialogs/create-cluster?name=bench&wait=10m", Primary: true}, h.Edit)
+	assert.Equal(t, &runLink{Label: "Try again with a 10m wait…", Href: "/dialogs/create-cluster?from=r1&name=bench", Primary: true}, h.Edit, "nodes ran out of the wait")
 	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, h.Back)
 	assert.Empty(t, h.RetryID, "only a task runs again at once")
 
-	// One realm has the cluster: the command names the realm, and the page
-	// links to the cluster; without a timeout the wait is the dialog's.
+	// A cluster of the name that exists now is another one than that of a
+	// create cluster that failed: the run names no realm still.
 	run.Class = ""
 	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"ci": {{Name: "bench"}}}}
 	h = runHeadOf(runCtx{Run: run, Found: true, Snap: snap, Now: runAt(30)})
-	assert.Equal(t, "sind --realm ci create cluster bench", h.Command.Text)
+	assert.Equal(t, "sind create cluster bench", h.Command.Text)
+	assert.Empty(t, h.Realm)
+	assert.Equal(t, &runLink{Label: "Try bench again…", Href: "/dialogs/create-cluster?from=r1&name=bench", Primary: true}, h.Edit)
+
+	// One realm has the cluster of a create worker: the command names the
+	// realm, and the page links to the cluster.
+	grow := run
+	grow.Title, grow.Command, grow.Root.Name = "create worker bench", "create worker bench", "create worker"
+	h = runHeadOf(runCtx{Run: grow, Found: true, Snap: snap, Now: runAt(30)})
+	assert.Equal(t, "sind --realm ci create worker bench", h.Command.Text)
 	assert.Equal(t, "ci", h.Realm)
-	assert.Equal(t, "/dialogs/create-cluster?name=bench&realm=ci", h.Edit.Href)
-	assert.Equal(t, &runLink{Label: "Open bench", Href: "/clusters/ci/bench", Primary: true}, h.Back, "no Try again is the button to press")
+	assert.Equal(t, "/dialogs/create-worker?cluster=bench&realm=ci", h.Edit.Href)
+	assert.Equal(t, &runLink{Label: "Open bench", Href: "/clusters/ci/bench", Primary: true}, h.Back)
 	snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "bench"}}}
-	assert.Equal(t, "sind create cluster bench", runHeadOf(runCtx{Run: run, Snap: snap}).Command.Text, "the default realm needs no flag")
+	assert.Equal(t, "sind create worker bench", runHeadOf(runCtx{Run: grow, Snap: snap}).Command.Text, "the default realm needs no flag")
 	power := run
 	power.Title, power.Command, power.Root.Name = "power reboot worker-[0-1].bench", "power reboot bench", "power reboot"
 	h = runHeadOf(runCtx{Run: power, Snap: snap})
@@ -311,7 +320,7 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	// A stopped create worker opens Add workers of its cluster, a timed
 	// out node too; other commands get no dialog.
 	run = runOf(9, "canceled")
-	run.Title, run.Root.Node = "create worker bench", "bench"
+	run.Title, run.Root.Name, run.Root.Node = "create worker bench", "create worker", "bench"
 	run.Root.Children = []store.Span{runSp("target", "worker-1", runEndedAt(0, 9, "failed"), runWith(func(s *store.Span) { s.Class = "timeout" }))}
 	assert.True(t, runTimedOut(run))
 	h = runHeadOf(runCtx{Run: run, Snap: snap})

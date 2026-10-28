@@ -230,7 +230,9 @@
 .scrim .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
 /* In YAML mode the editor takes the place of the form, but for the name
    and the realm, which stay beside it, and the run options. */
-.scrim .act-form.act-yamlmode>:not(#act-yamled,#act-sec-run,.act-idrow){display:none}
+.scrim .act-form.act-yamlmode>:not(#act-yamled,#act-sec-run,.act-idrow,.act-retry-yaml){display:none}
+.scrim .act-form:not(.act-yamlmode)>.act-retry-yaml{display:none}
+.scrim .act-retry-yaml{margin:0}
 .scrim .act-yamlstart{margin-top:0}
 .scrim .act-yamlhead{margin-top:0;justify-content:space-between}
 .scrim .act-yamled textarea.act-drop{border-color:var(--accent);outline:2px dashed var(--accent)}
@@ -275,6 +277,11 @@
 .scrim .act-tile.worker{border-left-color:var(--brand-sky)}
 .scrim .act-tile.more{border-left-color:var(--line);color:var(--muted);font-weight:400}
 .scrim .act-planpane .callout{overflow-wrap:anywhere}
+.scrim .act-retry{display:grid;gap:8px;font-size:var(--t-md)}
+.scrim .act-retry ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.scrim .act-retry .mono{overflow-wrap:anywhere}
+.scrim .act-fromrun{font-weight:400;margin-left:6px}
+.scrim .act-retry-wait{color:var(--warn)}
 .scrim .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
 .scrim .act-yaml,.scrim .act-after,.scrim .act-confpre{max-height:320px;margin:0;overflow:auto}
 .scrim .act-conf{display:grid;gap:6px;margin-top:8px}

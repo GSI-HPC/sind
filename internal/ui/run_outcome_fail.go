@@ -260,10 +260,22 @@ func runFailOutcome(rc runCtx, p *runFailPanel) *runOutcome {
 	}
 	o.Next = []pgAction{doc}
 	o.CopyErr = cmp.Or(run.Err, runFailure(run))
-	if h := runHeadOf(rc); h.Edit != nil || h.RetryID != "" {
-		o.NextNote = "Try again, at the top, opens the form of this run."
+	if h := runHeadOf(rc); h.Edit != nil {
+		o.NextNote = strings.TrimSuffix(h.Edit.Label, "…") + ", at the top, " + runEditWhat(rc) + "."
 	}
 	return o
+}
+
+// runEditWhat says what the button of the head that tries a run again
+// opens: the form of the run's task, or New cluster rebuilt from the log.
+func runEditWhat(rc runCtx) string {
+	switch {
+	case rc.Task != nil:
+		return "opens the form of this run"
+	case rc.Run.Root.Name == "create cluster":
+		return "opens New cluster, rebuilt from the event log"
+	}
+	return "opens its dialog"
 }
 
 // runTimeoutNodes returns the nodes that ran out of time.

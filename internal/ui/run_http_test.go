@@ -72,16 +72,15 @@ func TestRunPageRenders(t *testing.T) {
 	assert.Contains(t, failed, `<b>Why this often happens</b>`)
 	assert.Contains(t, failed, `<a class="btn" href="/doctor">Check the host in Doctor</a>`)
 	assert.Contains(t, failed, `<button type="button" class="btn" data-pg-copy-text="setting up nodes: node worker-1: timed out; last probe error: probe munge: munge not ready">Copy the error</button>`)
-	assert.Contains(t, failed, `Try again, at the top, opens the form of this run.`)
+	assert.Contains(t, failed, `Try again with a 10m wait, at the top, opens New cluster, rebuilt from the event log.`)
 	assert.Contains(t, failed, `<span class="pill bad">failed</span>`)
 	assert.NotContains(t, failed, "from a terminal, so sind ui cannot stop it", "an ended run has nothing to stop")
 	// From a terminal: the command of its title, to copy with a note on
-	// its flags, and New cluster filled in from it, with a longer wait
-	// after the timeout.
+	// its flags, and New cluster rebuilt from the run.
 	assert.Contains(t, failed, `<div class="cmdlabel">What the event log names</div><div class="cmd"><code>sind create cluster</code>`)
 	assert.Contains(t, failed, `<p class="hint">Its flags and config are not in the log.</p>`)
 	assert.Contains(t, failed, `data-pg-copy-text="# The event log keeps no flags of this command; add them, such as --config FILE.`+"\n"+`sind create cluster" aria-label="Copy sind create cluster with a note on its flags">Copy with a note</button>`)
-	assert.Contains(t, failed, `<a class="btn primary" href="/dialogs/create-cluster?wait=10m" hx-get="/dialogs/create-cluster?wait=10m" hx-target="#layer" hx-swap="innerHTML">Try again with a 10m wait…</a>`)
+	assert.Contains(t, failed, `<a class="btn primary" href="/dialogs/create-cluster?from=r-failed" hx-get="/dialogs/create-cluster?from=r-failed" hx-target="#layer" hx-swap="innerHTML">Try again with a 10m wait…</a>`)
 	assert.NotContains(t, failed, `aria-label="Copy sind create cluster">Copy</button>`, "a command from the log is copied with its note only")
 
 	canceled := ts.get("/runs/r-canceled").Body.String()
