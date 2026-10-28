@@ -73,7 +73,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* shell */
 .app{display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);height:100%}
 header.top{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:12px;padding:8px 16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;position:relative;z-index:5}
-.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--t-xl);letter-spacing:-.03em;color:var(--fg)}
+.brand:not(.chip){display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--t-xl);letter-spacing:-.03em;color:var(--fg)}
 .brand img{width:24px;height:24px}
 .brand small{font:500 var(--t-xs) var(--f-mono);color:var(--faint);letter-spacing:0}
 .jump{flex:1 1 200px;max-width:420px;display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);color:var(--faint);cursor:text;text-align:left}
@@ -336,6 +336,6 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   input[type=checkbox],input[type=radio]{width:22px;height:22px}
   :is(td,th):has(>input[type=checkbox]:only-child){height:48px;cursor:pointer}
   table.cards td.c-act .btn{min-height:44px}
-  .brand,.skip{display:inline-flex;align-items:center;min-height:44px}
+  .brand:not(.chip),.skip{display:inline-flex;align-items:center;min-height:44px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
