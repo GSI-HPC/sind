@@ -1236,3 +1236,35 @@ func TestActDialog_FillsInTheFormOfATask(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, f.get("/dialogs/create-worker?task=nope").Code)
 	assert.Equal(t, http.StatusNotFound, f.get("/dialogs/delete-worker?task=t0&cluster=dev").Code, "a task of another action")
 }
+
+func TestActRestartServiceDialog(t *testing.T) {
+	f := newActFixture(t)
+	// No status yet: the dialog says that sind ui has not probed the node.
+	body := f.get("/dialogs/restart-service?realm=sind&cluster=dev&nodes=worker-1").Body.String()
+	assert.Contains(t, body, "Restart a service of worker-1.dev")
+	assert.Contains(t, body, "sind ui has not probed this node yet.")
+	f.st.SetStatus("sind", "dev", &cluster.Status{Name: "dev", Nodes: []*cluster.NodeStatus{
+		nil,
+		{Name: "worker-1.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{"slurmd": false, "munge": true, "sshd": true}}},
+		{Name: "worker-0.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning}},
+		{Name: "controller.dev", Health: &cluster.NodeHealth{State: cluster.StateStopped}},
+		{Name: "worker-9.dev"},
+	}})
+	f.st.SetFaults("sind", "dev", map[string]store.Fault{"worker-1": {Units: []store.Unit{{Name: "slurmd", State: "failed"}}}})
+	// The services of the node, in the order of the health matrix, in the
+	// words of the node page.
+	body = f.get("/dialogs/restart-service?realm=sind&cluster=dev&nodes=worker-1&unit=slurmd").Body.String()
+	assert.Contains(t, body, `<input type="hidden" name="nodes" value="worker-1">`)
+	assert.Contains(t, body, `<label><input type="radio" name="unit" value="munge"> <span class="mono">munge</span> <small>active</small></label><label><input type="radio" name="unit" value="sshd"> <span class="mono">sshd</span> <small>active</small></label><label><input type="radio" name="unit" value="slurmd" checked> <span class="mono">slurmd</span> <small>failed</small></label>`)
+	f.st.SetFaults("sind", "dev", nil)
+	body = f.get("/dialogs/restart-service?realm=sind&cluster=dev&nodes=worker-1&unit=slurmd").Body.String()
+	assert.Contains(t, body, `<span class="mono">slurmd</span> <small>down</small></label>`, "before sind ui read how it failed")
+	// Without a node, as the jump list opens it: the nodes that run and
+	// that sind ui probed, each with what is down on it, and the dialog
+	// loads again with the one picked.
+	body = f.get("/dialogs/restart-service?realm=sind&cluster=dev").Body.String()
+	assert.Contains(t, body, "Restart a service of a node of dev")
+	assert.Contains(t, body, `<select id="act-nodes" name="nodes" hx-get="/dialogs/restart-service" hx-include="closest form" hx-target="#layer" hx-swap="innerHTML" aria-describedby="act-hint-nodes"><option value="">Pick a node</option><option value="worker-0">worker-0</option><option value="worker-1">worker-1 · slurmd down</option></select>`)
+	f.st.SetStatus("sind", "dev", nil)
+	assert.Contains(t, f.get("/dialogs/restart-service?realm=sind&cluster=dev").Body.String(), `<option value="">Pick a node</option></select>`)
+}

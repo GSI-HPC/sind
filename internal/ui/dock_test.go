@@ -259,6 +259,11 @@ func TestTaskTitle(t *testing.T) {
 		Argv: []string{"sind", "--realm", "ci", "create", "worker", "dev", "--count", "3", "--cpus", "4"},
 	}
 	assert.Equal(t, "create worker dev --count 3 --cpus 4", taskTitle(task, nil))
+	restart := store.Task{Action: "restart-service", Cluster: "dev", Form: map[string][]string{"unit": {"slurmd"}},
+		Argv: []string{"sind", "ssh", "worker-4.dev", "--", "systemctl", "restart", "slurmd"}}
+	assert.Equal(t, "restart slurmd worker-4.dev", taskTitle(restart, nil), "a restart says what it restarts")
+	restart.Form = nil
+	assert.Equal(t, "ssh worker-4.dev -- systemctl restart slurmd", taskTitle(restart, nil))
 	assert.Equal(t, "create worker dev --count 3 --cpus 4", taskTitle(task, &store.Run{Title: "create worker"}), "the cluster of the task")
 
 	create := store.Task{Action: "create-cluster", Cluster: "lab", Display: "sind create cluster --config /c/lab.yaml --pull --wait 10m"}

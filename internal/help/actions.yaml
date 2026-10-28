@@ -47,6 +47,13 @@
   undo: Use the opposite verb
   doc: usage/power-control#commands
   words: [nodeset, drain]
+- id: restart-service
+  title: Restart a service
+  summary: Restarts one systemd unit of a running node, such as a slurmd that failed, with systemctl restart through sind ssh. The container and its other processes go on, so it is the first fix to try for one failed service; Reboot is the next. It does not run while sshd is down, as sind ssh needs it.
+  command: sind ssh NODE -- systemctl restart UNIT
+  undo: Nothing to undo
+  doc: usage/power-control#restart-a-service
+  words: [managed]
 - id: connect
   title: Connect a container
   summary: Attaches a container that sind did not make to the networks of the realm.

@@ -372,6 +372,13 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 </div>{{if eq .ID "slurm"}}<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{$.Val "reason"}}" placeholder="such as disk test" maxlength="200"><span class="hint">sinfo -R shows it.</span></div>{{end}}</fieldset>{{end}}
 {{end}}
 
+{{define "act-dlg-restart-service"}}{{if .Val "nodes"}}<input type="hidden" name="nodes" value="{{.Val "nodes"}}">
+<fieldset class="fld"><legend class="lbl">Service of <span class="mono">{{.Val "nodes"}}</span></legend>
+  {{with .NodeServices}}<div class="checks">{{range .}}<label><input type="radio" name="unit" value="{{.Name}}"{{if $.Is "unit" .Name}} checked{{end}}> <span class="mono">{{.Name}}</span> <small>{{.Word}}</small></label>{{end}}</div>
+  {{else}}<div class="empty">sind ui has not probed this node yet.</div>{{end}}</fieldset>
+{{else}}<div class="fld"><label for="act-nodes">Node</label><select id="act-nodes" name="nodes" hx-get="/dialogs/restart-service" hx-include="closest form" hx-target="#layer" hx-swap="innerHTML" aria-describedby="act-hint-nodes"><option value="">Pick a node</option>{{range .ServiceNodes}}<option value="{{.Short}}">{{.Label}}</option>{{end}}</select><span class="hint" id="act-hint-nodes">A node that runs. The dialog then lists the services that sind checks on it.</span></div>
+{{end}}{{end}}
+
 {{define "act-dlg-connect"}}
 <div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">The name of a running container that no realm has yet.</span></div>
 {{template "act-realm" .}}

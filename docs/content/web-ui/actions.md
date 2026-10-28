@@ -37,6 +37,7 @@ Each action runs one command:
 | Delete workers | `sind delete worker NODES` | Cannot be undone |
 | Power | `sind power VERB NODES` | Use the opposite verb |
 | Drain or resume workers | `sind exec CLUSTER -- scontrol update NodeName=NODES State=DRAIN Reason=WHY` | Resume, or drain |
+| Restart a service | `sind ssh NODE -- systemctl restart UNIT` | Nothing to undo |
 | Connect or disconnect a container | `sind connect container NAME` | Disconnect or connect it again |
 | Delete realm | `sind --realm REALM delete realm` | Cannot be undone |
 
@@ -73,6 +74,10 @@ The power buttons of a page, such as **Reboot…**, open the Power dialog. It so
 Before an action that stops nodes, the dialog warns when they include the controller in control, the standby controller of a pair, the db node or every running worker of a cluster, and says what that does to jobs, failover and accounting. The button names the action and the nodes, such as **Shut down 3 nodes**.
 
 {{< uishot "dialog-power" "The Power dialog groups the actions, and shows the command of the one that you selected." >}}
+
+## Restart a service
+
+**Restart slurmd…** on the page of a node whose service failed, **Restart…** beside a service that is down, and the fix of its row in **Needs you** or **Ready for jobs** open the Restart a service dialog. It lists the services that sind checks on the node, with their state, and restarts the one you pick with `systemctl` on the node: the container and its other processes go on, so it is the fix to try before a reboot. It warns when the service is active. Opened from the jump box, it first asks for the node, and names the services that are down on each. The restart logs in with `sind ssh`, so it does not run while sshd is down: **Reboot…** is the fix then. The command writes no progress, so the task has no run page; the card of the node turns green once the service is active again. See [Restart a service]({{< relref "/usage/power-control#restart-a-service" >}}).
 
 ## Delete
 

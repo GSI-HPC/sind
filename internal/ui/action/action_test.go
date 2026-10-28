@@ -89,7 +89,7 @@ func build(t *testing.T, id string, f Form) (Command, error) {
 
 func TestIDs(t *testing.T) {
 	assert.Equal(t, []string{
-		"connect", "create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-realm", "delete-worker", "disconnect", "power",
+		"connect", "create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-realm", "delete-worker", "disconnect", "power", "restart-service",
 	}, IDs())
 	_, ok := Lookup("nope")
 	assert.False(t, ok)

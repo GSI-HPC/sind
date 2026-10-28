@@ -116,6 +116,32 @@ The dialog runs the `sind exec … scontrol update` command above. It writes no 
 {{< /ui >}}
 {{< /ways >}}
 
+## Restart a service
+
+When one service of a running node failed, such as `slurmd`, restart that unit before you reboot the node: the container and its other processes go on. sind has no command of its own for this; run `systemctl` on the node. When munge failed too, restart munge first, as the Slurm daemons need it. When sshd is down, `sind ssh` cannot log in: reboot the node.
+
+{{< ways >}}
+{{< cli >}}
+
+```bash
+sind ssh worker-4.dev -- systemctl status slurmd
+sind ssh worker-4.dev -- systemctl restart slurmd
+```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Open the page of the node. Its card says what failed, when and with which exit status, shows the last lines of the unit's journal, and lists the fixes under **Try in this order**.
+2. Press **Restart slurmd…**, the first fix. **Restart…** beside a failed service in **Services**, and the fix of the row in **Needs you**, open the same dialog.
+3. The dialog shows the `sind ssh … -- systemctl restart` command. Press **Restart slurmd**.
+
+{{< uishot "dialog-restart-service" >}}
+
+The command writes no progress, so the task has no run page. Once the node's services are up again, the card turns green, **Fixed**, for 30 seconds and says what it checked. Until the status shows the service active, the card is blue and waits. If the restart does not help, **Reboot…** is the next fix.
+
+{{< /ui >}}
+{{< /ways >}}
+
 ## Node failure detection
 
 slurmctld learns that a frozen, cut or shut down worker is gone only when the worker stops answering its pings, as slurmd does not sign off. sind keeps Slurm's default `SlurmdTimeout=300`: the node shows as `idle*` once a ping fails and turns `DOWN` about five minutes after it stopped responding. For failure tests, lower the timeout in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}):

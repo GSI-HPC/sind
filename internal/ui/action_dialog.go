@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -25,7 +27,7 @@ import (
 // actDialogKeys are the query keys that open a dialog with its fields
 // filled in.
 var actDialogKeys = []string{
-	"realm", "cluster", "nodes", "op", "reason", "container",
+	"realm", "cluster", "nodes", "op", "reason", "container", "unit",
 	// The clusters of a delete of several, and the list to go back to.
 	"clusters", "back",
 	// The fields of the New cluster dialog, which a link may fill in to
@@ -235,6 +237,18 @@ var actSpecs = map[string]actSpec{
 				op, _ = action.PowerOpOf("shutdown")
 			}
 			d.Form.Set("op", op.ID)
+		},
+	},
+	"restart-service": {
+		OK: "Restart", NeedsCluster: true,
+		Title: func(d *actDialog) string {
+			if n := d.Form.Get("nodes"); n != "" {
+				return "Restart a service of " + pgArg(d.Cluster, n)
+			}
+			return "Restart a service of a node of " + d.Cluster
+		},
+		Lead: func(*actDialog) string {
+			return "systemd stops the service and starts it again. The container and its other processes go on, so this is the first thing to try when one service failed."
 		},
 	},
 	"connect": {
@@ -836,6 +850,71 @@ func (d *actDialog) LikeNewest() string {
 
 // Is reports whether the field has the value.
 func (d *actDialog) Is(field, value string) bool { return d.Form.Get(field) == value }
+
+// actUnit is a service of the node of a restart, with its state: Word is
+// active, or the word of the node page for one that is down, as failed.
+type actUnit struct {
+	Name, Word string
+	OK         bool
+}
+
+// NodeServices returns the services that sind checks on the node of the
+// form, in the order of the health matrix, for the restart of one.
+func (d *actDialog) NodeServices() []actUnit {
+	short := d.Form.Get("nodes")
+	var out []actUnit
+	for name, ok := range action.NodeServices(d.Snap.Status(d.Realm, d.Cluster), short, d.Cluster) {
+		word := "active"
+		if !ok {
+			word = pgUnitWord(d.Snap, d.Realm, d.Cluster, short, name)
+		}
+		out = append(out, actUnit{name, word, ok})
+	}
+	slices.SortFunc(out, func(a, b actUnit) int {
+		return slices.Index(pgServiceOrder, a.Name) - slices.Index(pgServiceOrder, b.Name)
+	})
+	return out
+}
+
+// actNodeOpt is a node that the restart can pick, labelled with the
+// services that are down on it: "worker-4 · slurmd failed".
+type actNodeOpt struct{ Short, Label string }
+
+// ServiceNodes are the nodes of the cluster whose services the restart can
+// pick from: those that run and that sind ui has probed, sorted.
+func (d *actDialog) ServiceNodes() []actNodeOpt {
+	st := d.Snap.Status(d.Realm, d.Cluster)
+	if st == nil {
+		return nil
+	}
+	var out []actNodeOpt
+	for _, s := range st.Nodes {
+		if s == nil || s.Health == nil || s.Health.State != cluster.StateRunning {
+			continue
+		}
+		short, _, _ := strings.Cut(s.Name, ".")
+		label := short
+		for _, svc := range slices.Sorted(maps.Keys(s.Health.Services)) {
+			if !s.Health.Services[svc] {
+				label += " · " + string(svc) + " " + pgUnitWord(d.Snap, d.Realm, d.Cluster, short, string(svc))
+			}
+		}
+		out = append(out, actNodeOpt{short, label})
+	}
+	slices.SortFunc(out, func(a, b actNodeOpt) int { return strings.Compare(a.Short, b.Short) })
+	return out
+}
+
+// pgUnitWord says how a unit of a node that is down stands, as the node
+// page writes it: its ActiveState as sind ui read it, as failed, else down.
+func pgUnitWord(sn store.Snapshot, realm, name, short, unit string) string {
+	if f, ok := sn.Fault(realm, name, short); ok {
+		if u, ok := f.Unit(unit); ok && u.State != "" {
+			return u.State
+		}
+	}
+	return "down"
+}
 
 // RealmNames are the realms that the realm field suggests: those that sind
 // ui sees, and the realm of the dialog.

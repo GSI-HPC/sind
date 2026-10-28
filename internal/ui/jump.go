@@ -389,13 +389,14 @@ var jumpDefaults = []string{"create-cluster", "create-worker", "power"}
 // jumpAsks are the questions of the step of each action that asks for a
 // cluster or a realm.
 var jumpAsks = map[string]string{
-	"create-worker":  "Add workers to which cluster?",
-	"delete-cluster": "Delete which cluster?",
-	"delete-worker":  "Delete workers of which cluster?",
-	"power":          "Power the nodes of which cluster?",
-	"connect":        "Connect a container to which realm?",
-	"disconnect":     "Disconnect a container from which realm?",
-	"delete-realm":   "Delete which realm?",
+	"create-worker":   "Add workers to which cluster?",
+	"delete-cluster":  "Delete which cluster?",
+	"delete-worker":   "Delete workers of which cluster?",
+	"restart-service": "Restart a service of a node of which cluster?",
+	"power":           "Power the nodes of which cluster?",
+	"connect":         "Connect a container to which realm?",
+	"disconnect":      "Disconnect a container from which realm?",
+	"delete-realm":    "Delete which realm?",
 }
 
 // jumpStep returns the entries of the step of the action id: its clusters

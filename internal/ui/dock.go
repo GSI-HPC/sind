@@ -314,13 +314,18 @@ func dockRunCard(run store.Run, chip string, now time.Time) dockCard {
 // it, with the cluster, or else the words of its command line, followed by
 // the flags that tell it from others, as in "create worker dev --count 3
 // --cpus 4". The realm has a chip of its own, and the path of --config,
-// which only the whole command needs, is left out.
+// which only the whole command needs, is left out. A restart of a service
+// says what it restarts: "restart slurmd worker-4.dev".
 func taskTitle(t store.Task, run *store.Run) string {
 	argv := t.Argv
 	if len(argv) == 0 {
 		argv = strings.Fields(t.Display)
 	}
 	words, flags := taskWords(argv)
+	if unit := pgFormValue(t.Form, "unit"); t.Action == "restart-service" && unit != "" && len(words) == 2 {
+		// sind ssh worker-4.dev -- systemctl restart slurmd
+		return "restart " + unit + " " + words[1]
+	}
 	base := strings.Join(words, " ")
 	switch {
 	case run != nil && run.Title != "":
