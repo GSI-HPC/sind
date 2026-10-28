@@ -112,19 +112,25 @@ shots:
     fit: true
 
   - name: activity
-    alt: "Activity: the runs of sind commands, from this UI and from a terminal"
+    alt: "Activity: the runs of sind commands, from this UI and from a terminal, each with what came of it, such as 3 nodes ready for jobs or worker-1 timed out"
     path: /activity
     hide: "#tasks"
     page: activity
 
+  - name: run-ok
+    alt: "A create cluster that ended ok: the cluster is ready for jobs, with the checks of its Summary, the first commands of a job and the ways on"
+    path: /runs/d3e0000000000007
+    hide: "#tasks"
+    page: run
+
   - name: run-failed
-    alt: "A run that failed: a node ran out of time, sind rolled back, and the page says what to try"
+    alt: "A create cluster that failed: bench was not created, as worker-1 ran out of the 5m wait; what munge does, why this often happens, the Doctor checks that did not pass, and Try again with a 10m wait"
     path: /runs/d3e0000000000005
     hide: "#tasks"
     page: run
 
   - name: run-canceled
-    alt: "A run that was stopped with Ctrl-C: the work that had not ended was stopped and rolled back"
+    alt: "A run that was stopped from the terminal: what worker-2 was doing at that time, and that sind removed it again"
     path: /runs/d3e0000000000006
     hide: "#tasks"
     page: run
@@ -141,6 +147,14 @@ shots:
     path: /clusters
     steps:
       - dialog: create-cluster
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
+  - name: dialog-try-again
+    alt: "New cluster rebuilt from the failed run of bench: what the event log gave, what keeps the defaults, and a longer wait with the reason"
+    path: /runs/d3e0000000000005
+    steps:
+      - dialog: create-cluster?from=d3e0000000000005&name=bench
     crop: "#layer [role=dialog]"
     page: dialogs
 
