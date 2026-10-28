@@ -36,12 +36,13 @@ into its target, not its content. */}}
   <div class="mb">
     {{include (print "act-dlg-" .ID) .}}
     {{template "act-preview-slot" .}}
-    {{with .Typed}}<div class="fld act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
-      <input type="text" id="act-confirm" name="confirm" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
-      <span class="hint act-why" id="act-why" role="status"></span></div>{{end}}
   </div>
   {{end}}
-  <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{else}}<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+  <div class="mf" id="act-mf"><span class="act-status" id="act-status"></span>{{if not .Spec.Plan}}<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>{{end}}
+    {{- with .Typed}}<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
+      <input type="text" id="act-confirm" name="confirm" placeholder=" " autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
+      <span class="hint act-why" id="act-why" role="status"></span></div>{{end -}}
+    <button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
   <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
     <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
     <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
@@ -64,13 +65,16 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{define "act-preview"}}{{with .Data}}{{$p := .}}
 {{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
-{{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}{{/* the footer says what the form lacks */}}{{else}}
 {{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
-{{with .Cmd.Goes}}<div class="callout bad act-list"><b>Goes</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
-{{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+{{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>{{$p.ProblemsText}}</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
+{{if .Cmd.Goes}}<div class="act-gs"><div class="callout bad act-list"><b>Goes</b><ul>{{range .Cmd.Goes}}<li>{{.}}</li>{{end}}</ul></div>
+{{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>
+{{else}}{{with .Cmd.Stays}}<ul class="act-stays" aria-label="What stays">{{range .}}<li><span class="pg-ck y" aria-hidden="true">✓</span><span>{{.}}</span></li>{{end}}</ul>{{end}}{{end}}
+{{template "act-callouts" .}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
-{{template "act-callouts" .}}
+{{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
 {{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
 {{end}}
 {{template "act-ok" .OKButton}}
@@ -81,8 +85,17 @@ it, and the button and the parts of the dialog that depend on it. */}}
 <datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
 {{range .SlurmFiles}}<span class="act-dot" id="act-dot-{{.ID}}" hx-swap-oob="true">{{if $p.SlurmSet .ID}} •{{end}}</span>{{end}}
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
-{{if .Spec.Plan}}<span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{template "act-status" .}}</span>{{end}}
+<span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{if .Spec.Plan}}{{template "act-status" .}}{{else}}{{template "act-fstatus" .}}{{end}}</span>
 {{end}}{{end}}
+
+{{/* act-fstatus is the status in the footer of a dialog without a plan,
+beside its button, so that it is always in view: the problems, which lead
+to the first, what the form still lacks, or the warnings, which lead to the
+first of them; the first problem or warning says itself in short. */}}
+{{define "act-fstatus"}}
+{{- if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button><span class="act-fnote" title="{{.First.Text}}">{{.First.Text}}</span>
+{{- else if .Hint}}<span class="hint act-tot">{{.Hint}}</span>
+{{- else if .Warnings}}<button type="button" class="pill warn nodot act-go" data-act-go="@warn" aria-label="{{.WarningsText}}. Show them." title="Show the warnings">{{.WarningsText}} <span aria-hidden="true">↑</span></button><span class="act-fnote" title="{{.FirstWarn}}">{{.FirstWarn}}</span>{{end}}{{end}}
 
 {{/* act-callouts are what to know about the command of a preview. */}}
 {{define "act-callouts"}}

@@ -1231,6 +1231,16 @@ func (p actPreview) First() action.Problem {
 	return action.Problem{Text: p.Err}
 }
 
+// FirstText says the first problem with the name of its field: "How
+// many: the host has room for …".
+func (p actPreview) FirstText() string {
+	first := p.First()
+	if first.Label != "" {
+		return first.Label + ": " + first.Text
+	}
+	return first.Text
+}
+
 // StatusText is the text of the status button of a command with
 // problems: how many, and the field of the first.
 func (p actPreview) StatusText() string {
@@ -1264,11 +1274,7 @@ func (p actPreview) Say() string {
 		}
 		return "Ready. " + p.Spec.OK + " runs the command."
 	}
-	first, n := p.First(), p.Problems()
-	text := first.Text
-	if first.Label != "" {
-		text = first.Label + ": " + text
-	}
+	text, n := p.FirstText(), p.Problems()
 	if n > 1 {
 		text += fmt.Sprintf(" %d problems in all.", n)
 	}
@@ -1299,6 +1305,25 @@ func (p actPreview) Totals() string {
 
 // Warnings is how many warnings the command has, which the pill counts.
 func (p actPreview) Warnings() int { return len(p.Cmd.Warns) }
+
+// FirstWarn is the first warning of the command, which the footer shows
+// beside the count, so that a warning stays in view: "" for none.
+func (p actPreview) FirstWarn() string {
+	if len(p.Cmd.Warns) > 0 {
+		return p.Cmd.Warns[0]
+	}
+	return ""
+}
+
+// WarningsText counts the warnings for the footer of a dialog: "1
+// warning", "2 warnings".
+func (p actPreview) WarningsText() string { return pgPlural(p.Warnings(), "warning", "warnings") }
+
+// ProblemsText heads the list of problems of a dialog without a plan: "1
+// problem", "2 problems".
+func (p actPreview) ProblemsText() string {
+	return pgPlural(len(p.Cmd.Problems), "problem", "problems")
+}
 
 // Defaulted names the fields whose defaults the plan takes, as they are
 // wrong.

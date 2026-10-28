@@ -9,15 +9,24 @@
    gets the focus scrolls clear of the footer that sticks to the bottom of
    a small screen, above the padding of the scrim. */
 .scrim{position:fixed;inset:0;background:rgba(6,11,22,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow-y:auto;scroll-padding:12px 0 calc(var(--act-mf-h,64px) + 28px)}
-.scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line)}
+/* Every dialog is a column: the head, a body that scrolls, and the footer
+   with the status, the confirmation and the buttons, always in view. */
+.scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line);display:flex;flex-direction:column;max-height:calc(94vh - 32px)}
 .scrim .modal:focus{outline:none}
 .scrim .modal.wide{width:min(880px,100%)}
 .scrim .mh{padding:16px 18px 6px}
 .scrim .mtop{display:flex;gap:10px;align-items:flex-start}
 .scrim .mh h2{font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em;flex:1;min-width:0;overflow-wrap:anywhere}
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
-.scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
-.scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0;min-height:0;flex:1 1 auto;overflow-y:auto;align-content:start}
+.scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2);flex:none}
+/* The name or number to type sits in the footer, beside the button that
+   it guards; why the button stays off shows once the user typed. */
+.scrim .act-confirm{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:var(--t-md)}
+.scrim .act-confirm label{font-weight:500}
+.scrim .act-confirm input{width:9em;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono)}
+.scrim .act-confirm .act-why{flex-basis:100%;text-align:right}
+.scrim .act-confirm:has(#act-confirm:placeholder-shown) .act-why{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The button that runs the command shows its key, Ctrl+Enter or on macOS
    Cmd+Enter, where there is a keyboard. */
@@ -50,12 +59,16 @@
 .scrim fieldset.act-danger legend{color:var(--bad);padding:0 4px;margin-bottom:0}
 .scrim .act-reason{display:none;margin-top:8px}
 .scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
-/* What a delete removes and keeps, and the line about new workers. */
+/* What a delete removes and keeps, side by side, what stays as an action
+   runs, and the line about new workers. */
+.scrim .act-gs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:10px;align-items:start}
+.scrim .act-stays{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.scrim .act-stays li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px}
 .scrim .act-list ul,.scrim .act-probs ul{margin:4px 0 0;padding-left:18px}
 .scrim .act-list li{overflow-wrap:anywhere}
 .scrim .act-sum{margin:0;font-weight:500}
 /* The preview at work. */
-.scrim .act-checking{margin-right:auto;align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
+.scrim .act-checking{align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
 .scrim .act-checking.htmx-request{visibility:visible}
 /* The clusters that a delete of several removes. */
 .scrim .act-clusters{display:grid;gap:6px;margin:0;padding:0;list-style:none;max-height:40vh;overflow-y:auto}
@@ -67,8 +80,7 @@
 
 /* New cluster: the fields at the left, the plan at the right, the footer
    always in view. */
-.scrim .modal.split{display:flex;flex-direction:column;max-height:calc(94vh - 32px)}
-.scrim .modal.split .mb{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;padding:0;min-height:0;flex:1;border-top:1px solid var(--line-2)}
+.scrim .modal.split .mb{grid-template-columns:minmax(0,1fr) 300px;gap:0;padding:0;overflow:hidden;align-content:stretch;border-top:1px solid var(--line-2)}
 .scrim .act-form{overflow-y:auto;padding:14px 18px 18px;display:grid;gap:14px;align-content:start;min-width:0}
 .scrim .act-planpane{overflow-y:auto;background:var(--panel-2);border-left:1px solid var(--line-2);padding:14px;min-width:0}
 .scrim .act-planpane .stack{gap:12px;grid-template-columns:minmax(0,1fr)}
@@ -191,6 +203,10 @@
 .scrim .act-conf{display:grid;gap:6px;margin-top:8px}
 .scrim .act-conf summary{cursor:pointer;font-weight:500;width:max-content}
 .scrim .act-status{margin-right:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
+/* The first problem or warning shows beside its count, on a line of the
+   footer of its own, above the buttons. */
+.scrim .act-status:has(>.act-fnote){display:flex;flex-basis:100%}
+.scrim .act-fnote{flex:1 1 0;min-width:0;font-size:var(--t-sm);color:var(--muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .scrim button.pill{cursor:pointer}
 .scrim .act-go:hover{text-decoration:underline}
 .scrim .act-imgs{display:grid;gap:6px}
@@ -201,13 +217,19 @@
 .scrim .act-img .btn{justify-self:start;margin-top:2px}
 .scrim .act-img .btn.htmx-request::after{content:" …"}
 @media (max-width:760px){
-  .scrim .modal.split{max-height:none}
+  /* On a phone the page of the dialog scrolls, and the footer sticks to
+     the bottom of the screen. */
+  .scrim .modal{max-height:none}
+  .scrim .mb,.scrim .modal.split .mb{overflow:visible}
   .scrim .modal.split .mb{grid-template-columns:1fr}
   .scrim .act-form,.scrim .act-planpane{overflow:visible}
   .scrim .act-planpane{border-left:0;border-top:1px solid var(--line-2)}
-  .scrim:has(.modal.split){padding-bottom:0}
-  .scrim .modal.split .mf{position:sticky;bottom:0;background:var(--panel);border-radius:0 0 10px 10px}
-  .scrim .modal.split .mf.act-ask{background:var(--warn-soft)}
+  .scrim{padding-bottom:0}
+  .scrim .mf{position:sticky;bottom:0;z-index:2;background:var(--panel);border-radius:0 0 10px 10px}
+  .scrim .mf.act-ask{background:var(--warn-soft)}
+  .scrim .act-confirm{flex-basis:100%;order:-1}
+  .scrim .act-confirm input{flex:1}
+  .scrim .act-confirm .act-why{text-align:left}
   /* The status button and the buttons share a line, the totals take the
      next. */
   .scrim .act-status{display:contents}

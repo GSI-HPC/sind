@@ -35,10 +35,16 @@ func TestActDialog_Frame(t *testing.T) {
 	} {
 		assert.Contains(t, body, want)
 	}
-	for _, not := range []string{`aria-label="Add workers`, "data-act-draft", "act-status", "act-say", "act-draftbar"} {
+	for _, not := range []string{`aria-label="Add workers`, "data-act-draft", "act-say", "act-draftbar", "act-confirm"} {
 		assert.NotContains(t, body, not)
 	}
-	assert.Contains(t, f.get("/dialogs/delete-cluster?cluster=dev").Body.String(), `class="btn danger solid" id="act-ok"`)
+	// Every dialog has its status in the footer, and the name or the
+	// number to type beside the button that it guards.
+	assert.Contains(t, body, `<div class="mf" id="act-mf"><span class="act-status" id="act-status"></span><span class="act-checking"`)
+	body = f.get("/dialogs/delete-cluster?cluster=dev").Body.String()
+	assert.Contains(t, body, `class="btn danger solid" id="act-ok"`)
+	assert.Regexp(t, `(?s)<div class="mf" id="act-mf">.*<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">dev</b> to confirm</label>.*data-act-close>Cancel</button>`, body)
+	assert.Contains(t, body, `name="confirm" placeholder=" " autocomplete="off"`, "the hint of why shows once the user typed")
 
 	// New cluster keeps a draft, does not close on a click beside it, and
 	// has the status in its footer, which act.js says when it changes.
@@ -205,8 +211,31 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	assert.Contains(t, body, `data-act-go="" data-act-say="sind ui has no state directory`)
 	assert.Contains(t, body, `aria-label="1 problem. Show the problems." title="Show the problems">1 problem <span`)
 
-	// Dialogs without a plan have no status.
-	assert.NotContains(t, f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-0")).Body.String(), "act-status")
+}
+
+// A dialog without a plan has its status in the footer too: the problems,
+// what the form lacks, or the warnings, each beside the button.
+func TestActPreview_FooterStatus(t *testing.T) {
+	f := newActFixture(t)
+	status := func(form string) string {
+		body := f.post("/actions/power/preview", form).Body.String()
+		_, rest, ok := strings.Cut(body, `<span class="act-status" id="act-status" hx-swap-oob="innerHTML">`)
+		require.True(t, ok, body)
+		s, _, _ := strings.Cut(rest, "</span>\n")
+		return s
+	}
+	assert.Empty(t, status(actForm("cluster", "dev", "op", "on", "nodes", "worker-0")), "nothing to say")
+	assert.Equal(t, `<span class="hint act-tot">Pick at least one node of dev.</span>`, status(actForm("cluster", "dev", "op", "on")))
+	assert.Contains(t, status(actForm("cluster", "dev", "op", "on", "nodes", "worker-9")),
+		`<button type="button" class="pill bad nodot act-go" data-act-go="" aria-label="1 problem. Show the problems." title="Show the problems">1 problem <span aria-hidden="true">↑`)
+	// The first problem and the first warning say themselves beside
+	// their count, so that they stay in view.
+	assert.Contains(t, status(actForm("cluster", "dev", "op", "on", "nodes", "worker-9")),
+		`<span class="act-fnote" title="nodes: cluster dev has no node worker-9">nodes: cluster dev has no node worker-9</span>`)
+	assert.Contains(t, status(actForm("cluster", "dev", "op", "shutdown", "nodes", "controller")),
+		`<button type="button" class="pill warn nodot act-go" data-act-go="@warn" aria-label="1 warning. Show them." title="Show the warnings">1 warning <span aria-hidden="true">↑</span></button><span class="act-fnote" title="controller runs slurmctld. While it is down, dev takes no jobs, and sbatch, squeue and sinfo fail.">`)
+	assert.Equal(t, "2 warnings", actPreview{Cmd: action.Command{Warns: []string{"a", "b"}}}.WarningsText())
+	assert.Equal(t, "1 problem", actPreview{Cmd: action.Command{Problems: []action.Problem{{}}}}.ProblemsText())
 }
 
 func TestActPreview_StatusParts(t *testing.T) {
@@ -243,4 +272,15 @@ func TestActPreview_StatusParts(t *testing.T) {
 	missing := actPreview{View: v, Spec: spec, Blocked: true}
 	assert.Equal(t, 0, missing.Problems())
 	assert.Equal(t, action.Problem{}, missing.First())
+}
+
+// The parts of a preview that the dialog shows in a way of its own: the
+// first problem and the first warning in the footer, the names in the notes
+// and the words of the command.
+func TestActPreview_FooterParts(t *testing.T) {
+	assert.Empty(t, actPreview{}.FirstWarn())
+	assert.Equal(t, "a", actPreview{Cmd: action.Command{Warns: []string{"a", "b"}}}.FirstWarn())
+
+	assert.Equal(t, "How many: too many", actPreview{Cmd: action.Command{Problems: []action.Problem{{Label: "How many", Text: "too many"}}}}.FirstText())
+	assert.Equal(t, "it broke", actPreview{Err: "it broke"}.FirstText())
 }

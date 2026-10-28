@@ -306,13 +306,14 @@ func TestActPreview_Refusals(t *testing.T) {
 	assert.Contains(t, body, `disabled>Run<kbd`)
 	assert.NotContains(t, body, `name="shown"`)
 
-	// A value that the form lacks is a hint, not an error.
+	// A value that the form lacks is a hint in the footer, not an error.
 	for _, c := range []struct{ id, form, hint string }{
 		{"power", actForm("cluster", "dev", "op", "on"), "Pick at least one node of dev."},
 		{"connect", actForm("container", " "), "Write the name of a container, such as kind-control-plane."},
 	} {
 		body = f.post("/actions/"+c.id+"/preview", c.form).Body.String()
-		assert.Contains(t, body, `<p class="hint act-missing">`+c.hint+`</p>`, c.id)
+		assert.Contains(t, body, `<span class="hint act-tot">`+c.hint+`</span>`, c.id)
+		assert.NotContains(t, body, `act-missing`, c.id)
 		assert.NotContains(t, body, `callout bad`, c.id)
 		assert.Regexp(t, `id="act-ok"[^>]* disabled>`, body, c.id)
 		assert.NotContains(t, body, `name="shown"`, c.id)

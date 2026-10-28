@@ -97,7 +97,7 @@
     const form = d.querySelector('form.modal');
     if (!form) return;
     if (S.last && d.contains(S.last) && S.last.getClientRects().length) { S.last.focus(); return; }
-    const first = touch() ? null : [...form.querySelectorAll('.mb :is(input:not([type=hidden]), select, textarea)')].find(el => !el.disabled && el.getClientRects().length);
+    const first = touch() ? null : [...form.querySelectorAll('.mb :is(input:not([type=hidden]), select, textarea), #act-confirm')].find(el => !el.disabled && el.getClientRects().length);
     (first || form).focus();
   }
 
@@ -306,8 +306,17 @@
   }
 
   // goTo opens what hides the field name and gives it the focus; without a
-  // name, the list of problems of the plan takes it.
+  // name, the list of problems takes it, and with @warn the first warning.
   function goTo(form, name) {
+    if (name === '@warn') {
+      const w = form.querySelector('#act-preview .callout.warn');
+      if (w) {
+        w.setAttribute('tabindex', '-1');
+        w.focus({ preventScroll: true });
+        w.scrollIntoView({ block: 'center' });
+      }
+      return;
+    }
     const el = name ? field(form, name) : document.getElementById('act-probs');
     if (!(el instanceof HTMLElement)) return;
     // A field in a folded section or a closed editor: open it first.
@@ -784,10 +793,14 @@
     if (!d || d.target !== layer() || d.verb !== 'get' || !/^\/dialogs\/[a-z-]+(\?|$)/.test(d.path)) return;
     S.path = d.path;
     const el = d.elt instanceof HTMLElement && d.elt !== document.body ? d.elt : document.activeElement;
-    S.opener = S.find = null;
-    if (el instanceof HTMLElement && el !== document.body && !el.closest('#layer')) {
-      S.opener = el;
-      S.find = finder(el);
+    // A dialog that loads again from within, as once the user picked its
+    // cluster or node, keeps the element that opened it.
+    if (!(el instanceof HTMLElement && el.closest('#layer #act-dialog'))) {
+      S.opener = S.find = null;
+      if (el instanceof HTMLElement && el !== document.body && !el.closest('#layer')) {
+        S.opener = el;
+        S.find = finder(el);
+      }
     }
     const draft = local.get(draftKey(d.path.slice('/dialogs/'.length).split('?')[0]));
     if (!draft) return;
