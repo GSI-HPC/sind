@@ -73,7 +73,16 @@ func TestPgOverview(t *testing.T) {
 	// Realms with health, clusters as cards.
 	assert.Contains(t, body, `<a href="/?realm=sind"><b>sind</b></a>`)
 	assert.Contains(t, body, `<a class="btn sm ghost" href="/clusters?realm=sind">Clusters<span class="vh"> of sind</span></a>`)
-	assert.Contains(t, body, `<a class="btn sm danger" href="/dialogs/delete-realm?realm=sind" aria-label="Delete realm sind…" hx-get="/dialogs/delete-realm?realm=sind" hx-target="#layer" hx-push-url="false">Delete realm…</a>`)
+	// A quiet ⋯ menu holds the verbs of a realm, Delete apart.
+	assert.Contains(t, body, `<summary class="btn pg-mbtn pg-micon" aria-haspopup="menu" aria-label="Actions for realm sind" title="Actions for realm sind"><span aria-hidden="true">⋯</span></summary>`)
+	assert.Contains(t, body, `<a class="pg-mi" role="menuitem" tabindex="-1" href="/dialogs/connect?realm=sind" data-pg-menu-item><span class="pg-ml">Connect a container…</span>`)
+	assert.Contains(t, body, `<div class="pg-mg danger" role="group" aria-label="Can lose data"><div class="pg-mh" aria-hidden="true">Can lose data</div>
+    <a class="pg-mi" role="menuitem" tabindex="-1" href="/dialogs/delete-realm?realm=sind" data-pg-menu-item><span class="pg-ml">Delete realm…</span><span class="pg-mx">Every cluster of it goes, and its mesh.</span></a>`)
+	assert.NotContains(t, body, `class="btn sm danger"`, "no red button on a row")
+	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}})
+	assert.Contains(t, pgBody(t, ts, "/", 200), `<span class="pg-mx">Every cluster of it goes, with the files on their data volume.</span>`)
+	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-dev-home"}, {Name: "sind-default-data"}})
+	assert.Contains(t, pgBody(t, ts, "/", 200), `<span class="pg-mx">Every cluster of it goes, with the files on their data and home volumes.</span>`)
 	assert.Contains(t, body, "1 node needs a look")
 	assert.Contains(t, body, "a command runs")
 	assert.Contains(t, body, `<a class="panel pg-ccard" href="/clusters/sind/dev">`)
@@ -198,7 +207,19 @@ func TestPgClusters(t *testing.T) {
 	assert.Regexp(t, `<span class="pill ok" data-say="\S+ is running\." data-say-key="[a-z]+/[a-z0-9-]+">running</span>`, body)
 	// A live update that changes the list tells screen readers how many it holds.
 	assert.Contains(t, body, `<div class="tw" data-say="3 clusters in every realm." data-say-key="count">`)
-	assert.Contains(t, body, `href="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" hx-get=`)
+	// A quiet ⋯ menu holds the verbs of a cluster, Delete apart, with what
+	// it takes.
+	assert.Contains(t, body, `<summary class="btn pg-mbtn pg-micon" aria-haspopup="menu" aria-label="Actions for dev (sind)" title="Actions for dev (sind)">`)
+	assert.Contains(t, body, `href="/dialogs/create-worker?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Add workers…</span>`)
+	assert.Contains(t, body, `href="/dialogs/power?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Power…</span>`)
+	assert.Contains(t, body, `href="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Delete cluster…</span><span class="pg-mx">Its containers, network and volumes go.</span></a>`)
+	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-hpc-home"}, {Name: "sind-hpc-config"}})
+	body = pgBody(t, ts, "/clusters", 200)
+	assert.Contains(t, body, `href="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Delete cluster…</span><span class="pg-mx">The files on its data volume go too.</span></a>`)
+	assert.Contains(t, body, `href="/dialogs/delete-cluster?cluster=hpc&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Delete cluster…</span><span class="pg-mx">The files on its home volume go too.</span></a>`, "a home volume is data too")
+	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-dev-home"}})
+	body = pgBody(t, ts, "/clusters", 200)
+	assert.Contains(t, body, `<span class="pg-mx">The files on its data and home volumes go too.</span>`)
 	assert.Contains(t, body, "sind get clusters")
 	// The filter links to every realm.
 	assert.Contains(t, body, `<a class="on" aria-current="true" href="/clusters?realm=" data-pg-keep>All realms</a>`)

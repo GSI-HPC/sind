@@ -24,7 +24,7 @@ runs. Each part is a fragment. */}}
   <div class="tw"><table class="pg-realms"><thead><tr><th>Realm</th><th class="num">Clusters</th><th class="num">Nodes</th><th>Health</th><th></th></tr></thead><tbody>
   {{range .Realms}}<tr{{if .On}} class="sel"{{end}}><td class="mono"><a href="/?realm={{.Name}}"><b>{{.Name}}</b></a></td><td class="num">{{.Clusters}}</td><td class="num">{{.Nodes}}</td>
     <td>{{range .Lives}}<span class="pill {{.Class}}">{{.Text}}</span> {{end}}{{if .Look}}<span class="pill {{.LookClass}}">{{.LookText}}</span>{{else if .Lives}}{{else if .Nodes}}<span class="pill ok">all running</span>{{else}}<span class="faint">–</span>{{end}}</td>
-    <td class="act">{{if and .Locked (not .Lives)}}<span class="pill run">a command runs</span> {{end}}<a class="btn sm ghost" href="/clusters?realm={{.Name}}">Clusters<span class="vh"> of {{.Name}}</span></a> {{template "pg-action" .Delete}}</td></tr>
+    <td class="act">{{if and .Locked (not .Lives)}}<span class="pill run">a command runs</span> {{end}}<a class="btn sm ghost" href="/clusters?realm={{.Name}}">Clusters<span class="vh"> of {{.Name}}</span></a> {{template "pg-menu" .Menu}}</td></tr>
   {{end}}</tbody></table></div></section>
 {{if .Clusters}}<div class="grid g3 pg-block">{{range .Clusters}}<a class="panel pg-ccard" href="{{.Link}}">
   <div class="pg-top"><span class="pg-name">{{.Name}}</span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}<span class="pg-ver">{{with .Slurm}}Slurm {{.}}{{end}}</span></div>

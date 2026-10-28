@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
 func init() { pgRegister(defaultRegistry) }
@@ -111,7 +112,6 @@ func pgRealmRows(sn store.Snapshot, realm string, now time.Time) []pgRealmRow {
 		row := pgRealmRow{
 			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]),
 			Locked: sn.Locks[r] != nil, On: r == realm,
-			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
 		}
 		for _, c := range sn.Clusters[r] {
 			if l := pgWorkOf(sn, r, c.Name, now).Life; l != nil {
@@ -119,10 +119,58 @@ func pgRealmRows(sn store.Snapshot, realm string, now time.Time) []pgRealmRow {
 			}
 		}
 		row.Look, row.LookClass = pgLook(pgSnapNodes(sn, r, now))
-		row.Delete.Name = "Delete realm " + r + "…"
+		row.Menu = pgMenu{ID: "realm", Label: "Actions for realm " + r, Icon: "⋯", Groups: []pgMenuGroup{
+			{Label: "Mesh", Items: []pgMenuItem{{Label: "Connect a container…", Hint: "Let a container of yours reach the nodes by name.", URL: pgDialog("connect", "realm", r)}}},
+			{Label: "Can lose data", Danger: true, Items: []pgMenuItem{{Label: "Delete realm…", Hint: pgRealmDeleteHint(sn, r), URL: pgDialog("delete-realm", "realm", r)}}},
+		}}
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// pgDataKinds returns the kinds of the volumes of the cluster that hold
+// the data of its users, which a delete of it removes: "data", "home",
+// both or none.
+func pgDataKinds(sn store.Snapshot, realm, name string) []string {
+	var kinds []string
+	for _, t := range []cluster.VolumeType{cluster.VolumeData, cluster.VolumeHome} {
+		vol := string(cluster.VolumeName(realm, name, t))
+		if slices.ContainsFunc(sn.Volumes[realm], func(v cluster.VolumeSummary) bool { return v.Name == vol }) {
+			kinds = append(kinds, string(t))
+		}
+	}
+	return kinds
+}
+
+// pgDataVolumes names n volumes of the kinds: "data volume", "data and
+// home volumes".
+func pgDataVolumes(kinds []string, n int) string {
+	if n == 1 {
+		return pgJoin(kinds) + " volume"
+	}
+	return pgJoin(kinds) + " volumes"
+}
+
+// pgRealmDeleteHint is the hint of Delete realm… in the menu of a realm:
+// its clusters go, and with them the files on their data and home
+// volumes, if any; host directories stay.
+func pgRealmDeleteHint(sn store.Snapshot, realm string) string {
+	var kinds []string
+	n := 0
+	for _, c := range sn.Clusters[realm] {
+		k := pgDataKinds(sn, realm, c.Name)
+		n += len(k)
+		for _, kind := range k {
+			if !slices.Contains(kinds, kind) {
+				kinds = append(kinds, kind)
+			}
+		}
+	}
+	if n == 0 {
+		return "Every cluster of it goes, and its mesh."
+	}
+	slices.Sort(kinds)
+	return "Every cluster of it goes, with the files on their " + pgDataVolumes(kinds, n) + "."
 }
 
 func pgLoadClusters(v *View) (*pgClusterList, error) {
@@ -140,7 +188,7 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 		if !pgClusterIn(c, q.State) {
 			continue
 		}
-		row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name}
+		row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name, DataKinds: pgDataKinds(v.Snap, c.Realm, c.Name)}
 		if q.Realm == "" {
 			row.Label = c.Name + " (" + c.Realm + ")"
 		}

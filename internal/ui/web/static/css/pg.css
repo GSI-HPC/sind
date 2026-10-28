@@ -292,6 +292,16 @@ td.act .btn:not(.ghost){border-color:var(--accent);color:var(--accent)}
 .pg-mw[open]>summary{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .pg-caret{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;margin-left:2px}
 .pg-micon{min-width:40px;justify-content:center;font-weight:700;letter-spacing:.05em}
+/* The ⋯ menu of a table row is as small as the buttons beside it. Its
+   menu lies over the page, where the script places it in view (pg-fixed),
+   so that the table box, which scrolls sideways, neither clips nor fades
+   it. */
+td.act .pg-mbtn{padding:3px 8px;font-size:var(--t-sm);min-width:34px}
+td.act .pg-menu{text-align:left;white-space:normal}
+.pg-menu.pg-fixed{position:fixed;right:auto;bottom:auto}
+.tw:has(details[data-pg-menu][open]){-webkit-mask-image:none;mask-image:none}
+/* A card of a cluster has its ⋯ menu in its head, beside its state. */
+@media (max-width:640px){table.cards td.c-act:has(>.pg-mw:only-child){order:-1;flex:0 0 auto}}
 .pg-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:max-content;min-width:240px;max-width:min(320px,calc(100vw - 32px));padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);display:grid;gap:2px}
 .pg-mg+.pg-mg{border-top:1px solid var(--line-2);margin-top:4px;padding-top:4px}
 .pg-mh{padding:6px 10px 2px;font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}

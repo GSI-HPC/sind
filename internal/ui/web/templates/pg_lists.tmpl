@@ -56,7 +56,7 @@ matches, which the page script shows and hides as the user types. */}}
   <td class="c-chk"><input type="checkbox" data-pg-sel="{{.Key}}" aria-label="Select {{.Label}}"{{with .Life}} disabled title="sind {{.Verb}} this cluster."{{end}}></td>
   <td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}<td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$c.Name}} is {{.Text}}." data-say-key="{{$c.Realm}}/{{$c.Name}}">{{.Text}}</span>{{end}}{{with .Life}}<div class="pg-lifebar">{{template "run-segbar" .}}</div>{{end}}</td><td class="mono" data-label="Slurm">{{.Slurm}}</td><td class="num" data-label="Nodes">{{len .Nodes}}</td>
   <td class="c-wide" data-label="Roles"><div class="pg-nodemap">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div></td><td data-label="Monitoring">{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</td>
-  <td class="act c-act">{{with .Stop}}{{template "run-stop" .}}{{else}}{{with .Life}}<a class="btn sm" href="{{.Run.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a>{{else}}<a class="btn sm danger" href="{{.DeleteURL}}" hx-get="{{.DeleteURL}}" hx-target="#layer" hx-push-url="false" aria-label="Delete {{.Label}}…">Delete…</a>{{end}}{{end}}</td></tr>
+  <td class="act c-act">{{with .Stop}}{{template "run-stop" .}}{{else}}{{with .Life}}<a class="btn sm" href="{{.Run.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a>{{else}}{{template "pg-menu" .Menu}}{{end}}{{end}}</td></tr>
 {{end}}{{template "pg-list-none" (.None "cluster")}}
 </tbody></table></div>
 {{end}}{{end}}

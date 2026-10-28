@@ -56,8 +56,9 @@ type pgRealmRow struct {
 	Lives  []pgPill
 	Locked bool
 	On     bool
-	// Delete opens the Delete realm dialog.
-	Delete pgAction
+	// Menu is the ⋯ menu of the row: Connect a container, and Delete
+	// realm apart.
+	Menu pgMenu
 }
 
 // pgNeedWords say how many items of a kind there are, in the order of the

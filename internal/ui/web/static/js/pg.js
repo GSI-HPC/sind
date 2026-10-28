@@ -342,11 +342,39 @@
     for (const m of document.querySelectorAll('details[data-pg-menu][open]')) if (m !== except) closeMenu(m, false);
   }
 
+  // placeMenu lays the menu of a table row over the page, below its
+  // button or, where the screen ends, above it, and inside the screen, as
+  // the box of the table scrolls sideways and would clip it.
+  function placeMenu(m) {
+    const menu = m.querySelector('.pg-menu');
+    if (!menu || !m.closest('.tw')) return;
+    if (!m.open) {
+      menu.classList.remove('pg-fixed');
+      menu.style.left = menu.style.top = '';
+      return;
+    }
+    menu.classList.add('pg-fixed');
+    const b = m.querySelector('summary').getBoundingClientRect();
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    const vw = document.documentElement.clientWidth;
+    let end = window.innerHeight;
+    const rail = document.querySelector('.rail');
+    if (rail && getComputedStyle(rail).position === 'fixed' && rail.getBoundingClientRect().top > end / 2) end = rail.getBoundingClientRect().top;
+    const left = Math.max(8, Math.min(b.right - w, vw - w - 8));
+    const top = b.bottom + 6 + h > end - 8 && b.top - 6 - h >= 8 ? b.top - 6 - h : b.bottom + 6;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+
   function menus() {
+    const placeOpen = () => { for (const m of document.querySelectorAll('details[data-pg-menu][open]')) placeMenu(m); };
+    window.addEventListener('scroll', placeOpen, true);
+    window.addEventListener('resize', placeOpen);
     document.addEventListener('toggle', ev => {
       const m = ev.target;
       if (!(m instanceof HTMLDetailsElement) || !m.hasAttribute('data-pg-menu')) return;
       m.querySelector('summary').setAttribute('aria-expanded', String(m.open));
+      placeMenu(m);
       if (!m.open) return;
       closeMenus(m);
       // A menu opened with the keyboard moves the focus to its first verb.

@@ -298,8 +298,27 @@ type pgClusterRow struct {
 	// its name, and its realm when the list shows every realm.
 	Label string
 	// Stop is the Stop button of a command of sind ui that creates the
-	// cluster, which takes the place of Delete; nil for none.
+	// cluster, which takes the place of its menu; nil for none.
 	Stop *runStop
+	// DataKinds are the kinds of its volumes that hold the data of its
+	// users, which go with it: "data", "home", both or none.
+	DataKinds []string
+}
+
+// Menu is the ⋯ menu of the row: the dialogs that act on the cluster,
+// with Delete apart as the one that can lose data.
+func (r pgClusterRow) Menu() pgMenu {
+	del := "Its containers, network and volumes go."
+	if len(r.DataKinds) > 0 {
+		del = "The files on its " + pgDataVolumes(r.DataKinds, len(r.DataKinds)) + " go too."
+	}
+	return pgMenu{ID: "cluster", Label: "Actions for " + r.Label, Icon: "⋯", Groups: []pgMenuGroup{
+		{Label: "Cluster", Items: []pgMenuItem{
+			{Label: "Add workers…", Hint: "Create more worker nodes.", URL: pgDialog("create-worker", "realm", r.Realm, "cluster", r.Name)},
+			{Label: "Power…", Hint: "Start, stop or reboot its nodes.", URL: pgDialog("power", "realm", r.Realm, "cluster", r.Name)},
+		}},
+		{Label: "Can lose data", Danger: true, Items: []pgMenuItem{{Label: "Delete cluster…", Hint: del, URL: r.DeleteURL()}}},
+	}}
 }
 
 // Key identifies the cluster in a selection: realm/name.
