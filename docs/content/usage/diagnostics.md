@@ -352,7 +352,7 @@ sind get node NODE[.CLUSTER]
 {{< /cli >}}
 {{< ui >}}
 
-Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster. Its page shows its services, events and power state.
+Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster. Its page shows its services, what Slurm says about it and what changed on it. When it needs a look, a card at the top says what failed and when, shows the last lines of the journal of that service, and lists the fixes to try in order, such as **Restart slurmd…**, then **Reboot…**.
 
 {{< uishot "node" >}}
 
@@ -386,9 +386,9 @@ sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 {{< /cli >}}
 {{< ui >}}
 
-Open the cluster, then the **Logs** tab, or press **Logs** on the page of a node. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log; **Start with** shows more. Use **Pause** to stop the stream and **Follow** to resume it. **Filter** and **Errors and warnings only** narrow the lines, and **Download** saves them.
+Open the **Logs** tab of the node's page, or press **Logs** beside the node or one of its services anywhere in sind ui. It opens the log that tells the most: the journal of a service that failed, of the node's Slurm service while it runs, otherwise its container log. The **Logs** tab of a cluster shows the log of any of its nodes: select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log; **Start with** shows more. Use **Pause** to stop the stream and **Follow** to resume it. The log of a stopped node ends where it stopped, and the tab says when. **Filter** and **Errors and warnings only** narrow the lines, and **Download** saves them.
 
-{{< uishot "cluster-logs" >}}
+{{< uishot "node-logs" >}}
 
 {{< /ui >}}
 {{< /ways >}}

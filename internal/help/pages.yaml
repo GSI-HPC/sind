@@ -31,7 +31,7 @@
   howtos: [reach-node, job-pending]
 - id: node
   title: Node
-  summary: One node container, its services and its address. You can power it or delete it here, and drain or resume a worker in Slurm.
+  summary: One node container, what is wrong with it and the fixes to try in order, its services, what changed on it, and its logs. Its menus power it, drain or resume a worker in Slurm, and delete a worker.
   route: /nodes/{realm}/{cluster}/{node}
   doc: usage/diagnostics#node-status
   words: [node-roles, managed, munge, slurmctld, sshd, drain]

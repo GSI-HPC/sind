@@ -72,8 +72,15 @@ shots:
     page: nodes
 
   - name: node
-    alt: "A node whose slurmd is down: its identity, services and the commands for it"
+    alt: "A node whose slurmd failed: what failed and when, the end of its journal, the fixes to try in order, its services and what changed on it"
     path: /nodes/sind/dev/worker-4
+    hide: "#tasks"
+    page: node
+    sizes: [desktop, phone]
+
+  - name: node-logs
+    alt: "A node's Logs tab: the journal of the service that failed, with the fix to try first above it"
+    path: /nodes/sind/dev/worker-4?tab=logs&source=journal&unit=slurmd
     hide: "#tasks"
     page: node
     fit: true
