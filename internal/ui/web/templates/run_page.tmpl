@@ -20,7 +20,6 @@ them. */}}
   <div class="counts" data-g="counts"></div>
   <div class="noteln"><span class="note" data-g="note">&nbsp;</span><span class="eta" data-g="eta"></span></div>
 </div></div></section>
-<div hx-swap="morph:innerHTML" sse-swap="run-failed">{{fragment "run-failed" .}}</div>
 <section class="panel rgp"><div class="ph"><h2>Steps</h2><button type="button" class="btn sm" data-g="whole" hidden>Whole run</button><span class="grow"></span>
   <div class="legend" aria-hidden="true"><span><i class="lg-done"></i>done</span><span><i class="lg-fill"></i>share done</span><span><i class="lg-wait"></i>waiting</span><span><i class="lg-unp"></i>extracting</span><span><i class="lg-lane"></i>MB/s</span><span><i class="lg-now"></i>now</span></div></div>
 <div class="gantt" data-g="gantt">
@@ -43,27 +42,33 @@ them. */}}
 {{define "run-summary"}}{{with .Data}}<span hidden data-gantt="{{.Data}}"></span><span hidden data-doc-title="{{.DocTitle}}"></span><span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"{{if .SaySince}} data-say-since="{{.SaySince}}"{{end}}></span>{{end}}{{end}}
 
 {{/* run-command is the command of the run, from a runHead: with Copy and
-the config it ran with, or folded into one line once the run ended ok. */}}
+the config it ran with, or folded into one line once the run ended ok. The
+command of a run without a task, from its log, has Copy with a note on its
+flags only. */}}
 {{define "run-command"}}{{with .Data}}{{with .Command}}{{if $.Data.Fold}}<details class="runfold"><summary><span class="runfold-l">Command</span><code>{{.Text}}</code>{{if $.Data.Config}}<span class="runfold-c">Config used</span>{{end}}</summary>
-  <div class="runfold-b"><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div>{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<div class="runcfg-path mono">{{.Label}}</div><pre class="mono runcfg-pre">{{.Text}}</pre>{{end}}</div></details>
-{{else}}<div class="runcmd">{{template "pg-cmd" .}}{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">{{.Label}}</div><pre class="mono">{{.Text}}</pre></details>{{end}}</div>{{end}}{{end}}{{end}}{{end}}
+  <div class="runfold-b">{{template "run-cmd-line" $.Data}}{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<div class="runcfg-path mono">{{.Label}}</div><pre class="mono runcfg-pre">{{.Text}}</pre>{{end}}</div></details>
+{{else}}<div class="runcmd"><div><div class="cmdlabel">{{.Label}}</div>{{template "run-cmd-line" $.Data}}</div>{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">{{.Label}}</div><pre class="mono">{{.Text}}</pre></details>{{end}}</div>{{end}}{{end}}{{end}}{{end}}
+
+{{/* run-cmd-line is the command of a runHead with its copy button. */}}
+{{define "run-cmd-line"}}<div class="cmd"><code>{{.Command.Text}}</code>{{if .CopyNote}}<button type="button" data-pg-copy-text="{{.CopyNote}}" aria-label="Copy {{.Command.Text}} with a note on its flags">Copy with a note</button>{{else}}<button type="button" data-pg-copy aria-label="Copy {{.Command.Text}}">Copy</button>{{end}}</div>{{end}}
 
 {{/* run-outcome is what came of a run that ended, a runOutcome: a mark and
 a title that say it in the words of the cluster, and what to do next. The
 outcome of a create cluster that ended ok has the checks and the first
-commands of the "Ready for jobs" card of the cluster's Summary. */}}
+commands of the "Ready for jobs" card of the cluster's Summary; that of a
+run that failed or was stopped says what failed, why that often happens and
+the host checks that did not pass. */}}
 {{define "run-outcome"}}{{with .Data}}<section class="panel rout {{.Class}}" aria-labelledby="rout-t"><div class="ph rout-h"><span class="rout-mk" aria-hidden="true">{{.Mark}}</span><h2 id="rout-t">{{.Title}}</h2><span class="grow"></span><span class="rout-meta">{{.Meta}}{{with .Realm}} · realm <span class="chip">{{.}}</span>{{end}}</span></div>
 <div class="pb">{{with .Ready}}<div class="pg-ready-b"><div>{{if .Checked}}<ul class="pg-checks">{{range .Checks}}<li><span class="pg-ck {{.State}}" aria-hidden="true">{{.Mark}}</span><div><span class="vh">{{.Word}}: </span><b>{{.Title}}</b>{{with .Detail}} <span class="muted">{{.}}</span>{{end}}{{with .Actions}}<div class="pg-fix">{{range .}}{{template "pg-action" .}}{{end}}</div>{{end}}</div></li>{{end}}</ul>
   {{else}}<p class="muted pg-flat">sind ui checks the controller, the workers, accounting and the files once it has probed the cluster.</p>{{end}}</div>
   <div class="stack">{{with .Wait}}<p class="pg-wait">{{.}}</p>{{else}}{{range .Commands}}{{template "pg-cmd" .}}{{end}}<p class="hint pg-flat">{{.Note}}</p>{{end}}</div></div>{{end}}
-{{if or .Next .NextNote}}<div class="rout-next"><span class="rout-nl">Next</span>{{range .Next}}{{template "pg-action" .}}{{end}}<span class="grow"></span>{{with .NextNote}}<span class="hint">{{.}}</span>{{end}}</div>{{end}}
-</div></section>{{end}}{{end}}
-
-{{define "run-failed"}}{{with .Data}}<section class="panel rfail {{.Class}}"><div class="ph"><h2>{{.Title}}</h2></div><div class="pb stack">
-  {{range .Groups}}<div class="callout {{$.Data.Class}}"><b class="mono">{{.Nodes}}</b>{{if .Class}} <span class="chip">{{.Class}}</span>{{end}}<br><span class="mono">{{.Err}}</span></div>{{end}}
+{{with .Fail}}<div class="rout-fail"><div class="stack">{{range .Groups}}<div class="callout {{$.Data.Fail.Class}}"><b class="mono">{{.Nodes}}</b>{{if .Class}} <span class="chip">{{.Class}}</span>{{end}}<br><span class="mono">{{.Err}}</span></div>{{end}}
   {{if .CmdErr}}<div class="callout bad"><span class="mono">{{.CmdErr}}</span></div>{{end}}
-  {{range .Notes}}<div class="hint">{{.}}</div>{{end}}
-  {{if .Doctor}}<div class="hint">A timeout often means that a node needed more time: try again with a longer <span class="mono">--wait</span>, or check the host in <a href="/doctor">Doctor</a>.</div>{{end}}
+  {{range .Says}}<p class="rout-say">{{with .Word}}<span data-word="{{.}}">{{.}}</span>{{end}}{{.Text}}</p>{{end}}
+  {{range .Notes}}<p class="hint">{{.}}</p>{{end}}</div>
+  {{if or $.Data.Why $.Data.Doctor}}<div class="stack rout-why">{{with $.Data.WhyTitle}}<b>{{.}}</b>{{end}}{{with $.Data.Why}}<ul>{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+  {{with $.Data.Doctor}}<div class="rout-doc"><b>{{$.Data.DoctorText}}</b><ul>{{range .}}<li><span class="pg-ck {{if eq .Status "failed"}}bad{{else}}warn{{end}}" aria-hidden="true">{{if eq .Status "failed"}}✗{{else}}!{{end}}</span><div><b>{{.Name}}</b>{{with .Detail}} <span class="muted">{{.}}</span>{{end}}{{if .Remediation}} <a href="/doctor">Show fix</a>{{end}}</div></li>{{end}}</ul></div>{{end}}</div>{{end}}</div>{{end}}
+{{if or .Next .NextNote .CopyErr}}<div class="rout-next"><span class="rout-nl">Next</span>{{range .Next}}{{template "pg-action" .}}{{end}}{{with .CopyErr}}<button type="button" class="btn" data-pg-copy-text="{{.}}">Copy the error</button>{{end}}<span class="grow"></span>{{with .NextNote}}<span class="hint">{{.}}</span>{{end}}</div>{{end}}
 </div></section>{{end}}{{end}}
 
 {{define "run-facts"}}{{with .Data}}<section class="panel"><details class="raw" id="run-facts-raw"><summary>What the event log says about this run</summary><div class="pb"><dl class="kv">
@@ -74,4 +79,4 @@ commands of the "Ready for jobs" card of the cluster's Summary. */}}
 or a runWait: Try again, which runs the same command again (actRetryRoute),
 the dialog filled in with the task's form, and the way back to what the
 command worked on. */}}
-{{define "run-retry"}}{{if .RetryID}}<form class="inline" method="post" action="/tasks/{{.RetryID}}/retry" hx-post="/tasks/{{.RetryID}}/retry" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn primary">Try again</button></form>{{end}}{{with .Edit}}<a class="btn{{if .Primary}} primary{{end}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#layer" hx-swap="innerHTML">{{.Label}}</a>{{end}}{{with .Back}}<a class="btn{{if .Primary}} primary{{end}}" href="{{.Href}}">{{.Label}}</a>{{end}}{{end}}
+{{define "run-retry"}}{{with .Back}}<a class="btn{{if .Primary}} primary{{end}}" href="{{.Href}}">{{.Label}}</a>{{end}}{{with .Edit}}<a class="btn{{if .Primary}} primary{{end}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#layer" hx-swap="innerHTML">{{.Label}}</a>{{end}}{{if .RetryID}}<form class="inline" method="post" action="/tasks/{{.RetryID}}/retry" hx-post="/tasks/{{.RetryID}}/retry" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn{{if .RetryPrimary}} primary{{end}}">Try again</button></form>{{end}}{{end}}

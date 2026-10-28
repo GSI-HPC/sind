@@ -27,14 +27,29 @@ type runOutcome struct {
 	// Ready is the "Ready for jobs" card of the cluster that a create
 	// made, whose checks and commands the panel shows.
 	Ready *pgReady
-	// Next are the ways on, and NextNote a word about them.
+	// Fail is what failed, for a run that did not end ok. WhyTitle and
+	// Why say what often causes it, and Doctor are the host checks that
+	// did not pass, which DoctorText counts.
+	Fail       *runFailPanel
+	WhyTitle   string
+	Why        []string
+	Doctor     []store.DoctorCheck
+	DoctorText string
+	// Next are the ways on, and NextNote a word about them. CopyErr, when
+	// set, is the error that the button Copy the error copies.
 	Next     []pgAction
 	NextNote string
+	CopyErr  string
 }
 
-// runOutcomeOf builds the outcome of the run: nil for a run that goes on,
-// or one whose outcome says no more than its head does.
+// runOutcomeOf builds the outcome of the run: what failed, once a target
+// or the run failed or the run was stopped, and what came of a create
+// cluster that ended ok; nil for a run that goes on well, or one whose
+// outcome says no more than its head does.
 func runOutcomeOf(rc runCtx) *runOutcome {
+	if p := runFailedOf(rc); p != nil {
+		return runFailOutcome(rc, p)
+	}
 	run := rc.Run
 	if !run.Done() || run.Status != store.StatusOK {
 		return nil

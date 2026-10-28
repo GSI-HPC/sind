@@ -142,12 +142,10 @@ func TestRunFailedPanel(t *testing.T) {
 
 	p := runFailedOf(runCtxOf(runFixture(t, "create-failed.jsonl", -1)[0], runAt(400)))
 	require.NotNil(t, p)
-	assert.Equal(t, "What failed", p.Title)
 	assert.Equal(t, "bad", p.Class)
 	assert.Equal(t, []runFailGroup{{Nodes: "worker-[1,2]", Class: "timeout", Err: "node {}: timed out; last probe error: probe munge: munge not ready"}}, p.Groups)
 	assert.Empty(t, p.CmdErr)
-	assert.True(t, p.Doctor)
-	assert.Equal(t, []string{"sind removed what the command had created (rollback). Nothing is left behind."}, p.Notes)
+	assert.Empty(t, p.Notes, "the line beside the outcome says that the rollback went well")
 
 	// One node: its name comes back into the text.
 	one := runOf(9, "failed", runSp("step", "nodes", runEndedAt(0, 9, "failed"), runKids(
@@ -155,7 +153,6 @@ func TestRunFailedPanel(t *testing.T) {
 	)))
 	p = runFailedOf(runCtxOf(one, runAt(10)))
 	assert.Equal(t, "node worker-1: refused", p.Groups[0].Err)
-	assert.False(t, p.Doctor)
 	assert.Empty(t, p.Notes)
 
 	// A failure with no failed target says what the command said.
@@ -171,25 +168,21 @@ func TestRunFailedPanel(t *testing.T) {
 	)))
 	p = runFailedOf(runCtxOf(live, runAt(10)))
 	require.NotNil(t, p)
-	assert.Equal(t, "What failed", p.Title)
+	assert.Equal(t, "bad", p.Class)
 
 	// A canceled run that had a failure says it was stopped.
 	stopped := runOf(9, "canceled", runSp("step", "nodes", runEndedAt(0, 9, "canceled"), runKids(
 		runSp("target", "w-1", runEndedAt(0, 1, "failed"), runWith(func(s *store.Span) { s.Err = "w-1: bad" })),
 	)))
 	p = runFailedOf(runCtxOf(stopped, runAt(10)))
-	assert.Equal(t, "Stopped", p.Title)
 	assert.Equal(t, "warn", p.Class)
 }
 
 func TestRunStoppedPanel(t *testing.T) {
 	p := runFailedOf(runCtxOf(runFixture(t, "create-canceled.jsonl", -1)[0], runAt(400)))
 	require.NotNil(t, p)
-	assert.Equal(t, "Stopped", p.Title)
 	assert.Equal(t, "warn", p.Class)
-	require.Len(t, p.Notes, 2)
-	assert.Equal(t, "The run was interrupted. 2 targets stopped while they ran, and 1 target never started.", p.Notes[0])
-	assert.Contains(t, p.Notes[1], "Nothing is left behind")
+	assert.Equal(t, []string{"The run was interrupted. 2 targets stopped while they ran, and 1 target never started."}, p.Notes)
 
 	// Singular, no rollback, and what finished is not stopped.
 	one := runOf(9, "canceled", runSp("step", "nodes", runEndedAt(0, 9, "canceled"), runKids(
@@ -267,10 +260,11 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	run := runOf(9, "failed")
 	run.Title, run.Root.Node, run.Class = "create cluster bench", "bench", "timeout"
 	h := runHeadOf(runCtx{Run: run, Found: true, Snap: store.Snapshot{}, Now: runAt(30)})
-	assert.Equal(t, &pgCmd{Label: "Command", Text: "sind create cluster bench"}, h.Command)
-	assert.Contains(t, h.CmdNote, "not its flags")
+	assert.Equal(t, &pgCmd{Label: "What the event log names", Text: "sind create cluster bench"}, h.Command)
+	assert.Equal(t, "Its flags and config are not in the log.", h.CmdNote)
+	assert.Equal(t, "# The event log keeps no flags of this command; add them, such as --config FILE.\nsind create cluster bench", h.CopyNote)
 	assert.Empty(t, h.Realm)
-	assert.Equal(t, &runLink{Label: "Edit and try again…", Href: "/dialogs/create-cluster?name=bench&wait=10m"}, h.Edit)
+	assert.Equal(t, &runLink{Label: "Try again with a 10m wait…", Href: "/dialogs/create-cluster?name=bench&wait=10m", Primary: true}, h.Edit)
 	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, h.Back)
 	assert.Empty(t, h.RetryID, "only a task runs again at once")
 
@@ -286,8 +280,20 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "bench"}}}
 	assert.Equal(t, "sind create cluster bench", runHeadOf(runCtx{Run: run, Snap: snap}).Command.Text, "the default realm needs no flag")
 	power := run
-	power.Title, power.Command = "power reboot worker-[0-1].bench", "power reboot bench"
-	assert.Equal(t, "sind power reboot bench", runHeadOf(runCtx{Run: power, Snap: snap}).Command.Text, "the command as the log names it")
+	power.Title, power.Command, power.Root.Name = "power reboot worker-[0-1].bench", "power reboot bench", "power reboot"
+	h = runHeadOf(runCtx{Run: power, Snap: snap})
+	assert.Equal(t, "sind power reboot 'worker-[0-1].bench'", h.Command.Text, "the nodes, as the title names them")
+	assert.Equal(t, "# The event log keeps no flags of this command; add the ones it had.\nsind power reboot 'worker-[0-1].bench'", h.CopyNote)
+	power.Command = ""
+	assert.Equal(t, []string{"power", "reboot", "worker-[0-1].bench"}, runLogWords(power), "no command: the title")
+	workers := runOf(9, "ok", runSp("step", "nodes", runKids(
+		runSp("target", "worker-2", runWith(func(s *store.Span) { s.Node, s.Role = "worker-2", "worker" })),
+		runSp("target", "worker-3", runWith(func(s *store.Span) { s.Node, s.Role = "worker-3", "worker" })))))
+	workers.Title, workers.Command, workers.Root.Name = "create worker worker-[2-3].bench", "create worker bench", "create worker"
+	assert.Equal(t, []string{"create", "worker", "bench", "--count", "2"}, runLogWords(workers))
+	// A run of another sind ui, whose task this one does not keep.
+	workers.FromUI = true
+	assert.Equal(t, "sind ui no longer keeps its form, and the log has no flags or config.", runHeadOf(runCtx{Run: workers, Snap: snap}).CmdNote)
 
 	// A stopped create worker opens Add workers of its cluster, a timed
 	// out node too; other commands get no dialog.

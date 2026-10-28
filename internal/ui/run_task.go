@@ -50,13 +50,14 @@ type runWait struct {
 	// NoRun says that the command writes no event log, so it never has a
 	// run page.
 	NoRun bool
-	// Command, Back, RetryID and Edit are those of the run page (runHead),
+	// Command, Back, RetryID, Edit and RetryPrimary are those of the run page (runHead),
 	// for a command that ended before it wrote a run.
-	Command *pgCmd
-	Back    *runLink
-	RetryID string
-	Edit    *runLink
-	CSRF    string
+	Command      *pgCmd
+	Back         *runLink
+	RetryID      string
+	Edit         *runLink
+	RetryPrimary bool
+	CSRF         string
 	// SayKey, SayState and Say are what run.js announces when the task
 	// ends while the page waits. The key is the page's own, and the page
 	// announces no start: the run page that follows at once does.
@@ -89,6 +90,7 @@ func runWaitOf(v *View) *runWait {
 		w.Command = &pgCmd{Label: "Command", Text: t.Display}
 	}
 	w.RetryID, w.Edit = runRetry(t, card.Class)
+	w.RetryPrimary = w.RetryID != ""
 	return w
 }
 

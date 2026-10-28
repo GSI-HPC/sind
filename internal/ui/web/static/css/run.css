@@ -108,6 +108,16 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rout>.pb{padding:16px 16px 16px 20px}
 .rout-next{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2)}
 .rout-nl{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-right:6px}
+.rout-fail{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;align-items:start}
+.rout-fail .callout{overflow-wrap:anywhere;margin:0}
+.rout-say{margin:0;font-size:var(--t-md)}
+.rout-fail p.hint{margin:0}
+.rout-why{font-size:var(--t-md)}
+.rout-why ul{margin:0;padding-left:18px;display:grid;gap:6px;color:var(--muted)}
+.rout-doc{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--line-2)}
+.rout-doc ul{list-style:none;padding:0;color:inherit}
+.rout-doc li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:baseline}
+@media (max-width:900px){.rout-fail{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:700px){.rout-h,.rout>.pb{padding-left:16px}.rout-meta{flex-basis:100%}.rout-next .grow{display:none}.rout-next .hint{flex-basis:100%}}
 /* the summary: the clock, line 1 (what leads now), the counts, and line 2
    (the one fact to know now) on a fixed grid, so that nothing moves as
@@ -129,9 +139,6 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .hint{font-size:var(--t-sm);color:var(--muted)}
 .rsum+.hint{margin-top:10px}
 .hint+.hint{margin-top:6px}
-.rfail.bad{border-color:var(--bad)}
-.rfail.warn{border-color:var(--warn)}
-.rfail .callout{overflow-wrap:anywhere}
 
 /* timeline (gantt.js draws it; a step row is 44 px, a target row 26 px) */
 .rgp{--bar-body:color-mix(in srgb,var(--run) 16%,var(--panel));--hatch:color-mix(in srgb,var(--queued) 55%,transparent);--lane:color-mix(in srgb,var(--run) 20%,transparent);--lane-done:color-mix(in srgb,var(--deco) 22%,transparent)}
