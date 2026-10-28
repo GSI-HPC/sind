@@ -79,6 +79,8 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .rp>*{min-width:0}
 .rp>div:empty{display:none}
 .runhead{margin-bottom:0}
+/* the notes under the head keep the gap of the sections of the page */
+.runhead~.callout{margin-top:14px}
 /* the command of a run of sind ui, with Copy, and the config it ran with */
 .runcmd{display:grid;gap:8px;min-width:0}
 .runcfg>summary{cursor:pointer;width:max-content;font:var(--t-sm) var(--f-body);color:var(--muted)}

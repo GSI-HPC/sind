@@ -767,7 +767,8 @@
     if (failedT) return ['bad', (failedT.node || failedT.n) + ' failed at ' + dur(failedT.e) + ': ' + failedT.err];
     if (run.stopping) return ['warn', 'Stopping: what runs stops, and what is queued does not start.'];
     const lock = run.root.kids.find(s => s.k === 'wait' && !ended(s));
-    if (lock) return ['', 'Waiting for the ' + lock.n + (lock.m ? ' held by ' + lock.m : '') + ' for ' + dur(elapsed(lock, t)) + '.'];
+    // The head of the page links what holds the lock.
+    if (lock) return ['', 'Waits for the ' + lock.n + ' for ' + dur(elapsed(lock, t)) + '.'];
     // The spans that run, the newest first, for what the run does.
     const live = run.spans.filter(s => s.r != null && !ended(s) && s.k !== 'command').sort((a, b) => b.r - a.r);
     if (t - run.last > quietAfter) {

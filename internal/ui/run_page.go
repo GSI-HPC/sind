@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
@@ -191,6 +193,12 @@ type runHead struct {
 	TaskID    string
 	Stop      *runStop
 	Canceling bool
+	// Waits says that the run waits for the lock of its realm; Holder
+	// leads to the run that holds it, and HolderText names the holder as
+	// the log does when sind ui has no run of it.
+	Waits      bool
+	Holder     *runLink
+	HolderText string
 }
 
 // runHeadOf builds the head of the run page.
@@ -243,6 +251,10 @@ func runHeadOf(rc runCtx) *runHead {
 		runHeadNoTask(rc, h)
 	}
 	h.RetryPrimary = h.RetryID != "" && (h.Edit == nil || !h.Edit.Primary)
+	if runWaitsForLock(run) {
+		h.Waits = true
+		h.Holder, h.HolderText = runLockHolder(rc)
+	}
 	if run.Done() && runStatusClass(run) == runOK {
 		// What the command worked on is the way on.
 		h.Fold = h.Command != nil
@@ -329,6 +341,67 @@ func runLogWords(run store.Run) []string {
 		words = strings.Fields(run.Title)
 	}
 	return words
+}
+
+// runLockHolder finds what holds the lock that the run waits for: the
+// oldest run that goes on in the same realm, does not wait itself and can
+// be the command that the log of the wait names (runNamedBy), or else what
+// the log names. A run from a terminal that was killed never ends in the
+// log; the name in the log keeps the page from linking it.
+func runLockHolder(rc runCtx) (*runLink, string) {
+	msg := ""
+	for _, s := range activity.VisibleChildren(rc.Run.Root) {
+		if s.Kind == activity.KindWait && s.Name == runLockWait {
+			msg = s.Message
+			break
+		}
+	}
+	line, _, _ := strings.Cut(msg, " (pid ")
+	realm := runEntryOf(rc.Snap, rc.Run).realm
+	var holder *store.Run
+	for i, r := range rc.Snap.Runs {
+		if r.ID == rc.Run.ID || r.Done() || runWaitsForLock(r) || realm == "" || runEntryOf(rc.Snap, r).realm != realm || msg != "" && !runNamedBy(r, line) {
+			continue
+		}
+		if holder == nil || r.Start.Before(holder.Start) {
+			holder = &rc.Snap.Runs[i]
+		}
+	}
+	if holder != nil {
+		return &runLink{Label: runEntryOf(rc.Snap, *holder).title, Href: "/runs/" + holder.ID}, ""
+	}
+	return nil, msg
+}
+
+// runNamedBy reports whether a command line, as the lock names its
+// holder ("sind create cluster dev"), can be the command of the run: it
+// has the run's command words, and its words after them name the run's
+// cluster or nodes of it, or are values of flags, as the path of
+// --config.
+func runNamedBy(r store.Run, line string) bool {
+	words, name := strings.Fields(line), strings.Fields(r.Root.Name)
+	i := -1
+	for j := 0; j+len(name) <= len(words); j++ {
+		if slices.Equal(words[j:j+len(name)], name) {
+			i = j
+			break
+		}
+	}
+	if i < 0 || len(name) == 0 {
+		return false
+	}
+	rest := words[i+len(name):]
+	for j, w := range rest {
+		switch {
+		case strings.HasPrefix(w, "-"):
+		case w == r.Root.Node || strings.HasSuffix(w, "."+r.Root.Node), r.Root.Node == config.DefaultClusterName && !strings.Contains(w, "."):
+			return true
+		case j == 0 || !strings.HasPrefix(rest[j-1], "-") || strings.Contains(rest[j-1], "="):
+			// An argument that is no value of a flag names another cluster.
+			return false
+		}
+	}
+	return true
 }
 
 // sindArgvOf is the command line of sind in realm, which names a realm

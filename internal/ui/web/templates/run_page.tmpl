@@ -37,6 +37,7 @@ them. */}}
   <div class="sub"><span class="pill {{.PillClass}}">{{.Pill}}</span>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}<span>{{.Origin}}</span>{{if .Program}}<span>{{.Program}}</span>{{end}}<span>started {{.Started}}</span>{{if .Exit}}<span class="mono">{{.Exit}}</span>{{end}}</div></div>
   <div class="actions">{{if .TaskID}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{else}}{{with .Stop}}{{template "run-stop" .}}{{end}}{{end}}{{end}}{{template "run-retry" .}}</div></div>
 {{with .NoStop}}<div class="callout">{{.}}</div>{{end}}
+{{if .Waits}}<div class="callout run-lock">This run waits for the lock of its realm{{with .Holder}}, which <a href="{{.Href}}">{{.Label}}</a> holds{{else}}{{with $.Data.HolderText}}, which {{.}} holds{{end}}{{end}}. It goes on once the lock is free.</div>{{end}}
 {{end}}{{end}}{{end}}
 
 {{define "run-summary"}}{{with .Data}}<span hidden data-gantt="{{.Data}}"></span><span hidden data-doc-title="{{.DocTitle}}"></span><span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"{{if .SaySince}} data-say-since="{{.SaySince}}"{{end}}></span>{{end}}{{end}}
