@@ -28,6 +28,9 @@ import (
 // filled in.
 var actDialogKeys = []string{
 	"realm", "cluster", "nodes", "op", "reason", "container", "unit", "count",
+	// The name of a container that Connect does not list, which a switch
+	// of its realm keeps.
+	action.ConnectOther,
 	// The clusters of a delete of several, and the list to go back to.
 	"clusters", "back",
 	// The fields of the New cluster dialog, which a link may fill in to
@@ -266,10 +269,18 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"connect": {
-		OK: "Connect", RealmField: true, Fields: actFields("container", "realm"),
-		Title: func(*actDialog) string { return "Connect a container" },
-		Lead: func(*actDialog) string {
-			return "Attaches a container that sind did not make, such as a kind node, to the mesh and cluster networks of the realm. It then resolves the nodes by name."
+		OK: "Connect", Fields: actFields("container"),
+		Title: func(d *actDialog) string { return "Connect a container to realm " + d.Realm },
+		Lead: func(d *actDialog) string {
+			return "The container joins the mesh and the cluster networks of realm " + d.Realm + ". It then reaches the nodes by name."
+		},
+		Defaults: func(d *actDialog) {
+			// A name that the list does not offer, as a run to try again
+			// may give, is another name.
+			if c := d.Form.Get("container"); c != "" && !slices.ContainsFunc(d.Outsides(), func(o pgOutside) bool { return o.Name == c && !o.Off }) {
+				d.Form.Set(action.ConnectOther, c)
+				d.Form.Del("container")
+			}
 		},
 	},
 	"disconnect": {
@@ -948,6 +959,30 @@ func pgUnitWord(sn store.Snapshot, realm, name, short, unit string) string {
 	return "down"
 }
 
+// Outsides are the containers that sind did not make and that can join
+// the realm of a Connect dialog.
+func (d *actDialog) Outsides() []pgOutside { return pgOutsides(d.Snap, d.Realm) }
+
+// actRealmChoice is a realm that a Connect dialog can switch to.
+type actRealmChoice struct {
+	Name, URL string
+	On        bool
+}
+
+// RealmChoices are the realms that a Connect dialog can switch to, each
+// opening it again for its own containers; none while sind ui sees one
+// realm or none.
+func (d *actDialog) RealmChoices() []actRealmChoice {
+	if len(d.Snap.Realms) < 2 {
+		return nil
+	}
+	out := make([]actRealmChoice, len(d.Snap.Realms))
+	for i, r := range d.Snap.Realms {
+		out[i] = actRealmChoice{Name: r.Name, URL: pgDialog(d.ID, "realm", r.Name), On: r.Name == d.Realm}
+	}
+	return out
+}
+
 // RealmNames are the realms that the realm field suggests: those that sind
 // ui sees, and the realm of the dialog.
 func (d *actDialog) RealmNames() []string {
@@ -965,9 +1000,6 @@ func (d *actDialog) RealmNames() []string {
 func (d *actDialog) RealmHint() string {
 	if d.Retry != nil && d.Retry.Realm == "" {
 		return "The run names no realm. sind is the default realm of a terminal."
-	}
-	if d.ID == "connect" {
-		return "The realm whose networks the container joins. It needs a cluster, whose mesh comes with it."
 	}
 	return "A group of clusters. A new name makes a new realm."
 }

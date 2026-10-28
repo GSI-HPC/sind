@@ -598,6 +598,14 @@
     }
   });
 
+  // A click on Another name of Connect goes on to its field; the keyboard
+  // gets there with Tab, so that the arrow keys still move in the list.
+  document.addEventListener('click', ev => {
+    if (!(ev.target instanceof Element) || !ev.target.closest('.act-oother label') || ev.detail === 0) return;
+    const name = document.getElementById('act-container');
+    if (name) setTimeout(() => name.focus(), 0);
+  });
+
   // Pull follows the image until the user ticks or clears the box.
   document.addEventListener('change', ev => {
     const auto = document.getElementById('act-pull-auto');

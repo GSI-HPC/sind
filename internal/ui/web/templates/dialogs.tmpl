@@ -465,9 +465,23 @@ form posts as nodes. */}}
 {{else}}<div class="fld"><label for="act-nodes">Node</label><select id="act-nodes" name="nodes" hx-get="/dialogs/restart-service" hx-include="closest form" hx-target="#layer" hx-swap="innerHTML" aria-describedby="act-hint-nodes"><option value="">Pick a node</option>{{range .ServiceNodes}}<option value="{{.Short}}">{{.Label}}</option>{{end}}</select><span class="hint" id="act-hint-nodes">A node that runs. The dialog then lists the services that sind checks on it.</span></div>
 {{end}}{{end}}
 
+{{/* act-dlg-connect is the Connect dialog: the realms to switch to, each
+of which opens the dialog again with the container picked so far, and the containers that sind did not make
+and that are not on the mesh of the realm, as a list to pick one from,
+those that do not run turned off, and Another name for one that starts
+later; without such a container, the field for its name. */}}
 {{define "act-dlg-connect"}}
-<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">The name of a running container that no realm has yet.</span></div>
-{{template "act-realm" .}}
+{{with .RealmChoices}}<div class="fld"><span class="lbl" id="act-realms-lbl">Realm</span>
+  <div class="seg act-seg act-realms" role="group" aria-labelledby="act-realms-lbl">{{range .}}<button type="button" hx-get="{{.URL}}" hx-include=".act-olist input[name=container], #act-container" hx-target="#layer" hx-swap="innerHTML"{{if .On}} aria-pressed="true" class="on"{{else}} aria-pressed="false"{{end}}>{{.Name}}</button>{{end}}</div></div>{{end}}
+{{with .Outsides}}<fieldset class="fld act-outs"><legend class="lbl">Containers that sind did not make</legend>
+  <div class="act-olist">{{range .}}<label class="act-orow{{if .Off}} off{{end}}"><input type="radio" name="container" value="{{.Name}}"{{if $.Is "container" .Name}} checked data-act-focus{{end}}{{if .Off}} disabled{{end}}>
+    <span class="act-on"><b class="mono">{{.Name}}</b><small>{{.Image}}{{if .Off}} · stopped. Start it first.{{else}}{{with .Networks}} · {{.}}{{end}}{{with .Up}} · {{.}}{{end}}{{end}}</small></span>
+    {{- if .Off}}<span class="pill">{{.State}}</span>{{else}}{{with .Also}}<span class="chip">{{.}}</span>{{end}}{{end}}</label>{{end}}
+    <div class="act-oother"><label class="act-orow"><input type="radio" name="container" value="" id="act-other-pick"{{if and (not ($.Val "container")) ($.Val "other")}} checked{{end}}>
+      <span class="act-on"><b>Another name…</b><small>For a container that starts later.</small></span></label>
+      <input type="text" class="act-oname" id="act-container" name="other" value="{{$.Val "other"}}" placeholder="such as kind-control-plane" autocapitalize="off" spellcheck="false" aria-label="Name of the container" aria-describedby="act-err-container"{{if and (not ($.Val "container")) ($.Val "other")}} data-act-focus{{end}}></div></div>
+  <span class="err" id="act-err-container"></span></fieldset>
+{{else}}<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="other" value="{{.Val "other"}}" placeholder="such as kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">sind ui sees no container that sind did not make and that is not on the mesh of realm {{.Realm}}. Write the name of one that starts later.</span></div>{{end}}
 {{end}}
 
 {{define "act-dlg-disconnect"}}

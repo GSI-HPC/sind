@@ -32,6 +32,10 @@ type World struct {
 	// one clears those that are gone.
 	published map[string]bool
 	statuses  []store.StatusKey
+	// outside are the containers of other tools on the host, with the
+	// networks they have of their own: a realm whose mesh they join adds
+	// its mesh network (realm.external).
+	outside []store.Outside
 	// now is the clock of what the world times, such as when a service
 	// failed; nil is time.Now.
 	now func() time.Time
@@ -454,6 +458,25 @@ func (w *World) Publish(st *store.Store) {
 	w.published, w.statuses = now, keys
 }
 
+// connectable returns the containers outside sind that are not on the
+// mesh of r, each on its own networks and the meshes that it joins.
+func (w *World) connectable(r *realm) []store.Outside {
+	var out []store.Outside
+	for _, o := range w.outside {
+		if slices.Contains(r.external, o.Name) {
+			continue
+		}
+		o.Networks = slices.Clone(o.Networks)
+		for _, other := range w.realms {
+			if slices.Contains(other.external, o.Name) {
+				o.Networks = append(o.Networks, string(mesh.NewManager(nil, other.name).NetworkName()))
+			}
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
 // clear removes what the store holds of a realm that is gone.
 func (w *World) clear(st *store.Store, name string) {
 	st.SetClusters(name, nil)
@@ -531,8 +554,9 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 			DNSZone: r.name + ".sind", DNSImage: "coredns/coredns:1.12.1",
 			SSHContainer: string(m.SSHContainerName()), SSHVolume: string(m.SSHVolumeName()), SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
 		},
-		Records:  records,
-		External: slices.Clone(r.external),
+		Records:     records,
+		External:    slices.Clone(r.external),
+		Connectable: w.connectable(r),
 	})
 	if r.monitoring {
 		st.SetMonitoring(r.name, monitoringOf(r, watched))

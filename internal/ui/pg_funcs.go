@@ -4,7 +4,8 @@ package ui
 
 import (
 	"strconv"
-	"strings"
+
+	"github.com/GSI-HPC/sind/internal/ui/action"
 )
 
 // The templates of the main pages register no template function: the
@@ -23,9 +24,4 @@ func pgPlural(n int, one, many string) string {
 }
 
 // pgJoin joins words as a sentence does: "a", "a and b", "a, b and c".
-func pgJoin(words []string) string {
-	if len(words) < 2 {
-		return strings.Join(words, "")
-	}
-	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
-}
+func pgJoin(words []string) string { return action.JoinWords(words) }

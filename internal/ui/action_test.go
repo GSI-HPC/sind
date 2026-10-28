@@ -25,6 +25,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -215,7 +216,7 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 		{"power", "cluster=dev&op=stop", []string{`value="shutdown" checked`}},
 		// No action is picked for the user.
 		{"power", "cluster=dev&op=melt", []string{"Power and drain: nodes of dev", "Drain and Resume change what Slurm does", `name="op" value="shutdown">`}},
-		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`, `id="act-realm" name="realm" value="sind"`, "The realm whose networks the container joins."}},
+		{"connect", "container=kind-cp", []string{"Connect a container to realm sind", `name="other" value="kind-cp"`, `<input type="hidden" name="realm" value="sind">`, "Write the name of one that starts later."}},
 		{"disconnect", "", []string{"Disconnect a container", "connected to realm sind"}},
 		{"delete-realm", "", []string{"Delete realm sind", "Deletes every cluster of realm sind", `Type <b class="mono" id="act-confirm-word">sind</b> to confirm`}},
 	} {
@@ -350,7 +351,7 @@ func TestActPreview_Refusals(t *testing.T) {
 	// A value that the form lacks is a hint in the footer, not an error.
 	for _, c := range []struct{ id, form, hint string }{
 		{"power", actForm("cluster", "dev", "op", "on"), "Pick at least one node of dev."},
-		{"connect", actForm("container", " "), "Write the name of a container, such as kind-control-plane."},
+		{"connect", actForm("container", " "), "Pick a container, or write the name of one, such as kind-control-plane."},
 	} {
 		body = f.post("/actions/"+c.id+"/preview", c.form).Body.String()
 		assert.Contains(t, body, `<span class="hint act-tot">`+c.hint+`</span>`, c.id)
@@ -406,28 +407,73 @@ func TestActConnect_ProblemsAtTheirFields(t *testing.T) {
 	f := newActFixture(t)
 
 	body := f.get("/dialogs/connect").Body.String()
-	assert.Less(t, strings.Index(body, `id="act-container"`), strings.Index(body, `id="act-realm"`), "the field to fill comes first and gets the focus")
 	assert.Contains(t, body, `aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span>`)
-	assert.Contains(t, body, "It needs a cluster, whose mesh comes with it.")
+	assert.NotContains(t, body, `id="act-realm"`, "the dialog connects to the realm of its link")
+	assert.NotContains(t, body, "act-realms", "one realm, none to switch to")
 
 	body = f.post("/actions/connect/preview", actForm("realm", "No", "container", "kind-cp")).Body.String()
-	assert.Contains(t, body, `<span class="err" id="act-err-realm" hx-swap-oob="innerHTML">use `)
-	assert.Contains(t, body, `<span class="err" id="act-err-container" hx-swap-oob="innerHTML"></span>`)
-	assert.Contains(t, body, `<p class="hint act-missing">Fix the field above to see the command.</p>`)
-	assert.NotContains(t, body, "callout bad", "the field says it")
+	assert.Contains(t, body, `<div class="callout bad">realm: use `)
 	assert.Regexp(t, `id="act-ok"[^>]* disabled>`, body)
 
-	body = f.post("/actions/connect/preview", actForm("container", "a;b")).Body.String()
-	assert.Contains(t, body, `<span class="err" id="act-err-container" hx-swap-oob="innerHTML">write the name of a container, such as kind-control-plane</span>`)
+	body = f.post("/actions/connect/preview", actForm("other", "a;b")).Body.String()
+	assert.Contains(t, body, `<span class="err" id="act-err-container" hx-swap-oob="innerHTML">use letters, digits, _, . and - in the name of a container, and start it with a letter or a digit</span>`)
+	assert.Contains(t, body, `<p class="hint act-missing">Fix the field above to see the command.</p>`)
 
-	body = f.post("/actions/connect/preview", actForm("realm", "new", "container", "kind-cp")).Body.String()
+	body = f.post("/actions/connect/preview", actForm("realm", "new", "other", "kind-cp")).Body.String()
 	assert.Contains(t, body, actCode("sind --realm new connect container kind-cp"))
 	assert.Contains(t, body, `<div class="callout warn">sind ui sees no realm new. sind connects a container only to a realm with a cluster, whose mesh it joins; create a cluster in new first.</div>`)
+	assert.Contains(t, body, `>Connect kind-cp<kbd`)
 
 	// A dialog without fields of its own keeps the error in the preview.
 	body = f.post("/actions/disconnect/preview", actForm("realm", "No", "container", "kind-cp")).Body.String()
 	assert.Contains(t, body, `<div class="callout bad">realm: use `)
 	assert.NotContains(t, body, "act-err-realm")
+}
+
+func TestActConnect_PicksAContainer(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetRealms([]cluster.RealmSummary{{Name: "ci", Clusters: 1}, {Name: "sind", Clusters: 2}})
+	f.st.SetMesh("ci", store.Mesh{External: []string{"kind-control-plane"}})
+	f.st.SetMesh("sind", store.Mesh{
+		Info:    &mesh.Info{Network: "sind-mesh"},
+		Records: []mesh.DNSRecord{{Hostname: "controller.dev.sind.sind"}, {Hostname: "worker-0.dev.sind.sind"}},
+		Connectable: []store.Outside{
+			{Name: "db", Image: "postgres:16", State: "exited", Status: "Exited (0) 2 days ago", Networks: []string{"bridge"}},
+			{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "ci-mesh"}},
+			{Name: "my-app", Image: "python:3.12-slim", State: "running", Status: "Up 2 hours"},
+		},
+	})
+
+	body := f.get("/dialogs/connect?realm=sind&container=my-app").Body.String()
+	assert.Contains(t, body, "<h2 id=\"act-title\">Connect a container to realm sind</h2>")
+	assert.Contains(t, body, "The container joins the mesh and the cluster networks of realm sind. It then reaches the nodes by name.")
+	// The realms to switch to open the dialog again, with the container
+	// picked so far.
+	assert.Contains(t, body, `<button type="button" hx-get="/dialogs/connect?realm=ci" hx-include=".act-olist input[name=container], #act-container" hx-target="#layer" hx-swap="innerHTML" aria-pressed="false">ci</button>`)
+	assert.Contains(t, body, `aria-pressed="true" class="on">sind</button>`)
+	// The containers that run come first, with their image, networks and
+	// uptime, the one of the link picked; one that another realm has says
+	// so, and one that does not run is off.
+	assert.Contains(t, body, `<input type="radio" name="container" value="my-app" checked data-act-focus>`)
+	assert.Contains(t, body, `<small>python:3.12-slim · up 2 hours</small>`)
+	assert.Contains(t, body, `<small>kindest/node:v1.31.0 · networks kind, ci-mesh · up 5 hours</small></span><span class="chip">also in realm ci</span>`)
+	assert.Contains(t, body, `<label class="act-orow off"><input type="radio" name="container" value="db" disabled>`)
+	assert.Contains(t, body, `<small>postgres:16 · stopped. Start it first.</small></span><span class="pill">exited</span>`)
+	assert.Less(t, strings.Index(body, `value="my-app"`), strings.Index(body, `value="db"`))
+	assert.Contains(t, body, `<input type="radio" name="container" value="" id="act-other-pick">`)
+
+	// A name of the link that the list does not offer is another name.
+	body = f.get("/dialogs/connect?realm=sind&container=db").Body.String()
+	assert.Contains(t, body, `value="" id="act-other-pick" checked>`)
+	assert.Contains(t, body, `name="other" value="db"`)
+	assert.NotContains(t, body, `value="db" disabled checked`)
+	body = f.get("/dialogs/connect?realm=sind&container=&other=later-app").Body.String()
+	assert.Contains(t, body, `value="" id="act-other-pick" checked>`)
+	assert.Contains(t, body, `name="other" value="later-app"`)
+
+	body = f.post("/actions/connect/preview", actForm("realm", "sind", "container", "my-app")).Body.String()
+	assert.Contains(t, body, `<div class="callout"><span class="mono">my-app</span> joins <span class="mono">sind-mesh</span> and the networks of default and dev. It can then reach <span class="mono">controller.dev.sind.sind</span> and the other node by name.</div>`)
+	assert.Contains(t, body, `>Connect my-app<kbd`)
 }
 
 func TestActPreview_AddWorkersShowsTheirSize(t *testing.T) {
@@ -1095,7 +1141,7 @@ func TestActDialog_RendersAsAFragmentOfTheLayerOnly(t *testing.T) {
 func TestActDialog_OpenedByItsURLIsAPage(t *testing.T) {
 	f := newActFixture(t)
 	body := f.get("/dialogs/connect").Body.String()
-	assert.Contains(t, body, "<title>Connect a container · sind ui</title>")
+	assert.Contains(t, body, "<title>Connect a container to realm sind · sind ui</title>")
 	assert.Contains(t, body, `<main class="main" id="main" tabindex="-1">`+"\n"+`<div class="scrim" id="act-dialog"`)
 }
 

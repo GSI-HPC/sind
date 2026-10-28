@@ -10,7 +10,7 @@
 {{/* more-mesh is the live body of the page; .Data is moreMeshData. */}}
 {{define "more-mesh"}}{{with .Data}}
 {{template "more-top" .}}
-{{range .Realms}}
+{{range .Realms}}{{$r := .}}
 <div class="stack more-realm">
   <div class="more-rhead">
     {{if $.Data.Multi}}<h2>Realm <b class="mono">{{.Name}}</b></h2>{{end}}
@@ -45,11 +45,15 @@
       {{if .Has}}<div class="pb more-dig"><p class="cmdlabel">Ask the DNS server from this host</p>
         <div class="cmd"><code>dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}</code><button type="button" data-more-copy aria-label="Copy dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}">Copy</button></div></div>{{end}}
       {{else}}<div class="empty">No DNS records yet. Each node adds its name when it starts.</div>{{end}}</section>
-    <section class="panel"><div class="ph"><h2>Other containers</h2><span class="grow"></span><span class="faint">connected with sind connect container</span></div>
+    <section class="panel"><div class="ph"><h2>Other containers</h2><span class="grow"></span><span class="faint">{{if .External}}connected with sind connect container{{else}}none connected yet{{end}}</span></div>
       {{if .External}}<div class="tw"><table><tbody>
       {{range .External}}<tr><td class="mono"><b>{{.Name}}</b></td><td><span class="pill ok">connected</span></td>
         <td class="act"><a class="btn sm" href="{{.DisconnectURL}}" hx-get="{{.DisconnectURL}}" hx-target="#layer" hx-swap="innerHTML">Disconnect…</a></td></tr>
       {{end}}</tbody></table></div>
+      {{else if .Outsides}}<div class="pb stack more-outs"><p class="muted">A container on the mesh reaches the nodes by name. These containers run, and can connect to realm {{.Name}}:</p>
+        <div class="more-olist">{{range .Outsides}}<div class="more-orow"><span class="more-on"><b class="mono">{{.Name}}</b><small>{{.Image}}{{with .Up}} · {{.}}{{end}}{{with .Also}} · {{.}}{{end}}</small></span>
+          <a class="btn sm" href="{{.ConnectURL}}" hx-get="{{.ConnectURL}}" hx-target="#layer" hx-swap="innerHTML" aria-label="Connect {{.Name}} to realm {{$r.Name}}…">Connect…</a></div>{{end}}</div>
+        <p class="hint">Or connect one by name: <code class="mono">{{.ConnectCommand}}</code></p></div>
       {{else}}<div class="empty">No other containers. Connect one, such as a kind node, to reach the clusters by name.</div>{{end}}</section>
   </div>
 </div>

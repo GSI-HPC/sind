@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,6 +56,33 @@ func TestMoreMeshPage(t *testing.T) {
 	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=">All realms</a>`)
 	body = pgBody(t, ts, "/mesh?realm=sindd", http.StatusNotFound)
 	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=sind">Realm sind</a>`)
+}
+
+func TestMoreMeshOffersContainersToConnect(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	ts.st.SetMesh("ci", store.Mesh{
+		Info: &mesh.Info{Network: "ci-mesh"},
+		Connectable: []store.Outside{
+			{Name: "db", Image: "postgres:16", State: "exited"},
+			{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours"},
+			{Name: "my-app", Image: "python:3.12-slim", State: "running"},
+		},
+	})
+	body := pgBody(t, ts, "/mesh?realm=ci", http.StatusOK)
+	// While no container is connected, the card lists those that run and
+	// can connect, each with Connect, and the command for any name.
+	assert.Contains(t, body, `<span class="faint">none connected yet</span>`)
+	assert.Contains(t, body, `<b class="mono">kind-control-plane</b><small>kindest/node:v1.31.0 · up 5 hours · also in realm sind</small>`)
+	assert.Contains(t, body, `<a class="btn sm" href="/dialogs/connect?container=my-app&amp;realm=ci"`)
+	assert.Contains(t, body, `aria-label="Connect my-app to realm ci…">Connect…</a>`)
+	assert.NotContains(t, body, `container=db`, "one that does not run cannot connect")
+	assert.Contains(t, body, `<code class="mono">sind --realm ci connect container NAME</code>`)
+	assert.NotContains(t, body, "No other containers")
+
+	ts.st.SetMesh("sind", store.Mesh{Info: &mesh.Info{Network: "sind-mesh"}, Connectable: []store.Outside{{Name: "x", State: "running"}}})
+	body = pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `<code class="mono">sind connect container NAME</code>`)
+	assert.Contains(t, body, `<b class="mono">x</b><small></small>`)
 }
 
 func TestMoreMeshStates(t *testing.T) {
@@ -653,4 +681,26 @@ func TestMoreListPagesReadTheRealmCookie(t *testing.T) {
 		require.Equal(t, http.StatusFound, w.Code, path)
 		assert.Equal(t, path+"?realm=ci", w.Header().Get("Location"), path)
 	}
+}
+
+func TestPgOutsides(t *testing.T) {
+	sn := store.Snapshot{
+		Realms: []cluster.RealmSummary{{Name: "a"}, {Name: "b"}, {Name: "c"}},
+		Meshes: map[string]store.Mesh{
+			"a": {Connectable: []store.Outside{{Name: "kind", Image: "kindest/node", State: "running", Status: "Up About an hour", Networks: []string{"kind"}}}},
+			"b": {External: []string{"kind"}},
+			"c": {External: []string{"kind"}},
+		},
+	}
+	assert.Equal(t, []pgOutside{{
+		Name: "kind", Image: "kindest/node", Networks: "network kind", Up: "up about an hour", State: "running",
+		Also: "also in realms b and c", ConnectURL: "/dialogs/connect?container=kind&realm=a",
+	}}, pgOutsides(sn, "a"))
+	assert.Nil(t, pgOutsides(sn, "b"))
+
+	// The monitoring stack of another realm is sind's, though the docker ps
+	// of this realm does not tell it apart.
+	sn.Meshes["b"] = store.Mesh{Connectable: []store.Outside{{Name: "a-mesh-grafana-1", State: "running"}}}
+	sn.Monitorings = map[string]*cluster.Monitoring{"a": {Services: []cluster.MonitoringService{{Container: "a-mesh-grafana-1"}}}}
+	assert.Nil(t, pgOutsides(sn, "b"))
 }

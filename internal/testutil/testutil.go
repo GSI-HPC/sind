@@ -25,6 +25,7 @@ type PsEntry struct {
 	ID       string `json:"ID"`
 	Names    string `json:"Names"`
 	State    string `json:"State"`
+	Status   string `json:"Status,omitempty"`
 	Image    string `json:"Image"`
 	Labels   string `json:"Labels,omitempty"`
 	Networks string `json:"Networks,omitempty"`

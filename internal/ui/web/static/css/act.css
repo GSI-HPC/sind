@@ -85,6 +85,30 @@
 .scrim .act-reason{display:none}
 .scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
 .scrim .act-pick{display:grid;gap:6px}
+/* Connect: the realms to switch to, and the containers to pick one from,
+   each with its image, networks and uptime; one that does not run is
+   off, and Another name shows its field once picked. */
+.scrim .act-realms{justify-self:start}
+.scrim .act-realms button{padding:5px 12px;border:0;background:none;color:var(--fg);font:inherit;cursor:pointer}
+.scrim .act-realms button+button{border-left:1px solid var(--line)}
+.scrim .act-realms button.on{background:var(--accent-soft);box-shadow:inset 0 -2px 0 var(--accent);font-weight:600}
+.scrim .act-outs{border:0;margin:0;padding:0;min-width:0}
+.scrim .act-olist{display:grid;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.scrim .act-orow{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer}
+.scrim .act-olist>*+*{border-top:1px solid var(--line-2)}
+.scrim .act-orow:hover{background:var(--hover)}
+.scrim .act-orow:has(input:checked){background:var(--accent-soft)}
+.scrim .act-orow:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.scrim .act-orow input{margin:0}
+.scrim .act-on{display:grid;gap:1px;min-width:0}
+.scrim .act-on small{color:var(--muted);font-size:var(--t-sm);overflow-wrap:anywhere}
+.scrim .act-orow.off{cursor:not-allowed;color:var(--faint)}
+.scrim .act-orow.off:hover{background:none}
+.scrim .act-orow.off small{color:var(--faint)}
+.scrim .act-outs .act-oother input.act-oname{display:none;box-sizing:border-box;margin:0 12px 10px 40px;width:calc(100% - 52px);padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono)}
+.scrim .act-oother:has(#act-other-pick:checked){background:var(--accent-soft)}
+.scrim .act-outs .act-oother:has(#act-other-pick:checked) input.act-oname{display:block}
+.scrim .act-oother .act-orow:has(input:checked){background:none}
 /* Add workers: the clusters to pick from, by realm, and the cluster that
    it adds to, with Change. */
 .scrim .act-cls{display:grid;gap:10px;max-height:min(360px,46vh);overflow-y:auto}
@@ -299,6 +323,12 @@
 .scrim .act-img .act-ver{color:var(--fg)}
 .scrim .act-img .btn{justify-self:start;margin-top:2px}
 .scrim .act-img .btn.htmx-request::after{content:" …"}
+@media (max-width:480px){
+  /* A container to connect has the realms that it is in already, or its
+     state, under its name, which keeps the width of the row. */
+  .scrim .act-orow{grid-template-columns:18px minmax(0,1fr)}
+  .scrim .act-orow>:is(.chip,.pill){grid-column:2;justify-self:start}
+}
 @media (max-width:760px){
   /* On a phone the page of the dialog scrolls, and the footer sticks to
      the bottom of the screen. */

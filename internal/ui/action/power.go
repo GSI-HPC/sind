@@ -15,8 +15,6 @@ import (
 func init() {
 	register(
 		Action{ID: "power", Build: buildPower, Cluster: formCluster},
-		Action{ID: "connect", Build: buildConnect(false)},
-		Action{ID: "disconnect", Build: buildConnect(true)},
 	)
 }
 
@@ -363,31 +361,4 @@ func countOr(shorts []string, many string) string {
 		return shorts[0]
 	}
 	return fmt.Sprintf("%d %s", len(shorts), many)
-}
-
-// buildConnect returns the Build of connect container, or with detach of
-// disconnect container. Connect warns of a realm that sind ui does not
-// see, as sind connects a container only to a realm with a mesh.
-func buildConnect(detach bool) func(Form, Context) (Command, error) {
-	return func(f Form, c Context) (Command, error) {
-		realm, err := checkRealm(f)
-		if err != nil {
-			return Command{}, err
-		}
-		name := strings.TrimSpace(f.Get("container"))
-		if name == "" {
-			return Command{}, &Missing{Field: "container", Text: "write the name of a container, such as kind-control-plane"}
-		}
-		if !containerPattern.MatchString(name) {
-			return Command{}, fmt.Errorf("container: write the name of a container, such as kind-control-plane")
-		}
-		if detach {
-			return NewCommand(sindArgv(realm, "disconnect", "container", name)...), nil
-		}
-		cmd := NewCommand(sindArgv(realm, "connect", "container", name)...)
-		if _, ok := c.Snap.Realm(realm); !ok {
-			cmd.Warns = append(cmd.Warns, fmt.Sprintf("sind ui sees no realm %s. sind connects a container only to a realm with a cluster, whose mesh it joins; create a cluster in %s first.", realm, realm))
-		}
-		return cmd, nil
-	}
 }

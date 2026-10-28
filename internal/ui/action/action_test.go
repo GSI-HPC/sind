@@ -3,7 +3,6 @@
 package action
 
 import (
-	"errors"
 	"io/fs"
 	"net/url"
 	"slices"
@@ -681,7 +680,17 @@ func TestBuildConnect(t *testing.T) {
 	cmd, err := build(t, "connect", form("container", "kind-control-plane"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "connect", "container", "kind-control-plane"}, cmd.Argv)
-	assert.Empty(t, cmd.Warns, "a realm that sind ui sees")
+	assert.Equal(t, "Connect kind-control-plane", cmd.OK)
+	assert.Empty(t, cmd.Warns, "a realm that sind ui sees, whose mesh it has not read")
+	assert.Empty(t, cmd.Notes)
+
+	// The name of the list wins over the one written.
+	cmd, err = build(t, "connect", form("container", "", "other", "my-app"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind connect container my-app", cmd.Display)
+	cmd, err = build(t, "connect", form("container", "a", "other", "b"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind connect container a", cmd.Display)
 
 	cmd, err = build(t, "connect", form("realm", "new", "container", "kind-control-plane"))
 	require.NoError(t, err)
@@ -692,18 +701,98 @@ func TestBuildConnect(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns, "disconnect leaves the realm to sind")
 
-	cmd, err = build(t, "disconnect", form("realm", "ci", "container", " kind-1 "))
+	cmd, err = build(t, "disconnect", form("realm", "ci", "container", " kind-1 ", "other", "x"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci disconnect container kind-1", cmd.Display)
+	_, err = build(t, "disconnect", form("other", "x"))
+	var missing *Missing
+	assert.ErrorAs(t, err, &missing, "disconnect takes no other name")
 
 	for _, bad := range []string{"", " ", "-rf", "a b", "a;b", "$(x)"} {
 		_, err = build(t, "connect", form("container", bad))
-		assert.EqualError(t, err, "container: write the name of a container, such as kind-control-plane", bad)
-		var missing *Missing
-		assert.Equal(t, strings.TrimSpace(bad) == "", errors.As(err, &missing), bad)
+		if strings.TrimSpace(bad) == "" {
+			assert.EqualError(t, err, "container: pick a container, or write the name of one, such as kind-control-plane", bad)
+			assert.ErrorAs(t, err, &missing, bad)
+			continue
+		}
+		assert.EqualError(t, err, "container: use letters, digits, _, . and - in the name of a container, and start it with a letter or a digit", bad)
 	}
 	_, err = build(t, "connect", form("realm", "No", "container", "x"))
 	assert.ErrorContains(t, err, "realm: use ")
+	_, err = build(t, "disconnect", form("realm", "No", "container", "x"))
+	assert.ErrorContains(t, err, "realm: use ")
+}
+
+func TestBuildConnect_ChecksTheContainer(t *testing.T) {
+	st := testStore()
+	st.SetMesh("ci", store.Mesh{
+		Info:     &mesh.Info{Network: "ci-mesh", DNSContainer: "ci-dns", SSHContainer: "ci-ssh"},
+		Records:  []mesh.DNSRecord{{Hostname: "controller.ci1.ci.sind"}, {Hostname: "worker-0.ci1.ci.sind"}, {Hostname: "worker-1.ci1.ci.sind"}},
+		External: []string{"kind-control-plane"},
+		Connectable: []store.Outside{
+			{Name: "my-app", State: "running"}, {Name: "pg", State: "exited"},
+		},
+	})
+	run := func(name string) (Command, error) {
+		a, _ := Lookup("connect")
+		return a.Build(form("realm", "ci", "container", name), st.ctx())
+	}
+	cmd, err := run("my-app")
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns)
+	assert.Equal(t, []string{"`my-app` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` and the other 2 nodes by name."}, cmd.Notes)
+
+	cmd, err = run("pg")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"pg does not run, it is exited. It reaches the nodes once you start it."}, cmd.Warns)
+	cmd, err = run("kind-control-plane")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"kind-control-plane is on the mesh of realm ci already. sind adds only the networks that it lacks."}, cmd.Warns)
+	assert.Empty(t, cmd.Notes, "it joins no network that it is on")
+	cmd, err = run("nosuch")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sind ui sees no container nosuch. The command fails unless it runs by then."}, cmd.Warns)
+	assert.Empty(t, cmd.Notes, "sind ui cannot say what a container that it does not see reaches")
+
+	// The containers of sind cannot connect: the nodes and the mesh.
+	_, err = run("ci-ci1-worker-0")
+	assert.EqualError(t, err, "container: ci-ci1-worker-0 is a container of sind in realm ci; pick one that sind did not make")
+	_, err = run("ci-dns")
+	assert.EqualError(t, err, "container: ci-dns is a container of sind in realm ci; pick one that sind did not make")
+	_, err = run("ci-ssh")
+	require.Error(t, err)
+	st.SetMonitoring("sind", &cluster.Monitoring{Services: []cluster.MonitoringService{{Container: "sind-mesh-grafana-1"}}})
+	_, err = run("sind-mesh-grafana-1")
+	assert.EqualError(t, err, "container: sind-mesh-grafana-1 is a container of sind in realm sind; pick one that sind did not make")
+	_, ok := SindContainer(store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": nil}}, "sind-mesh-grafana-1")
+	assert.False(t, ok, "a realm without a stack")
+
+	// A mesh that sind ui could not read fully knows no container for sure.
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Records: []mesh.DNSRecord{{Hostname: "controller.ci1.ci.sind"}}, Err: "boom"})
+	cmd, err = run("nosuch")
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns)
+	assert.Equal(t, []string{"`nosuch` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` by name."}, cmd.Notes)
+
+	x := []store.Outside{{Name: "x", State: "running"}}
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
+	st.SetClusters("ci", []cluster.Summary{{Name: "b"}, {Name: "a"}, {Name: "c"}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach the nodes of realm ci by name."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{{Hostname: "a.ci1.ci.sind"}, {Hostname: "b.ci1.ci.sind"}}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node by name."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
+	st.SetClusters("ci", nil)
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh`. It can then reach the nodes of realm ci by name."}, cmd.Notes)
+}
+
+func TestJoinWords(t *testing.T) {
+	assert.Empty(t, JoinWords(nil))
+	assert.Equal(t, "a", JoinWords([]string{"a"}))
+	assert.Equal(t, "a and b", JoinWords([]string{"a", "b"}))
+	assert.Equal(t, "a, b and c", JoinWords([]string{"a", "b", "c"}))
 }
 
 func TestNodeWords(t *testing.T) {

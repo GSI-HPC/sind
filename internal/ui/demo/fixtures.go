@@ -88,6 +88,14 @@ func Seeded() *World {
 	sind := w.realmOf("sind")
 	sind.monitoring = true
 	sind.external = []string{"kind-control-plane"}
+	// Containers of other tools run beside the clusters, and one has
+	// stopped.
+	w.outside = []store.Outside{
+		{Name: "gitlab-runner", Image: "gitlab/gitlab-runner:v17.5.0", State: "running", Status: "Up 3 days", Networks: []string{"bridge"}},
+		{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind"}},
+		{Name: "my-app", Image: "python:3.12-slim", State: "running", Status: "Up 2 hours", Networks: []string{"bridge"}},
+		{Name: "postgres-test", Image: "postgres:16", State: "exited", Status: "Exited (0) 2 days ago", Networks: []string{"bridge"}},
+	}
 	// slurmd of one worker of dev is down: the page shows a failed service.
 	// Slurm runs jobs on two others and has drained one.
 	dev := w.lookup("sind", "dev")

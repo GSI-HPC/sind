@@ -68,6 +68,17 @@ func TestSeeded(t *testing.T) {
 	m, ok := sn.Meshes["sind"]
 	require.True(t, ok)
 	assert.Equal(t, []string{"kind-control-plane"}, m.External)
+	names := func(os []store.Outside) (out []string) {
+		for _, o := range os {
+			out = append(out, o.Name)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"gitlab-runner", "my-app", "postgres-test"}, names(m.Connectable), "kind-control-plane is on the mesh of sind")
+	ciOut := sn.Meshes["ci"].Connectable
+	assert.Equal(t, []string{"gitlab-runner", "kind-control-plane", "my-app", "postgres-test"}, names(ciOut))
+	assert.Equal(t, store.Outside{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "sind-mesh"}}, ciOut[1],
+		"a container on the mesh of another realm is on its network")
 	assert.Equal(t, "sind-mesh", m.Info.Network)
 	assert.Len(t, m.Records, 11+2+3)
 	ci := sn.Meshes["ci"]

@@ -71,8 +71,22 @@ type Mesh struct {
 	// External are the containers outside sind on the mesh network,
 	// sorted.
 	External []string
+	// Connectable are the containers outside sind that are not on the
+	// mesh network, running or not, sorted by name: those that sind
+	// connect container can attach.
+	Connectable []Outside
 	// Err says in one line why the mesh could not be read.
 	Err string
+}
+
+// Outside is a container that sind did not make, as docker ps lists it.
+type Outside struct {
+	Name, Image string
+	// State is Docker's word for it, such as running or exited, and
+	// Status what docker ps says of it for people, such as "Up 2 hours".
+	State, Status string
+	// Networks are those that it is on.
+	Networks []string
 }
 
 // Slurm is what Slurm says about a cluster, read next to its status.
@@ -237,6 +251,13 @@ func (s *Store) SetMesh(realm string, m Mesh) {
 	m.Records = slices.Clone(m.Records)
 	m.External = slices.Clone(m.External)
 	slices.Sort(m.External)
+	m.Connectable = slices.Clone(m.Connectable)
+	for i := range m.Connectable {
+		m.Connectable[i].Networks = slices.Clone(m.Connectable[i].Networks)
+	}
+	if len(m.Connectable) == 0 {
+		m.Connectable = nil
+	}
 	if len(m.Records) == 0 {
 		m.Records = nil
 	}
