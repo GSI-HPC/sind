@@ -48,7 +48,7 @@ func TestMoreMeshPage(t *testing.T) {
 	}
 
 	one := pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
-	assert.NotContains(t, one, "Realm <b")
+	assert.NotContains(t, one, "<h2>Realm <b", "one realm needs no head of its own")
 	assert.NotContains(t, one, "has no mesh")
 
 	body = pgBody(t, ts, "/mesh?realm=nope", http.StatusNotFound)
@@ -77,7 +77,7 @@ func TestMoreMeshOffersContainersToConnect(t *testing.T) {
 	assert.Contains(t, body, `<a class="btn sm" href="/dialogs/connect?container=my-app&amp;realm=ci"`)
 	assert.Contains(t, body, `aria-label="Connect my-app to realm ci…">Connect…</a>`)
 	assert.NotContains(t, body, `container=db`, "one that does not run cannot connect")
-	assert.Contains(t, body, `<code class="mono">sind --realm ci connect container NAME</code>`)
+	assert.Contains(t, body, `<span class="pg-cli"><code class="mono">sind --realm ci connect container NAME</code><button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind --realm ci connect container NAME"`)
 	assert.NotContains(t, body, "No other containers")
 
 	ts.st.SetMesh("sind", store.Mesh{Info: &mesh.Info{Network: "sind-mesh"}, Connectable: []store.Outside{{Name: "x", State: "running"}}})
@@ -191,7 +191,7 @@ func TestMoreMonitoringPage(t *testing.T) {
 
 	empty := pgBody(t, ts, "/monitoring?realm=ci", http.StatusOK)
 	assert.Contains(t, empty, "Realm <b class=\"mono\">ci</b> has no monitoring stack")
-	assert.Contains(t, empty, "sind create cluster --monitoring")
+	assert.Contains(t, empty, "sind --realm ci create cluster --monitoring", "the command works in the realm of the page")
 	assert.Contains(t, empty, "/dialogs/create-cluster?realm=ci")
 	assert.Contains(t, empty, "Slurm 26.05")
 
@@ -293,9 +293,9 @@ func TestMoreServiceState(t *testing.T) {
 }
 
 func TestMoreMonitoringCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}, time.Time{}), "no stack, no badge")
+	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}, "", time.Time{}), "no stack, no badge")
 	ts, _ := moreTestServer(t, true, false)
-	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot(), time.Time{}))
+	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot(), "", time.Time{}))
 	stack := func(states ...string) store.Snapshot {
 		m := &cluster.Monitoring{}
 		for _, s := range states {
@@ -303,10 +303,10 @@ func TestMoreMonitoringCount(t *testing.T) {
 		}
 		return store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": m}}
 	}
-	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running"), time.Time{}))
-	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused"), time.Time{}))
-	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created"), time.Time{}).Label)
-	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited"), time.Time{}).Label)
+	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running"), "", time.Time{}))
+	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused"), "", time.Time{}))
+	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created"), "", time.Time{}).Label)
+	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited"), "", time.Time{}).Label)
 }
 
 func TestMoreMonitoringInterval(t *testing.T) {
@@ -618,15 +618,15 @@ func TestMoreDoctorCheck(t *testing.T) {
 }
 
 func TestMoreDoctorCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}, time.Time{}))
+	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}, "", time.Time{}))
 	ok := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}}}
-	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}, time.Time{}))
+	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}, "", time.Time{}))
 	warn := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}, time.Time{}))
+	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}, "", time.Time{}))
 	bad := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "warning"}, {Status: "failed"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}, time.Time{}))
+	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}, "", time.Time{}))
 	worse := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "failed"}, {Status: "failed"}}}
-	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}, time.Time{}))
+	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}, "", time.Time{}))
 
 	// The rail of any page shows both badges, with their meaning in words.
 	ts, _ := moreTestServer(t, true, false)

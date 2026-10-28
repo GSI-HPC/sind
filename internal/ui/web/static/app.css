@@ -80,8 +80,6 @@ header.top{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:12px;
 .jump span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--panel);color:var(--muted)}
 .spacer{flex:1}
-.realm{display:flex;align-items:center;gap:6px;font:var(--t-sm) var(--f-body);color:var(--muted)}
-.realm select{font:600 var(--t-sm) var(--f-mono);padding:4px 6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
 .live{display:flex;align-items:center;gap:6px;font:var(--t-sm) var(--f-body);color:var(--ok)}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
 @keyframes pulse{50%{opacity:.35}}
@@ -122,6 +120,19 @@ nav.rail .more,.rail-sheet{display:none}
 .nav .n.ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .nav.on{background:var(--accent-soft);font-weight:600}
 .nav.on .g{color:var(--accent)}
+/* The realm switcher at the head of the Realm group: the realm, its
+   clusters, a dot when another realm needs a look; its menu (pg.css) lists
+   the realms. */
+nav.rail .rail-rsw{display:block;margin:0 0 6px}
+.rail-rbtn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);color:var(--fg);cursor:pointer;list-style:none;user-select:none}
+.rail-rbtn::-webkit-details-marker{display:none}
+.rail-rbtn:hover,.rail-rsw[open]>.rail-rbtn{border-color:var(--accent)}
+.rail-rbtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rail-rbtn b{font-weight:600;font-size:var(--t-md);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-rbtn .faint{font-size:var(--t-sm);white-space:nowrap}
+.rail-rbtn .pg-caret{margin-left:auto;color:var(--faint)}
+.rail-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.rail-dot.bad{background:var(--bad)}
 
 /* The page scrolls in .main, above the strip of the task dock, which so
    covers nothing. --main-pb is its bottom padding, which a bar that sticks
@@ -245,7 +256,8 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   .app{grid-template-columns:minmax(0,1fr);padding-bottom:calc(57px + env(safe-area-inset-bottom,0px))}
   .main{--main-pb:24px;grid-column:1;padding:16px max(16px,env(safe-area-inset-right,0px)) var(--main-pb) max(16px,env(safe-area-inset-left,0px))}
   nav.rail{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:stretch;padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);border-right:0;border-top:1px solid var(--line);overflow:visible;box-shadow:0 -4px 14px rgba(15,23,42,.08)}
-  nav.rail .rgl,nav.rail .rgl:has(.rgs){display:none}
+  nav.rail .rgl,nav.rail .rgl:has(.rgs),nav.rail>.rail-rsw{display:none}
+  nav.rail .rail-sheet .rail-rsw{display:block;margin:8px 0}
   nav.rail .rg{display:flex;min-width:0}
   nav.rail .rg-0{display:none}
   nav.rail .rg-1{flex:1 1 0} nav.rail .rg-2{flex:2 1 0} nav.rail .rg-3{flex:3 1 0} nav.rail .rg-4{flex:4 1 0}
@@ -268,7 +280,7 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   .tasks{grid-column:1}
   .toast{bottom:calc(72px + var(--dock-h,0px) + env(safe-area-inset-bottom,0px))}
   header.top{gap:8px}
-  .hostchip,.brand small,.realm label{display:none}
+  .hostchip,.brand small{display:none}
   /* the dot says live; the word shows when the page is not */
   .live:not(.off) span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   /* The tab strip of a cluster stays at the top while its tab scrolls: its
@@ -290,7 +302,6 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
 }
 @media (max-width:760px){
   .jump{order:5;flex-basis:100%;max-width:none}
-  .realm select{max-width:120px}
 }
 /* A table of class cards shows each row as a card on a phone: the name and
    the state on the first line, the other cells after it, each with its label
@@ -329,7 +340,7 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
    tap anywhere in a table cell that holds only a checkbox ticks it. */
 @media (pointer:coarse){
   .iconbtn{min-width:44px;min-height:44px}
-  .jump,.realm select,.btn,.seg button,.tab,.nav,.cmd button{min-height:44px}
+  .jump,.btn,.seg button,.tab,.nav,.cmd button,.rail-rbtn{min-height:44px}
   .btn{justify-content:center}
   .tab{display:inline-flex;align-items:center}
   .cmd button{min-width:56px}

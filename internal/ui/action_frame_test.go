@@ -316,7 +316,7 @@ func TestActDialog_PowerPickerShowsSlurm(t *testing.T) {
 	assert.Contains(t, body, `data-act-pick="worker-0">Idle <span class="act-qn">1</span>`)
 	assert.Contains(t, body, `data-act-pick="worker-1">Drained <span class="act-qn">1</span>`)
 	assert.Contains(t, body, `data-act-pick="worker-1">Need a look <span class="act-qn bad">1</span>`)
-	assert.NotContains(t, body, "checked", "no action and no node is picked for the user")
+	assert.NotContains(t, body, " checked", "no action and no node is picked for the user")
 
 	// A short confirmation names the node with its state.
 	body = f.get("/dialogs/power?cluster=dev&op=resume&nodes=worker-1").Body.String()

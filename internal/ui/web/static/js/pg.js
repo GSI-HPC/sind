@@ -325,12 +325,13 @@
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {});
   }
 
-  // The menus of the head of a node page, <details data-pg-menu>: one is
-  // open at a time; the arrow keys, Home and End move between its verbs,
-  // which skip none, as a verb that is off says why; Escape and Tab close
-  // it, and a click beside it too. A verb opens its dialog, which gives the
-  // focus back to the menu's button when it closes.
-  function menuItems(m) { return [...m.querySelectorAll('[role="menuitem"]')].filter(i => !i.hidden); }
+  // The menus of the head of a node page, of the rows of a list and the
+  // realm switcher of the rail, <details data-pg-menu>: one is open at a
+  // time; the arrow keys, Home and End move between its verbs, which skip
+  // none, as a verb that is off says why; Escape and Tab close it, and a
+  // click beside it too. A verb opens its dialog, which gives the focus back
+  // to the menu's button when it closes; an entry of the switcher is a link.
+  function menuItems(m) { return [...m.querySelectorAll('[role^="menuitem"]')].filter(i => !i.hidden); }
 
   function closeMenu(m, focus) {
     if (!m.open) return;
@@ -342,12 +343,13 @@
     for (const m of document.querySelectorAll('details[data-pg-menu][open]')) if (m !== except) closeMenu(m, false);
   }
 
-  // placeMenu lays the menu of a table row over the page, below its
-  // button or, where the screen ends, above it, and inside the screen, as
-  // the box of the table scrolls sideways and would clip it.
+  // placeMenu lays the menu of a table row, or of the rail, over the page,
+  // below its button or, where the screen ends, above it, and inside the
+  // screen, as the box of the table scrolls sideways and would clip it, and
+  // the rail too. The menu of the rail starts at the left of its button.
   function placeMenu(m) {
     const menu = m.querySelector('.pg-menu');
-    if (!menu || !m.closest('.tw')) return;
+    if (!menu || !m.closest('.tw, .rail')) return;
     if (!m.open) {
       menu.classList.remove('pg-fixed');
       menu.style.left = menu.style.top = '';
@@ -360,7 +362,7 @@
     let end = window.innerHeight;
     const rail = document.querySelector('.rail');
     if (rail && getComputedStyle(rail).position === 'fixed' && rail.getBoundingClientRect().top > end / 2) end = rail.getBoundingClientRect().top;
-    const left = Math.max(8, Math.min(b.right - w, vw - w - 8));
+    const left = Math.max(8, Math.min(m.closest('.rail') ? b.left : b.right - w, vw - w - 8));
     const top = b.bottom + 6 + h > end - 8 && b.top - 6 - h >= 8 ? b.top - 6 - h : b.bottom + 6;
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
@@ -423,7 +425,9 @@
       if (!m) return;
       if (t.closest('[role="menuitem"][aria-disabled="true"]')) { ev.preventDefault(); return; }
       const item = t.closest('a[data-pg-menu-item]');
-      if (!item) return;
+      // A link of the menu, such as a realm of the switcher, goes where it
+      // leads, and the help that one opens closes the menu.
+      if (!item) { if (t.closest('[role^="menuitem"]')) closeMenu(m, false); return; }
       ev.preventDefault();
       const summary = m.querySelector('summary');
       closeMenu(m, true);
@@ -431,54 +435,11 @@
     });
   }
 
-  // realmPicker makes the realm picker of the top bar safe for the keyboard:
-  // a pick of the mouse, or of the list that the keyboard opened, applies at
-  // once; the arrow keys on the closed list only browse it, and Enter, or
-  // the focus leaving, applies the realm they reached. On Apple systems the
-  // arrow keys open the list, as Space does elsewhere.
-  function realmPicker() {
-    const form = document.querySelector('form[data-pg-realm]');
-    if (!form) return;
-    const sel = form.querySelector('select');
-    const hint = form.querySelector('[data-pg-realm-hint]');
-    const start = sel.value;
-    const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
-    const arrowsOpen = /mac|iphone|ipad|ipod/i.test(platform);
-    let browsing = false;
-    let applied = false;
-    const apply = () => {
-      if (applied || sel.value === start) return;
-      applied = true;
-      form.requestSubmit();
-    };
-    sel.addEventListener('keydown', ev => {
-      if (ev.key === 'Enter') { ev.preventDefault(); apply(); return; }
-      if (ev.key === 'Escape' && browsing) {
-        sel.value = start;
-        hint.textContent = '';
-        browsing = false;
-        return;
-      }
-      // Space, Alt+arrow and F4 open the list, where a pick is a choice.
-      const arrow = /^Arrow(Up|Down)$/.test(ev.key);
-      const opens = ev.key === ' ' || ev.key === 'F4' || (arrow && (ev.altKey || arrowsOpen));
-      browsing = !opens && ev.key !== 'Tab' && ev.key !== 'Shift' && ev.key !== 'Escape';
-    });
-    sel.addEventListener('pointerdown', () => { browsing = false; });
-    sel.addEventListener('change', () => {
-      if (!browsing) { apply(); return; }
-      const name = sel.value ? 'realm ' + sel.value : 'all realms';
-      hint.textContent = sel.value === start ? '' : 'Press Enter to show ' + name + '.';
-    });
-    sel.addEventListener('blur', apply);
-  }
-
   menus();
   document.addEventListener('keydown', gridKeys);
   document.addEventListener('focusin', gridFocus);
 
   document.addEventListener('DOMContentLoaded', () => {
-    realmPicker();
     document.addEventListener('change', ev => {
       const t = ev.target;
       if (t.matches('input[data-pg-sel]')) {
@@ -586,10 +547,12 @@
   });
 
   // After a live update replaced a table, the filter, the links and the
-  // selection are drawn again.
+  // selection are drawn again, and an open menu is laid over the page
+  // again, as the morph took the place it had.
   document.addEventListener('htmx:afterSwap', () => {
     filter();
     keepText(false);
     draw();
+    for (const m of document.querySelectorAll('details[data-pg-menu][open]')) placeMenu(m);
   });
 })();

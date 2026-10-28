@@ -63,7 +63,8 @@ func pgPageFragments(p Page, prefixes []string) []Fragment {
 // pgList is what a list page shows besides its rows.
 type pgList struct {
 	pgListQuery
-	Realms []pgRealmRow
+	// Realms are the names of every realm.
+	Realms []string
 	Chips  []pgChip
 	Cols   []pgCol
 	// Total counts the rows of the realm, Shown those that the filters
@@ -75,6 +76,38 @@ type pgList struct {
 type pgFilterView struct {
 	List               pgList
 	Placeholder, Label string
+}
+
+// pgListScope is what a list holds, for the head of its page: "2 clusters
+// in realm ci.", "5 clusters in 2 realms.", "1 cluster." with one realm.
+type pgListScope struct {
+	// Count is "2 clusters", Realm the realm of the list, and Realms
+	// "2 realms" when the list shows more than one.
+	Count, Realm, Realms string
+}
+
+// Scope returns what the list holds, counting its rows as one or many.
+func (l pgList) Scope(one, many string) pgListScope {
+	sc := pgListScope{Count: pgPlural(l.Total, one, many), Realm: l.Realm}
+	if l.Realm == "" && len(l.Realms) > 1 {
+		sc.Realms = pgPlural(len(l.Realms), "realm", "realms")
+	}
+	return sc
+}
+
+// Commands returns the commands that list in a terminal what the list
+// holds, as "sind --realm ci get clusters": the one of its realm, or one
+// for each realm, as sind get works on one realm.
+func (l pgList) Commands(what string) []string {
+	realms := l.Realms
+	if l.Realm != "" || len(realms) == 0 {
+		realms = []string{l.Realm}
+	}
+	out := make([]string, len(realms))
+	for i, r := range realms {
+		out[i] = pgSind(r) + " get " + what
+	}
+	return out
 }
 
 // Filter returns the view of the list's filter field.
@@ -179,7 +212,7 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 		return nil, err
 	}
 	all := pgClustersOf(v.Snap, q.Realm, v.Now)
-	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm, v.Now), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
+	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmNames(v.Snap, ""), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgClusterChips, func(key string) int {
 		return pgCount(all, func(c pgCluster) bool { return pgClusterIn(c, key) })
 	})
@@ -218,7 +251,7 @@ func pgLoadNodes(v *View) (*pgNodeList, error) {
 	for _, c := range pgClustersOf(v.Snap, q.Realm, v.Now) {
 		all = append(all, c.Nodes...)
 	}
-	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm, v.Now), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
+	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmNames(v.Snap, ""), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgNodeChips, func(key string) int {
 		return pgCount(all, func(n pgNode) bool { return pgNodeIn(n, key) })
 	})

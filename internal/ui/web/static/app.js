@@ -168,7 +168,7 @@
     if (sheet) sheet.hidden = !open;
     if (more) more.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open) {
-      const first = sheet && sheet.querySelector('a');
+      const first = sheet && sheet.querySelector('summary, a');
       if (first) first.focus();
     }
   }

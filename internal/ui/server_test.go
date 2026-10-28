@@ -150,7 +150,7 @@ func TestPageShell(t *testing.T) {
 	assert.Contains(t, body, `<input type="hidden" name="csrf" value="`+ts.csrf+`">`)
 	assert.Contains(t, body, `id="tasks"`)
 	assert.Contains(t, body, `data-theme-toggle`)
-	assert.Contains(t, body, `id="realm-sel"`)
+	assert.NotContains(t, body, `id="realm-sel"`, "the rail holds the realm switcher")
 
 	// Nothing inline: the Content-Security-Policy would block it.
 	assert.NotRegexp(t, `<script[^>]*>[^<]`, body)
@@ -162,10 +162,10 @@ func TestPageShell(t *testing.T) {
 
 func TestRailCountsAndLitEntry(t *testing.T) {
 	cfg, st := testConfig(t)
-	cfg.Registry.SetNavCount("clusters", func(store.Snapshot, time.Time) NavCount {
+	cfg.Registry.SetNavCount("clusters", func(store.Snapshot, string, time.Time) NavCount {
 		return NavCount{Text: "2", Class: "bad"}
 	})
-	cfg.Registry.SetNavCount("nodes", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "5"} })
+	cfg.Registry.SetNavCount("nodes", func(store.Snapshot, string, time.Time) NavCount { return NavCount{Text: "5"} })
 	ts := newTestServerFrom(t, cfg, st).login()
 	body := ts.get("/demo/x").Body.String()
 	assert.Contains(t, body, `Clusters<span class="n bad">2</span>`)

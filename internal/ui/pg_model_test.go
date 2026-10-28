@@ -368,12 +368,15 @@ func TestPgRealmNames(t *testing.T) {
 	}
 	assert.Equal(t, []string{"a", "b", "c2", "c10"}, pgRealmNames(sn, ""))
 	assert.Equal(t, []string{"zz"}, pgRealmNames(sn, "zz"))
-	assert.Equal(t, "/clusters", (&View{Page: "cluster"}).PgRealmNext())
-	assert.Equal(t, "/clusters", (&View{Page: "run"}).PgRealmNext())
-	assert.Equal(t, "/nodes", (&View{Page: "nodes"}).PgRealmNext())
-	assert.Equal(t, "/nodes", (&View{Page: "node"}).PgRealmNext())
-	assert.Equal(t, "/mesh", (&View{Page: "more-mesh"}).PgRealmNext())
-	assert.Equal(t, "/", (&View{Page: "overview"}).PgRealmNext())
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "cluster", Nav: "clusters"}))
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "run"}))
+	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "nodes", Nav: "nodes"}))
+	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "node", Nav: "nodes"}))
+	assert.Equal(t, "/mesh", pgRealmNext(&View{Page: "more-mesh", Nav: "mesh"}))
+	// The Overview and Activity show every realm: a pick goes to the
+	// clusters of the realm.
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "overview", Nav: "overview"}))
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "run-activity", Nav: "activity"}))
 }
 
 func TestPgClusterTopics(t *testing.T) {

@@ -3,7 +3,7 @@
 {{/* page-more-mesh is the Mesh and DNS page. */}}
 {{define "page-more-mesh"}}
 <div class="head"><div class="t"><h1>Mesh and DNS</h1>
-  <div class="sub">{{template "pg-realm-scope" .}}<span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
+  <div class="sub">{{template "pg-realm-line" .}}<span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
 <div class="stack" id="more-mesh" hx-swap="morph:innerHTML" sse-swap="more-mesh">{{fragment "more-mesh" .}}</div>
 {{end}}
 
@@ -54,7 +54,7 @@
       {{else if .Outsides}}<div class="pb stack more-outs"><p class="muted">A container on the mesh reaches the nodes by name. These containers run, and can connect to realm {{.Name}}:</p>
         <div class="more-olist">{{range .Outsides}}<div class="more-orow"><span class="more-on"><b class="mono">{{.Name}}</b><small>{{.Image}}{{with .Up}} · {{.}}{{end}}{{with .Also}} · {{.}}{{end}}</small></span>
           <a class="btn sm" href="{{.ConnectURL}}" hx-get="{{.ConnectURL}}" hx-target="#layer" hx-swap="innerHTML" aria-label="Connect {{.Name}} to realm {{$r.Name}}…">Connect…</a></div>{{end}}</div>
-        <p class="hint">Or connect one by name: <code class="mono">{{.ConnectCommand}}</code></p></div>
+        <p class="hint">Or connect one by name: <span class="pg-cli"><code class="mono">{{.ConnectCommand}}</code>{{template "pg-copy" .ConnectCommand}}</span></p></div>
       {{else}}<div class="empty">No other containers. Connect one, such as a kind node, to reach the clusters by name.</div>{{end}}</section>
   </div>
 </div>

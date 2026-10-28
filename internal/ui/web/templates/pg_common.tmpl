@@ -38,14 +38,20 @@ which adds the tile of such a node. */}}
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}
 
-{{/* pg-realm-filter lets a list switch to one realm, with the filters it
-has; it takes the list. */}}
-{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.URL "realm" ""}}" data-pg-keep>All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.URL "realm" .Name}}" data-pg-keep>{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
+{{/* pg-realm-scope says which realm the Overview or Activity shows when its
+address narrows it to one, which filters only that page and leaves the realm
+of the rail as it is, with a link to the same page with all realms; it takes
+the view, and is empty on a page that shows every realm. */}}
+{{define "pg-realm-scope"}}{{with .PgRealmScope}}{{if .Realm}}<span class="pg-scope">Only realm <b class="mono">{{.Realm}}</b> on this page. <a href="{{.ShowAll}}">Show all realms</a></span>{{end}}{{end}}{{end}}
 
-{{/* pg-realm-scope says which realm a page shows, with a link to the same
-page with all realms; it takes the view, and is empty on a page that shows
-every realm. */}}
-{{define "pg-realm-scope"}}{{with .PgRealmScope}}{{if .Realm}}<span class="pg-scope">Showing realm <b class="mono">{{.Realm}}</b> · <a href="{{.ShowAll}}">Show all</a></span>{{end}}{{end}}{{end}}
+{{/* pg-realm-line says which realm a page of the Realm group of the rail
+shows, which the realm switcher picks; it takes the view, and is empty on a
+page that shows every realm. */}}
+{{define "pg-realm-line"}}{{with .Params.Get "realm"}}<span>Realm <b class="mono">{{.}}</b>.</span>{{end}}{{end}}
 
 {{/* pg-gone is what a page of a cluster or a node shows after it was deleted. */}}
 {{define "pg-gone"}}<div class="callout warn pg-gone"><b>{{.}}</b> no longer exists. Someone may have deleted it. <a href="/clusters">Back to the clusters</a></div>{{end}}
+
+{{/* pg-cli says how to list what a page shows in a terminal: one command,
+or one for each realm, each with Copy. It takes the commands. */}}
+{{define "pg-cli"}}{{if eq (len .) 1}}In a terminal: {{else}}In a terminal, once for each realm: {{end}}{{range .}}<span class="pg-cli"><code class="mono">{{.}}</code>{{template "pg-copy" .}}</span>{{end}}{{end}}

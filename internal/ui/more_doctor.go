@@ -168,7 +168,7 @@ func moreCheckMark(status doctor.Status) (class, mark string) {
 // moreDoctorCount is the badge behind the rail entry: the checks that
 // failed, as "1 failed", else the warnings, as "2 warnings", or a dot when
 // every check passed. Before the first check it shows none.
-func moreDoctorCount(sn store.Snapshot, _ time.Time) NavCount {
+func moreDoctorCount(sn store.Snapshot, _ string, _ time.Time) NavCount {
 	if sn.Doctor == nil {
 		return NavCount{}
 	}

@@ -97,21 +97,21 @@ func TestRunActivityLimit(t *testing.T) {
 }
 
 func TestRunNavCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{}, runNow))
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{}, "", runNow))
 	over := store.Run{End: runPtr(runAt(1)), Status: store.StatusOK}
 	failed := store.Run{ID: "f", Title: "create cluster a", End: runPtr(runAt(1)), Status: store.StatusFailed}
 	other := store.Run{ID: "o", Title: "create cluster b", End: runPtr(runAt(1)), Status: store.StatusFailed}
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{over, over}}, runNow), "runs that ended well need no badge")
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{over, over}}, "", runNow), "runs that ended well need no badge")
 	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 runs failed in the last 6 hours"},
-		runNavCount(store.Snapshot{Runs: []store.Run{failed, over, other}}, runNow))
-	assert.Equal(t, "1 failed", runNavCount(store.Snapshot{Runs: []store.Run{failed, other}, Dismissed: map[string]bool{"o": true}}, runNow).Text,
+		runNavCount(store.Snapshot{Runs: []store.Run{failed, over, other}}, "", runNow))
+	assert.Equal(t, "1 failed", runNavCount(store.Snapshot{Runs: []store.Run{failed, other}, Dismissed: map[string]bool{"o": true}}, "", runNow).Text,
 		"a run that the user dismissed from Needs you")
 	again := store.Run{Title: "create cluster b", End: runPtr(runAt(1)), Status: store.StatusOK}
-	assert.Equal(t, "1 failed", runNavCount(store.Snapshot{Runs: []store.Run{again, failed, other}}, runNow).Text,
+	assert.Equal(t, "1 failed", runNavCount(store.Snapshot{Runs: []store.Run{again, failed, other}}, "", runNow).Text,
 		"a run whose command ended ok since")
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{failed}}, runNow.Add(7*time.Hour)), "an old failure is old news")
-	assert.Equal(t, NavCount{Text: "1 running", Class: "run", Label: "1 command runs now"}, runNavCount(store.Snapshot{Runs: []store.Run{failed, {}}}, runNow))
-	assert.Equal(t, "2 commands run now", runNavCount(store.Snapshot{Runs: []store.Run{{}, {}}}, runNow).Label)
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{failed}}, "", runNow.Add(7*time.Hour)), "an old failure is old news")
+	assert.Equal(t, NavCount{Text: "1 running", Class: "run", Label: "1 command runs now"}, runNavCount(store.Snapshot{Runs: []store.Run{failed, {}}}, "", runNow))
+	assert.Equal(t, "2 commands run now", runNavCount(store.Snapshot{Runs: []store.Run{{}, {}}}, "", runNow).Label)
 }
 
 func TestRunMatches(t *testing.T) {

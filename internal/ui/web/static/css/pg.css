@@ -150,9 +150,6 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-steps li:last-child{border-bottom:0}
 .pg-steps li::before{counter-increment:pg-step;content:counter(pg-step);width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 var(--t-sm) var(--f-mono)}
 
-/* the realm filter of the lists */
-.pg-seg{margin-bottom:14px;max-width:100%;overflow-x:auto;white-space:nowrap}
-
 /* a cluster's head */
 .pg-run{display:flex;gap:10px;align-items:center;margin-bottom:14px}
 
@@ -211,8 +208,21 @@ td.act .btn + .btn{margin-left:4px}
    colour it shares */
 tr.sel .pill.run{border-color:var(--run)}
 
-/* the realm a page shows */
+/* the realm a page shows, and the commands that list it in a terminal */
 .pg-scope b{color:var(--fg)}
+.pg-cli{display:inline-flex;align-items:center;gap:6px;margin-right:10px;white-space:nowrap}
+.pg-cli .pg-copy{border-color:var(--line)}
+/* the menu of the realm switcher of the rail: a tick, the realm with a dot
+   when it needs a look, what it holds; a note on what the scope concerns */
+.pg-menu.rail-rmenu{min-width:320px}
+.pg-mi.rail-ro{display:flex;align-items:center;gap:8px}
+.rail-ck{width:12px;flex:none;color:var(--accent);font-weight:700}
+.rail-ro .pg-mx{margin-left:auto;padding-left:16px;font:var(--t-xs) var(--f-mono);color:var(--faint);white-space:nowrap}
+.pg-mi.rail-ro.on{background:var(--accent-soft)}
+.rail-ro.on .pg-ml{font-weight:600}
+.rail-rsep{border-top:1px solid var(--line-2);margin:4px 0}
+.pg-mi.rail-rhelp{gap:2px;line-height:1.45}
+.rail-rhelp .pg-ml{color:var(--accent);font-size:var(--t-sm)}
 
 /* the error page: the address, what is missing, the ways forward */
 .miss-addr{overflow-wrap:anywhere}
@@ -259,7 +269,6 @@ tr.sel .pill.run{border-color:var(--run)}
    sort and the tiles of a cluster's nodes are 44 px, as every control. */
 @media (pointer:coarse){
   .pg-chip,.pg-sort,table.cards .pg-sort,table.cards .pg-all,.pg-r{min-height:44px}
-  .pg-seg a{display:inline-flex;align-items:center;min-height:44px}
   .pg-filter input{height:44px}
   a.pg-sumpill{min-height:44px;padding-top:4px;padding-bottom:4px}
   .pg-big .pg-nm{width:44px;height:44px;border-radius:7px}

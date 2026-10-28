@@ -3,7 +3,7 @@
 {{/* page-more-monitoring is the Monitoring page. */}}
 {{define "page-more-monitoring"}}
 <div class="head"><div class="t"><h1>Monitoring</h1>
-  <div class="sub">{{template "pg-realm-scope" .}}<span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals. This page shows the key numbers; Grafana has the rest.</span></div></div>
+  <div class="sub">{{template "pg-realm-line" .}}<span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals. This page shows the key numbers; Grafana has the rest.</span></div></div>
   <div class="more-iv">{{fragment "more-mon-interval" .}}</div></div>
 <div class="stack" id="more-monitoring" hx-swap="morph:innerHTML" sse-swap="more-monitoring">{{fragment "more-monitoring" .}}</div>
 {{end}}
@@ -42,7 +42,7 @@ its address with the port, "" for none. */}}
   <p>Create a cluster with Monitoring on, and sind starts Prometheus, Loki, Grafana and Alloy for the realm. It needs Slurm 26.05.</p>
   <div class="more-howto">
     <p class="cmdlabel">From your terminal</p>
-    <div class="cmd"><code>sind create cluster --monitoring</code><button type="button" data-more-copy aria-label="Copy sind create cluster --monitoring">Copy</button></div>
+    <div class="cmd"><code>{{.CreateCmd}}</code><button type="button" data-more-copy aria-label="Copy {{.CreateCmd}}">Copy</button></div>
   </div>
   <p><a class="btn primary" href="{{.NewURL}}" hx-get="{{.NewURL}}" hx-target="#layer" hx-swap="innerHTML">New cluster…</a></p>
 </div></section>

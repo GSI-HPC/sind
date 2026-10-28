@@ -130,7 +130,7 @@ func TestPgOverview(t *testing.T) {
 	// Quick actions: the dialogs of the actions part.
 	assert.Contains(t, body, `href="/dialogs/create-cluster"`)
 	assert.Contains(t, body, `href="/dialogs/create-worker"`, "with several clusters, Add workers asks for the cluster")
-	assert.Contains(t, body, `href="/dialogs/connect"`)
+	assert.NotContains(t, body, `href="/dialogs/connect"`, "Connect a container lives on Mesh and DNS")
 
 	// A probe finds a service down while a command works on dev: it may be
 	// starting the service, so it is no problem yet.
@@ -155,7 +155,7 @@ func TestPgOverview(t *testing.T) {
 	// Narrowed to one realm.
 	body = pgBody(t, ts, "/?realm=ci", 200)
 	assert.Contains(t, body, "1 cluster · 2 nodes")
-	assert.Contains(t, body, `<span class="pg-scope">Showing realm <b class="mono">ci</b> · <a href="/?realm=">Show all</a></span>`)
+	assert.Contains(t, body, `<span class="pg-scope">Only realm <b class="mono">ci</b> on this page. <a href="/?realm=">Show all realms</a></span>`)
 	assert.Contains(t, body, "<title>Overview · ci · sind ui</title>")
 	assert.Contains(t, body, `href="/clusters/ci/default"`)
 	assert.NotContains(t, body, `href="/clusters/sind/dev"`)
@@ -197,7 +197,7 @@ func TestPgClusters(t *testing.T) {
 
 	pgFillStore(ts.st)
 	body = pgBody(t, ts, "/clusters", 200)
-	assert.Contains(t, body, "Every cluster of every realm.")
+	assert.Contains(t, body, `<span class="pg-scope">3 clusters in 2 realms.</span>`)
 	assert.Contains(t, body, `title="Sort by Realm">Realm`)
 	assert.Contains(t, body, `<tr class="click" data-href="/clusters/sind/dev" data-pg-item="sind/dev" data-pg-label="dev (sind)" data-pg-one="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" data-pg-text="dev sind mixed 26.05.4 controller.dev `)
 	assert.Contains(t, body, `<td class="c-chk"><input type="checkbox" data-pg-sel="sind/dev" aria-label="Select dev (sind)"></td>
@@ -220,11 +220,12 @@ func TestPgClusters(t *testing.T) {
 	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-dev-home"}})
 	body = pgBody(t, ts, "/clusters", 200)
 	assert.Contains(t, body, `<span class="pg-mx">The files on its data and home volumes go too.</span>`)
-	assert.Contains(t, body, "sind get clusters")
-	// The filter links to every realm.
-	assert.Contains(t, body, `<a class="on" aria-current="true" href="/clusters?realm=" data-pg-keep>All realms</a>`)
-	assert.Contains(t, body, `<a href="/clusters?realm=ci" data-pg-keep>ci · 1</a>`)
-	assert.Contains(t, body, `<a href="/clusters?realm=sind" data-pg-keep>sind · 2</a>`)
+	// The terminal hint lists each realm, as get lists one realm.
+	assert.Contains(t, body, `In a terminal, once for each realm: <span class="pg-cli"><code class="mono">sind --realm ci get clusters</code><button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind --realm ci get clusters" aria-label="Copy sind --realm ci get clusters">Copy</button></span><span class="pg-cli"><code class="mono">sind get clusters</code>`)
+	// The realm switcher of the rail, not the page, picks the realm.
+	assert.NotContains(t, body, `data-pg-keep>ci · 1</a>`)
+	assert.Contains(t, body, `<a class="pg-mi rail-ro" role="menuitemradio" aria-checked="false" tabindex="-1" href="/clusters?realm=ci">`)
+	assert.Contains(t, body, `<a class="pg-mi rail-ro on" role="menuitemradio" aria-checked="true" tabindex="-1" href="/clusters?realm="><span class="rail-ck" aria-hidden="true">✓</span><span class="pg-ml">All realms</span><span class="pg-mx">3 clusters</span></a>`)
 	// The filter field, the chips and the selection, which deletes several.
 	assert.Contains(t, body, `<form class="pg-filter" role="search" method="get" action="/clusters" data-pg-filter-form>
   <input type="hidden" name="realm" value="">
@@ -237,11 +238,12 @@ func TestPgClusters(t *testing.T) {
 	assert.Contains(t, body, `sse-connect="/events?f=pg-clusters-chips&amp;f=pg-clusters-head&amp;f=pg-clusters-table&amp;f=rail&amp;f=tasks&amp;f=tasks-menu&amp;nav=clusters"`)
 
 	body = pgBody(t, ts, "/clusters?realm=sind", 200)
-	assert.Contains(t, body, `<span class="pg-scope">Showing realm <b class="mono">sind</b> · <a href="/clusters?realm=">Show all</a></span>`)
-	assert.NotContains(t, body, "Every cluster of every realm.")
+	assert.Contains(t, body, `<span class="pg-scope">2 clusters in realm <b class="mono">sind</b>.</span>`)
+	assert.Contains(t, body, `In a terminal: <span class="pg-cli"><code class="mono">sind get clusters</code>`)
 	assert.NotContains(t, body, `title="Sort by Realm"`)
 	assert.NotContains(t, body, "/clusters/ci/default")
-	assert.Contains(t, body, `<a class="on" aria-current="true" href="/clusters?realm=sind" data-pg-keep>sind · 2</a>`)
+	assert.Contains(t, body, `aria-checked="true" tabindex="-1" href="/clusters?realm=sind">`)
+	assert.Contains(t, body, `<a class="nav" href="/nodes?realm=sind">`, "the rail keeps the realm")
 	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=sind"`)
 	assert.Contains(t, body, `data-pg-label="dev"`, "one realm names a cluster by its name alone")
 
@@ -253,7 +255,7 @@ func TestPgClusters(t *testing.T) {
 	body = pgBody(t, ts, "/clusters?realm=nowhere", 200)
 	assert.Contains(t, body, `No cluster in realm <b class="mono">nowhere</b> yet.`)
 	assert.Contains(t, body, `<tr class="pg-none" data-pg-none><td`)
-	assert.Contains(t, body, `href="/clusters?realm=" data-pg-keep>All realms</a>`)
+	assert.Contains(t, body, `href="/clusters?realm="><span class="rail-ck" aria-hidden="true"></span><span class="pg-ml">All realms</span>`)
 	assert.Equal(t, http.StatusBadRequest, ts.get("/clusters?realm=A_B").Code)
 }
 
@@ -277,11 +279,12 @@ func TestPgNodes(t *testing.T) {
 	assert.NotContains(t, body, "data-pg-select", "the nodes list selects nothing")
 
 	assert.Contains(t, body, `<span class="pill bad" data-say="worker-3.dev is stopped." data-say-key="sind/worker-3.dev">stopped</span>`)
-	assert.Contains(t, body, "Every node of every realm.")
+	assert.Contains(t, body, `<span class="pg-scope">15 nodes in 2 realms.</span>`)
 
 	body = pgBody(t, ts, "/nodes?realm=ci", 200)
 	assert.Contains(t, body, `<div class="tw" data-say="2 nodes in realm ci." data-say-key="count">`)
-	assert.Contains(t, body, `Showing realm <b class="mono">ci</b> · <a href="/nodes?realm=">Show all</a>`)
+	assert.Contains(t, body, `<span class="pg-scope">2 nodes in realm <b class="mono">ci</b>.</span>`)
+	assert.Contains(t, body, `In a terminal: <span class="pg-cli"><code class="mono">sind --realm ci get nodes</code>`)
 	assert.Contains(t, body, "<title>Nodes · ci · sind ui</title>")
 	assert.Contains(t, pgBody(t, ts, "/clusters?realm=ci", 200), `<div class="tw" data-say="1 cluster in realm ci." data-say-key="count">`)
 	assert.NotContains(t, body, `title="Sort by Realm"`)
@@ -321,8 +324,9 @@ func TestPgRail(t *testing.T) {
 	assert.NotContains(t, body, `<b class="mono">worker-1.dev</b> is drained`)
 	body = pgBody(t, ts, "/nodes?state=problem", 200)
 	assert.Contains(t, body, `<span class="pill warn">drained</span> <span class="faint pg-small">memory errors</span>`, "the Issues column, with the reason")
-	// The rail says that its counts span every realm.
-	assert.Contains(t, body, `Realm<span class="rgs">counts all realms</span></span>`)
+	// The rail says which group spans every realm.
+	assert.Contains(t, body, `Overview<span class="rgs">all realms</span></span>`)
+	assert.Contains(t, body, `<span class="rgl" id="rail-realm">Realm</span>`)
 	// One needs a look: the unit says so.
 	ts.st.SetSlurm("sind", "hpc", nil)
 	ts.st.SetNodes("ci", nil)

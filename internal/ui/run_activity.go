@@ -36,8 +36,8 @@ func registerRunActivity(r *Registry) {
 			return err
 		},
 	})
-	// The realm picker stays on the page, and a realm it picks is the
-	// one the lists show next.
+	// Activity shows every realm; ?realm=, from its realm chips, filters
+	// only this page and leaves the scope of the rail as it is.
 	r.AddRoute(pgRealmRoute(Page{
 		Name: "run-activity", Pattern: "GET /activity", Title: "Activity", Nav: "activity",
 		Fragments: []string{"run-list"},
@@ -48,7 +48,7 @@ func registerRunActivity(r *Registry) {
 // runNavCount is the badge behind the Activity entry of the rail: the runs
 // that go on, or else the runs that failed lately and that "Needs you"
 // lists (pgFailures). A log without either shows none.
-func runNavCount(snap store.Snapshot, now time.Time) NavCount {
+func runNavCount(snap store.Snapshot, _ string, now time.Time) NavCount {
 	running := pgCount(snap.Runs, func(r store.Run) bool { return !r.Done() })
 	failed := pgCount(pgFailures(snap, now), func(f pgFailure) bool { return f.Fixed == nil })
 	switch {

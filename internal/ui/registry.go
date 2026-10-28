@@ -55,6 +55,11 @@ type View struct {
 	Now time.Time
 	// Params are the values of the request that Load reads.
 	Params Params
+	// Scope is the realm that the session works in, "" for every realm:
+	// the realm that the browser remembers (pg_realm.go), or the one that a
+	// page of one realm or all of them shows. The rail shows it, scopes its
+	// Realm group to it, and /events renders with the scope of the page.
+	Scope string
 	// Data is what Load sets, for the template.
 	Data any
 	// CSRF is the session's token, for forms: {{template "csrf-field" .}}.
@@ -173,14 +178,13 @@ type NavCount struct {
 	// Label says what the badge means in words, for screen readers and
 	// as its tooltip, such as "1 node needs a look".
 	Label string
-	// AllRealms says that the count spans more than one realm; the label
-	// of the entry's group says so.
-	AllRealms bool
 }
 
 // NavCountFunc returns the badge of a rail entry from the snapshot, at
-// the time of the view.
-type NavCountFunc func(sn store.Snapshot, now time.Time) NavCount
+// the time of the view. realm is the scope of an entry of the Realm group
+// of the rail, which counts only that realm; it is "" for every realm, and
+// for the other entries.
+type NavCountFunc func(sn store.Snapshot, realm string, now time.Time) NavCount
 
 // A Service is background work of sind ui.
 type Service struct {

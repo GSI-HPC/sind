@@ -254,6 +254,7 @@ func (s *Server) View(r *http.Request, keys ...string) (*View, error) {
 	}
 	v := s.newView(p)
 	v.CSRF = session.CSRF(r.Context())
+	v.Scope = pgScopeOf(r, v.Snap)
 	return v, nil
 }
 
@@ -416,7 +417,7 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 // of r and shows what m says.
 func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m *Miss) {
 	v := s.newView(Params{})
-	v.CSRF = session.CSRF(r.Context())
+	v.CSRF, v.Scope = session.CSRF(r.Context()), pgScopeOf(r, v.Snap)
 	v.Title, v.Content = "Not found", "page-notfound"
 	if status != http.StatusNotFound {
 		v.Title = "Bad address"
@@ -429,7 +430,8 @@ func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m
 }
 
 // eventsURL returns the URL of the live updates of the shell fragments and
-// of the named ones, with the Params they declare and the lit rail entry.
+// of the named ones, with the Params they declare, the lit rail entry and
+// the scope.
 func (s *Server) eventsURL(names []string, v *View) string {
 	names = slices.Compact(slices.Sorted(slices.Values(slices.Concat(shellFragments, names))))
 	q := url.Values{"f": names}
@@ -442,6 +444,9 @@ func (s *Server) eventsURL(names []string, v *View) string {
 	}
 	if v.Nav != "" {
 		q.Set("nav", v.Nav)
+	}
+	if v.Scope != "" {
+		q.Set("scope", v.Scope)
 	}
 	return "/events?" + q.Encode()
 }

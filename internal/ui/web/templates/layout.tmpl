@@ -36,7 +36,6 @@ by. */}}
     <a class="brand" href="/"><img src="{{call .Asset "icon.svg"}}" alt="" width="24" height="24">sind <small>ui</small></a>
     {{template "slot-jump" .}}
     <div class="spacer"></div>
-    {{template "slot-realm" .}}
     <div class="cmds" id="cmds" hx-swap="morph:innerHTML" sse-swap="tasks-menu" data-own-focus>{{fragment "tasks-menu" .}}</div>
     {{if .Events}}<span class="live" id="live" title="Live: changes show as they happen"><i></i><span>live</span></span>{{end}}
     <span class="hostchip"><i></i>{{.Addr}}</span>

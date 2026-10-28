@@ -477,6 +477,10 @@ func (d *pgClusterView) SlurmConfLink() string {
 	return pgClusterURL(d.Realm, d.Name, "slurm") + "#slurm-file-slurm-conf"
 }
 
+// GetCmd returns the command that shows the health of the cluster in a
+// terminal: "sind --realm ci get cluster pr-145".
+func (d *pgClusterView) GetCmd() string { return pgSind(d.Realm) + " get cluster" + d.ClusterArg() }
+
 // ClusterArg returns the CLUSTER argument of a command: " dev", empty for
 // the default cluster.
 func (d *pgClusterView) ClusterArg() string { return pgClusterArg(d.Name) }

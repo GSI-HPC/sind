@@ -56,10 +56,10 @@ func TestPgClustersSortAndChips(t *testing.T) {
 	assert.Contains(t, body, `<th class="num" aria-sort="descending"><a class="pg-sort on" href="/clusters?q=dev&amp;realm=sind&amp;sort=nodes&amp;state=problem" data-pg-keep title="Sort by Nodes">Nodes<span class="pg-arrow" aria-hidden="true">▼</span></a></th>`)
 	assert.Contains(t, body, `<th><a class="pg-sort" href="/clusters?q=dev&amp;realm=sind&amp;sort=state&amp;state=problem" data-pg-keep title="Sort by State">State<span class="pg-arrow" aria-hidden="true">↕</span></a></th>`)
 	assert.Contains(t, body, `<th>Roles</th>`, "a column that does not sort is no link")
-	assert.Contains(t, body, `<a href="/clusters?q=dev&amp;realm=&amp;sort=-nodes&amp;state=problem" data-pg-keep>All realms</a>`)
+	assert.NotContains(t, body, `pg-seg`, "the realm switcher of the rail picks the realm")
 	assert.Contains(t, body, `<input type="hidden" name="realm" value="sind"><input type="hidden" name="state" value="problem"><input type="hidden" name="sort" value="-nodes">
   <input type="search" name="q" value="dev"`)
-	assert.Contains(t, body, `sse-connect="/events?f=pg-clusters-chips&amp;f=pg-clusters-head&amp;f=pg-clusters-table&amp;f=rail&amp;f=tasks&amp;f=tasks-menu&amp;nav=clusters&amp;q=dev&amp;realm=sind&amp;sort=-nodes&amp;state=problem"`)
+	assert.Contains(t, body, `sse-connect="/events?f=pg-clusters-chips&amp;f=pg-clusters-head&amp;f=pg-clusters-table&amp;f=rail&amp;f=tasks&amp;f=tasks-menu&amp;nav=clusters&amp;q=dev&amp;realm=sind&amp;scope=sind&amp;sort=-nodes&amp;state=problem"`)
 	// The default sort reversed links back to the default.
 	body = pgBody(t, ts, "/clusters?sort=-name", 200)
 	assert.Contains(t, body, `<a class="pg-sort on" href="/clusters?realm=" data-pg-keep title="Sort by Name">Name<span class="pg-arrow" aria-hidden="true">▼</span></a>`)

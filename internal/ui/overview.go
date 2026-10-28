@@ -12,9 +12,10 @@ func init() { defaultRegistry.AddRoute(pgRealmRoute(overviewPage, false, false))
 
 // overviewPage is the Overview page, template overview.tmpl, served by
 // pgRealmRoute. It spans every realm; ?realm= narrows it to one, which the
-// realms panel and the realm picker link to, and which the realm cookie
-// remembers. Without ?realm= it shows every realm, whatever the cookie
-// says: the page is the Overview group of the rail, not the Realm group.
+// realms panel links to. That filters only this page, and the realm cookie
+// does not remember it: the page is the Overview group of the rail, not
+// the Realm group. Without ?realm= it shows every realm, whatever the
+// cookie says.
 var overviewPage = Page{
 	Name:      "overview",
 	Pattern:   "GET /{$}",
@@ -108,8 +109,15 @@ func pgLoadOverview(v *View) (*pgOverview, error) {
 		d.Nodes += len(c.Nodes)
 	}
 	pgNeedsOf(d, sn, v.Now)
-	for _, r := range sn.Runs[:min(recentRuns, len(sn.Runs))] {
-		d.Runs = append(d.Runs, pgRunOf(sn, r, v.Now))
+	// Narrowed to a realm, the Overview lists the runs of that realm, as
+	// Activity does.
+	for _, r := range sn.Runs {
+		if len(d.Runs) == recentRuns {
+			break
+		}
+		if realm == "" || slices.Contains(runEntryOf(sn, r).realms, realm) {
+			d.Runs = append(d.Runs, pgRunOf(sn, r, v.Now))
+		}
 	}
 	d.Actions = pgQuickActions(d)
 	return d, nil
@@ -117,7 +125,8 @@ func pgLoadOverview(v *View) (*pgOverview, error) {
 
 // pgQuickActions returns the buttons at the top of the Overview: the
 // dialogs that start most work. A realm is passed on when it is clear which
-// one is meant.
+// one is meant. Connect a container is on Mesh and DNS, of the realm of
+// the scope, and in the menu of each realm.
 func pgQuickActions(d *pgOverview) []pgAction {
 	realm := d.Realm
 	if realm == "" && len(d.Realms) == 1 {
@@ -134,7 +143,7 @@ func pgQuickActions(d *pgOverview) []pgAction {
 	default:
 		acts = append(acts, pgDialogAction("Add workers…", "", "create-worker", "realm", realm))
 	}
-	return append(acts, pgDialogAction("Connect a container…", "", "connect", "realm", realm))
+	return acts
 }
 
 // RealmsText returns "2 realms".

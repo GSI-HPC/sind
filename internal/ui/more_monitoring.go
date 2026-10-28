@@ -70,6 +70,12 @@ type moreMonitoringData struct {
 	Forward string
 }
 
+// CreateCmd returns the command that creates a cluster with monitoring in
+// the realm of the empty state.
+func (d moreMonitoringData) CreateCmd() string {
+	return pgSind(d.Realm) + " create cluster --monitoring"
+}
+
 // moreMonRealm is the monitoring stack of one realm.
 type moreMonRealm struct {
 	Name     string
@@ -124,11 +130,15 @@ func moreServiceState(s cluster.MonitoringService) (class, text string) {
 }
 
 // moreMonitoringCount is the badge behind the rail entry: the services of
-// all stacks that are not ready, as "1 down" (or "1 starting" when none
-// is down), or a dot when all are ready. Without a stack it shows none.
-func moreMonitoringCount(sn store.Snapshot, _ time.Time) NavCount {
+// the stack of the realm, or of all stacks, that are not ready, as "1 down"
+// (or "1 starting" when none is down), or a dot when all are ready.
+// Without a stack it shows none.
+func moreMonitoringCount(sn store.Snapshot, realm string, _ time.Time) NavCount {
 	n, down, starting := 0, 0, 0
-	for _, m := range sn.Monitorings {
+	for name, m := range sn.Monitorings {
+		if realm != "" && name != realm {
+			continue
+		}
 		for _, s := range m.Services {
 			n++
 			switch class, _ := moreServiceState(s); class {

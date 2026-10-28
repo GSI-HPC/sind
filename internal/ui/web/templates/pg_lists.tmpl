@@ -2,7 +2,8 @@
 
 {{/* page-clusters and page-nodes are the list pages. The head, the chips and
 the table are fragments, so that the head follows the realm that the page
-shows. The filter field is not: a live update never changes what the user
+shows; the realm switcher of the rail picks it. The line below the list
+gives the commands that list the same in a terminal. The filter field is not: a live update never changes what the user
 types. The page script filters the rows as the user types, tells screen
 readers how many rows match, and keeps the text in the address. data-pg-list
 names a row. */}}
@@ -11,16 +12,16 @@ names a row. */}}
 <div class="pg-tools">{{template "pg-list-filter" (.Filter "Filter by name, realm or node" "Filter the clusters")}}
   <div class="pg-chips" role="group" aria-label="Show" hx-swap="morph:innerHTML" sse-swap="pg-clusters-chips">{{fragment "pg-clusters-chips" $}}</div></div>
 <div hx-swap="morph:innerHTML" sse-swap="pg-clusters-table">{{fragment "pg-clusters-table" $}}</div>
-</section>{{end}}
-<p class="muted pg-hint">Tick clusters to delete several at once. In a terminal: <code class="mono">sind get clusters</code></p>{{end}}
+</section>
+<p class="muted pg-hint">Tick clusters to delete several at once. {{template "pg-cli" (.Commands "clusters")}}</p>{{end}}{{end}}
 
 {{define "page-nodes"}}<div hx-swap="morph:innerHTML" sse-swap="pg-nodes-head">{{fragment "pg-nodes-head" .}}</div>
 {{with .Data}}<section class="panel pg-list" data-pg-list="node">
 <div class="pg-tools">{{template "pg-list-filter" (.Filter "Filter by node, cluster, state or IP" "Filter the nodes")}}
   <div class="pg-chips" role="group" aria-label="Show" hx-swap="morph:innerHTML" sse-swap="pg-nodes-chips">{{fragment "pg-nodes-chips" $}}</div></div>
 <div hx-swap="morph:innerHTML" sse-swap="pg-nodes-table">{{fragment "pg-nodes-table" $}}</div>
-</section>{{end}}
-<p class="muted pg-hint">In a terminal: <code class="mono">sind get nodes</code></p>{{end}}
+</section>
+<p class="muted pg-hint">{{template "pg-cli" (.Commands "nodes")}}</p>{{end}}{{end}}
 
 {{/* pg-list-filter is the filter field of a list: a form that works without
 script too. It takes a pgFilterView. */}}
@@ -28,6 +29,9 @@ script too. It takes a pgFilterView. */}}
   <input type="hidden" name="realm" value="{{.Realm}}">{{with .State}}<input type="hidden" name="state" value="{{.}}">{{end}}{{with .SortParam}}<input type="hidden" name="sort" value="{{.}}">{{end}}
   <input type="search" name="q" value="{{.Q}}" placeholder="{{$.Placeholder}}" aria-label="{{$.Label}}" data-pg-filter autocomplete="off" autocapitalize="off" spellcheck="false">
 </form>{{end}}{{end}}
+
+{{/* pg-list-scope says what a list holds; it takes a pgListScope. */}}
+{{define "pg-list-scope"}}<span class="pg-scope">{{.Count}}{{with .Realm}} in realm <b class="mono">{{.}}</b>{{end}}{{with .Realms}} in {{.}}{{end}}.</span>{{end}}
 
 {{/* pg-list-chips are the state filters of a list; they take the list. */}}
 {{define "pg-list-chips"}}{{range .Chips}}<a class="pg-chip{{if .On}} on{{end}}{{with .Class}} {{.}}{{end}}" href="{{.URL}}" data-pg-keep{{if .On}} aria-current="true"{{end}}>{{.Label}} <span class="n">{{.N}}</span></a>{{end}}{{end}}
@@ -41,9 +45,8 @@ matches, which the page script shows and hides as the user types. */}}
 {{define "pg-list-none"}}<tr class="pg-none" data-pg-none{{if .Shown}} hidden{{end}}><td colspan="9"><div class="empty">{{if .Total}}No {{.Noun}} matches the filter. <a href="{{.URL "q" "" "state" ""}}">Show all</a>{{else}}No {{.Noun}}{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.{{end}}</div></td></tr>{{end}}
 
 {{define "pg-clusters-head"}}{{with .Data}}
-<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every cluster of every realm. {{end}}sind finds them by their Docker labels.</span></div></div>
+<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">{{template "pg-list-scope" (.Scope "cluster" "clusters")}}<span>sind finds them by their Docker labels.</span></div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
-{{template "pg-realm-filter" .}}
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
 {{define "pg-clusters-chips"}}{{with .Data}}{{template "pg-list-chips" .}}{{end}}{{end}}
@@ -62,8 +65,7 @@ matches, which the page script shows and hides as the user types. */}}
 {{end}}{{end}}
 
 {{define "pg-nodes-head"}}{{with .Data}}
-<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every node of every realm. {{end}}A node's name is its short name and its cluster, as sind's commands take it.</span></div></div></div>
-{{template "pg-realm-filter" .}}
+<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">{{template "pg-list-scope" (.Scope "node" "nodes")}}<span>A node's name is its short name and its cluster, as sind's commands take it.</span></div></div></div>
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
 {{define "pg-nodes-chips"}}{{with .Data}}{{template "pg-list-chips" .}}{{end}}{{end}}
