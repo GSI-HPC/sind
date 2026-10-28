@@ -2,15 +2,27 @@
 
 // Script of the progress display. The server draws every page and fragment
 // but the summary and the timeline of the run page, which gantt.js draws;
-// this file does six small things that need the browser: it counts the
+// this file does seven small things that need the browser: it counts the
 // clocks of runs that go on (an element with data-since, the start in
 // milliseconds since 1970), it sizes the bars finer than the whole percent
 // of their classes, it puts the progress of the run in the title of the
 // tab, it announces when a command starts or ends, it opens and closes the
-// task dock, and it closes the question of Stop. It evaluates no text and
-// needs no inline script.
+// task dock, it closes the question of Stop, and it hides the rows of
+// "Needs you" that are fixed. It evaluates no text and needs no inline
+// script.
 (() => {
   'use strict';
+
+  // clock is the time of the server, in milliseconds since 1970: the
+  // browser's, moved by how far the server's was off when it drew the page
+  // (data-now of the body). The clocks of runs then agree with the times
+  // that the server writes, also when its clock stands, as in the still
+  // demo.
+  const skew = (() => {
+    const now = Number(document.body && document.body.dataset.now);
+    return now > 0 ? now - Date.now() : 0;
+  })();
+  function clock() { return Date.now() + skew; }
 
   // dur writes a duration as the server's runDur does: 3.4s, 42s, 5m07s, 2h03m.
   function dur(ms) {
@@ -79,12 +91,28 @@
     document.querySelectorAll('[data-fill]').forEach(el => set(el, 'width', Number(el.dataset.fill) / 100 + '%'));
   }
 
+  // recount says again how many rows of "Needs you" are open and fixed,
+  // once a row that is fixed hid, as the server's NeedsText does; with no
+  // row left, the panel shows only the commands that run, or nothing.
+  function recount() {
+    document.querySelectorAll('[data-needs]').forEach(sec => {
+      const head = sec.querySelector('[data-needs-count]');
+      if (!head) return;
+      const open = Number(head.dataset.needsOpen) || 0;
+      const fixed = sec.querySelectorAll('[data-needs-fixed]:not(.gone)').length;
+      const text = open + ' open' + (fixed ? ' · ' + fixed + ' fixed' : '');
+      if (head.textContent !== text) head.textContent = text;
+      sec.classList.toggle('pg-needs-none', open === 0 && fixed === 0);
+    });
+  }
+
   function tick() {
-    const now = Date.now();
+    const now = clock();
     place();
     document.querySelectorAll('[data-hide-at]').forEach(el => {
       if (now >= Number(el.dataset.hideAt) && !el.classList.contains('gone')) el.classList.add('gone');
     });
+    recount();
     document.querySelectorAll('[data-since]').forEach(el => {
       const since = Number(el.dataset.since);
       if (!(since > 0)) return;
@@ -123,7 +151,7 @@
     const region = document.getElementById('say');
     if (!region) return;
     const out = [];
-    const now = Date.now();
+    const now = clock();
     document.querySelectorAll('[data-say-key]').forEach(el => {
       const key = el.dataset.sayKey;
       const state = el.dataset.sayState;

@@ -18,7 +18,7 @@ sizes:
   phone: {width: 390, height: 844}
 shots:
   - name: overview
-    alt: "Overview: what needs you first, with the problems named in the head, then the realms, a card for each cluster and the latest runs"
+    alt: "Overview: what needs you with what it means for the jobs and a fix for each problem, the commands that run now, then the realms, a card for each cluster and the latest runs"
     path: /
     page: overview
     sizes: [desktop, phone]

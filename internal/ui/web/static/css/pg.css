@@ -99,14 +99,43 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 /* what the card says while the create goes on, in place of the commands */
 .pg-wait{margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:var(--r);color:var(--muted);font-size:var(--t-md)}
 
-/* Needs you */
-.pg-it{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;padding:10px 14px 10px 0;border-bottom:1px solid var(--line-2);align-items:center}
+/* Needs you: the bar of the severity, the kind, what is wrong and what it
+   means for the jobs, the links that help to find out, the × that
+   dismisses a failed run, and the fix in a column of its own, so that the
+   fixes line up */
+.pg-it{display:grid;grid-template-columns:4px 64px minmax(0,1fr) auto 32px 184px;gap:12px;padding:10px 14px 10px 0;border-bottom:1px solid var(--line-2);align-items:center}
 .pg-it:last-child{border-bottom:0}
+.pg-it.gone{display:none}
+.pg-it.ok{background:var(--ok-soft)}
 .pg-bar{align-self:stretch;border-radius:0 3px 3px 0;background:var(--info)}
-.pg-bar.bad{background:var(--bad)} .pg-bar.warn{background:var(--warn)} .pg-bar.run{background:var(--run)}
+.pg-bar.bad{background:var(--bad)} .pg-bar.warn{background:var(--warn)} .pg-bar.run{background:var(--run)} .pg-bar.ok{background:var(--ok)}
+.pg-kind{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+.pg-it.ok .pg-kind{color:var(--ok)}
 .pg-tt{font-weight:500;overflow-wrap:anywhere}
+.pg-tt b.mono{font-weight:600}
 .pg-dd{color:var(--muted);font-size:var(--t-md);overflow-wrap:anywhere}
+.pg-eff{font-weight:500;color:var(--fg)}
 .pg-bb{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pg-bb .btn.ghost{color:var(--accent)}
+.pg-dis{display:flex;justify-content:center}
+.pg-fixc{display:flex}
+.pg-fixc > .btn{flex:1;justify-content:center;text-align:center}
+.pg-fixc > .btn:not([aria-disabled="true"]){border-color:var(--accent);color:var(--accent)}
+
+/* Running now: the commands that run, a strip at the end of Needs you, or
+   the panel alone when nothing needs the user; once the last row that is
+   fixed hides, the panel keeps only the strip, or hides */
+.pg-attn.pg-needs-none > .ph{display:none}
+.pg-attn.pg-needs-none:not(:has(.pg-now)){display:none}
+.pg-now{background:var(--panel-2);border-top:1px solid var(--line-2);border-radius:0 0 var(--r) var(--r)}
+.pg-now-only .pg-now,.pg-needs-none .pg-now{border-top:0;border-radius:var(--r)}
+.pg-now-r{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line-2)}
+.pg-now-r:last-child{border-bottom:0}
+.pg-now-h{flex:none;width:96px;font-weight:600;font-size:var(--t-md)}
+.pg-now-t{font-size:var(--t-md);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+.pg-now-l{flex:1;min-width:0;color:var(--muted);font-size:var(--t-md);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-now-r .num{font:var(--t-sm) var(--f-mono);color:var(--faint)}
+.pg-now-all{font-size:var(--t-md)}
 
 /* recent runs */
 .pg-r{display:flex;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line-2);color:var(--fg)}
@@ -177,8 +206,19 @@ tr.sel .pill.run{border-color:var(--run)}
 .miss-links li{display:flex;gap:6px;align-items:center}
 
 @media (max-width:760px){
-  .pg-it{grid-template-columns:4px minmax(0,1fr)}
-  .pg-bb{grid-column:2;justify-content:flex-start}
+  .pg-it{grid-template-columns:4px minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+  .pg-it > .pg-bar{grid-row:1 / span 3}
+  .pg-kind{grid-column:2;grid-row:1}
+  .pg-dis{grid-column:3;grid-row:1;justify-content:flex-end}
+  .pg-body{grid-column:2 / -1}
+  .pg-bb{grid-column:2;grid-row:3;justify-content:flex-start}
+  .pg-fixc{grid-column:3;grid-row:3}
+  .pg-fixc > .btn{flex:0 1 auto}
+  /* the strip names the commands that run; the dock has their steps */
+  .pg-now-h{width:auto}
+  .pg-now-r{flex-wrap:wrap;gap:4px 10px}
+  .pg-now-h:empty,.pg-now-l,.pg-now-r .num{display:none}
+  .pg-now-t{max-width:none;flex:1 1 0;white-space:normal;overflow-wrap:anywhere}
   .pg-steps li{grid-template-columns:28px minmax(0,1fr)}
   .pg-steps li > :last-child{grid-column:2}
 }

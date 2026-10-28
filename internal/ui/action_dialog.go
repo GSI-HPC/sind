@@ -1345,7 +1345,7 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		s.env.Log.Error("starting a task", "action", a.ID, "err", err)
 		p.Err = err.Error()
 	default:
-		id, err := actStart(st, a, f, p.Cmd)
+		id, err := actStart(st, v, a, f, p.Cmd)
 		if err == nil {
 			realm, cl := a.Target(f)
 			actStarted(s, w, r, v, p, id, p.Spec.Removes && actOnPageOf(r, realm, cl))
@@ -1372,8 +1372,9 @@ func actStartParts(st *actState, cmd action.Command) error {
 }
 
 // actStart creates the command's directories, saves its file, if it has
-// one, and starts the command as a task. It returns the task's ID.
-func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) (string, error) {
+// one, and starts the command as a task, with the nodes that it may fix in
+// the view's snapshot (pgFixes). It returns the task's ID.
+func actStart(st *actState, v *View, a action.Action, f action.Form, cmd action.Command) (string, error) {
 	for _, dir := range cmd.Dirs {
 		if err := st.mkdirAll(dir); err != nil {
 			return "", fmt.Errorf("creating the directory %s: %w", dir, err)
@@ -1386,6 +1387,7 @@ func actStart(st *actState, a action.Action, f action.Form, cmd action.Command) 
 	}
 	realm, cl := a.Target(f)
 	spec := run.Spec{Action: a.ID, Argv: cmd.Argv, Display: cmd.Display, Realm: realm, Cluster: cl, Form: actKeptForm(f)}
+	spec.Fixes = pgFixes(v.Snap, spec, v.Now)
 	if cmd.Config != nil {
 		spec.ConfigPath, spec.Config = cmd.Config.Path, cmd.Config.Content
 	}
@@ -1459,7 +1461,7 @@ func actRetryRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		page.Redirect(w, r, actEditHref(t))
 		return
 	}
-	nid, err := actStart(st, a, f, p.Cmd)
+	nid, err := actStart(st, v, a, f, p.Cmd)
 	if err != nil {
 		s.Fail(w, r, err)
 		return

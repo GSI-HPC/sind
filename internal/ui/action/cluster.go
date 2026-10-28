@@ -27,7 +27,7 @@ func init() {
 // deleteWorkerTyped is what the user types to delete workers: the name of
 // the worker when one goes, else the name of the cluster.
 func deleteWorkerTyped(f Form) string {
-	if names := nodeNames(f); len(names) == 1 {
+	if names := NodeNames(f); len(names) == 1 {
 		return names[0]
 	}
 	return formCluster(f)

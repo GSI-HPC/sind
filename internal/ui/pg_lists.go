@@ -25,6 +25,7 @@ func pgRegister(r *Registry) {
 	r.AddPage(pgClusterPage)
 	r.AddRoute(pgClusterByNameRoute())
 	r.AddPage(pgNodePage)
+	r.AddRoute(Route{Pattern: "POST /needs/runs/{id}/dismiss", Handle: pgDismissRun})
 	pgNavCounts(r)
 }
 

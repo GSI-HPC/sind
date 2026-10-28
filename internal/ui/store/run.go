@@ -163,6 +163,10 @@ type Task struct {
 	// token, the fingerprint and the typed confirmation, so that the user
 	// can try the command again; nil for a command that no form built.
 	Form map[string][]string
+	// Fixes are the nodes, by short name, that needed a look when a command
+	// that brings nodes back started, such as one that reboots or resumes
+	// them; "Needs you" shows them as fixed for a while once it ends ok.
+	Fixes []string
 	// ConfigPath and Config are the file that the command saved and runs
 	// with, such as the config of a new cluster; empty for none.
 	ConfigPath string

@@ -672,8 +672,8 @@ func TestNodeWords(t *testing.T) {
 }
 
 func TestNodeNames(t *testing.T) {
-	assert.Equal(t, []string{"a", "b", "c"}, nodeNames(form("nodes", "a, b", "nodes", "b\tc\n")))
-	assert.Empty(t, nodeNames(form()))
+	assert.Equal(t, []string{"a", "b", "c"}, NodeNames(form("nodes", "a, b", "nodes", "b\tc\n")))
+	assert.Empty(t, NodeNames(form()))
 	assert.True(t, strings.HasPrefix(ShortName(node("dev", "worker-0", config.RoleWorker)), "worker-0"))
 }
 

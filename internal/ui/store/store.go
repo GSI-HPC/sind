@@ -28,6 +28,8 @@ const (
 	TopicRuns Topic = "runs"
 	// TopicTasks changes when a task starts, ends or is dismissed.
 	TopicTasks Topic = "tasks"
+	// TopicNeeds changes when the user dismisses a run from "Needs you".
+	TopicNeeds Topic = "needs"
 )
 
 // RunTopic is the topic of one run, which changes with every event of it,
@@ -40,6 +42,9 @@ type Snapshot struct {
 	Runs []Run
 	// Tasks are the commands sind ui started, oldest first.
 	Tasks []Task
+	// Dismissed holds the IDs of the runs that failed and that the user
+	// dismissed from "Needs you", for as long as sind ui runs.
+	Dismissed map[string]bool
 
 	// The sind data. Maps are replaced, never changed, by the setters in
 	// sind.go; the keys are realm names unless noted.
@@ -258,6 +263,19 @@ func (s *Store) HideTasks(hide func(Task) bool) {
 			}
 		}
 	}, TopicTasks)
+}
+
+// DismissRun dismisses the run with the ID id from "Needs you" and
+// notifies TopicNeeds.
+func (s *Store) DismissRun(id string) {
+	s.update(func(sn *Snapshot) {
+		d := make(map[string]bool, len(sn.Dismissed)+1)
+		for k := range sn.Dismissed {
+			d[k] = true
+		}
+		d[id] = true
+		sn.Dismissed = d
+	}, TopicNeeds)
 }
 
 // Task returns the task with the ID id.

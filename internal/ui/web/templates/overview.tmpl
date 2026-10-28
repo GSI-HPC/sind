@@ -14,7 +14,7 @@ runs. Each part is a fragment. */}}
 <div class="head"><div class="t"><h1>Overview</h1>
   <div class="sub"><span>{{.RealmsText}}</span>{{template "pg-realm-scope" $}}
     <span>{{.ClustersText}} · {{.NodesText}}</span>
-    {{with .Summary}}<a class="pill {{$.Data.SummaryClass}} nodot pg-sumpill" href="#needs">{{.}} <span aria-hidden="true">→</span></a>{{else}}{{if not .Needs}}{{if not .Empty}}<span class="pill ok">Nothing needs you</span>{{end}}{{end}}{{end}}</div></div>
+    {{with .Summary}}<a class="pill {{$.Data.SummaryClass}} nodot pg-sumpill" href="#needs">{{.}} <span aria-hidden="true">→</span></a>{{else}}{{if not .Open}}{{if not .Empty}}<span class="pill ok">Nothing needs you</span>{{end}}{{end}}{{end}}</div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
@@ -45,10 +45,23 @@ runs. Each part is a fragment. */}}
   <li><div><b>Delete it</b><div class="muted">sind removes the containers, networks and volumes.</div></div><span class="faint">when done</span></li></ol></div></section>{{end}}
 
 {{/* pg-overview-needs comes first on the page, so it shows only when
-something needs the user; the head says when nothing does. */}}
-{{define "pg-overview-needs"}}{{with .Data}}{{if .Needs}}<section class="panel pg-attn pg-block" id="needs" tabindex="-1"><div class="ph"><h2>Needs you</h2><span class="grow"></span><span class="faint">{{.NeedsText}}</span></div>
-  {{range .Needs}}<div class="pg-it"><span class="pg-bar {{.Sev}}"></span><div><div class="pg-tt">{{.Title}}</div><div class="pg-dd">{{.Detail}}</div></div><div class="pg-bb">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
-  {{end}}</section>{{end}}{{end}}{{end}}
+something needs the user or runs; the head says when nothing does. "Needs
+you" has a row for each problem, with the action that most likely fixes it
+in a column of its own, and a row that a command fixed turns green until
+run.js hides it at data-hide-at, and recounts the head (data-needs-*). The
+strip "Running now" at its end lists the commands that run, which are no
+problem; when nothing needs the user, it is the panel alone. */}}
+{{define "pg-overview-needs"}}{{with .Data}}{{if or .Needs .Running}}<section class="panel pg-attn pg-block{{if not .Needs}} pg-now-only{{end}}" id="needs" tabindex="-1" aria-labelledby="pg-needs-h"{{if .Needs}} data-needs{{end}}>
+  {{if .Needs}}<div class="ph"><h2 id="pg-needs-h">Needs you</h2><span class="grow"></span><span class="faint" data-needs-count data-needs-open="{{.OpenCount}}">{{.NeedsText}}</span></div>
+  {{range .Needs}}{{$n := .}}<div class="pg-it {{.Sev}}" id="{{.ID}}"{{if .HideAt}} data-hide-at="{{.HideAt}}" data-needs-fixed{{end}}><span class="pg-bar {{.Sev}}"></span><span class="pg-kind">{{.Label}}</span>
+    <div class="pg-body"><div class="pg-tt"><b class="mono">{{.Subject}}</b> {{.Title}}{{with .Meta}} <span class="chip" title="realm">{{.}}</span>{{end}}</div><div class="pg-dd">{{.Detail}}{{with .Effect}} <b class="pg-eff">{{.}}</b>{{end}}</div></div>
+    <div class="pg-bb">{{range .Actions}}{{template "pg-action" .}}{{end}}</div>
+    <div class="pg-dis">{{with .Dismiss}}<form class="inline" method="post" action="/needs/runs/{{.}}/dismiss" hx-post="/needs/runs/{{.}}/dismiss" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="iconbtn" aria-label="Dismiss: {{$n.Subject}} {{$n.Title}}" title="Dismiss">×</button></form>{{end}}</div>
+    <div class="pg-fixc">{{with .Fix}}{{template "pg-action" .}}{{end}}</div></div>
+  {{end}}{{else}}<h2 class="vh" id="pg-needs-h">Running now</h2>{{end}}
+  {{with .Running}}<div class="pg-now" role="group" aria-label="Running now">{{range $i, $r := .}}<div class="pg-now-r"><span class="pg-now-h">{{if not $i}}Running now{{end}}</span>{{if .Waiting}}<span class="pg-ck wait" aria-hidden="true">○</span>{{else}}<span class="spin" aria-hidden="true"></span>{{end}}<a class="mono pg-now-t" href="{{.Link}}">{{.Title}}</a>{{if .Terminal}}<span class="chip">terminal</span>{{end}}<span class="pg-now-l">{{.Line}}{{with .Lock}} · {{.}}{{end}}</span>{{template "run-elapsed" .}}<a class="btn sm" href="{{.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a></div>
+  {{end}}{{if gt (len .) 1}}<div class="pg-now-r pg-now-all"><span class="pg-now-h"></span><a href="{{$.Data.RunningLink}}">Show them in Activity</a></div>{{end}}</div>{{end}}
+</section>{{end}}{{end}}{{end}}
 
 {{define "pg-overview-recent"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Recent activity</h2><span class="grow"></span><a href="/activity">All activity</a></div>
   <div class="pg-recent">{{range .Runs}}<a class="pg-r" href="{{.Link}}"><span class="dot {{.Class}}"></span><span class="pg-c">{{.Title}}</span>{{if .Terminal}}<span class="chip">terminal</span>{{end}}<span class="pg-tm">{{.Time}}</span></a>

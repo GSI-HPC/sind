@@ -46,18 +46,11 @@ func registerRunActivity(r *Registry) {
 }
 
 // runNavCount is the badge behind the Activity entry of the rail: the runs
-// that go on, or else the runs that failed lately, the ones that "Needs
-// you" lists (failedWindow). A log without either shows none.
+// that go on, or else the runs that failed lately and that "Needs you"
+// lists (pgFailures). A log without either shows none.
 func runNavCount(snap store.Snapshot, now time.Time) NavCount {
-	running, failed := 0, 0
-	for _, run := range snap.Runs {
-		switch {
-		case !run.Done():
-			running++
-		case run.Status == store.StatusFailed && now.Sub(*run.End) < failedWindow:
-			failed++
-		}
-	}
+	running := pgCount(snap.Runs, func(r store.Run) bool { return !r.Done() })
+	failed := pgCount(pgFailures(snap, now), func(f pgFailure) bool { return f.Fixed == nil })
 	switch {
 	case running > 0:
 		return NavCount{Text: strconv.Itoa(running) + " running", Class: "run", Label: pgPlural(running, "command runs", "commands run") + " now"}
