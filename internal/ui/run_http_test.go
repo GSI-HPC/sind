@@ -49,7 +49,7 @@ func TestRunPageRenders(t *testing.T) {
 		`&#34;title&#34;:&#34;create cluster dev&#34;`,
 		`&#34;n&#34;:&#34;nodes&#34;`,
 		`<div class="gantt" data-g="gantt">`,
-		"/events?f=rail&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-summary&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
+		"/events?f=rail&amp;f=run-command&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-outcome&amp;f=run-summary&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
 		`/css/run.css`, `/js/run.js`, `/js/gantt.js`,
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)

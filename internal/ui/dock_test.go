@@ -96,6 +96,12 @@ func TestRunDockTaskEnded(t *testing.T) {
 	assert.Equal(t, "done in 53s", c.Line)
 	assert.False(t, c.Compact)
 	assert.Empty(t, c.Why)
+	assert.Nil(t, c.Open, "no cluster to open")
+
+	// A new cluster that is ready: the card opens it.
+	task.Realm, task.Cluster = "sind", "dev"
+	c = runDockOf(store.Snapshot{Runs: []store.Run{ok}, Tasks: []store.Task{task}}, runAt(900)).Cards[0]
+	assert.Equal(t, &runLink{Label: "Open dev", Href: "/clusters/sind/dev", Primary: true}, c.Open)
 }
 
 func TestRunDockTaskWithoutRun(t *testing.T) {

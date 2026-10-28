@@ -76,13 +76,39 @@ details.stopc>summary::-webkit-details-marker{display:none}
 
 /* run page */
 .rp{display:grid;gap:14px;min-width:0}
+.rp>*{min-width:0}
 .rp>div:empty{display:none}
 .runhead{margin-bottom:0}
 /* the command of a run of sind ui, with Copy, and the config it ran with */
-.runcmd{display:grid;gap:8px;margin-top:12px;min-width:0}
+.runcmd{display:grid;gap:8px;min-width:0}
 .runcfg>summary{cursor:pointer;width:max-content;font:var(--t-sm) var(--f-body);color:var(--muted)}
 .runcfg-path{margin:6px 0 0;font-size:var(--t-sm);color:var(--muted);overflow-wrap:anywhere}
 .runcfg pre{margin:6px 0 0;max-height:320px;overflow:auto;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font:var(--t-sm)/1.5 var(--f-mono)}
+/* once the run ended ok, the command and its config fold into one line */
+.runfold{border:1px solid var(--line);border-radius:8px;background:var(--panel);min-width:0}
+.runfold>summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:center;padding:9px 14px;font-size:var(--t-md);color:var(--muted);min-width:0}
+.runfold>summary::-webkit-details-marker{display:none}
+.runfold>summary::before{content:"▸";color:var(--faint);flex:none;transition:transform .15s}
+.runfold[open]>summary::before{transform:rotate(90deg)}
+.runfold>summary code{flex:1;min-width:0;font:var(--t-sm) var(--f-mono);color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.runfold[open]>summary code{visibility:hidden}
+.runfold-l{flex:none}
+.runfold-c{flex:none;font-size:var(--t-sm)}
+.runfold-b{display:grid;gap:8px;padding:0 14px 12px}
+.runcfg-pre{margin:0;max-height:320px;overflow:auto;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);font:var(--t-sm)/1.5 var(--f-mono)}
+/* the outcome of a run, under its head: a mark, a title that says what
+   came of the command, and what to do next */
+.rout{--rout:var(--ok);--rout-soft:var(--ok-soft);border-color:color-mix(in srgb,var(--rout) 45%,var(--line));box-shadow:inset 4px 0 0 var(--rout)}
+.rout.bad{--rout:var(--bad);--rout-soft:var(--bad-soft)}
+.rout.warn{--rout:var(--warn);--rout-soft:var(--warn-soft)}
+.rout-h{padding:14px 16px 12px 20px}
+.rout-h h2{margin:0;font-size:var(--t-xl);letter-spacing:-.02em;min-width:0;overflow-wrap:anywhere}
+.rout-mk{width:28px;height:28px;border-radius:50%;background:var(--rout-soft);color:var(--rout);display:grid;place-items:center;font:700 15px var(--f-body);flex:none}
+.rout-meta{color:var(--muted);font-size:var(--t-md)}
+.rout>.pb{padding:16px 16px 16px 20px}
+.rout-next{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2)}
+.rout-nl{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-right:6px}
+@media (max-width:700px){.rout-h,.rout>.pb{padding-left:16px}.rout-meta{flex-basis:100%}.rout-next .grow{display:none}.rout-next .hint{flex-basis:100%}}
 /* the summary: the clock, line 1 (what leads now), the counts, and line 2
    (the one fact to know now) on a fixed grid, so that nothing moves as
    the texts change */

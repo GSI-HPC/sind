@@ -11,6 +11,8 @@ them. */}}
 <div class="crumbs"><a href="/activity">Activity</a> / <span class="mono">{{.Params.Get "id"}}</span></div>
 <div class="rp">
 <div hx-swap="morph:innerHTML" sse-swap="run-head">{{fragment "run-head" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-outcome">{{fragment "run-outcome" .}}</div>
+<div hx-swap="morph:innerHTML" sse-swap="run-command">{{fragment "run-command" .}}</div>
 <div class="rdata" hx-swap="morph:innerHTML" sse-swap="run-summary">{{fragment "run-summary" .}}</div>
 <section class="panel"><div class="pb"><div class="rsum">
   <span class="clock" data-g="clock"></span>
@@ -36,10 +38,26 @@ them. */}}
   <div class="sub"><span class="pill {{.PillClass}}">{{.Pill}}</span>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}<span>{{.Origin}}</span>{{if .Program}}<span>{{.Program}}</span>{{end}}<span>started {{.Started}}</span>{{if .Exit}}<span class="mono">{{.Exit}}</span>{{end}}<span class="mono faint" title="trace {{.TraceTip}}"><span data-word="trace">trace</span> {{.Trace}}</span></div></div>
   <div class="actions">{{if .TaskID}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{else}}{{with .Stop}}{{template "run-stop" .}}{{end}}{{end}}{{end}}{{template "run-retry" .}}</div></div>
 {{with .NoStop}}<div class="callout">{{.}}</div>{{end}}
-{{with .Command}}<div class="runcmd">{{template "pg-cmd" .}}{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">{{.Label}}</div><pre class="mono">{{.Text}}</pre></details>{{end}}</div>{{end}}
 {{end}}{{end}}{{end}}
 
 {{define "run-summary"}}{{with .Data}}<span hidden data-gantt="{{.Data}}"></span><span hidden data-doc-title="{{.DocTitle}}"></span><span hidden data-say-key="{{.SayKey}}" data-say-state="{{.SayState}}" data-say="{{.Say}}"{{if .SaySince}} data-say-since="{{.SaySince}}"{{end}}></span>{{end}}{{end}}
+
+{{/* run-command is the command of the run, from a runHead: with Copy and
+the config it ran with, or folded into one line once the run ended ok. */}}
+{{define "run-command"}}{{with .Data}}{{with .Command}}{{if $.Data.Fold}}<details class="runfold"><summary><span class="runfold-l">Command</span><code>{{.Text}}</code>{{if $.Data.Config}}<span class="runfold-c">Config used</span>{{end}}</summary>
+  <div class="runfold-b"><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div>{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<div class="runcfg-path mono">{{.Label}}</div><pre class="mono runcfg-pre">{{.Text}}</pre>{{end}}</div></details>
+{{else}}<div class="runcmd">{{template "pg-cmd" .}}{{with $.Data.CmdNote}}<p class="hint">{{.}}</p>{{end}}{{with $.Data.Config}}<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">{{.Label}}</div><pre class="mono">{{.Text}}</pre></details>{{end}}</div>{{end}}{{end}}{{end}}{{end}}
+
+{{/* run-outcome is what came of a run that ended, a runOutcome: a mark and
+a title that say it in the words of the cluster, and what to do next. The
+outcome of a create cluster that ended ok has the checks and the first
+commands of the "Ready for jobs" card of the cluster's Summary. */}}
+{{define "run-outcome"}}{{with .Data}}<section class="panel rout {{.Class}}" aria-labelledby="rout-t"><div class="ph rout-h"><span class="rout-mk" aria-hidden="true">{{.Mark}}</span><h2 id="rout-t">{{.Title}}</h2><span class="grow"></span><span class="rout-meta">{{.Meta}}{{with .Realm}} · realm <span class="chip">{{.}}</span>{{end}}</span></div>
+<div class="pb">{{with .Ready}}<div class="pg-ready-b"><div>{{if .Checked}}<ul class="pg-checks">{{range .Checks}}<li><span class="pg-ck {{.State}}" aria-hidden="true">{{.Mark}}</span><div><span class="vh">{{.Word}}: </span><b>{{.Title}}</b>{{with .Detail}} <span class="muted">{{.}}</span>{{end}}{{with .Actions}}<div class="pg-fix">{{range .}}{{template "pg-action" .}}{{end}}</div>{{end}}</div></li>{{end}}</ul>
+  {{else}}<p class="muted pg-flat">sind ui checks the controller, the workers, accounting and the files once it has probed the cluster.</p>{{end}}</div>
+  <div class="stack">{{with .Wait}}<p class="pg-wait">{{.}}</p>{{else}}{{range .Commands}}{{template "pg-cmd" .}}{{end}}<p class="hint pg-flat">{{.Note}}</p>{{end}}</div></div>{{end}}
+{{if or .Next .NextNote}}<div class="rout-next"><span class="rout-nl">Next</span>{{range .Next}}{{template "pg-action" .}}{{end}}<span class="grow"></span>{{with .NextNote}}<span class="hint">{{.}}</span>{{end}}</div>{{end}}
+</div></section>{{end}}{{end}}
 
 {{define "run-failed"}}{{with .Data}}<section class="panel rfail {{.Class}}"><div class="ph"><h2>{{.Title}}</h2></div><div class="pb stack">
   {{range .Groups}}<div class="callout {{$.Data.Class}}"><b class="mono">{{.Nodes}}</b>{{if .Class}} <span class="chip">{{.Class}}</span>{{end}}<br><span class="mono">{{.Err}}</span></div>{{end}}
@@ -56,4 +74,4 @@ them. */}}
 or a runWait: Try again, which runs the same command again (actRetryRoute),
 the dialog filled in with the task's form, and the way back to what the
 command worked on. */}}
-{{define "run-retry"}}{{if .RetryID}}<form class="inline" method="post" action="/tasks/{{.RetryID}}/retry" hx-post="/tasks/{{.RetryID}}/retry" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn primary">Try again</button></form>{{end}}{{with .Edit}}<a class="btn" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#layer" hx-swap="innerHTML">{{.Label}}</a>{{end}}{{with .Back}}<a class="btn" href="{{.Href}}">{{.Label}}</a>{{end}}{{end}}
+{{define "run-retry"}}{{if .RetryID}}<form class="inline" method="post" action="/tasks/{{.RetryID}}/retry" hx-post="/tasks/{{.RetryID}}/retry" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn primary">Try again</button></form>{{end}}{{with .Edit}}<a class="btn{{if .Primary}} primary{{end}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#layer" hx-swap="innerHTML">{{.Label}}</a>{{end}}{{with .Back}}<a class="btn{{if .Primary}} primary{{end}}" href="{{.Href}}">{{.Label}}</a>{{end}}{{end}}

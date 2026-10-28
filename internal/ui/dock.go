@@ -92,6 +92,8 @@ type dockCard struct {
 	// does not hold yet.
 	Href   string
 	Action string
+	// Open leads to the cluster that a create made, once it ended ok.
+	Open *runLink
 	// TaskID is the task of the card; empty for a terminal run.
 	TaskID  string
 	Dismiss bool
@@ -274,6 +276,9 @@ func dockTaskCard(t store.Task, run *store.Run, now time.Time) dockCard {
 		c.Action = "Show what failed"
 	default:
 		c.Action = "Details"
+	}
+	if c.Class == runOK && t.Action == "create-cluster" && t.Cluster != "" {
+		c.Open = &runLink{Label: "Open " + t.Cluster, Href: pgClusterURL(t.Realm, t.Cluster, ""), Primary: true}
 	}
 	if c.Class == runOK && t.End != nil {
 		c.HideAt = t.End.Add(dockHideAfter).UnixMilli()

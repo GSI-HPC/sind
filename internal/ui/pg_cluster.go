@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -186,12 +187,16 @@ type pgClusterView struct {
 // pgLoadCluster builds the view of a cluster page from the view's
 // Params (realm, cluster, tab).
 func pgLoadCluster(v *View) (*pgClusterView, error) {
-	realm, name, tab := v.Params.Get("realm"), v.Params.Get("cluster"), v.Params.Get("tab")
+	return pgClusterViewOf(v.Snap, v.Params.Get("realm"), v.Params.Get("cluster"), v.Params.Get("tab"), v.Now, v.CSRF)
+}
+
+// pgClusterViewOf builds the view of the tab of a cluster page; the
+// Summary for no tab.
+func pgClusterViewOf(sn store.Snapshot, realm, name, tab string, now time.Time, csrf string) (*pgClusterView, error) {
 	d := &pgClusterView{Realm: realm, Name: name, Tab: tab}
 	if tab == "" {
 		d.Tab = "summary"
 	}
-	sn := v.Snap
 	summary, ok := sn.Cluster(realm, name)
 	if !ok {
 		return d, nil
@@ -200,11 +205,11 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 		return nil, pgTabMiss(realm, name, tab)
 	}
 	d.Found = true
-	d.Cluster = pgClusterOf(sn, realm, summary, sn.Monitorings[realm], v.Now)
+	d.Cluster = pgClusterOf(sn, realm, summary, sn.Monitorings[realm], now)
 	d.Status = sn.Status(realm, name)
 	d.Slurm = pgSlurmOf(sn.Slurm(realm, name), d.Cluster.Nodes)
 	d.Tabs = pgTabLinks(d)
-	d.Actions = pgClusterActions(d, v.CSRF)
+	d.Actions = pgClusterActions(d, csrf)
 	switch d.Tab {
 	case "summary":
 		pgSummaryTab(d)

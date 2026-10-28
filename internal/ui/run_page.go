@@ -24,7 +24,12 @@ func init() { registerRun(defaultRegistry) }
 // places them. Each depends on the one run that the page shows. The
 // summary and the timeline are no fragments: gantt.js draws them from the
 // data of run-summary (runGantt).
-var runFragments = []string{"run-head", "run-summary", "run-failed", "run-facts"}
+var runFragments = []string{"run-head", "run-outcome", "run-command", "run-summary", "run-failed", "run-facts"}
+
+// runOutcomePrefixes are the topics that the outcome of a run depends on
+// beside the run: the clusters, their nodes and their status, which its
+// checks of a cluster that a create made read.
+var runOutcomePrefixes = []string{"clusters/", "nodes/", "status/"}
 
 // registerRun adds the progress display to r: the run page, the Activity
 // page, the page of a task whose run the log does not hold yet, and the
@@ -32,16 +37,23 @@ var runFragments = []string{"run-head", "run-summary", "run-failed", "run-facts"
 func registerRun(r *Registry) {
 	loads := map[string]func(rc runCtx) any{
 		"run-head":    func(rc runCtx) any { return runHeadOf(rc) },
+		"run-outcome": func(rc runCtx) any { return runOutcomeOf(rc) },
+		"run-command": func(rc runCtx) any { return runHeadOf(rc) },
 		"run-summary": func(rc runCtx) any { return runSummaryOf(rc) },
 		"run-failed":  func(rc runCtx) any { return runFailedOf(rc) },
 		"run-facts":   func(rc runCtx) any { return runFactsOf(rc) },
 	}
 	for _, name := range runFragments {
 		build := loads[name]
+		var prefixes []string
+		if name == "run-outcome" {
+			prefixes = runOutcomePrefixes
+		}
 		r.AddFragment(Fragment{
-			Name:   name,
-			Params: []string{"id"},
-			Watch:  func(p Params) []store.Topic { return []store.Topic{store.RunTopic(p.Get("id"))} },
+			Name:     name,
+			Params:   []string{"id"},
+			Prefixes: prefixes,
+			Watch:    func(p Params) []store.Topic { return []store.Topic{store.RunTopic(p.Get("id"))} },
 			Load: func(v *View) error {
 				rc := newRunCtx(v)
 				v.Data = nil
@@ -147,6 +159,9 @@ type runHead struct {
 	// says that the log keeps no flags.
 	Command *pgCmd
 	CmdNote string
+	// Fold folds the command and the config into one line, once the run
+	// ended ok: its outcome comes first then.
+	Fold bool
 	// Realm is the realm the run worked on, when sind ui knows it.
 	Realm string
 	// Config is the file that the task saved and ran with.
@@ -209,6 +224,13 @@ func runHeadOf(rc runCtx) *runHead {
 		h.Realm = t.Realm
 	} else {
 		runHeadNoTask(rc, h)
+	}
+	if run.Done() && runStatusClass(run) == runOK {
+		// What the command worked on is the way on.
+		h.Fold = h.Command != nil
+		if h.Back != nil {
+			h.Back.Primary = true
+		}
 	}
 	return h
 }
@@ -275,8 +297,12 @@ func runTimedOut(run store.Run) bool {
 	return false
 }
 
-// runLink is a link of the run page.
-type runLink struct{ Label, Href string }
+// runLink is a link of the run page; Primary makes it the button to
+// press.
+type runLink struct {
+	Label, Href string
+	Primary     bool
+}
 
 // runBack leads from the run of a task to what it worked on: its cluster
 // while it exists, the list of clusters once it is gone, and the mesh for
