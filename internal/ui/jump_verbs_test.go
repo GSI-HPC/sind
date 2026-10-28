@@ -132,7 +132,7 @@ func TestJumpVerbs(t *testing.T) {
 		{name: "a job is no verb", q: "sbatch worker-0.hpc", not: []string{"Actions"}},
 		{name: "a verb that is a word of a page or a dialog finds it too", q: "start", want: []string{
 			"Actions | Start nodes… |",
-			"Other actions | New cluster | Fill in its config, then create it | sind create cluster --config FILE | /dialogs/create-cluster |",
+			"Other actions | New cluster | Fill in its config, then create it | sind create cluster --config FILE | /clusters/new |",
 		}},
 		{name: "log finds Activity", q: "log", want: []string{"Pages | Activity |"}},
 		{name: "the typed order of a node set", q: "reboot worker-1.hpc,worker-0.dev", want: []string{"Actions | Reboot worker-1.hpc… |"}},

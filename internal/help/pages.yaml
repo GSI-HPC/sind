@@ -15,6 +15,13 @@
   doc: usage/cluster-lifecycle
   words: [realm, cluster, data]
   howtos: [first-cluster, clean-up, tidy-clusters]
+- id: new-cluster
+  title: New cluster
+  summary: The form of a new cluster at the left and its plan at the right. Pick a start, name the cluster, check its nodes and where your files are, then create it. The plan shows what the nodes take of this host, the warnings of the Doctor that they reach, and the command one argument to a line.
+  route: /clusters/new
+  doc: usage/cluster-lifecycle#create-a-cluster
+  words: [cluster, realm, node-roles, data, wait]
+  howtos: [first-cluster, slow-create]
 - id: cluster
   title: Cluster
   summary: One cluster. Its tabs show the health of its nodes and services, what Slurm says about them, the logs, the network and how to connect. Tick nodes on the Nodes tab to act on several at once; the bar at the bottom offers what fits them and names the nodes that a verb skips.

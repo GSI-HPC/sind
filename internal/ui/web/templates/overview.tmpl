@@ -40,7 +40,7 @@ runs. Each part is a fragment. */}}
 
 {{define "pg-first-steps"}}<section class="panel"><div class="ph"><h2>No realm on this Docker daemon yet</h2></div><div class="pb"><ol class="pg-steps">
   <li><div><b>Check the host</b><div class="muted">Doctor checks Docker and cgroup v2.</div></div><a class="btn sm" href="/doctor">Doctor</a></li>
-  <li><div><b>Create a cluster</b><div class="muted">One controller and one worker, in about 30 s.</div></div>{{range .Actions}}{{if eq .Class "primary"}}{{template "pg-action" .}}{{end}}{{end}}</li>
+  <li><div><b>Create a cluster</b><div class="muted">A controller and two workers, in about 30 s.</div></div>{{range .Actions}}{{if eq .Class "primary"}}{{template "pg-action" .}}{{end}}{{end}}</li>
   <li><div><b>Run a job</b><div class="muted">Enter the cluster and submit a test job.</div></div><span class="faint">after step 2</span></li>
   <li><div><b>Delete it</b><div class="muted">sind removes the containers, networks and volumes.</div></div><span class="faint">when done</span></li></ol></div></section>{{end}}
 

@@ -126,12 +126,12 @@ func TestActCheck(t *testing.T) {
 	f.state.images = images
 
 	body := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "image", "own:dev")).Body.String()
-	assert.Contains(t, body, `<span class="mono">own:dev</span><small>controller, workers</small>`)
+	assert.Contains(t, body, `<span>Image <span class="mono tok">own:dev</span>: No label with its Slurm release`)
 	assert.Contains(t, body, `hx-post="/actions/create-cluster/check" hx-vals="{&#34;check&#34;:&#34;own:dev&#34;}"`)
 
 	w := f.post("/actions/create-cluster/check", actForm("name", "hpc", "image", "own:dev", "check", "own:dev"))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), `<span class="hint act-ver">Slurm 25.11.8, as a check found.</span>`)
+	assert.Contains(t, w.Body.String(), `<span>Image <span class="mono tok">own:dev</span> has Slurm 25.11.8, as a check found.</span>`)
 	assert.NotContains(t, w.Body.String(), "Check image</button>")
 
 	fake.checkErr = errors.New("no slurmctld")

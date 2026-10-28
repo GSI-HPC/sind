@@ -26,7 +26,7 @@ func TestPgOverviewEmpty(t *testing.T) {
 	assert.Contains(t, body, "0 realms")
 	assert.Contains(t, body, "sind ui has not read Docker yet")
 	assert.Contains(t, body, "No realm on this Docker daemon yet")
-	assert.Contains(t, body, `href="/dialogs/create-cluster"`)
+	assert.Contains(t, body, `href="/clusters/new"`)
 	assert.NotContains(t, body, "Nothing needs you", "an empty Docker has nothing to say it about")
 	assert.NotContains(t, body, `id="needs"`)
 	assert.Contains(t, body, "No runs yet.")
@@ -128,7 +128,7 @@ func TestPgOverview(t *testing.T) {
 	assert.Contains(t, body, `<span class="dot warn"></span><span class="pg-c">power reboot worker-1.dev</span><span class="chip">terminal</span><span class="pg-tm">1 d ago</span>`)
 
 	// Quick actions: the dialogs of the actions part.
-	assert.Contains(t, body, `href="/dialogs/create-cluster"`)
+	assert.Contains(t, body, `href="/clusters/new"`)
 	assert.Contains(t, body, `href="/dialogs/create-worker"`, "with several clusters, Add workers asks for the cluster")
 	assert.NotContains(t, body, `href="/dialogs/connect"`, "Connect a container lives on Mesh and DNS")
 
@@ -161,7 +161,7 @@ func TestPgOverview(t *testing.T) {
 	assert.NotContains(t, body, `href="/clusters/sind/dev"`)
 	assert.NotContains(t, body, "stays locked")
 	assert.Contains(t, body, `<tr class="sel"><td class="mono"><a href="/?realm=ci">`)
-	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=ci"`)
+	assert.Contains(t, body, `href="/clusters/new?realm=ci"`)
 
 	// A realm that Docker has no trace of, with the closest realm.
 	body = pgBody(t, ts, "/?realm=cix", 404)
@@ -183,7 +183,7 @@ func TestPgOverviewOneRealmPassesItOn(t *testing.T) {
 	ts := pgServer(t)
 	ts.st.SetRealms([]cluster.RealmSummary{{Name: "solo"}})
 	body := pgBody(t, ts, "/", 200)
-	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=solo"`)
+	assert.Contains(t, body, `href="/clusters/new?realm=solo"`)
 	assert.Contains(t, body, "No cluster yet.")
 	assert.NotContains(t, body, "create-worker")
 }
@@ -244,7 +244,7 @@ func TestPgClusters(t *testing.T) {
 	assert.NotContains(t, body, "/clusters/ci/default")
 	assert.Contains(t, body, `aria-checked="true" tabindex="-1" href="/clusters?realm=sind">`)
 	assert.Contains(t, body, `<a class="nav" href="/nodes?realm=sind">`, "the rail keeps the realm")
-	assert.Contains(t, body, `href="/dialogs/create-cluster?realm=sind"`)
+	assert.Contains(t, body, `href="/clusters/new?realm=sind"`)
 	assert.Contains(t, body, `data-pg-label="dev"`, "one realm names a cluster by its name alone")
 
 	body = pgBody(t, ts, "/clusters?realm=cix", 404)

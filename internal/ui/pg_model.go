@@ -56,14 +56,18 @@ func pgQueryURL(path string, kv ...string) string {
 }
 
 // pgDialog returns the URL of the dialog of the action with the query
-// pairs kv, as pgQueryURL.
+// pairs kv, as pgQueryURL, or that of its page, for an action with one.
 func pgDialog(action string, kv ...string) string {
+	if p := actPages[action]; p != "" {
+		return pgQueryURL(p, kv...)
+	}
 	return pgQueryURL("/dialogs/"+url.PathEscape(action), kv...)
 }
 
-// pgDialogAction returns a dialog link.
+// pgDialogAction returns a dialog link, or the link of the page of an
+// action that has one, as New cluster.
 func pgDialogAction(label, class, action string, kv ...string) pgAction {
-	return pgAction{Label: label, Class: class, URL: pgDialog(action, kv...), Dialog: true}
+	return pgAction{Label: label, Class: class, URL: pgDialog(action, kv...), Dialog: actPages[action] == ""}
 }
 
 // pgClusterURL returns the address of a cluster page, with the tab when it

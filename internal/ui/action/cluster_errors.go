@@ -11,7 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
-// The texts of the New cluster dialog say what to change, in the words of
+// The texts of the New cluster page say what to change, in the words of
 // the form: sind's own errors name the keys of the config and quote Go
 // strings, which suit a config file, not a form.
 

@@ -163,12 +163,11 @@ func (r *actRetry) NewWaitWord() string {
 // workers".
 func (r *actRetry) Nodes() string {
 	parts := []string{"a controller"}
+	if r.Roles["backup"] {
+		parts = append(parts, "a backup controller")
+	}
 	for _, role := range actRoles {
-		switch {
-		case !r.Roles[role.Name]:
-		case role.Name == "backup":
-			parts = append(parts, "a backup controller")
-		default:
+		if r.Roles[role.Name] && role.Name != "backup" {
 			parts = append(parts, "a "+role.Label+" node")
 		}
 	}
@@ -182,7 +181,7 @@ func (r *actRetry) Nodes() string {
 }
 
 // FromRun reports whether the value of the field, image or nodes, comes
-// from the run that the New cluster dialog tries again.
+// from the run that the New cluster page tries again.
 func (d *actDialog) FromRun(field string) bool {
 	r := d.Retry
 	return r != nil && (field != "image" || r.Image != "") && (field != "nodes" || r.HasNodes)

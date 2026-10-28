@@ -383,7 +383,7 @@ func pgRunNeed(sn store.Snapshot, f pgFailure, e runEntry, now time.Time) pgNeed
 		edit = h.Edit
 	}
 	if edit != nil {
-		need.Fix = &pgAction{Label: "Try again…", URL: edit.Href, Class: "sm", Dialog: true}
+		need.Fix = &pgAction{Label: "Try again…", URL: edit.Href, Class: "sm", Dialog: edit.Dialog()}
 		need.Actions = []pgAction{show}
 	}
 	return need

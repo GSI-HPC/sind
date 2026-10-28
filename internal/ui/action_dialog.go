@@ -33,12 +33,13 @@ var actDialogKeys = []string{
 	action.ConnectOther,
 	// The clusters of a delete of several, and the list to go back to.
 	"clusters", "back",
-	// The fields of the New cluster dialog, which a link may fill in to
+	// The fields of the New cluster page, which a link may fill in to
 	// start from a cluster that exists.
 	"name", "image", "wait", "backup", "db", "api", "submitter", "workers", "size", "cpus", "memory", "tmp", "users",
 	"dtype", "dir", "mkdir", "mount", "monitoring", "pull", "wait_other",
-	// The run that New cluster tries again (actRetry).
-	"from",
+	// The run that New cluster tries again (actRetry), and the start that
+	// its page picks the nodes from (actPresets).
+	"from", "start",
 }
 
 // actRowFieldPattern is a field of a node, a worker group or a row of a
@@ -103,8 +104,8 @@ type actSpec struct {
 	// PickCluster lets the link name no cluster: the dialog then asks for
 	// it first.
 	PickCluster bool
-	// Plan puts the preview into a pane beside the fields, which shows
-	// the plan of the command even while a field is wrong.
+	// Plan makes the preview the plan of the page, which shows the plan
+	// of the command even while a field is wrong.
 	Plan bool
 	// Draft has the browser keep what the user typed until the command
 	// starts or the user discards it, and the dialog opens with it again;
@@ -135,7 +136,7 @@ type actSpec struct {
 // actSpecs are the dialogs, by action id.
 var actSpecs = map[string]actSpec{
 	"create-cluster": {
-		OK: "Create", Wide: true, Plan: true, Draft: true, Follow: true, RealmField: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
+		OK: "Create", Plan: true, Draft: true, Follow: true, RealmField: true, Fields: action.ClusterFieldsOf, Sections: actClusterSections,
 		Title: func(d *actDialog) string {
 			if d.Retry != nil {
 				return "Try " + cmp.Or(d.Form.Get("name"), "the cluster") + " again"
@@ -146,11 +147,13 @@ var actSpecs = map[string]actSpec{
 			if d.Retry != nil {
 				return "Rebuilt from the run " + d.Retry.ID + ". Try again saves the config, then runs sind create cluster with it."
 			}
-			return "sind ui saves the config, then runs sind create cluster with it."
+			return "Pick a start, name the cluster and check the plan. sind ui saves the config, then runs sind create cluster with it."
 		},
 		Defaults: func(d *actDialog) {
 			if d.Retry != nil {
 				d.Retry.defaults(d)
+			} else {
+				d.startDefaults()
 			}
 			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
 			d.def("image", config.DefaultImage)
@@ -160,8 +163,6 @@ var actSpecs = map[string]actSpec{
 				d.Form.Set("wait_other", w)
 			}
 			d.def("wait", action.DefaultWait)
-			d.def("db", "on")
-			d.def("submitter", "on")
 			if !d.Form.Has("wg") {
 				d.Form.Set("wg", "w0")
 				d.Form.Set("w0-count", cmp.Or(d.Form.Get("workers"), "2"))
@@ -291,20 +292,16 @@ type actSection struct {
 	ID string
 	// Fields are those in the section, whose problems it counts.
 	Fields func(f url.Values) []string
-	// Sum is the line that sums the section up.
+	// Sum is the line that sums the section up, nil for none.
 	Sum func(p actPreview) string
 }
 
-// actClusterSections are the sections of the New cluster dialog.
+// actClusterSections are the sections of the page of a new cluster that
+// fold, under More options, and the editor of the data under Your files,
+// which folds too but has no summary of its own.
 var actClusterSections = []actSection{
-	{ID: "users", Fields: action.UserFieldsOf, Sum: actUsersSum},
-	{ID: "identity", Fields: actFields("identity", "ctlusers"), Sum: func(p actPreview) string {
-		mode := cmp.Or(p.Form.Get("identity"), string(config.IdentityLocal))
-		if mode == string(config.IdentityClientIDs) && actOn(p.Form.Get("ctlusers")) {
-			return mode + ", users on the controllers too"
-		}
-		return mode
-	}},
+	{ID: "image", Fields: actFields("image"), Sum: actImageSum},
+	{ID: "size", Fields: actFields("size", "cpus", "memory", "tmp"), Sum: actSizeSum},
 	{ID: "slurm", Fields: actFields(action.SlurmFields()...), Sum: func(p actPreview) string {
 		var files []string
 		for _, s := range action.SlurmFiles {
@@ -317,20 +314,54 @@ var actClusterSections = []actSection{
 		}
 		return "Adds to " + strings.Join(files, ", ")
 	}},
-	{ID: "data", Fields: actFields("dtype", "dir", "mkdir", "mount", "cvmfs"), Sum: func(p actPreview) string {
-		sum := strings.TrimSpace(p.Form.Get("dir"))
-		if p.Form.Get("dtype") == "volume" {
-			sum = "Docker volume"
-		} else if len(p.Cmd.Dirs) > 0 {
-			sum += ", created"
+	{ID: "users", Fields: func(f url.Values) []string {
+		return append(action.UserFieldsOf(f), "identity", "ctlusers", "monitoring")
+	}, Sum: func(p actPreview) string {
+		mode := cmp.Or(p.Form.Get("identity"), string(config.IdentityLocal))
+		if mode == string(config.IdentityClientIDs) && actOn(p.Form.Get("ctlusers")) {
+			mode += ", users on the controllers too"
 		}
-		sum = actWithMount(sum, p.Form)
-		if actOn(p.Form.Get("cvmfs")) {
-			sum += ", CVMFS"
+		monitoring := "no monitoring"
+		if actOn(p.Form.Get("monitoring")) {
+			monitoring = "monitoring"
 		}
-		return sum
+		return actUsersSum(p) + " · " + mode + " · " + monitoring
 	}},
 	{ID: "run", Fields: actFields("pull", "wait", "wait_other"), Sum: actRunSum},
+	{ID: "data", Fields: actFields("dtype", "dir", "mkdir", "mount", "cvmfs")},
+}
+
+// actImageSum sums up the image of a new cluster: its last part, and the
+// Slurm release that sind ui knows of it.
+func actImageSum(p actPreview) string {
+	image := cmp.Or(strings.TrimSpace(p.Form.Get("image")), config.DefaultImage)
+	sum := actImageShort(image)
+	for _, i := range p.Cmd.Images {
+		if i.Image == image && i.Version != "" {
+			sum += " · Slurm " + i.Version
+		}
+	}
+	return sum
+}
+
+// actImageShort is the last part of the name of an image, which names it
+// in a line: sind-node:latest.
+func actImageShort(image string) string { return image[strings.LastIndex(image, "/")+1:] }
+
+// actSizeSum sums up the size that every node takes: Small: 1 CPU · 512m
+// each.
+func actSizeSum(p actPreview) string {
+	label, cpus, memory := "Custom", strings.TrimSpace(p.Form.Get("cpus")), strings.TrimSpace(p.Form.Get("memory"))
+	for _, sz := range action.Sizes {
+		if p.Form.Get("size") == sz.ID {
+			label, cpus, memory = sz.Label, strconv.Itoa(sz.CPUs), sz.Memory
+		}
+	}
+	n, err := strconv.Atoi(cpus)
+	if err != nil {
+		return label
+	}
+	return label + ": " + pgPlural(n, "CPU", "CPUs") + " · " + cmp.Or(memory, config.DefaultMemory) + " each"
 }
 
 // YAMLMode reports whether the user edits the YAML of the config, which
@@ -491,17 +522,9 @@ func (p actPreview) PullHint() string {
 	return "Off, as " + why + "."
 }
 
-// actWithMount adds the mount path of the data to sum, if it is not the
-// default.
-func actWithMount(sum string, f url.Values) string {
-	if m := strings.TrimSpace(f.Get("mount")); m != "" {
-		return sum + ", at " + m
-	}
-	return sum
-}
-
 // actSectionView is a section as a preview shows it.
 type actSectionView struct {
+	// Summary is "" for a section without one.
 	ID, Summary string
 	// Bad is how many problems the section has.
 	Bad int
@@ -511,7 +534,10 @@ type actSectionView struct {
 func (p actPreview) Sections() []actSectionView {
 	var out []actSectionView
 	for _, sec := range p.Spec.Sections {
-		v := actSectionView{ID: sec.ID, Summary: sec.Sum(p)}
+		v := actSectionView{ID: sec.ID}
+		if sec.Sum != nil {
+			v.Summary = sec.Sum(p)
+		}
 		fields := sec.Fields(p.Form)
 		for _, pr := range p.Cmd.Problems {
 			if slices.Contains(fields, pr.Field) {
@@ -549,7 +575,7 @@ func actEffOf(f url.Values) actEff {
 	return e
 }
 
-// actNodeView is a node of the New cluster dialog: a role or a worker group,
+// actNodeView is a node of the New cluster page: a role or a worker group,
 // with its size button and editor.
 type actNodeView struct {
 	Key, Label string
@@ -742,6 +768,9 @@ func actPendingOK(id string, sn store.Snapshot, realm, clusterName string, f act
 		// New cluster tries a run again.
 		return "Try again"
 	}
+	if id == "create-cluster" {
+		return actPageOK(f)
+	}
 	if id != "power" {
 		return ""
 	}
@@ -757,30 +786,59 @@ var actWaits = []actChoice{
 	{"2m", "2m"}, {"5m", "5m"}, {"10m", "10m"}, {"0", "No limit"}, {"other", "Other"},
 }
 
-// actRole is a role of the New cluster dialog that is a checkbox. Word is
-// the help word of the role, and Hint says what it runs, in parts, which
-// name a word of the help where they have one.
+// actRole is a role of New cluster that is a checkbox. Word is the help
+// word of the role; Purpose says what the node does for the user, and Hint
+// what runs on it, in parts, which name a word of the help where they have
+// one. Note is a line about it, if any.
 type actRole struct {
 	Name, Label, Small, Word string
+	Purpose                  string
 	Hint                     []actHintPart
-	// Sub sets the row in below the one above it.
-	Sub bool
+	Note                     string
+	// More puts the row under More nodes, which most clusters do without.
+	More bool
 }
 
 // actHintPart is a part of a hint: text, which explains itself as the
 // help word Word when it has one.
 type actHintPart struct{ Text, Word string }
 
-// actRoles are the roles of the New cluster dialog that are a checkbox.
+// actRoles are the roles of New cluster that are a checkbox: the optional
+// nodes first, then those under More nodes.
 var actRoles = []actRole{
-	{"backup", "backup", "controller-backup", "controller-backup", []actHintPart{{"A second ", ""}, {"slurmctld", "slurmctld"}, {" that takes over. Same image and size as the controller.", ""}}, true},
-	{"db", "db", "", "db", []actHintPart{{"MariaDB", "mariadb"}, {" and ", ""}, {"slurmdbd", "slurmdbd"}, {": accounting.", ""}}, false},
-	{"api", "api", "", "api", []actHintPart{{"slurmrestd", "slurmrestd"}, {". Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", ""}}, false},
-	{"submitter", "submitter", "", "submitter", []actHintPart{{"The login node. sind enter puts you here.", ""}}, false},
+	{Name: "db", Label: "db", Word: "db", Purpose: "keeps job history for sacct", Hint: []actHintPart{{"MariaDB", "mariadb"}, {", ", ""}, {"slurmdbd", "slurmdbd"}}},
+	{Name: "submitter", Label: "submitter", Word: "submitter", Purpose: "the login node: sind enter puts you here"},
+	{Name: "backup", Label: "backup", Small: "controller-backup", Word: "controller-backup", Purpose: "takes over when the controller fails",
+		Hint: []actHintPart{{"slurmctld", "slurmctld"}}, Note: "Same image and size as the controller.", More: true},
+	{Name: "api", Label: "api", Word: "api", Purpose: "answers the Slurm REST API", Hint: []actHintPart{{"slurmrestd", "slurmrestd"}},
+		Note: "Needs slurmrestd in the image; sind-node images have it from Slurm 26.05.", More: true},
 }
 
-// Roles are the roles of the New cluster dialog that are a checkbox.
-func (d *actDialog) Roles() []actRole { return actRoles }
+// actRoleRow is a role of New cluster as its row shows it, with the
+// dialog D whose form ticks it.
+type actRoleRow struct {
+	actRole
+	D *actDialog
+}
+
+// Roles are the roles of New cluster that are a checkbox, but those under
+// More nodes, or, with more, only those.
+func (d *actDialog) Roles(more bool) []actRoleRow {
+	var out []actRoleRow
+	for _, r := range actRoles {
+		if r.More == more {
+			out = append(out, actRoleRow{r, d})
+		}
+	}
+	return out
+}
+
+// DataOpen reports whether the fields of the data storage of New cluster
+// start open: while CVMFS is on or the mount path is not the default, which
+// the map of the files does not show.
+func (d *actDialog) DataOpen() bool {
+	return d.On("cvmfs") || strings.TrimSpace(d.Form.Get("mount")) != ""
+}
 
 // On reports whether the checkbox field is ticked: on, or the 1 of a link.
 func (d *actDialog) On(field string) bool { return actOn(d.Form.Get(field)) }
@@ -954,19 +1012,6 @@ func (d *actDialog) RealmChoices() []actRealmChoice {
 	return out
 }
 
-// RealmNames are the realms that the realm field suggests: those that sind
-// ui sees, and the realm of the dialog.
-func (d *actDialog) RealmNames() []string {
-	names := []string{d.Realm}
-	for _, r := range d.Snap.Realms {
-		if r.Name != d.Realm {
-			names = append(names, r.Name)
-		}
-	}
-	slices.Sort(names)
-	return names
-}
-
 // RealmHint says what the realm field of the dialog does.
 func (d *actDialog) RealmHint() string {
 	if d.Retry != nil && d.Retry.Realm == "" {
@@ -993,67 +1038,26 @@ func actLocks(a action.Action, f action.Form) bool {
 // actDialogRoute answers with a dialog, filled in with the fields in the
 // query. The script of the dialogs posts the same link with the field
 // draft, the user's draft of a dialog that keeps one, which then fills in
-// the fields where it fits the link (actDraftOf).
+// the fields where it fits the link (actDraftOf). A dialog whose form is a
+// page sends the browser there, with the query of the link.
 func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	a, ok := actLookup(s, w, r)
 	if !ok {
 		return
 	}
-	keys := actLinkKeys(r.URL.Query())
-	v, err := s.View(r, keys...)
-	if err != nil {
-		s.Fail(w, r, err)
+	if p := actPages[a.ID]; p != "" {
+		to := p
+		if q := r.URL.RawQuery; q != "" {
+			to += "?" + q
+		}
+		page.Redirect(w, r, to)
 		return
 	}
-	spec := actSpecs[a.ID]
-	d := &actDialog{
-		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
-		OpGroups: action.PowerGroups(), Waits: actWaits,
-	}
-	if id := r.URL.Query().Get("task"); id != "" {
-		// Edit and try again: the form of the task, which the link may
-		// change.
-		t, ok := v.Snap.Task(id)
-		if !ok || t.Action != a.ID {
-			s.Fail(w, r, fmt.Errorf("task %s of %s: %w", id, a.ID, ErrNotFound))
-			return
-		}
-		d.Form = actKeptForm(t.Form)
-	}
-	for _, k := range keys {
-		if vals := v.Params[k]; len(vals) > 0 {
-			d.Form[k] = slices.Clone(vals)
-		}
-	}
-	d.Realm = action.Realm(d.Form)
-	if err := config.CheckName("realm", d.Realm); err != nil {
-		s.Fail(w, r, fmt.Errorf("realm: %v: %w", err, ErrBadRequest))
+	d, ok := actOpen(s, w, r, a)
+	if !ok {
 		return
 	}
-	d.Form.Set("realm", d.Realm)
-	if a.ID == "create-cluster" {
-		if d.Retry = actRetryOf(v.Snap, d.Form.Get("from")); d.Retry == nil {
-			d.Form.Del("from")
-		}
-	}
-	if draft, ok := actDraftOf(spec, r.PostForm.Get("draft"), d.Form); ok {
-		d.Form, d.Draft = draft, true
-	}
-	switch {
-	case actNoCluster(spec, d.Form):
-		d.Picking = true
-		d.Form.Del("cluster")
-	case spec.NeedsCluster:
-		if err := d.pickCluster(); err != nil {
-			s.Fail(w, r, err)
-			return
-		}
-	}
-	if spec.Defaults != nil && !d.Draft {
-		spec.Defaults(d)
-	}
-	d.Typed, d.Confirms = a.Want(d.Form), a.Typed != nil
-	d.Title, d.Lead = spec.Title(d), spec.Lead(d)
+	v := d.View
 	if !page.IsHTMX(r) {
 		// A dialog opened by its URL, as a link without script or the
 		// jump box does: the dialog over a page of its own.
@@ -1066,12 +1070,80 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	s.Write(w, r, http.StatusOK, "act-dialog", v.withData(d))
 }
 
+// actOpen fills in the form of the action a from the query of the
+// request, a task to edit, the user's draft or the defaults, or fails the
+// request. The form of a page that the link gives no realm takes the
+// realm of the scope, or of the draft.
+func actOpen(s *Server, w http.ResponseWriter, r *http.Request, a action.Action) (*actDialog, bool) {
+	keys := actLinkKeys(r.URL.Query())
+	v, err := s.View(r, keys...)
+	if err != nil {
+		s.Fail(w, r, err)
+		return nil, false
+	}
+	spec := actSpecs[a.ID]
+	d := &actDialog{
+		View: v, ID: a.ID, Spec: spec, Form: url.Values{},
+		OpGroups: action.PowerGroups(), Waits: actWaits,
+	}
+	if id := r.URL.Query().Get("task"); id != "" {
+		// Edit and try again: the form of the task, which the link may
+		// change.
+		t, ok := v.Snap.Task(id)
+		if !ok || t.Action != a.ID {
+			s.Fail(w, r, fmt.Errorf("task %s of %s: %w", id, a.ID, ErrNotFound))
+			return nil, false
+		}
+		d.Form = actKeptForm(t.Form)
+	}
+	for _, k := range keys {
+		if vals := v.Params[k]; len(vals) > 0 {
+			d.Form[k] = slices.Clone(vals)
+		}
+	}
+	anyRealm := actPages[a.ID] != "" && !d.Form.Has("realm")
+	if anyRealm && v.Scope != "" {
+		d.Form.Set("realm", v.Scope)
+	}
+	if err := config.CheckName("realm", action.Realm(d.Form)); err != nil {
+		s.Fail(w, r, fmt.Errorf("realm: %v: %w", err, ErrBadRequest))
+		return nil, false
+	}
+	d.Form.Set("realm", action.Realm(d.Form))
+	if a.ID == "create-cluster" {
+		if d.Retry = actRetryOf(v.Snap, d.Form.Get("from")); d.Retry == nil {
+			d.Form.Del("from")
+		}
+	}
+	if draft, ok := actDraftOf(spec, r.PostForm.Get("draft"), d.Form, anyRealm); ok {
+		d.Form, d.Draft = draft, true
+	}
+	d.Realm = action.Realm(d.Form)
+	switch {
+	case actNoCluster(spec, d.Form):
+		d.Picking = true
+		d.Form.Del("cluster")
+	case spec.NeedsCluster:
+		if err := d.pickCluster(); err != nil {
+			s.Fail(w, r, err)
+			return nil, false
+		}
+	}
+	if spec.Defaults != nil && !d.Draft {
+		spec.Defaults(d)
+	}
+	d.Typed, d.Confirms = a.Want(d.Form), a.Typed != nil
+	d.Title, d.Lead = spec.Title(d), spec.Lead(d)
+	return d, true
+}
+
 // actDraftOf returns the fields of the draft that the browser kept of a
 // dialog, raw as a form encodes them, when the dialog keeps drafts and the
-// link fits the draft: the same realm, and no other field filled in, as a
-// link with fields of its own starts from them. The draft leaves out the
-// fields that belong to one post, as a task does, and the draft itself.
-func actDraftOf(spec actSpec, raw string, link url.Values) (url.Values, bool) {
+// link fits the draft: the same realm, unless anyRealm, as the link of a
+// page names none, and no other field filled in, as a link with fields of
+// its own starts from them. The draft leaves out the fields that belong to
+// one post, as a task does, and the draft itself.
+func actDraftOf(spec actSpec, raw string, link url.Values, anyRealm bool) (url.Values, bool) {
 	if !spec.Draft || raw == "" {
 		return nil, false
 	}
@@ -1081,7 +1153,7 @@ func actDraftOf(spec actSpec, raw string, link url.Values) (url.Values, bool) {
 		}
 	}
 	f, err := url.ParseQuery(raw)
-	if err != nil || actCheckForm(f) != nil || action.Realm(f) != link.Get("realm") {
+	if err != nil || actCheckForm(f) != nil || !anyRealm && action.Realm(f) != link.Get("realm") || config.CheckName("realm", action.Realm(f)) != nil {
 		return nil, false
 	}
 	f = actKeptForm(f)
@@ -1144,6 +1216,8 @@ type actPreview struct {
 	// action asks for it.
 	Typed, Why string
 	Confirms   bool
+	// Home is the home directory of the user, which the plan writes as ~.
+	Home string
 }
 
 // OKButton is the button that runs the command, as the preview says: its
@@ -1177,14 +1251,20 @@ func actWhy(want, typed string) string {
 	return typed + " is not " + want + ". Type the name as it is shown."
 }
 
-// actMaxTiles is the most nodes that a plan draws one by one.
-const actMaxTiles = 16
+// actMaxTiles is the most nodes that a dialog draws one by one, and
+// actPlanTiles the most that the plan of New cluster draws, in two rows,
+// so that the command stays in view.
+const actMaxTiles, actPlanTiles = 16, 6
 
-// Tiles are the nodes that the plan draws: all, or the first ones when
-// there are more than actMaxTiles.
+// Tiles are the nodes that the preview draws: all, or the first ones when
+// there are more than it draws.
 func (p actPreview) Tiles() []action.PlannedNode {
-	if len(p.Cmd.Nodes) > actMaxTiles {
-		return p.Cmd.Nodes[:actMaxTiles-1]
+	most := actMaxTiles
+	if p.Spec.Plan {
+		most = actPlanTiles
+	}
+	if len(p.Cmd.Nodes) > most {
+		return p.Cmd.Nodes[:most-1]
 	}
 	return p.Cmd.Nodes
 }
@@ -1217,9 +1297,6 @@ func (p actPreview) NodeViews() []actNodeView {
 
 // HostMB is the memory of the Docker host in MiB, 0 when unknown.
 func (p actPreview) HostMB() int { return int(p.Snap.Docker.MemTotal >> 20) }
-
-// HostHigh is the memory of the host above which the plan warns, in MiB.
-func (p actPreview) HostHigh() int { return p.HostMB() * action.HostMemoryWarn / 100 }
 
 // NodesText counts nodes: "1 node", "3 nodes".
 func (p actPreview) NodesText(n int) string { return pgPlural(n, "node", "nodes") }
@@ -1371,10 +1448,12 @@ func (p actPreview) Totals() string {
 	return out
 }
 
-// Warnings is how many warnings the command has, which the pill counts.
+// Warnings is how many warnings the command has, which the pill counts:
+// its own, those of the Doctor that the nodes on the host reach, and a new
+// realm.
 func (p actPreview) Warnings() int {
-	n := len(p.Cmd.Warns)
-	if p.Cmd.Budget != nil && p.Cmd.Budget.Inotify != "" {
+	n := len(p.Cmd.Warns) + len(p.HostWarns())
+	if p.RealmNote() != nil {
 		n++
 	}
 	return n
@@ -1399,6 +1478,9 @@ type actTextPart struct {
 	Text string
 	Mono bool
 }
+
+// Pieces cuts a name of the part where a line may break, as pgText does.
+func (t actTextPart) Pieces() []pgPiece { return pgText(t.Text).Pieces() }
 
 // NoteParts are the notes of the command, each in parts: a note writes a
 // name in backquotes, as "the partition `all`", which the dialog sets in
@@ -1441,8 +1523,8 @@ func (p actPreview) FirstWarn() string {
 	switch {
 	case len(p.Cmd.Warns) > 0:
 		return p.Cmd.Warns[0]
-	case p.Cmd.Budget != nil && p.Cmd.Budget.Inotify != "":
-		return "With " + pgPlural(p.Cmd.Budget.Nodes(), "node", "nodes") + ", the inotify limit of the host can run out."
+	case len(p.HostWarns()) > 0:
+		return p.HostWarns()[0].Short
 	}
 	return ""
 }
@@ -1471,7 +1553,7 @@ func (p actPreview) Defaulted() string {
 
 // actEvaluate builds the command of the form and decides whether it may run.
 func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) actPreview {
-	p := actPreview{View: v, ID: a.ID, Spec: actSpecs[a.ID], Form: f}
+	p := actPreview{View: v, ID: a.ID, Spec: actSpecs[a.ID], Form: f, Home: ctx.Home}
 	p.Danger = p.Spec.Danger
 	if op, ok := action.PowerOpOf(f.Get("op")); a.ID == "power" && ok && op.Danger {
 		p.Danger = true
@@ -1681,7 +1763,7 @@ func actKeptForm(f url.Values) url.Values {
 // actEditHref is the dialog of a task's action, filled in with the form of
 // the task.
 func actEditHref(t store.Task) string {
-	return "/dialogs/" + t.Action + "?task=" + url.QueryEscape(t.ID)
+	return pgDialog(t.Action, "task", t.ID)
 }
 
 // actSameCommand reports whether cmd is the command that the task ran:

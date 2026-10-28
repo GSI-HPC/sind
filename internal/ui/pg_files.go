@@ -21,13 +21,13 @@ type pgFiles struct {
 	Kind string
 	// Host is the directory of the host or the name of the volume, Node
 	// the path in every node.
-	Host, Node string
+	Host, Node pgText
 	// Text says it in a sentence.
-	Text string
+	Text pgText
 	// Copy is the command that copies a job script in from this host: cp
 	// into the directory, or docker cp into a node of the cluster, which
 	// mounts the volume; "" while there is no place to copy to.
-	Copy string
+	Copy pgText
 }
 
 // pgFilesOf returns where the files are with the data mount m, whose
@@ -35,23 +35,23 @@ type pgFiles struct {
 // through. A volume that is missing (m.OK false) has nothing to copy to.
 func pgFilesOf(m cluster.MountPoint, container string) pgFiles {
 	node := cmp.Or(m.Path, cluster.DefaultDataMountPath)
-	f := pgFiles{Host: m.Source, Node: node}
+	f := pgFiles{Host: pgText(m.Source), Node: pgText(node)}
 	switch {
 	case m.Type == config.StorageHostPath:
 		f.Kind = "On this host"
 		if m.Source == "" {
-			f.Text = "Say which directory of this host the nodes see at " + node + "."
+			f.Text = pgText("Say which directory of this host the nodes see at " + node + ".")
 			return f
 		}
-		f.Text = "Put your batch script in " + m.Source + ". Every node sees it at " + node + ", and the output of your jobs lands there too."
-		f.Copy = "cp job.sh " + pgShellPath(strings.TrimSuffix(m.Source, "/")+"/")
+		f.Text = pgText("Put your batch script in " + m.Source + ". Every node sees it at " + node + ", and the output of your jobs lands there too.")
+		f.Copy = pgText("cp job.sh " + pgShellPath(strings.TrimSuffix(m.Source, "/")+"/"))
 	case !m.OK:
 		f.Kind = "Docker volume"
-		f.Text = "Docker has no volume " + m.Source + ", so " + node + " is empty in the nodes."
+		f.Text = pgText("Docker has no volume " + m.Source + ", so " + node + " is empty in the nodes.")
 	default:
 		f.Kind = "Docker volume"
-		f.Text = "The volume " + m.Source + " is " + node + " in every node. Jobs read scripts from it and write their output to it."
-		f.Copy = "docker cp job.sh " + action.Quote([]string{container + ":" + strings.TrimSuffix(node, "/") + "/"})
+		f.Text = pgText("The volume " + m.Source + " is " + node + " in every node. Jobs read scripts from it and write their output to it.")
+		f.Copy = pgText("docker cp job.sh " + action.Quote([]string{container + ":" + strings.TrimSuffix(node, "/") + "/"}))
 	}
 	return f
 }
@@ -77,6 +77,34 @@ func pgFilesNode(nodes []pgNode) string {
 			if out == "" {
 				out = n.Container
 			}
+		}
+	}
+	return out
+}
+
+// pgText is a text that holds names, paths or a command, which a line
+// should not break inside: Pieces cuts it where it may break.
+type pgText string
+
+// pgPiece is a piece of a pgText: a word, or the part of a path up to and
+// with a slash, which the page keeps whole while it fits on a line
+// (pg-pieces), or a space between words.
+type pgPiece struct {
+	Text  string
+	Space bool
+}
+
+// Pieces cuts the text into words, and the words after each slash, so
+// that a line breaks between two words or after a slash of a long path,
+// never at a hyphen of a name such as sind-dev-submitter.
+func (t pgText) Pieces() []pgPiece {
+	var out []pgPiece
+	for i, w := range strings.Split(string(t), " ") {
+		if i > 0 {
+			out = append(out, pgPiece{Text: " ", Space: true})
+		}
+		for _, s := range actSlashSegs(w) {
+			out = append(out, pgPiece{Text: s})
 		}
 	}
 	return out

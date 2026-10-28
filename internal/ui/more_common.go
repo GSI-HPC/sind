@@ -50,7 +50,7 @@ func moreNoRealms(d store.DockerState) moreNotice {
 	case d.Err != "":
 		return moreNotice{Text: "Docker is not reachable: " + d.Err + ".", Href: "/doctor", HrefText: "Open Doctor"}
 	default:
-		return moreNotice{Text: "No realm yet. A realm exists once it has a cluster.", Href: "/dialogs/create-cluster", HrefText: "New cluster…"}
+		return moreNotice{Text: "No realm yet. A realm exists once it has a cluster.", Href: "/clusters/new", HrefText: "New cluster…"}
 	}
 }
 

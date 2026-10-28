@@ -156,6 +156,11 @@ func TestPgRunNeedTryAgain(t *testing.T) {
 	sn.Tasks[0].Form = map[string][]string{"realm": {"sind"}, "cluster": {"dev"}}
 	need = pgRunNeed(sn, pgFailure{Run: failed}, runEntryOf(sn, failed), pgNow)
 	assert.Equal(t, "/dialogs/create-worker?task=t", need.Fix.URL)
+	// New cluster is a page: its Try again is a plain link.
+	sn.Tasks[0].Action = "create-cluster"
+	need = pgRunNeed(sn, pgFailure{Run: failed}, runEntryOf(sn, failed), pgNow)
+	assert.Equal(t, "/clusters/new?task=t", need.Fix.URL)
+	assert.False(t, need.Fix.Dialog)
 }
 
 func TestPgNeedsOfTheOverview(t *testing.T) {

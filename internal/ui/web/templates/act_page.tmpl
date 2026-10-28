@@ -1,0 +1,307 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/*
+  The page of New cluster, /clusters/new (action_page.go): the form at the
+  left in numbered sections, the plan at the right, which stays in view,
+  with the button that runs the command at its foot. It is the form of a
+  dialog in all but its frame: the routes of the dialogs preview and run it,
+  and act.js keeps its draft, asks before Cancel loses changes, and replaces
+  the page with the run once the command starts. .Data is the *actDialog;
+  the preview, act-plan, is an actPreview.
+*/}}
+
+{{define "act-page"}}{{with .Data}}
+<div class="crumbs"><a href="/clusters">Clusters</a> / {{if .Retry}}Try again{{else}}New cluster{{end}}</div>
+<div class="head"><div class="t"><div class="act-h1"><h1 id="act-title">{{.Title}}</h1><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for New cluster" title="Help for New cluster">?</button></div>
+  <div class="sub muted" id="act-lead">{{.Lead}}</div></div></div>
+{{end}}{{template "act-page-form" .}}{{end}}
+
+{{/* act-page-form is the form of the page, which the script of the
+dialogs also gets alone, as it opens the page again with the user's draft.
+A form ignores the morph extension of the page, as a dialog does. */}}
+{{define "act-page-form"}}{{with .Data}}
+<div class="act-page" id="act-dialog" data-act-page hx-ext="ignore:morph">
+<form class="act-pform" autocomplete="off" aria-labelledby="act-title" data-act-draft="{{.ID}}"{{if .Draft}} data-act-restored{{end}} data-act-back="/clusters"
+  hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
+  {{template "csrf-field" .View}}
+  {{if .Draft}}<div class="callout act-draftbar" id="act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>
+  <div class="callout warn act-draftbar" id="act-ask-restart" role="group" aria-labelledby="act-ask-rq" hidden><span id="act-ask-rq">Start over and lose your changes?</span><button type="button" class="btn sm" data-act-keep>Keep editing</button><button type="button" class="btn sm danger solid" data-act-discard>Discard</button></div>{{end}}
+  <div class="act-np">
+    <div class="act-form act-npform{{if .YAMLMode}} act-yamlmode{{end}}">{{template "act-new-cluster" .}}</div>
+    <aside class="act-pcard" id="act-plan" aria-label="Plan">
+      {{template "act-preview-slot" .}}
+      <div class="act-pf" id="act-mf">
+        <span class="hint act-tot" id="act-tot"></span>
+        <span class="act-pfst"><span class="act-status" id="act-status"></span><span class="hint act-saved" id="act-saved"></span><a class="act-pfplan" href="#act-preview">Show the plan</a></span>
+        <button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}
+      </div>
+      <div class="act-pf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
+        <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Leave and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
+        <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
+      </div>
+    </aside>
+  </div>
+  <span class="vh" id="act-say" role="status"></span><span id="act-start-on" data-start="{{.StartOn}}" hidden></span>
+</form>
+</div>
+{{end}}{{end}}
+
+{{/* act-new-cluster is the form of a new cluster, in sections that CSS
+numbers: where it starts from, its name and realm, its nodes, its files,
+and the options that most first clusters keep. In YAML mode, the editor of
+the YAML below the name and the realm takes the place of all but them and
+the run options (act-noyaml). */}}
+{{define "act-new-cluster"}}
+<section class="act-sect{{if not .Retry}} act-noyaml{{end}}" aria-labelledby="act-h-start">
+  <h2 id="act-h-start"><span class="act-n" aria-hidden="true"></span>Start from{{if not .Retry}}<span class="act-sr act-noyaml">You can change every value below.</span>{{end}}</h2>
+  {{with .Retry}}<input type="hidden" name="from" value="{{.ID}}">
+  <div class="callout act-retry"><b>This run came from {{.Source}}. {{.Lack}}</b>
+    <ul><li>Nodes: {{if .HasNodes}}{{.Nodes}}, as the run had them.{{else}}not in the log, so the defaults of New cluster.{{end}}</li>
+    <li>Image: {{with .Image}}<span class="mono">{{.}}</span>, as the run pulled it.{{else}}not in the log, so the default.{{end}}</li>
+    {{with .OldWait}}<li>Wait: {{.}} → {{$.Retry.NewWaitWord}}, as {{$.Retry.Why}}.</li>{{end}}
+    <li>Not in the log: CPUs, memory, /data, users and Slurm lines. They have the defaults of New cluster.</li></ul>
+    <div class="act-inline"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><a class="btn sm" href="/runs/{{.ID}}">Show the {{.Word}} run</a></div></div>
+  <p class="hint act-retry-yaml">Try again runs your YAML in place of the {{.Word}} run {{.ID}}. Run options keep its wait and its pull.</p>
+  {{else}}
+  <div class="act-tpl act-noyaml" role="group" aria-labelledby="act-h-start">
+    {{range .Starts}}<button type="button" class="act-tc" data-act-start="{{.ID}}" data-act-set="{{.Set}}" aria-pressed="{{.On}}">{{template "act-squares" .Squares}}<b>{{.Title}}</b><small>{{.Text}}</small><span class="act-tmeta">{{.Nodes}} nodes</span></button>{{end}}
+    {{if .Copies}}<button type="button" class="act-tc" id="act-copy" data-act-start="copy" data-act-fold="act-copies" aria-expanded="false" aria-controls="act-copies" aria-pressed="{{eq .StartOn "copy"}}">{{template "act-squares" .CopySquares}}<b>Copy a cluster</b><small>The nodes of a cluster you have: {{.CopyNames}}</small><span class="act-tmeta" id="act-copy-foot">{{.CopyFoot}}</span></button>{{end}}
+  </div>
+  {{with .Copies}}<div class="act-copies act-noyaml" id="act-copies" role="group" aria-label="Clusters to copy" hidden>{{range .}}<button type="button" class="act-cprow" data-act-start="copy:{{.Realm}}/{{.Name}}" data-act-set="{{.Set}}"><span class="act-cprn"><b class="mono">{{.Name}}</b><small>realm {{.Realm}} · {{.Text}}</small></span></button>{{end}}</div>{{end}}
+  <input type="hidden" id="act-start" name="start" value="{{.Val "start"}}">
+  <div class="act-inline act-yamlstart act-noyaml"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><span class="hint">Paste a cluster config, or open a file of one.</span></div>
+  {{end}}
+</section>
+
+<section class="act-sect" aria-labelledby="act-h-name">
+  <h2 id="act-h-name"><span class="act-n" aria-hidden="true"></span>Name it</h2>
+  <div class="act-card"><div class="row act-idrow">
+    <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}"{{if .Defaulted "name"}} data-act-select{{end}} autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-ok-name act-hint-name">
+      <span class="err" id="act-err-name"></span><span class="act-good" id="act-ok-name"></span><span class="hint" id="act-hint-name">Use a–z, 0–9 and -.</span></div>
+    {{template "act-realm" .}}
+  </div></div>
+  {{template "act-yamled" .}}
+</section>
+
+<section class="act-sect act-noyaml" aria-labelledby="act-h-nodes">
+  <h2 id="act-h-nodes"><span class="act-n" aria-hidden="true"></span>Nodes{{if .FromRun "nodes"}} <span class="chip act-fromrun">from the run</span>{{end}}<span class="act-sr" id="act-ncount"></span></h2>
+  <div class="act-roles" id="act-roles">
+    <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><span class="act-purp"><b data-word="controller">controller</b> schedules your jobs <span class="act-d"><span data-word="slurmctld">slurmctld</span></span></span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
+    {{template "act-ned" (.Node "controller")}}
+    <div class="act-groups" id="act-groups">{{range .Groups}}{{template "act-group" ($.Node .)}}{{end}}</div>
+    {{range .Roles false}}{{template "act-role" .}}{{end}}
+    <details class="act-morenodes" id="act-morenodes"{{if ne .MoreNodes "none"}} open{{end}}><summary><span class="act-st">More nodes</span><span class="act-ss" id="act-sum-more">{{.MoreNodes}}</span></summary>
+      {{range .Roles true}}{{template "act-role" .}}{{end}}
+      <div class="act-nr act-wgadd"><span></span><span></span><span class="act-lab"><span><button type="button" class="btn sm" data-act-wgadd>+ Add worker group</button></span><span class="hint">Each group has its own size. sind create worker later copies the last group.</span></span></div>
+    </details>
+  </div>
+  <span id="act-eff" hidden></span>
+  <template id="act-wg-tpl">{{template "act-group" (.Node "__WG__")}}</template>
+</section>
+
+<section class="act-sect act-noyaml" aria-labelledby="act-h-files">
+  <h2 id="act-h-files"><span class="act-n" aria-hidden="true"></span>Your files<span class="act-sb" id="act-bad-data"></span></h2>
+  <div class="act-card act-files">
+    <div class="act-fhead"><div class="act-fmap" id="act-fmap">{{template "pg-files" .Files}}</div>
+      <button type="button" class="btn sm" data-act-fold="act-fed" aria-expanded="{{.DataOpen}}" aria-controls="act-fed">Change…</button></div>
+    <div class="act-fed" id="act-fed"{{if not .DataOpen}} hidden{{end}}>
+      <div class="seg act-seg" role="radiogroup" aria-label="Data storage">
+        <label><input type="radio" id="act-dtype" name="dtype" value="hostPath"{{if ne (.Val "dtype") "volume"}} checked{{end}}><span>Host directory</span></label><label><input type="radio" id="act-dtype-volume" name="dtype" value="volume"{{if eq (.Val "dtype") "volume"}} checked{{end}}><span>Docker volume</span></label></div>
+      <span class="err" id="act-err-dtype"></span>
+      <div class="row">
+        <div class="fld act-wide" data-act-dtype="hostPath"{{if eq (.Val "dtype") "volume"}} hidden{{end}}><label for="act-dir">Directory</label><input type="text" id="act-dir" name="dir" value="{{.Val "dir"}}" autocapitalize="off" spellcheck="false"{{if .DirFollows}} data-act-follow{{end}} aria-describedby="act-err-dir act-hint-dir">
+          <span class="err" id="act-err-dir"></span><span class="hint" id="act-hint-dir">On the host. Jobs write here as root.</span></div>
+        <p class="hint act-wide" data-act-dtype="volume"{{if ne (.Val "dtype") "volume"}} hidden{{end}}>Docker keeps the files in the volume above, which sind makes with the cluster.</p>
+        <div class="fld"><label for="act-mount">Mount path</label><input type="text" id="act-mount" name="mount" value="{{.Val "mount"}}" placeholder="/data" autocapitalize="off" spellcheck="false" aria-describedby="act-err-mount act-hint-mount">
+          <span class="err" id="act-err-mount"></span><span class="hint" id="act-hint-mount">In the nodes.</span></div>
+      </div>
+      <label class="act-nr act-box" data-act-dtype="hostPath"{{if eq (.Val "dtype") "volume"}} hidden{{end}}><input type="checkbox" id="act-mkdir" name="mkdir"{{if .On "mkdir"}} checked{{end}} aria-describedby="act-err-mkdir"><span class="act-lab"><b>Create the directory if it is missing</b><span class="hint">Docker mounts only a directory that exists.</span><span class="err" id="act-err-mkdir"></span></span></label>
+      <label class="act-nr act-box"><input type="checkbox" id="act-cvmfs" name="cvmfs"{{if .On "cvmfs"}} checked{{end}} aria-describedby="act-err-cvmfs"><span class="act-lab"><b>CVMFS</b><span class="hint">Mounts CVMFS read-only at /cvmfs on every node, from the cvmfs Docker volume plugin or from /cvmfs of the host.</span><span class="err" id="act-err-cvmfs"></span></span></label>
+      <span class="hint">sind ui writes the data storage into the config, so the saved file alone makes the same cluster again.</span>
+    </div>
+  </div>
+</section>
+
+<section class="act-sect" aria-labelledby="act-h-more">
+  <h2 id="act-h-more"><span class="act-n" aria-hidden="true"></span>More options<span class="act-sr act-noyaml">Most first clusters need none of these.</span></h2>
+  <details class="act-sec act-noyaml" id="act-sec-image"{{if .FromRun "image"}} open{{end}}><summary><span class="act-st">Image</span>{{if .FromRun "image"}}<span class="chip act-fromrun">from the run</span>{{end}}<span class="act-ss" id="act-sum-image"></span><span class="act-sb" id="act-bad-image"></span></summary>
+    <div class="act-sbody"><div class="fld"><label for="act-image">Image{{if .FromRun "image"}} <span class="chip act-fromrun">from the run</span>{{end}}</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
+      <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div></div>
+  </details>
+  <details class="act-sec act-noyaml" id="act-sec-size"{{if .Is "size" "x"}} open{{end}}><summary><span class="act-st">Node sizes</span><span class="act-ss" id="act-sum-size"></span><span class="act-sb" id="act-bad-size"></span></summary>
+    <div class="act-sbody"><div class="fld"><span class="lbl" id="act-size-lbl">Every node</span>
+      <div class="act-size">
+        <div class="seg act-seg act-sizes" role="radiogroup" aria-labelledby="act-size-lbl">{{range .Sizes}}<label><input type="radio" name="size" value="{{.ID}}"{{if $.Is "size" .ID}} checked{{end}}{{if eq .ID "s"}} id="act-size"{{end}}><span>{{.Label}}<small>{{.CPUs}} CPU{{if ne .CPUs 1}}s{{end}} · {{.Memory}} · /tmp {{or .TmpSize "256m"}}</small></span></label>{{end}}<label><input type="radio" name="size" value="x"{{if .Is "size" "x"}} checked{{end}}><span>Custom<small>your values</small></span></label></div>
+        <div class="row act-custom">
+          <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" min="1" aria-describedby="act-err-cpus"><span class="err" id="act-err-cpus"></span></div>
+          <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" list="act-memories" placeholder="512m" autocapitalize="off" spellcheck="false" aria-describedby="act-err-memory act-hint-memory">
+            <span class="err" id="act-err-memory"></span><span class="hint" id="act-hint-memory">Such as 512m, 2g or 1.5g.</span></div>
+          <div class="fld"><label for="act-tmp">/tmp</label><input type="text" id="act-tmp" name="tmp" value="{{.Val "tmp"}}" placeholder="256m" autocapitalize="off" spellcheck="false" aria-describedby="act-err-tmp"><span class="err" id="act-err-tmp"></span></div>
+        </div>
+      </div>
+      <span class="err" id="act-err-size"></span>
+      <span class="hint">Every node takes these values. The size button of a node changes them for that node or worker group.</span>
+      <datalist id="act-memories"><option value="512m"></option><option value="1g"></option><option value="2g"></option><option value="4g"></option><option value="8g"></option></datalist></div></div>
+  </details>
+  <details class="act-sec act-slurm act-noyaml" id="act-sec-slurm"{{range .SlurmFiles}}{{if $.Val (print "slurm-" .ID)}} open{{end}}{{end}}><summary><span class="act-st">Slurm config</span><span class="act-ss" id="act-sum-slurm"></span><span class="act-sb" id="act-bad-slurm"></span></summary>
+    <div class="act-sbody">
+      <div class="seg act-seg act-stabs" role="radiogroup" aria-label="Slurm config file">{{range .SlurmFiles}}<label><input type="radio" name="stab" value="{{.ID}}"{{if $.Is "stab" .ID}} checked{{end}}><span>{{.ID}}<span class="act-dot" id="act-dot-{{.ID}}"></span></span></label>{{end}}</div>
+      {{range .SlurmFiles}}<div class="fld act-sl act-sl-{{.ID}}"><label for="act-slurm-{{.ID}}">Lines to add to <span class="mono">{{.File}}</span></label>
+        <textarea id="act-slurm-{{.ID}}" name="slurm-{{.ID}}" rows="6" placeholder="such as {{.Example}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-slurm-{{.ID}}">{{$.Val (print "slurm-" .ID)}}</textarea><span class="err" id="act-err-slurm-{{.ID}}"></span></div>{{end}}
+      <span class="hint">sind writes these lines after its own, and Slurm takes the last value of a parameter, so yours wins. sind checks only a few parameters, such as SlurmctldHost with a backup controller and the database ones of slurmdbd.conf. The plan warns when slurm.conf sets ClusterName, SlurmctldHost, SlurmUser, the spool directories or PlugStackConfig, which the cluster needs as sind sets them.</span>
+    </div>
+  </details>
+  <details class="act-sec act-noyaml" id="act-sec-users"{{if or (.Rows "user") (.Rows "group") (.Rows "account") (ne (.Val "identity") "local") (.On "monitoring")}} open{{end}}><summary><span class="act-st">Users, identity, monitoring</span><span class="act-ss" id="act-sum-users"></span><span class="act-sb" id="act-bad-users"></span></summary>
+    <div class="act-sbody">
+      <div class="fld"><span class="lbl">Users</span>
+        <div class="act-rows" id="act-rows-user">{{range .Rows "user"}}{{template "act-user" .}}{{end}}</div>
+        <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="user" data-act-into="act-rows-user" data-act-prefix="u">+ Add user</button><span class="hint">sind creates them on the nodes, with a home in /home. An empty UID takes the next free one from 1000.</span></div></div>
+      <div class="fld"><span class="lbl">Groups</span>
+        <div class="act-rows" id="act-rows-group">{{range .Rows "group"}}{{template "act-group-row" .}}{{end}}</div>
+        <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="group" data-act-into="act-rows-group" data-act-prefix="g">+ Add group</button><span class="hint">For the group and groups of a user. Each user has a private group of its own name too.</span></div></div>
+      <div class="fld"><span class="lbl">Slurm accounts</span>
+        <div class="act-rows" id="act-rows-account">{{range .Rows "account"}}{{template "act-account" .}}{{end}}</div>
+        <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children. A new cluster has only the QOS normal; sind creates no QOS.</span></div></div>
+      <datalist id="act-dl-groups"></datalist><datalist id="act-dl-accounts"></datalist>
+      <datalist id="act-dl-limits">{{range .LimitKeys}}<option value="{{.}}"></option>{{end}}</datalist>
+      <template id="act-tpl-user">{{template "act-user" (.Row "__ROW__")}}</template>
+      <template id="act-tpl-group">{{template "act-group-row" (.Row "__ROW__")}}</template>
+      <template id="act-tpl-account">{{template "act-account" (.Row "__ROW__")}}</template>
+      <template id="act-tpl-limit">{{template "act-limit" (.Row "__ROW__").Blank}}</template>
+      <div class="fld act-ids"><span class="lbl">Identity</span>
+        <div class="checks" role="radiogroup" aria-label="Identity mode">{{range .Identities}}<label><input type="radio" name="identity" value="{{.Mode}}"{{if $.Is "identity" (print .Mode)}} checked{{end}}{{if eq (print .Mode) "local"}} id="act-identity"{{end}}> <span class="mono">{{.Mode}}</span> <small>{{.Hint}}</small></label>{{end}}</div>
+        <span class="err" id="act-err-identity"></span>
+        <label class="act-nr act-box act-ctlusers"><input type="checkbox" id="act-ctlusers" name="ctlusers"{{if .On "ctlusers"}} checked{{end}} aria-describedby="act-err-ctlusers"><span class="act-lab"><b>Users on the controllers too</b><span class="hint">For a partition with AllowGroups: slurmctld checks the groups on its own node.</span><span class="err" id="act-err-ctlusers"></span></span></label>
+        <span class="hint">Where the nodes find the users, and how Slurm authenticates them. nssSlurm and clientIds need a managed cluster.</span></div>
+      <label class="act-nr act-box"><input type="checkbox" id="act-monitoring" name="monitoring"{{if .On "monitoring"}} checked{{end}} aria-describedby="act-err-monitoring"><span class="act-lab"><b>Monitoring</b><span class="hint">Adds the nodes to the realm's Prometheus, Loki and Grafana. Needs Slurm 26.05 or later in the image.</span><span class="err" id="act-err-monitoring"></span></span></label>
+    </div>
+  </details>
+  <details class="act-sec" id="act-sec-run"{{with .Retry}}{{if .OldWait}} open{{end}}{{end}}><summary><span class="act-st">Run options</span><span class="act-ss" id="act-sum-run"></span><span class="act-sb" id="act-bad-run"></span></summary>
+    <div class="act-sbody">
+      {{if .Val "pull_auto"}}<input type="hidden" id="act-pull-auto" name="pull_auto" value="1">{{end}}
+      <label class="act-nr act-box"><input type="checkbox" id="act-pull" name="pull"{{if .On "pull"}} checked{{end}} aria-describedby="act-err-pull act-pull-hint"><span class="act-lab"><b>Pull the image</b><span class="hint" id="act-pull-hint">Gets the newest image first, even if Docker has one.</span><span class="err" id="act-err-pull"></span></span></label>
+      <div class="fld"><span class="lbl" id="act-wait-lbl">Wait for ready{{with .Retry}}{{with .OldWait}} <span class="chip act-fromrun">was {{.}}</span>{{end}}{{end}}</span>
+        <div class="act-waits"><div class="seg act-seg" role="radiogroup" aria-labelledby="act-wait-lbl">{{range .Waits}}<label><input type="radio" name="wait" value="{{.Value}}"{{if $.Is "wait" .Value}} checked{{end}}{{if eq .Value "2m"}} id="act-wait"{{end}}><span>{{.Label}}</span></label>{{end}}</div>
+        <input type="text" id="act-wait_other" name="wait_other" value="{{.Val "wait_other"}}" placeholder="such as 15m" autocapitalize="off" spellcheck="false" aria-label="Other time to wait" aria-describedby="act-err-wait_other"></div>
+        <span class="err" id="act-err-wait"></span><span class="err" id="act-err-wait_other"></span>
+        {{with .Retry}}{{if .OldWait}}<span class="hint act-retry-wait">sind ui set {{.NewWaitWord}} because {{.Why}}. Pick {{.OldWait}} to keep the wait of the run.</span>{{end}}{{end}}
+        <span class="hint">For each node, from the start of its container; pulls do not count. If a node is not ready in time, sind removes the cluster again.</span></div>
+    </div>
+  </details>
+</section>
+{{end}}
+
+{{/* act-squares draws the nodes of a start, one square for each, by the
+classes of their roles. */}}
+{{define "act-squares"}}<span class="act-tsq" aria-hidden="true">{{range .}}<i class="{{.}}"></i>{{end}}</span>{{end}}
+
+{{/* act-role is a row of a node of a new cluster that is a checkbox, which
+says what the node does first and what runs on it second, and its editor.
+It is an actRoleRow. */}}
+{{define "act-role"}}<div class="act-nr"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if .D.On .Name}} checked{{end}} aria-describedby="act-hint-{{.Name}} act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i>
+  <span class="act-lab"><span class="act-purp"><label for="act-{{.Name}}"><b data-word="{{.Word}}">{{.Label}}</b> {{.Purpose}}</label>{{with .Small}} <small>{{.}}</small>{{end}} <span class="act-d" id="act-hint-{{.Name}}">{{range .Hint}}{{if .Word}}<span data-word="{{.Word}}">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</span>{{if not .More}}<span class="act-opt">optional</span>{{end}}</span>
+  {{with .Note}}<span class="hint">{{.}}</span>{{end}}<span class="err" id="act-err-{{.Name}}"></span></span>{{if ne .Name "backup"}}{{template "act-chip" (.D.Node .Name)}}{{end}}</div>
+{{if ne .Name "backup"}}{{template "act-ned" (.D.Node .Name)}}{{end}}{{end}}
+
+{{/* act-realm is the realm field of the page: a realm that sind ui sees,
+with its clusters, or New realm…, whose name the field below takes. While
+sind ui sees no realm, the field alone. */}}
+{{define "act-realm"}}<div class="fld">{{if .RealmOptions}}<label for="act-realm-pick">Realm</label>
+  <select id="act-realm-pick" data-act-realm aria-describedby="act-err-realm act-hint-realm">{{range .RealmOptions}}<option value="{{.Name}}"{{if .On}} selected{{end}}>{{.Label}}</option>{{end}}<option value=""{{if .NewRealm}} selected{{end}}>New realm…</option></select>
+  <input type="text" id="act-realm" name="realm" value="{{.Realm}}"{{if not .NewRealm}} hidden{{end}} placeholder="such as lab" aria-label="Name of the new realm" autocapitalize="off" spellcheck="false" aria-describedby="act-err-realm act-hint-realm">
+  {{else}}<label for="act-realm">Realm</label><input type="text" id="act-realm" name="realm" value="{{.Realm}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-realm act-hint-realm">{{end}}
+  <span class="err" id="act-err-realm"></span><span class="hint" id="act-hint-realm">{{.RealmHint}}</span></div>{{end}}
+
+{{/* act-yamled is the editor of the YAML of a new cluster, which Start
+from YAML and Edit YAML open. */}}
+{{define "act-yamled"}}<div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
+  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
+  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The plan follows it, and Name and Realm change the name and the realm in it. The rest of the form is locked; Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
+  <div class="act-inline act-yamlhead"><label class="lbl" for="act-yaml">Config</label><button type="button" class="btn sm" data-act-yaml-open aria-describedby="act-hint-yaml">Open a file…</button>
+    <input type="file" id="act-yaml-file" accept=".yaml,.yml,application/yaml,text/yaml,text/plain" hidden></div>
+  <textarea id="act-yaml" name="yaml" rows="26" placeholder="kind: Cluster&#10;name: hpc&#10;nodes:&#10;  - controller&#10;  - worker: 2" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml act-hint-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
+  <span class="err" id="act-err-yaml"></span><span class="hint" id="act-hint-yaml">Paste a config, open a file, or drop one here. At most 64 KiB.</span>
+</div>{{end}}
+
+{{/* act-page-oob are the parts of the form of the page that each preview
+updates: whether the name is free, the count of the nodes and those under
+More nodes, the files, the start whose card is on and the cluster that Copy
+a cluster copies, and what the nodes use, which a phone shows in the
+footer. */}}
+{{define "act-page-oob"}}<span class="act-good" id="act-ok-name" hx-swap-oob="innerHTML">{{with .NameOK}}✓ {{.}}{{end}}</span>
+<span class="act-sr" id="act-ncount" hx-swap-oob="innerHTML">{{.NodeCount}}</span>
+<span class="act-ss" id="act-sum-more" hx-swap-oob="innerHTML">{{.MoreNodes}}</span>
+<div class="act-fmap" id="act-fmap" hx-swap-oob="innerHTML">{{template "pg-files" .Files}}</div>
+<span id="act-start-on" data-start="{{.StartOn}}" hidden hx-swap-oob="true"></span>
+<span class="act-tmeta" id="act-copy-foot" hx-swap-oob="innerHTML">{{.CopyFoot}}</span>
+<span class="hint act-tot" id="act-tot" hx-swap-oob="innerHTML">{{.Totals}}</span>{{end}}
+
+{{/* act-pstatus is the status at the foot of the plan, which a phone shows:
+a button that goes to the first problem while the command cannot run, or to
+the first warning. act.js says the status to assistive technology when its
+data-act-key changes. */}}
+{{define "act-pstatus"}}
+{{- if not .Blocked}}<span class="vh" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}"></span>
+{{- with .Warnings}}<button type="button" class="pill warn nodot act-go" data-act-go="@warn" aria-label="Ready, {{$.WarningsText}}. Show the first." title="Show the first warning">Ready · {{$.WarningsText}} <span aria-hidden="true">↑</span></button>{{end}}
+{{- else if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button>
+{{- else}}<span class="pill bad" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Not ready</span>{{end}}{{end}}
+
+{{/* act-pill says whether the command can run, and with how many
+warnings. */}}
+{{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else if .Warnings}}<span class="pill warn">Ready · {{.Warnings}} warning{{if ne .Warnings 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
+
+{{/* act-plan is the plan of a new cluster: the nodes, what they take of
+the host and the warnings of the Doctor that they reach, the command, with
+the config and the slurm.conf it writes, and what sind ui checked. The
+checks follow the command, so that the command stays in view at the height
+of a laptop. An error of the server, as when the command does not
+start, heads the plan and keeps the rest of it. */}}
+{{define "act-plan"}}{{$p := .}}
+<div class="act-ph"><h2>Plan</h2>{{template "act-pill" .}}</div>
+<div class="act-pb">
+{{with .Err}}<div class="callout bad" id="act-probs" tabindex="-1">{{if $p.Cmd.Config}}<b>The command did not start.</b> {{end}}{{.}}</div>{{end}}
+{{if .Cmd.Config}}
+{{with .Cmd.Problems}}<div class="callout bad act-probs"{{if not $p.Err}} id="act-probs"{{end}} tabindex="-1"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
+{{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
+<div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}" title="{{.Short}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
+{{with .HostBars}}<div class="act-host"><div class="cmdlabel">This host</div>
+  {{range .}}<div class="act-br{{with .Class}} {{.}}{{end}}"><span class="act-bk" aria-hidden="true">{{.Label}}</span><svg class="act-hbar" viewBox="0 0 1000 10" preserveAspectRatio="none" aria-hidden="true"><rect class="now" width="{{.NowW}}" height="10"/><rect class="add" x="{{.NowW}}" width="{{.AddW}}" height="10"/>{{if ge .MarkX 0}}<rect class="host" x="{{.MarkX}}" width="6" height="10"/>{{end}}</svg><span class="act-bv" aria-hidden="true">{{.Value}}</span><span class="vh">{{.Say}}</span></div>{{end}}</div>
+{{else}}<p class="hint">{{.Cmd.Summary}}</p>{{end}}
+{{range .HostWarns}}{{template "act-hostwarn" .}}{{end}}
+{{if .Cmd.OverHost}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if .Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Create anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
+{{with .RealmNote}}<div class="callout warn"><b>Realm <span class="mono tok">{{.Name}}</span> is new.</b> sind creates it with its own mesh network, DNS server and SSH relay.{{with .Mean}} Did you mean <span class="mono tok">{{.}}</span>?{{end}}</div>{{end}}
+{{if .Warn}}<div class="callout warn">{{.Warn}}</div>{{end}}
+{{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. {{.LockWaits}}</div>{{end}}
+{{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
+<div class="act-runs"><div class="cmdlabel">Runs</div>
+  <div class="act-run"><code>{{range .RunLines}}<span class="act-rl{{if .Sub}} act-rlsub{{end}}">{{template "pg-pieces" .Pieces}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}" aria-label="Copy the command">Copy</button></div>
+  <div class="act-tog"><button type="button" class="btn sm" data-pg-copy-text="{{.Cmd.Script}}">Copy script</button><button type="button" class="btn sm" data-act-fold="act-yamlv" aria-expanded="false" aria-controls="act-yamlv">Show YAML</button>{{if .Cmd.SlurmConf}}<button type="button" class="btn sm" data-act-fold="act-confv" aria-expanded="false" aria-controls="act-confv">Preview slurm.conf</button>{{end}}</div>
+  <p class="hint">sind ui saves the config (mode 0600) and keeps it{{range .Cmd.Dirs}}, creates <span class="mono">{{template "pg-pieces" ($p.Tilde .).Pieces}}</span>, which stays if the create fails{{end}}, then runs the command. Copy script does the same.</p>
+  <div class="act-fpanel" id="act-yamlv" hidden><div class="act-inline act-fph"><span class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></span>{{if not .YAMLMode}}<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>{{end}}<button type="button" class="btn sm" data-pg-copy-text="{{.Cmd.Config.Content}}">Copy YAML</button></div>
+    {{if .YAMLMode}}<p class="hint">The YAML that you edit, as it is.</p>{{else}}<pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
+    <p class="hint">Edit YAML gives you the whole config, also what the form has no field for, such as named Slurm config fragments or capabilities of the node defaults. The form stays locked until you discard the edits.</p>{{end}}</div>
+  {{if .Cmd.SlurmConf}}<div class="act-fpanel" id="act-confv" hidden><pre class="term act-confpre">{{range .ConfLines}}<span{{if .Own}} class="act-own"{{end}}>{{.Text}}</span>
+{{end}}</pre>
+    <p class="hint">sind's lines, then those of Slurm config{{if .SlurmSet "main"}}, marked{{end}}, then the include of sind-nodes.conf with the workers and the partition all. The other files of Slurm config are files of their own.</p></div>{{end}}
+</div>
+{{with .Cmd.After}}<div><div class="cmdlabel">Then sind runs</div><pre class="term act-after">{{range $i, $s := .}}{{if $i}}
+{{end}}# {{.Where}}
+{{range .Lines}}{{.}}
+{{end}}{{end}}</pre></div>{{end}}
+<ul class="act-plist" aria-label="Checks">
+  {{with .NameOK}}<li><span class="pg-ck y" aria-hidden="true">✓</span><span>Name <span class="mono tok">{{$p.Form.Get "name"}}</span> is free in realm <span class="mono tok">{{$p.Realm}}</span>.</span></li>{{end}}
+  {{$many := gt (len .Cmd.Images) 1}}{{range .Cmd.Images}}<li>{{if .Version}}<span class="pg-ck y" aria-hidden="true">✓</span><span>Image <span class="mono tok">{{$p.ImageShort .Image}}</span>{{if $many}} <small>({{.Of}})</small>{{end}} has Slurm {{.Version}}{{if .Checked}}, as a check found{{end}}.{{if .Moves}} Create pulls it first, so this can change.{{end}}</span>
+    {{else}}<span class="pg-ck" aria-hidden="true">·</span><span>Image <span class="mono tok">{{$p.ImageShort .Image}}</span>{{if $many}} <small>({{.Of}})</small>{{end}}: {{$p.ImageLine .}}{{if .CanCheck}} <button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</span>{{end}}</li>{{end}}
+  {{range .NoteParts}}<li><span class="pg-ck" aria-hidden="true">·</span><span>{{range .}}{{if .Mono}}<span class="mono">{{template "pg-pieces" .Pieces}}</span>{{else}}{{.Text}}{{end}}{{end}}</span></li>{{end}}
+</ul>
+{{end}}
+</div>
+{{end}}
+
+{{/* act-hostwarn is a warning of the Doctor that the new nodes reach, with
+its fix, folded, which act.js keeps open across the previews. */}}
+{{define "act-hostwarn"}}<div class="callout warn act-hw"><b>{{.Title}}.</b> {{.Text}}
+  {{if or .Steps .Detail}}<details class="act-fix" id="act-fix-{{.Check}}" data-act-hold><summary>Show fix</summary>
+    <p class="hint"><a href="/doctor">The Doctor</a>: <span class="mono">{{.Detail}}</span></p>
+    {{range .Steps}}{{range .Text}}<p class="act-fixtext">{{.}}</p>{{end}}{{if .Cmd}}<div class="cmd"><code{{if .Multi}} class="nop"{{end}}>{{.Cmd}}</code><button type="button" data-pg-copy-text="{{.Cmd}}" aria-label="Copy {{.Cmd}}">Copy</button></div>{{end}}{{end}}
+  </details>{{end}}</div>{{end}}

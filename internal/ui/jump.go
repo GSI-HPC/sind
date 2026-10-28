@@ -549,7 +549,7 @@ func jumpAction(a help.Action, sn store.Snapshot, ctx jumpContext, clusters int)
 		it.Label, it.Kind, it.Step = a.Title+"…", "action · pick a cluster", a.ID
 		it.Sub = "Pick a cluster first"
 	case a.ID == "create-cluster":
-		it.Href, it.Dialog = pgDialog(a.ID, "realm", ctx.Realm), true
+		it.Href = pgDialog(a.ID, "realm", ctx.Realm)
 		it.Sub = "Fill in its config, then create it"
 		if ctx.Realm != "" {
 			it.Sub = "In realm " + ctx.Realm + ", or another that you type"

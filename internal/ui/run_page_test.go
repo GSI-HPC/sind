@@ -284,7 +284,7 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	assert.Equal(t, "Its flags and config are not in the log.", h.CmdNote)
 	assert.Equal(t, "# The event log keeps no flags of this command; add them, such as --config FILE.\nsind create cluster bench", h.CopyNote)
 	assert.Empty(t, h.Realm)
-	assert.Equal(t, &runLink{Label: "Try again with a 10m wait…", Href: "/dialogs/create-cluster?from=r1&name=bench", Primary: true}, h.Edit, "nodes ran out of the wait")
+	assert.Equal(t, &runLink{Label: "Try again with a 10m wait…", Href: "/clusters/new?from=r1&name=bench", Primary: true}, h.Edit, "nodes ran out of the wait")
 	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, h.Back)
 	assert.Empty(t, h.RetryID, "only a task runs again at once")
 
@@ -295,7 +295,7 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	h = runHeadOf(runCtx{Run: run, Found: true, Snap: snap, Now: runAt(30)})
 	assert.Equal(t, "sind create cluster bench", h.Command.Text)
 	assert.Empty(t, h.Realm)
-	assert.Equal(t, &runLink{Label: "Try bench again…", Href: "/dialogs/create-cluster?from=r1&name=bench", Primary: true}, h.Edit)
+	assert.Equal(t, &runLink{Label: "Try bench again…", Href: "/clusters/new?from=r1&name=bench", Primary: true}, h.Edit)
 
 	// One realm has the cluster of a create worker: the command names the
 	// realm, and the page links to the cluster.

@@ -87,7 +87,9 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	}
 	cmd.Notes = append(cmd.Notes, workerSlurmNote(c.Snap.Status(realm, cl.Name)))
 	var ps problems
-	budgetProblems(f, &cmd, hostBudget(c, count, size.memoryMB), size.memoryMB, size.cpus, &ps)
+	b := hostBudget(c, count, count*size.memoryMB, count*size.cpus)
+	budgetProblems(f, &cmd, b, workersOver(size.memoryMB), &ps)
+	cpuWarning(&cmd, b, "Each new worker", size.cpus)
 	cmd.Problems = ps
 	return cmd, nil
 }

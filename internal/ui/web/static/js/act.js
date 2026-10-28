@@ -9,7 +9,8 @@
 // button that opened it, the question before a close loses changes, the
 // draft of a new cluster, Enter and Ctrl+Enter, the status, Back, which
 // closes the dialog, and the history of a command that started, which the
-// tab leaves in one Back. The dialogs are the server's HTML, which htmx
+// tab leaves in one Back. The page of New cluster is such a form too, with
+// its starts, its list of realms and its folded panels. The dialogs are the server's HTML, which htmx
 // puts into #layer; nothing here evaluates text, and no storage is needed to
 // work: every access is guarded.
 (() => {
@@ -17,8 +18,11 @@
 
   const layer = () => document.getElementById('layer');
   const dialog = () => document.getElementById('act-dialog');
-  const formOf = () => { const d = dialog(); return d && d.querySelector('form.modal'); };
+  const formOf = () => { const d = dialog(); return d && d.querySelector('form'); };
   const inPage = d => !d.closest('#layer');
+  // A page of its own, as New cluster is, is no dialog: the rest of the
+  // page stays usable, and Escape does not leave it.
+  const isPage = d => !!d && d.hasAttribute('data-act-page');
 
   const local = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -98,7 +102,7 @@
   // clusters of Add workers does, or to its first field, or on a touch
   // screen to the dialog itself.
   function focusIn(d) {
-    const form = d.querySelector('form.modal');
+    const form = d.querySelector('form');
     if (!form) return;
     if (S.last && d.contains(S.last) && S.last.getClientRects().length) { S.last.focus(); return; }
     const usable = el => !el.disabled && el.getClientRects().length;
@@ -120,7 +124,7 @@
   // inert, and its first field takes the focus, or on a touch screen the
   // dialog itself.
   function opened(d) {
-    const form = d.querySelector('form.modal');
+    const form = d.querySelector('form');
     d.addEventListener('htmx:beforeRequest', quiet);
     d.addEventListener('htmx:beforeOnLoad', quiet);
     S.dialog = d;
@@ -133,8 +137,9 @@
     // A dialog in the layer has an entry of its own in the history of the
     // tab, so that Back closes it, as on a phone.
     if (!inPage(d) && !(history.state && history.state.actDialog)) history.pushState({ actDialog: true }, '');
-    isolate(d);
     footer(d);
+    if (isPage(d)) { pressed(); return; }
+    isolate(d);
     focusIn(d);
   }
 
@@ -219,9 +224,13 @@
     if (!d) return;
     if (!force && S.dirty) { ask('close'); return; }
     if (inPage(d)) {
-      // A dialog opened as a page of its own: leave it.
+      // A dialog opened as a page of its own: back to the page it was
+      // opened from, or, opened from elsewhere, to the page it belongs to.
       S.dirty = false;
-      if (history.length > 1) history.back(); else location.assign('/');
+      const form = formOf();
+      let ours = false;
+      try { ours = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) { /* no referrer */ }
+      if (ours && history.length > 1) history.back(); else location.assign((form && form.dataset.actBack) || '/');
       return;
     }
     // The field with the focus asks for a look at the command when it
@@ -234,9 +243,19 @@
   }
 
   // ask shows a question in place of the footer: close and lose the
-  // changes, or start over and lose them.
+  // changes, or start over and lose them. The page asks the second in
+  // place of the bar of its draft, beside Start over.
   function ask(mode) {
     const form = formOf();
+    const inline = mode === 'restart' && form && form.querySelector('#act-ask-restart');
+    if (inline) {
+      if (!S.asking) S.back = document.activeElement;
+      S.asking = mode;
+      form.querySelector('#act-draftbar').hidden = true;
+      inline.hidden = false;
+      inline.querySelector('[data-act-keep]').focus();
+      return;
+    }
     const bar = form && form.querySelector('#act-ask');
     const mf = form && form.querySelector('#act-mf');
     if (!bar || !mf) return;
@@ -263,6 +282,11 @@
     S.asking = null;
     form.querySelector('#act-ask').hidden = true;
     form.querySelector('#act-mf').hidden = false;
+    const inline = form.querySelector('#act-ask-restart');
+    if (inline && !inline.hidden) {
+      inline.hidden = true;
+      form.querySelector('#act-draftbar').hidden = false;
+    }
     if (refocus) (S.back && S.back.isConnected && form.contains(S.back) ? S.back : form.querySelector('[data-act-close]')).focus();
   }
 
@@ -310,6 +334,8 @@
       if (typeof v === 'string' && !['csrf', 'shown', 'confirm'].includes(k)) data.append(k, v);
     }
     local.set(draftKey(form.dataset.actDraft), data.toString());
+    const saved = document.getElementById('act-saved');
+    if (saved) saved.textContent = 'Draft saved';
   }
 
   // footer keeps the scroll padding of a dialog at the height of its
@@ -319,10 +345,10 @@
   function footer(d) {
     const ro = new ResizeObserver(() => {
       if (!d.isConnected) { ro.disconnect(); return; }
-      const f = [...d.querySelectorAll('.mf')].find(x => !x.hidden);
+      const f = [...d.querySelectorAll('.mf, .act-pf')].find(x => !x.hidden);
       document.documentElement.style.setProperty('--act-mf-h', (f ? f.offsetHeight : 0) + 'px');
     });
-    for (const f of d.querySelectorAll('.mf')) ro.observe(f);
+    for (const f of d.querySelectorAll('.mf, .act-pf')) ro.observe(f);
   }
 
   // fields counts the fields of a form, a group of radio buttons or
@@ -396,6 +422,12 @@
       const button = document.querySelector('[aria-controls="' + panel.id + '"]');
       if (button) button.setAttribute('aria-expanded', 'true');
     }
+    // A folded panel of the page, as Change… of Your files folds.
+    for (let p = el.closest('[hidden]'); p && p.id; p = p.parentElement && p.parentElement.closest('[hidden]')) {
+      const button = document.querySelector('[data-act-fold="' + p.id + '"]');
+      if (!button) break;
+      fold(button, true);
+    }
     el.focus({ preventScroll: true });
     el.scrollIntoView({ block: 'center' });
   }
@@ -421,7 +453,7 @@
     const go = t.closest('[data-act-go]');
     if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
     // The buttons that change the form of a new cluster.
-    if (ev.isTrusted && t.closest('.scrim :is([data-act-step], [data-act-rowadd], [data-act-rowdel], [data-act-wgadd], [data-act-wgdel], [data-act-reset])')) changed();
+    if (ev.isTrusted && t.closest('#act-dialog :is([data-act-step], [data-act-rowadd], [data-act-rowdel], [data-act-wgadd], [data-act-wgdel], [data-act-reset])')) changed();
 
     const step = t.closest('[data-act-step]');
     if (step) {
@@ -438,6 +470,13 @@
       input.dispatchEvent(new Event('input', { bubbles: true }));
       return;
     }
+
+    // A start of New cluster sets the nodes of the form; a button that
+    // folds a panel opens or closes it.
+    const start = t.closest('[data-act-set]');
+    if (start) { applyStart(start); return; }
+    const folder = t.closest('[data-act-fold]');
+    if (folder) { fold(folder); return; }
 
     // The size button of a node opens and closes its editor.
     const chip = t.closest('[data-act-ed]');
@@ -546,6 +585,19 @@
     if (jump) {
       ev.preventDefault();
       goTo(jump.closest('form'), jump.dataset.actJump);
+      return;
+    }
+
+    // A link to a part of the page, as Show the plan of a phone, scrolls
+    // there and adds no entry to the history, which would cost Cancel and
+    // the run one more Back.
+    const hash = t.closest('[data-act-page] a[href^="#"]');
+    const to = hash && document.getElementById(hash.getAttribute('href').slice(1));
+    if (to) {
+      ev.preventDefault();
+      if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
+      to.focus({ preventScroll: true });
+      to.scrollIntoView({ block: 'start' });
     }
   });
 
@@ -564,7 +616,7 @@
     const t = ev.target;
     if (!(t instanceof Element) || !t.closest('#act-dialog form')) return;
     S.last = t;
-    if (S.asking && !t.closest('#act-ask')) unask(false);
+    if (S.asking && !t.closest('#act-ask, #act-ask-restart')) unask(false);
     // A default name is selected the first time it takes the focus, also
     // after a tap, so that typing replaces it. The selection waits for
     // the caret that the tap or click puts in.
@@ -575,7 +627,8 @@
   });
 
   // The directory of the data follows the name until the user types one;
-  // a Docker volume needs none.
+  // a Docker volume needs none, so its fields give way to a line about
+  // the volume.
   // The value and the button of a limit row are named after the limit.
   document.addEventListener('input', ev => {
     const t = ev.target;
@@ -594,7 +647,7 @@
     } else if (t.name === 'name' && 'actFollow' in dir.dataset) {
       dir.value = '~/sind/' + t.value.trim();
     } else if (t.name === 'dtype') {
-      dir.readOnly = t.value === 'volume';
+      for (const el of t.form.querySelectorAll('[data-act-dtype]')) el.hidden = el.dataset.actDtype !== t.value;
     }
   });
 
@@ -622,7 +675,7 @@
     const ed = document.getElementById('act-yamled');
     const text = document.getElementById('act-yaml');
     const flag = document.getElementById('act-yaml-on');
-    const plan = document.querySelector('.scrim .act-yaml');
+    const plan = document.querySelector('#act-dialog .act-yaml');
     if (!form || !ed || !text || !flag) return;
     if (on && text.disabled) {
       formIDs.clear();
@@ -643,6 +696,7 @@
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
       formIDs.clear();
+      realmPick();
     }
     form.querySelector('.act-form').classList.toggle('act-yamlmode', on);
     const first = on ? text : form.querySelector('.act-form input[type=text]');
@@ -672,6 +726,7 @@
       if (m) input.value = unquote(m[1]);
       else if (key === 'name' && text.value.trim() !== '') input.value = 'default';
     }
+    realmPick();
   }
 
   // toYAML puts the value of the field Name or Realm into the YAML: in
@@ -788,6 +843,104 @@
     }
   });
 
+  // applyStart sets the nodes of the form to those of a start of New
+  // cluster, from its data-act-set, a query of the roles and the workers:
+  // the boxes of the roles, and one worker group of that many workers.
+  function applyStart(card) {
+    const form = card.closest('form');
+    if (!form) return;
+    const set = new URLSearchParams(card.dataset.actSet);
+    for (const [name, v] of set) {
+      if (name === 'workers') continue;
+      const box = form.elements[name];
+      if (box instanceof HTMLInputElement && box.type === 'checkbox') box.checked = v === 'on';
+    }
+    const groups = document.getElementById('act-groups');
+    const rows = groups ? [...groups.querySelectorAll('.act-wgrow')] : [];
+    for (const row of rows.slice(1)) {
+      const key = row.id.slice('act-wg-'.length);
+      for (const prefix of ['act-wg-', 'act-ed-']) {
+        const el = document.getElementById(prefix + key);
+        if (el) el.remove();
+      }
+    }
+    if (!rows.length) {
+      const add = form.querySelector('[data-act-wgadd]');
+      if (add) add.click();
+    }
+    numberGroups();
+    const first = groups && groups.querySelector('.act-wgrow input[name=wg]');
+    const count = first && document.getElementById('act-' + first.value + '-count');
+    if (count) count.value = set.get('workers') || '1';
+    const id = document.getElementById('act-start');
+    if (id) id.value = card.dataset.actStart || '';
+    // A start with nodes under More nodes shows them.
+    const more = document.getElementById('act-morenodes');
+    if (more && more.querySelector('input[type=checkbox]:checked')) more.open = true;
+    const list = card.closest('#act-copies');
+    if (list) fold(document.querySelector('[data-act-fold="act-copies"]'), false);
+    for (const c of document.querySelectorAll('[data-act-start]')) c.setAttribute('aria-pressed', String(c === card || (!!list && c.id === 'act-copy')));
+    changed();
+    form.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // pressed marks the card of the start that the form has, as the last
+  // preview says.
+  function pressed() {
+    const on = document.getElementById('act-start-on');
+    if (!on) return;
+    const id = document.getElementById('act-start');
+    for (const c of document.querySelectorAll('[data-act-start]')) {
+      const row = !!c.closest('#act-copies');
+      c.setAttribute('aria-pressed', String(row ? on.dataset.start === 'copy' && !!id && id.value === c.dataset.actStart : c.dataset.actStart === on.dataset.start));
+    }
+  }
+
+  // fold opens or closes the panel of a button with data-act-fold, or
+  // opens it, or closes it, by open. A panel of the plan stays open when a
+  // preview takes its place.
+  const folded = new Set();
+  function fold(button, open) {
+    const panel = button && document.getElementById(button.dataset.actFold);
+    if (!panel) return;
+    panel.hidden = open === undefined ? !panel.hidden : !open;
+    button.setAttribute('aria-expanded', String(!panel.hidden));
+    if (panel.hidden) folded.delete(panel.id); else folded.add(panel.id);
+  }
+
+  function unfold() {
+    for (const id of folded) {
+      const button = document.querySelector('[data-act-fold="' + id + '"]');
+      const panel = document.getElementById(id);
+      if (button && panel && panel.hidden) fold(button, true);
+    }
+  }
+
+  // The realm of New cluster: a realm that sind ui sees, or New realm…,
+  // whose name the field below the list takes.
+  document.addEventListener('change', ev => {
+    const pick = ev.target;
+    if (!(pick instanceof HTMLSelectElement) || !pick.hasAttribute('data-act-realm')) return;
+    const input = document.getElementById('act-realm');
+    if (!(input instanceof HTMLInputElement)) return;
+    input.hidden = pick.value !== '';
+    input.value = pick.value;
+    if (pick.value === '') input.focus();
+    changed();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // realmPick shows in the list the realm that the field has, as the
+  // YAML sets it.
+  function realmPick() {
+    const pick = document.querySelector('[data-act-realm]');
+    const input = document.getElementById('act-realm');
+    if (!(pick instanceof HTMLSelectElement) || !(input instanceof HTMLInputElement)) return;
+    const known = [...pick.options].some(o => o.value !== '' && o.value === input.value);
+    pick.value = known ? input.value : '';
+    input.hidden = known;
+  }
+
   // followPull ticks the box as the preview says, while it follows the
   // image.
   function followPull() {
@@ -801,7 +954,7 @@
   function placeholders() {
     const eff = document.getElementById('act-eff');
     if (!eff || !eff.dataset.cpus) return;
-    document.querySelectorAll('.scrim [data-act-ph]').forEach(i => {
+    document.querySelectorAll('#act-dialog [data-act-ph]').forEach(i => {
       i.placeholder = eff.dataset[i.dataset.actPh] || '';
     });
   }
@@ -825,6 +978,7 @@
       return;
     }
     if (ev.key === 'Escape') {
+      if (isPage(dialog()) && !S.asking) return;
       ev.preventDefault();
       if (S.asking) unask(true); else close(false);
       return;
@@ -840,7 +994,7 @@
 
   // A field with a problem says so to assistive technology too.
   function markProblems(root) {
-    root.querySelectorAll('.scrim .err[id^="act-err-"]').forEach(err => {
+    root.querySelectorAll('#act-dialog .err[id^="act-err-"]').forEach(err => {
       const el = field(err.closest('form'), err.id.slice('act-err-'.length));
       if (!(el instanceof Element)) return;
       if (err.textContent) el.setAttribute('aria-invalid', 'true');
@@ -925,11 +1079,13 @@
   // which target parts of it, leave the focus alone.
   document.addEventListener('htmx:afterSettle', () => {
     const d = dialog();
-    if (d && d !== S.dialog) opened(d);
+    if (d && d !== S.dialog) { folded.clear(); opened(d); }
     else if (!d && S.dialog) closed();
     markProblems(document);
     followPull();
     placeholders();
+    pressed();
+    unfold();
     say();
   });
 

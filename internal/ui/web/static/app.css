@@ -220,6 +220,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .cmd code{flex:1;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
 .cmd code::before{content:"$ ";color:var(--term-prompt);user-select:none}
 .cmd code.nop::before{content:""}
+/* A word, or a part of a path up to a slash, that stays whole while it
+   fits on a line, and breaks only where it does not. */
+.tok{display:inline-block;max-width:100%;overflow-wrap:anywhere;text-indent:0}
 .cmd button{border:0;border-left:1px solid #26354d;background:none;color:var(--term-dim);padding:0 12px;cursor:pointer;font:var(--t-xs) var(--f-body)}
 .cmd button:hover{color:var(--term-fg)}
 pre.term{margin:0;background:var(--term-bg);color:var(--term-fg);border-radius:var(--r);padding:10px 12px;font:var(--t-sm)/1.55 var(--f-mono);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}

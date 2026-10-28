@@ -4,7 +4,7 @@
 # the action uses.
 - id: create-cluster
   title: New cluster
-  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. The dialog writes the config, which Edit YAML lets you change as a whole; Start from YAML takes a config that you paste or open from a file.
+  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. Its page starts from a set of nodes or from a cluster you have, and its plan shows what the nodes take of the host and the warnings of the Doctor that they reach. sind ui writes the config, which Edit YAML lets you change as a whole; Start from YAML takes a config that you paste or open from a file.
   command: sind create cluster --config FILE
   undo: Delete the cluster
   doc: usage/cluster-lifecycle#create-a-cluster

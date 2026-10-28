@@ -154,7 +154,7 @@ func TestMoreNoRealms(t *testing.T) {
 	}
 	n := moreNoRealms(store.DockerState{Checked: true, Err: "x"})
 	assert.Equal(t, "/doctor", n.Href)
-	assert.Equal(t, "/dialogs/create-cluster", moreNoRealms(store.DockerState{Checked: true}).Href)
+	assert.Equal(t, "/clusters/new", moreNoRealms(store.DockerState{Checked: true}).Href)
 	assert.Empty(t, moreNoRealms(store.DockerState{}).Href)
 }
 
@@ -192,7 +192,7 @@ func TestMoreMonitoringPage(t *testing.T) {
 	empty := pgBody(t, ts, "/monitoring?realm=ci", http.StatusOK)
 	assert.Contains(t, empty, "Realm <b class=\"mono\">ci</b> has no monitoring stack")
 	assert.Contains(t, empty, "sind --realm ci create cluster --monitoring", "the command works in the realm of the page")
-	assert.Contains(t, empty, "/dialogs/create-cluster?realm=ci")
+	assert.Contains(t, empty, "/clusters/new?realm=ci")
 	assert.Contains(t, empty, "Slurm 26.05")
 
 	pgBody(t, ts, "/monitoring?realm=nope", http.StatusNotFound)

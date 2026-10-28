@@ -5,10 +5,10 @@
   summary: From nothing to a job that has run on a worker.
   steps:
     - Press New cluster on the Overview.
-    - Keep the defaults, or change the nodes. Press Create.
+    - Keep Quick test, or pick another start. Press Create.
     - When the run is done, open the cluster. Ready for jobs at the top says whether it can run a job.
     - Run a job with the two commands beside it.
-    - Read its output in slurm-JOBID.out in the data directory of the cluster.
+    - Read its output in slurm-JOBID.out in the data directory, which Your files on the Connect tab names.
     - When you are done, press Delete… on the page of the cluster.
   commands:
     - sind create cluster

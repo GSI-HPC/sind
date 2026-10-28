@@ -441,6 +441,10 @@ type runLink struct {
 	Primary     bool
 }
 
+// Dialog reports whether the link opens a dialog, which goes into the
+// layer of the page, not a page, as New cluster is.
+func (l runLink) Dialog() bool { return strings.HasPrefix(l.Href, "/dialogs/") }
+
 // runBack leads from the run of a task to what it worked on: its cluster
 // while it exists, the list of clusters once it is gone, and the mesh for
 // a command of the realm. Nil for a task of none of them.

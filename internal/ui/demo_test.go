@@ -30,7 +30,7 @@ var demoPages = []string{
 	"/clusters/sind/dev?tab=network", "/clusters/sind/dev?tab=connect", "/clusters/sind/legacy", "/clusters/ci/pr-145",
 	"/nodes", "/nodes/sind/dev/worker-4", "/mesh", "/monitoring", "/topology", "/doctor",
 	"/activity", "/runs/d3e0000000000002", "/runs/d3e0000000000005", "/runs/d3e0000000000006",
-	"/dialogs/create-cluster", "/dialogs/delete-cluster?realm=sind&cluster=legacy", "/dialogs/power?realm=sind&cluster=dev&op=reboot",
+	"/clusters/new", "/dialogs/delete-cluster?realm=sind&cluster=legacy", "/dialogs/power?realm=sind&cluster=dev&op=reboot",
 	"/help?topic=/clusters/sind/dev", "/help?topic=word/mesh",
 }
 

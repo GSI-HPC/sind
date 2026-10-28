@@ -38,8 +38,13 @@ which adds the tile of such a node. */}}
 {{/* pg-files says where the files of the jobs of a cluster are, a pgFiles:
 the host side and the path in the nodes, a sentence, and the command that
 copies a job script in. */}}
-{{define "pg-files"}}<div class="pg-files"><div class="pg-fmap"><span class="pg-fside"><small>{{.Kind}}</small><b class="mono">{{or .Host "–"}}</b></span><span class="pg-farrow" aria-hidden="true">→</span><span class="pg-fside"><small>In every node</small><b class="mono">{{.Node}}</b></span></div>
-  <p class="pg-ftext">{{.Text}}</p>{{with .Copy}}<div class="cmd"><code>{{.}}</code><button type="button" data-pg-copy aria-label="Copy {{.}}">Copy</button></div>{{end}}</div>{{end}}
+{{define "pg-files"}}<div class="pg-files"><div class="pg-fmap"><span class="pg-fside"><small>{{.Kind}}</small><b class="mono">{{with .Host}}{{template "pg-pieces" .Pieces}}{{else}}–{{end}}</b></span><span class="pg-farrow" aria-hidden="true">→</span><span class="pg-fside"><small>In every node</small><b class="mono">{{template "pg-pieces" .Node.Pieces}}</b></span></div>
+  <p class="pg-ftext">{{template "pg-pieces" .Text.Pieces}}</p>{{with .Copy}}<div class="cmd"><code>{{template "pg-pieces" .Pieces}}</code><button type="button" data-pg-copy aria-label="Copy {{.}}">Copy</button></div>{{end}}</div>{{end}}
+
+{{/* pg-pieces sets the pieces of a pgText: each word, or part of a path up
+to a slash, stays whole while it fits on a line (.tok), so that a line
+breaks between them, not at a hyphen of a name. */}}
+{{define "pg-pieces"}}{{range .}}{{if .Space}} {{else}}<span class="tok">{{.Text}}</span>{{end}}{{end}}{{end}}
 
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}

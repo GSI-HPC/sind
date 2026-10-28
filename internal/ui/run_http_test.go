@@ -80,7 +80,7 @@ func TestRunPageRenders(t *testing.T) {
 	assert.Contains(t, failed, `<div class="cmdlabel">What the event log names</div><div class="cmd"><code>sind create cluster</code>`)
 	assert.Contains(t, failed, `<p class="hint">Its flags and config are not in the log.</p>`)
 	assert.Contains(t, failed, `data-pg-copy-text="# The event log keeps no flags of this command; add them, such as --config FILE.`+"\n"+`sind create cluster" aria-label="Copy sind create cluster with a note on its flags">Copy with a note</button>`)
-	assert.Contains(t, failed, `<a class="btn primary" href="/dialogs/create-cluster?from=r-failed" hx-get="/dialogs/create-cluster?from=r-failed" hx-target="#layer" hx-swap="innerHTML">Try again with a 10m wait…</a>`)
+	assert.Contains(t, failed, `<a class="btn primary" href="/clusters/new?from=r-failed">Try again with a 10m wait…</a>`)
 	assert.NotContains(t, failed, `aria-label="Copy sind create cluster">Copy</button>`, "a command from the log is copied with its note only")
 
 	canceled := ts.get("/runs/r-canceled").Body.String()
@@ -112,7 +112,7 @@ func TestRunPageOffersToTryAgain(t *testing.T) {
 		`<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">/c/dev.yaml</div><pre class="mono">name: dev` + "\n" + `realm: sind` + "\n" + `</pre></details>`,
 		// Back, the dialog with a longer wait, as nodes ran out of
 		// theirs, and Try again, in that order.
-		`<div class="actions"><a class="btn" href="/clusters">Open Clusters</a><a class="btn primary" href="/dialogs/create-cluster?task=t-failed&amp;wait=10m" hx-get="/dialogs/create-cluster?task=t-failed&amp;wait=10m" hx-target="#layer" hx-swap="innerHTML">Try again with a 10m wait…</a><form class="inline" method="post" action="/tasks/t-failed/retry"`,
+		`<div class="actions"><a class="btn" href="/clusters">Open Clusters</a><a class="btn primary" href="/clusters/new?task=t-failed&amp;wait=10m">Try again with a 10m wait…</a><form class="inline" method="post" action="/tasks/t-failed/retry"`,
 		`<button type="submit" class="btn">Try again</button>`,
 	} {
 		assert.Contains(t, body, want)

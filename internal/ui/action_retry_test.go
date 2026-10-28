@@ -95,12 +95,12 @@ func TestActRetryOf(t *testing.T) {
 func TestActDialog_TryARunAgain(t *testing.T) {
 	f := newActFixture(t)
 	f.st.SetRuns([]store.Run{retryRun()})
-	w := f.get("/dialogs/create-cluster?from=rb&name=bench")
+	w := f.get("/clusters/new?from=rb&name=bench")
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
 	for _, want := range []string{
-		`<h2 id="act-title">Try bench again</h2>`,
-		`<p id="act-lead">Rebuilt from the run rb. Try again saves the config, then runs sind create cluster with it.</p>`,
+		`<h1 id="act-title">Try bench again</h1>`,
+		`<div class="sub muted" id="act-lead">Rebuilt from the run rb. Try again saves the config, then runs sind create cluster with it.</div>`,
 		`<input type="hidden" name="from" value="rb">`,
 		`<b>This run came from a terminal. sind ui does not have its config.</b>`,
 		`<li>Nodes: a controller, a backup controller, a db node and 2 workers, as the run had them.</li>`,
@@ -110,7 +110,7 @@ func TestActDialog_TryARunAgain(t *testing.T) {
 		`<button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><a class="btn sm" href="/runs/rb">Show the failed run</a>`,
 		`<label for="act-image">Image <span class="chip act-fromrun">from the run</span></label>`,
 		`name="image" value="ghcr.io/gsi-hpc/sind-node:26.05.4"`,
-		`<span class="lbl">Nodes <span class="chip act-fromrun">from the run</span></span>`,
+		`Nodes <span class="chip act-fromrun">from the run</span><span class="act-sr" id="act-ncount">`,
 		`id="act-db" name="db" checked`,
 		`id="act-backup" name="backup" checked`,
 		`name="w0-count" value="2"`,
@@ -119,7 +119,7 @@ func TestActDialog_TryARunAgain(t *testing.T) {
 		`<input type="radio" name="wait" value="10m" checked>`,
 		`sind ui set 10m because worker-1 ran out of the 5m wait. Pick 5m to keep the wait of the run.`,
 		`The run names no realm. sind is the default realm of a terminal.`,
-		`>Try again<kbd class="act-kbd"`,
+		`><span class="act-okl">Try again</span><kbd class="act-kbd"`,
 	} {
 		assert.Contains(t, body, want)
 	}
@@ -133,7 +133,7 @@ func TestActDialog_TryARunAgain(t *testing.T) {
 	// The preview keeps the label of the button.
 	pw := f.post("/actions/create-cluster/preview", actForm("realm", "sind", "name", "bench", "from", "rb", "wg", "w0", "w0-count", "2", "wait", "10m", "dtype", "volume"))
 	require.Equal(t, http.StatusOK, pw.Code)
-	assert.Contains(t, pw.Body.String(), `>Try again<kbd class="act-kbd"`)
+	assert.Contains(t, pw.Body.String(), `><span class="act-okl">Try again</span><kbd class="act-kbd"`)
 	assert.Contains(t, pw.Body.String(), `Ready. Try again runs the command.`)
 	assert.Contains(t, pw.Body.String(), ` · wait 10m</span>`, "the footer names the longer wait")
 	pw = f.post("/actions/create-cluster/preview", actForm("realm", "sind", "name", "bench", "from", "rb", "wg", "w0", "w0-count", "2", "wait", "other", "wait_other", "20m", "dtype", "volume"))
@@ -144,13 +144,13 @@ func TestActDialog_TryARunAgain(t *testing.T) {
 	lock := runOf(2, "canceled", runSp("wait", runLockWait, runEndedAt(0, 2, "canceled")))
 	lock.ID, lock.Title, lock.Root.Name, lock.Root.Node = "rs", "create cluster bench", "create cluster", "bench"
 	f.st.SetRuns([]store.Run{lock})
-	body = f.get("/dialogs/create-cluster?from=rs&name=bench").Body.String()
+	body = f.get("/clusters/new?from=rs&name=bench").Body.String()
 	assert.Contains(t, body, `<li>Nodes: not in the log, so the defaults of New cluster.</li>`)
-	assert.Contains(t, body, `<span class="lbl">Nodes</span>`)
+	assert.Contains(t, body, `Nodes<span class="act-sr" id="act-ncount">`)
 	assert.Contains(t, body, `Show the stopped run`)
 
 	// A run that sind ui does not know: New cluster, as without it.
-	body = f.get("/dialogs/create-cluster?from=nope").Body.String()
-	assert.Contains(t, body, `<h2 id="act-title">New cluster</h2>`)
+	body = f.get("/clusters/new?from=nope").Body.String()
+	assert.Contains(t, body, `<h1 id="act-title">New cluster</h1>`)
 	assert.NotContains(t, body, `name="from"`)
 }

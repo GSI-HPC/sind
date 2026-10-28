@@ -40,12 +40,13 @@ func budgetCtx(st *testStoreT, hostMB int64, cpus int) Context {
 func TestHostBudget(t *testing.T) {
 	st := testStore()
 	c := budgetCtx(st, 16<<10, 8)
-	b := hostBudget(c, 2, 1024)
+	b := hostBudget(c, 2, 2048, 2)
 	require.NotNil(t, b)
 	// The 7 nodes of realm sind run; worker-0 is unknown, worker-1 has
-	// sind's default of 512 MiB, the others 1 GiB each.
-	assert.Equal(t, Budget{HostMB: 16 << 10, HostCPUs: 8, NowMB: 5*1024 + 512, NowNodes: 7, Unknown: 1, AddMB: 2048, AddNodes: 2}, *b)
+	// sind's defaults of 512 MiB and 1 CPU, the others 1 GiB and 1 CPU.
+	assert.Equal(t, Budget{HostMB: 16 << 10, HostCPUs: 8, NowMB: 5*1024 + 512, NowCPUs: 6, NowNodes: 7, Unknown: 1, AddMB: 2048, AddCPUs: 2, AddNodes: 2}, *b)
 	assert.Equal(t, 5*1024+512+2048, b.TotalMB())
+	assert.Equal(t, 8, b.TotalCPUs())
 	assert.Equal(t, 9, b.Nodes())
 	assert.False(t, b.Over())
 	assert.False(t, b.High())
@@ -60,27 +61,32 @@ func TestHostBudget(t *testing.T) {
 	assert.Equal(t, 0, Budget{}.HostX())
 
 	c.Sizes = nil
-	b = hostBudget(c, 1, 1024)
+	b = hostBudget(c, 1, 1024, 1)
 	assert.Equal(t, 7, b.Unknown)
 	assert.Zero(t, b.NowMB)
 
-	assert.Nil(t, hostBudget(c, 1, 0), "the size of the new workers is unknown")
+	assert.Nil(t, hostBudget(c, 1, 0, 1), "the size of the new workers is unknown")
 	st.SetDocker(store.DockerState{Checked: true})
-	assert.Nil(t, hostBudget(st.ctx(), 1, 1024), "the memory of the host is unknown")
+	assert.Nil(t, hostBudget(st.ctx(), 1, 1024, 1), "the memory of the host is unknown")
 }
 
-func TestHostBudget_Inotify(t *testing.T) {
+func TestHostBudget_Limits(t *testing.T) {
 	st := testStore()
 	st.SetDoctor(&store.DoctorReport{Checks: []store.DoctorCheck{
 		{Name: "cgroup", Status: clidoctor.StatusWarning},
-		{Name: "inotify", Status: clidoctor.StatusWarning, Detail: "max_user_instances 128"},
+		{Name: "inotify", Status: clidoctor.StatusWarning, Detail: "max_user_instances 128", Remediation: "sudo sysctl x=1"},
 	}})
 	c := budgetCtx(st, 64<<10, 8)
-	assert.Empty(t, hostBudget(c, 2, 1024).Inotify, "9 nodes")
-	assert.Equal(t, "max_user_instances 128", hostBudget(c, 3, 1024).Inotify)
+	inotify := HostWarn{Check: "inotify", Detail: "max_user_instances 128", Remediation: "sudo sysctl x=1", Nodes: 10}
+	b := hostBudget(c, 2, 2048, 2)
+	assert.Equal(t, []HostWarn{inotify}, b.Limits, "only the checks that hold from a number of nodes on")
+	assert.Empty(t, b.Crossed(), "9 nodes")
+	assert.Equal(t, []HostWarn{inotify}, hostBudget(c, 3, 1024, 3).Crossed())
 
 	st.SetDoctor(&store.DoctorReport{Checks: []store.DoctorCheck{{Name: "inotify", Status: clidoctor.StatusOK}}})
-	assert.Empty(t, hostBudget(st.ctx(), 3, 1024).Inotify)
+	assert.Empty(t, hostBudget(budgetCtx(st, 64<<10, 8), 3, 1024, 3).Limits)
+	st.SetDoctor(nil)
+	assert.Empty(t, hostBudget(budgetCtx(st, 64<<10, 8), 30, 1024, 3).Limits, "no report of the Doctor yet")
 }
 
 func TestBuildCreateWorker_Budget(t *testing.T) {

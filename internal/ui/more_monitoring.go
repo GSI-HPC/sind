@@ -58,7 +58,7 @@ type moreMonitoringData struct {
 	Empty bool
 	// Realm is the realm that the empty state is about, "" for all.
 	Realm string
-	// NewURL opens the New cluster dialog.
+	// NewURL opens the New cluster page.
 	NewURL string
 	// Notice is set when there is no realm to show.
 	Notice    moreNotice

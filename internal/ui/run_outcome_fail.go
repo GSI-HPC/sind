@@ -107,7 +107,7 @@ func runTimeoutSays(tos []runTimeout) []runPlain {
 	return out
 }
 
-// runWaitWord writes a wait the way the New cluster dialog names it: 5m,
+// runWaitWord writes a wait the way the New cluster page names it: 5m,
 // 1h, 90s.
 func runWaitWord(d time.Duration) string {
 	switch {
@@ -130,7 +130,7 @@ func runLongestWait(tos []runTimeout) time.Duration {
 }
 
 // runRetryWait returns the wait to try a create cluster again with, after
-// nodes ran out of the wait: the next choice of the New cluster dialog
+// nodes ran out of the wait: the next choice of the New cluster page
 // above it, or twice the wait above them all, as the query of the dialog
 // takes it, and its word; 10m where the log names no wait.
 func runRetryWait(run store.Run) (kv []string, word string) {

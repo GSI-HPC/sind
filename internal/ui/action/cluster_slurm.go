@@ -16,7 +16,7 @@ type SlurmFile struct {
 	section           func(s *config.Slurm) *config.Section
 }
 
-// SlurmFiles are the Slurm config files of the New cluster dialog, in
+// SlurmFiles are the Slurm config files of the New cluster page, in
 // order.
 var SlurmFiles = []SlurmFile{
 	{"main", "slurm.conf", "SelectType=select/cons_tres", func(s *config.Slurm) *config.Section { return &s.Main }},

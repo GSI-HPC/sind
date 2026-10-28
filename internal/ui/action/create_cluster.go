@@ -28,7 +28,7 @@ func init() {
 	register(Action{ID: "create-cluster", Build: buildCreateCluster, Cluster: func(f Form) string { return strings.TrimSpace(f.Get("name")) }})
 }
 
-// Waits are the values of the field "wait" of the New cluster dialog that
+// Waits are the values of the field "wait" of the New cluster page that
 // it offers as buttons, as sind create cluster --wait takes them; the value
 // "other" takes the field "wait_other", any time that --wait takes.
 var Waits = []string{"2m", "5m", "10m", "0"}
@@ -85,7 +85,7 @@ type clusterPlan struct {
 	data    clusterData
 }
 
-// buildCreateCluster makes the command of the New cluster dialog. A wrong
+// buildCreateCluster makes the command of the New cluster page. A wrong
 // field is a problem of the command, not an error: the plan takes the
 // field's default, or the name as it is, so that the dialog can show the
 // rest of it. With the field "yaml_on" the config is the YAML that the user
@@ -122,12 +122,10 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	}
 	clusterImages(cfg, pull, c.Image, monitoring, &images, &ps)
 	containers, cpus, memoryMB := clusterSize(cfg.Defaults, cfg.Nodes)
-	host := int(c.Snap.Docker.MemTotal >> 20)
-	over := host > 0 && memoryMB > host
-	if over && !checkbox(f, "overcommit", "Create anyway", &ps) {
-		ps.add("overcommit", "Memory", false, fmt.Errorf("the nodes may use %s, more than the %s of the Docker host; give them less memory, or tick Create anyway",
-			MemoryLabel(memoryMB), MemoryLabel(host)))
-	}
+	var cmd Command
+	budget := hostBudget(c, containers, memoryMB, cpus)
+	budgetProblems(f, &cmd, budget, clusterOver, &ps)
+	cpuWarning(&cmd, budget, "A node", nodeCPUs(cfg.Defaults, cfg.Nodes))
 	order := ClusterFieldsOf(f)
 	slices.SortStableFunc(ps, func(a, b Problem) int { return fieldOrder(order, a.Field) - fieldOrder(order, b.Field) })
 	var flags []string
@@ -137,7 +135,8 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if wait != DefaultWait {
 		flags = append(flags, "--wait", wait)
 	}
-	cmd := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
+	run := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
+	cmd.Argv, cmd.Display = run.Argv, run.Display
 	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
 	cmd.Nodes = plan.planned
 	if plan.final != nil {
@@ -145,8 +144,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	}
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
 	cmd.Containers, cmd.CPUs, cmd.MemoryMB = containers, cpus, memoryMB
-	cmd.OverHost = over
-	cmd.Warns = append(plan.warns, slurmWarnings(cfg)...)
+	cmd.Warns = append(append(plan.warns, slurmWarnings(cfg)...), cmd.Warns...)
 	cmd.Problems = ps
 	if data.home {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("%s is your home directory. Jobs write their output files there as root. Pick a scratch directory such as %s.",
@@ -155,14 +153,10 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if data.warn != "" {
 		cmd.Warns = append(cmd.Warns, data.warn)
 	}
-	if host > 0 && memoryMB*100 > host*HostMemoryWarn && !ps.has("overcommit") {
-		cmd.Warns = append(cmd.Warns, fmt.Sprintf("The nodes may use %s of memory, %d%% of the %s of the Docker host, which then can run out of memory.",
-			MemoryLabel(memoryMB), memoryMB*100/host, MemoryLabel(host)))
-	}
-	cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui saves the config to %s (mode 0600) and keeps it.", cmd.Config.Path))
+	// The plan says below the command that sind ui saves the config and
+	// creates the directory.
 	if data.mkdir {
 		cmd.Dirs = []string{data.dir}
-		cmd.Notes = append(cmd.Notes, fmt.Sprintf("sind ui creates the directory %s first. It stays if the create fails.", data.dir))
 	}
 	cmd.Script = clusterScript(realm, file, content, cmd.Dirs, flags)
 	cmd.Images = images.Images

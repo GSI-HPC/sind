@@ -24,6 +24,7 @@ var wave2Actions = []string{
 var wave2Paths = map[string]string{
 	"/":                        "overview",
 	"/clusters":                "clusters",
+	"/clusters/new":            "new-cluster",
 	"/clusters/sind/dev":       "cluster",
 	"/nodes":                   "nodes",
 	"/nodes/sind/dev/worker-1": "node",

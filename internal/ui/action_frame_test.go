@@ -34,7 +34,7 @@ func TestActDialog_Frame(t *testing.T) {
 		`<div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>`,
 		`<span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span>`,
 		`<button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>`,
-		`<button type="submit" class="btn primary" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" disabled>Add<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>`,
+		`<button type="submit" class="btn primary" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" disabled><span class="act-okl">Add</span><kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>`,
 	} {
 		assert.Contains(t, body, want)
 	}
@@ -49,13 +49,14 @@ func TestActDialog_Frame(t *testing.T) {
 	assert.Regexp(t, `(?s)<div class="mf" id="act-mf">.*<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">dev</b> to confirm</label>.*data-act-close>Cancel</button>`, body)
 	assert.Contains(t, body, `name="confirm" placeholder=" " autocomplete="off"`, "the hint of why shows once the user typed")
 
-	// New cluster keeps a draft, does not close on a click beside it, and
-	// has the status in its footer, which act.js says when it changes.
-	body = f.get("/dialogs/create-cluster").Body.String()
-	assert.Contains(t, body, `<div class="scrim" id="act-dialog" hx-ext="ignore:morph">`)
-	assert.Contains(t, body, `tabindex="-1" data-act-draft="create-cluster"`)
+	// New cluster is a page, which keeps a draft and has the status at the
+	// foot of its plan, which act.js says when it changes.
+	body = f.get("/clusters/new").Body.String()
+	assert.Contains(t, body, `<div class="act-page" id="act-dialog" data-act-page hx-ext="ignore:morph">`)
+	assert.Contains(t, body, `aria-labelledby="act-title" data-act-draft="create-cluster" data-act-back="/clusters"`)
 	assert.Contains(t, body, `<span class="vh" id="act-say" role="status"></span>`)
-	assert.Contains(t, body, `<div class="act-form">`)
+	assert.Contains(t, body, `<span class="act-status" id="act-status"></span>`)
+	assert.Contains(t, body, `<div class="act-form act-npform">`)
 	assert.Contains(t, body, `<div class="act-yamled" id="act-yamled" hidden>`)
 	assert.NotContains(t, body, "data-act-restored")
 }
@@ -77,13 +78,15 @@ func TestActDialog_OpensWithTheDraft(t *testing.T) {
 	draft := draftOf("csrf", "old", "shown", "x", "realm", "sind", "name", "mine", "image", "my/image:1",
 		"wg", "w0", "w0-count", "3", "wg", "wab", "wab-count", "2", "size", "m", "identity", "local", "stab", "main",
 		"dtype", "hostPath", "dir", "/scratch/mine", "wait", "10m", "ur", "u1", "u1-name", "ada")
-	w := f.postHTMX("/dialogs/create-cluster", draft)
+	w := f.postHTMX("/clusters/new", draft)
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
 	for _, want := range []string{
 		`data-act-draft="create-cluster" data-act-restored`,
-		`<div class="callout act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>`,
+		`<div class="callout act-draftbar" id="act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>`,
+		// Start over asks in the place of the bar.
+		`<div class="callout warn act-draftbar" id="act-ask-restart" role="group" aria-labelledby="act-ask-rq" hidden><span id="act-ask-rq">Start over and lose your changes?</span>`,
 		`id="act-name" name="name" value="mine"`, `value="my/image:1"`, `id="act-w0-count" name="w0-count" value="3"`, `id="act-wab-count" name="wab-count" value="2"`,
 		`value="m" checked`, `value="10m" checked`, `name="u1-name" value="ada"`, `value="/scratch/mine"`,
 		// What the user cleared stays clear: the defaults do not fill the
@@ -96,8 +99,8 @@ func TestActDialog_OpensWithTheDraft(t *testing.T) {
 	assert.NotContains(t, body, `value="old"`, "a draft has no CSRF token of its own")
 
 	// A draft in YAML mode opens the editor with its text.
-	body = f.postHTMX("/dialogs/create-cluster", draftOf("realm", "sind", "yaml_on", "1", "yaml", "kind: Cluster\nname: y\n", "wait", "5m")).Body.String()
-	assert.Contains(t, body, `<div class="act-form act-yamlmode">`)
+	body = f.postHTMX("/clusters/new", draftOf("realm", "sind", "yaml_on", "1", "yaml", "kind: Cluster\nname: y\n", "wait", "5m")).Body.String()
+	assert.Contains(t, body, `<div class="act-form act-npform act-yamlmode">`)
 	assert.Contains(t, body, `<div class="act-yamled" id="act-yamled">`)
 	assert.Contains(t, body, `name="yaml_on" value="1">`)
 	assert.Contains(t, body, `aria-describedby="act-err-yaml act-hint-yaml">kind: Cluster`+"\n"+`name: y`+"\n"+`</textarea>`)
@@ -107,11 +110,11 @@ func TestActDialog_IgnoresADraftThatDoesNotFit(t *testing.T) {
 	f := newActFixture(t)
 
 	for _, c := range []struct{ name, target, form string }{
-		{"no draft", "/dialogs/create-cluster", ""},
-		{"another realm", "/dialogs/create-cluster?realm=ci", draftOf("realm", "sind", "name", "mine")},
-		{"a link with fields", "/dialogs/create-cluster?name=linked", draftOf("realm", "sind", "name", "mine")},
-		{"not a form", "/dialogs/create-cluster", "draft=%zz"},
-		{"too long", "/dialogs/create-cluster", draftOf("realm", "sind", "name", strings.Repeat("x", actMaxValue+1))},
+		{"no draft", "/clusters/new", ""},
+		{"another realm", "/clusters/new?realm=ci", draftOf("realm", "sind", "name", "mine")},
+		{"a link with fields", "/clusters/new?name=linked", draftOf("realm", "sind", "name", "mine")},
+		{"not a form", "/clusters/new", "draft=%zz"},
+		{"too long", "/clusters/new", draftOf("realm", "sind", "name", strings.Repeat("x", actMaxValue+1))},
 		{"a dialog without drafts", "/dialogs/connect", draftOf("realm", "sind", "container", "mine")},
 	} {
 		body := f.postHTMX(c.target, c.form).Body.String()
@@ -119,20 +122,20 @@ func TestActDialog_IgnoresADraftThatDoesNotFit(t *testing.T) {
 		assert.NotContains(t, body, `value="mine"`, c.name)
 	}
 	// A draft that fits needs no realm in the link: sind is the default.
-	assert.Contains(t, f.postHTMX("/dialogs/create-cluster?realm=sind", draftOf("name", "mine")).Body.String(), `value="mine"`)
+	assert.Contains(t, f.postHTMX("/clusters/new?realm=sind", draftOf("name", "mine")).Body.String(), `value="mine"`)
 }
 
 func TestActDraftOf(t *testing.T) {
 	spec := actSpec{Draft: true}
 	link := url.Values{"realm": {"ci"}}
 
-	f, ok := actDraftOf(spec, actForm("realm", "ci", "name", "x", "nodes", "a", "nodes", "b", "confirm", "x", "shown", "s", "csrf", "c", "draft", "d"), link)
+	f, ok := actDraftOf(spec, actForm("realm", "ci", "name", "x", "nodes", "a", "nodes", "b", "confirm", "x", "shown", "s", "csrf", "c", "draft", "d"), link, false)
 	require.True(t, ok)
 	assert.Equal(t, url.Values{"realm": {"ci"}, "name": {"x"}, "nodes": {"a", "b"}}, f)
 
-	_, ok = actDraftOf(actSpec{}, actForm("realm", "ci"), link)
+	_, ok = actDraftOf(actSpec{}, actForm("realm", "ci"), link, false)
 	assert.False(t, ok, "a dialog without drafts")
-	_, ok = actDraftOf(spec, "", link)
+	_, ok = actDraftOf(spec, "", link, false)
 	assert.False(t, ok, "no draft")
 }
 
@@ -200,7 +203,7 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	body := f.post("/actions/create-cluster/preview", actForm("name", "My Cluster", "w0-count", "2", "dir", "/scratch/x")).Body.String()
 	assert.Contains(t, body, `<span class="act-status" id="act-status" hx-swap-oob="innerHTML"><button type="button" class="pill bad nodot act-go" data-act-go="name" data-act-say="Name: `)
 	assert.Contains(t, body, `data-act-key="1 name" aria-label="1 problem: Name. Go to the field." title="Go to the field">1 problem: Name <span aria-hidden="true">↑</span></button>`)
-	assert.Contains(t, body, `<span class="hint act-tot">3 containers · 3 CPUs · 1.5 GiB of 32 GiB</span></span>`)
+	assert.Contains(t, body, `<span class="hint act-tot" id="act-tot" hx-swap-oob="innerHTML">3 containers · 3 CPUs · 1.5 GiB of 32 GiB</span>`)
 	assert.Contains(t, body, `<div class="callout bad act-probs" id="act-probs" tabindex="-1">`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "dev", "w0-count", "20", "cpus", "0", "dir", "/scratch/dev")).Body.String()
@@ -208,7 +211,12 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	assert.Contains(t, body, ` 2 problems in all." data-act-key="2 name"`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc")).Body.String()
-	assert.Contains(t, body, `<span class="pill ok" data-act-say="Ready. Create runs the command." data-act-key="ready 0">Ready</span><span class="hint act-tot">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
+	assert.Contains(t, body, `<span class="act-status" id="act-status" hx-swap-oob="innerHTML"><span class="vh" data-act-say="Ready. Create hpc runs the command." data-act-key="ready 0"></span></span>`)
+	assert.Contains(t, body, `<span class="hint act-tot" id="act-tot" hx-swap-oob="innerHTML">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
+
+	// A warning is a button too, which a phone shows in the footer.
+	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "realm", "sinf", "w0-count", "1", "dir", "/scratch/hpc")).Body.String()
+	assert.Contains(t, body, `data-act-key="ready 1"></span><button type="button" class="pill warn nodot act-go" data-act-go="@warn" aria-label="Ready, 1 warning. Show the first." title="Show the first warning">Ready · 1 warning <span aria-hidden="true">↑</span></button></span>`)
 
 	// An error has no field: the status shows the list of problems.
 	f.state.configDir = ""
@@ -287,13 +295,14 @@ func TestActPreview_FooterParts(t *testing.T) {
 	assert.Equal(t, "a", actPreview{Cmd: action.Command{Warns: []string{"a", "b"}}}.FirstWarn())
 	assert.Empty(t, actPreview{Cmd: action.Command{Budget: &action.Budget{}}}.FirstWarn())
 	assert.Equal(t, "With 12 nodes, the inotify limit of the host can run out.",
-		actPreview{Cmd: action.Command{Budget: &action.Budget{NowNodes: 10, AddNodes: 2, Inotify: "x"}}}.FirstWarn())
+		actPreview{Cmd: action.Command{Budget: &action.Budget{NowNodes: 10, AddNodes: 2, Limits: []action.HostWarn{{Check: "inotify", Nodes: 10}}}}}.FirstWarn())
 
 	assert.Equal(t, "How many: too many", actPreview{Cmd: action.Command{Problems: []action.Problem{{Label: "How many", Text: "too many"}}}}.FirstText())
 	assert.Equal(t, "it broke", actPreview{Err: "it broke"}.FirstText())
 
 	notes := actPreview{Cmd: action.Command{Notes: []string{"the partition `all`.", "`a`"}}}.NoteParts()
 	assert.Equal(t, [][]actTextPart{{{"the partition ", false}, {"all", true}, {".", false}}, {{"a", true}}}, notes)
+	assert.Equal(t, []pgPiece{{Text: "/"}, {Text: "etc/"}, {Text: "a-b"}}, actTextPart{Text: "/etc/a-b", Mono: true}.Pieces(), "a name in a note breaks only after a slash")
 	assert.Equal(t, [][]string{{"sind", "power", "reboot", "worker-4.dev"}}, actPreview{Cmd: action.Command{Display: "sind power reboot worker-4.dev"}}.CmdLines())
 	assert.Equal(t, [][]string{{"sind", "delete", "cluster"}, {"sind", "delete", "cluster", "dev"}}, actPreview{Cmd: action.Command{Display: "sind delete cluster\nsind delete cluster dev"}}.CmdLines(),
 		"a command of several shows one line for each")

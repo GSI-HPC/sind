@@ -44,7 +44,7 @@ its address with the port, "" for none. */}}
     <p class="cmdlabel">From your terminal</p>
     <div class="cmd"><code>{{.CreateCmd}}</code><button type="button" data-more-copy aria-label="Copy {{.CreateCmd}}">Copy</button></div>
   </div>
-  <p><a class="btn primary" href="{{.NewURL}}" hx-get="{{.NewURL}}" hx-target="#layer" hx-swap="innerHTML">New cluster…</a></p>
+  <p><a class="btn primary" href="{{.NewURL}}">New cluster…</a></p>
 </div></section>
 {{end}}
 {{range .Realms}}{{$realm := .Name}}
