@@ -808,7 +808,11 @@
     S.dirty = false;
     for (const n of document.querySelectorAll('#act-notes [data-act-note]:not([data-act-timed])')) {
       n.dataset.actTimed = '';
-      const tick = () => { if (n.matches(':hover, :focus-within')) setTimeout(tick, 2000); else n.remove(); };
+      // A pointer keeps the notice only once it moved onto it: one that
+      // the notice appeared under, as after a click on the spot, does not.
+      let moved = false;
+      n.addEventListener('pointermove', () => { moved = true; }, { once: true });
+      const tick = () => { if (n.matches(':focus-within') || (moved && n.matches(':hover'))) setTimeout(tick, 2000); else n.remove(); };
       setTimeout(tick, 10000);
     }
     if (det.follow) return;
