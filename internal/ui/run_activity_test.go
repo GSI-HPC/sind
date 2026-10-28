@@ -29,11 +29,11 @@ func TestRunActivityPage(t *testing.T) {
 		`<a class="tab" href="/activity?status=running">Running<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=ok">OK<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=failed">Failed<span class="n">1</span></a>`,
-		`<a class="tab" href="/activity?status=canceled">Canceled<span class="n">1</span></a>`,
+		`<a class="tab" href="/activity?status=canceled">Stopped<span class="n">1</span></a>`,
 		`<a class="mono" href="/runs/r-mid">create cluster dev</a>`,
 		`<span class="pill run">running</span>`,
 		`<span class="pill bad">failed</span>`,
-		"3 ok · 2 failed · 1 canceled",
+		"3 ok · 2 failed · 1 stopped",
 		"1 ok · 3 running",
 		`<span class="chip">terminal</span>`,
 		"/events?f=rail&amp;f=run-list&amp;f=tasks&amp;nav=activity",
@@ -120,7 +120,7 @@ func TestRunMatchesAndCounts(t *testing.T) {
 	assert.True(t, runMatches(store.Run{}, "running"))
 	assert.False(t, runMatches(store.Run{}, "ok"), "a run that goes on has no status")
 	assert.Equal(t, "–", runCountsText(runOf(0, "")))
-	assert.Equal(t, "1 ok · 1 running · 1 queued · 1 failed · 1 canceled · 1 skipped",
+	assert.Equal(t, "1 ok · 1 running · 1 queued · 1 failed · 1 stopped · 1 skipped",
 		runCountsText(runOf(0, "", runSp("step", "s", runStartedAt(0), runKids(
 			runSp("target", "a", runEndedAt(0, 1, "ok")), runSp("target", "b", runStartedAt(0)), runSp("target", "c"),
 			runSp("target", "d", runEndedAt(0, 1, "failed")), runSp("target", "e", runEndedAt(0, 1, "canceled")),

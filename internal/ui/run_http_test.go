@@ -87,7 +87,7 @@ func TestRunPageRenders(t *testing.T) {
 	canceled := ts.get("/runs/r-canceled").Body.String()
 	assert.Contains(t, canceled, `<section class="panel rout warn" aria-labelledby="rout-t">`)
 	assert.NotContains(t, canceled, "Copy the error", "a stopped run has no error to copy")
-	assert.Contains(t, canceled, `<span class="pill warn">canceled</span>`)
+	assert.Contains(t, canceled, `<span class="pill warn">stopped</span>`)
 
 	ok := ts.get("/runs/r-ok").Body.String()
 	assert.NotContains(t, ok, "rout-fail")

@@ -66,6 +66,8 @@
   // phaseName is what a target does in a call or a wait: "create" for the
   // call "docker create".
   function phaseName(s) { return s.n.replace(/^docker /, ''); }
+  // said is the word of a state: a run that was canceled was stopped.
+  function said(s) { return s === 'canceled' ? 'stopped' : s; }
 
   // ---- the run ----
 
@@ -401,12 +403,12 @@
         }
         return [m.done + '/' + m.n + failed, small];
       }
-      return [m.done + '/' + m.n + failed + ' · ' + dur(el, true), m.s === 'ok' ? usually : m.s];
+      return [m.done + '/' + m.n + failed + ' · ' + dur(el, true), m.s === 'ok' ? usually : said(m.s)];
     }
     const w = m.waits.filter(x => !ended(x)).pop();
     if (m.s === 'running') return [dur(el, true), w ? 'waits ' + dur(elapsed(w, t)) : usually];
     const waited = m.waits.reduce((s, x) => s + elapsed(x, t), 0);
-    return [dur(el, true), waited >= 1 ? 'waited ' + dur(waited) : (m.s === 'ok' ? usually : m.s)];
+    return [dur(el, true), waited >= 1 ? 'waited ' + dur(waited) : (m.s === 'ok' ? usually : said(m.s))];
   }
 
   // stepCaption is the second line of a step without targets: what it
@@ -487,7 +489,7 @@
       const s = state(x);
       let c = { queued: 'q', running: 'run', ok: 'ok', failed: 'bad', canceled: 'cx', skipped: 'q' }[s] || 'q';
       if (s === 'running' && x.u && firstByte(x) == null) c = 'w';
-      return [c, '', (x.node || x.n) + ': ' + s, 'i'];
+      return [c, '', (x.node || x.n) + ': ' + said(s), 'i'];
     });
     if (m.n > max) out.push(['more', '+' + (m.n - max)]);
     return out;
@@ -518,7 +520,7 @@
       const a = amountAt(tg, t), z = tg.z;
       const amount = isBytes ? bytes(a) + (z > 0 ? ' / ' + (tg.m === 'size estimated' ? '≈' : '') + bytes(z) : '')
         : a + (z > 0 ? ' / ' + z : '') + ' layers';
-      let word = s, rate = '';
+      let word = said(s), rate = '';
       if (s === 'running') {
         const nt = newest(tg, t);
         if (fb == null) word = 'waiting';
@@ -543,7 +545,7 @@
         text = phaseName(cur) + (cur.m ? ' · ' + cur.m : '') + ' · ' + dur(elapsed(cur, t), true) + (quiet ? ' · no progress reported' : '');
         if (cur.k === 'wait' && cur.to) text += ' of ' + dur(cur.to);
       } else if (s === 'failed') text = tg.err || 'failed';
-      else text = dur(end - tg.r, true) + (s === 'ok' ? '' : ' · ' + s);
+      else text = dur(end - tg.r, true) + (s === 'ok' ? '' : ' · ' + said(s));
       if (tg.u === 'bytes' && tg.w.length) text += ' · pulled ' + bytes(amountAt(tg, t));
       res.push(['txt' + (s === 'failed' ? ' bad' : ''), text, s === 'failed' ? text : '']);
     } else {
@@ -775,8 +777,8 @@
   function headline(t) {
     if (run.end != null) {
       const steps = run.root.kids.filter(s => s.k === 'step' && visible(s, t));
-      const parts = [['b', run.state === 'ok' ? 'done' : run.state === 'ended' ? 'ended' : run.state, '', 'b']];
-      parts.push(['', ' in ' + dur(run.end, true)]);
+      const parts = [['b', run.state === 'ok' ? 'done' : run.state === 'ended' ? 'ended' : said(run.state), '', 'b']];
+      parts.push(['', (run.state === 'canceled' ? ' after ' : ' in ') + dur(run.end, true)]);
       parts.push(['sep', ' · '], ['', plural(steps.length, 'step')]);
       for (const st of steps) {
         const m = stepModel(st, t);

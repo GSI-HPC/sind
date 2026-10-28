@@ -178,12 +178,12 @@ func TestRunStatusClassAndPill(t *testing.T) {
 		"task running": {runOf(0, ""), &store.Task{}, runRunning, "running", "run"},
 		"ok":           {over("ok"), nil, runOK, "ok", "ok"},
 		"failed":       {over("failed"), nil, runFailed, "failed", "bad"},
-		"canceled":     {over("canceled"), nil, runCanceled, "canceled", "warn"},
+		"canceled":     {over("canceled"), nil, runCanceled, "stopped", "warn"},
 		"odd status":   {over("weird"), nil, runEnded, "weird", ""},
 		"skipped":      {over("skipped"), nil, runEnded, "skipped", ""},
 		"no status":    {over(""), nil, runEnded, "ended", ""},
 		"no end":       {func() store.Run { r := over(""); r.Unfinished = true; return r }(), nil, runEnded, "no end recorded", "warn"},
-		"no end, task": {func() store.Run { r := over("canceled"); r.Unfinished = true; return r }(), nil, runCanceled, "canceled", "warn"},
+		"no end, task": {func() store.Run { r := over("canceled"); r.Unfinished = true; return r }(), nil, runCanceled, "stopped", "warn"},
 	} {
 		assert.Equal(t, tc.class, runStatusClass(tc.run), name)
 		label, pill := runPill(tc.run, tc.task)
@@ -298,7 +298,7 @@ func TestRunLine(t *testing.T) {
 	}{
 		"ok":        {runOf(12, "ok"), nil, "done in 12s"},
 		"failed":    {runOf(75, "failed"), nil, "failed in 1m15s"},
-		"canceled":  {runOf(3, "canceled"), nil, "canceled in 3.0s"},
+		"canceled":  {runOf(3, "canceled"), nil, "stopped after 3.0s"},
 		"no status": {runOf(3, ""), nil, "ended in 3.0s"},
 		"no end":    {func() store.Run { r := runOf(3, ""); r.Unfinished = true; return r }(), nil, "no end recorded; the last event came after 3.0s"},
 		"suspended": {func() store.Run { r := runOf(0, ""); r.Suspended = true; return r }(), nil, "suspended"},

@@ -73,7 +73,7 @@ func TestRunTaskPageEndedWithoutRun(t *testing.T) {
 	assert.NotContains(t, body, "/cancel")
 
 	body = ts.get("/tasks/c").Body.String()
-	assert.Contains(t, body, `<div class="callout warn">The command ended (canceled)`)
+	assert.Contains(t, body, `<div class="callout warn">The command ended (stopped)`)
 	assert.NotContains(t, body, "standard error")
 	// The dock keeps the card of the failed command to one line of its
 	// error, and leaves its output to its page.

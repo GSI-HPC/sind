@@ -240,9 +240,11 @@ func runHeadOf(rc runCtx) *runHead {
 	if run.Done() && runStatusClass(run) == runOK {
 		// What the command worked on is the way on.
 		h.Fold = h.Command != nil
-		if h.Back != nil {
-			h.Back.Primary = true
-		}
+	}
+	if h.Back != nil && run.Done() && !h.RetryPrimary && (h.Edit == nil || !h.Edit.Primary) {
+		// The head has one button to press: what the command worked on,
+		// when no Try again is.
+		h.Back.Primary = true
 	}
 	return h
 }
@@ -290,7 +292,12 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 		}
 	case "create worker":
 		if e.realm != "" {
-			h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-worker", "realm", e.realm, "cluster", e.cluster)}
+			// Add workers, for as many workers as the run made.
+			label, count := "Add a worker again…", ""
+			if n := len(activity.NodeNames(run.Root)); n > 1 {
+				label, count = "Add workers again…", strconv.Itoa(n)
+			}
+			h.Edit = &runLink{Label: label, Href: pgDialog("create-worker", "realm", e.realm, "cluster", e.cluster, "count", count)}
 		}
 	}
 }
@@ -468,7 +475,7 @@ func runFailedOf(rc runCtx) *runFailPanel {
 		return nil
 	}
 	if failures == nil && canceled {
-		return runStopped(run)
+		return runStopped(rc, run)
 	}
 	p := &runFailPanel{Class: "bad"}
 	for _, f := range failures {
@@ -498,23 +505,13 @@ func runRollbackNotes(run store.Run) []string {
 	return nil
 }
 
-// runStopped builds the panel of a run that was stopped without a failure.
-func runStopped(run store.Run) *runFailPanel {
-	stopped, never := 0, 0
-	runVisit(run.Root, func(t store.Span, _ string) {
-		switch {
-		case t.Kind != activity.KindTarget:
-		case t.Started.IsZero():
-			never++
-		case t.Done() && t.Status == store.StatusOK:
-		default:
-			stopped++
-		}
-	})
+// runStopped builds the panel of a run that was stopped without a
+// failure: what the nodes did at that time, and what sind undid.
+func runStopped(rc runCtx, run store.Run) *runFailPanel {
 	p := &runFailPanel{Class: "warn"}
-	p.Notes = append(p.Notes, fmt.Sprintf("The run was interrupted. %s stopped while they ran, and %s never started.",
-		pgPlural(stopped, "target", "targets"), pgPlural(never, "target", "targets")))
-	p.Notes = append(p.Notes, runRollbackNotes(run)...)
+	for _, line := range append(runStoppedDoing(run), runStoppedUndo(rc)...) {
+		p.Says = append(p.Says, runPlain{Text: line})
+	}
 	return p
 }
 

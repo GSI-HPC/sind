@@ -184,7 +184,7 @@ func runPill(run store.Run, task *store.Task) (label, class string) {
 	case c == runFailed:
 		return "failed", "bad"
 	case c == runCanceled:
-		return "canceled", "warn"
+		return "stopped", "warn"
 	case run.Unfinished && run.Status == "":
 		return "no end recorded", "warn"
 	}
@@ -604,6 +604,8 @@ func runLine(run store.Run, task *store.Task, now time.Time) string {
 			return "ended in " + elapsed
 		case run.Status == store.StatusOK:
 			return "done in " + elapsed
+		case run.Status == store.StatusCanceled:
+			return "stopped after " + elapsed
 		}
 		return run.Status + " in " + elapsed
 	}

@@ -18,6 +18,6 @@ answers with HX-Redirect. */}}
 {{else if eq .Class "running"}}<section class="panel"><div class="pb waiting"><span class="spin" aria-hidden="true"></span><span>{{if .NoRun}}The command runs. It writes no progress, so it has no run page: this page shows how it ends.{{else}}Waiting for the command to write its first progress event. This page opens the run as soon as it does.{{end}}</span>{{template "run-elapsed" .}}</div></section>
 {{else if and (eq .Class "ok") (not .Output)}}<section class="panel"><div class="pb"><div class="callout">The command ended without errors. Commands such as Drain and Resume write no progress, so they have no run page.</div></div></section>
 {{else}}<section class="panel"><div class="pb stack">
-  <div class="callout {{if eq .Class "failed"}}bad{{else if eq .Class "canceled"}}warn{{end}}">The command ended ({{.Class}}){{if not .NoRun}} before the event log held a run of it{{end}}.{{if .Err}} {{.Err}}{{end}}</div>
+  <div class="callout {{if eq .Class "failed"}}bad{{else if eq .Class "canceled"}}warn{{end}}">The command ended ({{if eq .Class "canceled"}}stopped{{else}}{{.Class}}{{end}}){{if not .NoRun}} before the event log held a run of it{{end}}.{{if .Err}} {{.Err}}{{end}}</div>
   {{if .Output}}<div><div class="cmdlabel">End of what it wrote to standard error</div><pre class="term tout">{{.Output}}</pre></div>{{end}}
 </div></section>{{end}}{{end}}{{end}}{{end}}

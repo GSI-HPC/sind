@@ -21,7 +21,7 @@ const runListMax = 500
 
 // runFilters are the filters of the Activity page, in the order of its tabs.
 var runFilters = []struct{ Key, Label string }{
-	{"", "All"}, {"running", "Running"}, {"ok", "OK"}, {"failed", "Failed"}, {"canceled", "Canceled"},
+	{"", "All"}, {"running", "Running"}, {"ok", "OK"}, {"failed", "Failed"}, {"canceled", "Stopped"},
 }
 
 // registerRunActivity adds the Activity page and its list of runs.
@@ -320,7 +320,7 @@ func runCountsText(run store.Run) string {
 	for _, p := range []struct {
 		n    int
 		what string
-	}{{c.OK, "ok"}, {c.Running, "running"}, {c.Queued, "queued"}, {c.Failed, "failed"}, {c.Canceled, "canceled"}, {c.Skipped, "skipped"}} {
+	}{{c.OK, "ok"}, {c.Running, "running"}, {c.Queued, "queued"}, {c.Failed, "failed"}, {c.Canceled, "stopped"}, {c.Skipped, "skipped"}} {
 		if p.n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.what))
 		}

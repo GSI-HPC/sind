@@ -212,7 +212,7 @@ func runFailOutcome(rc runCtx, p *runFailPanel) *runOutcome {
 	case !run.Done():
 		o.Title = "What failed"
 	case stopped:
-		o.Class, o.Mark, o.Title = "warn", runMark(runCanceled), "Stopped"
+		o.Class, o.Mark, o.Title = "warn", runMark(runCanceled), runStoppedTitle(rc)
 	case run.Root.Name == "create cluster" && e.cluster != "":
 		o.Title = e.cluster + " was not created"
 	default:
@@ -230,11 +230,19 @@ func runFailOutcome(rc runCtx, p *runFailPanel) *runOutcome {
 	case run.Done():
 		meta = append(meta, "failed after "+runDur(runElapsed(run, rc.Now)))
 	}
-	if rb := runRollbackWord(run); rb != "" {
+	switch rb := runRollbackWord(run); {
+	case stopped && rb == "sind rolled back · nothing is left":
+		// What the rollback removed follows in words.
+		meta = append(meta, "nothing is left")
+	case rb != "":
 		meta = append(meta, rb)
 	}
 	o.Meta = strings.Join(meta, " · ")
-	p.Says = runTimeoutSays(tos)
+	says := runTimeoutSays(tos)
+	if stopped {
+		says = append(append([]runPlain{{Text: runStoppedLead(rc)}}, p.Says...), says...)
+	}
+	p.Says = says
 	if len(tos) > 0 {
 		o.WhyTitle = "Why this often happens"
 		o.Why = []string{

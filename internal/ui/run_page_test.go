@@ -86,7 +86,7 @@ func TestRunHead(t *testing.T) {
 	h = runHeadOf(rc)
 	assert.Empty(t, h.TaskID)
 	assert.Equal(t, "exit 130", h.Exit)
-	assert.Equal(t, "canceled", h.Pill)
+	assert.Equal(t, "stopped", h.Pill)
 	assert.Equal(t, "1", runHeadOf(runCtx{Run: store.Run{Trace: "1"}}).Trace)
 	assert.Empty(t, runHeadOf(runCtx{Run: store.Run{}}).Program)
 }
@@ -182,17 +182,33 @@ func TestRunStoppedPanel(t *testing.T) {
 	p := runFailedOf(runCtxOf(runFixture(t, "create-canceled.jsonl", -1)[0], runAt(400)))
 	require.NotNil(t, p)
 	assert.Equal(t, "warn", p.Class)
-	assert.Equal(t, []string{"The run was interrupted. 2 targets stopped while they ran, and 1 target never started."}, p.Notes)
+	assert.Equal(t, []runPlain{
+		{Text: "worker-[0,1] were waiting for munge at that time."}, {Text: "1 node had not started yet."},
+		{Text: "sind removed controller, worker-[0,1] again (rollback, 1.7s)."},
+	}, p.Says)
+	assert.Empty(t, p.Notes)
 
-	// Singular, no rollback, and what finished is not stopped.
+	// What each node did, no rollback, and what finished is not stopped.
 	one := runOf(9, "canceled", runSp("step", "nodes", runEndedAt(0, 9, "canceled"), runKids(
 		runSp("call", "setup", runStartedAt(0)),
 		runSp("target", "a", runEndedAt(0, 1, "ok")),
 		runSp("target", "b", runStartedAt(0)),
 		runSp("target", "c"),
-	)))
+		runSp("target", "d", runStartedAt(0), runKids(runSp("call", "docker create", runEndedAt(0, 1, "ok")), runSp("call", "docker start", runStartedAt(1)))),
+		runSp("target", "e", runEndedAt(0, 9, "canceled"), runKids(runSp("call", "docker exec", runEndedAt(0, 9, "canceled")))),
+		runSp("target", "f", runStartedAt(0), runKids(runSp("wait", "ready", runStartedAt(0), runWith(func(s *store.Span) { s.Message = "container" })))),
+		runSp("target", "g", runStartedAt(0), runKids(runSp("call", "docker pull", runStartedAt(0)))),
+		runSp("target", "h", runStartedAt(0), runKids(runSp("call", "setup", runStartedAt(0)))),
+	), runWith(func(s *store.Span) {
+		s.Children = append(s.Children, runSp("step", "rollback", runKids(runSp("target", "z", runStartedAt(0)))))
+	})))
 	p = runFailedOf(runCtxOf(one, runAt(10)))
-	assert.Equal(t, []string{"The run was interrupted. 1 target stopped while they ran, and 1 target never started."}, p.Notes)
+	assert.Equal(t, []runPlain{
+		{Text: "b was running at that time."}, {Text: "d was starting its container at that time."}, {Text: "e was in exec at that time."},
+		{Text: "f was waiting for its container at that time."}, {Text: "g was pulling its image at that time."}, {Text: "h was in setup at that time."},
+		{Text: "1 node had not started yet."},
+	}, p.Says)
+	assert.Empty(t, p.Notes)
 }
 
 func TestRunRollbackNote(t *testing.T) {
@@ -276,7 +292,7 @@ func TestRunHeadWithoutTask(t *testing.T) {
 	assert.Equal(t, "sind --realm ci create cluster bench", h.Command.Text)
 	assert.Equal(t, "ci", h.Realm)
 	assert.Equal(t, "/dialogs/create-cluster?name=bench&realm=ci", h.Edit.Href)
-	assert.Equal(t, &runLink{Label: "Open bench", Href: "/clusters/ci/bench"}, h.Back)
+	assert.Equal(t, &runLink{Label: "Open bench", Href: "/clusters/ci/bench", Primary: true}, h.Back, "no Try again is the button to press")
 	snap.Clusters = map[string][]cluster.Summary{"sind": {{Name: "bench"}}}
 	assert.Equal(t, "sind create cluster bench", runHeadOf(runCtx{Run: run, Snap: snap}).Command.Text, "the default realm needs no flag")
 	power := run

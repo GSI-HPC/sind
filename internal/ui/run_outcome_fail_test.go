@@ -144,7 +144,7 @@ func TestRunFailOutcome(t *testing.T) {
 	o = at(stopped)
 	assert.Equal(t, "warn", o.Class)
 	assert.Equal(t, "~", o.Mark)
-	assert.Equal(t, "Stopped", o.Title)
+	assert.Equal(t, "Stopped from the terminal", o.Title)
 	assert.Equal(t, "stopped after 5.0s", o.Meta)
 	assert.Empty(t, o.CopyErr)
 	assert.Nil(t, o.Doctor)
