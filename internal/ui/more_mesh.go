@@ -181,7 +181,7 @@ func moreMeshLoad(v *View) error {
 				}
 			}
 			for _, e := range m.External {
-				r.External = append(r.External, moreExternal{e, pgDialog("disconnect", "realm", name, "nodes", e)})
+				r.External = append(r.External, moreExternal{e, pgDialog("disconnect", "realm", name, "container", e)})
 			}
 		}
 		for _, o := range pgOutsides(v.Snap, name) {

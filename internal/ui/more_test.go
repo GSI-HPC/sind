@@ -25,7 +25,7 @@ func TestMoreMeshPage(t *testing.T) {
 		"sind-mesh", "172.18.0.0/16", "sind-dns", "172.18.255.254", "sind.sind", "sind-ssh-config", "2 records",
 		"worker-0.default.sind.sind", "kind-control-plane",
 		"/dialogs/connect?realm=sind", "/dialogs/delete-realm?realm=ci",
-		"/dialogs/disconnect?nodes=kind-control-plane&amp;realm=sind",
+		"/dialogs/disconnect?container=kind-control-plane&amp;realm=sind",
 		"Realm ci has no mesh", "No other containers", `sse-swap="more-mesh"`, `href="/static/`,
 	} {
 		assert.Contains(t, body, want)
