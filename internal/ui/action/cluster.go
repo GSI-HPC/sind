@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 func init() {
@@ -80,8 +81,29 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 		cmd.Nodes = append(cmd.Nodes, PlannedNode{Short: n, Role: string(config.RoleWorker)})
 	}
 	cmd.OK = "Add " + countOr(added, "workers")
-	cmd.Notes = append(cmd.Notes, strings.TrimSpace(size.why+" sind adds the workers, then tells slurmctld about them."))
+	if size.why != "" {
+		cmd.Notes = append(cmd.Notes, size.why)
+	}
+	cmd.Notes = append(cmd.Notes, workerSlurmNote(c.Snap.Status(realm, cl.Name)))
+	var ps problems
+	budgetProblems(f, &cmd, hostBudget(c, count, size.memoryMB), size.memoryMB, size.cpus, &ps)
+	cmd.Problems = ps
 	return cmd, nil
+}
+
+// workerSlurmNote says what Slurm does with new workers of the cluster
+// with the status st, which may be nil: they join the partition all, and
+// sind reconfigures slurmctld, which running jobs survive; on an
+// unmanaged cluster sind does nothing in Slurm.
+func workerSlurmNote(st *cluster.Status) string {
+	if st != nil {
+		for _, n := range st.Nodes {
+			if n.Role == config.RoleController && !n.Managed {
+				return "The cluster is unmanaged, so the new workers are too: sind writes no Slurm config for them and starts no slurmd."
+			}
+		}
+	}
+	return "The new workers join the partition `" + slurm.PartitionAll + "`. Your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure` on the controller, and running jobs go on."
 }
 
 // workerSize is the size that new workers get where the form leaves it

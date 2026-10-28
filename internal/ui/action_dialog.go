@@ -183,7 +183,7 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"create-worker": {
-		OK: "Add", NeedsCluster: true, PickCluster: true,
+		OK: "Add", NeedsCluster: true, PickCluster: true, Fields: actFields("count", "cpus", "memory"),
 		Title: func(d *actDialog) string {
 			if d.Picking {
 				return actPickTitle
@@ -1186,6 +1186,9 @@ func (p actPreview) HostMB() int { return int(p.Snap.Docker.MemTotal >> 20) }
 // HostHigh is the memory of the host above which the plan warns, in MiB.
 func (p actPreview) HostHigh() int { return p.HostMB() * action.HostMemoryWarn / 100 }
 
+// NodesText counts nodes: "1 node", "3 nodes".
+func (p actPreview) NodesText(n int) string { return pgPlural(n, "node", "nodes") }
+
 // MemoryLabel writes a size in MiB for people.
 func (p actPreview) MemoryLabel(mb int) string { return action.MemoryLabel(mb) }
 
@@ -1326,18 +1329,49 @@ func (p actPreview) Totals() string {
 }
 
 // Warnings is how many warnings the command has, which the pill counts.
-func (p actPreview) Warnings() int { return len(p.Cmd.Warns) }
+func (p actPreview) Warnings() int {
+	n := len(p.Cmd.Warns)
+	if p.Cmd.Budget != nil && p.Cmd.Budget.Inotify != "" {
+		n++
+	}
+	return n
+}
 
 // CmdWords are the words of the command as the dialog shows it, each of
 // which a line breaks only where it does not fit by itself, so that a
 // node name such as worker-4.dev stays whole.
 func (p actPreview) CmdWords() []string { return strings.Split(p.Cmd.Display, " ") }
 
+// actTextPart is a part of a note: text, or, where Mono is set, a name
+// as the shell or a config file writes it.
+type actTextPart struct {
+	Text string
+	Mono bool
+}
+
+// NoteParts are the notes of the command, each in parts: a note writes a
+// name in backquotes, as "the partition `all`", which the dialog sets in
+// the monospaced font.
+func (p actPreview) NoteParts() [][]actTextPart {
+	out := make([][]actTextPart, len(p.Cmd.Notes))
+	for i, note := range p.Cmd.Notes {
+		for j, part := range strings.Split(note, "`") {
+			if part != "" {
+				out[i] = append(out[i], actTextPart{Text: part, Mono: j%2 == 1})
+			}
+		}
+	}
+	return out
+}
+
 // FirstWarn is the first warning of the command, which the footer shows
 // beside the count, so that a warning stays in view: "" for none.
 func (p actPreview) FirstWarn() string {
-	if len(p.Cmd.Warns) > 0 {
+	switch {
+	case len(p.Cmd.Warns) > 0:
 		return p.Cmd.Warns[0]
+	case p.Cmd.Budget != nil && p.Cmd.Budget.Inotify != "":
+		return "With " + pgPlural(p.Cmd.Budget.Nodes(), "node", "nodes") + ", the inotify limit of the host can run out."
 	}
 	return ""
 }
@@ -1437,6 +1471,7 @@ func actContext(r *http.Request, v *View, st *actState) action.Context {
 	}
 	if st.workers != nil {
 		c.Worker = func(container string) action.WorkerFacts { return st.workers.facts(r.Context(), container) }
+		c.Sizes = func(containers []string) []action.WorkerFacts { return st.workers.sizes(r.Context(), containers) }
 	}
 	return c
 }

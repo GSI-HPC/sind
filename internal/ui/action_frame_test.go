@@ -283,10 +283,15 @@ func TestActPreview_StatusParts(t *testing.T) {
 func TestActPreview_FooterParts(t *testing.T) {
 	assert.Empty(t, actPreview{}.FirstWarn())
 	assert.Equal(t, "a", actPreview{Cmd: action.Command{Warns: []string{"a", "b"}}}.FirstWarn())
+	assert.Empty(t, actPreview{Cmd: action.Command{Budget: &action.Budget{}}}.FirstWarn())
+	assert.Equal(t, "With 12 nodes, the inotify limit of the host can run out.",
+		actPreview{Cmd: action.Command{Budget: &action.Budget{NowNodes: 10, AddNodes: 2, Inotify: "x"}}}.FirstWarn())
 
 	assert.Equal(t, "How many: too many", actPreview{Cmd: action.Command{Problems: []action.Problem{{Label: "How many", Text: "too many"}}}}.FirstText())
 	assert.Equal(t, "it broke", actPreview{Err: "it broke"}.FirstText())
 
+	notes := actPreview{Cmd: action.Command{Notes: []string{"the partition `all`.", "`a`"}}}.NoteParts()
+	assert.Equal(t, [][]actTextPart{{{"the partition ", false}, {"all", true}, {".", false}}, {{"a", true}}}, notes)
 	assert.Equal(t, []string{"sind", "power", "reboot", "worker-4.dev"}, actPreview{Cmd: action.Command{Display: "sind power reboot worker-4.dev"}}.CmdWords())
 }
 

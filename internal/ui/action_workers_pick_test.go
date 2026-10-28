@@ -41,7 +41,7 @@ func TestActDialog_AddWorkersPicksTheCluster(t *testing.T) {
 	assert.Regexp(t, `(?s)realm ci</span>.*hx-get="/dialogs/create-worker\?cluster=pr&amp;realm=ci" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" data-act-focus><span class="act-crn"><b class="mono">pr</b><small>1 worker, 2 CPUs and 1 GiB</small>.*realm sind</span>`, body)
 	// The fixture creates dev now.
 	assert.Contains(t, body, `data-act-focus disabled><span class="act-crn"><b class="mono">dev</b><small>sind creates it now. Add workers when the create ends.</small>`)
-	assert.Contains(t, body, `id="act-count" name="count" value="1" min="1" readonly>`)
+	assert.Contains(t, body, `id="act-count" name="count" value="1" min="1" readonly aria-describedby="act-err-count">`)
 	assert.Contains(t, body, `placeholder="as its newest worker"`)
 	assert.Contains(t, f.post("/actions/create-worker/preview", actForm("realm", "ci")).Body.String(), `<span class="hint act-tot">Pick a cluster.</span>`)
 
@@ -50,7 +50,7 @@ func TestActDialog_AddWorkersPicksTheCluster(t *testing.T) {
 	assert.Contains(t, body, `<h2 id="act-title">Add workers to pr</h2>`)
 	assert.Contains(t, body, `<span class="faint">Cluster</span> <b class="mono">pr</b></span><small>realm ci · 1 worker, 2 CPUs and 1 GiB</small>`)
 	assert.Contains(t, body, `hx-get="/dialogs/create-worker?realm=ci" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" aria-label="Change the cluster">Change…</button>`)
-	assert.Contains(t, body, `id="act-count" name="count" value="3" min="1">`)
+	assert.Contains(t, body, `id="act-count" name="count" value="3" min="1" aria-describedby="act-err-count">`)
 
 	// With one cluster, there is nothing to change to; a cluster with
 	// several workers says each.

@@ -436,13 +436,69 @@ func TestActPreview_AddWorkersShowsTheirSize(t *testing.T) {
 		info := &docker.ContainerInfo{Name: name}
 		info.HostConfig.NanoCPUs, info.HostConfig.Memory = 2e9, 1<<30
 		return info, nil
-	})
+	}, nil)
 
 	body := f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "3")).Body.String()
 	assert.Contains(t, body, `<p class="act-sum">3 × 2 CPUs, 1 GiB: worker-2 … worker-4</p>`)
 	assert.Contains(t, body, `>Add 3 workers<kbd`)
 	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "1", "memory", "2g")).Body.String()
 	assert.Contains(t, body, `<p class="act-sum">1 × 2 CPUs, 2 GiB: worker-2</p>`)
+}
+
+func TestActPreview_AddWorkersShowsTheHost(t *testing.T) {
+	f := newActFixture(t)
+	f.state.workers = newActWorkers(func(_ context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
+		info := &docker.ContainerInfo{Name: name}
+		info.HostConfig.NanoCPUs, info.HostConfig.Memory = 2e9, 1<<30
+		return info, nil
+	}, nil)
+	f.st.SetDocker(store.DockerState{Checked: true, MemTotal: 8 << 30, NCPU: 4})
+	f.st.SetDoctor(&store.DoctorReport{Checks: []store.DoctorCheck{{Name: "inotify", Status: "warning", Detail: "max_user_instances 128"}}})
+
+	// 4 nodes of 1 GiB run; 3 more come to 7 GiB of 8 GiB.
+	body := f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "3")).Body.String()
+	assert.Contains(t, body, `<div class="act-hb high">`)
+	assert.Contains(t, body, `<b>Memory of the Docker host</b><span class="mono">7 GiB of 8 GiB</span>`)
+	assert.Contains(t, body, `<rect class="now" width="500" height="10"/><rect class="add" x="500" width="375" height="10"/></svg>`)
+	assert.Contains(t, body, `the 4 nodes that run now: 4 GiB</span>`)
+	assert.Contains(t, body, `the new workers: 3 GiB</span>`)
+	assert.Contains(t, body, `<span>Nodes on the host then</span><span class="mono">7</span>`)
+	assert.Contains(t, body, `<div class="callout warn">The memory limits of the nodes then come to 7 GiB, 87% of the 8 GiB of the Docker host`)
+	assert.Contains(t, body, `>Add 3 workers<kbd`)
+	assert.NotContains(t, body, "inotify")
+	assert.Contains(t, body, `>1 warning <span aria-hidden="true">↑</span></button><span class="act-fnote" title="The memory limits of the nodes then come to 7 GiB`)
+	assert.NotContains(t, body, `name="overcommit"`)
+	assert.Contains(t, body, `<div class="callout">The new workers join the partition <span class="mono">all</span>. Your own <span class="mono">PartitionName</span> lines do not change.`)
+
+	// 6 more come to 10 GiB, and to 10 nodes: the host is a mark on the
+	// bar, and How many says how many fit.
+	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "6")).Body.String()
+	assert.Contains(t, body, `<div class="act-hb over">`)
+	assert.Contains(t, body, `<rect class="add" x="400" width="600" height="10"/><rect class="host" x="800" width="5" height="10"/></svg>`)
+	assert.Contains(t, body, `the new workers: 6 GiB, more than the host has</span>`)
+	assert.Contains(t, body, `<li><a href="#act-count" data-act-jump="count">How many</a>: the host has room for about 4 more workers of 1 GiB. Add fewer,`)
+	assert.Contains(t, body, `<span class="err" id="act-err-count" hx-swap-oob="innerHTML">the host has room for about 4 more workers of 1 GiB.`)
+	assert.Contains(t, body, `aria-label="1 problem: How many.`)
+	assert.Contains(t, body, `<span class="act-fnote" title="the host has room for about 4 more workers of 1 GiB.`, "the pill names the field, the note leaves it out")
+	assert.Contains(t, body, `<input type="checkbox" id="act-overcommit" name="overcommit" data-act-hold`)
+	assert.Contains(t, body, `With 10 nodes, the inotify limit of the host can keep systemd in new nodes from starting: <span class="mono">max_user_instances 128</span>. <a href="/doctor">The Doctor</a> says how to raise it.`)
+	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true" disabled>`)
+
+	// Added anyway, the limits over the host are a warning.
+	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "6", "overcommit", "on")).Body.String()
+	assert.Contains(t, body, `>2 warnings <span aria-hidden="true">↑</span></button><span class="act-fnote" title="You add them anyway: the memory limits come to 10 GiB, more than the 8 GiB of the Docker host.">`)
+	assert.Contains(t, body, `<div class="callout warn">You add them anyway:`)
+	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "1", "overcommit", "on", "memory", "8g")).Body.String()
+	assert.Contains(t, body, `name="overcommit" checked data-act-hold`)
+	assert.Contains(t, body, `the new worker: 8 GiB, more than the host has</span>`)
+	assert.Contains(t, body, `<span class="mono">5</span>`)
+	assert.NotContains(t, body, "act-probs")
+	assert.NotContains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true" disabled>`)
+
+	// A field that is wrong says so in place.
+	body = f.post("/actions/create-worker/preview", actForm("cluster", "dev", "count", "1", "memory", "lots")).Body.String()
+	assert.Contains(t, body, `<span class="err" id="act-err-memory" hx-swap-oob="innerHTML">invalid memory`)
+	assert.Contains(t, body, "Fix the field above to see the command.")
 }
 
 func TestActPreview_Warnings(t *testing.T) {

@@ -67,6 +67,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
 {{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}{{/* the footer says what the form lacks */}}{{else}}
 {{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
+{{if .Cmd.Budget}}{{template "act-budget" .}}{{end}}
 {{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>{{$p.ProblemsText}}</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
 {{if .Cmd.Goes}}<div class="act-gs"><div class="callout bad act-list"><b>Goes</b><ul>{{range .Cmd.Goes}}<li>{{.}}</li>{{end}}</ul></div>
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>
@@ -99,11 +100,28 @@ first of them; the first problem or warning says itself in short. */}}
 {{- else if .Hint}}<span class="hint act-tot">{{.Hint}}</span>
 {{- else if .Warnings}}<button type="button" class="pill warn nodot act-go" data-act-go="@warn" aria-label="{{.WarningsText}}. Show them." title="Show the warnings">{{.WarningsText}} <span aria-hidden="true">↑</span></button><span class="act-fnote" title="{{.FirstWarn}}">{{.FirstWarn}}</span>{{end}}{{end}}
 
+{{/* act-budget is what new workers take of the Docker host beside the
+nodes that run on it: the memory limits of all of them against the memory
+of the host, as a bar of the nodes that run now and the new ones, on which
+the host is a mark once they come to more; the number of nodes, the
+Doctor's inotify warning once they reach it, and, while the limits come to
+more than the host has, the box that adds them anyway. */}}
+{{define "act-budget"}}{{$p := .}}{{with .Cmd.Budget}}<div class="act-budget" id="act-budget">
+<div class="act-hb{{if .Over}} over{{else if .High}} high{{end}}">
+  <div class="act-hbh"><b>Memory of the Docker host</b><span class="mono">{{$p.MemoryLabel .TotalMB}} of {{$p.MemoryLabel .HostMB}}</span></div>
+  <svg class="act-hbar" viewBox="0 0 1000 10" preserveAspectRatio="none" aria-hidden="true"><rect class="now" width="{{.NowW}}" height="10"/><rect class="add" x="{{.NowW}}" width="{{.AddW}}" height="10"/>{{if .Over}}<rect class="host" x="{{.HostX}}" width="5" height="10"/>{{end}}</svg>
+  <div class="act-hbl hint"><span><i class="act-sw now" aria-hidden="true"></i>the {{$p.NodesText .NowNodes}} that run now: {{$p.MemoryLabel .NowMB}}{{with .Unknown}}, {{$p.NodesText .}} of them of a size sind ui cannot read{{end}}</span>
+    <span><i class="act-sw add" aria-hidden="true"></i>the new {{if eq .AddNodes 1}}worker{{else}}workers{{end}}: {{$p.MemoryLabel .AddMB}}{{if .Over}}, more than the host has{{end}}</span></div>
+  <div class="act-hbh"><span>Nodes on the host then</span><span class="mono">{{.Nodes}}</span></div></div>
+{{with .Inotify}}<div class="callout warn">With {{$p.NodesText $p.Cmd.Budget.Nodes}}, the inotify limit of the host can keep systemd in new nodes from starting: <span class="mono">{{.}}</span>. <a href="/doctor">The Doctor</a> says how to raise it.</div>{{end}}
+{{if .Over}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if $p.Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Add anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
+</div>{{end}}{{end}}
+
 {{/* act-callouts are what to know about the command of a preview. */}}
 {{define "act-callouts"}}
 {{if .Warn}}<div class="callout warn">{{.Warn}}</div>{{end}}
 {{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. {{.LockWaits}}</div>{{end}}
-{{range .Cmd.Notes}}<div class="callout">{{.}}</div>{{end}}
+{{range .NoteParts}}<div class="callout">{{range .}}{{if .Mono}}<span class="mono">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</div>{{end}}
 {{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
 {{end}}
 
@@ -359,14 +377,14 @@ with the fields that the user filled in. */}}
 {{define "act-dlg-create-worker"}}
 {{if .Picking}}<div class="fld"><span class="lbl" id="act-cl-lbl">Cluster</span>
   <div class="act-cls" role="group" aria-labelledby="act-cl-lbl">{{range .ClusterGroups}}<div class="act-clg" role="group" aria-label="Realm {{.Realm}}"><span class="act-ogl" aria-hidden="true">realm {{.Realm}}</span>
-    {{range .Rows}}<button type="button" class="act-crow" hx-get="{{.URL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" data-act-focus{{if .Off}} disabled{{end}}><span class="act-crn"><b class="mono">{{.Name}}</b><small>{{with .Off}}{{.}}{{else}}{{.Workers}}{{end}}</small></span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</button>{{end}}</div>{{end}}</div>
+    {{range .Rows}}<button type="button" class="act-crow" hx-get="{{.URL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" data-act-focus{{if .Off}} disabled{{end}}><span class="act-crn"><b class="mono">{{.Name}}</b><small>{{with .Off}}{{.}}{{else}}{{.Workers}}{{end}}</small></span>{{if .Pill.Text}}<span class="pill {{.Pill.Class}}">{{.Pill.Text}}</span>{{end}}</button>{{end}}</div>{{end}}</div>
   <span class="hint">Or open Add workers on the page of a cluster to skip this step.</span></div>
-{{else}}{{with .ClusterRow}}<div class="act-target act-ctarget"><span class="act-crn"><span><span class="faint">Cluster</span> <b class="mono">{{.Name}}</b></span><small>realm {{.Realm}} · {{.Workers}}</small></span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}
+{{else}}{{with .ClusterRow}}<div class="act-target act-ctarget"><span class="act-crn"><span><span class="faint">Cluster</span> <b class="mono">{{.Name}}</b></span><small>realm {{.Realm}} · {{.Workers}}</small></span>{{if .Pill.Text}}<span class="pill {{.Pill.Class}}">{{.Pill.Text}}</span>{{end}}
   {{- if $.CanChange}}<button type="button" class="btn sm" hx-get="{{$.ChangeURL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" aria-label="Change the cluster">Change…</button>{{end}}</div>{{end}}{{end}}
 <div class="row">
-  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"{{if .Picking}} readonly{{end}}></div>
-  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" min="1"{{if .Picking}} readonly{{end}}></div>
-  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" autocapitalize="off" spellcheck="false"{{if .Picking}} readonly{{end}}><span class="hint">Such as 1g or 512m.</span></div>
+  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"{{if .Picking}} readonly{{end}} aria-describedby="act-err-count"><span class="err" id="act-err-count"></span></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" min="1"{{if .Picking}} readonly{{end}} aria-describedby="act-err-cpus"><span class="err" id="act-err-cpus"></span></div>
+  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" autocapitalize="off" spellcheck="false"{{if .Picking}} readonly{{end}} aria-describedby="act-err-memory act-hint-memory"><span class="err" id="act-err-memory"></span><span class="hint" id="act-hint-memory">Such as 1g or 512m.</span></div>
 </div>
 {{end}}
 

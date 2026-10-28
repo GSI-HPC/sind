@@ -69,7 +69,7 @@ func moreFixture(t *testing.T, st *store.Store) {
 	st.SetDoctor(&store.DoctorReport{Time: pgNow.Add(-3 * time.Minute), Checks: []store.DoctorCheck{
 		{Name: "Docker Engine", Status: "ok", Detail: "Docker Engine 28.5.1"},
 		{Name: "cgroup v2", Status: "ok", Detail: "cgroup2 with nsdelegate"},
-		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_instances is 128; 9 nodes and more can run out", Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
+		{Name: "inotify", Status: "warning", Detail: "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)", Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
 		{Name: "DNS policy", Status: "failed", Detail: "not authorized (optional)", Remediation: "sudo resolvectl dns docker0 127.0.0.1"},
 		{Name: "Odd", Status: "strange"},
 	}})

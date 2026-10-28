@@ -11,7 +11,7 @@
   words: [cluster, node-roles, managed, data, identity, wait, rollback]
 - id: create-worker
   title: Add workers
-  summary: Adds worker nodes to a running cluster and tells slurmctld. Opened without a cluster, as from the Overview or the jump box while there are several, the dialog asks for the cluster first; one that a command creates or deletes now is off.
+  summary: Adds worker nodes to a running cluster, in the partition all, and reconfigures slurmctld. Opened without a cluster, as from the Overview or the jump box while there are several, the dialog asks for the cluster first; one that a command creates or deletes now is off. It sets the memory limits of the new workers and of the nodes that run against the memory of the Docker host, and holds the button while they come to more, until you tick Add anyway.
   command: sind create worker CLUSTER --count N
   undo: Delete the workers
   doc: usage/worker-management#add-workers

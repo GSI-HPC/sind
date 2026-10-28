@@ -99,7 +99,7 @@
 .scrim .act-crn{display:grid;gap:2px;min-width:0}
 .scrim .act-crn small{color:var(--muted);font-size:var(--t-sm)}
 .scrim .act-crow:disabled small{color:var(--faint)}
-.scrim .act-ctarget .act-crn{flex:1}
+.scrim .act-ctarget .act-crn{flex:1 1 16em}
 .scrim .act-ph2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px}
 .scrim .act-picks{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .scrim .act-qn{font:var(--t-xs) var(--f-mono);color:var(--faint);margin-left:2px}
@@ -153,6 +153,8 @@
 .scrim .act-nr input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
 .scrim .act-lab{display:grid;gap:1px;min-width:0}
 .scrim .act-lab b{font:600 var(--t-md) var(--f-mono)}
+/* The label of a checkbox is a word, not a name. */
+.scrim .act-box .act-lab b{font-family:var(--f-body)}
 .scrim .act-lab small{font:400 var(--t-sm) var(--f-mono);color:var(--faint)}
 .scrim .act-lab>label{cursor:pointer}
 .scrim .act-nr:has(input[type=checkbox]:not(:checked)) .act-sq{opacity:.4}
@@ -245,8 +247,24 @@
 .scrim .act-ids:not(:has(input[name=identity][value=clientIds]:checked)) .act-ctlusers{display:none}
 
 /* The plan pane. */
+/* The budget of the host: a bar of the memory of the nodes that run now
+   and of the new ones, against the host, which is a mark once they come to
+   more; with its legend and the number of nodes. */
+.scrim .act-hb{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+.scrim .act-hbh{display:flex;justify-content:space-between;gap:8px;font-size:var(--t-md)}
+.scrim .act-hbh b{font-weight:600}
+.scrim .act-hbh .mono{white-space:nowrap}
+.scrim .act-hbar{display:block;width:100%;height:10px;border-radius:5px;background:var(--line-2)}
+.scrim .act-hbar .now,.scrim .act-sw.now{fill:var(--deco);background:var(--deco)}
+.scrim .act-hbar .add,.scrim .act-sw.add{fill:var(--accent);background:var(--accent)}
+.scrim .act-hb.high .act-hbar .add,.scrim .act-hb.high .act-sw.add{fill:var(--warn);background:var(--warn)}
+.scrim .act-hb.over .act-hbar .add,.scrim .act-hb.over .act-sw.add{fill:var(--bad);background:var(--bad)}
+.scrim .act-hbar .host{fill:var(--fg)}
+.scrim .act-hbl{display:flex;flex-wrap:wrap;gap:2px 14px}
+.scrim .act-sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
 .scrim .act-meter{display:grid;gap:2px}
 .scrim .act-meter meter{width:100%;height:8px}
+.scrim .act-budget{display:grid;gap:8px}
 .scrim .act-ph{display:flex;align-items:center;gap:8px}
 .scrim .act-ph h3{flex:1;margin:0}
 .scrim .act-probs a{color:var(--bad);font-weight:600}

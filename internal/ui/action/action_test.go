@@ -210,7 +210,7 @@ func TestBuildCreateWorker(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "create", "worker", "dev", "--count", "2"}, cmd.Argv)
 	assert.Equal(t, "sind create worker dev --count 2", cmd.Display)
-	assert.Equal(t, []string{"sind adds the workers, then tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, []string{"The new workers join the partition `all`. Your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure` on the controller, and running jobs go on."}, cmd.Notes)
 	assert.Equal(t, "2 × the CPUs of worker-3, the memory of worker-3: worker-4 … worker-5", cmd.Summary)
 	assert.Equal(t, []PlannedNode{{Short: "worker-4", Role: "worker"}, {Short: "worker-5", Role: "worker"}}, cmd.Nodes)
 	assert.Equal(t, "Add 2 workers", cmd.OK)
@@ -250,7 +250,7 @@ func TestBuildCreateWorker_Sizes(t *testing.T) {
 	cmd, err = a.Build(form("cluster", "default", "count", "1"), c)
 	require.NoError(t, err)
 	assert.Equal(t, "1 × the CPUs of worker-0, the memory of worker-0: worker-1", cmd.Summary)
-	assert.Equal(t, []string{"sind ui cannot look at the size of worker-0: docker: gone. sind adds the workers, then tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, []string{"sind ui cannot look at the size of worker-0: docker: gone.", "The new workers join the partition `all`. Your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure` on the controller, and running jobs go on."}, cmd.Notes)
 
 	// A worker without limits gives new workers sind's defaults, as sind
 	// does.

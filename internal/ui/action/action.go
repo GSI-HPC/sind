@@ -62,6 +62,10 @@ type Command struct {
 	// accept.
 	Containers, CPUs, MemoryMB int
 	OverHost                   bool
+	// Budget is what the new nodes of a command that adds workers take
+	// of the Docker host, beside the nodes that run on it, nil while sind
+	// ui does not know.
+	Budget *Budget
 	// Images are the images of Nodes and what sind ui knows of them.
 	Images []PlanImage
 	// After is what the command runs once the nodes are up, and SlurmConf
@@ -207,6 +211,9 @@ type Context struct {
 	Image func(image string) ImageFacts
 	// Worker tells the size of a worker container; nil knows nothing.
 	Worker func(container string) WorkerFacts
+	// Sizes tells the sizes of node containers, in their order, as one
+	// look at Docker; nil knows nothing.
+	Sizes func(containers []string) []WorkerFacts
 }
 
 // WorkerFacts is what sind ui knows of the size of a worker container.

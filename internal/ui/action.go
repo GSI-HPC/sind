@@ -118,7 +118,7 @@ func actService() Service {
 			client := docker.NewClient(env.Exec)
 			env.Put(actKey{}, &actState{
 				starter: r, home: home, configDir: filepath.Join(stateDir, "ui", "configs"), writeFile: actSaveFile,
-				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(client), workers: newActWorkers(client.InspectContainer),
+				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(client), workers: newActWorkers(client.InspectContainer, client.InspectContainers),
 			})
 			return nil
 		},

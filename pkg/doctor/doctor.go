@@ -93,6 +93,10 @@ func CheckDockerVersion(version string) error {
 // 128 runs out first.
 const MinInotifyInstances = 1024
 
+// InotifyNodes is the number of nodes on the host from which the kernel's
+// default of fs.inotify.max_user_instances can run out.
+const InotifyNodes = 10
+
 // inotifyInstancesPath is where the kernel exposes
 // fs.inotify.max_user_instances.
 const inotifyInstancesPath = "/proc/sys/fs/inotify/max_user_instances"
