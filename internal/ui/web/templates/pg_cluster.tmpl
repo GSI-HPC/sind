@@ -126,5 +126,7 @@ the nodes it acts on, and the nodes that a verb skips. */}}
   {{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
 <section class="panel"><div class="ph"><h2>Services</h2></div><div class="pb stack">
   {{if .API}}<dl class="kv"><dt><span data-word="slurmrestd">slurmrestd</span></dt><dd class="mono">{{.API}}</dd></dl>{{else}}<p class="muted pg-flat">No api node, so no slurmrestd. Add <span class="mono">api</span> to the nodes of the config.</p>{{end}}
-  {{with .Grafana}}<dl class="kv"><dt>Grafana</dt><dd class="mono">{{.}}</dd></dl>{{end}}</div></section></div>
+  {{with .Grafana}}<dl class="kv"><dt>Grafana</dt><dd class="mono">{{.}}</dd></dl>{{end}}</div></section>
+<section class="panel"><div class="ph"><h2>Your files</h2></div><div class="pb stack">
+  {{with .Files}}{{template "pg-files" .}}{{else}}<p class="muted pg-flat">Where your files are appears once sind ui has probed the cluster.</p>{{end}}</div></section></div>
 <p class="muted pg-hint">There is no terminal in the browser. Each command runs in your own terminal.</p>{{end}}

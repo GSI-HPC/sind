@@ -35,6 +35,12 @@ which adds the tile of such a node. */}}
 {{/* pg-copy-icon is the sign of a button that copies. */}}
 {{define "pg-copy-icon"}}<svg class="pg-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></svg>{{end}}
 
+{{/* pg-files says where the files of the jobs of a cluster are, a pgFiles:
+the host side and the path in the nodes, a sentence, and the command that
+copies a job script in. */}}
+{{define "pg-files"}}<div class="pg-files"><div class="pg-fmap"><span class="pg-fside"><small>{{.Kind}}</small><b class="mono">{{or .Host "–"}}</b></span><span class="pg-farrow" aria-hidden="true">→</span><span class="pg-fside"><small>In every node</small><b class="mono">{{.Node}}</b></span></div>
+  <p class="pg-ftext">{{.Text}}</p>{{with .Copy}}<div class="cmd"><code>{{.}}</code><button type="button" data-pg-copy aria-label="Copy {{.}}">Copy</button></div>{{end}}</div>{{end}}
+
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}
 

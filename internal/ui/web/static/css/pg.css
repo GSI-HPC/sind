@@ -412,3 +412,18 @@ pre.pg-jl{max-height:220px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 
 /* the Slurm tab: the rows are cards on a phone, as in the Nodes tab */
 td.act{white-space:nowrap}
+
+/* Your files, on the Connect tab of a cluster and the New cluster page:
+   the host side and the path in the nodes, then what to do. */
+.pg-files{display:grid;gap:10px;min-width:0}
+.pg-fmap{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center}
+.pg-fside{display:grid;gap:2px;padding:8px 12px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2);min-width:0}
+.pg-fside small{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+.pg-fside b{font-weight:500;overflow-wrap:anywhere}
+.pg-farrow{color:var(--muted);font-size:var(--t-lg)}
+.pg-ftext{margin:0;color:var(--muted);font-size:var(--t-md)}
+
+@media (max-width:480px){
+  .pg-fmap{grid-template-columns:minmax(0,1fr)}
+  .pg-farrow{transform:rotate(90deg);justify-self:center}
+}

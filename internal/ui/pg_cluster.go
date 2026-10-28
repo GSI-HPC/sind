@@ -177,10 +177,12 @@ type pgClusterView struct {
 	Data *cluster.MountPoint
 	// Ready is the "Ready for jobs" card of the Summary.
 	Ready *pgReady
-	// Connect tab.
+	// Connect tab. Files says where the files of the jobs are, nil while
+	// the status has no data mount.
 	Commands []pgCmd
 	API      string
 	Grafana  string
+	Files    *pgFiles
 	HA       []string
 }
 
@@ -459,6 +461,10 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 	}
 	if api != nil {
 		d.API = "http://" + api.FQDN + ":6820"
+	}
+	if m := pgDataMount(d.Status); m != nil {
+		f := pgFilesOf(*m, pgFilesNode(d.Cluster.Nodes))
+		d.Files = &f
 	}
 	if m := sn.Monitorings[d.Realm]; m != nil && d.Cluster.Monitoring {
 		for _, s := range m.Services {
