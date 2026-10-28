@@ -869,8 +869,8 @@ func TestPgSlurm(t *testing.T) {
 
 	pgFillSlurm(ts.st)
 	body = pgBody(t, ts, "/clusters/sind/dev?tab=slurm", 200)
-	assert.Contains(t, body, `<td class="mono"><b>all</b> <span class="chip brand">default</span></td><td><span class="pill ok">up</span></td><td class="mono">infinite</td><td class="num">4</td><td class="mono">worker-[0-3]</td>`)
-	assert.Contains(t, body, `<td class="mono"><b>debug</b></td><td><span class="pill bad">down</span></td>`)
+	assert.Contains(t, body, `<td class="mono c-name"><b>all</b> <span class="chip brand">default</span></td><td class="c-state"><span class="pill ok">up</span></td><td class="mono" data-label="Time limit">infinite</td><td class="num" data-label="Nodes">4</td><td class="mono" data-label="Node list">worker-[0-3]</td>`)
+	assert.Contains(t, body, `<td class="mono c-name"><b>debug</b></td><td class="c-state"><span class="pill bad">down</span></td>`)
 	assert.Contains(t, body, `<td class="mono c-name"><a href="/nodes/sind/dev/worker-0"><b>worker-0</b></a></td><td class="c-state"><span class="pill run">mixed</span></td><td data-label="Reason"><span class="faint">–</span></td><td data-label="CPUs">1 of 2 in use</td><td data-label="Memory">1 GiB</td><td class="mono" data-label="Partitions">all, debug</td>`)
 	assert.Contains(t, body, `<span class="pill warn">drained</span></td><td data-label="Reason">disk check</td>`)
 	assert.Contains(t, body, `<span class="pill bad">down*</span></td><td data-label="Reason">Not responding</td><td data-label="CPUs">0 of 2 in use</td><td data-label="Memory">512 MB</td>`)

@@ -51,7 +51,7 @@ The state of one cluster, in six tabs.
 
 {{< uishot "cluster-nodes-selected" >}}
 
-**Slurm** shows what Slurm says: the partitions, the state, reason, CPUs and memory of each worker, and the `slurm.conf` and `sind-nodes.conf` that sind wrote, each with **Copy**. **View slurm.conf** on the Summary leads here. sind ui runs `sinfo` on the controller each time it reads the status of the cluster, and gives it 10 seconds. When slurmctld does not answer, the tab says why and still shows the files, which the controller reads without slurmctld. A worker that a command creates or deletes shows the command's state in place of its Slurm state and reason, such as `starting` and `waits for munge · 19s of 5m`. A worker that takes no jobs has its first fix in its row, such as **Resume…**, after its logs unless Slurm drained it; one that takes jobs has **Drain…**. On a phone each worker is a card.
+**Slurm** shows what Slurm says: the partitions, the state, reason, CPUs and memory of each worker, and the `slurm.conf` and `sind-nodes.conf` that sind wrote, each with **Copy**. **View slurm.conf** on the Summary leads here. sind ui runs `sinfo` on the controller each time it reads the status of the cluster, and gives it 10 seconds. When slurmctld does not answer, the tab says why and still shows the files, which the controller reads without slurmctld. A worker that a command creates or deletes shows the command's state in place of its Slurm state and reason, such as `starting` and `waits for munge · 19s of 5m`. A worker that takes no jobs has its first fix in its row, such as **Resume…**, after its logs unless Slurm drained it; one that takes jobs has **Drain…**. On a phone each partition and each worker is a card.
 
 {{< uishot "cluster-slurm" >}}
 

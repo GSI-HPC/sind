@@ -82,8 +82,8 @@ node stands. It takes a pgLife. */}}
 {{define "pg-tab-slurm"}}{{with .Slurm}}{{template "pg-slurm-note" .}}
 {{if or .Files (and .Read (not .Err))}}<div class="grid g2">
 {{if and .Read (not .Err)}}<section class="panel pg-wide"><div class="ph"><h2>Partitions</h2><span class="grow"></span><span class="faint mono">sinfo</span></div>
-  <div class="tw"><table><thead><tr><th>Partition</th><th>State</th><th>Time limit</th><th class="num">Nodes</th><th>Node list</th></tr></thead><tbody>
-  {{range .Partitions}}<tr><td class="mono"><b>{{.Name}}</b>{{if .Default}} <span class="chip brand">default</span>{{end}}</td><td><span class="pill {{if eq .State "up"}}ok{{else}}bad{{end}}">{{.State}}</span></td><td class="mono">{{.TimeLimit}}</td><td class="num">{{.Nodes}}</td><td class="mono">{{.NodeList}}</td></tr>
+  <div class="tw"><table class="cards"><thead><tr><th>Partition</th><th>State</th><th>Time limit</th><th class="num">Nodes</th><th>Node list</th></tr></thead><tbody>
+  {{range .Partitions}}<tr><td class="mono c-name"><b>{{.Name}}</b>{{if .Default}} <span class="chip brand">default</span>{{end}}</td><td class="c-state"><span class="pill {{if eq .State "up"}}ok{{else}}bad{{end}}">{{.State}}</span></td><td class="mono" data-label="Time limit">{{.TimeLimit}}</td><td class="num" data-label="Nodes">{{.Nodes}}</td><td class="mono" data-label="Node list">{{.NodeList}}</td></tr>
   {{else}}<tr><td colspan="5"><div class="empty">Slurm has no partition. A cluster without workers has none.</div></td></tr>{{end}}</tbody></table></div></section>
 <section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint mono">sinfo --Node</span></div>
   <div class="tw"><table class="cards pg-sl"><thead><tr><th>Node</th><th>State</th><th>Reason</th><th>CPUs</th><th>Memory</th><th>Partitions</th><th><span class="vh">Actions</span></th></tr></thead><tbody>
