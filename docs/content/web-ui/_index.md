@@ -42,17 +42,17 @@ Useful flags:
 
 The UI listens on `127.0.0.1` only. Only your user can open it. To use it from another machine, forward the port over SSH and use the same port on both ends (see [Use it from another machine]({{< relref "/web-ui/security#use-it-from-another-machine" >}})).
 
-{{< uishot "overview" "The Overview of two realms. The task dock at the bottom right shows a run that goes on." >}}
+{{< uishot "overview" "The Overview of two realms. The strip of the task dock at the bottom shows a run that goes on." >}}
 
 To try the UI without Docker, run `sind ui --demo`. It shows made-up clusters, and its dialogs play the commands instead of running them. The screenshots in these docs come from it.
 
 ## The parts of the window
 
 - **The rail** on the left lists the pages. A badge says what needs you, with its unit: `2 need a look` for nodes (the number alone on a phone), `1 warning` or `1 failed` for the host checks, `1 failed` for runs. A green dot means that all is well. **Clusters** shows how many clusters there are. The badges count every realm, whatever realm the page shows, and their label says so when there is more than one. On a phone, and in a window that is not high, the rail is a bar at the bottom of the screen: Overview, Clusters, Nodes, Doctor and **More**, which opens the other pages.
-- **The top bar** has the jump box, which finds a cluster, a node, a page or a help entry, and the realm switch. **live** shows that the page gets updates. `?` opens the help for the page you are on, and ◐ turns the dark theme on or off.
+- **The top bar** has the jump box, which finds a cluster, a node, a page or a help entry, the realm switch, and the button of the task dock, which counts the commands, such as `1 running | 1 failed`. **live** shows that the page gets updates. `?` opens the help for the page you are on, and ◐ turns the dark theme on or off.
 - **The realm switch** shows the realm of the page. Pick a realm on the Overview, Clusters, Nodes, Mesh and DNS, Monitoring, Topology or Activity, and the page shows only that realm. The page says **Showing realm ci**, and its address has `?realm=ci`, so a link that you share shows the same. On a cluster or node page, a pick opens the list of clusters or nodes of that realm. With the keyboard, the arrow keys go through the realms, and Enter shows the one you reached. On a Mac, the arrow keys open the list, and the realm you pick there shows at once. The UI remembers the realm you picked last: Clusters and the other lists open with it, and **Show all** shows every realm again.
 - **Connection lost** shows at the top when the page stops getting updates, for example because `sind ui` stopped. The page then dims, and its buttons wait until it is live again. See [Connection lost]({{< relref "/web-ui/troubleshooting#connection-lost" >}}).
-- **The task dock** at the bottom right shows the runs that go on (see [Runs and Progress]({{< relref "/web-ui/runs" >}})).
+- **The task dock** is a strip at the bottom of the page with the command that runs, and **Commands**, the list that its button in the top bar opens, with the commands that run and those that ended (see [Runs and Progress]({{< relref "/web-ui/runs" >}})).
 - A dotted word explains itself when you point at it, tap it or give it the focus. Services such as slurmctld and slurmd, node roles such as submitter, and words of sind such as realm are dotted.
 - **Skip to content** is the first stop of the Tab key. It skips the top bar and the rail.
 

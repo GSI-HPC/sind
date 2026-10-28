@@ -255,7 +255,16 @@ shots:
     page: dialogs
 
   - name: task-dock
-    alt: "The task dock: a card for a run that goes on, with its steps, the current step, Stop and Show progress"
+    alt: "The strip of the task dock: the run that goes on, with its steps, the current step, its clock, Stop and Show progress"
     path: /
-    crop: "#tasks .task"
+    crop: "#tasks .tstrip"
+    page: run
+
+  - name: task-list
+    alt: "Commands, the list of the task dock: the run that goes on, with its steps, its current step, Stop and Show progress"
+    path: /
+    steps:
+      - click: ".cmds-btn"
+      - wait: "#cmds.open #cmds-pop"
+    crop: "#cmds-pop"
     page: run

@@ -158,16 +158,6 @@ await hz(15); mark("rundone"); await wait(3500);
 
 mark("failed");
 await go("/activity"); await wait(1200);
-// The dock keeps the card of the run until it is hidden.
-for (const b of await page.$$('#tasks form[action$="/dismiss"] button')) {
-  const r = await b.boundingBox();
-  if (!r) continue;
-  await moveTo(r.x + r.width / 2, r.y + r.height / 2, "Hide");
-  await wait(250);
-  mark("click", { x: px, y: py, label: "Hide" });
-  await page.mouse.click(px, py);
-  await wait(900);
-}
 const failed = await page.evaluate(() => {
   const a = [...document.querySelectorAll('a[href^="/runs/"]')]
     .find(a => /\bfailed\b/i.test(a.closest("tr,li,article,.row")?.innerText || ""));

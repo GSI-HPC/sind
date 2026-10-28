@@ -9,11 +9,19 @@ When you start an action, its run appears in the task dock, on its run page and 
 
 ## The task dock
 
-The task dock at the bottom right shows one card at a time: the command that works now, with a spinner, a bar with one part for each step, and the current step, such as `nodes 3/8 · worker-2 waits for munge`. The title of a card is the command with its main flags, such as `create worker dev --count 3`, and the realm beside it; point at it to see the whole command. A card links to the run page. Use **Show progress** to open it, or **Details** for a run that has ended. A card of a `create cluster` that ended ok also has **Open pr-145**, which opens the new cluster. A screen reader hears once when a command starts, ends or fails; the clock and the current step are not read out. Use **Stop…** to stop the run, on a phone too.
+The task dock has two parts: a strip at the bottom of the page, and **Commands**, a list that opens from the top bar.
 
-When there is more than one command, a bar above the card sums them up, such as `2 running · 1 waiting · 1 failed · 3 done`. A command that waits for the lock of its realm counts as waiting: it has not started its work yet. **Show all** shows every card, and **Show one** goes back to one. A card of a command that ended ok hides after a few seconds. A card of a command that failed or was stopped stays until you hide it with ×. It keeps to one line, such as the first line of the error; **Show what failed** opens the run page with the whole error and what the command wrote. **Clear done** hides the cards of all commands that have ended. Hiding a card keeps the run: Activity lists it, and its run page still shows its command and **Try again**. The page of a run leaves out the card of that run, and the bar still counts it. On a short screen, such as a phone on its side, the dock keeps to one line until you press **Show all**.
+The strip shows the command that started last of those that run, with a spinner, a bar with one part for each step, the current step, such as `nodes 3/8 · worker-2 waits for munge`, and the clock. When you start a command from a dialog, the strip shows it at once. A command that works comes before one that waits for the lock of its realm. The title is the command with its main flags, such as `create worker dev --count 3`, and the realm beside it; point at it to see the whole command, and select it to open the run page. Use **Show progress** to open the run page, and **Stop…** to stop the run. When no command runs, the strip shows the one that ended last for 15 seconds: how it ended, such as `3 nodes ready for jobs`, and **Details**, **Show what failed** or, for a `create cluster` that ended ok, **Open pr-145**, which opens the new cluster. Then the strip goes. The page sits above the strip, so the strip never covers a button or a line. The page of a run leaves its run out of the strip.
+
+The button in the top bar counts the commands, such as `1 running | 1 failed`, or `3 ended` when none runs or failed. It opens **Commands**: **Running**, each command with its steps, **Stop…** and **Show progress**, and **Ended today**, one line for each command that ended, with the time it ended and how, such as `worker-1 timed out · rolled back` in red. The strip opens the list too, from its count, such as `2 ended`. Esc, a click beside the list or Tab past its last button closes it. A command from a terminal shows while it runs. × clears one command that ended, and **Clear ended** clears them all. Clearing keeps the run: Activity lists it, and its run page still shows its command and **Try again**. **All in Activity** lists every run.
+
+On a phone, the strip sits above the bar of the pages, in two lines, with the count of the commands that failed and **Show**, which opens the list as a sheet. When the strip is gone, the button beside the jump box opens it.
+
+A screen reader hears once when a command starts, ends or fails; the clock and the current step are not read out.
 
 {{< uishot "task-dock" >}}
+
+{{< uishot "task-list" >}}
 
 The browser tab title shows the step that is running, such as `▸ nodes 3/8 · sind ui`. You can see the progress in another tab.
 
@@ -67,7 +75,7 @@ When several commands run on a cluster, the banner of the cluster page has **Sho
 
 ## Stop a run
 
-Press **Stop…** on the task card or on the run page. The page asks you to confirm, and says what stays when the command stops:
+Press **Stop…** in the strip or the list of the task dock, or on the run page. The page asks you to confirm, and says what stays when the command stops:
 
 - A create removes the nodes or workers it has made so far (rollback). The saved config stays.
 - A delete keeps what it has removed so far. The rest stays, and you can delete it again.

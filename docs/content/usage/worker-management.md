@@ -20,7 +20,7 @@ sind create worker [CLUSTER] [FLAGS]
 1. On the page of the cluster, press **Add workers…**. From the Overview or the jump box, with several clusters, the dialog first lists the clusters by realm with their health and workers: pick one. **Change…** goes back to the list.
 2. Set **How many**. Leave **CPUs** and **Memory** empty to take the values of the newest worker. The dialog shows the size and the names of the new workers, such as `3 × 2 CPUs, 1 GiB: worker-6 … worker-8`.
 3. Check the host: a bar sets the memory limits of the nodes that run now, in every realm, and of the new workers against the memory of the Docker host. Above 80 % the dialog warns. When the limits come to more than the host has, **How many** says how many more workers fit, and the button stays off until you tick **Add anyway**. It also warns when the nodes reach the inotify limit that `sind doctor` reports.
-4. Press the button, such as **Add 3 workers**. The task dock shows the progress of the run.
+4. Press the button, such as **Add 3 workers**. The strip of the task dock shows the progress of the run.
 
 The new workers join the partition `all`; your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure`, and running jobs go on.
 

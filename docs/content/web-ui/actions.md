@@ -16,9 +16,9 @@ Action buttons open a dialog. The dialog shows:
 
 Press the button of the dialog, such as **Create**, **Add 3 workers**, **Reboot worker-0** or **Delete cluster dev**, or press Ctrl+Enter (Cmd+Enter on macOS), to start the command. The button names what it changes. Enter in a field does not start it, unless the dialog has only that field, such as the name to type for a delete. The UI checks the fields against the cluster as it is now. It also builds the command again when you press the button. If that command differs from the one in the dialog, the UI refuses to start it.
 
-When the command starts, the dialog closes and you stay on your page. A notice names the command and links to its run page, and the task dock shows its progress, so you can start the next action at once. **New cluster** opens the run page of its command instead, and so does **Delete** on the page of the cluster that it deletes, or on the page of one of its nodes.
+When the command starts, the dialog closes and you stay on your page. The strip of the task dock at the bottom shows the command and its progress, with a link to its run page, so you can start the next action at once. **New cluster** opens the run page of its command instead, and so does **Delete** on the page of the cluster that it deletes, or on the page of one of its nodes. Back in the browser then returns to the page that you started from, in one step.
 
-Esc, **Cancel** or a click beside the dialog closes it, and the focus goes back to the button that opened it. When you have changed a field, the dialog asks first: **Keep editing** or **Discard**. When you leave the page while such a dialog is open, your browser asks first. **New cluster** keeps a draft instead.
+Esc, **Cancel**, a click beside the dialog or Back in the browser closes it, and the focus goes back to the button that opened it. When you have changed a field, the dialog asks first: **Keep editing** or **Discard**. When you leave the page while such a dialog is open, your browser asks first. **New cluster** keeps a draft instead.
 
 You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. In the New cluster dialog, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm`, as `SIND_REALM` in your shell would otherwise take the place of the config's realm.
 
@@ -97,7 +97,7 @@ Delete realm deletes every cluster of the realm, its mesh and its monitoring sta
 
 {{< uishot "dialog-delete-cluster" "A delete lists what goes and what stays, and asks you to type the name of the cluster." >}}
 
-**Delete clusters** deletes the clusters that you ticked on the Clusters page, up to 32. It asks you to type their number, and its button, such as **Delete 2 clusters**, starts one `sind delete cluster` for each. A cluster that is gone by the time the dialog opens is named and left out. Delete clusters in the jump box takes you to the Clusters page to tick them. The commands of one realm run one after the other, as each waits for the realm lock. The page goes back to the list, and the task dock shows each command.
+**Delete clusters** deletes the clusters that you ticked on the Clusters page, up to 32. It asks you to type their number, and its button, such as **Delete 2 clusters**, starts one `sind delete cluster` for each. A cluster that is gone by the time the dialog opens is named and left out. Delete clusters in the jump box takes you to the Clusters page to tick them. The commands of one realm run one after the other, as each waits for the realm lock. The page goes back to the list, and the list of the task dock shows each command.
 
 {{< uishot "dialog-delete-clusters" "Deleting several clusters asks you to type their number." >}}
 

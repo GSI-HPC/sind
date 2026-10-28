@@ -17,7 +17,7 @@ Run the command on a terminal. sind draws a live tree of its steps and nodes, as
 {{< /cli >}}
 {{< ui >}}
 
-Start the command from a dialog of `sind ui`. The task dock at the bottom right shows a card for the run, with its steps and the current step. **Show progress** opens the run page, with a timeline of the steps and of the targets of each step. **Stop** stops the command, and sind rolls back what it made. [Runs and Progress]({{< relref "/web-ui/runs" >}}) describes them.
+Start the command from a dialog of `sind ui`. The strip of the task dock at the bottom of the page shows the run, with its steps and the current step. **Show progress** opens the run page, with a timeline of the steps and of the targets of each step. **Stop** stops the command, and sind rolls back what it made. [Runs and Progress]({{< relref "/web-ui/runs" >}}) describes them.
 
 {{< uishot "run-going" >}}
 
