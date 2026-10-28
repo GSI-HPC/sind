@@ -237,8 +237,8 @@ func TestStatusReadsWhatSlurmSays(t *testing.T) {
 	assert.Equal(t, "boom", sl.Err)
 	assert.True(t, f.has(devKey))
 
-	// A read that was cancelled stores nothing; one of a cluster whose page
-	// closed neither.
+	// A read that was cancelled stores nothing; one of a cluster that the
+	// store does not keep neither.
 	f.st.SetSlurm("sind", "dev", nil)
 	ctx, cancel := cancelled(t.Context())
 	defer cancel()
@@ -366,17 +366,13 @@ func TestStatusWithoutViewersReadsEveryClusterAlways(t *testing.T) {
 	waitFor(t, "read every All", func() bool { return f.reads() >= 3 })
 }
 
-func TestStatusReadsWhatSlurmSaysOnlyWhileThePageIsOpen(t *testing.T) {
+func TestStatusReadsWhatSlurmSaysOfEveryCluster(t *testing.T) {
 	f := newStatusFixture(t)
 	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
 	start(t, f.status.Run)
-	waitFor(t, "status", func() bool { return f.has(devKey) })
-	f.fake.settle()
-	assert.Nil(t, f.st.Snapshot().Slurm("sind", "dev"), "no page of dev is open")
+	waitFor(t, "status and what Slurm says", func() bool { return f.has(devKey) && f.st.Snapshot().Slurm("sind", "dev") != nil })
 
-	release := f.watched.Watch([]store.Topic{devKey.Topic()})
-	waitFor(t, "what Slurm says", func() bool { return f.st.Snapshot().Slurm("sind", "dev") != nil })
-	release()
-	waitFor(t, "dropped with the page", func() bool { return f.st.Snapshot().Slurm("sind", "dev") == nil })
-	assert.True(t, f.has(devKey), "the status stays: the store lists dev")
+	// Once the store no longer lists dev, and no page shows it, both go.
+	f.st.SetClusters("sind", nil)
+	waitFor(t, "dropped with the cluster", func() bool { return !f.has(devKey) && f.st.Snapshot().Slurm("sind", "dev") == nil })
 }

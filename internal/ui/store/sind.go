@@ -278,15 +278,6 @@ func (s *Store) KeepStatuses(keep ...StatusKey) {
 	})
 }
 
-// KeepSlurms drops what Slurm says of every cluster that is not in keep,
-// as the pages that showed it are closed. It notifies nothing.
-func (s *Store) KeepSlurms(keep ...StatusKey) {
-	s.change(func(sn *Snapshot) bool {
-		keepEntries(&sn.Slurms, keep)
-		return false
-	})
-}
-
 // SetLock replaces the holder of the realm lock. A nil holder, the lock
 // being free, removes it. The holder is handed over and must not change
 // afterwards.

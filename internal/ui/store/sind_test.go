@@ -230,17 +230,6 @@ func TestSetSlurmAndKeepStatuses(t *testing.T) {
 	assert.Nil(t, s.Snapshot().Slurm("r", "b"))
 	s.SetSlurm("r", "a", nil)
 	assert.Empty(t, s.Snapshot().Slurms)
-
-	// KeepSlurms leaves the statuses.
-	s.SetStatus("r", "a", &cluster.Status{Name: "a"})
-	s.SetSlurm("r", "a", &Slurm{})
-	s.SetSlurm("r", "b", &Slurm{})
-	sub.Take()
-	s.KeepSlurms(StatusKey{"r", "b"})
-	assert.Empty(t, sub.Take(), "dropping notifies nothing")
-	assert.Nil(t, s.Snapshot().Slurm("r", "a"))
-	assert.NotNil(t, s.Snapshot().Slurm("r", "b"))
-	assert.NotNil(t, s.Snapshot().Status("r", "a"))
 }
 
 func TestSortingAndReaders(t *testing.T) {

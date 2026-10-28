@@ -54,8 +54,8 @@ type Snapshot struct {
 	// Statuses are keyed by realm and cluster, for the clusters listed
 	// and the ones whose page is open.
 	Statuses map[StatusKey]*cluster.Status
-	// Slurms are what Slurm says about the clusters whose page is open,
-	// keyed alike.
+	// Slurms are what Slurm says about the clusters, keyed alike; the
+	// store keeps them with the statuses.
 	Slurms      map[StatusKey]*Slurm
 	Locks       map[string]*state.LockHolder
 	Monitorings map[string]*cluster.Monitoring
