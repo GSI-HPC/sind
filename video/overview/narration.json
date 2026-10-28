@@ -43,7 +43,7 @@
 
     { "id": "ui", "text": "sind ui prints an address, and only you can open it." },
     { "id": "overview", "text": "The overview shows all realms, clusters and nodes, live." },
-    { "id": "dialog", "text": "A new cluster is a form, a plan, and the exact command." },
+    { "id": "dialog", "text": "New cluster is a page: a start, a plan, and the exact command." },
     { "id": "name", "text": "First, a name. Let's call it lab." },
     { "id": "api", "text": "Tick a box to add a node, like the api node for the REST API. The plan on the right follows every change." },
     { "id": "workers3", "text": "Then set how many workers you want. Three, this time." },

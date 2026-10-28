@@ -29,7 +29,9 @@ its progress tree and colours as it does for a user. It keeps what the
 commands print, with its timing; the compositor types the inputs. For the web
 UI, it starts `sind ui` and runs `record_ui.mjs`, which drives headless Chrome
 through the pages and dialogs and keeps a screencast with the beats, the
-pointer moves and the clicks.
+pointer moves and the clicks. Its New cluster beat opens the page at
+`/clusters/new`, picks With job history, ticks api under More nodes and
+opens Edit YAML under Show YAML in the plan.
 
 The host needs Docker, host DNS for `*.sind` (systemd-resolved and a polkit
 rule), mise, jq, Chrome and node with `video/node_modules`. `setup-host.sh`
