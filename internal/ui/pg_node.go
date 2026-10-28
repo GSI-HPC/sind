@@ -252,70 +252,96 @@ type pgMenuItem struct {
 
 // pgNodeMenus returns the menus of the head of a node page: Slurm (Drain,
 // Resume) and ⋯ (Delete worker) for a worker, and Power for every node.
-// A verb that does not fit the state of the node is off, with why.
+// A verb that does not fit the state of the node is off, with why
+// (pgOpOff).
 func pgNodeMenus(n pgNode) []pgMenu {
-	item := func(label, hint, op, off string) pgMenuItem {
-		it := pgMenuItem{Label: label + "…", Hint: hint, URL: n.power("", "", op).URL, Off: off}
-		if off != "" {
-			it.Label, it.Hint = label, off
+	item := func(label, hint, op string) pgMenuItem {
+		it := pgMenuItem{Label: label + "…", Hint: hint, URL: n.power("", "", op).URL}
+		if canon, _ := action.PowerOpOf(op); pgOpOff(n, canon.ID) != "" {
+			it.Label, it.Hint, it.Off = label, pgOpOff(n, canon.ID), pgOpOff(n, canon.ID)
 		}
 		return it
 	}
-	runs, paused := n.State == cluster.StateRunning, n.State == cluster.StatePaused
-	off := func(fits bool, why string) string {
-		if fits {
-			return ""
-		}
-		return why
-	}
-	stop := off(runs, "It does not run")
-	if paused {
-		stop = "It is frozen: unfreeze it first"
-	}
-	start := off(!runs && !paused, "It runs already")
-	if paused {
-		start = "It is frozen: unfreeze it first"
-	}
 	power := pgMenu{ID: "power", Label: "Power", Groups: []pgMenuGroup{
 		{Label: "Container", Items: []pgMenuItem{
-			item("Start", "Start the container.", "start", start),
-			item("Reboot", "Stop, then start. Jobs on it fail.", "reboot", stop),
-			item("Shut down", "Stop cleanly. Its data stays.", "stop", stop),
-			item("Freeze", "Pause all its processes.", "pause", stop),
-			item("Unfreeze", "Let its processes run on.", "unpause", off(paused, "It is not frozen")),
+			item("Start", "Start the container.", "start"),
+			item("Reboot", "Stop, then start. Jobs on it fail.", "reboot"),
+			item("Shut down", "Stop cleanly. Its data stays.", "stop"),
+			item("Freeze", "Pause all its processes.", "pause"),
+			item("Unfreeze", "Let its processes run on.", "unpause"),
 		}},
 		{Label: "Can lose data", Danger: true, Items: []pgMenuItem{
-			item("Power-cycle", "Kill, then start.", "cycle", stop),
-			item("Cut power", "Kill at once.", "cut", stop),
+			item("Power-cycle", "Kill, then start.", "cycle"),
+			item("Cut power", "Kill at once.", "cut"),
 		}},
 	}}
 	if !n.Worker() {
 		return []pgMenu{power}
 	}
-	drain, resume := "", ""
-	switch {
-	case paused:
-		drain, resume = "It is frozen: unfreeze it first", "It is frozen: unfreeze it first"
-	case !runs:
-		drain, resume = "It does not run", "It does not run"
-	case n.Known && !n.Managed:
-		drain, resume = "sind runs no Slurm on it", "sind runs no Slurm on it"
-	case n.Slurm == nil:
-		drain, resume = "sinfo does not list it", "sinfo does not list it"
-	case strings.HasPrefix(n.Slurm.State, "drain"):
-		drain = "It is " + strings.TrimSuffix(n.Slurm.State, "*") + " already"
-	case slurm.NodeStateTakesJobs(n.Slurm.State):
-		resume = "It takes jobs already"
-	}
 	slurmMenu := pgMenu{ID: "slurm", Label: "Slurm", Groups: []pgMenuGroup{{Label: "scontrol", Items: []pgMenuItem{
-		item("Drain", "Start no new job on it. Asks for a reason.", "drain", drain),
-		item("Resume", "Take jobs again.", "resume", resume),
+		item("Drain", "Start no new job on it. Asks for a reason.", "drain"),
+		item("Resume", "Take jobs again.", "resume"),
 	}}}}
 	del := pgDialogAction("", "", "delete-worker", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short)
 	more := pgMenu{ID: "more", Label: "More actions", Icon: "⋯", Groups: []pgMenuGroup{{Label: "Worker", Danger: true, Items: []pgMenuItem{
 		{Label: "Delete worker…", Hint: "Remove its container. Jobs on it fail.", URL: del.URL},
 	}}}}
 	return []pgMenu{slurmMenu, power, more}
+}
+
+// pgOpOff says why the power op, an id of action.PowerOps, does not fit
+// the node now, as "It does not run"; "" when it fits. The menus of a node
+// page, the picker of the Power dialog and the selection bar of the Nodes
+// tab all ask it: Start fits a node that does not run, Unfreeze a frozen
+// one, Drain and Resume a running worker that Slurm lists, the others a
+// node that runs; none fits a node that a command creates or deletes.
+func pgOpOff(n pgNode, op string) string {
+	runs, paused := n.State == cluster.StateRunning, n.State == cluster.StatePaused
+	const frozen = "It is frozen: unfreeze it first"
+	switch {
+	case n.Deleting:
+		return "sind deletes it now"
+	case n.Creating:
+		return "sind creates it now"
+	}
+	switch op {
+	case "on":
+		switch {
+		case paused:
+			return frozen
+		case runs:
+			return "It runs already"
+		}
+	case "unfreeze":
+		if !paused {
+			return "It is not frozen"
+		}
+	case "drain", "resume":
+		switch {
+		case !n.Worker():
+			return "Only workers take jobs"
+		case paused:
+			return frozen
+		case !runs:
+			return "It does not run"
+		case n.Known && !n.Managed:
+			return "sind runs no Slurm on it"
+		case n.Slurm == nil:
+			return "sinfo does not list it"
+		case op == "drain" && strings.HasPrefix(n.Slurm.State, "drain"):
+			return "It is " + strings.TrimSuffix(n.Slurm.State, "*") + " already"
+		case op == "resume" && slurm.NodeStateTakesJobs(n.Slurm.State):
+			return "It takes jobs already"
+		}
+	default:
+		switch {
+		case paused:
+			return frozen
+		case !runs:
+			return "It does not run"
+		}
+	}
+	return ""
 }
 
 // --- what works on the node, and what changed on it

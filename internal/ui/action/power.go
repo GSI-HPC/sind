@@ -26,7 +26,8 @@ func init() {
 type PowerOp struct {
 	ID    string
 	Label string
-	Text  string
+	// Text says what the op does to several nodes, One to one node.
+	Text, One string
 	// Group is the PowerGroup the op belongs to.
 	Group string
 	// Danger says that processes stop without warning.
@@ -47,15 +48,31 @@ const (
 // PowerOps are the ways to change the state of nodes, in the order a
 // dialog lists them.
 var PowerOps = []PowerOp{
-	{"drain", "Drain", "New jobs do not start on the nodes; running jobs go on. Asks for a reason.", GroupSlurm, false},
-	{"resume", "Resume", "The nodes take jobs again.", GroupSlurm, false},
-	{"on", "Start", "Starts the containers (docker start), and the mesh and monitoring if they stopped.", GroupContainers, false},
-	{"shutdown", "Shut down", "Stops the containers cleanly (docker stop). Their data stays. Start them again later.", GroupContainers, false},
-	{"reboot", "Reboot", "Stops, then starts the containers. Running jobs on them fail.", GroupContainers, false},
-	{"freeze", "Freeze", "Pauses all processes (docker pause). Slurm sees the nodes stop answering.", GroupContainers, false},
-	{"unfreeze", "Unfreeze", "Lets the paused processes run again.", GroupContainers, false},
-	{"cycle", "Power-cycle", "Kills, then starts the containers. Like a reset button.", GroupDanger, true},
-	{"cut", "Cut power", "Kills the containers at once (docker kill). Like pulling the plug: what is not on disk is lost.", GroupDanger, true},
+	{"drain", "Drain", "New jobs do not start on the nodes; running jobs go on. Asks for a reason.",
+		"New jobs do not start on the node; running jobs go on. Asks for a reason.", GroupSlurm, false},
+	{"resume", "Resume", "The nodes take jobs again.", "The node takes jobs again.", GroupSlurm, false},
+	{"on", "Start", "Starts the containers (docker start), and the mesh and monitoring if they stopped.",
+		"Starts the container (docker start), and the mesh and monitoring if they stopped.", GroupContainers, false},
+	{"shutdown", "Shut down", "Stops the containers cleanly (docker stop). Their data stays. Start them again later.",
+		"Stops the container cleanly (docker stop). Its data stays. Start it again later.", GroupContainers, false},
+	{"reboot", "Reboot", "Stops, then starts the containers. Running jobs on them fail.",
+		"Stops, then starts the container. Running jobs on it fail.", GroupContainers, false},
+	{"freeze", "Freeze", "Pauses all processes (docker pause). Slurm sees the nodes stop answering.",
+		"Pauses all its processes (docker pause). Slurm sees the node stop answering.", GroupContainers, false},
+	{"unfreeze", "Unfreeze", "Lets the paused processes run again.", "Lets its paused processes run again.", GroupContainers, false},
+	{"cycle", "Power-cycle", "Kills, then starts the containers. Like a reset button.",
+		"Kills, then starts the container. Like a reset button.", GroupDanger, true},
+	{"cut", "Cut power", "Kills the containers at once (docker kill). Like pulling the plug: what is not on disk is lost.",
+		"Kills the container at once (docker kill). Like pulling the plug: what is not on disk is lost.", GroupDanger, true},
+}
+
+// Heading names the op and what it acts on, for the title of a dialog or a
+// button: "Reboot worker-4", "Cut power to 3 workers".
+func (op PowerOp) Heading(what string) string {
+	if op.ID == "cut" {
+		return "Cut power to " + what
+	}
+	return op.Label + " " + what
 }
 
 // PowerGroup is a group of power ops, as a dialog shows them together.
@@ -111,7 +128,11 @@ func buildPower(f Form, c Context) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	op, ok := PowerOpOf(strings.TrimSpace(f.Get("op")))
+	word := strings.TrimSpace(f.Get("op"))
+	if word == "" {
+		return Command{}, &Missing{Field: "op", Text: "pick an action"}
+	}
+	op, ok := PowerOpOf(word)
 	if !ok {
 		return Command{}, fmt.Errorf("op: pick what to do with the nodes")
 	}
@@ -124,14 +145,59 @@ func buildPower(f Form, c Context) (Command, error) {
 	}
 	shorts := shortNames(picked)
 	cmd := NewCommand(sindArgv(realm, append([]string{"power", op.ID}, nodeWords(cl.Name, shorts)...)...)...)
-	cmd.OK = op.Label + " " + countOr(shorts, "nodes")
+	cmd.OK = op.Heading(countOr(shorts, NodesNoun(picked)))
 	if stops(op.ID) {
-		cmd.Warns = append(cmd.Warns, powerWarnings(c.Snap.ClusterNodes(realm, cl.Name), picked, c.Snap.Status(realm, cl.Name), cl.Name)...)
+		all, st := c.Snap.ClusterNodes(realm, cl.Name), c.Snap.Status(realm, cl.Name)
+		cmd.Warns = append(cmd.Warns, powerWarnings(all, picked, st, cl.Name)...)
+		cmd.Stays = powerStays(all, picked, st, cl.Name)
 	}
 	if op.Danger {
 		cmd.Warns = append(cmd.Warns, "Cannot be undone: processes on these nodes stop without warning.")
 	}
 	return cmd, nil
+}
+
+// NodesNoun is the word for several of the nodes: "workers" when they are
+// all workers, else "nodes".
+func NodesNoun(nodes []cluster.NodeSummary) string {
+	for _, n := range nodes {
+		if n.Role != config.RoleWorker {
+			return "nodes"
+		}
+	}
+	return "workers"
+}
+
+// powerStays says what keeps running when the picked nodes of the cluster,
+// whose nodes are all and whose status st may be nil, go down: the other
+// running workers, and the cluster's scheduling while the controller in
+// control is not among them.
+func powerStays(all, picked []cluster.NodeSummary, st *cluster.Status, clusterName string) []string {
+	isPicked := func(n cluster.NodeSummary) bool {
+		return slices.ContainsFunc(picked, func(p cluster.NodeSummary) bool { return p.Container == n.Container })
+	}
+	others := 0
+	var ctls []cluster.NodeSummary
+	for _, n := range all {
+		switch {
+		case n.Role == config.RoleController:
+			ctls = append(ctls, n)
+		case n.Role == config.RoleWorker && n.State == cluster.StateRunning && !isPicked(n):
+			others++
+		}
+	}
+	if others == 0 {
+		return nil
+	}
+	stays := []string{fmt.Sprintf("%d other workers keep running.", others)}
+	if others == 1 {
+		stays[0] = "1 other worker keeps running."
+	}
+	active := activeController(ctls, st)
+	if active != "" && !slices.ContainsFunc(picked, func(p cluster.NodeSummary) bool { return ShortName(p) == active }) {
+		stays = append(stays, clusterName+" still takes jobs.")
+	}
+	return stays
 }
 
 // stops reports whether the sind power subcommand id takes nodes out of
@@ -272,7 +338,7 @@ func buildSlurmState(f Form, c Context, realm, clusterName string, op PowerOp) (
 		cmd = NewCommand(sindArgv(realm, append(words, "State=RESUME")...)...)
 		cmd.Notes = append(cmd.Notes, "The nodes take jobs again. A node that is down because its container stopped comes back once you start it.")
 	}
-	cmd.OK = op.Label + " " + countOr(shorts, "nodes")
+	cmd.OK = op.Heading(countOr(shorts, "workers"))
 	if !slices.ContainsFunc(c.Snap.ClusterNodes(realm, clusterName), func(n cluster.NodeSummary) bool {
 		return n.Role == config.RoleController && n.State == cluster.StateRunning
 	}) {

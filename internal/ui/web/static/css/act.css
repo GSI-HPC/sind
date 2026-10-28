@@ -51,14 +51,61 @@
 .scrim .checks.act-nodes label{flex-wrap:wrap}
 .scrim .checks.act-nodes{grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))}
 .scrim .checks.act-nodes small{display:inline}
-/* Power and drain: the actions in groups, the ones that can lose data
-   apart, and the reason of a drain only while Drain is picked. */
-.scrim fieldset.act-ops{border:0;margin:0;padding:0}
-.scrim fieldset.act-ops legend{padding:0;margin-bottom:6px}
-.scrim fieldset.act-danger{border:1px solid var(--bad);border-radius:var(--r);padding:8px 10px 10px;background:var(--bad-soft)}
-.scrim fieldset.act-danger legend{color:var(--bad);padding:0 4px;margin-bottom:0}
-.scrim .act-reason{display:none;margin-top:8px}
+/* Power and drain. A short confirmation names the nodes, with the other
+   actions folded away; the picker has the action segment in groups, the
+   ones that can lose data in red, the quick picks, the node set and the
+   table of the nodes, which scrolls inside the dialog. The reason of a
+   drain shows only while Drain is picked. */
+.scrim .act-power{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.scrim .act-target{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+.scrim .act-tl{list-style:none;margin:0;padding:0;flex:1;min-width:0;display:grid;gap:4px}
+.scrim .act-tl li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.scrim .act-why2{font-size:var(--t-sm)}
+/* A word of a command breaks only where it does not fit a line. */
+.scrim .act-cw{display:inline-block;max-width:100%}
+.scrim .act-other{border:1px solid var(--line-2);border-radius:var(--r);padding:8px 12px}
+.scrim .act-other>summary{cursor:pointer;display:flex;align-items:center;gap:8px;min-width:0}
+.scrim .act-other>summary .pg-caret{flex:none;margin-left:-2px;transform:rotate(-90deg);transition:transform .15s}
+.scrim .act-other[open]>summary .pg-caret{transform:none}
+.scrim .act-other>summary b{white-space:nowrap}
+.scrim .act-otherops{font-size:var(--t-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.scrim .act-other[open]>summary{margin-bottom:10px}
+.scrim .act-other[open] .act-otherops{display:none}
+.scrim fieldset.act-opseg{border:0;margin:0;padding:0;min-width:0}
+.scrim fieldset.act-opseg legend{padding:0;margin-bottom:6px}
+.scrim .act-opsrow{display:flex;flex-wrap:wrap;gap:8px 12px}
+.scrim .act-og{display:grid;gap:3px}
+.scrim .act-ogl{font-size:var(--t-xs);color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.scrim .act-og .act-seg{flex-wrap:wrap}
+.scrim .act-og.danger .act-ogl{color:var(--bad)}
+.scrim .act-og.danger .act-seg{border-color:var(--bad)}
+.scrim .act-og.danger .act-seg label{border-color:var(--bad)}
+.scrim .act-og.danger .act-seg span{color:var(--bad)}
+.scrim .act-og.danger .act-seg input:checked+span{background:var(--bad-soft);box-shadow:inset 0 -2px 0 var(--bad)}
+.scrim .act-seg label.off span{color:var(--faint);text-decoration:line-through;text-decoration-color:var(--deco)}
+.scrim .act-seg label:has(input:disabled){cursor:not-allowed}
+.scrim .act-offs{margin:6px 0 0}
+.scrim .act-reason{display:none}
 .scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
+.scrim .act-pick{display:grid;gap:6px}
+.scrim .act-ph2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px}
+.scrim .act-picks{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.scrim .act-qn{font:var(--t-xs) var(--f-mono);color:var(--faint);margin-left:2px}
+.scrim .act-qn.bad{color:var(--bad);font-weight:600}
+.scrim #act-nodeset{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono);width:100%}
+.scrim .act-pick:has(#act-nodeset-err:not(:empty)) #act-nodeset{border-color:var(--bad)}
+/* The node table grows in the body of the dialog, which scrolls; its head
+   sticks at the top of the body. */
+.scrim .act-nt{border:1px solid var(--line-2);border-radius:var(--r);margin-top:4px}
+.scrim .act-ntab{width:100%;border-collapse:collapse;font-size:var(--t-md)}
+.scrim .act-ntab th{position:sticky;top:-10px;background:var(--panel-2);text-align:left;font-size:var(--t-xs);font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line-2);z-index:1}
+.scrim .act-ntab th:first-child{border-top-left-radius:var(--r)}
+.scrim .act-ntab th:last-child{border-top-right-radius:var(--r)}
+.scrim .act-ntab td{padding:5px 8px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+.scrim .act-ntab tr:last-child td{border-bottom:0}
+.scrim .act-ntab td:first-child,.scrim .act-ntab th:first-child{width:28px;padding-right:0}
+.scrim .act-ntab label{cursor:pointer;white-space:nowrap}
+.scrim .act-ntab tr:has(input:checked){background:var(--accent-soft)}
 /* What a delete removes and keeps, side by side, what stays as an action
    runs, and the line about new workers. */
 .scrim .act-gs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:10px;align-items:start}
@@ -242,6 +289,16 @@
   .scrim .act-nr>.act-k,.scrim .act-nr>.act-always{grid-column:3/-1;justify-self:start}
   .scrim .act-rowf{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
   .scrim .act-rowf>input[name$=-accounts]{grid-column:1/3}
+  /* Each node of the table is a card: the tick, then the name and the
+     role on one line, the Slurm state and the issues below them; a cell
+     with nothing to say drops out. */
+  .scrim .act-ntab thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .scrim .act-ntab tr{display:grid;grid-template-columns:28px auto minmax(0,1fr);align-items:center;gap:4px 8px;padding:8px 10px;border-bottom:1px solid var(--line-2)}
+  .scrim .act-ntab tr:last-child{border-bottom:0}
+  .scrim .act-ntab td{display:block;padding:0;border:0;height:auto;min-width:0}
+  .scrim .act-ntab td:first-child{grid-row:1;width:auto;height:auto;align-self:center}
+  .scrim .act-ntab :is(.act-nslurm,.act-nissues){grid-column:2/-1;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+  .scrim .act-ntab :is(.act-nslurm,.act-nissues):has(>.faint:only-child){display:none}
 }
 @media (max-width:520px){.scrim{padding-top:2vh}}
 /* On a touch screen, the controls of a dialog are 44 px too: the fields,
@@ -261,12 +318,18 @@
   .scrim .act-nr>label.act-lab{align-self:stretch;align-content:center;min-height:44px;cursor:pointer}
   .scrim .act-nr>.act-lab>label{padding:12px 0;margin:-12px 0}
   .scrim .checks label{min-height:44px;align-items:center}
+  .scrim .act-ntab td{height:44px}
+  .scrim .act-ntab input[type=checkbox]{width:24px;height:24px}
+  .scrim .act-qp,.scrim [data-act-change]{min-height:44px}
+  .scrim .act-other>summary{min-height:44px;align-items:center}
   .scrim .act-seg span{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
   .scrim .act-conf summary{padding:12px 0}
   .scrim button.pill{min-height:44px}
 }
 @media (pointer:coarse) and (max-width:760px){
   .scrim .act-nr{grid-template-columns:24px 12px minmax(0,1fr) auto}
+  .scrim .act-ntab td{height:auto}
+  .scrim .act-ntab tr{min-height:52px}
 }
 /* The notices of the commands that dialogs started, with a link to the
    run. They sit at the bottom left, beside the task dock and above the

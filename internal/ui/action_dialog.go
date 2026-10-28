@@ -227,17 +227,9 @@ var actSpecs = map[string]actSpec{
 	},
 	"power": {
 		OK: "Run", NeedsCluster: true,
-		Title: func(d *actDialog) string { return "Power and drain: nodes of " + d.Cluster },
-		Lead: func(*actDialog) string {
-			return "Drain and Resume change what Slurm does with the nodes. The other actions change their containers, up to 8 at a time."
-		},
-		Defaults: func(d *actDialog) {
-			op, ok := action.PowerOpOf(d.Form.Get("op"))
-			if !ok {
-				op, _ = action.PowerOpOf("shutdown")
-			}
-			d.Form.Set("op", op.ID)
-		},
+		Title:    func(d *actDialog) string { return actPowerHead(d.Snap, d.Realm, d.Cluster, d.Form).Title },
+		Lead:     func(d *actDialog) string { return actPowerHead(d.Snap, d.Realm, d.Cluster, d.Form).Lead },
+		Defaults: actPowerDefaults,
 	},
 	"restart-service": {
 		OK: "Restart", NeedsCluster: true,
@@ -692,6 +684,9 @@ type actDialog struct {
 	Lock *state.LockHolder
 	// Draft says that the fields are those of the user's draft.
 	Draft bool
+	// Short says that the Power dialog is a short confirmation of the
+	// action and the nodes of its link, with the picker folded away.
+	Short bool
 	// defaulted are the fields that Spec.Defaults filled.
 	defaulted []string
 }
@@ -708,7 +703,17 @@ type actOK struct {
 // OKButton is the button that runs the command, off until a preview says
 // that it can run.
 func (d *actDialog) OKButton() actOK {
-	return actOK{Label: d.Spec.OK, Danger: d.Spec.Danger, Off: true, Why: d.Typed != ""}
+	return actOK{Label: cmp.Or(actPendingOK(d.ID, d.Snap, d.Realm, d.Cluster, d.Form), d.Spec.OK), Danger: d.Spec.Danger, Off: true, Why: d.Typed != ""}
+}
+
+// actPendingOK names the button of a dialog whose form lacks a part, as
+// its command would: that of the Power dialog names the action and the
+// nodes; "" for another dialog, whose button keeps its name.
+func actPendingOK(id string, sn store.Snapshot, realm, clusterName string, f action.Form) string {
+	if id != "power" {
+		return ""
+	}
+	return actPowerOK(sn, realm, clusterName, f)
 }
 
 // actChoice is an option of a select.
@@ -754,13 +759,6 @@ func (d *actDialog) DirFollows() bool { return d.Form.Get("dir") == actDefaultDi
 
 // actDefaultDir is the directory of the data of a new cluster name.
 func actDefaultDir(name string) string { return "~/sind/" + name }
-
-// actNodeChoice is a node of the picker of the power and delete worker
-// dialogs.
-type actNodeChoice struct {
-	Short, Role, State string
-	On                 bool
-}
 
 // actClusterChoice is a cluster of the dialog that deletes several.
 type actClusterChoice struct {
@@ -937,6 +935,10 @@ func (d *actDialog) RealmHint() string {
 	return "A group of clusters. A new name makes a new realm."
 }
 
+// actLockOps are the power ops whose commands take the realm lock: those
+// that start containers.
+var actLockOps = []string{"on", "reboot", "cycle"}
+
 // actLocks reports whether the command of the action takes the realm lock,
 // as sind does: every command that changes a realm does, but the power
 // commands that only stop or pause containers.
@@ -945,7 +947,7 @@ func actLocks(a action.Action, f action.Form) bool {
 		return true
 	}
 	op, _ := action.PowerOpOf(f.Get("op"))
-	return slices.Contains([]string{"on", "reboot", "cycle"}, op.ID)
+	return slices.Contains(actLockOps, op.ID)
 }
 
 // actDialogRoute answers with a dialog, filled in with the fields in the
@@ -1048,13 +1050,12 @@ func (d *actDialog) pickCluster() error {
 	if err := config.CheckName("cluster", d.Cluster); err != nil {
 		return fmt.Errorf("cluster: %v: %w", err, ErrBadRequest)
 	}
-	picked := strings.FieldsFunc(strings.Join(d.Form["nodes"], ","), func(r rune) bool { return r == ',' || r == ' ' })
-	for _, n := range d.Snap.ClusterNodes(d.Realm, d.Cluster) {
-		if d.ID == "delete-worker" && n.Role != config.RoleWorker {
+	picked := action.NodeNames(d.Form)
+	for _, n := range actPgNodes(d.View, d.Realm, d.Cluster) {
+		if d.ID == "delete-worker" && !n.Worker() {
 			continue
 		}
-		short := action.ShortName(n)
-		d.Nodes = append(d.Nodes, actNodeChoice{Short: short, Role: string(n.Role), State: string(n.State), On: slices.Contains(picked, short)})
+		d.Nodes = append(d.Nodes, actNodeChoiceOf(n, slices.Contains(picked, n.Short)))
 	}
 	return nil
 }
@@ -1095,9 +1096,10 @@ type actPreview struct {
 }
 
 // OKButton is the button that runs the command, as the preview says: its
-// label is the command's, or the dialog's.
+// label is the command's, or what the command would be, or the dialog's.
 func (p actPreview) OKButton() actOK {
-	return actOK{Label: cmp.Or(p.Cmd.OK, p.Spec.OK), Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
+	label := cmp.Or(p.Cmd.OK, actPendingOK(p.ID, p.Snap, action.Realm(p.Form), p.Form.Get("cluster"), p.Form), p.Spec.OK)
+	return actOK{Label: label, Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Typed != ""}
 }
 
 // actWhy says why what the user typed, typed, does not confirm want: a
@@ -1306,6 +1308,11 @@ func (p actPreview) Totals() string {
 // Warnings is how many warnings the command has, which the pill counts.
 func (p actPreview) Warnings() int { return len(p.Cmd.Warns) }
 
+// CmdWords are the words of the command as the dialog shows it, each of
+// which a line breaks only where it does not fit by itself, so that a
+// node name such as worker-4.dev stays whole.
+func (p actPreview) CmdWords() []string { return strings.Split(p.Cmd.Display, " ") }
+
 // FirstWarn is the first warning of the command, which the footer shows
 // beside the count, so that a warning stays in view: "" for none.
 func (p actPreview) FirstWarn() string {
@@ -1347,10 +1354,23 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 	if p.Typed = a.Want(f); !a.Confirmed(f) {
 		p.Why = actWhy(p.Typed, f.Get(action.ConfirmField))
 	}
+	if a.ID == "power" {
+		// An action that fits none of the ticked nodes, as a stale link
+		// may ask for, does not run.
+		if why := actPowerMisfit(v, f); why != "" {
+			p.Err, p.Blocked, p.Realm = why, true, action.Realm(f)
+			return p
+		}
+	}
 	cmd, err := a.Build(f, ctx)
 	var missing *action.Missing
 	if errors.As(err, &missing) {
 		p.Hint, p.Blocked = missing.Hint(), true
+		// Before the user picks the action, the lock may hold up the one
+		// they pick.
+		if p.Realm = action.Realm(f); actLocks(a, f) || missing.Field == "op" {
+			p.Lock = v.Snap.Locks[p.Realm]
+		}
 		return p
 	}
 	if err != nil {
@@ -1372,6 +1392,20 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 		}
 	}
 	return p
+}
+
+// LockWaits says what waits for the lock of the realm: the command, or,
+// in a Power dialog that has no action yet, the actions that take it.
+func (p actPreview) LockWaits() string {
+	if _, ok := action.PowerOpOf(p.Form.Get("op")); p.ID == "power" && !ok {
+		labels := make([]string, len(actLockOps))
+		for i, id := range actLockOps {
+			op, _ := action.PowerOpOf(id)
+			labels[i] = op.Label
+		}
+		return pgJoin(labels) + " wait until it ends; the other actions do not take the lock."
+	}
+	return "The command waits until it ends; its run page shows the realm lock wait."
 }
 
 // actContext returns what the actions check a form against.

@@ -75,7 +75,7 @@ func TestActDeleteClusters_Run(t *testing.T) {
 	f := newActFixture(t)
 	form := actForm("clusters", "sind/dev", "clusters", "sind/default", "back", "/clusters?realm=sind&q=d")
 	preview := f.post("/actions/delete-clusters/preview", form).Body.String()
-	assert.Contains(t, preview, "<code>sind delete cluster\nsind delete cluster dev</code>")
+	assert.Contains(t, preview, actCode("sind delete cluster\nsind delete cluster dev"))
 	assert.Contains(t, preview, "These are all the clusters of realm sind")
 	assert.Contains(t, preview, `>Delete 2 clusters<kbd`, "the button names what it deletes")
 	assert.Contains(t, preview, "The button stays off until you type the number.", "a count is no name")

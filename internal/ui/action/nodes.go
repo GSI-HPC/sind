@@ -81,6 +81,13 @@ func nodeWords(clusterName string, shorts []string) []string {
 	return names
 }
 
+// NodeSet folds the short names of nodes into one node set as sind takes
+// them, such as worker-[0-2], or joins them with commas where they do not
+// fold.
+func NodeSet(shorts []string) string {
+	return strings.Join(nodeWords(config.DefaultClusterName, shorts), ",")
+}
+
 // nextWorkers returns the short names that new workers of a cluster with the
 // nodes get: worker-N upward from the highest number there is.
 func nextWorkers(nodes []cluster.NodeSummary, count int) []string {

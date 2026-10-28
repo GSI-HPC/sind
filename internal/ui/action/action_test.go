@@ -471,19 +471,27 @@ func TestBuildPower(t *testing.T) {
 		danger := tc.sub == "cut" || tc.sub == "cycle"
 		assert.Equal(t, danger, len(cmd.Warns) == 1, tc.op)
 		op, _ := PowerOpOf(tc.sub)
-		assert.Equal(t, op.Label+" 3 nodes", cmd.OK)
+		assert.Equal(t, op.Heading("3 workers"), cmd.OK, "the button names the workers")
 	}
+	cmd, err := build(t, "power", form("cluster", "dev", "op", "cut", "nodes", "controller,worker-0"))
+	require.NoError(t, err)
+	assert.Equal(t, "Cut power to 2 nodes", cmd.OK)
 
-	cmd, err := build(t, "power", form("realm", "ci", "cluster", "ci1", "op", "on", "nodes", "worker-0"))
+	cmd, err = build(t, "power", form("realm", "ci", "cluster", "ci1", "op", "on", "nodes", "worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci power on worker-0.ci1", cmd.Display)
 	assert.Equal(t, "Start worker-0", cmd.OK)
 
 	_, err = build(t, "power", form("cluster", "dev", "op", "melt", "nodes", "worker-0"))
 	assert.EqualError(t, err, "op: pick what to do with the nodes")
+	// No action is picked for the user.
+	_, err = build(t, "power", form("cluster", "dev", "nodes", "worker-0"))
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "Pick an action.", missing.Hint())
+	assert.Equal(t, "op", missing.Field)
 	_, err = build(t, "power", form("cluster", "dev", "op", "on"))
 	assert.EqualError(t, err, "nodes: pick at least one node of dev")
-	var missing *Missing
 	require.ErrorAs(t, err, &missing)
 	assert.Equal(t, "Pick at least one node of dev.", missing.Hint())
 	cmd, err = build(t, "power", form("cluster", "dev", "op", "on", "nodes", "controller"))
@@ -548,12 +556,36 @@ func TestBuildPower_Warnings(t *testing.T) {
 	assert.Empty(t, warns("shutdown", "worker-1"))
 }
 
+func TestBuildPower_Stays(t *testing.T) {
+	st := store.New()
+	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 1}})
+	st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	stopped := node("dev", "worker-3", config.RoleWorker)
+	stopped.State = cluster.StateStopped
+	st.SetNodes("sind", []cluster.NodeSummary{
+		node("dev", "controller", config.RoleController), node("dev", "db", config.RoleDB),
+		node("dev", "worker-0", config.RoleWorker), node("dev", "worker-1", config.RoleWorker), node("dev", "worker-2", config.RoleWorker), stopped,
+	})
+	a, _ := Lookup("power")
+	stays := func(op, nodes string) []string {
+		t.Helper()
+		cmd, err := a.Build(form("cluster", "dev", "op", op, "nodes", nodes), (&testStoreT{st}).ctx())
+		require.NoError(t, err)
+		return cmd.Stays
+	}
+	assert.Equal(t, []string{"2 other workers keep running.", "dev still takes jobs."}, stays("reboot", "worker-0"))
+	assert.Equal(t, []string{"1 other worker keeps running.", "dev still takes jobs."}, stays("cut", "worker-0,worker-1"))
+	assert.Equal(t, []string{"2 other workers keep running."}, stays("shutdown", "controller,worker-0"), "the controller goes")
+	assert.Empty(t, stays("freeze", "worker-0,worker-1,worker-2"), "no running worker stays")
+	assert.Empty(t, stays("on", "worker-3"), "start stops nothing")
+}
+
 func TestBuildPower_SlurmState(t *testing.T) {
 	cmd, err := build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "worker-0,worker-1", "reason", " disk test "))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-[0-1]", "State=DRAIN", "Reason=disk test"}, cmd.Argv)
 	assert.Equal(t, "sind exec dev -- scontrol update 'NodeName=worker-[0-1]' State=DRAIN 'Reason=disk test'", cmd.Display)
-	assert.Equal(t, "Drain 2 nodes", cmd.OK)
+	assert.Equal(t, "Drain 2 workers", cmd.OK)
 	assert.Contains(t, cmd.Notes[0], "Running jobs go on")
 	assert.Empty(t, cmd.Warns)
 
@@ -613,7 +645,12 @@ func TestPowerOpOf(t *testing.T) {
 	for _, op := range PowerOps {
 		assert.NotEmpty(t, op.Label)
 		assert.NotEmpty(t, op.Text)
+		assert.NotEmpty(t, op.One)
 	}
+	op, _ = PowerOpOf("reboot")
+	assert.Equal(t, "Reboot worker-4", op.Heading("worker-4"))
+	op, _ = PowerOpOf("cut")
+	assert.Equal(t, "Cut power to worker-4", op.Heading("worker-4"))
 }
 
 func TestPowerGroups(t *testing.T) {
@@ -669,6 +706,12 @@ func TestNodeWords(t *testing.T) {
 	odd := []string{"a b.dev"}
 	assert.Equal(t, odd, nodeWords("dev", []string{"a b"}))
 	assert.Equal(t, []string{"x[.dev"}, nodeWords("dev", []string{"x["}))
+}
+
+func TestNodeSet(t *testing.T) {
+	assert.Equal(t, "worker-[0-2]", NodeSet([]string{"worker-2", "worker-0", "worker-1"}))
+	assert.Equal(t, "controller,worker-[0,4]", NodeSet([]string{"worker-4", "controller", "worker-0"}))
+	assert.Empty(t, NodeSet(nil))
 }
 
 func TestNodeNames(t *testing.T) {

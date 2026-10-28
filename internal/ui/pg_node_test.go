@@ -256,6 +256,37 @@ func TestPgNodeMenus(t *testing.T) {
 	assert.Len(t, pgNodeMenus(n), 1)
 }
 
+// pgOpOff is the one rule of which power ops fit a node, for the menus, the
+// Power dialog and the selection bar.
+func TestPgOpOff(t *testing.T) {
+	n := fixWorker()
+	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	off := func(ops ...string) []string {
+		var out []string
+		for _, op := range ops {
+			out = append(out, op+": "+pgOpOff(n, op))
+		}
+		return out
+	}
+	all := []string{"drain", "resume", "on", "shutdown", "reboot", "freeze", "unfreeze", "cycle", "cut"}
+	assert.Equal(t, []string{"drain: ", "resume: It takes jobs already", "on: It runs already", "shutdown: ", "reboot: ", "freeze: ", "unfreeze: It is not frozen", "cycle: ", "cut: "}, off(all...))
+	n.Creating = true
+	for _, o := range off(all...) {
+		assert.Contains(t, o, ": sind creates it now")
+	}
+	n.Creating, n.Deleting = false, true
+	assert.Equal(t, []string{"on: sind deletes it now"}, off("on"))
+	n.Deleting = false
+	n.State = cluster.StatePaused
+	assert.Equal(t, []string{"on: It is frozen: unfreeze it first", "reboot: It is frozen: unfreeze it first", "unfreeze: "}, off("on", "reboot", "unfreeze"))
+	n.State = cluster.StateStopped
+	assert.Equal(t, []string{"on: ", "cut: It does not run"}, off("on", "cut"))
+	n.Role = config.RoleController
+	assert.Equal(t, []string{"drain: Only workers take jobs"}, off("drain"))
+	n = fixWorker()
+	assert.Equal(t, []string{"drain: sinfo does not list it"}, off("drain"))
+}
+
 func TestPgNodeActs(t *testing.T) {
 	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.Local)
 	end := now.Add(-time.Minute)

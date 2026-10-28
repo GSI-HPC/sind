@@ -14,6 +14,9 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The frame of every dialog: its name and description, the dialog itself,
@@ -224,7 +227,7 @@ func TestActPreview_FooterStatus(t *testing.T) {
 		s, _, _ := strings.Cut(rest, "</span>\n")
 		return s
 	}
-	assert.Empty(t, status(actForm("cluster", "dev", "op", "on", "nodes", "worker-0")), "nothing to say")
+	assert.Empty(t, status(actForm("cluster", "dev", "op", "reboot", "nodes", "worker-0")), "nothing to say")
 	assert.Equal(t, `<span class="hint act-tot">Pick at least one node of dev.</span>`, status(actForm("cluster", "dev", "op", "on")))
 	assert.Contains(t, status(actForm("cluster", "dev", "op", "on", "nodes", "worker-9")),
 		`<button type="button" class="pill bad nodot act-go" data-act-go="" aria-label="1 problem. Show the problems." title="Show the problems">1 problem <span aria-hidden="true">↑`)
@@ -283,4 +286,30 @@ func TestActPreview_FooterParts(t *testing.T) {
 
 	assert.Equal(t, "How many: too many", actPreview{Cmd: action.Command{Problems: []action.Problem{{Label: "How many", Text: "too many"}}}}.FirstText())
 	assert.Equal(t, "it broke", actPreview{Err: "it broke"}.FirstText())
+
+	assert.Equal(t, []string{"sind", "power", "reboot", "worker-4.dev"}, actPreview{Cmd: action.Command{Display: "sind power reboot worker-4.dev"}}.CmdWords())
+}
+
+// The picker of the Power dialog shows the Slurm state of each node, with
+// the reason, and the quick picks count the nodes they tick.
+func TestActDialog_PowerPickerShowsSlurm(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{
+		{Name: "controller.dev", Role: config.RoleController, Managed: true, Health: &cluster.NodeHealth{State: cluster.StateRunning}},
+		{Name: "worker-0.dev", Role: config.RoleWorker, Managed: true, Health: &cluster.NodeHealth{State: cluster.StateRunning}},
+		{Name: "worker-1.dev", Role: config.RoleWorker, Managed: true, Health: &cluster.NodeHealth{State: cluster.StateRunning}},
+	}})
+	f.st.SetSlurm("sind", "dev", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{
+		{Name: "worker-0", State: "idle"}, {Name: "worker-1", State: "drained", Reason: "memory errors"},
+	}}})
+	body := f.get("/dialogs/power?cluster=dev").Body.String()
+	assert.Contains(t, body, `<span class="pill warn">drained</span> <span class="faint act-why2">memory errors</span>`)
+	assert.Contains(t, body, `data-act-pick="worker-0">Idle <span class="act-qn">1</span>`)
+	assert.Contains(t, body, `data-act-pick="worker-1">Drained <span class="act-qn">1</span>`)
+	assert.Contains(t, body, `data-act-pick="worker-1">Need a look <span class="act-qn bad">1</span>`)
+	assert.NotContains(t, body, "checked", "no action and no node is picked for the user")
+
+	// A short confirmation names the node with its state.
+	body = f.get("/dialogs/power?cluster=dev&op=resume&nodes=worker-1").Body.String()
+	assert.Contains(t, body, `<li><b class="mono">worker-1</b> <span class="chip ">worker</span> <span class="pill warn" title="Slurm state">drained</span> <span class="faint act-why2">memory errors</span></li>`)
 }

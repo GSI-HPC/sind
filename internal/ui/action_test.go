@@ -105,7 +105,20 @@ func newActFixture(t *testing.T) *actFixture {
 		actNode("default", "controller", config.RoleController),
 	})
 	f.testServer = newTestServerFrom(t, cfg, st).login()
+	// No command creates a cluster of the fixture, so that the actions
+	// fit its nodes; a test that needs one sets its runs.
+	st.SetRuns(nil)
 	return f
+}
+
+// actCode is the command of a preview as the dialog shows it: each word
+// of display, html-escaped, whole.
+func actCode(display string) string {
+	words := strings.Split(display, " ")
+	for i, w := range words {
+		words[i] = `<span class="act-cw">` + w + `</span>`
+	}
+	return "<code>" + strings.Join(words, " ") + "</code>"
 }
 
 // form encodes key and value pairs.
@@ -174,13 +187,32 @@ func TestActDialog_EveryActionOpens(t *testing.T) {
 			`autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"`, `btn danger solid`, `disabled aria-describedby="act-why">Delete cluster<kbd`}},
 		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, `id="act-confirm-word">worker-1</b>`}},
 		{"delete-worker", "cluster=dev&nodes=worker-0,worker-1", []string{`id="act-confirm-word">dev</b>`}},
-		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Power and drain: nodes of dev", `value="worker-0" checked`, `value="worker-1" checked`, `value="controller">`, `value="cut" checked`, "Cut power",
-			`<legend class="lbl">Slurm (scontrol)</legend>`, `<legend class="lbl">Containers</legend>`, `<fieldset class="fld act-ops act-danger"><legend class="lbl">Can lose data</legend>`,
-			`id="act-reason" name="reason" value=""`, "Drain and Resume change what Slurm does"}},
-		{"power", "cluster=dev&op=drain&reason=disk", []string{`value="drain" checked`, `name="reason" value="disk"`}},
+		// Opened for an action and nodes, the dialog is a short confirmation,
+		// with the picker folded away.
+		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Cut power to 2 workers of dev", "Kills the containers at once", `value="worker-0" id="act-n-worker-0" checked`, `value="worker-1" id="act-n-worker-1" checked`, `value="controller" id="act-n-controller">`,
+			`value="cut" checked`, `<div class="act-og danger"><span class="act-ogl" id="act-og-danger" aria-hidden="true">Can lose data</span><div class="seg act-seg" role="group" aria-labelledby="act-og-danger">`, `<li><b class="mono">worker-0</b> <span class="chip ">worker</span>`,
+			`data-act-change aria-controls="act-pick" aria-expanded="false">Change nodes…</button>`, `<div class="act-pick" id="act-pick" hidden>`,
+			// The closed section names the other actions that fit the nodes.
+			`<summary><b>Other actions</b><span class="pg-caret" aria-hidden="true"></span> <span class="faint act-otherops">Shut down · Reboot · Freeze · Power-cycle</span></summary>`,
+			`id="act-nodeset" value="worker-[0-1]"`}},
+		{"power", "cluster=dev&nodes=worker-0&op=reboot", []string{"Reboot worker-0.dev", "Stops, then starts the container. Running jobs on it fail.", `<div class="act-pick" id="act-pick" hidden>`}},
+		// An action that fits none of the nodes, as of a stale link, opens
+		// the picker, which says why.
+		{"power", "cluster=dev&nodes=worker-0&op=on", []string{"Start worker-0.dev", `<div class="act-pick" id="act-pick">`, `value="worker-0" id="act-n-worker-0" checked`}},
+		// Without nodes, or with one that is gone, it is the picker.
+		{"power", "cluster=dev&op=drain&reason=disk", []string{"Drain nodes of dev", `value="drain" checked`, `name="reason" value="disk"`, `<div class="fld act-reason"><label for="act-reason">`,
+			`<div class="act-pick" id="act-pick">`, `<fieldset class="fld act-opseg"><legend class="lbl">Action</legend>`,
+			`<button type="button" class="btn sm act-qp" data-act-pick="worker-0,worker-1">All workers <span class="act-qn">2</span></button>`,
+			`<button type="button" class="btn sm act-qp" data-act-pick="" disabled>Idle <span class="act-qn">0</span></button>`,
+			`<tr data-act-node="controller" data-act-offs="{`}},
+		{"power", "cluster=dev&nodes=worker-9&op=reboot", []string{"Reboot nodes of dev", `<div class="act-pick" id="act-pick">`}},
+		{"power", "cluster=dev&nodes=worker-0&op=reboot&nodes=worker-1", []string{"Reboot 2 workers of dev"}},
+		{"power", "cluster=dev&nodes=worker-0,controller&op=reboot", []string{"Reboot 2 nodes of dev"}},
 		{"power", "cluster=dev&op=resume", []string{`value="resume" checked`}},
+		{"power", "cluster=gone&op=resume", []string{"Resume nodes of gone", "sind ui sees no node of gone yet."}},
 		{"power", "cluster=dev&op=stop", []string{`value="shutdown" checked`}},
-		{"power", "cluster=dev&op=melt", []string{`value="shutdown" checked`}},
+		// No action is picked for the user.
+		{"power", "cluster=dev&op=melt", []string{"Power and drain: nodes of dev", "Drain and Resume change what Slurm does", `name="op" value="shutdown">`}},
 		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`, `id="act-realm" name="realm" value="sind"`, "The realm whose networks the container joins."}},
 		{"disconnect", "", []string{"Disconnect a container", "connected to realm sind"}},
 		{"delete-realm", "", []string{"Delete realm sind", "Deletes every cluster of realm sind", `Type <b class="mono" id="act-confirm-word">sind</b> to confirm`}},
@@ -265,20 +297,21 @@ func TestActPreview_ShowsWhoHoldsTheLock(t *testing.T) {
 	// A power command that only stops containers takes no lock.
 	power := actForm("cluster", "dev", "nodes", "worker-0")
 	assert.NotContains(t, f.post("/actions/power/preview", power+"&op=shutdown").Body.String(), "holds the lock")
-	assert.Contains(t, f.post("/actions/power/preview", power+"&op=on").Body.String(), "holds the lock")
+	assert.Contains(t, f.post("/actions/power/preview", power+"&op=reboot").Body.String(), "holds the lock")
 	assert.NotContains(t, f.post("/actions/delete-realm/preview", actForm("realm", "ci")).Body.String(), "holds the lock")
 }
 
 func TestActPreview_ShowsTheCommand(t *testing.T) {
 	f := newActFixture(t)
 
-	w := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-0", "nodes", "worker-1"))
+	w := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "reboot", "nodes", "worker-0", "nodes", "worker-1"))
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
-	assert.Contains(t, body, `<code>sind power on &#39;worker-[0-1].dev&#39;</code>`)
-	assert.Contains(t, body, `data-pg-copy-text="sind power on &#39;worker-[0-1].dev&#39;"`)
-	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Start 2 nodes<kbd`)
+	assert.Contains(t, body, actCode("sind power reboot &#39;worker-[0-1].dev&#39;"))
+	assert.Contains(t, body, `data-pg-copy-text="sind power reboot &#39;worker-[0-1].dev&#39;"`)
+	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true">Reboot 2 workers<kbd`)
+	assert.Contains(t, body, `<h2 id="act-title" hx-swap-oob="true">Reboot 2 workers of dev</h2><p id="act-lead" hx-swap-oob="true">Stops, then starts the containers`, "the title follows the form")
 	assert.NotContains(t, body, `disabled`)
 	assert.NotContains(t, body, "act-yaml")
 }
@@ -303,7 +336,13 @@ func TestActPreview_Refusals(t *testing.T) {
 	body := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-9")).Body.String()
 	assert.Contains(t, body, `callout bad`)
 	assert.Contains(t, body, "nodes: cluster dev has no node worker-9")
-	assert.Contains(t, body, `disabled>Run<kbd`)
+	assert.Contains(t, body, `disabled>Start worker-9<kbd`, "the button names the action")
+	assert.NotContains(t, body, `name="shown"`)
+
+	// An action that fits none of the ticked nodes does not run.
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-0")).Body.String()
+	assert.Contains(t, body, `<div class="callout bad">Start fits none of the ticked nodes: worker-0 runs already. Pick another action or other nodes.</div>`)
+	assert.Contains(t, body, `disabled>Start worker-0<kbd`)
 	assert.NotContains(t, body, `name="shown"`)
 
 	// A value that the form lacks is a hint in the footer, not an error.
@@ -350,7 +389,7 @@ func TestActPreview_ListsWhatGoesAndStays(t *testing.T) {
 
 	body = f.post("/actions/delete-realm/preview", actForm("realm", "sind")).Body.String()
 	assert.Contains(t, body, "<li>2 clusters: default, dev</li>")
-	assert.Contains(t, body, "<code>sind --realm sind delete realm</code>")
+	assert.Contains(t, body, actCode("sind --realm sind delete realm"))
 }
 
 func TestActConnect_ProblemsAtTheirFields(t *testing.T) {
@@ -372,7 +411,7 @@ func TestActConnect_ProblemsAtTheirFields(t *testing.T) {
 	assert.Contains(t, body, `<span class="err" id="act-err-container" hx-swap-oob="innerHTML">write the name of a container, such as kind-control-plane</span>`)
 
 	body = f.post("/actions/connect/preview", actForm("realm", "new", "container", "kind-cp")).Body.String()
-	assert.Contains(t, body, "<code>sind --realm new connect container kind-cp</code>")
+	assert.Contains(t, body, actCode("sind --realm new connect container kind-cp"))
 	assert.Contains(t, body, `<div class="callout warn">sind ui sees no realm new. sind connects a container only to a realm with a cluster, whose mesh it joins; create a cluster in new first.</div>`)
 
 	// A dialog without fields of its own keeps the error in the preview.
@@ -408,8 +447,17 @@ func TestActPreview_Warnings(t *testing.T) {
 	assert.Contains(t, body, `holds the lock of realm <b class="mono">sind</b>: <span class="mono">sind power on x (pid 1 on h, since `)
 
 	// An error says nothing of the lock.
-	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "reboot")).Body.String()
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "reboot", "nodes", "worker-9")).Body.String()
 	assert.NotContains(t, body, "lock")
+	// A form that lacks a value does: before the user picks the action,
+	// it names those that wait.
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "reboot")).Body.String()
+	assert.Contains(t, body, "The command waits until it ends")
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "nodes", "worker-0")).Body.String()
+	assert.Contains(t, body, "Start, Reboot and Power-cycle wait until it ends; the other actions do not take the lock.")
+	assert.Contains(t, body, `<span class="hint act-tot">Pick an action.</span>`)
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "cut")).Body.String()
+	assert.NotContains(t, body, "lock", "cut takes no lock")
 }
 
 func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
@@ -667,7 +715,7 @@ func TestActRun_RefusesTheFormThatDoesNotBuild(t *testing.T) {
 	assert.Equal(t, "innerHTML", w.Header().Get("HX-Reswap"))
 	assert.Contains(t, w.Body.String(), `<div class="callout bad">Pick at least one node of dev.</div>`)
 	assert.NotContains(t, w.Body.String(), "act-missing")
-	assert.Contains(t, w.Body.String(), "disabled>Run<kbd")
+	assert.Contains(t, w.Body.String(), "disabled>Start nodes<kbd")
 	assert.Empty(t, f.starter.specs)
 }
 
@@ -690,7 +738,7 @@ func TestActRun_RefusesWithoutTheTypedName(t *testing.T) {
 
 func TestActRun_RefusesACommandThatChanged(t *testing.T) {
 	f := newActFixture(t)
-	form := actForm("cluster", "dev", "op", "on", "nodes", "worker-0")
+	form := actForm("cluster", "dev", "op", "reboot", "nodes", "worker-0")
 	shown := f.shown(t, "power", form)
 
 	// The browser shows one command and posts the fields of another.
@@ -724,7 +772,7 @@ func TestActRun_ShownCoversTheConfig(t *testing.T) {
 
 func TestActRun_StartFailures(t *testing.T) {
 	f := newActFixture(t)
-	form := actForm("cluster", "dev", "op", "on", "nodes", "worker-0")
+	form := actForm("cluster", "dev", "op", "reboot", "nodes", "worker-0")
 	form += "&shown=" + f.shown(t, "power", form)
 	f.starter.startErr = errors.New("not a sind command")
 

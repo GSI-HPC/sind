@@ -72,7 +72,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>
 {{else}}{{with .Cmd.Stays}}<ul class="act-stays" aria-label="What stays">{{range .}}<li><span class="pg-ck y" aria-hidden="true">✓</span><span>{{.}}</span></li>{{end}}</ul>{{end}}{{end}}
 {{template "act-callouts" .}}
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{range $i, $w := .CmdWords}}{{if $i}} {{end}}<span class="act-cw">{{$w}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
 {{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
@@ -85,6 +85,8 @@ it, and the button and the parts of the dialog that depend on it. */}}
 <datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
 {{range .SlurmFiles}}<span class="act-dot" id="act-dot-{{.ID}}" hx-swap-oob="true">{{if $p.SlurmSet .ID}} •{{end}}</span>{{end}}
 {{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
+{{with .Head}}<h2 id="act-title" hx-swap-oob="true">{{.Title}}</h2><p id="act-lead" hx-swap-oob="true">{{.Lead}}</p>{{end}}
+{{if eq .ID "power"}}{{with .PowerOffs}}<p class="hint act-offs" id="act-offs" hx-swap-oob="true">{{.}}</p>{{else}}<p class="hint act-offs" id="act-offs" hx-swap-oob="true" hidden></p>{{end}}{{end}}
 <span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{if .Spec.Plan}}{{template "act-status" .}}{{else}}{{template "act-fstatus" .}}{{end}}</span>
 {{end}}{{end}}
 
@@ -100,7 +102,7 @@ first of them; the first problem or warning says itself in short. */}}
 {{/* act-callouts are what to know about the command of a preview. */}}
 {{define "act-callouts"}}
 {{if .Warn}}<div class="callout warn">{{.Warn}}</div>{{end}}
-{{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. The command waits until it ends; its run page shows the realm lock wait.</div>{{end}}
+{{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. {{.LockWaits}}</div>{{end}}
 {{range .Cmd.Notes}}<div class="callout">{{.}}</div>{{end}}
 {{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
 {{end}}
@@ -378,12 +380,51 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 {{template "act-nodes" .}}
 {{end}}
 
-{{define "act-dlg-power"}}
-{{template "act-nodes" .}}
-{{range .OpGroups}}<fieldset class="fld act-ops{{if eq .ID "danger"}} act-danger{{end}}"><legend class="lbl">{{.Label}}</legend><div class="checks">
-  {{range .Ops}}<label><input type="radio" name="op" value="{{.ID}}"{{if $.Is "op" .ID}} checked{{end}}> <span>{{.Label}} <small>{{.Text}}</small></span></label>{{end}}
-</div>{{if eq .ID "slurm"}}<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{$.Val "reason"}}" placeholder="such as disk test" maxlength="200"><span class="hint">sinfo -R shows it.</span></div>{{end}}</fieldset>{{end}}
+{{/* act-dlg-power is the Power dialog: a short confirmation of the
+action and the nodes of its link, whose picker waits behind Change nodes,
+or the picker, when the link names no action or no nodes. act.js keeps the
+node set field and the ticks in step, and turns off the actions that fit no
+ticked node. */}}
+{{define "act-dlg-power"}}<div class="act-power" data-act-power>
+{{if .Short}}<div class="act-target" data-act-target>
+  <ul class="act-tl">{{range .Picked}}{{template "act-node-line" .}}{{end}}</ul>
+  <button type="button" class="btn sm" data-act-change aria-controls="act-pick" aria-expanded="false">Change nodes…</button></div>
+<details class="act-other" data-act-other><summary><b>Other actions</b><span class="pg-caret" aria-hidden="true"></span> <span class="faint act-otherops">{{.OtherOps}}</span></summary>{{template "act-opseg" .}}</details>
+{{else}}{{template "act-opseg" .}}{{end}}
+<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{.Val "reason"}}" placeholder="such as disk test" maxlength="200" aria-describedby="act-hint-reason"><span class="hint" id="act-hint-reason">sinfo -R shows it.</span></div>
+<div class="act-pick" id="act-pick"{{if .Short}} hidden{{end}}>
+{{if .Nodes}}<div class="act-ph2"><label class="lbl" for="act-nodeset">Nodes of {{.Cluster}}</label>
+  <span class="act-picks" role="group" aria-label="Tick"><span class="faint">Tick:</span>{{range .Picks}}<button type="button" class="btn sm act-qp" data-act-pick="{{.Nodes}}"{{if not .N}} disabled{{end}}>{{.Label}} <span class="act-qn{{if and .N .Class}} {{.Class}}{{end}}">{{.N}}</span></button>{{end}}</span></div>
+<input type="text" id="act-nodeset" value="{{.PickedSet}}" placeholder="such as worker-[0-3]" autocapitalize="off" autocomplete="off" spellcheck="false" aria-describedby="act-nodeset-err act-nodeset-hint" data-act-nodeset>
+<span class="err" id="act-nodeset-err" role="status"></span><span class="hint" id="act-nodeset-hint">A node set as the CLI takes it. The ticks follow it, and it follows the ticks.</span>
+{{template "act-ntable" .}}
+{{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}
+</div></div>
 {{end}}
+
+{{/* act-opseg is the action segment of the Power dialog, in groups: the
+ops of Slurm, those of the containers, and those that can lose data. */}}
+{{define "act-opseg"}}<fieldset class="fld act-opseg"><legend class="lbl">Action</legend>
+  <div class="act-opsrow">{{range .OpSegs}}<div class="act-og{{if eq .ID "danger"}} danger{{end}}"><span class="act-ogl" id="act-og-{{.ID}}" aria-hidden="true">{{.Label}}</span><div class="seg act-seg" role="group" aria-labelledby="act-og-{{.ID}}">{{range .Ops}}<label title="{{.Text}}"><input type="radio" name="op" value="{{.ID}}"{{if .On}} checked{{end}}><span>{{.Label}}</span></label>{{end}}</div></div>{{end}}</div>
+  <p class="hint act-offs" id="act-offs" hidden></p></fieldset>{{end}}
+
+{{/* act-node-line is a picked node of a short confirmation: its name,
+role, state and issues. */}}
+{{define "act-node-line"}}{{with .Node}}<li><b class="mono">{{.Short}}</b> <span class="chip {{.RoleClass}}">{{.Role}}</span>{{template "act-node-state" .}}</li>{{end}}{{end}}
+
+{{/* act-node-state is what a node of a picker says of itself: what is
+wrong with its container and its services, and its Slurm state with the
+reason. */}}
+{{define "act-node-state"}}{{if .Life}} <span class="pill run">{{.Pill.Text}}</span>{{else}}{{range .ServiceIssues}} <span class="pill {{.Class}}">{{.Text}}</span>{{end}}{{with .Slurm}} <span class="pill {{$.SlurmClass}}" title="Slurm state">{{.State}}</span>{{with .Reason}} <span class="faint act-why2">{{.}}</span>{{end}}{{end}}{{end}}{{end}}
+
+{{/* act-ntable is the table of the nodes of a picker, whose boxes the
+form posts as nodes. */}}
+{{define "act-ntable"}}<div class="act-nt" role="group" aria-label="Nodes of {{.Cluster}}"><table class="act-ntab"><thead><tr><th><span class="vh">Tick</span></th><th>Node</th><th>Role</th><th>Slurm</th><th>Issues</th></tr></thead><tbody>
+{{range .Nodes}}<tr data-act-node="{{.Short}}" data-act-offs="{{.Offs}}"><td><input type="checkbox" name="nodes" value="{{.Short}}" id="act-n-{{.Short}}"{{if .On}} checked{{end}}></td>
+  <td class="mono act-nn"><label for="act-n-{{.Short}}"><b>{{.Short}}</b></label></td><td class="act-nrole"><span class="chip {{.Node.RoleClass}}">{{.Role}}</span></td>
+  {{with .Node}}<td class="act-nslurm">{{if .Life}}<span class="pill run">{{.Pill.Text}}</span>{{else if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint act-why2">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td>
+  <td class="act-nissues">{{if .Life}}<span class="faint">–</span>{{else}}{{range .ServiceIssues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">{{.State}}</span>{{end}}{{end}}</td>{{end}}</tr>{{end}}
+</tbody></table></div>{{end}}
 
 {{define "act-dlg-restart-service"}}{{if .Val "nodes"}}<input type="hidden" name="nodes" value="{{.Val "nodes"}}">
 <fieldset class="fld"><legend class="lbl">Service of <span class="mono">{{.Val "nodes"}}</span></legend>

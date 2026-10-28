@@ -42,7 +42,7 @@
   words: [worker, nodeset]
 - id: power
   title: Power
-  summary: Drains or resumes workers in Slurm with scontrol, or starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog groups the actions, selects the one of the button that opened it, and warns before it stops the controller in control, the standby controller of a pair, the db node or the last running workers.
+  summary: Drains or resumes workers in Slurm with scontrol, or starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. Opened for an action and nodes, the dialog is a short confirmation that names them, with Change nodes for the picker; opened without, it picks no action for you. The picker shows the Slurm state and the issues of each node, ticks the nodes of a node set or a quick pick, and turns off the actions that fit no ticked node. It warns before it stops the controller in control, the standby controller of a pair, the db node or the last running workers.
   command: sind power reboot NODES
   undo: Use the opposite verb
   doc: usage/power-control#commands
