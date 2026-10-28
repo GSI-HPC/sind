@@ -127,7 +127,7 @@ func (d *Demo) InspectContainer(ctx context.Context, name docker.ContainerName) 
 
 // Exec returns the executor that answers the log streams.
 func (d *Demo) Exec() cmdexec.Executor {
-	e := &Exec{Now: d.Now, Failed: d.world.FailedSince}
+	e := &Exec{Now: d.Now, Failed: d.world.FailedSince, Stopped: d.world.StoppedAt}
 	if !d.still {
 		e.Every = 800 * time.Millisecond
 	}

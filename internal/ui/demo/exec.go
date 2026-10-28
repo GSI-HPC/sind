@@ -31,6 +31,10 @@ type Exec struct {
 	// down: its journal then ends with the lines of its failure. nil for
 	// none.
 	Failed func(container, unit string) (time.Time, bool)
+	// Stopped tells when a container stopped, and whether it is stopped:
+	// its output then ends there, and its journal cannot be read, as
+	// docker exec needs a container that runs. nil for none.
+	Stopped func(container string) (time.Time, bool)
 }
 
 // Run implements cmdexec.Executor.
@@ -77,6 +81,11 @@ func (e *Exec) stream(ctx context.Context, w io.Writer, journal bool, container,
 		daemon = daemonOf(short)
 	}
 	now := e.Now()
+	if e.Stopped != nil {
+		if at, ok := e.Stopped(container); ok {
+			return stoppedStream(w, journal, container, short, daemon, at)
+		}
+	}
 	failed, down := time.Time{}, false
 	if journal && e.Failed != nil {
 		failed, down = e.Failed(container, daemon)
@@ -116,6 +125,22 @@ func (e *Exec) stream(ctx context.Context, w io.Writer, journal bool, container,
 			return err
 		}
 	}
+}
+
+// stoppedStream writes what the log of a container that stopped at at
+// shows: its output up to then, or the error of docker exec for its
+// journal. Then the stream ends, as docker logs --follow ends.
+func stoppedStream(w io.Writer, journal bool, container, short, daemon string, at time.Time) error {
+	if journal {
+		_, err := io.WriteString(w, "Error response from daemon: container "+container+" is not running\n")
+		return err
+	}
+	for i := range head {
+		if _, err := io.WriteString(w, logLine(false, short, daemon, i, at.Add(-time.Duration(head-1-i)*3*time.Second))+"\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // shortName returns the node of a container name such as sind-dev-worker-1.

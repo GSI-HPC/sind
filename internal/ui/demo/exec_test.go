@@ -210,3 +210,39 @@ func TestFailureLines(t *testing.T) {
 	assert.True(t, j[0].At.Before(j[1].At))
 	assert.Equal(t, t0, j[4].At)
 }
+
+func TestExec_StoppedContainer(t *testing.T) {
+	at := t0.Add(-43 * time.Minute)
+	e := testExec(time.Millisecond)
+	e.Stopped = func(container string) (time.Time, bool) { return at, container == "sind-legacy-worker-1" }
+	ctx := context.Background()
+	p, err := e.Start(ctx, "docker", cluster.ContainerLogArgs("sind", "worker-1", "legacy", cluster.LogOptions{Follow: true})...)
+	require.NoError(t, err)
+	sc := bufio.NewScanner(p.Stdout)
+	var lines []string
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	require.Len(t, lines, head, "the output ends where the container stopped")
+	assert.Contains(t, lines[head-1], "[08:47:00]")
+	require.NoError(t, p.Close())
+
+	p, err = e.Start(ctx, "docker", cluster.ServiceLogArgs("sind", "worker-1", "legacy", "slurmd", cluster.LogOptions{Follow: true})...)
+	require.NoError(t, err)
+	sc = bufio.NewScanner(p.Stdout)
+	require.True(t, sc.Scan())
+	assert.Equal(t, "Error response from daemon: container sind-legacy-worker-1 is not running", sc.Text())
+	assert.False(t, sc.Scan())
+	require.NoError(t, p.Close())
+
+	// A reader that goes ends it too.
+	for _, args := range [][]string{
+		cluster.ContainerLogArgs("sind", "worker-1", "legacy", cluster.LogOptions{}),
+		cluster.ServiceLogArgs("sind", "worker-1", "legacy", "slurmd", cluster.LogOptions{}),
+	} {
+		p, err = e.Start(ctx, "docker", args...)
+		require.NoError(t, err)
+		require.NoError(t, p.Close())
+	}
+	time.Sleep(20 * time.Millisecond)
+}

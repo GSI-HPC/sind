@@ -269,6 +269,13 @@ func TestWorld_Faults(t *testing.T) {
 	assert.False(t, down)
 	_, down = w.FailedSince("sind-dev-nobody", "slurmd")
 	assert.False(t, down)
+	at, down = w.StoppedAt("sind-legacy-worker-1")
+	assert.True(t, down)
+	assert.Equal(t, t0.Add(-seededStopped), at)
+	_, down = w.StoppedAt("sind-dev-worker-4")
+	assert.False(t, down)
+	_, down = w.StoppedAt("sind-dev-nobody")
+	assert.False(t, down)
 
 	// A restart brings the service up; one of a node that does not run,
 	// or of a service the node has not, does nothing.

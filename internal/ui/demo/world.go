@@ -393,6 +393,23 @@ func (w *World) FailedSince(container, unit string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// StoppedAt returns when the container stopped, and whether it is
+// stopped, for the logs of the demo.
+func (w *World) StoppedAt(container string) (time.Time, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, r := range w.realms {
+		for _, c := range r.clusters {
+			for _, n := range c.nodes {
+				if string(cluster.ContainerName(r.name, c.name, n.short)) == container {
+					return n.stopped, n.state == cluster.StateStopped && !n.stopped.IsZero()
+				}
+			}
+		}
+	}
+	return time.Time{}, false
+}
+
 // clusterStateOf returns the state of a cluster from the states of its
 // nodes, of which it has at least one.
 func clusterStateOf(c *clusterState) cluster.State {
