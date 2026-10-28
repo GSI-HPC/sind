@@ -132,7 +132,7 @@ func TestPageShell(t *testing.T) {
 	events, err := url.Parse(strings.ReplaceAll(m[1], "&amp;", "&"))
 	require.NoError(t, err)
 	assert.Equal(t, "/events", events.Path)
-	assert.Equal(t, []string{"count", "one-run", "rail", "tasks"}, events.Query()["f"])
+	assert.Equal(t, []string{"count", "one-run", "rail", "tasks", "tasks-menu"}, events.Query()["f"])
 	assert.Equal(t, "x", events.Query().Get("id"))
 	assert.Equal(t, "clusters", events.Query().Get("nav"))
 	assert.NotContains(t, events.Query(), "other", "a key no fragment declares")
@@ -180,7 +180,7 @@ func TestNotFound(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code, target)
 		assert.Contains(t, w.Body.String(), "<h1>Not found</h1>", target)
 		assert.Contains(t, w.Body.String(), "<title>Not found · sind ui</title>", target)
-		assert.Contains(t, w.Body.String(), `sse-connect="/events?f=rail&amp;f=tasks"`, target)
+		assert.Contains(t, w.Body.String(), `sse-connect="/events?f=rail&amp;f=tasks&amp;f=tasks-menu"`, target)
 	}
 	// A POST to an unknown path is refused at the door, then not found.
 	assert.Equal(t, http.StatusNotFound, ts.post("/nope", "").Code)
@@ -268,7 +268,7 @@ func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 		}, `template "page-notfound" is missing`},
 		"no rail": {func(cfg *serverConfig, _ fstest.MapFS) {
 			cfg.Registry = NewRegistry()
-			cfg.Registry.AddFragment(tasksFragment())
+			registerDock(cfg.Registry)
 		}, "the shell fragment rail is not registered"},
 		"no tasks": {func(cfg *serverConfig, _ fstest.MapFS) {
 			cfg.Registry = NewRegistry()
@@ -339,7 +339,7 @@ func TestNotFoundThatCannotRender(t *testing.T) {
 	cfg, st := testConfig(t)
 	cfg.Registry = NewRegistry()
 	cfg.Registry.AddFragment(Fragment{Name: "rail", Load: func(*View) error { return assert.AnError }})
-	cfg.Registry.AddFragment(tasksFragment())
+	registerDock(cfg.Registry)
 	ts := newTestServerFrom(t, cfg, st).login()
 	assert.Equal(t, http.StatusInternalServerError, ts.get("/nope").Code)
 }

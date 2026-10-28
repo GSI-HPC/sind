@@ -39,7 +39,7 @@ func TestRunActivityPage(t *testing.T) {
 		`<td class="hide-s warn" data-label="Result">stopped in services of worker-[0-1] · nothing left</td>`,
 		`<td class="hide-s muted" data-label="Result">nodes 0/3 · controller waits for munge</td>`,
 		`<span class="chip">terminal</span>`,
-		"/events?f=rail&amp;f=run-list&amp;f=tasks&amp;nav=activity",
+		"/events?f=rail&amp;f=run-list&amp;f=tasks&amp;f=tasks-menu&amp;nav=activity",
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
 	}

@@ -192,7 +192,7 @@ type Task struct {
 	// Output is the end of what the command wrote to standard error,
 	// escaped for display.
 	Output string
-	// Hidden is set once the user closed the card of the task after it
+	// Hidden is set once the user cleared the task from the dock after it
 	// ended: the dock leaves it out, and its run page still shows its
 	// command and offers to try it again.
 	Hidden bool

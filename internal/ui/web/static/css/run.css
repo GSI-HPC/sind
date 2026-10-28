@@ -15,22 +15,8 @@ form.inline{display:inline;margin:0}
 .mark{width:14px;text-align:center;font-weight:700;flex:none}
 .mark.ok,.mark.ended{color:var(--ok)} .mark.failed{color:var(--bad)} .mark.canceled{color:var(--warn)} .mark.running{color:var(--run-ink)} .mark.queued,.mark.skipped{color:var(--queued)}
 
-/* task dock */
-.task{min-width:0;grid-template-columns:minmax(0,1fr);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:12px 14px;display:grid;gap:8px}
-.task.failed{border-color:var(--bad)}
-.task.canceled{border-color:var(--warn)}
-.task .th{display:flex;gap:8px;align-items:center}
-.task .th b{font:600 var(--t-md) var(--f-mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.task .th b a{color:inherit}
-.task .tl{font:var(--t-sm) var(--f-mono);color:var(--muted);display:flex;gap:8px}
-.task .tl span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.task .tf{display:flex;gap:6px;justify-content:flex-end}
-.task .callout{font-size:var(--t-sm);overflow-wrap:anywhere}
-.task .tl.terr span:first-child{color:var(--bad)}
-.task.more{padding:8px 14px;text-align:center;color:var(--muted);font-size:var(--t-md)}
-.task.gone{display:none}
-/* Stop asks in the page: a question below the button, or over the card in
-   the dock */
+/* Stop asks in the page: a question below the button, above the strip of
+   the dock, or over the row of the list of the dock */
 details.stopc{position:relative;display:inline-block}
 details.stopc>summary{list-style:none;cursor:pointer}
 details.stopc>summary::-webkit-details-marker{display:none}
@@ -39,17 +25,82 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .stopc-b{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 /* in the head of a page the question hangs from the head's right edge, as
    on a phone the actions wrap below the title to the left */
-.task,.runhead{position:relative}
-:is(.task,.runhead) details.stopc{position:static}
-.task .stopc-pop{top:auto;left:8px;right:8px;bottom:8px;width:auto}
-/* the summary bar of several commands; the dock shows its first card until
-   Show all opens it, and the bar goes when no card is left to show */
-.dock-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px 8px 6px 12px;font-size:var(--t-md)}
-.dock-sum{flex:1;min-width:0;color:var(--muted)}
-.dock-sum b{color:var(--fg);font-weight:600}
-.tasks:not(.open) .task:not(.gone)~.task{display:none}
-.tasks:not(:has(.task:not(.gone))) .dock-bar{display:none}
-.tasks.open{max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);overflow-y:auto}
+.runhead{position:relative}
+.runhead details.stopc{position:static}
+
+/* The task dock. The strip is the last row of the grid of .app, below the
+   main column, which so keeps clear of it: the command that runs, or the
+   one that just ended, with its steps, its current step or how it ended,
+   its clock and its buttons. Its parts take their places by order: the
+   title, the steps, then the line. On a phone it sits above the bar of the
+   pages, in two lines, with Show. */
+.tstrip{display:flex;align-items:center;gap:12px;min-height:44px;padding:4px max(16px,env(safe-area-inset-right,0px)) 4px 24px;background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -4px 14px rgba(15,23,42,.05);font-size:var(--t-md);position:relative}
+.tstrip.failed{border-top-color:var(--bad)}
+.tstrip.canceled{border-top-color:var(--warn)}
+.tstrip.gone{display:none}
+.ts-x{display:contents}
+/* the title keeps its room, so that the step line gives way first; a long
+   title loses its flags before its name */
+.ts-t{order:1;display:flex;align-items:center;gap:8px;min-width:0;flex:0 0 auto;max-width:45%}
+.ts-t b{font:600 var(--t-md) var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ts-t b a{color:inherit}
+.tstrip>.segbar{order:2;flex:none;width:140px;height:6px}
+.ts-s{order:3;display:flex;gap:8px;min-width:0;flex:0 1 auto;font:var(--t-sm) var(--f-mono);color:var(--muted)}
+.ts-l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ts-l.bad{color:var(--bad)} .ts-l.warn{color:var(--warn)}
+.ts-r{display:none;flex:none}
+.ts-s .num{flex:none;color:var(--faint)}
+.tstrip>.grow{order:4}
+.ts-more,.ts-f{order:5}
+.ts-more{color:var(--muted);font-weight:400}
+.ts-b{order:6;display:flex;gap:6px}
+.ts-show{order:7}
+.ts-f,.ts-show{display:none}
+.ts-f{align-items:center;gap:5px;padding:2px 8px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--bad);font:600 var(--t-sm) var(--f-body);cursor:pointer}
+.tstrip details.stopc{position:static}
+.tstrip .stopc-pop{top:auto;bottom:calc(100% + 6px);right:16px}
+
+/* The button of the top bar that counts the commands, and their list,
+   which hangs from it. */
+.cmds{position:relative;display:flex}
+.cmds-btn{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:var(--panel);font:500 var(--t-sm) var(--f-body);color:var(--fg);cursor:pointer;white-space:nowrap}
+.cmds-btn:hover{border-color:var(--deco)}
+.cmds-btn[aria-expanded=true]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cmds-btn .spin{width:11px;height:11px}
+.cmds-btn .sep{width:1px;height:12px;background:var(--line)}
+.cmds-p{display:inline-flex;align-items:center;gap:5px;color:var(--muted)}
+.cmds-p.run{color:var(--fg)}
+.cmds-p.bad{color:var(--bad)}
+.cmds-pop{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.cmds.open .cmds-pop{display:block}
+.cmds-pop:focus{outline:none}
+.cmds-shade{display:none}
+.cmds-hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
+.cmds-hd h2{flex:1;font-size:var(--t-base)}
+.cmds-hd a{font-size:var(--t-md)}
+.cmds-g{padding:4px 0 6px}
+.cmds-g+.cmds-g{border-top:1px solid var(--line-2)}
+.cmds-g h3{margin:0;padding:8px 14px 4px}
+.cmds-r{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;gap:4px 8px;align-items:center;padding:7px 14px;position:relative}
+.cmds-r.running{grid-template-columns:16px minmax(0,1fr) auto}
+.cmds-r:hover{background:var(--hover)}
+.cmds-t{display:flex;align-items:center;gap:6px;min-width:0}
+.cmds-t a{font:600 var(--t-md) var(--f-mono);color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cmds-r>.num,.cmds-w{font:var(--t-sm) var(--f-mono);color:var(--faint)}
+.cmds-r .iconbtn{padding:0 6px;font-size:var(--t-md)}
+.cmds-r>form.inline{grid-column:4;grid-row:1/span 2}
+.cmds-r>.segbar,.cmds-b{grid-column:2/-1}
+.cmds-s{grid-column:2/4}
+.cmds-r.running .cmds-s{grid-column:2/-1}
+.cmds-r>.segbar{height:6px}
+.cmds-s{font:var(--t-sm) var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmds-s.bad{color:var(--bad)} .cmds-s.warn{color:var(--warn)}
+.cmds-b{display:flex;gap:6px;justify-content:flex-end}
+.cmds-r details.stopc{position:static}
+.cmds-r .stopc-pop{top:auto;left:8px;right:8px;bottom:8px;width:auto}
+.cmds-more{display:block;padding:6px 14px 4px 38px;font-size:var(--t-md)}
+.cmds-ft{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:9px 14px;border-top:1px solid var(--line-2);background:var(--panel-2);font-size:var(--t-sm);position:sticky;bottom:0}
+.cmds-ft .faint{margin-left:auto}
 
 /* the bar of a run's steps */
 .segbar{display:flex;gap:2px;height:8px}
@@ -268,9 +319,6 @@ table.runs td.bad{color:var(--bad)}
 table.runs td.warn{color:var(--warn)}
 
 @media (max-width:760px){
-  /* a card keeps its line, its clock and Stop; the dock shows one card */
-  .task{padding:8px 10px;gap:6px}
-  .task .segbar{height:6px}
   /* the summary in three lines; a row's result goes under its track */
   /* on a phone the lines wrap rather than lose their ends */
   .rsum{grid-template-columns:auto minmax(0,1fr);grid-template-rows:minmax(22px,auto) minmax(18px,auto) auto;column-gap:12px}
@@ -322,11 +370,47 @@ table.runs td.warn{color:var(--warn)}
 .l100{left:100%}
 /* On a touch screen, the chips of Activity are 44 px, as every control. */
 @media (pointer:coarse){.fchip{min-height:44px;padding:2px 12px}}
-/* On a short screen, such as a phone on its side, the closed dock keeps to
-   one line: the summary bar when there is one, else the title of its card.
-   Show all opens it, and the title leads to the run. */
+/* On a phone, and on a short screen such as a phone on its side, the strip
+   is two lines above the bar of the pages: the title, then the current step
+   or how it ended, with the clock; then the steps, the count of the
+   commands that failed and Show, which opens the list as a sheet above the
+   bar. The button of the top bar counts without words, and gives way to
+   the strip. */
+@media (max-width:760px),(max-height:500px){
+  .tstrip{gap:10px;min-height:48px;padding:4px max(8px,env(safe-area-inset-right,0px)) 4px max(14px,env(safe-area-inset-left,0px));box-shadow:none}
+  .ts-x{order:1;display:grid;flex:1 1 0;min-width:0;line-height:1.25}
+  /* the name on the first line; the realm leads the second, the flags go */
+  .ts-t{max-width:none}
+  .ts-t .chip,.ts-t .fl{display:none}
+  .ts-r{display:inline}
+  .tstrip>.segbar{width:56px}
+  .tstrip>.grow,.ts-more,.ts-b{display:none}
+  .ts-f,.ts-show{display:inline-flex}
+  .cmds-btn{padding:4px 8px}
+  .cmds-btn .u{display:none}
+  .app:has(.tstrip:not(.gone)) .cmds-btn{display:none}
+  header.top:has(.cmds.open){z-index:50}
+  .cmds-pop{position:fixed;top:auto;left:0;right:0;bottom:calc(57px + env(safe-area-inset-bottom,0px));width:auto;max-height:70%;border-bottom:0;border-radius:14px 14px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .cmds-pop::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 2px}
+  .cmds.open .cmds-shade{display:block;position:fixed;left:0;right:0;top:0;bottom:calc(57px + env(safe-area-inset-bottom,0px));z-index:55;background:rgba(6,11,22,.4)}
+  .cmds-r{padding:10px 16px}
+  .cmds-r:not(.running) .cmds-t .fl{display:none}
+  .cmds-r>form.inline{grid-row:1}
+}
+/* on a phone the button sits beside the jump box, on its line */
+@media (max-width:760px){
+  .cmds{order:6}
+  header.top:has(.cmds-btn) .jump{flex:1 1 calc(100% - 60px)}
+  .app:has(.tstrip:not(.gone)) .jump{flex-basis:100%}
+}
 @media (max-height:500px){
-  .tasks:not(.open):has(.dock-bar) .task{display:none}
-  .tasks:not(.open) .task :is(.segbar,.tl,.tf){display:none}
-  .tasks:not(.open) .task{padding:4px 10px}
+  .cmds-pop,.cmds.open .cmds-shade{bottom:calc(45px + env(safe-area-inset-bottom,0px))}
+}
+/* on a touch screen the controls take 44 px; the count of the failed
+   commands stays a small pill, with the 44 px around it */
+@media (pointer:coarse){
+  .cmds-btn{min-height:44px;min-width:44px;justify-content:center}
+  .ts-f{position:relative}
+  .ts-f::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:44px;transform:translate(-50%,-50%)}
+  .cmds-r .iconbtn{min-height:44px}
 }

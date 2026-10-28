@@ -100,7 +100,7 @@ const testTemplates = `
 func testRegistry() *Registry {
 	r := NewRegistry()
 	r.AddFragment(railFragment())
-	r.AddFragment(tasksFragment())
+	registerDock(r)
 	r.AddFragment(Fragment{
 		Name: "count", Topics: []store.Topic{store.TopicTasks},
 		Load: func(v *View) error { v.Data = len(v.Snap.Tasks); return nil },

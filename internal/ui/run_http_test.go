@@ -49,12 +49,12 @@ func TestRunPageRenders(t *testing.T) {
 		`&#34;title&#34;:&#34;create cluster dev&#34;`,
 		`&#34;n&#34;:&#34;nodes&#34;`,
 		`<div class="gantt" data-g="gantt">`,
-		"/events?f=rail&amp;f=run-command&amp;f=run-facts&amp;f=run-head&amp;f=run-outcome&amp;f=run-summary&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
+		"/events?f=rail&amp;f=run-command&amp;f=run-facts&amp;f=run-head&amp;f=run-outcome&amp;f=run-summary&amp;f=tasks&amp;f=tasks-menu&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
 		`/css/run.css`, `/js/run.js`, `/js/gantt.js`,
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
 	}
-	assert.NotContains(t, body, `class="task running"`, "the dock does not repeat the run on show")
+	assert.NotContains(t, body, `class="tstrip`, "the strip does not repeat the run on show")
 	assert.NotContains(t, body, "style=", "the CSP allows no inline style")
 	assert.NotContains(t, body, "<script>", "no inline script")
 	assert.NotContains(t, body, "What failed")
@@ -119,7 +119,7 @@ func TestRunPageOffersToTryAgain(t *testing.T) {
 	}
 	assert.NotContains(t, body, "style=", "the CSP allows no inline style")
 
-	// Clear done hides the card, and the run page keeps all of it.
+	// Clear ended hides the command, and the run page keeps all of it.
 	require.Equal(t, http.StatusNoContent, ts.post("/tasks/clear", "").Code)
 	assert.Equal(t, head, runFragment(t, ts, runNow, "run-head", "id", "r-failed"))
 }

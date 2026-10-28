@@ -7,10 +7,11 @@
 // milliseconds since 1970), it sizes the bars finer than the whole percent
 // of their classes, it puts the progress of the run in the title of the
 // tab, it announces when a command starts or ends, it opens and closes the
-// task dock, it closes the question of Stop, and it hides the rows of
-// "Needs you" that are fixed and the cards of a fix (data-hide-at), shows
-// what waits for them (data-show-at), and counts down their seconds
-// (data-until). It evaluates no text and needs no inline script.
+// list of the task dock, it closes the question of Stop, and it hides the
+// rows of "Needs you" that are fixed, the cards of a fix and the strip of
+// the dock (data-hide-at), shows what waits for them (data-show-at), and
+// counts down their seconds (data-until). It evaluates no text and needs
+// no inline script.
 (() => {
   'use strict';
 
@@ -38,23 +39,40 @@
     return Math.floor(d / 3600000) + 'h' + pad(Math.floor(d % 3600000 / 60000)) + 'm';
   }
 
-  // The dock shows its first card, or every card once the user opens it
-  // with Show all; the choice stays for the viewer. A card of a command
-  // that ended ok hides at its data-hide-at.
-  const dockKey = 'sind-ui-dock-open';
-  function dockOpen() {
-    try { return localStorage.getItem(dockKey) === '1'; } catch (e) { return false; }
-  }
+  // The list of the dock, Commands, opens from the button of the top bar
+  // and from the strip: a popover below the button, a sheet on a phone. It
+  // is open while #cmds has the class open, which the live updates of the
+  // list leave alone, and the buttons say so (aria-expanded). Escape and a
+  // click outside close it; Escape gives the focus back to the button that
+  // opened it.
+  let opener = null;
+  function cmds() { return document.getElementById('cmds'); }
   function drawDock() {
-    const dock = document.getElementById('tasks');
-    if (!dock) return;
-    const open = dockOpen();
-    dock.classList.toggle('open', open);
-    const btn = dock.querySelector('[data-dock-toggle]');
-    if (!btn) return;
-    const label = open ? 'Show one' : 'Show all';
-    if (btn.textContent !== label) btn.textContent = label;
-    if (btn.getAttribute('aria-expanded') !== String(open)) btn.setAttribute('aria-expanded', String(open));
+    const box = cmds();
+    if (!box) return;
+    if (box.classList.contains('open') && !document.getElementById('cmds-pop')) box.classList.remove('open');
+    const open = String(box.classList.contains('open'));
+    document.querySelectorAll('[data-dock-toggle]').forEach(b => {
+      if (b.getAttribute('aria-expanded') !== open) b.setAttribute('aria-expanded', open);
+    });
+  }
+  function openDock(btn) {
+    const box = cmds();
+    const pop = document.getElementById('cmds-pop');
+    if (!box || !pop) return;
+    opener = btn;
+    box.classList.add('open');
+    drawDock();
+    pop.focus({ preventScroll: true });
+  }
+  function closeDock(refocus) {
+    const box = cmds();
+    if (!box || !box.classList.contains('open')) return;
+    box.classList.remove('open');
+    drawDock();
+    const back = opener && opener.isConnected && opener.getClientRects().length ? opener : document.querySelector('.cmds-btn');
+    if (refocus && back) back.focus();
+    opener = null;
   }
   // Stop asks in the page (template run-stop): Keep running and Escape
   // close the question, and so does a click elsewhere.
@@ -77,10 +95,60 @@
   });
 
   document.addEventListener('click', ev => {
-    if (!(ev.target instanceof Element) || !ev.target.closest('[data-dock-toggle]')) return;
-    try { localStorage.setItem(dockKey, dockOpen() ? '0' : '1'); } catch (e) { /* private window */ }
-    drawDock();
+    if (!(ev.target instanceof Element)) return;
+    const btn = ev.target.closest('[data-dock-toggle]');
+    const box = cmds();
+    const open = box && box.classList.contains('open');
+    if (btn) {
+      if (open) closeDock(true); else openDock(btn);
+      return;
+    }
+    if (open && (ev.target.closest('[data-dock-close]') || !ev.target.closest('#cmds-pop'))) closeDock(false);
   });
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape' || !(ev.target instanceof Element) || ev.target.closest('details.stopc[open]')) return;
+    const box = cmds();
+    if (!box || !box.classList.contains('open') || !(box.contains(ev.target) || ev.target.closest('[data-dock-toggle]'))) return;
+    ev.preventDefault();
+    closeDock(true);
+  });
+  // The list closes when the focus leaves it for another control, as Tab
+  // past its last one does.
+  document.addEventListener('focusout', ev => {
+    const box = cmds();
+    const to = ev.relatedTarget;
+    if (!box || !box.classList.contains('open') || !(to instanceof Element)) return;
+    if (!box.contains(to) && !to.closest('[data-dock-toggle]')) closeDock(false);
+  });
+  // A × or Clear ended takes its button away with what it clears, and a
+  // command that ends takes its Stop and Show progress: the focus then goes
+  // to the list, or with no list left, to its button or the jump box
+  // (app.js leaves the focus of #cmds, data-own-focus, to this). After a
+  // clear, the page says what went.
+  let inDock = null;
+  let cleared = '';
+  document.addEventListener('focusin', ev => {
+    const box = cmds();
+    inDock = box && ev.target instanceof Element && box.contains(ev.target) ? ev.target : null;
+  });
+  document.addEventListener('submit', ev => {
+    const f = ev.target;
+    const to = f instanceof HTMLFormElement && f.closest('#cmds-pop') ? f.getAttribute('action') || '' : '';
+    if (/\/tasks\/clear$/.test(to)) cleared = 'Cleared the commands that ended.';
+    else if (/\/dismiss$/.test(to)) cleared = 'Cleared.';
+  }, true);
+  function refocus() {
+    const box = cmds();
+    if (!box || !inDock || inDock.isConnected || (document.activeElement && document.activeElement !== document.body)) return;
+    inDock = null;
+    const pop = box.classList.contains('open') && document.getElementById('cmds-pop');
+    [pop, document.querySelector('.cmds-btn'), document.querySelector('header .jump'), document.getElementById('main')].some(el => {
+      if (el) el.focus({ preventScroll: true });
+      return el && document.activeElement === el;
+    });
+    if (cleared) document.dispatchEvent(new CustomEvent('sind:say', { detail: cleared }));
+    cleared = '';
+  }
 
   // set gives a property of the style of el a value, if it has another.
   function set(el, prop, value) {
@@ -197,8 +265,10 @@
     // browser paints it.
     const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title', 'data-say-state'], subtree: true };
     if (main) new MutationObserver(update).observe(main, what);
-    const dock = document.getElementById('tasks');
-    if (dock) new MutationObserver(() => { tick(); announce(); drawDock(); }).observe(dock, what);
+    for (const id of ['tasks', 'cmds']) {
+      const dock = document.getElementById(id);
+      if (dock) new MutationObserver(() => { tick(); announce(); drawDock(); refocus(); }).observe(dock, what);
+    }
     drawDock();
     update();
     // Tenths of a second, as the terminal draws them.

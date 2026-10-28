@@ -46,11 +46,12 @@ func TestRunTaskPageWaits(t *testing.T) {
 		`<span class="pill run">running</span>`,
 		`data-since="`,
 		`data-say-key="w:t1" data-say-state="running" data-say="create cluster dev: started."`,
-		"/events?f=rail&amp;f=run-wait&amp;f=tasks&amp;id=t1&amp;nav=activity&amp;task=t1",
+		"/events?f=rail&amp;f=run-wait&amp;f=tasks&amp;f=tasks-menu&amp;id=t1&amp;nav=activity&amp;task=t1",
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
 	}
-	assert.NotContains(t, body, `class="task running"`, "the dock does not repeat the task of the page")
+	assert.NotContains(t, body, `class="tstrip`, "the strip does not repeat the task of the page")
+	assert.Contains(t, body, `<div class="cmds-r running">`, "the list of the dock has it")
 	assert.NotContains(t, body, `hx-trigger="load"`, "no run to go to yet")
 
 	// The run shows up: the fragment asks for the redirect.
@@ -75,9 +76,9 @@ func TestRunTaskPageEndedWithoutRun(t *testing.T) {
 	body = ts.get("/tasks/c").Body.String()
 	assert.Contains(t, body, `<div class="callout warn">The command ended (stopped)`)
 	assert.NotContains(t, body, "standard error")
-	// The dock keeps the card of the failed command to one line of its
+	// The list of the dock keeps the failed command to one line of its
 	// error, and leaves its output to its page.
-	assert.Contains(t, body, `<div class="tl terr"><span title="docker: not found">docker: not found</span><span class="num">1.0s</span></div>`)
+	assert.Contains(t, body, `<span class="cmds-s bad">docker: not found</span>`)
 	assert.NotContains(t, body, "boom")
 	body = ts.get("/tasks/o").Body.String()
 	assert.Contains(t, body, `<div class="callout">The command ended without errors. Commands such as Drain and Resume write no progress`)

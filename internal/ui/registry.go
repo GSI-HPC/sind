@@ -328,5 +328,5 @@ func wildcards(pattern string) []string {
 }
 
 // shellFragments are the fragments that every page includes, in name
-// order: the rail and the task dock.
-var shellFragments = []string{"rail", "tasks"}
+// order: the rail, the strip of the task dock, and its button and list.
+var shellFragments = []string{"rail", "tasks", "tasks-menu"}

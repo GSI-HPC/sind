@@ -213,7 +213,7 @@ func TestPgClusters(t *testing.T) {
 	assert.Contains(t, body, `<tr class="pg-none" data-pg-none hidden><td colspan="9"><div class="empty">No cluster matches the filter. <a href="/clusters?realm=">Show all</a></div></td></tr>`)
 	assert.Contains(t, body, `sse-swap="pg-clusters-head"`)
 	assert.Contains(t, body, `sse-swap="pg-clusters-chips"`)
-	assert.Contains(t, body, `sse-connect="/events?f=pg-clusters-chips&amp;f=pg-clusters-head&amp;f=pg-clusters-table&amp;f=rail&amp;f=tasks&amp;nav=clusters"`)
+	assert.Contains(t, body, `sse-connect="/events?f=pg-clusters-chips&amp;f=pg-clusters-head&amp;f=pg-clusters-table&amp;f=rail&amp;f=tasks&amp;f=tasks-menu&amp;nav=clusters"`)
 
 	body = pgBody(t, ts, "/clusters?realm=sind", 200)
 	assert.Contains(t, body, `<span class="pg-scope">Showing realm <b class="mono">sind</b> · <a href="/clusters?realm=">Show all</a></span>`)

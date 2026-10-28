@@ -256,7 +256,9 @@
           e.focus({ preventScroll: true });
           return document.activeElement === e;
         });
-        if (!back) {
+        // A fragment marked data-own-focus, the list of the task dock,
+        // places the focus itself (run.js).
+        if (!back && !target.hasAttribute('data-own-focus')) {
           const to = document.querySelector('main h1') || document.getElementById('main');
           if (to) {
             if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
@@ -342,7 +344,7 @@
       for (const s of streams) s.close();
     });
     window.addEventListener('pageshow', ev => { if (ev.persisted && streams.size) location.reload(); });
-    // The page keeps the focus clear of the task dock (app.css), which
+    // The toasts keep above the strip of the task dock (app.css), which
     // needs its height.
     const dock = document.getElementById('tasks');
     if (dock) new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', dock.offsetHeight + 'px')).observe(dock);

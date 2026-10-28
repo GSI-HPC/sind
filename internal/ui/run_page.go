@@ -35,7 +35,8 @@ var runOutcomePrefixes = []string{"clusters/", "nodes/", "status/"}
 
 // registerRun adds the progress display to r: the run page, the Activity
 // page, the page of a task whose run the log does not hold yet, and the
-// routes of the task dock. The dock itself is the shell fragment "tasks".
+// routes of the task dock. The dock itself is the shell fragments "tasks"
+// and "tasks-menu".
 func registerRun(r *Registry) {
 	loads := map[string]func(rc runCtx) any{
 		"run-head":    func(rc runCtx) any { return runHeadOf(rc) },
@@ -106,7 +107,8 @@ func newRunCtx(v *View) runCtx {
 	return rc
 }
 
-// runPageLoad checks the run exists and tells the task dock not to draw it.
+// runPageLoad checks the run exists and tells the strip of the task dock not
+// to show it.
 func runPageLoad(v *View) error {
 	id := v.Params.Get("id")
 	rc := newRunCtx(v)
@@ -132,11 +134,16 @@ func runWhen(t, now time.Time) string {
 	if t.IsZero() {
 		return "–"
 	}
-	t, now = t.Local(), now.Local()
-	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return "today " + t.Format("15:04")
+	if runSameDay(t, now) {
+		return "today " + t.Local().Format("15:04")
 	}
-	return t.Format("Jan 2 15:04")
+	return t.Local().Format("Jan 2 15:04")
+}
+
+// runSameDay reports whether t is on the day of now, in local time.
+func runSameDay(t, now time.Time) bool {
+	t, now = t.Local(), now.Local()
+	return t.Year() == now.Year() && t.YearDay() == now.YearDay()
 }
 
 // runClock writes a time of day to the second, with the date for a time
@@ -478,7 +485,7 @@ type runSummary struct {
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
 	// SayKey, SayState and Say are what run.js announces when the state
-	// of the run changes, as for a card of the dock; SaySince is when the
+	// of the run changes, as for a command of the dock; SaySince is when the
 	// run started, in milliseconds since 1970, so that a page opened just
 	// after the start announces it.
 	SayKey   string

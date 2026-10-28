@@ -33,7 +33,7 @@ import (
 func runRegistry() *Registry {
 	r := NewRegistry()
 	r.AddFragment(railFragment())
-	r.AddFragment(tasksFragment())
+	registerDock(r)
 	r.AddRoute(pgRealmRoute(overviewPage, false, false))
 	pgRegister(r)
 	return r
