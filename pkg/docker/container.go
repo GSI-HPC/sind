@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ContainerExists returns true if the given container exists (running or stopped).
@@ -105,10 +106,16 @@ type ContainerInfo struct {
 	Status    ContainerState
 	ExitCode  int
 	OOMKilled bool
-	Labels    Labels
-	IPs       map[NetworkName]string
-	Mounts    []Mount  // bind mounts and volumes; tmpfs mounts are not listed
-	DNS       []string // DNS servers set with --dns
+	// Error is what Docker says went wrong when it last started the
+	// container, empty for nothing.
+	Error string
+	// StartedAt and FinishedAt are when the container last started and
+	// stopped; zero for never, which Docker writes as 0001-01-01T00:00:00Z.
+	StartedAt, FinishedAt time.Time
+	Labels                Labels
+	IPs                   map[NetworkName]string
+	Mounts                []Mount  // bind mounts and volumes; tmpfs mounts are not listed
+	DNS                   []string // DNS servers set with --dns
 	// Image is the ID of the image the container runs (sha256:...), which
 	// stays valid when the reference it was created from moves.
 	Image      string
@@ -176,9 +183,12 @@ type inspectResult struct {
 	Name  string `json:"Name"`
 	Image string `json:"Image"`
 	State struct {
-		Status    string `json:"Status"`
-		ExitCode  int    `json:"ExitCode"`
-		OOMKilled bool   `json:"OOMKilled"`
+		Status     string    `json:"Status"`
+		ExitCode   int       `json:"ExitCode"`
+		OOMKilled  bool      `json:"OOMKilled"`
+		Error      string    `json:"Error"`
+		StartedAt  time.Time `json:"StartedAt"`
+		FinishedAt time.Time `json:"FinishedAt"`
 	} `json:"State"`
 	Config struct {
 		Image  string            `json:"Image"`
@@ -242,6 +252,9 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			Status:     ContainerState(r.State.Status),
 			ExitCode:   r.State.ExitCode,
 			OOMKilled:  r.State.OOMKilled,
+			Error:      r.State.Error,
+			StartedAt:  r.State.StartedAt,
+			FinishedAt: r.State.FinishedAt,
 			Labels:     r.Config.Labels,
 			IPs:        ips,
 			Image:      r.Image,

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
@@ -426,7 +427,8 @@ func TestInspectContainer_ExitCodeAndOOM(t *testing.T) {
 	json := `[{
   "Id": "abc123",
   "Name": "/sind-dev-worker-0",
-  "State": {"Status": "exited", "ExitCode": 137, "OOMKilled": true},
+  "State": {"Status": "exited", "ExitCode": 137, "OOMKilled": true, "Error": "",
+    "StartedAt": "2026-10-27T08:01:02.5Z", "FinishedAt": "2026-10-27T08:12:00Z"},
   "Config": {"Labels": {}},
   "NetworkSettings": {"Networks": {}}
 }]`
@@ -439,6 +441,21 @@ func TestInspectContainer_ExitCodeAndOOM(t *testing.T) {
 	assert.Equal(t, StateExited, info.Status)
 	assert.Equal(t, 137, info.ExitCode)
 	assert.True(t, info.OOMKilled)
+	assert.Equal(t, time.Date(2026, 10, 27, 8, 1, 2, 5e8, time.UTC), info.StartedAt.UTC())
+	assert.Equal(t, time.Date(2026, 10, 27, 8, 12, 0, 0, time.UTC), info.FinishedAt.UTC())
+}
+
+func TestInspectContainer_NeverStarted(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Id": "abc", "Name": "/sind-dev-worker-0",
+  "State": {"Status": "created", "Error": "OCI runtime create failed",
+    "StartedAt": "0001-01-01T00:00:00Z", "FinishedAt": "0001-01-01T00:00:00Z"},
+  "Config": {"Labels": {}}, "NetworkSettings": {"Networks": {}}}]`, "", nil)
+	info, err := NewClient(&m).InspectContainer(t.Context(), "sind-dev-worker-0")
+	require.NoError(t, err)
+	assert.Equal(t, "OCI runtime create failed", info.Error)
+	assert.True(t, info.StartedAt.IsZero(), "Docker's time of never is the zero time")
+	assert.True(t, info.FinishedAt.IsZero())
 }
 
 func TestLogs(t *testing.T) {
