@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,6 +84,25 @@ func TestMoreMeshOffersContainersToConnect(t *testing.T) {
 	body = pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.Contains(t, body, `<code class="mono">sind connect container NAME</code>`)
 	assert.Contains(t, body, `<b class="mono">x</b><small></small>`)
+}
+
+func TestMoreMeshShowsTheFirstRecords(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	m := ts.st.Snapshot().Meshes["sind"]
+	m.Records = nil
+	for i := range 12 {
+		m.Records = append(m.Records, mesh.DNSRecord{Hostname: fmt.Sprintf("worker-%d.dev.sind.sind", i), IP: fmt.Sprintf("172.18.0.%d", i+2)})
+	}
+	ts.st.SetMesh("sind", m)
+	body := pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `<tr role="row" data-more-row="172.18.0.11 worker-9.dev.sind.sind"><td`)
+	assert.Contains(t, body, `<tr role="row" data-more-row="172.18.0.12 worker-10.dev.sind.sind" data-more-cut hidden><td`)
+	assert.Contains(t, body, `<button type="button" class="btn sm" data-more-all="dns-sind" aria-controls="dns-sind">Show all 12 records</button>`)
+	assert.NotContains(t, body, "more-scroll", "no box that scrolls in the page")
+
+	m.Records = m.Records[:10]
+	ts.st.SetMesh("sind", m)
+	assert.NotContains(t, pgBody(t, ts, "/mesh?realm=sind", http.StatusOK), "data-more-all")
 }
 
 func TestMoreMeshStates(t *testing.T) {

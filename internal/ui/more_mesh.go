@@ -87,6 +87,17 @@ type moreExternal struct {
 	DisconnectURL string
 }
 
+// moreDNSShown is how many DNS records of a realm the page shows before
+// Show all.
+const moreDNSShown = 10
+
+// Cut reports whether the page hides the record at i until the user asks
+// for all.
+func (r moreMeshRealm) Cut(i int) bool { return i >= moreDNSShown }
+
+// CutAny reports whether the page hides any record until Show all.
+func (r moreMeshRealm) CutAny() bool { return r.Cut(len(r.Records) - 1) }
+
 // ConnectCommand is the command that connects a container of any name to
 // the realm.
 func (r moreMeshRealm) ConnectCommand() string {

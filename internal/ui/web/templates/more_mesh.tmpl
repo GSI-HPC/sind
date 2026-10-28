@@ -33,15 +33,16 @@
   {{else if not .Err}}
   <section class="panel"><div class="empty">Realm {{.Name}} has no mesh. sind creates it with the first cluster.</div></section>
   {{end}}
-  <div class="grid g2">
+  <div class="grid g2 more-g2">
     <section class="panel"><div class="ph"><h2>DNS records</h2><span class="grow"></span>
       {{if .Records}}<button type="button" class="btn sm" data-more-copy-rows="dns-{{.Name}}" aria-label="Copy list of realm {{.Name}}, as lines of /etc/hosts">Copy list</button>{{end}}</div>
       {{if .Records}}<div class="pb more-filterbar"><input type="search" class="more-filter" data-more-filter="dns-{{.Name}}" placeholder="Filter by name or address" aria-label="Filter the DNS records of realm {{.Name}}" autocomplete="off" spellcheck="false">
         <span class="faint" role="status" data-more-count="dns-{{.Name}}">{{.RecordsText}}</span></div>
-      <div class="tw more-scroll"><table id="dns-{{.Name}}" class="more-cards more-dnscards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Name</th><th role="columnheader">Address</th><th role="columnheader"><span class="vh">Copy</span></th></tr></thead><tbody role="rowgroup">
-      {{range .Records}}<tr role="row" data-more-row="{{.IP}} {{.Hostname}}"><td role="cell" class="mono">{{if .Href}}<a href="{{.Href}}">{{.Hostname}}</a>{{else}}{{.Hostname}}{{end}}</td><td role="cell" class="mono">{{.IP}}</td>
+      <div class="tw"><table id="dns-{{.Name}}" class="more-cards more-dnscards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Name</th><th role="columnheader">Address</th><th role="columnheader"><span class="vh">Copy</span></th></tr></thead><tbody role="rowgroup">
+      {{range $i, $_ := .Records}}<tr role="row" data-more-row="{{.IP}} {{.Hostname}}"{{if $r.Cut $i}} data-more-cut hidden{{end}}><td role="cell" class="mono">{{if .Href}}<a href="{{.Href}}">{{.Hostname}}</a>{{else}}{{.Hostname}}{{end}}</td><td role="cell" class="mono">{{.IP}}</td>
         <td role="cell" class="act"><button type="button" class="btn sm ghost" data-more-copy-text="{{.Hostname}}" aria-label="Copy {{.Hostname}}">Copy</button></td></tr>
       {{end}}</tbody></table><p class="empty" data-more-none="dns-{{.Name}}" hidden>No record matches the filter.</p></div>
+      {{if .CutAny}}<div class="pb more-all"><button type="button" class="btn sm" data-more-all="dns-{{.Name}}" aria-controls="dns-{{.Name}}">Show all {{len .Records}} records</button></div>{{end}}
       {{if .Has}}<div class="pb more-dig"><p class="cmdlabel">Ask the DNS server from this host</p>
         <div class="cmd"><code>dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}</code><button type="button" data-more-copy aria-label="Copy dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}">Copy</button></div></div>{{end}}
       {{else}}<div class="empty">No DNS records yet. Each node adds its name when it starts.</div>{{end}}</section>
