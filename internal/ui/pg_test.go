@@ -120,7 +120,7 @@ func TestPgOverview(t *testing.T) {
 
 	// Quick actions: the dialogs of the actions part.
 	assert.Contains(t, body, `href="/dialogs/create-cluster"`)
-	assert.Contains(t, body, `href="/dialogs/create-worker?cluster=default&amp;realm=ci"`)
+	assert.Contains(t, body, `href="/dialogs/create-worker"`, "with several clusters, Add workers asks for the cluster")
 	assert.Contains(t, body, `href="/dialogs/connect"`)
 
 	// A probe finds a service down while a command works on dev: it may be

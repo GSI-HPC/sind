@@ -368,6 +368,11 @@ func jumpAction(a help.Action, sn store.Snapshot, ctx jumpContext, clusters int)
 				it.Kind, it.Href, it.Dialog = "action · "+c.Name, pgDialog(a.ID, "realm", realm, "cluster", c.Name), true
 			}
 		}
+	case actSpecs[a.ID].PickCluster && ctx.Cluster != "":
+		it.Kind, it.Href, it.Dialog = "action · "+ctx.Cluster, pgDialog(a.ID, "realm", ctx.Realm, "cluster", ctx.Cluster), true
+	case actSpecs[a.ID].PickCluster:
+		// The dialog asks for the cluster itself.
+		it.Kind, it.Href, it.Dialog = "action · pick a cluster", pgDialog(a.ID, "realm", ctx.Realm), true
 	case actSpecs[a.ID].NeedsCluster:
 		it.Label, it.Kind, it.Step = a.Title+"…", "action · pick a cluster", a.ID
 	case a.ID == "create-cluster":
@@ -389,7 +394,6 @@ var jumpDefaults = []string{"create-cluster", "create-worker", "power"}
 // jumpAsks are the questions of the step of each action that asks for a
 // cluster or a realm.
 var jumpAsks = map[string]string{
-	"create-worker":   "Add workers to which cluster?",
 	"delete-cluster":  "Delete which cluster?",
 	"delete-worker":   "Delete workers of which cluster?",
 	"restart-service": "Restart a service of a node of which cluster?",

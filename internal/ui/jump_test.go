@@ -51,7 +51,7 @@ func TestJump(t *testing.T) {
 	assert.Equal(t, 3+3+pages, strings.Count(body, `class="pi"`))
 	assert.Contains(t, body, `id="jump-o0" tabindex="-1" aria-selected="false" href="/clusters/ci/dev">dev<small>cluster · ci</small>`)
 	assert.Contains(t, body, `id="jump-o3" tabindex="-1" aria-selected="false" href="/dialogs/create-cluster" data-jump-dialog>New cluster<small>action</small>`)
-	assert.Contains(t, body, `id="jump-o4" tabindex="-1" aria-selected="false" data-jump-step="create-worker">Add workers…`)
+	assert.Contains(t, body, `id="jump-o4" tabindex="-1" aria-selected="false" href="/dialogs/create-worker" data-jump-dialog>Add workers<small>action · pick a cluster</small>`, "the dialog asks for the cluster")
 	assert.Contains(t, body, `id="jump-o5" tabindex="-1" aria-selected="false" data-jump-step="power">Power…`)
 	assert.Contains(t, body, `href="/clusters">Clusters<small>page</small>`)
 	assert.Contains(t, body, `href="/">Overview<small>page</small>`)
@@ -84,7 +84,7 @@ func TestJump(t *testing.T) {
 		"/jump?q=dev":             {`href="/clusters/ci/dev">dev<small>cluster · ci</small>`, `href="/nodes/sind/dev/worker-0">worker-0.dev<small>node · dev · sind</small>`, `href="/runs/x">create cluster dev<small>run · running</small>`},
 		"/jump?q=controller":      {`href="/nodes/sind/dev/controller">controller.dev`, `data-help-topic="word/controller"`},
 		"/jump?q=new+cluster":     {`href="/dialogs/create-cluster" data-jump-dialog>New cluster<small>action</small>`},
-		"/jump?q=add+workers":     {`data-jump-step="create-worker">Add workers…<small>action · pick a cluster</small></button>`},
+		"/jump?q=add+workers":     {`href="/dialogs/create-worker" data-jump-dialog>Add workers<small>action · pick a cluster</small></a>`},
 		"/jump?q=power":           {`data-jump-step="power">Power…`, `href="/runs/ra">power reboot worker-0<small>run · ok</small>`},
 		"/jump?q=delete":          {`data-jump-step="delete-cluster">Delete cluster…`, `data-jump-step="delete-realm">Delete realm…<small>action · pick a realm</small>`},
 		"/jump?q=delete+clusters": {`href="/clusters">Delete clusters<small>action</small>`},
@@ -156,11 +156,11 @@ func TestJumpStep(t *testing.T) {
 	ts := helpServer(t)
 	fixtureStore(ts.st)
 
-	w := ts.get("/jump?step=create-worker&from=" + url.QueryEscape("/clusters/sind/hpc?tab=nodes"))
+	w := ts.get("/jump?step=delete-worker&from=" + url.QueryEscape("/clusters/sind/hpc?tab=nodes"))
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, `role="listbox" aria-label="Add workers to which cluster?" data-jump-say="Add workers to which cluster? 3 results."`)
-	assert.Contains(t, body, `id="jump-o0" tabindex="-1" aria-selected="false" href="/dialogs/create-worker?cluster=hpc&amp;realm=sind" data-jump-dialog><span class="mono">hpc</span><small>sind · 1 worker · this page</small>`)
+	assert.Contains(t, body, `role="listbox" aria-label="Delete workers of which cluster?" data-jump-say="Delete workers of which cluster? 3 results."`)
+	assert.Contains(t, body, `id="jump-o0" tabindex="-1" aria-selected="false" href="/dialogs/delete-worker?cluster=hpc&amp;realm=sind" data-jump-dialog><span class="mono">hpc</span><small>sind · 1 worker · this page</small>`)
 	assert.Contains(t, body, `<span class="mono">dev</span><small>ci · 1 worker</small>`)
 	assert.Contains(t, body, `<span class="mono">dev</span><small>sind · 2 workers</small>`)
 	assert.Contains(t, body, `<kbd>Enter</kbd> pick`)
@@ -182,10 +182,11 @@ func TestJumpStep(t *testing.T) {
 
 	ts.st.SetClusters("sind", nil)
 	ts.st.SetClusters("ci", nil)
-	w = ts.get("/jump?step=create-worker")
+	w = ts.get("/jump?step=delete-worker")
 	assert.Contains(t, w.Body.String(), `class="empty">There is no cluster yet.`)
 
-	for _, target := range []string{"/jump?step=nope", "/jump?step=create-cluster"} {
+	// Add workers asks for the cluster in its dialog, not in a step.
+	for _, target := range []string{"/jump?step=nope", "/jump?step=create-cluster", "/jump?step=create-worker"} {
 		w = ts.get(target)
 		assert.Equal(t, http.StatusNotFound, w.Code, target)
 	}
@@ -217,15 +218,17 @@ func TestJumpAction(t *testing.T) {
 		kind     string
 		clusters int
 	}{
-		"no cluster":            {id: "power", ok: false},
-		"one cluster":           {id: "create-worker", sn: one, clusters: 1, ok: true, href: "/dialogs/create-worker?cluster=dev&realm=sind", kind: "action · dev"},
-		"clusters to pick":      {id: "delete-cluster", sn: two, clusters: 2, ok: true, step: "delete-cluster", quiet: true, kind: "action · pick a cluster"},
-		"new cluster":           {id: "create-cluster", ok: true, href: "/dialogs/create-cluster", kind: "action"},
-		"new cluster in realm":  {id: "create-cluster", ctx: jumpContext{Realm: "ci"}, ok: true, href: "/dialogs/create-cluster?realm=ci", kind: "action"},
-		"no realm":              {id: "connect", ok: false},
-		"the only realm":        {id: "connect", sn: one, clusters: 1, ok: true, href: "/dialogs/connect?realm=sind", quiet: true, kind: "action · realm sind"},
-		"the realm of the page": {id: "delete-realm", sn: two, clusters: 2, ctx: jumpContext{Realm: "ci"}, ok: true, href: "/dialogs/delete-realm?realm=ci", quiet: true, kind: "action · realm ci"},
-		"realms to pick":        {id: "disconnect", sn: two, clusters: 2, ok: true, step: "disconnect", quiet: true, kind: "action · pick a realm"},
+		"no cluster":              {id: "power", ok: false},
+		"one cluster":             {id: "create-worker", sn: one, clusters: 1, ok: true, href: "/dialogs/create-worker?cluster=dev&realm=sind", kind: "action · dev"},
+		"the dialog asks":         {id: "create-worker", sn: two, clusters: 2, ok: true, href: "/dialogs/create-worker", kind: "action · pick a cluster"},
+		"the cluster of the page": {id: "create-worker", sn: two, clusters: 2, ctx: jumpContext{Realm: "ci", Cluster: "pr"}, ok: true, href: "/dialogs/create-worker?cluster=pr&realm=ci", kind: "action · pr"},
+		"clusters to pick":        {id: "delete-cluster", sn: two, clusters: 2, ok: true, step: "delete-cluster", quiet: true, kind: "action · pick a cluster"},
+		"new cluster":             {id: "create-cluster", ok: true, href: "/dialogs/create-cluster", kind: "action"},
+		"new cluster in realm":    {id: "create-cluster", ctx: jumpContext{Realm: "ci"}, ok: true, href: "/dialogs/create-cluster?realm=ci", kind: "action"},
+		"no realm":                {id: "connect", ok: false},
+		"the only realm":          {id: "connect", sn: one, clusters: 1, ok: true, href: "/dialogs/connect?realm=sind", quiet: true, kind: "action · realm sind"},
+		"the realm of the page":   {id: "delete-realm", sn: two, clusters: 2, ctx: jumpContext{Realm: "ci"}, ok: true, href: "/dialogs/delete-realm?realm=ci", quiet: true, kind: "action · realm ci"},
+		"realms to pick":          {id: "disconnect", sn: two, clusters: 2, ok: true, step: "disconnect", quiet: true, kind: "action · pick a realm"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			it, ok := jumpAction(act(tc.id), tc.sn, tc.ctx, tc.clusters)
@@ -242,7 +245,7 @@ func TestJumpAction(t *testing.T) {
 	}
 	// Every action that may ask has a question.
 	for _, a := range h.Actions() {
-		if _, page := jumpActionPages[a.ID]; !page && a.ID != "create-cluster" {
+		if _, page := jumpActionPages[a.ID]; !page && a.ID != "create-cluster" && !actSpecs[a.ID].PickCluster {
 			assert.Contains(t, jumpAsks, a.ID)
 		}
 	}

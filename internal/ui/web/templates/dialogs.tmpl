@@ -352,11 +352,21 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 </details>
 {{end}}
 
+{{/* act-dlg-create-worker adds workers: to the cluster of the link, which
+a row names with Change, or, when the link names none, to the cluster that
+the user picks first from the list, which opens the dialog again for it
+with the fields that the user filled in. */}}
 {{define "act-dlg-create-worker"}}
+{{if .Picking}}<div class="fld"><span class="lbl" id="act-cl-lbl">Cluster</span>
+  <div class="act-cls" role="group" aria-labelledby="act-cl-lbl">{{range .ClusterGroups}}<div class="act-clg" role="group" aria-label="Realm {{.Realm}}"><span class="act-ogl" aria-hidden="true">realm {{.Realm}}</span>
+    {{range .Rows}}<button type="button" class="act-crow" hx-get="{{.URL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" data-act-focus{{if .Off}} disabled{{end}}><span class="act-crn"><b class="mono">{{.Name}}</b><small>{{with .Off}}{{.}}{{else}}{{.Workers}}{{end}}</small></span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</button>{{end}}</div>{{end}}</div>
+  <span class="hint">Or open Add workers on the page of a cluster to skip this step.</span></div>
+{{else}}{{with .ClusterRow}}<div class="act-target act-ctarget"><span class="act-crn"><span><span class="faint">Cluster</span> <b class="mono">{{.Name}}</b></span><small>realm {{.Realm}} · {{.Workers}}</small></span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}
+  {{- if $.CanChange}}<button type="button" class="btn sm" hx-get="{{$.ChangeURL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" aria-label="Change the cluster">Change…</button>{{end}}</div>{{end}}{{end}}
 <div class="row">
-  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"></div>
-  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{.LikeNewest}}" min="1"></div>
-  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{.LikeNewest}}" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
+  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"{{if .Picking}} readonly{{end}}></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" min="1"{{if .Picking}} readonly{{end}}></div>
+  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" autocapitalize="off" spellcheck="false"{{if .Picking}} readonly{{end}}><span class="hint">Such as 1g or 512m.</span></div>
 </div>
 {{end}}
 

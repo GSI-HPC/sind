@@ -13,7 +13,6 @@ package action
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -329,7 +328,7 @@ func findCluster(f Form, c Context) (string, cluster.Summary, error) {
 	}
 	name := formCluster(f)
 	if name == "" {
-		return "", cluster.Summary{}, errors.New("cluster: say which cluster")
+		return "", cluster.Summary{}, &Missing{Field: "cluster", Text: "pick a cluster"}
 	}
 	if err := config.CheckName("cluster", name); err != nil {
 		return "", cluster.Summary{}, fmt.Errorf("cluster: %w", err)

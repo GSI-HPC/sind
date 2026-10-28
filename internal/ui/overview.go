@@ -123,9 +123,15 @@ func pgQuickActions(d *pgOverview) []pgAction {
 		realm = d.Realms[0].Name
 	}
 	acts := []pgAction{pgDialogAction("New cluster…", "primary", "create-cluster", "realm", realm)}
-	if len(d.Clusters) > 0 {
+	// Add workers names the cluster only when there is one: else the
+	// dialog asks for it, so that no cluster is picked for the user.
+	switch len(d.Clusters) {
+	case 0:
+	case 1:
 		c := d.Clusters[0]
 		acts = append(acts, pgDialogAction("Add workers…", "", "create-worker", "realm", c.Realm, "cluster", c.Name))
+	default:
+		acts = append(acts, pgDialogAction("Add workers…", "", "create-worker", "realm", realm))
 	}
 	return append(acts, pgDialogAction("Connect a container…", "", "connect", "realm", realm))
 }

@@ -92,12 +92,16 @@
   }
 
   // focusIn gives the focus to the element of the open dialog that had it
-  // last, or to its first field, or on a touch screen to the dialog itself.
+  // last, or to the first that asks for it (data-act-focus), as the list of
+  // clusters of Add workers does, or to its first field, or on a touch
+  // screen to the dialog itself.
   function focusIn(d) {
     const form = d.querySelector('form.modal');
     if (!form) return;
     if (S.last && d.contains(S.last) && S.last.getClientRects().length) { S.last.focus(); return; }
-    const first = touch() ? null : [...form.querySelectorAll('.mb :is(input:not([type=hidden]), select, textarea), #act-confirm')].find(el => !el.disabled && el.getClientRects().length);
+    const usable = el => !el.disabled && el.getClientRects().length;
+    const first = touch() ? null : [...form.querySelectorAll('.mb [data-act-focus]')].find(usable) ||
+      [...form.querySelectorAll('.mb :is(input:not([type=hidden]), select, textarea), #act-confirm')].find(usable);
     (first || form).focus();
   }
 

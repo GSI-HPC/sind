@@ -27,7 +27,7 @@ import (
 // actDialogKeys are the query keys that open a dialog with its fields
 // filled in.
 var actDialogKeys = []string{
-	"realm", "cluster", "nodes", "op", "reason", "container", "unit",
+	"realm", "cluster", "nodes", "op", "reason", "container", "unit", "count",
 	// The clusters of a delete of several, and the list to go back to.
 	"clusters", "back",
 	// The fields of the New cluster dialog, which a link may fill in to
@@ -95,6 +95,9 @@ type actSpec struct {
 	// NeedsCluster says that the dialog is for one cluster, named by the
 	// link.
 	NeedsCluster bool
+	// PickCluster lets the link name no cluster: the dialog then asks for
+	// it first.
+	PickCluster bool
 	// Plan puts the preview into a pane beside the fields, which shows
 	// the plan of the command even while a field is wrong.
 	Plan bool
@@ -180,9 +183,17 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"create-worker": {
-		OK: "Add", NeedsCluster: true,
-		Title: func(d *actDialog) string { return "Add workers to " + d.Cluster },
+		OK: "Add", NeedsCluster: true, PickCluster: true,
+		Title: func(d *actDialog) string {
+			if d.Picking {
+				return actPickTitle
+			}
+			return "Add workers to " + d.Cluster
+		},
 		Lead: func(d *actDialog) string {
+			if d.Picking {
+				return actPickLead
+			}
 			if n, ok := action.NewestWorker(d.Snap.ClusterNodes(d.Realm, d.Cluster), d.Snap.Status(d.Realm, d.Cluster)); ok {
 				return "New workers take the image, CPUs and memory of " + action.ShortName(n) + ", the newest worker, unless you change them."
 			}
@@ -685,6 +696,8 @@ type actDialog struct {
 	Lock *state.LockHolder
 	// Draft says that the fields are those of the user's draft.
 	Draft bool
+	// Picking says that the dialog asks for its cluster first.
+	Picking bool
 	// Short says that the Power dialog is a short confirmation of the
 	// action and the nodes of its link, with the picker folded away.
 	Short bool
@@ -995,7 +1008,11 @@ func actDialogRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	if draft, ok := actDraftOf(spec, r.PostForm.Get("draft"), d.Form); ok {
 		d.Form, d.Draft = draft, true
 	}
-	if spec.NeedsCluster {
+	switch {
+	case actNoCluster(spec, d.Form):
+		d.Picking = true
+		d.Form.Del("cluster")
+	case spec.NeedsCluster:
 		if err := d.pickCluster(); err != nil {
 			s.Fail(w, r, err)
 			return

@@ -182,7 +182,7 @@ func TestFindCluster_Errors(t *testing.T) {
 		want string
 	}{
 		{"bad realm", form("realm", "Bad Realm", "cluster", "dev"), "realm: use "},
-		{"no cluster", form(), "cluster: say which cluster"},
+		{"no cluster", form(), "cluster: pick a cluster"},
 		{"bad cluster", form("cluster", "Dev!"), "cluster: invalid cluster name"},
 		{"unknown cluster", form("cluster", "nope"), "realm sind has no cluster nope"},
 		{"other realm", form("realm", "ci", "cluster", "dev"), "realm ci has no cluster dev"},
@@ -195,6 +195,14 @@ func TestFindCluster_Errors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A form without a cluster lacks a value: the dialog asks for it.
+func TestFindCluster_Missing(t *testing.T) {
+	_, err := build(t, "create-worker", form())
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "Pick a cluster.", missing.Hint())
 }
 
 func TestBuildCreateWorker(t *testing.T) {
