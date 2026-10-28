@@ -15,14 +15,33 @@ jump-step while the list holds the clusters. */}}
 </div></div></template>{{end}}
 
 {{/* help-jump-list is the list of the jump box and the line below it: .Data
-is a *jumpData. help.js reads data-jump-say into jump-status. */}}
-{{define "help-jump-list"}}{{with .Data}}<div class="pl" id="jump-list" role="listbox" aria-label="{{with .Ask}}{{.}}{{else}}Results{{end}}" data-jump-say="{{.Say}}">
-{{- range $i, $e := .Items}}{{$id := printf "jump-o%d" $i}}
-{{- if .Topic}}<a class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" href="/help?topic={{.Topic}}" data-help-topic="{{.Topic}}">
-{{- else if .Step}}<button type="button" class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" data-jump-step="{{.Step}}">
-{{- else if .Cmd}}<button type="button" class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" data-jump-cmd="{{.Cmd}}">
-{{- else}}<a class="pi" role="option" id="{{$id}}" tabindex="-1" aria-selected="false" href="{{.Href}}"{{if .Dialog}} data-jump-dialog{{end}}>{{end}}
-{{- if $.Data.Step}}<span class="mono">{{.Label}}</span>{{else}}{{.Label}}{{end}}<small>{{.Kind}}</small>{{if or .Step .Cmd}}</button>{{else}}</a>{{end}}
+is a *jumpData. The entries stand in groups under their heads (role group,
+named by the head), each with its kind or the command that does the same in
+a terminal at the right, which Tab copies (help.js). A line above the list
+says when the target of a verb names nothing. help.js reads data-jump-say
+into jump-status. */}}
+{{define "help-jump-list"}}{{with .Data}}{{with .MissText}}<div class="pmiss">{{.}}</div>{{end}}<div class="pl" id="jump-list" role="listbox" aria-label="{{with .Ask}}{{.}}{{else}}Results{{end}}" data-jump-say="{{.Say}}">
+{{- range .Groups}}{{if .Label}}<div class="pg" role="group" aria-labelledby="{{.ID}}"><div class="pgh" id="{{.ID}}"><span>{{.Label}}</span>{{with .Note}}<span class="pgn">{{.}}</span>{{end}}</div>{{end}}
+{{- range .Items}}{{template "help-jump-item" .}}{{end}}{{if .Label}}</div>{{end}}
 {{- end}}</div>
 {{- if not .Items}}<div class="empty">{{if .Step}}{{if .Query}}No {{.Noun}} matches.{{else}}There is no {{.Noun}} yet.{{end}}{{else if .HelpOnly}}Nothing in help matches.{{else}}Nothing matches. Try a cluster, a node or a word such as sbatch, or start with ? to search help only.{{end}}</div>{{end}}
-{{- with .Foot}}<div class="pf">{{.}}</div>{{end}}<div class="pf kbd-only"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>Enter</kbd> {{if .Step}}pick{{else}}open{{end}} · <kbd>Esc</kbd> close</div>{{end}}{{end}}
+{{- with .Foot}}<div class="pf">{{.}}</div>{{end}}<div class="pf kbd-only"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>Enter</kbd> {{if .Step}}pick{{else}}open{{end}}{{if .HasCLI}} · <kbd>Tab</kbd> copy the command{{end}} · <kbd>Esc</kbd> close</div>{{end}}{{end}}
+
+{{/* help-jump-item is an entry of the jump box, a jumpItem: an option that
+is off, which says why and that the box does not pick, one that opens a help
+entry, asks for the cluster of an action (a step, with its
+power op), runs a command of the box, copies a command, or else follows its
+link, over the page for a dialog. A command at the right is the option's
+data-jump-cli, which Tab copies. */}}
+{{define "help-jump-item"}}{{- if .Off}}<div class="pi off" role="option" id="{{.ID}}" aria-selected="false" aria-disabled="true">
+{{- else if .Topic}}<a class="pi" role="option" id="{{.ID}}" tabindex="-1" aria-selected="false" href="/help?topic={{.Topic}}" data-help-topic="{{.Topic}}">
+{{- else if .Step}}<button type="button" class="pi" role="option" id="{{.ID}}" tabindex="-1" aria-selected="false" data-jump-step="{{.Step}}"{{with .Op}} data-jump-op="{{.}}"{{end}}{{with .CLI}} data-jump-cli="{{.}}"{{end}}>
+{{- else if .Cmd}}<button type="button" class="pi" role="option" id="{{.ID}}" tabindex="-1" aria-selected="false" data-jump-cmd="{{.Cmd}}">
+{{- else if .Copy}}<button type="button" class="pi" role="option" id="{{.ID}}" tabindex="-1" aria-selected="false" data-jump-copy="{{.Copy}}"{{with .CLI}} data-jump-cli="{{.}}"{{end}}>
+{{- else}}<a class="pi" role="option" id="{{.ID}}" tabindex="-1" aria-selected="false" href="{{.Href}}"{{if .Dialog}} data-jump-dialog{{end}}{{with .CLI}} data-jump-cli="{{.}}"{{end}}>{{end}}
+{{- if or .Sub .Pills}}<span class="pim"><span class="pil">{{template "help-jump-label" .}}{{range .Pills}} <span class="pill {{.Class}}">{{.Text}}</span>{{end}}</span>{{with .Sub}}<em>{{.}}</em>{{end}}</span>{{else}}{{template "help-jump-label" .}}{{end}}
+{{- with .CLI}}<code class="pic">{{.}}</code>{{else}}<small>{{.Kind}}</small>{{end}}{{if .Off}}</div>{{else if or .Step .Cmd .Copy}}</button>{{else}}</a>{{end}}{{end}}
+
+{{/* help-jump-label is the label of an entry, in the type of code in a
+step, which lists names. */}}
+{{define "help-jump-label"}}{{if .Mono}}<span class="mono">{{.Label}}</span>{{else}}{{.Label}}{{end}}{{end}}
