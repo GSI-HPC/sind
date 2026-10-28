@@ -582,14 +582,12 @@ func TestActRun_StartsTheCommand(t *testing.T) {
 
 	w := f.postHTMX("/actions/power/run", form)
 
-	// The dialog closes, and the page behind it gets a notice of the run.
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	// The dialog closes, and the strip of the task dock shows the run.
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Header().Get("HX-Redirect"))
-	assert.Equal(t, "#act-notes", w.Header().Get("HX-Retarget"))
-	assert.Equal(t, "beforeend", w.Header().Get("HX-Reswap"))
-	assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": false}}`, w.Header().Get("HX-Trigger-After-Settle"))
-	assert.Equal(t, `<div class="act-note" data-act-note><p>Started <code>sind power reboot worker-0.dev</code>. <a href="/tasks/task1">Show progress</a></p>`+
-		`<button type="button" class="iconbtn" data-act-note-close aria-label="Close this notice" title="Close">×</button></div>`, w.Body.String())
+	assert.Empty(t, w.Header().Get("HX-Retarget"))
+	assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": false}}`, w.Header().Get("HX-Trigger"))
+	assert.Empty(t, w.Body.String())
 	require.Len(t, f.starter.specs, 1)
 	assert.Equal(t, run.Spec{
 		Action: "power", Argv: []string{"sind", "power", "reboot", "worker-0.dev"},
@@ -798,7 +796,7 @@ func TestActRun_RefusesWithoutTheTypedName(t *testing.T) {
 	assert.Empty(t, f.starter.specs)
 
 	w := f.postHTMX("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm=dev")
-	assert.Contains(t, w.Header().Get("HX-Trigger-After-Settle"), `"/tasks/task1"`)
+	assert.Contains(t, w.Header().Get("HX-Trigger"), `"/tasks/task1"`)
 	assert.Equal(t, "sind delete cluster dev", f.starter.specs[0].Display)
 }
 

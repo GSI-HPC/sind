@@ -60,9 +60,11 @@ func TestActDialog_Frame(t *testing.T) {
 	assert.NotContains(t, body, "data-act-restored")
 }
 
-func TestActDialog_LayoutHasTheNotices(t *testing.T) {
+func TestActDialog_LayoutHasTheLayer(t *testing.T) {
 	f := newActFixture(t)
-	assert.Contains(t, f.get("/dialogs/connect").Body.String(), `<div id="layer"></div>`+"\n"+`<div class="act-notes" id="act-notes" role="status"></div>`)
+	body := f.get("/dialogs/connect").Body.String()
+	assert.Contains(t, body, `<div id="layer"></div>`+"\n"+`</body>`)
+	assert.NotContains(t, body, "act-notes", "the strip of the task dock shows a command that started")
 }
 
 // draftOf encodes the fields of a draft as the script of the dialogs posts
@@ -161,10 +163,10 @@ func TestActRun_LeavesThePageOfWhatItRemoves(t *testing.T) {
 		assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": true}}`, w.Header().Get("HX-Trigger"), path)
 	}
 
-	// Elsewhere it stays, with a notice.
+	// Elsewhere it stays, and the task dock shows the command.
 	w := f.postFrom("/clusters", "/actions/delete-cluster/run", run)
 	assert.Empty(t, w.Header().Get("HX-Redirect"))
-	assert.Equal(t, "#act-notes", w.Header().Get("HX-Retarget"))
+	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
 func TestActOnPageOf(t *testing.T) {

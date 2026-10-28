@@ -1578,7 +1578,7 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		id, err := actStart(st, v, a, f, p.Cmd)
 		if err == nil {
 			realm, cl := a.Target(f)
-			actStarted(s, w, r, v, p, id, p.Spec.Removes && actOnPageOf(r, realm, cl))
+			actStarted(w, r, p, id, p.Spec.Removes && actOnPageOf(r, realm, cl))
 			return
 		}
 		s.env.Log.Error("starting a task", "action", a.ID, "err", err)
@@ -1700,9 +1700,6 @@ func actRetryRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 	page.Redirect(w, r, "/tasks/"+nid)
 }
 
-// actStartedNote is what the notice of a command that started says.
-type actStartedNote struct{ ID, Display string }
-
 // actOnPageOf reports whether htmx sent r from a page of the cluster, or
 // without a cluster of the realm: the cluster page or that of one of its
 // nodes.
@@ -1721,19 +1718,18 @@ func actOnPageOf(r *http.Request, realm, cluster string) bool {
 // actStarted answers a run that started. A dialog that follows its run,
 // one whose page the command removes (gone), or a form posted without
 // script, goes to the run page; any other dialog closes on the event
-// act-started, and htmx adds a notice with a link to the run to the page.
-// The event carries the run page and whether the browser goes there, so
-// that the script of the dialogs drops a draft.
-func actStarted(s *Server, w http.ResponseWriter, r *http.Request, v *View, p actPreview, id string, gone bool) {
+// act-started, and the strip of the task dock shows the command. The event
+// carries the run page and whether the browser goes there, so that the
+// script of the dialogs drops a draft.
+func actStarted(w http.ResponseWriter, r *http.Request, p actPreview, id string, gone bool) {
 	to := "/tasks/" + id
 	if p.Spec.Follow || gone || !page.IsHTMX(r) {
 		actFollow(w, r, to)
 		return
 	}
 	event, _ := json.Marshal(map[string]any{"act-started": map[string]any{"url": to, "follow": false}})
-	w.Header().Set("HX-Trigger-After-Settle", string(event))
-	page.Retarget(w, "#act-notes", "beforeend")
-	s.Write(w, r, http.StatusOK, "act-started", v.withData(actStartedNote{ID: id, Display: p.Cmd.Display}))
+	w.Header().Set("HX-Trigger", string(event))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // actRejected answers a run that did not start: htmx puts the preview, with

@@ -7,8 +7,8 @@
 // follow the YAML, the links to a field with a problem, and the frame of
 // every dialog: the focus, which stays in the dialog and goes back to the
 // button that opened it, the question before a close loses changes, the
-// draft of a new cluster, Enter and Ctrl+Enter, the status, and the notice
-// of a command that started. The dialogs are the server's HTML, which htmx
+// draft of a new cluster, Enter and Ctrl+Enter, and the status. The
+// dialogs are the server's HTML, which htmx
 // puts into #layer; nothing here evaluates text, and no storage is needed to
 // work: every access is guarded.
 (() => {
@@ -34,19 +34,18 @@
   // What the open dialog needs: the element that opened it and how to find
   // it again after a swap, the link it came from, the element in it that
   // had the focus last, whether the user changed a field, the question the
-  // footer asks, the elements made inert, and the status said last. The
-  // opener stays after a close, for the notice that the dialog leaves.
+  // footer asks, the elements made inert, and the status said last.
   const S = { dialog: null, opener: null, find: null, path: '', last: null, dirty: false, asking: null, back: null, inert: [], said: null, saveTimer: 0 };
 
-  // isolate makes everything but the dialog, the layer, the notices and
-  // the page's live region inert, marked data-act-inert, as a modal dialog needs: Tab and the
+  // isolate makes everything but the dialog, the layer and the page's live
+  // region inert, marked data-act-inert, as a modal dialog needs: Tab and the
   // screen reader stay in the dialog, the help pane and the jump box in the
   // layer still work, and what app.js says is still heard.
   function isolate(root) {
     release();
     const walk = parent => {
       for (const c of parent.children) {
-        if (c === root || c.id === 'layer' || c.id === 'act-notes' || c.id === 'say' || (c.inert && !c.hasAttribute('data-help-inert')) || /^(SCRIPT|TEMPLATE|STYLE|LINK)$/.test(c.tagName)) continue;
+        if (c === root || c.id === 'layer' || c.id === 'say' || (c.inert && !c.hasAttribute('data-help-inert')) || /^(SCRIPT|TEMPLATE|STYLE|LINK)$/.test(c.tagName)) continue;
         if (c.contains(root)) { walk(c); continue; }
         c.inert = true;
         c.setAttribute('data-act-inert', '');
@@ -103,19 +102,6 @@
     const first = touch() ? null : [...form.querySelectorAll('.mb [data-act-focus]')].find(usable) ||
       [...form.querySelectorAll('.mb :is(input:not([type=hidden]), select, textarea), #act-confirm')].find(usable);
     (first || form).focus();
-  }
-
-  // closeNote closes a notice. The focus that was on it goes into the open
-  // dialog, to the next notice, or back to where the dialog was opened,
-  // without a scroll of the page.
-  function closeNote(n) {
-    const had = n.contains(document.activeElement);
-    n.remove();
-    if (!had) return;
-    const d = dialog();
-    if (d) { focusIn(d); return; }
-    const next = document.querySelector('#act-notes [data-act-note-close]');
-    if (next) next.focus({ preventScroll: true }); else focusBack(true);
   }
 
   // quiet drops a request of a dialog that closes, and the answer to one
@@ -355,8 +341,6 @@
     if (t.closest('[data-act-restart]')) { ask('restart'); return; }
     const go = t.closest('[data-act-go]');
     if (go) { goTo(go.closest('form'), go.dataset.actGo); return; }
-    const note = t.closest('[data-act-note-close]');
-    if (note) { closeNote(note.closest('[data-act-note]')); return; }
     // The buttons that change the form of a new cluster.
     if (ev.isTrusted && t.closest('.scrim :is([data-act-step], [data-act-rowadd], [data-act-rowdel], [data-act-wgadd], [data-act-wgdel], [data-act-reset])')) changed();
 
@@ -815,23 +799,14 @@
     d.parameters.draft = draft;
   });
 
-  // A command started: the draft goes, and a dialog that does not follow
-  // its run closes, while its notice stays for a while. One opened as a
-  // page of its own goes to the run.
+  // A command started: the draft goes, and the dialog closes, while the
+  // strip of the task dock shows the command. One opened as a page of its
+  // own goes to the run.
   document.addEventListener('act-started', ev => {
     const det = ev.detail || {};
     const form = formOf();
     if (form && form.dataset.actDraft) local.del(draftKey(form.dataset.actDraft));
     S.dirty = false;
-    for (const n of document.querySelectorAll('#act-notes [data-act-note]:not([data-act-timed])')) {
-      n.dataset.actTimed = '';
-      // A pointer keeps the notice only once it moved onto it: one that
-      // the notice appeared under, as after a click on the spot, does not.
-      let moved = false;
-      n.addEventListener('pointermove', () => { moved = true; }, { once: true });
-      const tick = () => { if (n.matches(':focus-within') || (moved && n.matches(':hover'))) setTimeout(tick, 2000); else n.remove(); };
-      setTimeout(tick, 10000);
-    }
     if (det.follow) return;
     const d = dialog();
     if (d && inPage(d)) { location.assign(det.url); return; }
