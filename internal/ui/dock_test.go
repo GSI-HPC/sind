@@ -378,7 +378,7 @@ func TestRunDockTemplates(t *testing.T) {
 		`<div class="segbar" role="progressbar" aria-label="Progress of create cluster dev"`,
 		`<button type="button" class="btn ghost sm ts-more" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false">1 ended</button>`,
 		`<button type="button" class="ts-f" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false" aria-label="1 failed: show the commands"><i class="dot bad" aria-hidden="true"></i>1</button>`,
-		`<summary class="btn sm" aria-label="Stop create cluster dev…">Stop…</summary>`,
+		`<details class="stopc sm" data-stop-task="t-mid"><summary class="btn sm" aria-label="Stop create cluster dev…">Stop…</summary>`,
 		`<a class="btn sm primary" href="/runs/r-mid" aria-label="Show progress: create cluster dev">Show progress</a></span>`,
 		`<button type="button" class="btn sm ts-show" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false" aria-label="Show the commands">Show</button>`,
 	} {

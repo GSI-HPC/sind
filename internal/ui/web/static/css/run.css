@@ -59,6 +59,9 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .ts-f{align-items:center;gap:5px;padding:2px 8px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--bad);font:600 var(--t-sm) var(--f-body);cursor:pointer}
 .tstrip details.stopc{position:static}
 .tstrip .stopc-pop{top:auto;bottom:calc(100% + 6px);right:16px}
+/* the question of Stop opens over the page, the bar of the selected nodes
+   too */
+.tasks:has(details.stopc[open]){z-index:6}
 
 /* The button of the top bar that counts the commands, and their list,
    which hangs from it. */

@@ -7,12 +7,12 @@
 // milliseconds since 1970), it sizes the bars finer than the whole percent
 // of their classes, it puts the progress of the run in the title of the
 // tab, it announces when a command starts or ends, it opens and closes the
-// list of the task dock, it closes the question of Stop, it opens the run
-// of the page of a task once there is one, and it hides the rows of "Needs
-// you" that are fixed, the cards of a fix and the strip of the dock
-// (data-hide-at), shows what waits for them (data-show-at), and counts down
-// their seconds (data-until). It evaluates no text and needs no inline
-// script.
+// list of the task dock, it keeps and closes the question of Stop, it
+// opens the run of the page of a task once there is one, and it hides the
+// rows of "Needs you" that are fixed, the cards of a fix and the strip of
+// the dock (data-hide-at), shows what waits for them (data-show-at), and
+// counts down their seconds (data-until). It evaluates no text and needs
+// no inline script.
 (() => {
   'use strict';
 
@@ -76,7 +76,19 @@
     opener = null;
   }
   // Stop asks in the page (template run-stop): Keep running and Escape
-  // close the question, and so does a click elsewhere.
+  // close the question, and so does a click elsewhere. A live update
+  // leaves it open, but keepStops closes it once its button stops another
+  // task, as when the strip shows another command.
+  const stopOf = new WeakMap();
+  document.addEventListener('toggle', ev => {
+    const d = ev.target;
+    if (d instanceof HTMLDetailsElement && d.matches('.stopc') && d.open) stopOf.set(d, d.dataset.stopTask);
+  }, true);
+  function keepStops() {
+    document.querySelectorAll('details.stopc[open]').forEach(d => {
+      if (stopOf.has(d) && stopOf.get(d) !== d.dataset.stopTask) d.open = false;
+    });
+  }
   function closeStops(except) {
     document.querySelectorAll('details.stopc[open]').forEach(d => { if (d !== except) d.open = false; });
   }
@@ -215,9 +227,12 @@
   }
 
   // The width that place gave a bar stays until its next tick, so that the
-  // bar does not jump back to its class.
-  Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) =>
-    name !== 'style' || !(el instanceof HTMLElement && 'fill' in el.dataset);
+  // bar does not jump back to its class. The question of Stop stays open
+  // (keepStops).
+  Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, el) => {
+    if (name === 'open' && el instanceof Element && el.matches('details.stopc')) return false;
+    return name !== 'style' || !(el instanceof HTMLElement && 'fill' in el.dataset);
+  };
 
   function title() {
     const el = document.querySelector('[data-doc-title]');
@@ -277,11 +292,11 @@
     // A morph changes text and attributes in place, so the observers
     // watch those too: a clock the server drew is counted again before the
     // browser paints it.
-    const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title', 'data-say-state'], subtree: true };
-    if (main) new MutationObserver(update).observe(main, what);
+    const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title', 'data-say-state', 'data-stop-task'], subtree: true };
+    if (main) new MutationObserver(() => { update(); keepStops(); }).observe(main, what);
     for (const id of ['tasks', 'cmds']) {
       const dock = document.getElementById(id);
-      if (dock) new MutationObserver(() => { tick(); announce(); drawDock(); refocus(); }).observe(dock, what);
+      if (dock) new MutationObserver(() => { tick(); announce(); drawDock(); keepStops(); refocus(); }).observe(dock, what);
     }
     drawDock();
     update();
