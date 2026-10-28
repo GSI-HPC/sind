@@ -4,6 +4,7 @@ package ui
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -17,7 +18,6 @@ func railFragment() Fragment {
 	return Fragment{
 		Name:     "rail",
 		Prefixes: []string{""},
-		Shell:    true,
 		Load:     func(v *View) error { v.Data = v.reg.rail(v); return nil },
 	}
 }
@@ -26,7 +26,7 @@ func railFragment() Fragment {
 // number of clusters, and the nodes that need a look by the rule of every
 // page (pgNode.Problem), or a dot when every node is fine.
 func pgNavCounts(r *Registry) {
-	r.SetNavCount("clusters", func(sn store.Snapshot) NavCount {
+	r.SetNavCount("clusters", func(sn store.Snapshot, _ time.Time) NavCount {
 		n := 0
 		for _, cs := range sn.Clusters {
 			n += len(cs)
@@ -36,14 +36,9 @@ func pgNavCounts(r *Registry) {
 		}
 		return NavCount{Text: strconv.Itoa(n), Label: pgPlural(n, "cluster", "clusters")}
 	})
-	r.SetNavCount("nodes", func(sn store.Snapshot) NavCount {
+	r.SetNavCount("nodes", func(sn store.Snapshot, _ time.Time) NavCount {
 		nodes := pgSnapNodes(sn, "")
-		problems := 0
-		for _, n := range nodes {
-			if n.Problem() {
-				problems++
-			}
-		}
+		problems := pgCount(nodes, pgNode.Problem)
 		switch {
 		case problems > 0:
 			return NavCount{Text: strconv.Itoa(problems) + " down", Class: "bad", Label: pgPlural(problems, "node needs", "nodes need") + " a look"}

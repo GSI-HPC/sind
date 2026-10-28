@@ -13,30 +13,21 @@ func init() { pgRegister(defaultRegistry) }
 // pgRegister adds the main pages of sind ui to r: their pages, fragments,
 // routes, and the counts of the rail.
 func pgRegister(r *Registry) {
-	for _, f := range pgOverviewFragments() {
-		r.AddFragment(f)
-	}
-	for _, f := range append(pgClustersFragments(), pgNodesFragments()...) {
-		r.AddFragment(f)
-	}
-	for _, f := range pgClusterFragments() {
-		r.AddFragment(f)
-	}
-	for _, f := range pgNodeFragments() {
+	for _, f := range slices.Concat(pgOverviewFragments(), pgPageFragments(pgClustersPage, pgListTopics), pgPageFragments(pgNodesPage, pgListTopics), pgClusterFragments(), pgNodeFragments()) {
 		r.AddFragment(f)
 	}
 	// The list pages read the realm cookie, which a Page cannot see, so
 	// they are routes, as the Overview is; the pages of one cluster or node
 	// are pages.
-	r.AddRoute(pgListRoute(pgClustersPage))
-	r.AddRoute(pgListRoute(pgNodesPage))
+	r.AddRoute(pgRealmRoute(pgClustersPage, true, false))
+	r.AddRoute(pgRealmRoute(pgNodesPage, true, false))
 	r.AddPage(pgClusterPage)
 	r.AddRoute(pgClusterByNameRoute())
 	r.AddPage(pgNodePage)
 	pgNavCounts(r)
 }
 
-// pgClustersPage is the Clusters page. It is served by pgListRoute, which
+// pgClustersPage is the Clusters page. It is served by pgRealmRoute, which
 // builds its handler from this value, so the registry holds no page of it.
 // Its head, its chips and its table are fragments; the filter field is not,
 // so that a live update never changes it while the user types.
@@ -56,25 +47,14 @@ var pgNodesPage = Page{
 // pgListTopics are what the list pages depend on.
 var pgListTopics = []string{"realms", "clusters/", "nodes/", "status/", "monitoring/", "docker", "run"}
 
-// pgListFragments returns the fragments of a list page, which all show
-// what load returns.
-func pgListFragments(prefix string, load func(v *View) (any, error)) []Fragment {
+// pgPageFragments returns the fragments of a page, which all read its
+// Params, show what it loads and depend on the topics of the prefixes.
+func pgPageFragments(p Page, prefixes []string) []Fragment {
 	var out []Fragment
-	for _, part := range []string{"head", "chips", "table"} {
-		out = append(out, Fragment{
-			Name: prefix + "-" + part, Params: pgListKeys, Prefixes: pgListTopics,
-			Load: func(v *View) (err error) { v.Data, err = load(v); return },
-		})
+	for _, name := range p.Fragments {
+		out = append(out, Fragment{Name: name, Params: p.Params, Prefixes: prefixes, Load: p.Load})
 	}
 	return out
-}
-
-func pgClustersFragments() []Fragment {
-	return pgListFragments("pg-clusters", func(v *View) (any, error) { return pgLoadClusters(v) })
-}
-
-func pgNodesFragments() []Fragment {
-	return pgListFragments("pg-nodes", func(v *View) (any, error) { return pgLoadNodes(v) })
 }
 
 // pgList is what a list page shows besides its rows.
@@ -109,9 +89,6 @@ type pgNoneView struct {
 // None returns the view of the list's row for no match.
 func (l pgList) None(noun string) pgNoneView { return pgNoneView{pgList: l, Noun: noun} }
 
-// ClearURL returns the address of the list without its filters.
-func (l pgList) ClearURL() string { return l.URL("q", "", "state", "") }
-
 // pgClusterList is what the Clusters page shows.
 type pgClusterList struct {
 	pgList
@@ -130,8 +107,8 @@ func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
 		row := pgRealmRow{
-			Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)), Problems: pgProblemNodes(sn, r),
-			Locked: sn.Lock(r) != nil, On: r == realm,
+			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]), Problems: pgCount(pgSnapNodes(sn, r), pgNode.Problem),
+			Locked: sn.Locks[r] != nil, On: r == realm,
 			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
 		}
 		row.Delete.Name = "Delete realm " + r + "…"
@@ -148,7 +125,7 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 	all := pgClustersOf(v.Snap, q.Realm, v.Now)
 	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgClusterChips, func(key string) int {
-		return len(slices.DeleteFunc(slices.Clone(all), func(c pgCluster) bool { return !pgClusterIn(c, key) }))
+		return pgCount(all, func(c pgCluster) bool { return pgClusterIn(c, key) })
 	})
 	words := q.words()
 	for _, c := range all {
@@ -182,7 +159,7 @@ func pgLoadNodes(v *View) (*pgNodeList, error) {
 	}
 	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgNodeChips, func(key string) int {
-		return len(slices.DeleteFunc(slices.Clone(all), func(n pgNode) bool { return !pgNodeIn(n, key) }))
+		return pgCount(all, func(n pgNode) bool { return pgNodeIn(n, key) })
 	})
 	words := q.words()
 	for _, n := range all {

@@ -79,12 +79,7 @@ type jumpData struct {
 
 // Say is what the box tells a screen reader about the list. In a step, it
 // starts with the question, as the field does not say it.
-func (d *jumpData) Say() string {
-	if d.Ask != "" {
-		return d.Ask + " " + d.say()
-	}
-	return d.say()
-}
+func (d *jumpData) Say() string { return strings.TrimSpace(d.Ask + " " + d.say()) }
 
 func (d *jumpData) say() string {
 	switch {

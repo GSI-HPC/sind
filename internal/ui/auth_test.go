@@ -9,7 +9,6 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTokenExchange(t *testing.T) {
@@ -104,14 +103,6 @@ func TestPostFormIsCappedAndChecked(t *testing.T) {
 	w = ts.post("/changes?x=%zz", "name=dev")
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "malformed")
-}
-
-func TestForbiddenSaysNothingAboutTheToken(t *testing.T) {
-	ts := newTestServer(t)
-	w := ts.do(request("GET", "/"))
-	require.Equal(t, http.StatusForbidden, w.Code)
-	assert.NotContains(t, w.Body.String(), "the-token")
-	assert.Contains(t, w.Body.String(), "sind ui printed in your terminal")
 }
 
 // The cookie also goes to pages on other ports of 127.0.0.1. A browser

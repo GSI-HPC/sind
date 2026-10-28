@@ -142,32 +142,4 @@ func TestWaitProgress(t *testing.T) {
 	assert.Equal(t, 1.0, used, "no more than the limit")
 	_, ok = WaitUsed(wait("2026-01-01T00:04:00Z", 0), now)
 	assert.False(t, ok, "no limit")
-
-	assert.Equal(t, WaitOK, WaitLevel(0))
-	assert.Equal(t, WaitOK, WaitLevel(0.49))
-	assert.Equal(t, WaitWarn, WaitLevel(0.5))
-	assert.Equal(t, WaitWarn, WaitLevel(0.79))
-	assert.Equal(t, WaitCritical, WaitLevel(0.8))
-	assert.Equal(t, WaitCritical, WaitLevel(1))
-}
-
-func TestSlowestWait(t *testing.T) {
-	now := at("2026-01-01T00:05:00Z")
-	w := func(name, since string, timeout time.Duration) store.Span {
-		return store.Span{Name: name, Kind: KindWait, Started: at(since), Timeout: timeout}
-	}
-	step := store.Span{Children: []store.Span{
-		{Kind: KindTarget, Children: []store.Span{w("a", "2026-01-01T00:04:30Z", time.Minute)}},
-		{Kind: KindTarget, Children: []store.Span{w("b", "2026-01-01T00:02:00Z", 4*time.Minute)}},
-		{Kind: KindTarget, Children: []store.Span{w("c", "2026-01-01T00:00:00Z", 0)}},
-		{Kind: KindTarget, Children: []store.Span{w("d", "2026-01-01T00:04:30Z", time.Minute)}},
-		{Kind: KindCall, Timeout: time.Second, Started: at("2026-01-01T00:00:00Z")},
-	}}
-	got, used, ok := SlowestWait(step, now)
-	assert.True(t, ok)
-	assert.Equal(t, "b", got.Name)
-	assert.InDelta(t, 0.75, used, 1e-9)
-
-	_, _, ok = SlowestWait(store.Span{Children: []store.Span{{Kind: KindWait}}}, now)
-	assert.False(t, ok)
 }

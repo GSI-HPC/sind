@@ -15,7 +15,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 func TestDemo_Setup(t *testing.T) {
@@ -73,7 +72,7 @@ func TestDemo_Still(t *testing.T) {
 	assert.Equal(t, store.TaskRunning, task.Status)
 	assert.NotNil(t, a.Locks["ci"])
 	assert.Equal(t, 5, len(a.Clusters["sind"])+len(a.Clusters["ci"]), "nightly is there, half made")
-	assert.Equal(t, cluster.StateMixed, a.ClustersOf("ci")[0].State)
+	assert.Equal(t, cluster.StateMixed, a.Clusters["ci"][0].State)
 	for _, r := range a.Runs {
 		assert.False(t, r.Start.After(Epoch))
 		if r.End != nil {
@@ -112,6 +111,15 @@ func TestDemo_Refresh(t *testing.T) {
 	assert.Len(t, st.Snapshot().Realms, 2)
 }
 
+// running runs d until the function it returns, which waits for Run to
+// end, is called.
+func running(d *Demo) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { d.Run(ctx); close(done) }()
+	return func() { cancel(); <-done }
+}
+
 func TestDemo_Doctor(t *testing.T) {
 	st := store.New()
 	d := New(st, false)
@@ -119,14 +127,11 @@ func TestDemo_Doctor(t *testing.T) {
 	d.Setup()
 	before := st.Snapshot().Doctor.Time
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { d.Run(ctx); close(done) }()
+	stop := running(d)
 	d.RequestDoctor()
 	d.RequestDoctor() // never blocks
 	require.Eventually(t, func() bool { return st.Snapshot().Doctor.Time.After(before) && !st.Snapshot().Doctor.Running }, 5*time.Second, time.Millisecond)
-	cancel()
-	<-done
+	stop()
 }
 
 func TestDemo_DoctorWithoutReport(t *testing.T) {
@@ -148,32 +153,18 @@ func TestDemo_Drifts(t *testing.T) {
 	d := New(st, false)
 	d.driftEvery = time.Millisecond
 	d.Setup()
-	slurmd := func() bool {
-		for _, n := range st.Snapshot().Status("sind", "dev").Nodes {
-			if n.Name == "worker-4.dev" {
-				return n.Health.Services[probe.ServiceSlurmd]
-			}
-		}
-		return false
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { d.Run(ctx); close(done) }()
-	require.Eventually(t, slurmd, 5*time.Second, time.Millisecond, "a service flips by itself")
-	cancel()
-	<-done
+	stop := running(d)
+	require.Eventually(t, func() bool { return slurmdUp(st) }, 5*time.Second, time.Millisecond, "a service flips by itself")
+	stop()
 
 	// Where nothing can flip, nothing is published.
 	for _, n := range d.world.nodesOf("sind", "dev") {
 		d.world.apply("sind", opRemove, n)
 	}
 	d.Refresh("sind")
-	ctx, cancel = context.WithCancel(context.Background())
-	done = make(chan struct{})
-	go func() { d.Run(ctx); close(done) }()
+	stop = running(d)
 	time.Sleep(20 * time.Millisecond)
-	cancel()
-	<-done
+	stop()
 }
 
 func TestDemo_StillStandsStill(t *testing.T) {
@@ -182,12 +173,9 @@ func TestDemo_StillStandsStill(t *testing.T) {
 	d.driftEvery = time.Millisecond
 	d.Setup()
 	before := st.Snapshot()
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { d.Run(ctx); close(done) }()
+	stop := running(d)
 	time.Sleep(30 * time.Millisecond)
-	cancel()
-	<-done
+	stop()
 	assert.Equal(t, before.Statuses, st.Snapshot().Statuses, "nothing moves")
 }
 

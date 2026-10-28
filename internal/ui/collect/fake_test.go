@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
 	"slices"
@@ -267,9 +266,6 @@ func ndjson[T any](rows []T) string {
 	}
 	return testutil.NDJSON(rows...)
 }
-
-// quietLog discards logs.
-func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 // debugLog returns a logger that writes everything it is given to the
 // buffer.

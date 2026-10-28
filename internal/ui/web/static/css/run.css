@@ -37,12 +37,10 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .stopc-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:50;width:min(340px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--warn);border-radius:10px;box-shadow:var(--shadow);padding:12px;display:grid;gap:10px;font:var(--t-md)/1.45 var(--f-body);text-align:left;white-space:normal;color:var(--fg)}
 .stopc-pop p{margin:0}
 .stopc-b{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
-.task{position:relative}
-.task details.stopc{position:static}
 /* in the head of a page the question hangs from the head's right edge, as
    on a phone the actions wrap below the title to the left */
-.runhead{position:relative}
-.runhead details.stopc{position:static}
+.task,.runhead{position:relative}
+:is(.task,.runhead) details.stopc{position:static}
 .task .stopc-pop{top:auto;left:8px;right:8px;bottom:8px;width:auto}
 /* the summary bar of several commands; the dock shows its first card until
    Show all opens it, and the bar goes when no card is left to show */
@@ -120,7 +118,6 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .lg-lane{background:linear-gradient(0deg,var(--lane) 0 60%,transparent 60%);border-bottom:1.5px solid var(--run)}
 .legend i.lg-now{width:2px;height:12px;background:var(--accent)}
 .gantt{position:relative;font:var(--t-sm) var(--f-mono);padding:4px 14px 10px;--lw:232px;--rw:330px;--gap:12px}
-.rgp .ph [hidden]{display:none}
 .g-row{display:grid;grid-template-columns:var(--lw) minmax(0,1fr) var(--rw);column-gap:var(--gap);position:relative}
 .g-axis{height:26px;align-items:end;color:var(--faint);font-size:var(--t-xs)}
 .g-axis .ttl,.g-axis .ares{font:var(--t-xs) var(--f-body);color:var(--faint);padding-bottom:6px}

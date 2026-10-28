@@ -381,12 +381,6 @@ func TestBuildDeleteClusters(t *testing.T) {
 	}
 }
 
-func TestNewParts(t *testing.T) {
-	cmd := NewParts([]Part{{Display: "a"}, {Display: "b"}})
-	assert.Equal(t, "a\nb", cmd.Display)
-	assert.Len(t, cmd.Parts, 2)
-}
-
 func TestBuildDeleteWorker(t *testing.T) {
 	cmd, err := build(t, "delete-worker", form("cluster", "dev", "nodes", "worker-3, worker-2", "nodes", "worker-2"))
 	require.NoError(t, err)

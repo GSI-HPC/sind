@@ -34,7 +34,7 @@ each kind. */}}
 
 {{/* pg-realm-filter lets a list switch to one realm, with the filters it
 has; it takes the list. */}}
-{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.RealmURL ""}}" data-pg-keep>All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.RealmURL .Name}}" data-pg-keep>{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
+{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.URL "realm" ""}}" data-pg-keep>All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.URL "realm" .Name}}" data-pg-keep>{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
 
 {{/* pg-realm-scope says which realm a page shows, with a link to the same
 page with all realms; it takes the view, and is empty on a page that shows

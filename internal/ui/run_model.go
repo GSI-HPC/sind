@@ -87,16 +87,11 @@ func runOrigin(run store.Run) time.Time {
 		}
 	}
 	first := time.Time{}
-	var scan func(s store.Span)
-	scan = func(s store.Span) {
-		for _, c := range s.Children {
-			if !c.Started.IsZero() && (first.IsZero() || c.Started.Before(first)) {
-				first = c.Started
-			}
-			scan(c)
+	activity.Walk(run.Root, func(c store.Span) {
+		if !c.Started.IsZero() && (first.IsZero() || c.Started.Before(first)) {
+			first = c.Started
 		}
-	}
-	scan(run.Root)
+	})
 	return first
 }
 
@@ -119,14 +114,11 @@ func runElapsed(run store.Run, now time.Time) time.Duration {
 	return max(runEnd(run, now).Sub(origin), 0)
 }
 
-// runTicks reports whether the clock of a run goes on by itself: while the
-// run runs and is not suspended.
-func runTicks(run store.Run) bool { return !run.Done() && !run.Suspended }
-
 // runSince returns the unix time in milliseconds that run.js counts the
-// clock of a run from, 0 for a clock that stands still.
+// clock of a run from, 0 for a clock that stands still: once the run ended
+// or while it is suspended.
 func runSince(run store.Run) int64 {
-	if !runTicks(run) {
+	if run.Done() || run.Suspended {
 		return 0
 	}
 	origin := runOrigin(run)
@@ -141,17 +133,7 @@ func runSince(run store.Run) int64 {
 func runSpanClass(s store.Span, runDone bool) string {
 	switch {
 	case s.Done() || s.State == activity.StateEnded:
-		switch s.Status {
-		case store.StatusOK:
-			return runOK
-		case store.StatusFailed:
-			return runFailed
-		case store.StatusCanceled:
-			return runCanceled
-		case store.StatusSkipped:
-			return runSkipped
-		}
-		return runEnded
+		return runEndClass(s.Status)
 	case runDone && s.State == activity.StateQueued:
 		return runSkipped
 	case runDone:
@@ -162,20 +144,27 @@ func runSpanClass(s store.Span, runDone bool) string {
 	return runRunning
 }
 
-// runStatusClass returns the class of a run: how its command span stands.
+// runEndClass returns the class of a span that ended with status: the
+// status, whose words the classes share, or ended for one the log does not
+// name.
+func runEndClass(status string) string {
+	switch status {
+	case store.StatusOK, store.StatusFailed, store.StatusCanceled, store.StatusSkipped:
+		return status
+	}
+	return runEnded
+}
+
+// runStatusClass returns the class of a run: how its command span stands,
+// ended for a command that the log says was skipped.
 func runStatusClass(run store.Run) string {
 	if !run.Done() {
 		return runRunning
 	}
-	switch run.Status {
-	case store.StatusOK:
-		return runOK
-	case store.StatusFailed:
-		return runFailed
-	case store.StatusCanceled:
-		return runCanceled
+	if run.Status == store.StatusSkipped {
+		return runEnded
 	}
-	return runEnded
+	return runEndClass(run.Status)
 }
 
 // runPill returns the label and the pill class of a run's state. A task

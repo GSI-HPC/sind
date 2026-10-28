@@ -73,7 +73,7 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 	for _, n := range added {
 		cmd.Nodes = append(cmd.Nodes, PlannedNode{Short: n, Role: string(config.RoleWorker)})
 	}
-	cmd.OK = "Add " + countWorkers(added)
+	cmd.OK = "Add " + countOr(added, "workers")
 	cmd.Notes = append(cmd.Notes, strings.TrimSpace(size.why+" sind adds the workers, then tells slurmctld about them."))
 	return cmd, nil
 }
@@ -137,14 +137,6 @@ func plural(n int) string {
 	return "s"
 }
 
-// countWorkers names workers for a button: the one worker, or how many.
-func countWorkers(shorts []string) string {
-	if len(shorts) == 1 {
-		return shorts[0]
-	}
-	return fmt.Sprintf("%d workers", len(shorts))
-}
-
 func buildDeleteCluster(f Form, c Context) (Command, error) {
 	realm, cl, err := findCluster(f, c)
 	if err != nil {
@@ -162,7 +154,7 @@ func buildDeleteCluster(f Form, c Context) (Command, error) {
 	var volumes []string
 	for _, t := range cluster.AllVolumeTypes {
 		name := string(cluster.VolumeName(realm, cl.Name, t))
-		if slices.ContainsFunc(c.Snap.VolumesOf(realm), func(v cluster.VolumeSummary) bool { return v.Name == name }) {
+		if slices.ContainsFunc(c.Snap.Volumes[realm], func(v cluster.VolumeSummary) bool { return v.Name == name }) {
 			volumes = append(volumes, name)
 		}
 	}
@@ -179,7 +171,7 @@ func buildDeleteCluster(f Form, c Context) (Command, error) {
 	} else {
 		cmd.Stays = append(cmd.Stays, "the host directories it mounts, if any")
 	}
-	switch others := len(c.Snap.ClustersOf(realm)) - 1; {
+	switch others := len(c.Snap.Clusters[realm]) - 1; {
 	case others == 1:
 		cmd.Stays = append(cmd.Stays, "the other cluster of realm "+realm+", and its mesh")
 	case others > 1:
@@ -266,7 +258,7 @@ func buildDeleteClusters(f Form, c Context) (Command, error) {
 				n++
 			}
 		}
-		if n == len(c.Snap.ClustersOf(p.Realm)) {
+		if n == len(c.Snap.Clusters[p.Realm]) {
 			cmd.Notes = append(cmd.Notes, fmt.Sprintf("These are all the clusters of realm %s, so sind also removes its mesh, DNS server and SSH relay.", p.Realm))
 		}
 	}
@@ -284,7 +276,7 @@ func buildDeleteWorker(f Form, c Context) (Command, error) {
 	}
 	shorts := shortNames(picked)
 	cmd := NewCommand(sindArgv(realm, append([]string{"delete", "worker"}, nodeWords(cl.Name, shorts)...)...)...)
-	cmd.OK = "Delete " + countWorkers(shorts)
+	cmd.OK = "Delete " + countOr(shorts, "workers")
 	containers := make([]string, len(picked))
 	for i, n := range picked {
 		containers[i] = n.Container
@@ -323,7 +315,7 @@ func buildDeleteRealm(f Form, c Context) (Command, error) {
 	cmd.OK = "Delete realm " + realm
 	var names, dirs []string
 	unseen := false
-	for _, cl := range c.Snap.ClustersOf(realm) {
+	for _, cl := range c.Snap.Clusters[realm] {
 		names = append(names, cl.Name)
 		st := c.Snap.Status(realm, cl.Name)
 		if st == nil {
@@ -340,7 +332,7 @@ func buildDeleteRealm(f Form, c Context) (Command, error) {
 		cmd.Goes = append(cmd.Goes, countOf(len(names), "cluster")+": "+strings.Join(names, ", "))
 	}
 	cmd.Goes = append(cmd.Goes, "the mesh network, the DNS server and the SSH relay")
-	if c.Snap.MonitoringOf(realm) != nil {
+	if c.Snap.Monitorings[realm] != nil {
 		cmd.Goes = append(cmd.Goes, "the monitoring stack")
 	}
 	cmd.Goes = append(cmd.Goes, "the exported SSH config")
@@ -350,7 +342,7 @@ func buildDeleteRealm(f Form, c Context) (Command, error) {
 	}
 	// sind ui reads the containers on the mesh with the mesh; until it has,
 	// it cannot say whether there are any.
-	switch m, ok := c.Snap.MeshOf(realm); {
+	switch m, ok := c.Snap.Meshes[realm]; {
 	case !ok || m.Err != "":
 		cmd.Stays = append(cmd.Stays, "the containers that sind did not make, if any: sind detaches them")
 	case len(m.External) > 0:

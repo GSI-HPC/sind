@@ -17,7 +17,7 @@ so that htmx gives the focus back to the one pressed. It is no live
 fragment, so that an update never takes the focus. */}}
 {{define "more-mon-interval"}}{{with .Data}}<form class="more-ivform" method="post" action="/monitoring/interval" hx-post="/monitoring/interval" hx-swap="outerHTML">{{template "csrf-field" $}}
   <span id="mon-interval-label">Read every</span>
-  <span class="seg" role="group" aria-labelledby="mon-interval-label">{{range .Choices}}<button type="submit" id="mon-interval-{{.Value}}" name="interval" value="{{.Value}}" aria-pressed="{{.Selected}}"{{if .Selected}} class="on"{{end}}>{{.Value}}</button>{{end}}</span>
+  <span class="seg" role="group" aria-labelledby="mon-interval-label">{{range .Choices}}<button type="submit" id="mon-interval-{{.Value}}" name="interval" value="{{.Value}}" aria-pressed="{{.Selected}}">{{.Value}}</button>{{end}}</span>
 </form>{{if .Saved}}<span id="mon-saved" hx-swap-oob="true">Saved: every {{.Saved}}</span>{{else}}<span class="more-saved" role="status"><span id="mon-saved"></span></span>
 <p class="more-ivnote">How often sind ui reads the stacks and their numbers while a page is open. The choice lasts until sind ui stops. Prometheus keeps its own scrape interval.</p>{{end}}{{end}}{{end}}
 
@@ -25,8 +25,8 @@ fragment, so that an update never takes the focus. */}}
 names under .sind. .Data is moreMonitoringData. */}}
 {{define "more-mon-dns"}}{{$fwd := .Forward}}
 {{if eq .HostDNS "off"}}<div class="callout warn">This host does not resolve the names under <span class="mono">.sind</span> (<a href="/doctor">Doctor: DNS policy</a>), so the Open links fail. Use the address with its port instead.{{template "more-mon-forward" $fwd}}</div>
-{{else if eq .HostDNS "ok"}}<p class="muted more-note">Open uses the names under <span class="mono">.sind</span>, which this host resolves.{{template "more-mon-forward" $fwd}}</p>
-{{else}}<p class="muted more-note">Open uses the names under <span class="mono">.sind</span>, which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.{{template "more-mon-forward" $fwd}}</p>{{end}}
+{{else if eq .HostDNS "ok"}}<p class="muted pg-flat">Open uses the names under <span class="mono">.sind</span>, which this host resolves.{{template "more-mon-forward" $fwd}}</p>
+{{else}}<p class="muted pg-flat">Open uses the names under <span class="mono">.sind</span>, which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.{{template "more-mon-forward" $fwd}}</p>{{end}}
 {{end}}
 
 {{/* more-mon-forward says how to reach Grafana from another machine; . is
@@ -35,8 +35,7 @@ its address with the port, "" for none. */}}
 
 {{/* more-monitoring is the live body of the page; .Data is moreMonitoringData. */}}
 {{define "more-monitoring"}}{{with .Data}}
-{{template "more-dockerdown" .DockerErr}}
-{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{template "more-top" .}}
 {{if .Empty}}
 <section class="panel"><div class="empty">
   <p>{{if .Realm}}Realm <b class="mono">{{.Realm}}</b> has{{else}}No realm has{{end}} no monitoring stack.</p>
@@ -64,7 +63,7 @@ its address with the port, "" for none. */}}
         <td role="cell" class="mono more-aside">{{.SlurmVersion}}</td></tr>{{end}}
     </tbody></table></div>
     {{else}}<div class="empty">No cluster of this realm is monitored.</div>{{end}}</section>
-  <section class="panel"><div class="ph"><h2>Services</h2></div><div class="tw"><table class="more-cards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Service</th><th role="columnheader">State</th><th role="columnheader">Address</th><th role="columnheader">Image</th><th role="columnheader"><span class="more-vh">Open</span></th></tr></thead><tbody role="rowgroup">
+  <section class="panel"><div class="ph"><h2>Services</h2></div><div class="tw"><table class="more-cards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Service</th><th role="columnheader">State</th><th role="columnheader">Address</th><th role="columnheader">Image</th><th role="columnheader"><span class="vh">Open</span></th></tr></thead><tbody role="rowgroup">
     {{range .Services}}<tr role="row"><td role="cell"><b>{{.Name}}</b><br><span class="mono faint">{{.Container}}</span></td>
       <td role="cell"><span class="pill{{with .Pill}} {{.}}{{end}}">{{.Text}}</span></td>
       <td role="cell" class="more-long" data-label="Address"><span class="mono">{{.URL}}</span>{{if .Addr}}<br><span class="more-addr"><span class="mono faint">{{.Addr}}</span> <button type="button" class="btn sm" data-more-copy-text="{{.Addr}}" aria-label="Copy the address of {{.Name}}">Copy</button></span>{{end}}</td>

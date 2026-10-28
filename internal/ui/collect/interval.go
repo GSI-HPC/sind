@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -51,35 +52,31 @@ func (i *Interval) Set(d time.Duration) {
 	i.mu.Lock()
 	i.d = d
 	i.mu.Unlock()
+	poke(i.changed)
+}
+
+// poke sends to c unless a send is pending already.
+func poke(c chan struct{}) {
 	select {
-	case i.changed <- struct{}{}:
-	default: // a notice is pending already
+	case c <- struct{}{}:
+	default:
 	}
 }
 
 // Viewers counts the live update streams of the browser: the pages open.
 // A collector whose data only pages show reads it while one is open. It
-// is safe for concurrent use.
+// is safe for concurrent use, and has no page open at first.
 type Viewers struct {
 	mu sync.Mutex
 	n  int
-	// arrived hold, for each collector that asked (arrivals), a notice
-	// that the first page opened, which it has not taken yet.
-	arrived []chan struct{}
+	// arrived tells each collector that asked (arrivals) that the first
+	// page opened.
+	arrived sse.Notifier[struct{}]
 }
-
-// NewViewers returns Viewers with no page open.
-func NewViewers() *Viewers { return &Viewers{} }
 
 // arrivals returns a channel of its own for a collector, which receives
 // when the first page opens.
-func (v *Viewers) arrivals() <-chan struct{} {
-	c := make(chan struct{}, 1)
-	v.mu.Lock()
-	v.arrived = append(v.arrived, c)
-	v.mu.Unlock()
-	return c
-}
+func (v *Viewers) arrivals() <-chan struct{} { return v.arrived.Subscribe().Changed() }
 
 // Watch counts a page in until the function it returns is called. It
 // takes the topics of the page as ui.Env.AddWatcher hands them, and counts
@@ -88,12 +85,7 @@ func (v *Viewers) Watch([]store.Topic) (release func()) {
 	v.mu.Lock()
 	v.n++
 	if v.n == 1 {
-		for _, c := range v.arrived {
-			select {
-			case c <- struct{}{}:
-			default:
-			}
-		}
+		v.arrived.Notify(struct{}{})
 	}
 	v.mu.Unlock()
 	var once sync.Once

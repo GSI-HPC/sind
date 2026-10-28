@@ -45,7 +45,7 @@ func TestActDialog_Frame(t *testing.T) {
 	body = f.get("/dialogs/create-cluster").Body.String()
 	assert.Contains(t, body, `<div class="scrim" id="act-dialog" hx-ext="ignore:morph">`)
 	assert.Contains(t, body, `tabindex="-1" data-act-draft="create-cluster"`)
-	assert.Contains(t, body, `<span class="act-vh" id="act-say" role="status"></span>`)
+	assert.Contains(t, body, `<span class="vh" id="act-say" role="status"></span>`)
 	assert.Contains(t, body, `<div class="act-form">`)
 	assert.Contains(t, body, `<div class="act-yamled" id="act-yamled" hidden>`)
 	assert.NotContains(t, body, "data-act-restored")
@@ -115,9 +115,9 @@ func TestActDraftOf(t *testing.T) {
 	spec := actSpec{Draft: true}
 	link := url.Values{"realm": {"ci"}}
 
-	f, ok := actDraftOf(spec, actForm("realm", "ci", "name", "x", "confirm", "x", "shown", "s", "csrf", "c", "draft", "d"), link)
+	f, ok := actDraftOf(spec, actForm("realm", "ci", "name", "x", "nodes", "a", "nodes", "b", "confirm", "x", "shown", "s", "csrf", "c", "draft", "d"), link)
 	require.True(t, ok)
-	assert.Equal(t, url.Values{"realm": {"ci"}, "name": {"x"}}, f)
+	assert.Equal(t, url.Values{"realm": {"ci"}, "name": {"x"}, "nodes": {"a", "b"}}, f)
 
 	_, ok = actDraftOf(actSpec{}, actForm("realm", "ci"), link)
 	assert.False(t, ok, "a dialog without drafts")
@@ -189,7 +189,7 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	body := f.post("/actions/create-cluster/preview", actForm("name", "My Cluster", "w0-count", "2", "dir", "/scratch/x")).Body.String()
 	assert.Contains(t, body, `<span class="act-status" id="act-status" hx-swap-oob="innerHTML"><button type="button" class="pill bad nodot act-go" data-act-go="name" data-act-say="Name: `)
 	assert.Contains(t, body, `data-act-key="1 name" aria-label="1 problem: Name. Go to the field." title="Go to the field">1 problem: Name <span aria-hidden="true">↑</span></button>`)
-	assert.Contains(t, body, `<span class="act-tot">3 containers · 3 CPUs · 1.5 GiB of 32 GiB</span></span>`)
+	assert.Contains(t, body, `<span class="hint act-tot">3 containers · 3 CPUs · 1.5 GiB of 32 GiB</span></span>`)
 	assert.Contains(t, body, `<div class="callout bad act-probs" id="act-probs" tabindex="-1">`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "dev", "w0-count", "20", "cpus", "0", "dir", "/scratch/dev")).Body.String()
@@ -197,7 +197,7 @@ func TestActPreview_StatusLeadsToTheFirstProblem(t *testing.T) {
 	assert.Contains(t, body, ` 2 problems in all." data-act-key="2 name"`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("name", "hpc", "w0-count", "1", "dir", "/scratch/hpc")).Body.String()
-	assert.Contains(t, body, `<span class="pill ok" data-act-say="Ready. Create runs the command." data-act-key="ready 0">Ready</span><span class="act-tot">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
+	assert.Contains(t, body, `<span class="pill ok" data-act-say="Ready. Create runs the command." data-act-key="ready 0">Ready</span><span class="hint act-tot">2 containers · 2 CPUs · 1 GiB of 32 GiB</span>`)
 
 	// An error has no field: the status shows the list of problems.
 	f.state.configDir = ""

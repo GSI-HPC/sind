@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -93,8 +94,8 @@ func newRunCtx(v *View) runCtx {
 // runPageLoad checks the run exists and tells the task dock not to draw it.
 func runPageLoad(v *View) error {
 	id := v.Params.Get("id")
-	run, ok := v.Snap.Run(id)
-	if !ok {
+	rc := newRunCtx(v)
+	if !rc.Found {
 		m := &Miss{
 			What: fmt.Sprintf("The activity log holds no run %s.", id),
 			Hint: "Activity lists the runs that the log holds. sind keeps the log and one older copy.",
@@ -105,13 +106,7 @@ func runPageLoad(v *View) error {
 		m.Links = append(m.Links, MissLink{Label: "Activity", URL: "/activity"}, missOverview)
 		return m
 	}
-	v.Title = run.Title
-	if t, ok := runTaskOf(v.Snap, run.Trace); ok {
-		v.Title = taskTitle(t, &run)
-	}
-	if v.Title == "" {
-		v.Title = "Run " + id
-	}
+	v.Title = cmp.Or(rc.Run.Title, "Run "+id)
 	v.Params.Set("run", id)
 	return nil
 }
@@ -132,13 +127,11 @@ func runWhen(t, now time.Time) string {
 type runHead struct {
 	// Gone is set when the log no longer holds the run.
 	Gone      bool
-	ID        string
 	Title     string
 	Pill      string
 	PillClass string
-	// Terminal is set for a run that this sind ui did not start, which
-	// it cannot stop; NoStop says why, while the run goes on.
-	Terminal bool
+	// NoStop says why sind ui cannot stop a run that goes on and that it
+	// did not start.
 	NoStop   string
 	Origin   string
 	Program  string
@@ -163,23 +156,19 @@ type runHead struct {
 	RetryID string
 	Edit    *runLink
 	CSRF    string
-	// Running is set while the run goes on.
-	Running bool
 	// TaskID is the task to stop; empty when sind ui cannot stop the run.
 	// Stop is its button, nil while it is being stopped.
 	TaskID    string
 	Stop      *runStop
 	Canceling bool
-	Suspended bool
 }
 
 // runHeadOf builds the head of the run page.
 func runHeadOf(rc runCtx) *runHead {
 	run := rc.Run
 	h := &runHead{
-		ID: run.ID, Title: run.Title, Terminal: rc.Task == nil, Origin: runSourceText(runSource(rc.Snap, run)),
+		Title: run.Title, Origin: runSourceText(runSource(rc.Snap, run)),
 		Started: runWhen(run.Start, rc.Now), Trace: run.Trace, TraceTip: run.Trace,
-		Running: !run.Done(), Suspended: run.Suspended,
 	}
 	h.Pill, h.PillClass = runPill(run, rc.Task)
 	if len(h.Trace) > 8 {
@@ -191,7 +180,7 @@ func runHeadOf(rc runCtx) *runHead {
 	if run.Root.Exit != nil {
 		h.Exit = "exit " + strconv.Itoa(*run.Root.Exit)
 	}
-	if h.Terminal && h.Running {
+	if rc.Task == nil && !run.Done() {
 		switch runSource(rc.Snap, run) {
 		case runFromUI:
 			h.NoStop = "Another sind ui started this run, so this one cannot stop it. Stop it there."
@@ -203,7 +192,7 @@ func runHeadOf(rc runCtx) *runHead {
 	}
 	if t := rc.Task; t != nil {
 		h.CSRF = rc.CSRF
-		if h.Running {
+		if !run.Done() {
 			h.TaskID, h.Canceling = t.ID, t.Canceling
 			h.Stop = newRunStop(*t, &rc.Run, run.Title, rc.CSRF, false)
 		}
@@ -293,8 +282,9 @@ type runLink struct{ Label, Href string }
 // while it exists, the list of clusters once it is gone, and the mesh for
 // a command of the realm. Nil for a task of none of them.
 func runBack(snap store.Snapshot, t store.Task) *runLink {
+	_, exists := snap.Cluster(t.Realm, t.Cluster)
 	switch {
-	case t.Cluster != "" && runHasCluster(snap, t.Realm, t.Cluster):
+	case t.Cluster != "" && exists:
 		return &runLink{Label: "Open " + t.Cluster, Href: "/clusters/" + t.Realm + "/" + t.Cluster}
 	case t.Cluster != "":
 		return &runLink{Label: "Open Clusters", Href: "/clusters"}
@@ -322,16 +312,6 @@ func runRetry(t store.Task, class string) (string, *runLink) {
 		return "", &runLink{Label: "Try again…", Href: actEditHref(t)}
 	}
 	return t.ID, &runLink{Label: "Edit and try again…", Href: actEditHref(t)}
-}
-
-// runHasCluster reports whether the snapshot holds the cluster.
-func runHasCluster(snap store.Snapshot, realm, name string) bool {
-	for _, c := range snap.Clusters[realm] {
-		if c.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // runSummary is what the run page draws its summary and its timeline from,
@@ -459,19 +439,11 @@ func runStopped(run store.Run) *runFailPanel {
 	})
 	p := &runFailPanel{Title: "Stopped", Class: "warn"}
 	p.Notes = append(p.Notes, fmt.Sprintf("The run was interrupted. %s stopped while they ran, and %s never started.",
-		runPlural(stopped, "target"), runPlural(never, "target")))
+		pgPlural(stopped, "target", "targets"), pgPlural(never, "target", "targets")))
 	if note := runRollbackNote(run); note != "" {
 		p.Notes = append(p.Notes, note)
 	}
 	return p
-}
-
-// runPlural writes a count and its noun: "1 target", "3 targets".
-func runPlural(n int, noun string) string {
-	if n == 1 {
-		return "1 " + noun
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // runRollbackNote says what became of the rollback step of a run, or is

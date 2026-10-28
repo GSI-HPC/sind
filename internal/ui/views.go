@@ -19,19 +19,22 @@ type NavItem struct {
 	// Main puts the entry in the bar at the bottom of a phone's screen;
 	// the others are in the bar's More sheet.
 	Main bool
+	// Chord is the key that opens the page after g. help.js holds the
+	// same list.
+	Chord string
 }
 
 // navItems are the entries of the rail, in order. The pages that they link
 // to come from other parts of sind ui.
 var navItems = []NavItem{
-	{"overview", "Overview", "/", "Overview", true},
-	{"clusters", "Clusters", "/clusters", "Realm", true},
-	{"nodes", "Nodes", "/nodes", "Realm", true},
-	{"mesh", "Mesh and DNS", "/mesh", "Realm", false},
-	{"monitoring", "Monitoring", "/monitoring", "Realm", false},
-	{"topology", "Topology", "/topology", "Realm", false},
-	{"doctor", "Doctor", "/doctor", "Host", true},
-	{"activity", "Activity", "/activity", "Host", false},
+	{"overview", "Overview", "/", "Overview", true, "o"},
+	{"clusters", "Clusters", "/clusters", "Realm", true, "c"},
+	{"nodes", "Nodes", "/nodes", "Realm", true, "n"},
+	{"mesh", "Mesh and DNS", "/mesh", "Realm", false, "m"},
+	{"monitoring", "Monitoring", "/monitoring", "Realm", false, "p"},
+	{"topology", "Topology", "/topology", "Realm", false, "t"},
+	{"doctor", "Doctor", "/doctor", "Host", true, "d"},
+	{"activity", "Activity", "/activity", "Host", false, "a"},
 }
 
 // railData is what the rail fragment draws: the groups of entries, and for
@@ -96,7 +99,7 @@ func (r *Registry) rail(v *View) railData {
 	d := railData{More: navMore{Icon: icons + "more"}}
 	for _, it := range navItems {
 		e := navEntry{NavItem: it, On: it.Key == v.Nav, Icon: icons + it.Key}
-		if fn := r.navCount(it.Key); fn != nil {
+		if fn := r.navCounts[it.Key]; fn != nil {
 			e.Count = fn(v.Snap, v.Now)
 		}
 		if !it.Main {
@@ -115,11 +118,4 @@ func (r *Registry) rail(v *View) railData {
 		}
 	}
 	return d
-}
-
-// navCount returns the count function of the rail entry key, or nil.
-func (r *Registry) navCount(key string) NavCountFunc {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.navCounts[key]
 }

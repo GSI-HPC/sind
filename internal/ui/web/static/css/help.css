@@ -13,7 +13,6 @@
 .helppane .hb{padding:14px 16px;overflow-y:auto;flex:1;display:grid;gap:14px;align-content:start}
 .helppane .hb:focus{outline:0}
 .helppane .hb>div{display:grid;gap:12px;align-content:start}
-#help-status,.pvh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The texts of an entry, in the pane and on the help page. */
 :is(.helppane,.helpdoc) .kind{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
@@ -27,12 +26,10 @@
 :is(.helppane,.helpdoc) .steps{margin:0;padding-left:18px;display:grid;gap:6px}
 :is(.helppane,.helpdoc) .steps li{padding:0;border:0}
 :is(.helppane,.helpdoc) .chips{display:flex;gap:6px;flex-wrap:wrap}
-:is(.helppane,.helpdoc) .chips a:hover{text-decoration:none}
 :is(.helppane,.helpdoc) .stack{display:grid;gap:8px}
 :is(.helppane,.helpdoc) .link{display:flex;align-items:baseline;gap:10px;width:100%;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--accent)}
 :is(.helppane,.helpdoc) .link:hover{text-decoration:underline}
 :is(.helppane,.helpdoc) .link small{margin-left:auto;font:var(--t-xs) var(--f-mono);color:var(--faint)}
-:is(.helppane,.helpdoc) .hint{font-size:var(--t-sm);color:var(--muted)}
 .gloss{display:grid;gap:4px;margin:0}
 .gloss dt{font-weight:600;margin-top:8px}
 .gloss dd{margin:0;color:var(--muted);font-size:var(--t-md)}
@@ -62,7 +59,6 @@
 
 .hintcard{position:fixed;z-index:60;width:300px;max-width:calc(100% - 16px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:10px 12px;font-size:var(--t-md);display:grid;gap:6px;pointer-events:none}
 .hintcard .k{font:700 var(--t-xs) var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--info)}
-.hintcard .k.bad{color:var(--bad)}
 .hintcard .more{font-size:var(--t-sm)}
 .hintcard .mono{overflow-wrap:anywhere}
 
@@ -72,7 +68,6 @@
 .palette input{flex:1;min-width:0;border:0;padding:12px 14px;font-size:var(--t-lg);background:var(--panel);outline:0}
 .palette .pin .iconbtn{margin-right:8px}
 .palette .pstep{display:flex;gap:8px;align-items:center;padding:10px 14px 0;font-size:var(--t-sm)}
-.palette .pstep[hidden]{display:none}
 .palette .pstep .link{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font:inherit}
 .palette .pl{max-height:50vh;overflow-y:auto}
 .palette .pi{display:flex;gap:10px;padding:9px 14px;cursor:pointer;align-items:center;color:var(--fg);width:100%;border:0;background:none;font:inherit;text-align:left}

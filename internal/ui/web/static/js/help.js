@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // sind ui's help, in layers that open only when asked: a hint card when the
-// pointer rests on a dotted word (data-word) or on an action's button
-// (data-help), the help pane that ? opens, and the jump box that / opens.
+// pointer rests on a dotted word (data-word), the help pane that ? opens, and
+// the jump box that / opens.
 // The texts come from the server as HTML, from GET /help and GET /jump.
 // Nothing here evaluates text, and no storage is needed to work: every access
 // is guarded.
@@ -22,7 +22,6 @@
   const PANE_KEY = 'sind-ui-help-pane';
   // KEYS_KEY is "off" when the user turned the single-key shortcuts off.
   const KEYS_KEY = 'sind-ui-keys';
-  const delay = { word: 300, action: 700 };
 
   // PAGE stands for the help of the page that shows; the server finds it by
   // the path.
@@ -117,17 +116,6 @@
     return r.text();
   }
 
-  function toast(text) {
-    const old = document.querySelector('.toast');
-    if (old) old.remove();
-    const el = document.createElement('div');
-    el.className = 'toast';
-    el.setAttribute('role', 'status');
-    el.textContent = text;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2600);
-  }
-
   // Words you have seen lose their dots, so pages get quieter as you learn.
   function see(id) {
     if (H.seen.has(id)) return;
@@ -157,13 +145,8 @@
 
   // Hint cards.
 
-  const target = t => t && t.closest ? t.closest('[data-word], [data-help]') : null;
-  function topicOf(el) {
-    if (!el) return null;
-    if (el.dataset.word) return 'word/' + el.dataset.word;
-    if (el.dataset.help) return 'action/' + el.dataset.help;
-    return null;
-  }
+  const target = t => t && t.closest ? t.closest('[data-word]') : null;
+  const topicOf = el => el && el.dataset.word ? 'word/' + el.dataset.word : null;
 
   async function showHint(el) {
     const topic = topicOf(el);
@@ -189,7 +172,7 @@
     card.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
     card.style.top = y + 'px';
     H.hint = { card, anchor: el, topic };
-    if (el.dataset.word) see(el.dataset.word);
+    see(el.dataset.word);
   }
 
   function hideHint() {
@@ -278,10 +261,7 @@
   function syncButton() {
     const on = !!pane();
     document.body.classList.toggle('help-open', on);
-    for (const b of document.querySelectorAll('[data-help-toggle]')) {
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-expanded', String(on));
-    }
+    for (const b of document.querySelectorAll('[data-help-toggle]')) b.setAttribute('aria-expanded', String(on));
   }
 
   function save() {
@@ -428,9 +408,6 @@
     H.jumpBack = null;
   }
 
-  const PLACEHOLDER = 'Jump to… (start with ? for help only)';
-  const NAME = 'Jump to';
-
   // step asks for the cluster or the realm of an action, or with null
   // goes back to the first list.
   function step(opt) {
@@ -442,8 +419,8 @@
     if (opt) {
       $('jump-step-name').textContent = opt.firstChild.textContent.replace(/…$/, '');
     }
-    input.placeholder = opt ? '' : PLACEHOLDER;
-    input.setAttribute('aria-label', NAME);
+    input.placeholder = opt ? '' : 'Jump to… (start with ? for help only)';
+    input.setAttribute('aria-label', 'Jump to');
     input.focus();
     refreshJump();
   }
@@ -504,12 +481,10 @@
     if (on) on.click();
   }
 
-  // openDialog opens the dialog of a link over the page, as its buttons do;
-  // without htmx, the browser opens the link as a page of its own.
+  // openDialog opens the dialog of a link over the page, as its buttons do.
   function openDialog(href) {
     closeJump();
-    if (window.htmx) window.htmx.ajax('GET', href, { target: '#layer', swap: 'innerHTML' });
-    else location.assign(href);
+    htmx.ajax('GET', href, { target: '#layer', swap: 'innerHTML' });
   }
 
   // runCmd runs a command of the jump box.
@@ -519,7 +494,8 @@
     if (cmd === 'theme') { const b = document.querySelector('[data-theme-toggle]'); if (b) b.click(); return; }
     if (cmd === 'keys') {
       setKeys(!keysOn());
-      toast(keysOn() ? 'Single-key shortcuts are on.' : 'Single-key shortcuts are off. Ctrl+K still opens the jump box.');
+      // app.js shows the toast.
+      document.dispatchEvent(new CustomEvent('sind:toast', { detail: keysOn() ? 'Single-key shortcuts are on.' : 'Single-key shortcuts are off. Ctrl+K still opens the jump box.' }));
     }
   }
 
@@ -556,7 +532,7 @@
     if (!el || el.closest('#helppane, #jump')) { hideHint(); return; }
     if (H.hint && H.hint.anchor === el) return;
     hideHint();
-    H.timer = setTimeout(() => { if (H.over === el) showHint(el); }, el.dataset.word ? delay.word : delay.action);
+    H.timer = setTimeout(() => { if (H.over === el) showHint(el); }, 300);
   });
   document.addEventListener('mouseout', ev => {
     const el = target(ev.target);
@@ -582,13 +558,6 @@
     if (t.closest('[data-palette-open]')) { openJump(''); return; }
     if (t.closest('[data-jump-close]')) { closeJump(); return; }
     if (t.closest('[data-jump-back]')) { step(null); return; }
-    const copy = t.closest('[data-help-copy]');
-    if (copy) {
-      const text = copy.dataset.helpCopy;
-      const done = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
-      done.then(() => toast('Copied'), () => toast('Select the text and press Ctrl+C to copy'));
-      return;
-    }
     const topic = t.closest('[data-help-topic]');
     // On the help page, a topic is a link that the browser follows.
     if (topic && !topic.closest('.helpdoc')) {
@@ -682,7 +651,6 @@
       }).observe(l, { childList: true });
     }
     mark();
-    syncKeys();
     const st = session.get(PANE_KEY);
     if (st && st.open && Array.isArray(st.stack) && st.stack.length && ensurePane()) {
       H.stack = st.stack.filter(t => typeof t === 'string' && TOPIC_RE.test(t));

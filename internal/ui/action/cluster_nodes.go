@@ -48,8 +48,9 @@ const (
 	maxCPUs   = 1024
 )
 
-// groupPattern is the key of a worker group, which the dialog makes.
-var groupPattern = regexp.MustCompile(`^w[0-9a-z]{1,8}$`)
+// GroupPattern is the key of a worker group, which the dialog makes and
+// which ends up in ids.
+var GroupPattern = regexp.MustCompile(`^w[0-9a-z]{1,8}$`)
 
 // WorkerGroups returns the keys of the worker groups of the form, in order:
 // the values of the field "wg", or w0 for a form without one.
@@ -82,7 +83,7 @@ func ClusterFieldsOf(f Form) []string {
 		fields = append(fields, nodeFields(role)...)
 	}
 	for _, g := range WorkerGroups(f) {
-		if groupPattern.MatchString(g) {
+		if GroupPattern.MatchString(g) {
 			fields = append(fields, g+"-count")
 			fields = append(fields, nodeFields(g)...)
 		}
@@ -130,18 +131,18 @@ func nodeDefaults(f Form, d *config.Defaults, ps *problems) {
 		ps.add("cpus", "CPUs per node", true, fmt.Errorf("write a number from 1 to %d", maxCPUs))
 		d.CPUs = small.CPUs
 	}
-	if memory := strings.TrimSpace(f.Get("memory")); memory != "" {
-		if err := config.CheckMemory("memory", memory); err != nil {
-			ps.add("memory", "Memory per node", true, err)
+	sizeOf(f, "memory", "Memory per node", config.CheckMemory, "memory", &d.Memory, ps)
+	sizeOf(f, "tmp", "/tmp per node", config.CheckTmpSize, "/tmp size", &d.TmpSize, ps)
+}
+
+// sizeOf reads the memory or /tmp size of field, which check takes as
+// name, into v, which keeps its value where the field is empty or wrong.
+func sizeOf(f Form, field, label string, check func(name, value string) error, name string, v *string, ps *problems) {
+	if s := strings.TrimSpace(f.Get(field)); s != "" {
+		if err := check(name, s); err != nil {
+			ps.add(field, label, true, err)
 		} else {
-			d.Memory = memory
-		}
-	}
-	if tmp := strings.TrimSpace(f.Get("tmp")); tmp != "" {
-		if err := config.CheckTmpSize("/tmp size", tmp); err != nil {
-			ps.add("tmp", "/tmp per node", true, err)
-		} else {
-			d.TmpSize = tmp
+			*v = s
 		}
 	}
 }
@@ -170,7 +171,7 @@ func clusterNodes(f Form, ps *problems) ([]config.Node, []PlannedNode) {
 	var seen []string
 	for _, g := range WorkerGroups(f) {
 		switch {
-		case !groupPattern.MatchString(g) || slices.Contains(seen, g):
+		case !GroupPattern.MatchString(g) || slices.Contains(seen, g):
 			ps.add("", "Workers", false, fmt.Errorf("the worker group %q is not one that the dialog made; open the dialog again", g))
 			continue
 		case len(seen) == maxGroups:
@@ -218,32 +219,18 @@ func nodeSize(f Form, key, label string, n *config.Node, ps *problems) {
 			ps.add(key+"-image", label+" image", true, err)
 		}
 	}
-	if s := get("cpus"); s != "" {
-		if cpus, err := strconv.Atoi(s); err == nil && cpus >= 1 && cpus <= maxCPUs {
-			n.CPUs = cpus
-		} else {
-			ps.add(key+"-cpus", label+" CPUs", true, fmt.Errorf("write a number from 1 to %d, or nothing for the node defaults", maxCPUs))
-		}
+	if cpus, err := number(f, key+"-cpus", "", 1, maxCPUs, 0); err != nil {
+		ps.add(key+"-cpus", label+" CPUs", true, fmt.Errorf("write a number from 1 to %d, or nothing for the node defaults", maxCPUs))
+	} else {
+		n.CPUs = cpus
 	}
-	if memory := get("memory"); memory != "" {
-		if err := config.CheckMemory("memory", memory); err != nil {
-			ps.add(key+"-memory", label+" memory", true, err)
-		} else {
-			n.Memory = memory
-		}
-	}
-	if tmp := get("tmp"); tmp != "" {
-		if err := config.CheckTmpSize("/tmp size", tmp); err != nil {
-			ps.add(key+"-tmp", label+" /tmp", true, err)
-		} else {
-			n.TmpSize = tmp
-		}
-	}
+	sizeOf(f, key+"-memory", label+" memory", config.CheckMemory, "memory", &n.Memory, ps)
+	sizeOf(f, key+"-tmp", label+" /tmp", config.CheckTmpSize, "/tmp size", &n.TmpSize, ps)
 	if key != "submitter" && checkbox(f, key+"-unmanaged", label+" unmanaged", ps) {
 		n.Managed = new(bool)
 	}
 	for _, l := range nodeLists {
-		values := strings.FieldsFunc(get(l.attr), func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' })
+		values := splitList(get(l.attr))
 		if len(values) == 0 {
 			continue
 		}

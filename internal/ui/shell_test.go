@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ func TestShellSkipLinkAndLiveRegions(t *testing.T) {
 
 	// The skip link is the first thing of the page that takes the focus,
 	// and the content can take it.
-	assert.Contains(t, body, "<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n<div class=\"app\"")
+	assert.Contains(t, body, "\"}'>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n<div class=\"app\"")
 	assert.Contains(t, body, `<main class="main" id="main" tabindex="-1">`)
 	// The banner of a lost connection and the line that tells screen
 	// readers what a live update changed are there, and empty.
@@ -64,13 +65,13 @@ func TestRailMore(t *testing.T) {
 
 	// More shows the most urgent count of the sheet: a failure before work
 	// that goes on, and a plain count never.
-	reg.SetNavCount("monitoring", func(store.Snapshot) NavCount { return NavCount{Text: "4"} })
+	reg.SetNavCount("monitoring", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "4"} })
 	assert.Equal(t, NavCount{}, reg.rail(view("")).More.Count)
-	reg.SetNavCount("activity", func(store.Snapshot) NavCount { return NavCount{Text: "2 running", Class: "run"} })
+	reg.SetNavCount("activity", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "2 running", Class: "run"} })
 	m := reg.rail(view("")).More
 	assert.Equal(t, NavCount{Text: "▸", Class: "run"}, m.Count)
 	assert.Equal(t, "Activity: 2 running", m.Note)
-	reg.SetNavCount("mesh", func(store.Snapshot) NavCount { return NavCount{Text: "1", Class: "bad"} })
+	reg.SetNavCount("mesh", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "1", Class: "bad"} })
 	m = reg.rail(view("")).More
 	assert.Equal(t, NavCount{Text: "!", Class: "bad"}, m.Count, "the failure of Mesh stays over the work of Activity")
 	assert.Equal(t, "Mesh and DNS: 1", m.Note)
@@ -78,7 +79,7 @@ func TestRailMore(t *testing.T) {
 
 func TestRailMoreCountInThePage(t *testing.T) {
 	cfg, st := testConfig(t)
-	cfg.Registry.SetNavCount("activity", func(store.Snapshot) NavCount { return NavCount{Text: "1 running", Class: "run"} })
+	cfg.Registry.SetNavCount("activity", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "1 running", Class: "run"} })
 	ts := newTestServerFrom(t, cfg, st).login()
 	body := ts.get("/demo/x").Body.String()
 	assert.Contains(t, body, `More<span class="n run" aria-hidden="true">▸</span><span class="vh">, Activity: 1 running</span></button>`)

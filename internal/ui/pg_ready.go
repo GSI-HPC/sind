@@ -65,15 +65,14 @@ type pgReady struct {
 	Note     string
 }
 
-// pgEntry returns the node that `sind enter` opens a shell on: the
-// submitter when the cluster has one, else the controller.
-func pgEntry(nodes []pgNode) string {
-	for _, n := range nodes {
-		if n.Role == config.RoleSubmitter {
-			return "submitter"
-		}
+// pgEnterCmd returns the command that opens a shell on the cluster, on
+// the submitter when it has one, else on the controller.
+func pgEnterCmd(d *pgClusterView) pgCmd {
+	entry := "controller"
+	if slices.ContainsFunc(d.Cluster.Nodes, func(n pgNode) bool { return n.Role == config.RoleSubmitter }) {
+		entry = "submitter"
 	}
-	return "controller"
+	return pgCmd{"Open a shell on the " + entry, pgSind(d.Realm) + " enter" + pgClusterArg(d.Name)}
 }
 
 // pgPowerFix returns the power dialog that may fix a node that does not
@@ -89,7 +88,7 @@ func pgPowerFix(n pgNode) (pgAction, bool) {
 	case len(n.Down()) == 0:
 		return pgAction{}, false
 	}
-	return pgDialogAction(label, "sm ghost", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", op), true
+	return n.power(label, "sm ghost", op), true
 }
 
 // pgFixActions returns the links that help with a node: its logs, and
@@ -125,13 +124,12 @@ func pgWhyNot(n pgNode, svc string) string {
 // what Slurm says.
 func pgReadyOf(d *pgClusterView) *pgReady {
 	r := &pgReady{Verdict: "not checked yet"}
-	entry := pgEntry(d.Cluster.Nodes)
 	data := cluster.DefaultDataMountPath
 	if d.Data != nil {
 		data = d.Data.Path
 	}
 	r.Commands = []pgCmd{
-		{"Open a shell on the " + entry, fmt.Sprintf("%s enter%s", pgSind(d.Realm), pgClusterArg(d.Name))},
+		pgEnterCmd(d),
 		{"In that shell, submit a test job and show the queue", "sbatch --chdir=" + data + " --wrap hostname && squeue"},
 	}
 	r.Note = "Put job scripts in " + data + ": every node sees it, and the output of the test job lands there."

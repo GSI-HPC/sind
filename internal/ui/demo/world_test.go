@@ -21,11 +21,22 @@ func seededStore(t *testing.T) (*World, *store.Store) {
 	return w, st
 }
 
+// slurmdUp reports whether the slurmd of worker-4 of dev runs, as the
+// store has it.
+func slurmdUp(st *store.Store) bool {
+	for _, n := range st.Snapshot().Status("sind", "dev").Nodes {
+		if n.Name == "worker-4.dev" {
+			return n.Health.Services[probe.ServiceSlurmd]
+		}
+	}
+	return false
+}
+
 func TestSeeded(t *testing.T) {
 	_, st := seededStore(t)
 	sn := st.Snapshot()
 
-	assert.True(t, sn.Docker.Reachable())
+	assert.Equal(t, store.DockerState{Checked: true, MemTotal: HostMemory, NCPU: 16}, sn.Docker)
 	require.Len(t, sn.Realms, 2)
 	assert.Equal(t, "ci", sn.Realms[0].Name)
 	assert.Equal(t, 1, sn.Realms[0].Clusters)
@@ -47,17 +58,17 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, 6, dev.Workers)
 	assert.Equal(t, "25.11.8", byName["legacy"].SlurmVersion)
 
-	require.NotNil(t, sn.MonitoringOf("sind"))
+	require.NotNil(t, sn.Monitorings["sind"])
 	// dev's six workers are Slurm's nodes; worker-4's slurmd is down.
 	assert.Equal(t, &cluster.SlurmCounts{Nodes: 6, NodesDown: 1, JobsRunning: 5, JobsPending: demoPending},
-		sn.MonitoringOf("sind").Clusters[0].Slurm)
-	assert.Nil(t, sn.MonitoringOf("ci"), "monitoring in one realm only")
-	m, ok := sn.MeshOf("sind")
+		sn.Monitorings["sind"].Clusters[0].Slurm)
+	assert.Nil(t, sn.Monitorings["ci"], "monitoring in one realm only")
+	m, ok := sn.Meshes["sind"]
 	require.True(t, ok)
 	assert.Equal(t, []string{"kind-control-plane"}, m.External)
 	assert.Equal(t, "sind-mesh", m.Info.Network)
 	assert.Len(t, m.Records, 11+2+3)
-	ci, _ := sn.MeshOf("ci")
+	ci := sn.Meshes["ci"]
 	assert.Equal(t, "ci-mesh", ci.Info.Network)
 
 	status := sn.Status("sind", "dev")
@@ -118,7 +129,7 @@ func TestWorld_Lifecycle(t *testing.T) {
 	assert.Equal(t, cluster.StateRunning, state()["w0.new.sind.sind"])
 	apply(opStop, "w0")
 	assert.Equal(t, cluster.StateStopped, state()["w0.new.sind.sind"])
-	assert.Equal(t, cluster.StateStopped, st.Snapshot().ClustersOf("sind")[3].State)
+	assert.Equal(t, cluster.StateStopped, st.Snapshot().Clusters["sind"][3].State)
 
 	apply(opStart, "nobody") // a node that is not there
 	w.apply("sind", opStart, node{name: "w0", cluster: "nowhere"})
@@ -141,7 +152,7 @@ func TestWorld_RealmGoes(t *testing.T) {
 	require.Len(t, sn.Realms, 1)
 	assert.Empty(t, sn.Clusters["ci"])
 	assert.Empty(t, sn.Nodes["ci"])
-	_, ok := sn.MeshOf("ci")
+	_, ok := sn.Meshes["ci"]
 	assert.False(t, ok)
 	assert.Nil(t, sn.Status("ci", "pr-145"))
 }
@@ -150,7 +161,7 @@ func TestWorld_Monitoring(t *testing.T) {
 	w, st := seededStore(t)
 	w.apply("ci", opMonitor, node{})
 	w.Publish(st)
-	m := st.Snapshot().MonitoringOf("ci")
+	m := st.Snapshot().Monitorings["ci"]
 	require.NotNil(t, m)
 	assert.Len(t, m.Services, 4)
 	assert.Equal(t, "http://grafana.ci.sind:3000", m.Services[0].URL)
@@ -162,11 +173,11 @@ func TestWorld_Connect(t *testing.T) {
 	w.apply("sind", opConnect, node{name: "minio"})
 	w.apply("sind", opConnect, node{name: "minio"})
 	w.Publish(st)
-	m, _ := st.Snapshot().MeshOf("sind")
+	m := st.Snapshot().Meshes["sind"]
 	assert.Equal(t, []string{"kind-control-plane", "minio"}, m.External)
 	w.apply("sind", opDisconn, node{name: "kind-control-plane"})
 	w.Publish(st)
-	m, _ = st.Snapshot().MeshOf("sind")
+	m = st.Snapshot().Meshes["sind"]
 	assert.Equal(t, []string{"minio"}, m.External)
 
 	// A realm that only has a connected container is no realm.
@@ -177,21 +188,13 @@ func TestWorld_Connect(t *testing.T) {
 
 func TestWorld_Drift(t *testing.T) {
 	w, st := seededStore(t)
-	up := func() bool {
-		for _, n := range st.Snapshot().Status("sind", "dev").Nodes {
-			if n.Name == "worker-4.dev" {
-				return n.Health.Services[probe.ServiceSlurmd]
-			}
-		}
-		return false
-	}
-	require.False(t, up())
+	require.False(t, slurmdUp(st))
 	assert.True(t, w.Drift())
 	w.Publish(st)
-	assert.True(t, up())
+	assert.True(t, slurmdUp(st))
 	assert.True(t, w.Drift())
 	w.Publish(st)
-	assert.False(t, up())
+	assert.False(t, slurmdUp(st))
 
 	w.apply("sind", opStop, node{name: "worker-4", cluster: "dev"})
 	assert.False(t, w.Drift(), "a node that is stopped has nothing to flip")
@@ -206,8 +209,7 @@ func TestWorld_Drift(t *testing.T) {
 func TestWorld_Queries(t *testing.T) {
 	w := Seeded()
 	assert.Equal(t, []string{"default", "dev", "legacy"}, w.clustersOf("sind"))
-	assert.Equal(t, 3, w.Count("sind"))
-	assert.Equal(t, 0, w.Count("nowhere"))
+	assert.Empty(t, w.clustersOf("nowhere"))
 	assert.Nil(t, w.nodesOf("sind", "nowhere"))
 	assert.Len(t, w.nodesOf("sind", "dev"), 11)
 	assert.Nil(t, w.lookup("nowhere", "dev"))

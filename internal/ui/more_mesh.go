@@ -3,15 +3,12 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() {
-	RegisterFragment(Fragment{
+	defaultRegistry.AddFragment(Fragment{
 		Name:     "more-mesh",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker},
 		Prefixes: []string{"mesh/", "networks/", "nodes/"},
@@ -19,10 +16,10 @@ func init() {
 		Load:     moreMeshLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	RegisterRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgRealmRoute(Page{
 		Name: "more-mesh", Pattern: "GET /mesh", Title: "Mesh and DNS", Nav: "mesh",
 		Params: []string{"realm"}, Fragments: []string{"more-mesh"},
-	}))
+	}, true, false))
 }
 
 // moreMeshData is what the Mesh and DNS page shows.
@@ -67,9 +64,8 @@ type moreDNSRecord struct {
 // moreDNSRecords adds the node pages to the records of a realm.
 func moreDNSRecords(sn store.Snapshot, realm string, records []mesh.DNSRecord) []moreDNSRecord {
 	pages := map[string]string{}
-	for _, n := range sn.NodesOf(realm) {
-		short := strings.TrimPrefix(n.Container, cluster.ContainerPrefix(realm, n.Cluster))
-		pages[n.FQDN] = "/nodes/" + realm + "/" + n.Cluster + "/" + short
+	for _, n := range sn.Nodes[realm] {
+		pages[n.FQDN] = pgNodeURL(realm, n.Cluster, pgShort(realm, n.Cluster, n.Container))
 	}
 	out := make([]moreDNSRecord, len(records))
 	for i, r := range records {
@@ -96,21 +92,21 @@ func moreMeshLoad(v *View) error {
 	for _, name := range realms {
 		r := moreMeshRealm{
 			Name:       name,
-			ConnectURL: moreDialogURL("connect", "realm", name),
-			DeleteURL:  moreDialogURL("delete-realm", "realm", name),
+			ConnectURL: pgDialog("connect", "realm", name),
+			DeleteURL:  pgDialog("delete-realm", "realm", name),
 		}
-		if m, ok := v.Snap.MeshOf(name); ok {
+		if m, ok := v.Snap.Meshes[name]; ok {
 			r.Err, r.Records = m.Err, moreDNSRecords(v.Snap, name, m.Records)
 			if m.Info != nil {
 				r.Has, r.Info = true, *m.Info
-				for _, n := range v.Snap.NetworksOf(name) {
+				for _, n := range v.Snap.Networks[name] {
 					if n.Name == m.Info.Network {
 						r.Subnet = n.Subnet
 					}
 				}
 			}
 			for _, e := range m.External {
-				r.External = append(r.External, moreExternal{e, moreDialogURL("disconnect", "realm", name, "nodes", e)})
+				r.External = append(r.External, moreExternal{e, pgDialog("disconnect", "realm", name, "nodes", e)})
 			}
 		}
 		d.Realms = append(d.Realms, r)

@@ -16,17 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// moreGet fetches a page and returns its body, after checking the status.
-func moreGet(t *testing.T, ts *testServer, target string, status int) string {
-	t.Helper()
-	w := ts.get(target)
-	require.Equal(t, status, w.Code, target)
-	return w.Body.String()
-}
-
 func TestMoreMeshPage(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	body := moreGet(t, ts, "/mesh", http.StatusOK)
+	body := pgBody(t, ts, "/mesh", http.StatusOK)
 	for _, want := range []string{
 		"Mesh and DNS", "Realm <b class=\"mono\">sind</b>", "Realm <b class=\"mono\">ci</b>",
 		"sind-mesh", "172.18.0.0/16", "sind-dns", "172.18.255.254", "sind.sind", "sind-ssh-config", "2 records",
@@ -53,15 +45,15 @@ func TestMoreMeshPage(t *testing.T) {
 		assert.Contains(t, body, want)
 	}
 
-	one := moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
+	one := pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.NotContains(t, one, "Realm <b")
 	assert.NotContains(t, one, "has no mesh")
 
-	body = moreGet(t, ts, "/mesh?realm=nope", http.StatusNotFound)
+	body = pgBody(t, ts, "/mesh?realm=nope", http.StatusNotFound)
 	assert.Contains(t, body, "There is no realm nope.")
 	assert.Contains(t, body, "with its last cluster")
 	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=">All realms</a>`)
-	body = moreGet(t, ts, "/mesh?realm=sindd", http.StatusNotFound)
+	body = pgBody(t, ts, "/mesh?realm=sindd", http.StatusNotFound)
 	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=sind">Realm sind</a>`)
 }
 
@@ -69,7 +61,7 @@ func TestMoreMeshStates(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
 	ts.st.SetMesh("ci", store.Mesh{Err: "docker inspect failed"})
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "cannot connect"})
-	body := moreGet(t, ts, "/mesh?realm=ci", http.StatusOK)
+	body := pgBody(t, ts, "/mesh?realm=ci", http.StatusOK)
 	assert.Contains(t, body, "could not be read: docker inspect failed")
 	assert.NotContains(t, body, "dig +short", "no DNS server to ask")
 	assert.Contains(t, body, "Docker is not reachable: cannot connect")
@@ -77,17 +69,17 @@ func TestMoreMeshStates(t *testing.T) {
 	assert.Contains(t, body, "No DNS records yet")
 
 	// A mesh that was read in part keeps its pill honest.
-	m, _ := ts.st.Snapshot().MeshOf("sind")
+	m := ts.st.Snapshot().Meshes["sind"]
 	m.Err = "dns: timeout"
 	ts.st.SetMesh("sind", m)
-	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
+	body = pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.Contains(t, body, `<span class="pill bad">error</span>`)
 	assert.Contains(t, body, "sind-dns")
 
 	// One record is one, not "1 records".
 	m.Records = m.Records[:1]
 	ts.st.SetMesh("sind", m)
-	body = moreGet(t, ts, "/mesh?realm=sind", http.StatusOK)
+	body = pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
 	assert.Contains(t, body, `<span class="chip">1 record</span>`)
 	assert.Contains(t, body, `data-more-count="dns-sind">1 record</span>`)
 }
@@ -106,7 +98,7 @@ func TestMoreNoRealms(t *testing.T) {
 			ts, _ := moreTestServer(t, false, false)
 			ts.st.SetDocker(tc.docker)
 			for _, page := range []string{"/mesh", "/monitoring", "/topology"} {
-				body := moreGet(t, ts, page, http.StatusOK)
+				body := pgBody(t, ts, page, http.StatusOK)
 				assert.Contains(t, body, tc.want, page)
 				assert.NotContains(t, body, "callout warn", page)
 			}
@@ -120,7 +112,7 @@ func TestMoreNoRealms(t *testing.T) {
 
 func TestMoreMonitoringPage(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	body := pgBody(t, ts, "/monitoring", http.StatusOK)
 	for _, want := range []string{
 		"Monitoring", "sind-grafana", "grafana/grafana:13.2.3", "http://grafana.sind.sind:3000",
 		`<span class="pill ok">ready</span>`, `<span class="pill ok">running</span>`, `<span class="pill warn">starting</span>`,
@@ -145,23 +137,23 @@ func TestMoreMonitoringPage(t *testing.T) {
 	}
 	assert.Equal(t, 1, strings.Count(body, "data-more-copy-text="), "only grafana's URL has a name instead of its address")
 
-	one := moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	one := pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	assert.Contains(t, one, "<h2>Stack</h2>")
 	assert.NotContains(t, one, "No stack in")
 
-	empty := moreGet(t, ts, "/monitoring?realm=ci", http.StatusOK)
+	empty := pgBody(t, ts, "/monitoring?realm=ci", http.StatusOK)
 	assert.Contains(t, empty, "Realm <b class=\"mono\">ci</b> has no monitoring stack")
 	assert.Contains(t, empty, "sind create cluster --monitoring")
 	assert.Contains(t, empty, "/dialogs/create-cluster?realm=ci")
 	assert.Contains(t, empty, "Slurm 26.05")
 
-	moreGet(t, ts, "/monitoring?realm=nope", http.StatusNotFound)
+	pgBody(t, ts, "/monitoring?realm=nope", http.StatusNotFound)
 }
 
 func TestMoreMonitoringEmptyAndEdges(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
 	ts.st.SetMonitoring("sind", nil)
-	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	body := pgBody(t, ts, "/monitoring", http.StatusOK)
 	assert.Contains(t, body, "No realm has no monitoring stack")
 
 	ts.st.SetMonitoring("ci", &cluster.Monitoring{Realm: "ci", Services: []cluster.MonitoringService{
@@ -169,7 +161,7 @@ func TestMoreMonitoringEmptyAndEdges(t *testing.T) {
 		{Name: "loki", State: "running", URL: "ftp://x"},
 	}})
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "gone"})
-	body = moreGet(t, ts, "/monitoring?realm=ci", http.StatusOK)
+	body = pgBody(t, ts, "/monitoring?realm=ci", http.StatusOK)
 	assert.Contains(t, body, `<span class="pill bad">missing</span>`)
 	assert.Contains(t, body, "No cluster of this realm is monitored")
 	assert.NotContains(t, body, "Open ↗")
@@ -178,13 +170,13 @@ func TestMoreMonitoringEmptyAndEdges(t *testing.T) {
 
 func TestMoreMonitoringNumbers(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m := *ts.st.Snapshot().Monitorings["sind"]
 	m.Clusters = []cluster.MonitoredCluster{
 		{Name: "dev", Nodes: 4, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 3, NodesDown: 1, NodesDrain: 1, JobsRunning: 7, JobsPending: 12}},
 		{Name: "default", Nodes: 2, SlurmVersion: "26.05.1", Slurm: &cluster.SlurmCounts{Nodes: 1, NodesDown: 2, JobsRunning: 1}},
 	}
 	ts.st.SetMonitoring("sind", &m)
-	body := moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	body := pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	for _, want := range []string{
 		"Nodes running", "Slurm nodes up", "Jobs running", "Jobs pending",
 		// A draining node is up: the counts do not tell whether the
@@ -202,29 +194,29 @@ func TestMoreMonitoringNumbers(t *testing.T) {
 	// Slurm's nodes all up: no line of down ones.
 	m.Clusters = []cluster.MonitoredCluster{{Name: "dev", Slurm: &cluster.SlurmCounts{Nodes: 3}}}
 	ts.st.SetMonitoring("sind", &m)
-	body = moreGet(t, ts, "/monitoring?realm=sind", http.StatusOK)
+	body = pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	assert.Contains(t, body, `data-label="Slurm nodes up">3 of 3</td>`)
 }
 
 func TestMoreMonitoringHostDNS(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	report := func(checks ...store.DoctorCheck) { ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: checks}) }
+	report := func(checks ...store.DoctorCheck) { ts.st.SetDoctor(&store.DoctorReport{Time: pgNow, Checks: checks}) }
 
 	report(store.DoctorCheck{Name: "DNS policy", Status: "ok"})
-	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	body := pgBody(t, ts, "/monitoring", http.StatusOK)
 	assert.Contains(t, body, "which this host resolves. To open Grafana from another machine")
 	assert.NotContains(t, body, "callout warn")
 
 	report(store.DoctorCheck{Name: "Docker Engine", Status: "ok"})
-	body = moreGet(t, ts, "/monitoring", http.StatusOK)
+	body = pgBody(t, ts, "/monitoring", http.StatusOK)
 	assert.Contains(t, body, "which resolve only on the Docker host, with host DNS. If Open fails, use the address with its port.")
 
 	// Without an address of Grafana there is no ssh example.
-	m := *ts.st.Snapshot().MonitoringOf("sind")
+	m := *ts.st.Snapshot().Monitorings["sind"]
 	m.Services = []cluster.MonitoringService{{Name: "grafana", URL: "http://grafana.sind.sind:3000", State: "running"}}
 	ts.st.SetMonitoring("sind", &m)
 	ts.st.SetDoctor(nil)
-	body = moreGet(t, ts, "/monitoring", http.StatusOK)
+	body = pgBody(t, ts, "/monitoring", http.StatusOK)
 	assert.Contains(t, body, "with host DNS. If Open fails")
 	assert.NotContains(t, body, "ssh -L")
 
@@ -233,20 +225,19 @@ func TestMoreMonitoringHostDNS(t *testing.T) {
 
 func TestMoreServiceState(t *testing.T) {
 	for _, tc := range []struct {
-		state            string
-		ready, checked   bool
-		class, text      string
-		wantUnknownState bool
+		state          string
+		ready, checked bool
+		class, text    string
 	}{
-		{"running", false, false, "ok", "running", false},
-		{"running", true, true, "ok", "ready", false},
-		{"running", false, true, "warn", "starting", false},
-		{"missing", false, false, "bad", "missing", false},
-		{"exited", false, false, "bad", "exited", false},
-		{"dead", false, false, "bad", "dead", false},
-		{"paused", false, false, "warn", "paused", false},
-		{"created", false, false, "run", "created", false},
-		{"removing", false, false, "", "removing", true},
+		{"running", false, false, "ok", "running"},
+		{"running", true, true, "ok", "ready"},
+		{"running", false, true, "warn", "starting"},
+		{"missing", false, false, "bad", "missing"},
+		{"exited", false, false, "bad", "exited"},
+		{"dead", false, false, "bad", "dead"},
+		{"paused", false, false, "warn", "paused"},
+		{"created", false, false, "run", "created"},
+		{"removing", false, false, "", "removing"},
 	} {
 		class, text := moreServiceState(cluster.MonitoringService{State: dockerState(tc.state), Ready: tc.ready, Checked: tc.checked})
 		assert.Equal(t, tc.class, class, tc.state)
@@ -255,9 +246,9 @@ func TestMoreServiceState(t *testing.T) {
 }
 
 func TestMoreMonitoringCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}), "no stack, no badge")
+	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}, time.Time{}), "no stack, no badge")
 	ts, _ := moreTestServer(t, true, false)
-	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot()))
+	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot(), time.Time{}))
 	stack := func(states ...string) store.Snapshot {
 		m := &cluster.Monitoring{}
 		for _, s := range states {
@@ -265,25 +256,25 @@ func TestMoreMonitoringCount(t *testing.T) {
 		}
 		return store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": m}}
 	}
-	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running")))
-	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused")))
-	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created")).Label)
-	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited")).Label)
+	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running"), time.Time{}))
+	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused"), time.Time{}))
+	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created"), time.Time{}).Label)
+	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited"), time.Time{}).Label)
 }
 
 func TestMoreMonitoringInterval(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	assert.NotContains(t, moreGet(t, ts, "/monitoring", http.StatusOK), "Read every", "nothing reads the stacks")
+	assert.NotContains(t, pgBody(t, ts, "/monitoring", http.StatusOK), "Read every", "nothing reads the stacks")
 
 	iv := collect.NewInterval(45 * time.Second)
-	ts.srv.Env().Put(moreIntervalKey, iv)
-	body := moreGet(t, ts, "/monitoring", http.StatusOK)
+	ts.srv.env.Put(ColMonitoringIntervalKey, iv)
+	body := pgBody(t, ts, "/monitoring", http.StatusOK)
 	for _, want := range []string{
 		`action="/monitoring/interval"`, `name="csrf" value="` + ts.csrf + `"`, "Read every", `aria-labelledby="mon-interval-label"`,
 		// The ids let htmx give the focus back to the button pressed.
 		`<button type="submit" id="mon-interval-10s" name="interval" value="10s" aria-pressed="false">10s</button>` +
 			`<button type="submit" id="mon-interval-30s" name="interval" value="30s" aria-pressed="false">30s</button>` +
-			`<button type="submit" id="mon-interval-45s" name="interval" value="45s" aria-pressed="true" class="on">45s</button>` +
+			`<button type="submit" id="mon-interval-45s" name="interval" value="45s" aria-pressed="true">45s</button>` +
 			`<button type="submit" id="mon-interval-1m" name="interval" value="1m" aria-pressed="false">1m</button>` +
 			`<button type="submit" id="mon-interval-5m" name="interval" value="5m" aria-pressed="false">5m</button>`,
 		`<span class="more-saved" role="status"><span id="mon-saved"></span></span>`,
@@ -309,7 +300,7 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	w := post("5m", true)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, 5*time.Minute, iv.Get())
-	assert.Contains(t, w.Body.String(), `id="mon-interval-5m" name="interval" value="5m" aria-pressed="true" class="on"`)
+	assert.Contains(t, w.Body.String(), `id="mon-interval-5m" name="interval" value="5m" aria-pressed="true"`)
 	assert.Contains(t, w.Body.String(), `<span id="mon-saved" hx-swap-oob="true">Saved: every 5m</span>`)
 	assert.NotContains(t, w.Body.String(), "more-ivnote", "the note stays on the page")
 	assert.NotContains(t, w.Body.String(), "45s", "a choice that is no longer current goes")
@@ -326,10 +317,10 @@ func TestMoreMonitoringInterval(t *testing.T) {
 	assert.Equal(t, 10*time.Second, iv.Get())
 	assert.Equal(t, http.StatusBadRequest, post(strings.Repeat("1", 5000), true).Code, "a value that is too long")
 
-	ts.srv.Env().Put(moreIntervalKey, nil)
+	ts.srv.env.Put(ColMonitoringIntervalKey, nil)
 	assert.Equal(t, http.StatusNotFound, post("30s", true).Code)
 	moreEnv.Store(nil)
-	assert.Nil(t, moreIntervalOf())
+	assert.Nil(t, moreEnvGet[moreInterval](ColMonitoringIntervalKey))
 }
 
 func TestMoreDuration(t *testing.T) {
@@ -343,7 +334,7 @@ func TestMoreDuration(t *testing.T) {
 
 func TestMoreTopologyPage(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
-	body := moreGet(t, ts, "/topology", http.StatusOK)
+	body := pgBody(t, ts, "/topology", http.StatusOK)
 	for _, want := range []string{
 		"Topology", `<svg viewBox="0 0 900 `, `role="group"`, "Diagram of realm sind", "MESH SIND-MESH", "CLUSTER NETWORKS", "HOST", "NODES",
 		"this host", "Docker Engine 28.5.1", "sind-dns", "DNS · 172.18.255.254", "SSH relay", "sind-grafana", "grafana · 172.18.255.253",
@@ -365,7 +356,7 @@ func TestMoreTopologyPage(t *testing.T) {
 	assert.NotContains(t, body, "style=")
 
 	// The table lists the same things with the same links.
-	table := moreGet(t, ts, "/topology?view=table", http.StatusOK)
+	table := pgBody(t, ts, "/topology?view=table", http.StatusOK)
 	for _, want := range []string{
 		`<table class="more-topotable more-cards" role="table">`, `<th scope="colgroup" colspan="4" role="rowheader">Host and mesh</th>`,
 		`<a href="/doctor">this host</a>`, "Docker Engine 28.5.1",
@@ -378,17 +369,17 @@ func TestMoreTopologyPage(t *testing.T) {
 		assert.Contains(t, table, want)
 	}
 	assert.NotContains(t, table, "<svg viewBox")
-	assert.Contains(t, moreGet(t, ts, "/topology?view=table&realm=ci", http.StatusOK), `href="/topology?realm=ci"`)
+	assert.Contains(t, pgBody(t, ts, "/topology?view=table&realm=ci", http.StatusOK), `href="/topology?realm=ci"`)
 
-	moreGet(t, ts, "/topology?realm=nope", http.StatusNotFound)
-	moreGet(t, ts, "/topology?view=pie", http.StatusBadRequest)
+	pgBody(t, ts, "/topology?realm=nope", http.StatusNotFound)
+	pgBody(t, ts, "/topology?view=pie", http.StatusBadRequest)
 }
 
 func TestMoreTopologyEdges(t *testing.T) {
 	ts, _ := moreTestServer(t, true, false)
 	// A realm with nothing to draw says so.
 	ts.st.SetRealms([]cluster.RealmSummary{{Name: "sind"}, {Name: "bare"}, {Name: "ci"}})
-	body := moreGet(t, ts, "/topology", http.StatusOK)
+	body := pgBody(t, ts, "/topology", http.StatusOK)
 	assert.Contains(t, body, `Nothing to draw for <span class="mono">bare</span>`)
 
 	// No Docker Engine check: the host line says only Docker. A long name is clipped.
@@ -396,13 +387,13 @@ func TestMoreTopologyEdges(t *testing.T) {
 	ts.st.SetMesh("ci", store.Mesh{Err: "unread"})
 	ts.st.SetNodes("ci", moreNodes("ci", "pr-145", 0, -1))
 	ts.st.SetClusters("ci", []cluster.Summary{{Name: "pr-145", State: cluster.StateStopped}})
-	body = moreGet(t, ts, "/topology?realm=ci", http.StatusOK)
+	body = pgBody(t, ts, "/topology?realm=ci", http.StatusOK)
 	assert.Contains(t, body, ">Docker</text>")
 	assert.Contains(t, body, "ci-pr-145-net")
 	assert.Contains(t, body, ">stopped</text>")
 
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "gone"})
-	assert.Contains(t, moreGet(t, ts, "/topology", http.StatusOK), "Docker is not reachable: gone")
+	assert.Contains(t, pgBody(t, ts, "/topology", http.StatusOK), "Docker is not reachable: gone")
 }
 
 func TestMoreTopologyLayout(t *testing.T) {
@@ -433,7 +424,7 @@ func TestMoreTopologyLayout(t *testing.T) {
 
 func TestMoreDoctorPage(t *testing.T) {
 	ts, calls := moreTestServer(t, true, true)
-	body := moreGet(t, ts, "/doctor", http.StatusOK)
+	body := pgBody(t, ts, "/doctor", http.StatusOK)
 	for _, want := range []string{
 		"Doctor", "Docker Engine 28.5.1", "cgroup v2", "1 failed", "1 warning", "checked 3 min ago",
 		`<span class="more-mark ok"`, `<span class="more-mark warn"`, `<span class="more-mark bad"`, `<span class="more-mark "`, ">?</span>",
@@ -449,26 +440,26 @@ func TestMoreDoctorPage(t *testing.T) {
 	assert.NotContains(t, body, "disabled>Check again")
 	assert.Zero(t, *calls)
 
-	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Running: true, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}, {Name: "x", Status: "warning"}, {Name: "y", Status: "warning"}}})
-	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	ts.st.SetDoctor(&store.DoctorReport{Time: pgNow, Running: true, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}, {Name: "x", Status: "warning"}, {Name: "y", Status: "warning"}}})
+	body = pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, `pill run">checking`)
 	assert.Contains(t, body, "disabled>Check again")
 	assert.Contains(t, body, "just now")
 
-	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}, {Name: "x", Status: "warning"}, {Name: "y", Status: "warning"}}})
-	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	ts.st.SetDoctor(&store.DoctorReport{Time: pgNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}, {Name: "x", Status: "warning"}, {Name: "y", Status: "warning"}}})
+	body = pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, "2 warnings")
 	assert.Contains(t, body, "<b>Ready: sind can create clusters on this host.</b> The 2 warnings do not stop sind")
 
-	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}}})
-	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	ts.st.SetDoctor(&store.DoctorReport{Time: pgNow, Checks: []store.DoctorCheck{{Name: "Docker Engine", Status: "ok"}}})
+	body = pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, "all passed")
 	assert.Contains(t, body, `more-verdict ok" role="status"><b>Ready: sind can create clusters on this host.</b> Every check passed.`)
 
 	// A multi-line command has no prompt.
-	ts.st.SetDoctor(&store.DoctorReport{Time: moreNow, Checks: []store.DoctorCheck{{Name: "Docker host", Status: "warning",
+	ts.st.SetDoctor(&store.DoctorReport{Time: pgNow, Checks: []store.DoctorCheck{{Name: "Docker host", Status: "warning",
 		Remediation: "Point the docker CLI here:\n\nunset DOCKER_HOST\ndocker context use default"}}})
-	assert.Contains(t, moreGet(t, ts, "/doctor", http.StatusOK), "<code class=\"nop\">unset DOCKER_HOST\ndocker context use default</code>")
+	assert.Contains(t, pgBody(t, ts, "/doctor", http.StatusOK), "<code class=\"nop\">unset DOCKER_HOST\ndocker context use default</code>")
 }
 
 func TestMoreFixSteps(t *testing.T) {
@@ -513,30 +504,30 @@ func TestMoreDoctorVerdict(t *testing.T) {
 
 func TestMoreDoctorEmptyStates(t *testing.T) {
 	ts, _ := moreTestServer(t, false, true)
-	body := moreGet(t, ts, "/doctor", http.StatusOK)
+	body := pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, "not run yet")
 	assert.Contains(t, body, "No check has run yet. Press Check again to run them.")
 
 	ts.st.SetDoctor(&store.DoctorReport{Running: true})
-	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	body = pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, "The first check is running.")
 	assert.NotContains(t, body, "checked ")
 
 	ts.st.SetDoctor(nil)
 	ts.st.SetDocker(store.DockerState{Checked: true, Err: "Cannot connect to the Docker daemon"})
-	body = moreGet(t, ts, "/doctor", http.StatusOK)
+	body = pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, "Docker is not reachable:")
 	assert.Contains(t, body, "Cannot connect to the Docker daemon")
 
 	// Without a service that runs the checks the button is not there.
 	ts2, _ := moreTestServer(t, false, false)
-	body = moreGet(t, ts2, "/doctor", http.StatusOK)
+	body = pgBody(t, ts2, "/doctor", http.StatusOK)
 	assert.NotContains(t, body, "Check again")
 	assert.NotContains(t, body, "/doctor/check")
 	assert.Contains(t, body, "No check has run yet.")
 	assert.NotContains(t, body, "Press Check again")
 	moreEnv.Store(nil)
-	assert.Nil(t, moreDoctorFunc())
+	assert.Nil(t, moreEnvGet[func()](ColDoctorKey))
 }
 
 func TestMoreDoctorCheck(t *testing.T) {
@@ -580,19 +571,19 @@ func TestMoreDoctorCheck(t *testing.T) {
 }
 
 func TestMoreDoctorCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}))
+	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}, time.Time{}))
 	ok := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}}}
-	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}))
+	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}, time.Time{}))
 	warn := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}))
+	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}, time.Time{}))
 	bad := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "warning"}, {Status: "failed"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}))
+	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}, time.Time{}))
 	worse := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "failed"}, {Status: "failed"}}}
-	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}))
+	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}, time.Time{}))
 
 	// The rail of any page shows both badges, with their meaning in words.
 	ts, _ := moreTestServer(t, true, false)
-	body := moreGet(t, ts, "/doctor", http.StatusOK)
+	body := pgBody(t, ts, "/doctor", http.StatusOK)
 	assert.Contains(t, body, `<span class="n bad" title="1 host check failed, 2 warnings"><span aria-hidden="true">1 failed</span><span class="vh">, 1 host check failed, 2 warnings</span></span>`)
 	assert.Contains(t, body, `<span class="n warn" title="1 monitoring service is not ready yet"><span aria-hidden="true">1 starting</span>`)
 }
@@ -633,9 +624,9 @@ func TestMoreServiceSetup(t *testing.T) {
 	}
 	require.NotNil(t, setup)
 	env := &Env{}
-	env.Put(moreDoctorKey, func() {})
+	env.Put(ColDoctorKey, func() {})
 	require.NoError(t, setup(env))
-	assert.NotNil(t, moreDoctorFunc())
+	assert.NotNil(t, moreEnvGet[func()](ColDoctorKey))
 }
 
 func TestMoreHelpers(t *testing.T) {
@@ -646,8 +637,6 @@ func TestMoreHelpers(t *testing.T) {
 	} {
 		assert.Equal(t, want, moreAgo(now, now.Add(-d)))
 	}
-	assert.Equal(t, "/dialogs/connect?nodes=a+b&realm=r", moreDialogURL("connect", "realm", "r", "nodes", "a b"))
-	assert.Equal(t, "/dialogs/x?", moreDialogURL("x"))
 	assert.Equal(t, "", moreDockerDown(store.DockerState{Err: "unchecked"}))
 	assert.Equal(t, "boom", moreDockerDown(store.DockerState{Checked: true, Err: "boom"}))
 	cls, mark := moreCheckMark("failed")

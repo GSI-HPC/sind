@@ -86,7 +86,7 @@ func (w *Watched) Watch(topics []store.Topic) (release func()) {
 		}
 	}
 	w.mu.Unlock()
-	w.poke()
+	poke(w.wake)
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -98,15 +98,8 @@ func (w *Watched) Watch(topics []store.Topic) (release func()) {
 				}
 			}
 			w.mu.Unlock()
-			w.poke()
+			poke(w.wake)
 		})
-	}
-}
-
-func (w *Watched) poke() {
-	select {
-	case w.wake <- struct{}{}:
-	default:
 	}
 }
 
@@ -114,24 +107,15 @@ func (w *Watched) poke() {
 func (w *Watched) Keys() []store.StatusKey {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	keys := make([]store.StatusKey, 0, len(w.counts))
-	for k := range w.counts {
-		keys = append(keys, k)
-	}
-	slices.SortFunc(keys, compareKeys)
-	return keys
+	return slices.SortedFunc(maps.Keys(w.counts), compareKeys)
 }
 
 // takeFresh returns the clusters that are newly watched, and forgets them.
 func (w *Watched) takeFresh() []store.StatusKey {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	keys := make([]store.StatusKey, 0, len(w.fresh))
-	for k := range w.fresh {
-		keys = append(keys, k)
-	}
+	keys := slices.SortedFunc(maps.Keys(w.fresh), compareKeys)
 	clear(w.fresh)
-	slices.SortFunc(keys, compareKeys)
 	return keys
 }
 
@@ -184,14 +168,14 @@ func listed(sn store.Snapshot) []store.StatusKey {
 
 // clustersChanged reports whether a topic of ts is the clusters of a realm.
 func clustersChanged(ts []store.Topic) bool {
-	return slices.ContainsFunc(ts, func(t store.Topic) bool { return t.Under("clusters") })
+	return slices.ContainsFunc(ts, func(t store.Topic) bool { return strings.HasPrefix(string(t), "clusters/") })
 }
 
 // Run reads until ctx ends.
 func (s *Status) Run(ctx context.Context) {
 	sub := s.Bus.Subscribe()
 	defer sub.Close()
-	changes := s.Store.Subscribe()
+	changes := s.Store.Notifier().Subscribe()
 	defer changes.Close()
 	tick := time.NewTicker(cmp.Or(s.Every, statusEvery))
 	defer tick.Stop()
@@ -260,10 +244,10 @@ func (s *Status) Run(ctx context.Context) {
 			// A cluster that is gone is new again when it comes back.
 			maps.DeleteFunc(seen, func(k store.StatusKey, _ bool) bool { return !slices.Contains(cur, k) })
 			s.Store.KeepStatuses(s.keep()...)
-		case <-sub.C():
+		case <-sub.Changed():
 			now := time.Now()
 			keys := s.keep()
-			for _, ev := range sub.Drain() {
+			for _, ev := range sub.Take() {
 				at := now.Add(after)
 				if ev.Kind == KindRefresh {
 					at = now

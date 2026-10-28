@@ -134,7 +134,7 @@ func TestPgListQuery(t *testing.T) {
 	q := pgListQuery{Base: "/nodes", def: "cluster", Sort: "cluster"}
 	assert.Equal(t, "/nodes?realm=", q.URL())
 	assert.Equal(t, "", q.SortParam())
-	assert.Equal(t, "/nodes?realm=ci", q.RealmURL("ci"))
+	assert.Equal(t, "/nodes?realm=ci", q.URL("realm", "ci"))
 	q.Desc = true
 	assert.Equal(t, "-cluster", q.SortParam())
 	q.Sort, q.Desc, q.Q = "ip", false, "a b"
@@ -144,7 +144,6 @@ func TestPgListQuery(t *testing.T) {
 	assert.Equal(t, []string{"a", "b"}, q.words())
 	assert.True(t, pgMatch("a b c", []string{"c", "a"}))
 	assert.False(t, pgMatch("a b c", []string{"d"}))
-	assert.Equal(t, "/nodes?realm=", pgList{pgListQuery: q}.ClearURL()[:len("/nodes?realm=")])
 }
 
 func TestPgRanks(t *testing.T) {

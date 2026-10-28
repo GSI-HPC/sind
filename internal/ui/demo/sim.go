@@ -230,7 +230,7 @@ func (s *Sim) Cancel(id string) error {
 	return nil
 }
 
-// Running implements run.Starter.
+// Running returns how many commands run.
 func (s *Sim) Running() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -446,8 +446,7 @@ func (s *Sim) planCreateWorker(realm, name string, args []string) func(context.C
 // planDeleteCluster plays delete cluster.
 func (s *Sim) planDeleteCluster(realm, name string) func(context.Context, play) error {
 	return func(ctx context.Context, p play) error {
-		last := s.w.Count(realm) == 1
-		return p.remove(ctx, s.w.nodesOf(realm, name), true, last)
+		return p.remove(ctx, s.w.nodesOf(realm, name), true, len(s.w.clustersOf(realm)) == 1)
 	}
 }
 

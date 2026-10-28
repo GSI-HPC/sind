@@ -37,21 +37,25 @@ type pgAction struct {
 	Verb, Fit string
 }
 
-// pgDialog returns the URL of the dialog of the action with the query
-// pairs kv (key, value, key, value...); a pair with an empty value is left
-// out.
-func pgDialog(action string, kv ...string) string {
+// pgQueryURL returns path with the query pairs kv (key, value, key,
+// value...); a pair with an empty value is left out.
+func pgQueryURL(path string, kv ...string) string {
 	q := url.Values{}
 	for i := 0; i+1 < len(kv); i += 2 {
 		if kv[i+1] != "" {
 			q.Set(kv[i], kv[i+1])
 		}
 	}
-	u := "/dialogs/" + url.PathEscape(action)
 	if len(q) > 0 {
-		u += "?" + q.Encode()
+		path += "?" + q.Encode()
 	}
-	return u
+	return path
+}
+
+// pgDialog returns the URL of the dialog of the action with the query
+// pairs kv, as pgQueryURL.
+func pgDialog(action string, kv ...string) string {
+	return pgQueryURL("/dialogs/"+url.PathEscape(action), kv...)
 }
 
 // pgDialogAction returns a dialog link.
@@ -190,18 +194,21 @@ func (n pgNode) Worker() bool { return n.Role == config.RoleWorker }
 // Start for a node that does not run, Unfreeze for a paused one, and none
 // for a running one, whose verbs the selection offers.
 func (n pgNode) RowPower() *pgAction {
-	power := func(verb, op string) *pgAction {
-		a := pgDialogAction(verb+"…", "", "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", op)
-		a.Verb = verb
-		return &a
-	}
+	verb, op := "Start", "start"
 	switch n.State {
 	case cluster.StateRunning:
 		return nil
 	case cluster.StatePaused:
-		return power("Unfreeze", "unpause")
+		verb, op = "Unfreeze", "unpause"
 	}
-	return power("Start", "start")
+	a := n.power(verb+"…", "", op)
+	a.Verb = verb
+	return &a
+}
+
+// power returns the power dialog of op for the node.
+func (n pgNode) power(label, class, op string) pgAction {
+	return pgDialogAction(label, class, "power", "realm", n.Realm, "cluster", n.Cluster, "nodes", n.Short, "op", op)
 }
 
 // SSH returns the command that opens a shell on the node.
@@ -301,7 +308,7 @@ func pgSnapNodes(sn store.Snapshot, realm string) []pgNode {
 	var out []pgNode
 	busy := map[string][2]bool{}
 	for _, r := range pgRealmNames(sn, realm) {
-		for _, ns := range sn.NodesOf(r) {
+		for _, ns := range sn.Nodes[r] {
 			n := pgNodeOf(r, ns, sn.Status(r, ns.Cluster))
 			key := r + "/" + ns.Cluster
 			b, ok := busy[key]
@@ -316,12 +323,11 @@ func pgSnapNodes(sn store.Snapshot, realm string) []pgNode {
 	return out
 }
 
-// pgProblemNodes counts the nodes of the realm, or of every realm, that
-// need a look (pgNode.Problem).
-func pgProblemNodes(sn store.Snapshot, realm string) int {
+// pgCount counts the items of s that f holds for.
+func pgCount[T any](s []T, f func(T) bool) int {
 	n := 0
-	for _, node := range pgSnapNodes(sn, realm) {
-		if node.Problem() {
+	for _, x := range s {
+		if f(x) {
 			n++
 		}
 	}
@@ -329,15 +335,7 @@ func pgProblemNodes(sn store.Snapshot, realm string) int {
 }
 
 // ServiceUp counts the services that are up.
-func (n pgNode) ServiceUp() int {
-	c := 0
-	for _, s := range n.Services {
-		if s.OK {
-			c++
-		}
-	}
-	return c
-}
+func (n pgNode) ServiceUp() int { return pgCount(n.Services, func(s pgSvc) bool { return s.OK }) }
 
 // Service returns the health of the named service, ok false when the node
 // has no such service.
@@ -455,8 +453,8 @@ func pgValidTab(tab string) bool {
 func pgClustersOf(sn store.Snapshot, realm string, now time.Time) []pgCluster {
 	var out []pgCluster
 	for _, r := range pgRealmNames(sn, realm) {
-		mon := sn.MonitoringOf(r)
-		for _, c := range sn.ClustersOf(r) {
+		mon := sn.Monitorings[r]
+		for _, c := range sn.Clusters[r] {
 			out = append(out, pgClusterOf(sn, r, c, mon, now))
 		}
 	}
@@ -589,12 +587,7 @@ func (c pgCluster) Banner() *pgRunBanner {
 		}
 		return &pgRunBanner{Command: r.Title, Text: text, Href: r.Link(), Action: "Show progress"}
 	}
-	waiting := 0
-	for _, r := range c.Runs {
-		if r.Waiting {
-			waiting++
-		}
-	}
+	waiting := pgCount(c.Runs, func(r pgRun) bool { return r.Waiting })
 	text := "run on " + c.Name + "."
 	if waiting > 0 {
 		verb := "wait"

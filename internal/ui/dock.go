@@ -36,7 +36,6 @@ func tasksFragment() Fragment {
 		Topics:   []store.Topic{store.TopicTasks},
 		Prefixes: []string{"run/"},
 		Params:   []string{"run", "task"},
-		Shell:    true,
 		Load:     func(v *View) error { v.Data = dockLoad(v); return nil },
 	}
 }
@@ -130,9 +129,12 @@ func dockLoad(v *View) dockData {
 		if t.Hidden {
 			continue
 		}
-		run, hasRun := v.Snap.RunOfTrace(t.Trace)
-		c := dockTaskCard(t, run, hasRun, v.Now)
-		c.here = (hideTask != "" && t.ID == hideTask) || (hasRun && hideRun != "" && run.ID == hideRun)
+		var run *store.Run
+		if r, ok := v.Snap.RunOfTrace(t.Trace); ok {
+			run = &r
+		}
+		c := dockTaskCard(t, run, v.Now)
+		c.here = (hideTask != "" && t.ID == hideTask) || (run != nil && hideRun != "" && run.ID == hideRun)
 		cards = append(cards, c)
 	}
 	for _, run := range v.Snap.Runs {
@@ -209,10 +211,9 @@ func dockFit(cards []dockCard, now time.Time) dockData {
 	return d
 }
 
-// dockTaskCard draws a task, with its run if the log holds one.
-func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockCard {
-	c := dockCard{TaskID: t.ID, Tip: t.Display, Realm: t.Realm, Href: "/tasks/" + t.ID, start: t.Start}
-	c.Title = taskTitle(t, nil)
+// dockTaskCard draws a task, with its run if the log holds one (not nil).
+func dockTaskCard(t store.Task, run *store.Run, now time.Time) dockCard {
+	c := dockCard{TaskID: t.ID, Tip: t.Display, Realm: t.Realm, Href: "/tasks/" + t.ID, start: t.Start, Title: taskTitle(t, run)}
 	if t.End != nil {
 		c.end = *t.End
 	}
@@ -229,16 +230,16 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 			c.Class = runEnded
 		}
 	}
-	if hasRun {
-		c.Title, c.Href = taskTitle(t, &run), "/runs/"+run.ID
+	if run != nil {
+		c.Href = "/runs/" + run.ID
 		if c.Class == runRunning && run.Done() {
-			c.Class = runStatusClass(run)
+			c.Class = runStatusClass(*run)
 		}
-		shown := runRevealed(run, now)
+		shown := runRevealed(*run, now)
 		c.Segs, c.Line = runSegs(shown), runLine(shown, &t, now)
-		c.Elapsed, c.waiting = runDur(runElapsed(run, now)), runWaitsForLock(run)
+		c.Elapsed, c.waiting = runDur(runElapsed(*run, now)), runWaitsForLock(*run)
 		if c.Class == runRunning {
-			c.Since = runSince(run)
+			c.Since = runSince(*run)
 		}
 	} else {
 		c.Segs = runBar{{Class: c.Class, Title: c.Class}}
@@ -268,18 +269,14 @@ func dockTaskCard(t store.Task, run store.Run, hasRun bool, now time.Time) dockC
 		c.HideAt = t.End.Add(dockHideAfter).UnixMilli()
 	}
 	c.Mark = runMark(c.Class)
-	var runOf *store.Run
-	if hasRun {
-		runOf = &run
-	}
 	if c.Class == runRunning {
-		c.Stop = newRunStop(t, runOf, c.Title, "", true)
+		c.Stop = newRunStop(t, run, c.Title, "", true)
 	}
 	c.Canceling = c.Class == runRunning && t.Canceling
 	c.Dismiss = taskEnded(t)
 	why := t.Err
-	if hasRun && why == "" {
-		why = runFailure(run)
+	if run != nil && why == "" {
+		why = runFailure(*run)
 	}
 	c.Compact = c.Class == runFailed || c.Class == runCanceled || c.Class == runEnded
 	if c.Class == runFailed {

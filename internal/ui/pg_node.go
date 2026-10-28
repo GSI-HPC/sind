@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 )
@@ -27,14 +26,10 @@ var pgNodePage = Page{
 
 func pgNodeFragments() []Fragment {
 	params := []string{"realm", "cluster", "node"}
-	watch := func(p Params) []store.Topic {
-		realm, name := p.Get("realm"), p.Get("cluster")
-		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name)}
-	}
 	load := func(v *View) error { v.Data = pgLoadNode(v); return nil }
 	return []Fragment{
-		{Name: "pg-node-head", Params: params, Watch: watch, Load: load},
-		{Name: "pg-node-body", Params: params, Watch: watch, Load: load},
+		{Name: "pg-node-head", Params: params, Watch: pgClusterWatch, Load: load},
+		{Name: "pg-node-body", Params: params, Watch: pgClusterWatch, Load: load},
 	}
 }
 
@@ -93,19 +88,16 @@ func pgLoadNode(v *View) *pgNodeView {
 		d.ClusterState = c.State
 	}
 	n := d.Node
-	power := func(label, class, op string) pgAction {
-		return pgDialogAction(label, class, "power", "realm", realm, "cluster", name, "nodes", short, "op", op)
-	}
 	switch n.State {
 	case cluster.StateRunning:
-		d.Actions = []pgAction{power("Shut down…", "", "stop"), power("Reboot…", "", "reboot"), power("Freeze…", "", "pause")}
+		d.Actions = []pgAction{n.power("Shut down…", "", "stop"), n.power("Reboot…", "", "reboot"), n.power("Freeze…", "", "pause")}
 	case cluster.StatePaused:
-		d.Actions = []pgAction{power("Unfreeze…", "", "unpause")}
+		d.Actions = []pgAction{n.power("Unfreeze…", "", "unpause")}
 	default:
-		d.Actions = []pgAction{power("Start…", "primary", "start")}
+		d.Actions = []pgAction{n.power("Start…", "primary", "start")}
 	}
 	if n.Worker() {
-		d.Actions = append(d.Actions, power("Drain…", "", "drain"), power("Resume…", "", "resume"),
+		d.Actions = append(d.Actions, n.power("Drain…", "", "drain"), n.power("Resume…", "", "resume"),
 			pgDialogAction("Delete worker…", "danger", "delete-worker", "realm", realm, "cluster", name, "nodes", short))
 	}
 	sind := pgSind(realm)
@@ -115,9 +107,6 @@ func pgLoadNode(v *View) *pgNodeView {
 	}
 	return d
 }
-
-// ClusterLink returns the address of the node's cluster page.
-func (d *pgNodeView) ClusterLink() string { return pgClusterURL(d.Realm, d.Cluster, "") }
 
 // LogsLink returns the address of the Logs tab with the node's log: the
 // journal of its Slurm service while it runs, else its container output,

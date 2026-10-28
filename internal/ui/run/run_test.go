@@ -143,6 +143,13 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
+// running returns how many children run.
+func (f *fixture) running() int {
+	f.r.mu.Lock()
+	defer f.r.mu.Unlock()
+	return len(f.r.running)
+}
+
 func (f *fixture) waitDone(t *testing.T, id string) store.Task {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -172,7 +179,7 @@ func TestStart_RunsTheBinaryWithTheEnvironment(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, wantID, id)
-	assert.Equal(t, 1, f.r.Running())
+	assert.Equal(t, 1, f.running())
 	task, ok := f.st.Snapshot().Task(id)
 	require.True(t, ok)
 	assert.Equal(t, store.TaskRunning, task.Status)
@@ -240,7 +247,7 @@ func TestTask_Outcomes(t *testing.T) {
 			assert.Equal(t, strings.TrimSpace(res.stderr), strings.TrimSpace(task.Output))
 			assert.NotNil(t, task.End)
 			assert.Equal(t, "ci", <-f.refresh)
-			assert.Equal(t, 0, f.r.Running())
+			assert.Equal(t, 0, f.running())
 		})
 	}
 }
@@ -382,7 +389,7 @@ func TestShutdown_KillsAfterTheGrace(t *testing.T) {
 	task, _ := f.st.Snapshot().Task(id)
 	assert.Equal(t, store.TaskFailed, task.Status, "the fake reports the kill as its context ending")
 	assert.Equal(t, "signal: killed", task.Err)
-	assert.Equal(t, 0, f.r.Running())
+	assert.Equal(t, 0, f.running())
 }
 
 func TestKillGroup(t *testing.T) {
@@ -397,7 +404,6 @@ func TestNew_Defaults(t *testing.T) {
 	t.Cleanup(func() { r.Shutdown(time.Second) })
 	assert.Equal(t, 16, len(r.hex(8)))
 	assert.NotEqual(t, r.hex(8), r.hex(8))
-	assert.WithinDuration(t, time.Now(), r.cfg.Now(), time.Minute)
 	assert.NotNil(t, r.cfg.Kill)
 }
 

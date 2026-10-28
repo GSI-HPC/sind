@@ -20,7 +20,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/localweb/htmx"
 	"github.com/GSI-HPC/go-clikit/localweb/page"
 	"github.com/GSI-HPC/go-clikit/localweb/session"
-	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/go-clikit/localweb/sse"
 )
 
 // contentSecurityPolicy allows only sind ui's own files: no inline script
@@ -42,16 +42,6 @@ const (
 // openHint is what a refusal adds for the user. It never says what the token
 // is or where to find it, only that the terminal has it.
 const openHint = "Open the address that sind ui printed in your terminal, or run sind ui again."
-
-const (
-	// coalesceEvery is how long changes gather before a page gets them,
-	// so that a burst of changes costs one render: about two frames, so
-	// that a page moves as soon as a terminal would.
-	coalesceEvery = 30 * time.Millisecond
-	// keepAliveEvery is how often an idle stream sends a comment, so that
-	// nothing between drops it and a gone browser is noticed.
-	keepAliveEvery = 25 * time.Second
-)
 
 // Server serves sind ui's pages and live updates for one store.
 type Server struct {
@@ -76,8 +66,10 @@ type Server struct {
 	ctx context.Context
 	now func() time.Time
 	mux *http.ServeMux
-	// coalesce and keepAlive are coalesceEvery and keepAliveEvery, which
-	// tests shorten.
+	// coalesce and keepAlive are how long changes gather before a page
+	// gets them, and how often an idle stream sends a comment: zero and
+	// sse.DefaultKeepAlive, the defaults of localweb/sse, which tests
+	// shorten.
 	coalesce, keepAlive time.Duration
 }
 
@@ -105,7 +97,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 	if c.Now == nil {
 		c.Now = time.Now
 	}
-	reg := c.Registry.snapshot()
+	reg := c.Registry
 	static, _ := fs.Sub(c.FS, "static") // "static" is a valid directory name
 	a, err := assets.New(static, "/static/", assets.Options{})
 	if err != nil {
@@ -116,26 +108,20 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a, vendor: vendor,
 		styles: a.URLs("css/*.css"), scripts: a.URLs("js/*.js"),
 		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
-		coalesce: coalesceEvery, keepAlive: keepAliveEvery,
+		keepAlive: sse.DefaultKeepAlive,
 	}
 	if s.sessions, err = session.New(session.Options{
 		Token: c.Token, CookiePrefix: cookiePrefix, CSRFHeader: csrfHeader, Refuse: s.refuse,
 	}); err != nil {
 		return nil, err
 	}
-	funcs := template.FuncMap{"fragment": s.fragmentHTML}
-	for name, fn := range reg.funcs {
-		funcs[name] = fn
-	}
-	if s.tmpl, err = page.Parse(c.FS, page.Options{Funcs: funcs}, "templates/*.tmpl"); err != nil {
+	if s.tmpl, err = page.Parse(c.FS, page.Options{Funcs: template.FuncMap{"fragment": s.fragmentHTML}}, "templates/*.tmpl"); err != nil {
 		return nil, fmt.Errorf("templates: %w", err)
 	}
 	if err := s.check(); err != nil {
 		return nil, err
 	}
-	if err := s.routes(); err != nil {
-		return nil, err
-	}
+	s.routes()
 	return s, nil
 }
 
@@ -147,7 +133,7 @@ func (s *Server) check() error {
 			return fmt.Errorf("template %q is missing", name)
 		}
 	}
-	for _, name := range []string{"rail", "tasks"} {
+	for _, name := range shellFragments {
 		if _, ok := s.reg.fragments[name]; !ok {
 			return fmt.Errorf("the shell fragment %s is not registered", name)
 		}
@@ -170,14 +156,9 @@ func (s *Server) check() error {
 	return nil
 }
 
-// routes registers the routes of the server and of the registry. A pattern
-// that ServeMux refuses is an error, not a panic.
-func (s *Server) routes() (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("route: %v", r)
-		}
-	}()
+// routes registers the routes of the server and of the registry. ServeMux
+// panics for a pattern that is invalid or taken, a program error.
+func (s *Server) routes() {
 	s.mux.Handle("GET /htmx/", s.vendor)
 	s.mux.Handle("GET /events", s.fetchOnly(http.HandlerFunc(s.events)))
 	for _, p := range s.reg.pages {
@@ -191,7 +172,6 @@ func (s *Server) routes() (err error) {
 		s.mux.Handle(rt.Pattern, h)
 	}
 	s.mux.HandleFunc("/", s.notFound)
-	return nil
 }
 
 // Handler returns the server's handler with every check in front of it.
@@ -254,12 +234,6 @@ func (s *Server) signIn(w http.ResponseWriter, f localweb.Refusal) bool {
 	return err == nil
 }
 
-// Env returns what the server shares with the services.
-func (s *Server) Env() *Env { return s.env }
-
-// Store returns the store that the pages read.
-func (s *Server) Store() *store.Store { return s.env.Store }
-
 // View returns the view of a request: the current snapshot, the session's
 // CSRF token, and as Params the wildcards of the route that matched and
 // the values of the named keys, from the query and from the form. A value
@@ -315,18 +289,9 @@ func (s *Server) newView(p Params) *View {
 // status. A render that fails goes to Fail: a fragment of the page that
 // returns ErrNotFound makes the page a 404, and anything else a 500.
 func (s *Server) Write(w http.ResponseWriter, r *http.Request, status int, name string, v *View) {
-	if err := s.respond(w, status, name, v); err != nil {
+	if err := s.tmpl.Respond(w, status, name, v); err != nil {
 		s.Fail(w, r, err)
 	}
-}
-
-// respond writes the block name rendered with v, or returns the error and
-// writes nothing.
-func (s *Server) respond(w http.ResponseWriter, status int, name string, v *View) error {
-	if err := s.tmpl.Respond(w, status, name, v); err != nil {
-		return fmt.Errorf("rendering %s: %w", name, err)
-	}
-	return nil
 }
 
 // Fragment answers a request with the fragment name: its Load runs on the
@@ -339,7 +304,7 @@ func (s *Server) Fragment(w http.ResponseWriter, r *http.Request, name string) {
 	}
 	v, err := s.View(r, f.Params...)
 	if err == nil {
-		err = s.load(f, v)
+		err = f.Load(v)
 	}
 	if err != nil {
 		s.Fail(w, r, err)
@@ -358,14 +323,6 @@ func (s *Server) fragmentHTML(name string, v *View) (template.HTML, error) {
 	}
 	html, err := s.renderFragment(f, v)
 	return template.HTML(html), err //nolint:gosec // G203: the output of a template, escaped in context
-}
-
-// load runs the Load of f on v.
-func (s *Server) load(f Fragment, v *View) error {
-	if f.Load == nil {
-		return nil
-	}
-	return f.Load(v)
 }
 
 // Fail answers a request whose Load or route failed: ErrNotFound with the
@@ -451,7 +408,7 @@ func (s *Server) keys(own, fragments []string) []string {
 // page, which offers what the address names and the pages whose address
 // is close to it.
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
-	s.errorPage(w, r, http.StatusNotFound, missForPath(s.Store().Snapshot(), r.URL.Path))
+	s.errorPage(w, r, http.StatusNotFound, missForPath(s.env.Store.Snapshot(), r.URL.Path))
 }
 
 // errorPage answers with the error page in the layout: the Not found page
@@ -464,9 +421,9 @@ func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m
 	if status != http.StatusNotFound {
 		v.Title = "Bad address"
 	}
-	v.Data = &errorPage{Status: status, Address: missAddress(r), What: m.What, Hint: m.Hint, Links: m.Links}
+	v.Data = &errorPage{Status: status, Address: missAddress(r), Miss: m}
 	v.Events = s.eventsURL(nil, v)
-	if err := s.respond(w, status, "layout", v); err != nil {
+	if err := s.tmpl.Respond(w, status, "layout", v); err != nil {
 		s.fail500(w, r, err)
 	}
 }
@@ -474,7 +431,7 @@ func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m
 // eventsURL returns the URL of the live updates of the shell fragments and
 // of the named ones, with the Params they declare and the lit rail entry.
 func (s *Server) eventsURL(names []string, v *View) string {
-	names = slices.Compact(slices.Sorted(slices.Values(append(s.reg.shellFragments(), names...))))
+	names = slices.Compact(slices.Sorted(slices.Values(slices.Concat(shellFragments, names))))
 	q := url.Values{"f": names}
 	for _, n := range names {
 		for _, k := range s.reg.fragments[n].Params {

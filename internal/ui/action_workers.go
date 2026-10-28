@@ -19,18 +19,12 @@ type actWorkers struct {
 	now     func() time.Time
 
 	mu   sync.Mutex
-	seen map[string]actWorkerSeen
-}
-
-// actWorkerSeen is what sind ui saw of a worker container, and when.
-type actWorkerSeen struct {
-	facts action.WorkerFacts
-	at    time.Time
+	seen map[string]actSeen[action.WorkerFacts]
 }
 
 // newActWorkers returns the workers that inspect looks at.
 func newActWorkers(inspect func(context.Context, docker.ContainerName) (*docker.ContainerInfo, error)) *actWorkers {
-	return &actWorkers{inspect: inspect, now: time.Now, seen: map[string]actWorkerSeen{}}
+	return &actWorkers{inspect: inspect, now: time.Now, seen: map[string]actSeen[action.WorkerFacts]{}}
 }
 
 // facts tells the size of the container.
@@ -50,6 +44,6 @@ func (a *actWorkers) facts(ctx context.Context, container string) action.WorkerF
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.seen[container] = actWorkerSeen{f, a.now()}
+	a.seen[container] = actSeen[action.WorkerFacts]{f, a.now()}
 	return f
 }

@@ -24,7 +24,7 @@ address (node, source, unit, lines, q, level). logs.js opens the stream GET
       <select id="logs-lines" data-logs-lines>{{range .Lines}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
     <span class="grow"></span>
     <div class="seg" role="group" aria-label="Follow">
-      <button type="button" class="on" data-logs-follow aria-pressed="true">Follow</button>
+      <button type="button" data-logs-follow aria-pressed="true">Follow</button>
       <button type="button" data-logs-pause aria-pressed="false">Pause</button>
     </div>
     <button type="button" class="btn sm" data-logs-clear>Clear</button>
@@ -37,7 +37,7 @@ address (node, source, unit, lines, q, level). logs.js opens the stream GET
     <span class="hint faint" data-logs-count aria-hidden="true"></span>
     <button type="button" class="btn sm" data-logs-copy-lines>Copy lines</button>
     <button type="button" class="btn sm" data-logs-download>Download</button>
-    <span class="pg-vh" role="status" data-logs-said></span>
+    <span class="vh" role="status" data-logs-said></span>
   </div>
   <div class="pb stack">
     <div><p class="cmdlabel">The same in a terminal</p>

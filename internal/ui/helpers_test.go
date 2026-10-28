@@ -9,9 +9,11 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -56,6 +58,12 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
+// snapshot returns a copy of r, for a test to add to without changing r.
+func (r *Registry) snapshot() *Registry {
+	return &Registry{pages: slices.Clone(r.pages), fragments: maps.Clone(r.fragments), routes: slices.Clone(r.routes),
+		services: slices.Clone(r.services), navCounts: maps.Clone(r.navCounts)}
+}
+
 // overlay returns the embedded web files with the files of extra added
 // (or replaced).
 func overlay(t *testing.T, extra fstest.MapFS) fs.FS {
@@ -97,7 +105,7 @@ func testRegistry() *Registry {
 		Name: "count", Topics: []store.Topic{store.TopicTasks},
 		Load: func(v *View) error { v.Data = len(v.Snap.Tasks); return nil },
 	})
-	r.AddFragment(Fragment{Name: "same", Topics: []store.Topic{store.TopicTasks}})
+	r.AddFragment(Fragment{Name: "same", Topics: []store.Topic{store.TopicTasks}, Load: func(*View) error { return nil }})
 	r.AddFragment(Fragment{
 		Name: "runs", Prefixes: []string{"run"},
 		Load: func(v *View) error { v.Data = len(v.Snap.Runs); return nil },

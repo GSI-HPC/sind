@@ -4,13 +4,13 @@
 // nodes, the worker groups and the rows of users, groups and accounts of a
 // new cluster, the directory that follows the name, the pull that follows
 // the image, Edit YAML and Start from YAML with the name and realm that
-// follow the YAML, the links to a field with a problem, the Copy button,
-// and the frame of every dialog: the focus, which stays in the dialog and
-// goes back to the button that opened it, the question before a close
-// loses changes, the draft of a new cluster, Enter and Ctrl+Enter, the
-// status, and the notice of a command that started. The dialogs are the
-// server's HTML, which htmx puts into #layer; nothing here evaluates text,
-// and no storage is needed to work: every access is guarded.
+// follow the YAML, the links to a field with a problem, and the frame of
+// every dialog: the focus, which stays in the dialog and goes back to the
+// button that opened it, the question before a close loses changes, the
+// draft of a new cluster, Enter and Ctrl+Enter, the status, and the notice
+// of a command that started. The dialogs are the server's HTML, which htmx
+// puts into #layer; nothing here evaluates text, and no storage is needed to
+// work: every access is guarded.
 (() => {
   'use strict';
 
@@ -219,8 +219,8 @@
   function restart() {
     const d = dialog();
     if (!d) return;
-    if (inPage(d) || !window.htmx || !S.path) { location.reload(); return; }
-    window.htmx.ajax('GET', S.path, { target: '#layer', swap: 'innerHTML' });
+    if (inPage(d) || !S.path) { location.reload(); return; }
+    htmx.ajax('GET', S.path, { target: '#layer', swap: 'innerHTML' });
   }
 
   // changed marks the dialog as changed by the user, and keeps its draft.
@@ -248,7 +248,6 @@
   // with the focus never hides below it. The height goes on the root, as
   // htmx would copy a style of the dialog to the next one of its id.
   function footer(d) {
-    if (!window.ResizeObserver) return;
     const ro = new ResizeObserver(() => {
       if (!d.isConnected) { ro.disconnect(); return; }
       const f = [...d.querySelectorAll('.mf')].find(x => !x.hidden);
@@ -471,16 +470,6 @@
     if (jump) {
       ev.preventDefault();
       goTo(jump.closest('form'), jump.dataset.actJump);
-      return;
-    }
-
-    const copy = t.closest('.scrim [data-copy]');
-    if (copy && navigator.clipboard) {
-      navigator.clipboard.writeText(copy.dataset.copy).then(() => {
-        const was = copy.textContent;
-        copy.textContent = 'Copied';
-        setTimeout(() => { copy.textContent = was; }, 1200);
-      }, () => { /* no permission: the command stays on the screen */ });
     }
   });
 
@@ -860,7 +849,7 @@
     const draft = form && form.dataset.actDraft && !form.hasAttribute('data-act-restored') && local.get(draftKey(form.dataset.actDraft));
     if (draft) {
       document.addEventListener('DOMContentLoaded', () => {
-        if (window.htmx) window.htmx.ajax('POST', location.pathname + location.search, { target: '#act-dialog', swap: 'outerHTML', values: { draft } });
+        htmx.ajax('POST', location.pathname + location.search, { target: '#act-dialog', swap: 'outerHTML', values: { draft } });
       });
     }
   }

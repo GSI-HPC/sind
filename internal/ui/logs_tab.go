@@ -132,22 +132,18 @@ func (v *View) LogsTab() *LogsTabView {
 	return d
 }
 
-// Command returns the command of the terminal that shows the same log.
+// Command returns the command of the terminal that shows the same log:
+// the container output of the node, the journal of one unit, or the whole
+// journal, which only a command on the node shows. logs.js writes the same.
 func (d *LogsTabView) Command() string {
-	return logsCommand(d.Sind, d.Node+d.Suffix, d.Source, d.Unit, d.Count)
-}
-
-// logsCommand returns the sind command that follows a log: the container
-// output of the node arg, the journal of one unit, or the whole journal,
-// which only a command on the node shows. logs.js writes the same.
-func logsCommand(sind, arg, source, unit string, lines int) string {
+	arg := d.Node + d.Suffix
 	switch {
-	case source != string(logsJournal):
-		return fmt.Sprintf("%s logs %s -f -n %d", sind, arg, lines)
-	case unit != "":
-		return fmt.Sprintf("%s logs %s %s -f -n %d", sind, arg, unit, lines)
+	case d.Source != string(logsJournal):
+		return fmt.Sprintf("%s logs %s -f -n %d", d.Sind, arg, d.Count)
+	case d.Unit != "":
+		return fmt.Sprintf("%s logs %s %s -f -n %d", d.Sind, arg, d.Unit, d.Count)
 	}
-	return fmt.Sprintf("%s ssh %s -- journalctl -f -n %d", sind, arg, lines)
+	return fmt.Sprintf("%s ssh %s -- journalctl -f -n %d", d.Sind, arg, d.Count)
 }
 
 // logsThousands writes n with a comma between the thousands: 5,000.

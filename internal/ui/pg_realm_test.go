@@ -136,7 +136,7 @@ func TestPgRealmPicker(t *testing.T) {
 	assert.Contains(t, body, `<form class="realm" method="get" action="/clusters" autocomplete="off" data-pg-realm>`)
 	assert.Contains(t, body, `<select id="realm-sel" name="realm" aria-label="Realm" aria-describedby="realm-hint"><option value="" selected>all realms</option></select>`)
 	assert.Contains(t, body, `<noscript><button type="submit" class="btn sm">Show</button></noscript>`)
-	assert.Contains(t, body, `<span class="pg-vh" id="realm-hint" role="status" data-pg-realm-hint></span>`)
+	assert.Contains(t, body, `<span class="vh" id="realm-hint" role="status" data-pg-realm-hint></span>`)
 	pgFillStore(ts.st)
 	// A page of one cluster or node shows its realm, and the picker goes to
 	// the list.
@@ -194,6 +194,6 @@ func TestPgRealmGoneKeepsLiveUpdates(t *testing.T) {
 	st := store.New()
 	st.SetDocker(store.DockerState{Checked: true})
 	v := &View{Params: Params{"realm": {"gone"}}, Snap: st.Snapshot()}
-	require.NoError(t, pgClustersFragments()[0].Load(v))
+	require.NoError(t, pgPageFragments(pgClustersPage, nil)[0].Load(v))
 	assert.Empty(t, v.Data.(*pgClusterList).Clusters)
 }

@@ -1,7 +1,6 @@
 /* Logs tab of the cluster page. Colours come from app.css. */
 .logs-bar{gap:12px}
 .logs-fld{display:flex;align-items:center;gap:8px;min-width:0}
-.logs-fld[hidden]{display:none}
 .logs-fld select,.logs-fld input{font:var(--t-md) var(--f-mono);padding:5px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);max-width:100%}
 .logs-fld label{white-space:nowrap}
 .logs-q{flex:0 1 320px}

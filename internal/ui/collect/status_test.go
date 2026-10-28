@@ -77,7 +77,7 @@ func newStatusFixture(t *testing.T) *statusFixture {
 	t.Helper()
 	f := newFake(t)
 	st := store.New()
-	bus := NewBus()
+	bus := &Bus{}
 	w := NewWatched()
 	f.set(func() {
 		f.clusters["sind/dev"] = true
@@ -85,7 +85,7 @@ func newStatusFixture(t *testing.T) *statusFixture {
 		f.clusters["ci/a"] = true
 	})
 	sf := &statusFixture{fake: f, st: st, bus: bus, watched: w, status: &Status{
-		Store: st, Client: f.client(), Bus: bus, Watched: w, Log: quietLog(),
+		Store: st, Client: f.client(), Bus: bus, Watched: w,
 		Every: time.Hour, After: 30 * time.Millisecond,
 	}}
 	sf.status.read(t.Context(), devKey) // measures one read; stores nothing, as no page watches it
@@ -119,7 +119,7 @@ func TestStatusReadsWhenWatchedAndDropsWhenReleased(t *testing.T) {
 	second()
 	waitFor(t, "dropped", func() bool { return !f.has(devKey) && !f.has(prodKey) })
 	n := f.reads()
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	never(t, "a read of an unwatched cluster", 150*time.Millisecond, func() bool { return f.reads() != n })
 }
 
@@ -144,7 +144,7 @@ func TestStatusReadsAfterAnEventOfItsCluster(t *testing.T) {
 	// Many events of one cluster make one read, after the delay.
 	n := f.reads()
 	for range 5 {
-		f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+		f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	}
 	time.Sleep(20 * time.Millisecond)
 	assert.Equal(t, n, f.reads(), "not at once")
@@ -155,18 +155,18 @@ func TestStatusReadsAfterAnEventOfItsCluster(t *testing.T) {
 	// A network that no cluster owns, such as the mesh: every cluster of the
 	// realm, and no other realm's.
 	n = f.reads()
-	f.bus.Publish(Event{Kind: KindNetwork, Realm: "sind"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind"})
 	waitFor(t, "both", func() bool { return f.reads() >= n+2 })
 	f.fake.settle()
 	assert.Equal(t, n+2, f.reads())
 
 	// A lock is not a change of a cluster.
 	n = f.reads()
-	f.bus.Publish(Event{Kind: KindLock, Realm: "sind"})
+	f.bus.Notify(Event{Kind: KindLock, Realm: "sind"})
 	never(t, "a read for a lock", 200*time.Millisecond, func() bool { return f.reads() != n })
 
 	// A resync reads every watched cluster.
-	f.bus.Publish(Event{})
+	f.bus.Notify(Event{})
 	waitFor(t, "all three", func() bool { return f.reads() >= n+3 })
 }
 
@@ -179,8 +179,8 @@ func TestStatusRefreshReadsAtOnce(t *testing.T) {
 	f.fake.settle()
 
 	n := f.reads()
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"}) // pending for an hour
-	f.bus.Publish(Event{Kind: KindRefresh, Realm: "sind"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"}) // pending for an hour
+	f.bus.Notify(Event{Kind: KindRefresh, Realm: "sind"})
 	waitFor(t, "read", func() bool { return f.reads() > n })
 	f.fake.settle()
 	assert.Equal(t, n+1, f.reads(), "dev alone; the pending read of dev is done")
@@ -194,7 +194,7 @@ func TestStatusDropsAGoneClusterAndKeepsOnErrors(t *testing.T) {
 
 	// A read that fails leaves the status.
 	f.fake.set(func() { f.fake.failing = "network inspect" })
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	n := f.fake.count("network inspect")
 	waitFor(t, "failing read", func() bool { return f.fake.count("network inspect") > n })
 	f.fake.settle()
@@ -202,7 +202,7 @@ func TestStatusDropsAGoneClusterAndKeepsOnErrors(t *testing.T) {
 
 	// The cluster is deleted.
 	f.fake.set(func() { f.fake.failing = ""; delete(f.fake.clusters, "sind/dev") })
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	waitFor(t, "gone", func() bool { return !f.has(devKey) })
 }
 
@@ -275,7 +275,7 @@ func TestStatusEndsWithContextWhileEventsAreDue(t *testing.T) {
 	stop := start(t, f.status.Run)
 	f.watched.Watch([]store.Topic{devKey.Topic()})
 	waitFor(t, "status", func() bool { return f.has(devKey) })
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	f.fake.settle()
 	stop()
 }
@@ -288,7 +288,7 @@ func TestStatusReleasedWhileADueReadIsPending(t *testing.T) {
 	waitFor(t, "status", func() bool { return f.has(devKey) })
 	f.fake.settle()
 	n := f.reads()
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	time.Sleep(30 * time.Millisecond)
 	release()
 	never(t, "a read of the closed page", 300*time.Millisecond, func() bool { return f.reads() != n })
@@ -330,7 +330,7 @@ func TestStatusReadsEveryListedCluster(t *testing.T) {
 
 	// An event of a listed cluster reads it, although no page is open.
 	n := f.reads()
-	f.bus.Publish(Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"})
+	f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	waitFor(t, "read", func() bool { return f.reads() > n })
 
 	// A cluster that the store no longer lists loses its status.
@@ -346,7 +346,7 @@ func TestStatusReadsEveryListedCluster(t *testing.T) {
 func TestStatusReadsEveryClusterWhileAPageIsOpen(t *testing.T) {
 	f := newStatusFixture(t)
 	f.status.All = 30 * time.Millisecond
-	f.status.Viewers = NewViewers()
+	f.status.Viewers = &Viewers{}
 	f.st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
 	start(t, f.status.Run)
 	waitFor(t, "status at start", func() bool { return f.has(devKey) })

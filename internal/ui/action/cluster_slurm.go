@@ -36,10 +36,6 @@ func SlurmFields() []string {
 	return fields
 }
 
-// IdentityModes are the values of the field "identity", the first the
-// default, which the config leaves out.
-var IdentityModes = []config.IdentityMode{config.IdentityLocal, config.IdentityNSSSlurm, config.IdentityClientIDs}
-
 // clusterSlurm reads the lines of the Slurm config files, the identity
 // mode and CVMFS into the config. sind checks the lines; the dialog only
 // makes the line ends Unix ones, as a browser sends CR LF.

@@ -849,7 +849,7 @@ include /etc/slurm/sind-nodes.conf
 	body = pgBody(t, ts, "/clusters/sind/dev", 200)
 	assert.Contains(t, body, `<dt>partitions</dt><dd class="mono">all (default), debug</dd>`)
 	body = pgBody(t, ts, "/clusters/sind/dev?tab=nodes", 200)
-	assert.Contains(t, body, `<td data-label="Slurm"><span class="pill warn">drained</span> <span class="faint pg-reason">disk check</span></td>`)
+	assert.Contains(t, body, `<td data-label="Slurm"><span class="pill warn">drained</span> <span class="faint pg-small">disk check</span></td>`)
 	body = pgBody(t, ts, "/nodes/sind/dev/worker-0", 200)
 	assert.Contains(t, body, `<dt>state</dt><dd><span class="pill run">mixed</span></dd>`)
 	assert.Contains(t, body, `<dt>CPUs</dt><dd>1 of 2 in use</dd><dt>memory</dt><dd>1 GiB</dd><dt>partitions</dt><dd class="mono">all, debug</dd>`)

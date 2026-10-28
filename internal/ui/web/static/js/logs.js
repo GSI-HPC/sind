@@ -63,7 +63,7 @@
     function showUnit() { unitFld.hidden = sourceSel.value !== 'journal'; }
 
     // showCommand writes the command of a terminal that shows the same log,
-    // as logsCommand in Go does.
+    // as LogsTabView.Command in Go does.
     function showCommand() {
       const arg = nodeSel.value + suffix;
       const n = ' -f -n ' + linesSel.value;
@@ -219,8 +219,6 @@
 
     function setPaused(p) {
       paused = p;
-      followBtn.classList.toggle('on', !p);
-      pauseBtn.classList.toggle('on', p);
       followBtn.setAttribute('aria-pressed', String(!p));
       pauseBtn.setAttribute('aria-pressed', String(p));
       if (es) setState(p ? 'Paused' : 'Following');
@@ -286,10 +284,8 @@
 
   // A live update of the page morphs the tab in again: the panel that this
   // script runs stays as it is, with its stream and its lines.
-  if (window.Idiomorph) {
-    Idiomorph.defaults.callbacks.beforeNodeMorphed = old =>
-      !(old instanceof Element && old.hasAttribute('data-logs-ready'));
-  }
+  Idiomorph.defaults.callbacks.beforeNodeMorphed = old =>
+    !(old instanceof Element && old.hasAttribute('data-logs-ready'));
 
   document.addEventListener('DOMContentLoaded', () => scan(document));
   // htmx swaps in a tab body after the page has loaded.

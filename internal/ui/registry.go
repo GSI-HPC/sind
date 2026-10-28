@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -124,9 +123,7 @@ type Fragment struct {
 	// Params are the query keys the fragment reads; /events passes on no
 	// others.
 	Params []string
-	// Shell makes every page include the fragment.
-	Shell bool
-	// Load fills v.Data from v.Snap and v.Params. It may be nil.
+	// Load fills v.Data from v.Snap and v.Params.
 	Load func(v *View) error
 }
 
@@ -201,9 +198,7 @@ type Env struct {
 	// Addr is host:port that the server listens on.
 	Addr string
 
-	values sync.Map
-
-	watchMu  sync.Mutex
+	values   sync.Map
 	watchers []Watcher
 }
 
@@ -219,20 +214,13 @@ type Watcher func(topics []store.Topic) (release func())
 
 // AddWatcher adds a Watcher. Call it from Service.Setup, which runs before
 // the server is built.
-func (e *Env) AddWatcher(w Watcher) {
-	e.watchMu.Lock()
-	defer e.watchMu.Unlock()
-	e.watchers = append(e.watchers, w)
-}
+func (e *Env) AddWatcher(w Watcher) { e.watchers = append(e.watchers, w) }
 
 // watch tells every Watcher that a stream watches topics, and returns the
 // function that tells them it has ended.
 func (e *Env) watch(topics []store.Topic) (release func()) {
-	e.watchMu.Lock()
-	ws := slices.Clone(e.watchers)
-	e.watchMu.Unlock()
-	releases := make([]func(), 0, len(ws))
-	for _, w := range ws {
+	releases := make([]func(), 0, len(e.watchers))
+	for _, w := range e.watchers {
 		if r := w(slices.Clone(topics)); r != nil {
 			releases = append(releases, r)
 		}
@@ -254,24 +242,19 @@ func (e *Env) Get(key any) any {
 	return v
 }
 
-// Registry holds what parts of sind ui register.
+// Registry holds what parts of sind ui register. The init functions fill
+// the default one, before anything reads it.
 type Registry struct {
-	mu        sync.Mutex
 	pages     []Page
 	fragments map[string]Fragment
 	routes    []Route
 	services  []Service
-	funcs     template.FuncMap
 	navCounts map[string]NavCountFunc
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
-	return &Registry{
-		fragments: map[string]Fragment{},
-		funcs:     template.FuncMap{},
-		navCounts: map[string]NavCountFunc{},
-	}
+	return &Registry{fragments: map[string]Fragment{}, navCounts: map[string]NavCountFunc{}}
 }
 
 // defaultRegistry is the registry of the init functions.
@@ -282,36 +265,9 @@ var (
 	wildcardRE = regexp.MustCompile(`\{([^}.]+)(\.\.\.)?\}`)
 )
 
-// RegisterPage adds a page to the default registry; it panics when the
-// page is wrong, as the init function that calls it is a program error.
-func RegisterPage(p Page) { defaultRegistry.AddPage(p) }
-
-// RegisterFragment adds a fragment to the default registry.
-func RegisterFragment(f Fragment) { defaultRegistry.AddFragment(f) }
-
-// RegisterRoute adds a route to the default registry.
-func RegisterRoute(rt Route) { defaultRegistry.AddRoute(rt) }
-
-// RegisterService adds a service to the default registry.
-func RegisterService(s Service) { defaultRegistry.AddService(s) }
-
-// AddFuncs adds template functions to the default registry.
-func AddFuncs(m template.FuncMap) { defaultRegistry.AddFuncs(m) }
-
-// SetNavCount sets the count of the rail entry key in the default registry.
-func SetNavCount(key string, fn func(store.Snapshot) NavCount) {
-	defaultRegistry.SetNavCount(key, fn)
-}
-
-// SetNavCountAt sets the count of the rail entry key in the default
-// registry, from a function that needs the time too.
-func SetNavCountAt(key string, fn NavCountFunc) { defaultRegistry.SetNavCountAt(key, fn) }
-
 // AddPage adds a page. It panics for a name or a pattern that is invalid
-// or already taken.
+// or already taken, as the init function that calls it is a program error.
 func (r *Registry) AddPage(p Page) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if !nameRE.MatchString(p.Name) {
 		panic(fmt.Sprintf("ui: page name %q is invalid", p.Name))
 	}
@@ -329,8 +285,6 @@ func (r *Registry) AddPage(p Page) {
 // AddFragment adds a fragment. It panics for a name that is invalid or
 // already taken.
 func (r *Registry) AddFragment(f Fragment) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if !nameRE.MatchString(f.Name) {
 		panic(fmt.Sprintf("ui: fragment name %q is invalid", f.Name))
 	}
@@ -341,16 +295,10 @@ func (r *Registry) AddFragment(f Fragment) {
 }
 
 // AddRoute adds a route.
-func (r *Registry) AddRoute(rt Route) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.routes = append(r.routes, rt)
-}
+func (r *Registry) AddRoute(rt Route) { r.routes = append(r.routes, rt) }
 
 // AddService adds a service. It panics for a name that is taken.
 func (r *Registry) AddService(s Service) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if slices.ContainsFunc(r.services, func(o Service) bool { return o.Name == s.Name }) {
 		panic(fmt.Sprintf("ui: service %s is registered twice", s.Name))
 	}
@@ -358,51 +306,8 @@ func (r *Registry) AddService(s Service) {
 	slices.SortStableFunc(r.services, func(a, b Service) int { return strings.Compare(a.Name, b.Name) })
 }
 
-// AddFuncs adds template functions. It panics for a name that is taken.
-func (r *Registry) AddFuncs(m template.FuncMap) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for name, fn := range m {
-		if _, ok := r.funcs[name]; ok || name == "include" || name == "fragment" {
-			panic(fmt.Sprintf("ui: template function %s is registered twice", name))
-		}
-		r.funcs[name] = fn
-	}
-}
-
 // SetNavCount sets the count behind the rail entry key.
-func (r *Registry) SetNavCount(key string, fn func(store.Snapshot) NavCount) {
-	r.SetNavCountAt(key, func(sn store.Snapshot, _ time.Time) NavCount { return fn(sn) })
-}
-
-// SetNavCountAt sets the count behind the rail entry key, from a function
-// that needs the time too.
-func (r *Registry) SetNavCountAt(key string, fn NavCountFunc) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.navCounts[key] = fn
-}
-
-// snapshot copies what is registered, so that a server built from it is
-// not changed by a later registration.
-func (r *Registry) snapshot() *Registry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	c := NewRegistry()
-	c.pages = slices.Clone(r.pages)
-	c.routes = slices.Clone(r.routes)
-	c.services = slices.Clone(r.services)
-	for k, v := range r.fragments {
-		c.fragments[k] = v
-	}
-	for k, v := range r.funcs {
-		c.funcs[k] = v
-	}
-	for k, v := range r.navCounts {
-		c.navCounts[k] = v
-	}
-	return c
-}
+func (r *Registry) SetNavCount(key string, fn NavCountFunc) { r.navCounts[key] = fn }
 
 // wildcards returns the names of the wildcards of a ServeMux pattern.
 func wildcards(pattern string) []string {
@@ -415,15 +320,6 @@ func wildcards(pattern string) []string {
 	return out
 }
 
-// shellFragments returns the names of the fragments that every page
-// includes, in name order.
-func (r *Registry) shellFragments() []string {
-	var out []string
-	for name, f := range r.fragments {
-		if f.Shell {
-			out = append(out, name)
-		}
-	}
-	slices.Sort(out)
-	return out
-}
+// shellFragments are the fragments that every page includes, in name
+// order: the rail and the task dock.
+var shellFragments = []string{"rail", "tasks"}

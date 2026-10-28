@@ -171,7 +171,7 @@ func TestColServiceFillsTheStoreAndProvidesEnvKeys(t *testing.T) {
 	stop := colStart(t, env)
 
 	require.Eventually(t, func() bool { return len(env.Store.Snapshot().Realms) == 1 }, 5*time.Second, 5*time.Millisecond)
-	assert.True(t, env.Store.Snapshot().Docker.Reachable())
+	assert.Empty(t, env.Store.Snapshot().Docker.Err)
 	require.Eventually(t, func() bool { return env.Store.Snapshot().Doctor != nil && !env.Store.Snapshot().Doctor.Running }, 5*time.Second, 5*time.Millisecond)
 
 	// The host checks run again on request.
@@ -185,7 +185,7 @@ func TestColServiceFillsTheStoreAndProvidesEnvKeys(t *testing.T) {
 	refresh, ok := env.Get(ColRefreshKey).(func(string))
 	require.True(t, ok)
 	refresh("sind")
-	require.Eventually(t, func() bool { return len(env.Store.Snapshot().NodesOf("sind")) == 1 }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return len(env.Store.Snapshot().Nodes["sind"]) == 1 }, 5*time.Second, 5*time.Millisecond)
 
 	// The Monitoring page changes the interval of the monitoring stacks.
 	iv, ok := env.Get(ColMonitoringIntervalKey).(moreInterval)

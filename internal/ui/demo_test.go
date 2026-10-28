@@ -46,7 +46,7 @@ type demoSession struct {
 	csrf string
 }
 
-var csrfMeta = regexp.MustCompile(`<meta name="csrf-token" content="([^"]*)">`)
+var csrfMeta = regexp.MustCompile(`"X-Sind-CSRF":"([^"]*)"`)
 
 func openDemo(t *testing.T, r *running) *demoSession {
 	t.Helper()
@@ -185,11 +185,6 @@ func TestDemo_StillNeedsDemo(t *testing.T) {
 	assert.EqualError(t, err, "--still needs --demo")
 }
 
-func TestRun_MonitoringInterval(t *testing.T) {
-	err := Run(context.Background(), Options{MonitoringInterval: time.Second, NoOpen: true})
-	assert.EqualError(t, err, "monitoring interval: the interval must be between 5s and 1h, got 1s")
-}
-
 func TestDemoServices(t *testing.T) {
 	fail := func(*Env) error { t.Fatal("the real Setup ran"); return nil }
 	registered := []Service{
@@ -249,7 +244,7 @@ func TestDemoServices_DemoSetupAndRun(t *testing.T) {
 
 // token masks what differs from run to run in a page: the CSRF token and
 // the port.
-var stillMask = regexp.MustCompile(`<meta name="csrf-token" content="[^"]*">|name="csrf" value="[^"]*"|127\.0\.0\.1:\d+`)
+var stillMask = regexp.MustCompile(`"X-Sind-CSRF":"[^"]*"|name="csrf" value="[^"]*"|127\.0\.0\.1:\d+`)
 
 // servedStill serves a still demo, fetches the pages and stops it.
 func servedStill(t *testing.T) map[string]string {

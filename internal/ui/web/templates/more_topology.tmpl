@@ -9,8 +9,7 @@
 
 {{/* more-topology is the live body of the page; .Data is moreTopoData. */}}
 {{define "more-topology"}}{{with .Data}}
-{{template "more-dockerdown" .DockerErr}}
-{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{template "more-top" .}}
 {{if .Topologies}}<div class="more-viewbar"><span id="topo-view-label" class="muted">Show as</span>
   <span class="seg more-seg" role="group" aria-labelledby="topo-view-label"><a href="{{.DiagramURL}}"{{if not .Table}} class="on" aria-current="true"{{end}}>Diagram</a><a href="{{.TableURL}}"{{if .Table}} class="on" aria-current="true"{{end}}>Table</a></span></div>{{end}}
 {{$table := .Table}}{{$tableURL := .TableURL}}

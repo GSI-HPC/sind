@@ -14,7 +14,7 @@ import (
 )
 
 func TestGoldenLog(t *testing.T) {
-	run := only(t, "golden-v1.jsonl")
+	run := golden(t)
 
 	assert.Equal(t, "0123456789abcdef", run.ID)
 	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", run.Trace)
@@ -33,7 +33,6 @@ func TestGoldenLog(t *testing.T) {
 	root := run.Root
 	assert.Equal(t, spanOf(1), root.ID)
 	assert.Equal(t, KindCommand, root.Kind)
-	assert.True(t, root.DryRun)
 	// The other commands of the run hang below the root, in order, after
 	// the steps of the first.
 	assert.Equal(t, []string{"credential bmc", "run", "power on", "confirm", "status", "fetch"}, names(root.Children))
@@ -44,10 +43,7 @@ func TestGoldenLog(t *testing.T) {
 	assert.Equal(t, KindCall, cred.Kind)
 
 	step := find(t, root, "run")
-	assert.True(t, step.Fold)
-	assert.True(t, step.ShowLines)
 	assert.Equal(t, 2, step.Total)
-	assert.Equal(t, 1, step.Limit)
 	assert.Equal(t, "1 of 2 failed", step.Message)
 	assert.Equal(t, store.StatusFailed, step.Status)
 	assert.Equal(t, "target", step.Class)
@@ -55,7 +51,7 @@ func TestGoldenLog(t *testing.T) {
 	assert.Equal(t, StateEnded, step.State)
 
 	ok := find(t, root, "exe0001")
-	assert.Equal(t, "exe0001.hpc.example.org", ok.Host)
+	assert.Equal(t, step.ID, ok.Parent)
 	assert.Equal(t, "compute", ok.Role)
 	assert.Equal(t, "exe0001", ok.Node)
 	assert.Equal(t, at("2026-09-25T12:00:00Z"), ok.Queued)
@@ -71,7 +67,6 @@ func TestGoldenLog(t *testing.T) {
 	assert.Equal(t, ssh.Queued, ssh.Started, "started running")
 
 	redfish := find(t, root, "redfish")
-	assert.Equal(t, "exe0002.mgmt", redfish.Host)
 	assert.Equal(t, "transport", redfish.Class)
 
 	batch := find(t, root, "batch 1/2")
@@ -112,7 +107,7 @@ func TestGoldenLog(t *testing.T) {
 
 	// Every state, status and class the golden log lists comes through.
 	classes := map[string]bool{}
-	walk(root, func(s store.Span) {
+	Walk(root, func(s store.Span) {
 		if s.Class != "" {
 			classes[s.Class] = true
 		}
@@ -144,8 +139,6 @@ func TestCreateOK(t *testing.T) {
 	assert.True(t, root.Children[1].Hidden)
 
 	pull := find(t, root, "pull images")
-	assert.True(t, pull.Fold)
-	assert.True(t, pull.ShowLines)
 	assert.Equal(t, 1, pull.Total)
 	image := pull.Children[0]
 	assert.Equal(t, KindTarget, image.Kind)
@@ -155,7 +148,6 @@ func TestCreateOK(t *testing.T) {
 	assert.Empty(t, image.Role)
 
 	nodes := find(t, root, "nodes")
-	assert.True(t, nodes.Fold)
 	assert.Equal(t, 3, nodes.Total)
 	assert.Equal(t, Counts{Total: 3, OK: 3}, CountTargets(nodes))
 	assert.Equal(t, Counts{Total: 3, OK: 3}, CountTargets(find(t, root, "slurm")))
@@ -167,11 +159,6 @@ func TestCreateOK(t *testing.T) {
 	assert.Equal(t, "munge", find(t, controller, "ready").Message)
 	assert.Equal(t, []string{"docker create", "docker start", "ready", "setup"}, names(controller.Children))
 	assert.Equal(t, 14*time.Second, Elapsed(find(t, controller, "ready"), run.Last))
-
-	// The step bar and the counts a run page draws.
-	_, used, ok := SlowestWait(root, run.Last)
-	require.True(t, ok)
-	assert.Less(t, used, 0.5)
 	assert.Empty(t, FailedTargets(root))
 }
 
@@ -212,10 +199,6 @@ func TestCreateFailed(t *testing.T) {
 	used, ok := WaitUsed(w1, run.Last)
 	require.True(t, ok)
 	assert.Equal(t, 1.0, used)
-	assert.Equal(t, WaitCritical, WaitLevel(used))
-	slowest, _, ok := SlowestWait(root, run.Last)
-	require.True(t, ok)
-	assert.Equal(t, "ready", slowest.Name)
 
 	worker3 := find(t, nodes, "worker-3")
 	assert.Equal(t, store.StatusCanceled, worker3.Status)
@@ -271,17 +254,9 @@ func TestInterleaved(t *testing.T) {
 	}
 }
 
-// TestGoldenIsCurrent holds the copy of the golden log to the one in the
-// module, when the module cache has it, so that a new go-clikit that adds
-// to the log gets its lines read.
-func TestGoldenIsCurrent(t *testing.T) {
-	want := goldenOfModule(t)
-	assert.Equal(t, string(want), string(readFixture(t, "golden-v1.jsonl")))
-}
-
 func TestChangedAndImmutableRuns(t *testing.T) {
 	r := NewReducer(5)
-	r.Take(line("trace", "aaaaaaaaaaaaaaaa", `"trace":"`+traceT+`","program":"sind"`))
+	r.Take(line("trace", "aaaaaaaaaaaaaaaa", `"trace":"0123456789abcdef0123456789abcdef","program":"sind"`))
 	r.Take(ev("start", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"create cluster"`))
 	r.Take(ev("start", "bbbbbbbbbbbbbbbb", "2026-01-01T00:00:01Z", `"span":"r1","kind":"command","name":"delete cluster"`))
 	assert.Equal(t, []string{"aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"}, r.Changed())
@@ -306,85 +281,50 @@ func TestChangedAndImmutableRuns(t *testing.T) {
 	assert.Equal(t, "nodes", third[1].Root.Children[0].Name)
 	assert.Equal(t, "hi", third[1].Root.Children[0].Message)
 	assert.Equal(t, "create cluster", third[1].Title)
-	assert.Equal(t, traceT, third[1].Trace)
+	assert.Equal(t, "0123456789abcdef0123456789abcdef", third[1].Trace)
 
 	// A run that did not change is the one it was.
 	assert.Equal(t, third[0], r.Runs()[0])
 }
 
-func TestBadLinesAreLeftOut(t *testing.T) {
-	const run = "aaaaaaaaaaaaaaaa"
-	good := ev("start", run, "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"x"`)
-	for name, bad := range map[string]string{
-		"empty":            ``,
-		"text":             `hello`,
-		"cut":              string(good[:len(good)-12]),
-		"array":            `[1,2]`,
-		"number":           `5`,
-		"version 2":        `{"v":2,"type":"start","run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"version missing":  `{"type":"start","run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"version text":     `{"v":"1","type":"start","run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"no run":           `{"v":1,"type":"start","time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"run is a number":  `{"v":1,"type":"start","run":5,"time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"unknown type":     `{"v":1,"type":"mystery","run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"no type":          `{"v":1,"run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z","span":"s","kind":"command"}`,
-		"start, no span":   `{"v":1,"type":"start","run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z","kind":"command"}`,
-		"start, no time":   `{"v":1,"type":"start","run":"aaaaaaaaaaaaaaaa","span":"s","kind":"command"}`,
-		"start, bad time":  `{"v":1,"type":"start","run":"aaaaaaaaaaaaaaaa","time":"yesterday","span":"s","kind":"command"}`,
-		"end, no span":     `{"v":1,"type":"end","run":"aaaaaaaaaaaaaaaa","time":"2026-01-01T00:00:00Z"}`,
-		"unterminated obj": `{"v":1,"type":"start"`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			r := NewReducer(5)
-			r.Take([]byte(bad))
-			assert.Empty(t, r.Runs())
-			assert.Empty(t, r.Changed(), "a line left out makes no run")
-		})
-	}
+// runA is the run of the tests that make their lines by hand.
+const runA = "aaaaaaaaaaaaaaaa"
 
-	// None of them costs a later line.
-	r := NewReducer(5)
-	r.Take([]byte(`{"v":1,"type":"start"`))
-	r.Take(good)
-	r.Take([]byte("}}garbage{{"))
-	r.Take(ev("end", run, "2026-01-01T00:00:05Z", `"span":"r1","status":"ok","state":"ended"`))
-	runs := r.Runs()
-	require.Len(t, runs, 1)
-	assert.Equal(t, store.StatusOK, runs[0].Status)
+func titles(r *Reducer) []string {
+	var out []string
+	for _, run := range r.Runs() {
+		out = append(out, run.Title)
+	}
+	return out
 }
 
-func TestUnknownKeysAndValuesAreLeftOut(t *testing.T) {
+func TestKeepAtLeastOne(t *testing.T) {
+	r := NewReducer(0)
+	for i := range 40 {
+		id := fmt.Sprintf("%016x", i+1)
+		r.Take(ev("start", id, fmt.Sprintf("2026-01-01T00:00:%02dZ", i), `"span":"r","kind":"command","name":"`+id+`"`))
+	}
+	assert.Equal(t, []string{fmt.Sprintf("%016x", 40)}, titles(r), "one run is kept")
+}
+
+func TestTitleTellsRunsApart(t *testing.T) {
 	r := NewReducer(5)
-	const run = "aaaaaaaaaaaaaaaa"
-	r.Take(line("trace", run, `"trace":"`+traceT+`","program":"sind","version":"v1","future":{"a":[1]},"traceFlags":"01","traceState":"x=y"`))
-	r.Take(ev("start", run, "2026-01-01T00:00:00Z",
-		`"span":"r1","kind":"command","name":"cmd","flags":["hidden","sparkly","dry-run"],"state":"running","seq":"one","timeout":"long","exit":"x","newkey":[1,2],"httpStatus":503,"cache":"hit"`))
-	r.Take(ev("start", run, "2026-01-01T00:00:01Z",
-		`"span":"s1","parent":"r1","kind":"hologram","name":"odd","state":"strange","unit":"furlongs","amount":3,"size":10`))
-	r.Take(ev("end", run, "2026-01-01T00:00:02Z",
-		`"span":"s1","parent":"r1","kind":"hologram","status":"exploded","class":"cosmic","err":"bang","amount":3,"size":10`))
-	runs := r.Runs()
-	require.Len(t, runs, 1)
-	root := runs[0].Root
-	assert.True(t, root.Hidden)
-	assert.True(t, root.DryRun)
-	assert.False(t, root.Fold)
-	assert.Zero(t, root.Timeout, "a value of the wrong type is left out")
-	assert.Equal(t, "sind", runs[0].Program)
-	odd := root.Children[0]
-	assert.Empty(t, odd.Kind)
-	assert.Equal(t, StateEnded, odd.State)
-	assert.Empty(t, odd.Status, "an unknown status is none")
-	assert.Empty(t, odd.Class)
-	assert.Equal(t, "bang", odd.Err)
-	assert.Empty(t, odd.Unit)
-	assert.EqualValues(t, 10, odd.Size)
-	assert.EqualValues(t, 3, odd.Amount)
-	assert.Equal(t, at("2026-01-01T00:00:01Z"), odd.Started, "an unknown state is running")
+	r.Take(ev("start", runA, "2026-01-01T00:00:00Z", `"span":"r","kind":"command","name":"create cluster","node":"dev"`))
+	r.Take(ev("start", "bbbbbbbbbbbbbbbb", "2026-01-01T00:00:01Z", `"span":"r","kind":"command","name":"create cluster"`))
+	assert.Equal(t, []string{"create cluster", "create cluster dev"}, titles(r))
+}
+
+func TestSuspended(t *testing.T) {
+	r := NewReducer(5)
+	r.Take(ev("start", runA, "2026-01-01T00:00:00Z", `"span":"r","kind":"command","name":"c"`))
+	r.Take(ev("suspend", runA, "2026-01-01T00:00:01Z", `"span":"r"`))
+	assert.True(t, r.Runs()[0].Suspended)
+	r.Take(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"r","status":"ok"`))
+	assert.False(t, r.Runs()[0].Suspended, "a run that ended asks nothing")
 }
 
 func TestFromUI(t *testing.T) {
-	assert.False(t, only(t, "golden-v1.jsonl").FromUI, "a tracestate of another system")
+	assert.False(t, golden(t).FromUI, "a tracestate of another system")
 	r := NewReducer(5)
 	for i, state := range []string{"sind=ui", "rojo=00f067aa0ba902b7, sind=ui", ""} {
 		run := fmt.Sprintf("00000000000000%02d", i)

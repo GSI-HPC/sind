@@ -96,17 +96,12 @@
     }
   }
 
-  // say tells screen readers a sentence through the page's polite live
-  // region, once the user stops typing.
+  // say tells screen readers a sentence, once the user stops typing: app.js
+  // puts it into the page's polite live region.
   let sayTimer = 0;
   function say(text) {
-    const region = document.getElementById('say');
-    if (!region) return;
     clearTimeout(sayTimer);
-    sayTimer = setTimeout(() => {
-      region.textContent = '';
-      setTimeout(() => { region.textContent = text; }, 60);
-    }, 500);
+    sayTimer = setTimeout(() => document.dispatchEvent(new CustomEvent('sind:say', { detail: text })), 500);
   }
 
   // keepText writes the text of the filter field into the address of the
@@ -190,8 +185,7 @@
 
   // openDialog shows the dialog at url in the layer.
   function openDialog(url) {
-    if (window.htmx) window.htmx.ajax('GET', url, { target: '#layer', swap: 'innerHTML' });
-    else location.assign(url);
+    htmx.ajax('GET', url, { target: '#layer', swap: 'innerHTML' });
   }
 
   // bulkURL is the dialog that deletes the selected clusters: the one of

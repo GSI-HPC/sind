@@ -46,19 +46,24 @@ func pgClusterTitle(d *pgClusterView) string {
 // own, and the ones that tab shows. The logs tab keeps none, as a new
 // render of it would end the stream that it holds.
 func pgClusterTopics(p Params, tab string) []store.Topic {
-	realm, name := p.Get("realm"), p.Get("cluster")
+	realm := p.Get("realm")
+	topics := []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, p.Get("cluster"))}
 	switch tab {
 	case "", "summary":
-		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name), store.MonitoringTopic(realm), store.MeshTopic(realm)}
+		return append(topics, store.MonitoringTopic(realm), store.MeshTopic(realm))
 	case "nodes", "slurm":
-		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name)}
+		return topics
 	case "network":
-		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name), store.NetworksTopic(realm), store.VolumesTopic(realm), store.MeshTopic(realm)}
+		return append(topics, store.NetworksTopic(realm), store.VolumesTopic(realm), store.MeshTopic(realm))
 	case "connect":
-		return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.MonitoringTopic(realm)}
+		return append(topics[:2], store.MonitoringTopic(realm))
 	}
 	return nil
 }
+
+// pgClusterWatch returns the topics of the head of a cluster or node page:
+// those of the cluster, its nodes and its status.
+func pgClusterWatch(p Params) []store.Topic { return pgClusterTopics(p, "nodes") }
 
 func pgClusterFragments() []Fragment {
 	params := []string{"realm", "cluster", "tab"}
@@ -66,11 +71,7 @@ func pgClusterFragments() []Fragment {
 	return []Fragment{
 		{
 			Name: "pg-cluster-head", Params: params, Topics: []store.Topic{store.TopicRuns},
-			Watch: func(p Params) []store.Topic {
-				realm, name := p.Get("realm"), p.Get("cluster")
-				return []store.Topic{store.ClustersTopic(realm), store.NodesTopic(realm), store.StatusTopic(realm, name)}
-			},
-			Load: load,
+			Watch: pgClusterWatch, Load: load,
 		},
 		{
 			// The Logs tab reads its own keys too, so that the body that a
@@ -199,7 +200,7 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 		return nil, pgTabMiss(realm, name, tab)
 	}
 	d.Found = true
-	d.Cluster = pgClusterOf(sn, realm, summary, sn.MonitoringOf(realm), v.Now)
+	d.Cluster = pgClusterOf(sn, realm, summary, sn.Monitorings[realm], v.Now)
 	d.Status = sn.Status(realm, name)
 	d.Slurm = pgSlurmOf(sn.Slurm(realm, name), d.Cluster.Nodes)
 	d.Tabs = pgTabLinks(d)
@@ -221,17 +222,12 @@ func pgLoadCluster(v *View) (*pgClusterView, error) {
 }
 
 func pgTabLinks(d *pgClusterView) []pgTabLink {
-	problems := 0
-	for _, n := range d.Cluster.Nodes {
-		if n.Problem() {
-			problems++
-		}
-	}
+	problems := pgCount(d.Cluster.Nodes, pgNode.Problem)
 	var tabs []pgTabLink
 	for _, t := range pgTabs {
 		l := pgTabLink{Key: t.Key, Label: t.Label, URL: pgClusterURL(d.Realm, d.Name, t.Key), On: t.Key == d.Tab}
 		if t.Key == "nodes" {
-			l.Count, l.CountLabel = fmt.Sprint(len(d.Cluster.Nodes)), d.NodesText()
+			l.Count, l.CountLabel = fmt.Sprint(len(d.Cluster.Nodes)), d.Cluster.NodesText()
 			if problems > 0 {
 				l.Problems = pgPlural(problems, "problem", "problems")
 			}
@@ -320,7 +316,7 @@ func pgNodesTab(d *pgClusterView) {
 func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 	mine := string(cluster.NetworkName(d.Realm, d.Name))
 	mesh := d.Realm + "-mesh"
-	for _, n := range sn.NetworksOf(d.Realm) {
+	for _, n := range sn.Networks[d.Realm] {
 		if n.Name == mine || n.Name == mesh {
 			d.Networks = append(d.Networks, pgNetRow{n.Name, n.Driver, n.Subnet, n.Gateway, n.Name == mine})
 		}
@@ -343,7 +339,7 @@ func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 		return
 	}
 	prefix := cluster.ContainerPrefix(d.Realm, d.Name)
-	for _, vol := range sn.VolumesOf(d.Realm) {
+	for _, vol := range sn.Volumes[d.Realm] {
 		if strings.HasPrefix(vol.Name, prefix) {
 			d.Volumes = append(d.Volumes, vol)
 		}
@@ -381,7 +377,7 @@ func pgMountMode(m cluster.MountPoint) string {
 // and where the munge key is.
 func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
 	zone := d.Realm + ".sind"
-	m, _ := sn.MeshOf(d.Realm)
+	m := sn.Meshes[d.Realm]
 	if m.Info != nil && m.Info.DNSZone != "" {
 		zone = m.Info.DNSZone
 	}
@@ -414,7 +410,6 @@ func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
 // cluster, and the addresses of its services.
 func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 	sind, cl := pgSind(d.Realm), pgClusterArg(d.Name)
-	entry := pgEntry(d.Cluster.Nodes)
 	var first, api *pgNode
 	for i, n := range d.Cluster.Nodes {
 		if n.Role == config.RoleAPI {
@@ -425,7 +420,7 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 		}
 	}
 	d.Commands = []pgCmd{
-		{"Open a shell on the " + entry, fmt.Sprintf("%s enter%s", sind, cl)},
+		pgEnterCmd(d),
 		{"Run one command", fmt.Sprintf("%s exec%s -- sinfo", sind, cl)},
 	}
 	if first != nil {
@@ -438,7 +433,7 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 	if api != nil {
 		d.API = "http://" + api.FQDN + ":6820"
 	}
-	if m := sn.MonitoringOf(d.Realm); m != nil && d.Cluster.Monitoring {
+	if m := sn.Monitorings[d.Realm]; m != nil && d.Cluster.Monitoring {
 		for _, s := range m.Services {
 			if s.Name == "grafana" {
 				d.Grafana = s.URL
@@ -454,9 +449,6 @@ func (d *pgClusterView) ConnectLink() string { return pgClusterURL(d.Realm, d.Na
 func (d *pgClusterView) SlurmConfLink() string {
 	return pgClusterURL(d.Realm, d.Name, "slurm") + "#slurm-file-slurm-conf"
 }
-
-// NodesText returns "1 node" or "3 nodes".
-func (d *pgClusterView) NodesText() string { return pgPlural(len(d.Cluster.Nodes), "node", "nodes") }
 
 // ClusterArg returns the CLUSTER argument of a command: " dev", empty for
 // the default cluster.

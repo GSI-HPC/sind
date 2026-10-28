@@ -38,11 +38,11 @@ func registerRunActivity(r *Registry) {
 	})
 	// The realm picker stays on the page, and a realm it picks is the
 	// one the lists show next.
-	r.AddRoute(pgRealmLogRoute(Page{
+	r.AddRoute(pgRealmRoute(Page{
 		Name: "run-activity", Pattern: "GET /activity", Title: "Activity", Nav: "activity",
 		Fragments: []string{"run-list"},
-	}))
-	r.SetNavCountAt("activity", runNavCount)
+	}, false, true))
+	r.SetNavCount("activity", runNavCount)
 }
 
 // runNavCount is the badge behind the Activity entry of the rail: the runs
@@ -191,7 +191,7 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 	}
 	if e.realms == nil && e.cluster != "" {
 		for _, realm := range slices.Sorted(maps.Keys(snap.Clusters)) {
-			if runHasCluster(snap, realm, e.cluster) {
+			if _, ok := snap.Cluster(realm, e.cluster); ok {
 				e.realms = append(e.realms, realm)
 			}
 		}

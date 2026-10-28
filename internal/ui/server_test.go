@@ -5,7 +5,6 @@ package ui
 import (
 	"bytes"
 	"context"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -113,7 +112,7 @@ func TestPageShell(t *testing.T) {
 	a := ts.srv.assets
 
 	assert.Contains(t, body, "<title>Demo · sind ui</title>")
-	assert.Contains(t, body, `<meta name="csrf-token" content="`+ts.csrf+`">`)
+	assert.Contains(t, body, `<body hx-headers='{"X-Sind-CSRF":"`+ts.csrf+`"}'>`)
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("app.css")+`">`)
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("css/demo.css")+`">`)
 	assert.Less(t, strings.Index(body, a.URL("app.css")), strings.Index(body, a.URL("css/demo.css")), "extra styles follow app.css")
@@ -163,10 +162,10 @@ func TestPageShell(t *testing.T) {
 
 func TestRailCountsAndLitEntry(t *testing.T) {
 	cfg, st := testConfig(t)
-	cfg.Registry.SetNavCount("clusters", func(store.Snapshot) NavCount {
+	cfg.Registry.SetNavCount("clusters", func(store.Snapshot, time.Time) NavCount {
 		return NavCount{Text: "2", Class: "bad"}
 	})
-	cfg.Registry.SetNavCount("nodes", func(store.Snapshot) NavCount { return NavCount{Text: "5"} })
+	cfg.Registry.SetNavCount("nodes", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "5"} })
 	ts := newTestServerFrom(t, cfg, st).login()
 	body := ts.get("/demo/x").Body.String()
 	assert.Contains(t, body, `Clusters<span class="n bad">2</span>`)
@@ -255,12 +254,6 @@ func TestRouteView(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAccessors(t *testing.T) {
-	ts := newTestServer(t)
-	assert.Same(t, ts.srv.env, ts.srv.Env())
-	assert.Same(t, ts.st, ts.srv.Store())
-}
-
 func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 	good := fstest.MapFS{"templates/test.tmpl": {Data: []byte(testTemplates)}}
 	for name, tc := range map[string]struct {
@@ -291,13 +284,6 @@ func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 			e["templates/more.tmpl"] = &fstest.MapFile{Data: []byte(`{{define "page-more"}}{{end}}`)}
 			cfg.Registry.AddPage(Page{Name: "more", Pattern: "GET /more", Fragments: []string{"ghost"}})
 		}, "page more names the unknown fragment ghost"},
-		"bad pattern": {func(cfg *serverConfig, e fstest.MapFS) {
-			e["templates/more.tmpl"] = &fstest.MapFile{Data: []byte(`{{define "page-more"}}{{end}}`)}
-			cfg.Registry.AddPage(Page{Name: "more", Pattern: "GET /more/{"})
-		}, "route:"},
-		"conflicting routes": {func(cfg *serverConfig, _ fstest.MapFS) {
-			cfg.Registry.AddRoute(Route{Pattern: "GET /demo/{id}"})
-		}, "route:"},
 		"template syntax": {func(_ *serverConfig, e fstest.MapFS) {
 			e["templates/broken.tmpl"] = &fstest.MapFile{Data: []byte(`{{define "x"}}{{end`)}
 		}, "templates:"},
@@ -349,19 +335,10 @@ func TestFragmentHTMLUnknown(t *testing.T) {
 	assert.ErrorContains(t, err, `unknown fragment "nope"`)
 }
 
-func TestRegisteredTemplateFunctions(t *testing.T) {
-	cfg, st := testConfig(t)
-	cfg.Registry.AddFuncs(template.FuncMap{"shout": strings.ToUpper})
-	cfg.Registry.AddPage(Page{Name: "fn", Pattern: "GET /fn", Title: "Fn"})
-	cfg.FS = overlay(t, fstest.MapFS{"templates/test.tmpl": {Data: []byte(testTemplates + `{{define "page-fn"}}{{shout "loud"}}{{end}}`)}})
-	ts := newTestServerFrom(t, cfg, st).login()
-	assert.Contains(t, ts.get("/fn").Body.String(), "LOUD")
-}
-
 func TestNotFoundThatCannotRender(t *testing.T) {
 	cfg, st := testConfig(t)
 	cfg.Registry = NewRegistry()
-	cfg.Registry.AddFragment(Fragment{Name: "rail", Shell: true, Load: func(*View) error { return assert.AnError }})
+	cfg.Registry.AddFragment(Fragment{Name: "rail", Load: func(*View) error { return assert.AnError }})
 	cfg.Registry.AddFragment(tasksFragment())
 	ts := newTestServerFrom(t, cfg, st).login()
 	assert.Equal(t, http.StatusInternalServerError, ts.get("/nope").Code)

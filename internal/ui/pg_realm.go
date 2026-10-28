@@ -34,10 +34,11 @@ var pgRealmPages = map[string]string{
 	"run-activity": "/activity",
 }
 
-// pgRealmNext returns the address that the realm picker of a page's view
-// goes to: the page itself when it shows one realm or all, the list of
-// nodes from a node page, and the list of clusters from any other page.
-func pgRealmNext(v *View) string {
+// PgRealmNext returns the address that the realm picker in the top bar of
+// a page's view goes to: the page itself when it shows one realm or all,
+// the list of nodes from a node page, and the list of clusters from any
+// other page.
+func (v *View) PgRealmNext() string {
 	if p, ok := pgRealmPages[v.Page]; ok {
 		return p
 	}
@@ -54,10 +55,10 @@ type PgRealmOption struct {
 	Selected bool
 }
 
-// pgRealmOptions returns the entries of the realm picker: every realm of
+// PgRealmOptions returns the entries of the realm picker: every realm of
 // the snapshot with its cluster count, the realm of the page when the
 // snapshot does not know it, and the entry for all realms.
-func pgRealmOptions(v *View) []PgRealmOption {
+func (v *View) PgRealmOptions() []PgRealmOption {
 	cur := v.Params.Get("realm")
 	opts := []PgRealmOption{{Value: "", Label: "all realms", Selected: cur == ""}}
 	seen := false
@@ -80,11 +81,11 @@ type PgRealmScope struct {
 	ShowAll string
 }
 
-// pgRealmScope returns the scope of the view of a page that shows one
+// PgRealmScope returns the scope of the view of a page that shows one
 // realm or all of them; Realm is empty when it shows every realm. The page
 // is the one of the lit rail entry, which a fragment that /events renders
 // knows too.
-func pgRealmScope(v *View) PgRealmScope {
+func (v *View) PgRealmScope() PgRealmScope {
 	return PgRealmScope{Realm: v.Params.Get("realm"), ShowAll: navHref(v.Nav) + "?realm="}
 }
 
@@ -116,18 +117,11 @@ func pgRealmKnown(sn store.Snapshot, realm string) bool {
 // A realm that Docker has no trace of is the Not found page, with the
 // realms of a name close to it; while Docker is unknown or down, the page
 // shows the realm empty. Only the page checks: its live updates keep
-// showing the realm when its last cluster goes.
-func pgRealmRoute(p Page, remember bool) Route { return pgRealmRouteOf(p, remember, false) }
-
-// pgRealmLogRoute serves a page of the event log that shows one realm or
-// all of them, as pgRealmRoute does, but for a realm that Docker has no
-// trace of: the log keeps the runs of a realm whose last cluster is gone,
-// so the page shows that realm too.
-func pgRealmLogRoute(p Page) Route { return pgRealmRouteOf(p, false, true) }
-
-// pgRealmRouteOf is pgRealmRoute; anyRealm shows a realm that Docker has
-// no trace of instead of the Not found page.
-func pgRealmRouteOf(p Page, remember, anyRealm bool) Route {
+// showing the realm when its last cluster goes. The list pages of the
+// Realm group of the rail remember; a page of the event log sets anyRealm,
+// as the log keeps the runs of a realm whose last cluster is gone, and
+// shows a realm that Docker has no trace of instead of the Not found page.
+func pgRealmRoute(p Page, remember, anyRealm bool) Route {
 	load := p.Load
 	base := pgRealmPages[p.Name]
 	p.Load = func(v *View) error {
@@ -146,7 +140,7 @@ func pgRealmRouteOf(p Page, remember, anyRealm bool) Route {
 	}
 	return Route{Pattern: p.Pattern, Handle: func(s *Server, w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		sn := s.Store().Snapshot()
+		sn := s.env.Store.Snapshot()
 		old := ""
 		if c, err := r.Cookie(realmCookie); err == nil && config.CheckName("realm", c.Value) == nil {
 			old = c.Value
@@ -184,7 +178,3 @@ func pgRememberRealm(w http.ResponseWriter, realm string) {
 	}
 	http.SetCookie(w, c)
 }
-
-// pgListRoute serves a list page of the Realm group of the rail, which
-// remembers the realm.
-func pgListRoute(p Page) Route { return pgRealmRoute(p, true) }

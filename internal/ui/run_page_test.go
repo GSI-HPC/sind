@@ -46,8 +46,6 @@ func TestRunHead(t *testing.T) {
 
 	// From a terminal: no task to stop, and the page says so.
 	h := runHeadOf(runCtx{Run: run, Found: true, Snap: snap, Now: runAt(30)})
-	assert.True(t, h.Terminal)
-	assert.True(t, h.Running)
 	assert.Equal(t, "from a terminal", h.Origin)
 	assert.Contains(t, h.NoStop, "Ctrl-C")
 	other := run
@@ -67,7 +65,6 @@ func TestRunHead(t *testing.T) {
 	task := store.Task{ID: "t1", Trace: run.Trace, Realm: "sind", Cluster: "dev"}
 	snap.Tasks = []store.Task{task}
 	h = runHeadOf(newRunCtx((&View{Snap: snap, Now: runAt(30), Params: Params{}}).runWithRun(run)))
-	assert.False(t, h.Terminal)
 	assert.Equal(t, "from sind ui", h.Origin)
 	assert.Empty(t, h.NoStop)
 	assert.Equal(t, "t1", h.TaskID)
@@ -88,7 +85,6 @@ func TestRunHead(t *testing.T) {
 	rc = runCtx{Run: over, Found: true, Task: &task, Snap: rc.Snap, Now: runAt(30)}
 	h = runHeadOf(rc)
 	assert.Empty(t, h.TaskID)
-	assert.False(t, h.Running)
 	assert.Equal(t, "exit 130", h.Exit)
 	assert.Equal(t, "canceled", h.Pill)
 	assert.Equal(t, "1", runHeadOf(runCtx{Run: store.Run{Trace: "1"}}).Trace)
@@ -111,7 +107,7 @@ func TestRunPageNamesTheRunAsTheDock(t *testing.T) {
 	assert.Equal(t, "create worker dev --count 3: started.", runSummaryOf(rc).Say)
 	require.NoError(t, runPageLoad(v))
 	assert.Equal(t, "create worker dev --count 3", v.Title)
-	assert.Equal(t, dockTaskCard(task, run, true, runAt(30)).Title, h.Title)
+	assert.Equal(t, dockTaskCard(task, &run, runAt(30)).Title, h.Title)
 }
 
 func TestRunSummary(t *testing.T) {
@@ -219,12 +215,6 @@ func TestRunRollbackNote(t *testing.T) {
 	assert.Empty(t, note(runSp("step", "other", runEndedAt(1, 2, "ok"))))
 	assert.Empty(t, runRollbackNote(runOf(9, "failed", runSp("call", "rollback"))))
 	assert.Empty(t, runRollbackNote(runOf(9, "failed")))
-}
-
-func TestRunPlural(t *testing.T) {
-	assert.Equal(t, "1 target", runPlural(1, "target"))
-	assert.Equal(t, "0 targets", runPlural(0, "target"))
-	assert.Equal(t, "2 targets", runPlural(2, "target"))
 }
 
 func TestRunBack(t *testing.T) {
