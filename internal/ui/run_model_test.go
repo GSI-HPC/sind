@@ -485,7 +485,7 @@ func TestRunFailure(t *testing.T) {
 	assert.Equal(t, "node worker-1: timed out", runFailure(one))
 	two := runOf(5, store.StatusFailed,
 		runSp(activity.KindTarget, "w1", failed("worker-1")), runSp(activity.KindTarget, "w2", failed("worker-2")))
-	assert.Equal(t, "worker-[1,2]: node {}: timed out", runFailure(two))
+	assert.Equal(t, "worker-[1-2]: node {}: timed out", runFailure(two))
 	cmd := runOf(5, store.StatusFailed)
 	cmd.Err = "no such cluster"
 	assert.Equal(t, "no such cluster", runFailure(cmd))

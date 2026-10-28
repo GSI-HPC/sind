@@ -625,9 +625,10 @@ func runRollbackNote(run store.Run) string {
 
 var runNameRE = regexp.MustCompile(`^(.*?)([1-9][0-9]*|0)$`)
 
-// runFoldNodes writes a set of node names the short way, as the terminal
-// does: worker-[2,5] for worker-2 and worker-5, worker-[0-3] for four in a
-// row. Names without a number at the end stay as they are.
+// runFoldNodes writes a set of node names the short way, as node sets do:
+// worker-[2,5] for worker-2 and worker-5, worker-[0-3] for four in a row
+// and worker-[0-1] for two. Names without a number at the end stay as they
+// are.
 func runFoldNodes(names []string) string {
 	type group struct {
 		prefix string
@@ -671,12 +672,9 @@ func runFoldNodes(names []string) string {
 			for j+1 < len(g.nums) && g.nums[j+1] <= g.nums[j]+1 {
 				j++
 			}
-			switch {
-			case g.nums[j]-g.nums[i] >= 2:
+			if g.nums[j] > g.nums[i] {
 				parts = append(parts, fmt.Sprintf("%d-%d", g.nums[i], g.nums[j]))
-			case j > i && g.nums[j] > g.nums[i]:
-				parts = append(parts, strconv.Itoa(g.nums[i]), strconv.Itoa(g.nums[j]))
-			default:
+			} else {
 				parts = append(parts, strconv.Itoa(g.nums[i]))
 			}
 			i = j + 1

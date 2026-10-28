@@ -29,7 +29,7 @@ func TestRunTimeoutSays(t *testing.T) {
 		{Node: "a", Service: "container"}, {Node: "b", Service: "systemd"}, {Node: "c"}, {Node: "d", Service: "dbus"},
 	})
 	assert.Equal(t, []runPlain{
-		{Word: "munge", Text: " on worker-[1,2] did not start in time. Without munge, the nodes cannot talk to slurmctld."},
+		{Word: "munge", Text: " on worker-[1-2] did not start in time. Without munge, the nodes cannot talk to slurmctld."},
 		{Word: "slurmctld", Text: " on worker-3 did not start in time. Without slurmctld, the cluster has no controller."},
 		{Word: "sshd", Text: " on db did not start in time. Without sshd, the node takes no ssh logins."},
 		{Text: "The container of a did not start in time."},

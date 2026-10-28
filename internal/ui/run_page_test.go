@@ -24,13 +24,13 @@ func TestRunFoldNodes(t *testing.T) {
 	}{
 		"one":              {[]string{"worker-2"}, "worker-2"},
 		"two apart":        {[]string{"worker-5", "worker-2"}, "worker-[2,5]"},
-		"two in a row":     {[]string{"worker-2", "worker-3"}, "worker-[2,3]"},
+		"two in a row":     {[]string{"worker-2", "worker-3"}, "worker-[2-3]"},
 		"a range":          {[]string{"worker-0", "worker-1", "worker-2", "worker-3"}, "worker-[0-3]"},
 		"range and single": {[]string{"w1", "w2", "w3", "w7"}, "w[1-3,7]"},
 		"the same twice":   {[]string{"w2", "w2"}, "w2"},
 		"no number":        {[]string{"controller", "controller"}, "controller"},
-		"leading zero":     {[]string{"w01", "w02"}, "w0[1,2]"},
-		"zero":             {[]string{"w0", "w1"}, "w[0,1]"},
+		"leading zero":     {[]string{"w01", "w02"}, "w0[1-2]"},
+		"zero":             {[]string{"w0", "w1"}, "w[0-1]"},
 		"mixed groups":     {[]string{"worker-1", "controller", "db-1", "worker-3"}, "worker-[1,3], controller, db-1"},
 		"none":             {nil, ""},
 	} {
@@ -140,7 +140,7 @@ func TestRunFailedPanel(t *testing.T) {
 	p := runFailedOf(runCtxOf(runFixture(t, "create-failed.jsonl", -1)[0], runAt(400)))
 	require.NotNil(t, p)
 	assert.Equal(t, "bad", p.Class)
-	assert.Equal(t, []runFailGroup{{Nodes: "worker-[1,2]", Class: "timeout", Err: "node {}: timed out; last probe error: probe munge: munge not ready"}}, p.Groups)
+	assert.Equal(t, []runFailGroup{{Nodes: "worker-[1-2]", Class: "timeout", Err: "node {}: timed out; last probe error: probe munge: munge not ready"}}, p.Groups)
 	assert.Empty(t, p.CmdErr)
 	assert.Empty(t, p.Notes, "the line beside the outcome says that the rollback went well")
 
@@ -180,8 +180,8 @@ func TestRunStoppedPanel(t *testing.T) {
 	require.NotNil(t, p)
 	assert.Equal(t, "warn", p.Class)
 	assert.Equal(t, []runPlain{
-		{Text: "worker-[0,1] were waiting for munge at that time."}, {Text: "1 node had not started yet."},
-		{Text: "sind removed controller, worker-[0,1] again (rollback, 1.7s)."},
+		{Text: "worker-[0-1] were waiting for munge at that time."}, {Text: "1 node had not started yet."},
+		{Text: "sind removed controller, worker-[0-1] again (rollback, 1.7s)."},
 	}, p.Says)
 	assert.Empty(t, p.Notes)
 
@@ -206,6 +206,13 @@ func TestRunStoppedPanel(t *testing.T) {
 		{Text: "1 node had not started yet."},
 	}, p.Says)
 	assert.Empty(t, p.Notes)
+
+	// Several nodes in one phase fold as a node set.
+	wait := func(n string) store.Span {
+		return runSp("target", n, runStartedAt(0), runWith(func(s *store.Span) { s.Node = n }), runKids(runSp("wait", "ready", runStartedAt(0))))
+	}
+	two := runOf(9, "canceled", runSp("step", "nodes", runEndedAt(0, 9, "canceled"), runKids(wait("worker-0"), wait("worker-1"), wait("db"))))
+	assert.Equal(t, []string{"worker-[0-1], db were waiting for their containers at that time."}, runStoppedDoing(two))
 }
 
 func TestRunRollbackNote(t *testing.T) {
