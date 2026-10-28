@@ -60,6 +60,12 @@
 .scrim .act-why2{font-size:var(--t-sm)}
 /* A word of a command breaks only where it does not fit a line. */
 .scrim .act-cw{display:inline-block;max-width:100%}
+/* Each command of the Runs block is a line of its own, which, when it
+   wraps, goes on indented under its first word. */
+.scrim .cmd code.act-cls{text-indent:0}
+.scrim .act-cl{display:block;padding-left:2ch;text-indent:-2ch}
+.scrim .act-cl::before{content:"$ ";color:var(--term-prompt);user-select:none}
+.scrim .act-cl .act-cw{text-indent:0}
 .scrim .act-other{border:1px solid var(--line-2);border-radius:var(--r);padding:8px 12px}
 .scrim .act-other>summary{cursor:pointer;display:flex;align-items:center;gap:8px;min-width:0}
 .scrim .act-other>summary .pg-caret{flex:none;margin-left:-2px;transform:rotate(-90deg);transition:transform .15s}

@@ -73,7 +73,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>
 {{else}}{{with .Cmd.Stays}}<ul class="act-stays" aria-label="What stays">{{range .}}<li><span class="pg-ck y" aria-hidden="true">✓</span><span>{{.}}</span></li>{{end}}</ul>{{end}}{{end}}
 {{template "act-callouts" .}}
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{range $i, $w := .CmdWords}}{{if $i}} {{end}}<span class="act-cw">{{$w}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code class="nop act-cls">{{range .CmdLines}}<span class="act-cl">{{range $i, $w := .}}{{if $i}} {{end}}<span class="act-cw">{{$w}}</span>{{end}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
 {{end}}
 {{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
 {{if .Confirms}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}

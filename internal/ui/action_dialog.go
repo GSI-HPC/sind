@@ -1405,10 +1405,18 @@ func (p actPreview) Warnings() int {
 	return n
 }
 
-// CmdWords are the words of the command as the dialog shows it, each of
-// which a line breaks only where it does not fit by itself, so that a
-// node name such as worker-4.dev stays whole.
-func (p actPreview) CmdWords() []string { return strings.Split(p.Cmd.Display, " ") }
+// CmdLines are the lines of the command as the dialog shows it, one for
+// each command of a command of several, each in words, which a line
+// breaks only where one does not fit by itself, so that a node name such
+// as worker-4.dev stays whole.
+func (p actPreview) CmdLines() [][]string {
+	lines := strings.Split(p.Cmd.Display, "\n")
+	out := make([][]string, len(lines))
+	for i, l := range lines {
+		out[i] = strings.Split(l, " ")
+	}
+	return out
+}
 
 // actTextPart is a part of a note: text, or, where Mono is set, a name
 // as the shell or a config file writes it.

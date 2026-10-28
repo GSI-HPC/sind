@@ -294,7 +294,9 @@ func TestActPreview_FooterParts(t *testing.T) {
 
 	notes := actPreview{Cmd: action.Command{Notes: []string{"the partition `all`.", "`a`"}}}.NoteParts()
 	assert.Equal(t, [][]actTextPart{{{"the partition ", false}, {"all", true}, {".", false}}, {{"a", true}}}, notes)
-	assert.Equal(t, []string{"sind", "power", "reboot", "worker-4.dev"}, actPreview{Cmd: action.Command{Display: "sind power reboot worker-4.dev"}}.CmdWords())
+	assert.Equal(t, [][]string{{"sind", "power", "reboot", "worker-4.dev"}}, actPreview{Cmd: action.Command{Display: "sind power reboot worker-4.dev"}}.CmdLines())
+	assert.Equal(t, [][]string{{"sind", "delete", "cluster"}, {"sind", "delete", "cluster", "dev"}}, actPreview{Cmd: action.Command{Display: "sind delete cluster\nsind delete cluster dev"}}.CmdLines(),
+		"a command of several shows one line for each")
 }
 
 // The picker of the Power dialog shows the Slurm state of each node, with

@@ -112,14 +112,18 @@ func newActFixture(t *testing.T) *actFixture {
 	return f
 }
 
-// actCode is the command of a preview as the dialog shows it: each word
-// of display, html-escaped, whole.
+// actCode is the command of a preview as the dialog shows it: each line
+// of display a line of its own, each of its words html-escaped, whole.
 func actCode(display string) string {
-	words := strings.Split(display, " ")
-	for i, w := range words {
-		words[i] = `<span class="act-cw">` + w + `</span>`
+	lines := strings.Split(display, "\n")
+	for l, line := range lines {
+		words := strings.Split(line, " ")
+		for i, w := range words {
+			words[i] = `<span class="act-cw">` + w + `</span>`
+		}
+		lines[l] = `<span class="act-cl">` + strings.Join(words, " ") + `</span>`
 	}
-	return "<code>" + strings.Join(words, " ") + "</code>"
+	return `<code class="nop act-cls">` + strings.Join(lines, "") + "</code>"
 }
 
 // form encodes key and value pairs.
