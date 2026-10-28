@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -322,10 +323,15 @@ func runSourceChip(source string) string {
 	return ""
 }
 
-// runTitle is the title of a run that task t started, with the cluster the
-// task works on, which the log of an older sind does not name.
+// runTitle is the title of a run that task t started, with the nodes or
+// the cluster the task works on, which the log may not name: "power reboot
+// worker-4.dev" from the command words of the task when the run's title
+// starts them, else the title and the cluster.
 func runTitle(run store.Run, t *store.Task) string {
-	if run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) {
+	if words, _ := taskWords(t.Argv); run.Title != "" && strings.HasPrefix(strings.Join(words, " "), run.Title+" ") {
+		return strings.Join(words, " ")
+	}
+	if run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) || slices.ContainsFunc(strings.Fields(run.Title), func(w string) bool { return strings.HasSuffix(w, "."+t.Cluster) }) {
 		return run.Title
 	}
 	return run.Title + " " + t.Cluster

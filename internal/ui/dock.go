@@ -325,7 +325,7 @@ func taskTitle(t store.Task, run *store.Run) string {
 	switch {
 	case run != nil && run.Title != "":
 		base = runTitle(*run, &t)
-	case t.Cluster != "" && !slices.Contains(words, t.Cluster):
+	case t.Cluster != "" && !slices.ContainsFunc(words, func(w string) bool { return w == t.Cluster || strings.HasSuffix(w, "."+t.Cluster) }):
 		base = strings.TrimSpace(base + " " + t.Cluster)
 	}
 	if base == "" {
