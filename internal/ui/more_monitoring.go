@@ -94,11 +94,11 @@ type moreMonCluster struct {
 	cluster.MonitoredCluster
 	// Running and Total count the cluster's node containers.
 	Running, Total int
-	// Up is the number of Slurm's nodes that are not down; only with
-	// Slurm. Draining nodes count as up, and the page shows them beside
-	// it: a node can be down and drain at once, and the counts do not
-	// tell how many are both.
-	Up int
+	// Take is the number of Slurm's nodes that take jobs: neither down nor
+	// in drain (drained or draining), as Ready for jobs counts them; only
+	// with Slurm. A node can be down and in drain at once, and the counts
+	// do not tell how many are both, so it may count too few.
+	Take int
 }
 
 // moreServiceState says how a service stands. A service that runs and
@@ -179,7 +179,7 @@ func moreServiceAddr(s cluster.MonitoringService) string {
 }
 
 // moreMonClusterOf returns a monitored cluster with the count of its node
-// containers and of its Slurm nodes that are up.
+// containers and of its Slurm nodes that take jobs.
 func moreMonClusterOf(sn store.Snapshot, realm string, c cluster.MonitoredCluster) moreMonCluster {
 	mc := moreMonCluster{MonitoredCluster: c}
 	for _, n := range sn.ClusterNodes(realm, c.Name) {
@@ -189,7 +189,7 @@ func moreMonClusterOf(sn store.Snapshot, realm string, c cluster.MonitoredCluste
 		}
 	}
 	if s := c.Slurm; s != nil {
-		mc.Up = max(s.Nodes-s.NodesDown, 0)
+		mc.Take = max(s.Nodes-s.NodesDown-s.NodesDrain, 0)
 	}
 	return mc
 }

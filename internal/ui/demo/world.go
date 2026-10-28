@@ -410,7 +410,8 @@ const demoPending = 3
 
 // slurmCountsOf returns the numbers that Prometheus would have of a
 // monitored cluster: its workers are Slurm's nodes, one whose slurmd does
-// not run is down, and each other one runs a job.
+// not run is down, one that the demo drained is in drain, and each other
+// one runs a job.
 func slurmCountsOf(c *clusterState) *cluster.SlurmCounts {
 	s := &cluster.SlurmCounts{JobsPending: demoPending}
 	for _, n := range c.nodes {
@@ -418,11 +419,14 @@ func slurmCountsOf(c *clusterState) *cluster.SlurmCounts {
 			continue
 		}
 		s.Nodes++
-		if n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd] {
+		switch {
+		case n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd]:
 			s.NodesDown++
-			continue
+		case n.drain != "":
+			s.NodesDrain++
+		default:
+			s.JobsRunning++
 		}
-		s.JobsRunning++
 	}
 	return s
 }

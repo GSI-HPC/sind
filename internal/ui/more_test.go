@@ -178,12 +178,11 @@ func TestMoreMonitoringNumbers(t *testing.T) {
 	ts.st.SetMonitoring("sind", &m)
 	body := pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	for _, want := range []string{
-		"Nodes running", "Slurm nodes up", "Jobs running", "Jobs pending",
-		// A draining node is up: the counts do not tell whether the
-		// down one drains too.
-		`<td role="cell" class="num" data-label="Slurm nodes up">2 of 3<br><span class="faint more-nowrap">1 down, 1 draining</span></td>`,
+		"Nodes running", "Take jobs", "Jobs running", "Jobs pending",
+		// A node in drain takes no jobs, as Ready for jobs counts it.
+		`<td role="cell" class="num" data-label="Take jobs">1 of 3<br><span class="faint more-nowrap" title="Slurm sends no new jobs to a node that is down or in drain, which is drained or draining. A node can be both at once.">1 down, 1 in drain</span></td>`,
 		`<td role="cell" class="num" data-label="Jobs running">7</td><td role="cell" class="num" data-label="Jobs pending">12</td>`,
-		`<td role="cell" class="num" data-label="Nodes running">2 of 2</td>`, `data-label="Slurm nodes up">0 of 1<br>`,
+		`<td role="cell" class="num" data-label="Nodes running">2 of 2</td>`, `data-label="Take jobs">0 of 1<br>`,
 		// On a phone, each row is a card with the labels in it.
 		`<table class="more-cards more-moncards" role="table">`, `<td role="cell" class="mono more-aside">26.05.1</td>`,
 	} {
@@ -195,7 +194,7 @@ func TestMoreMonitoringNumbers(t *testing.T) {
 	m.Clusters = []cluster.MonitoredCluster{{Name: "dev", Slurm: &cluster.SlurmCounts{Nodes: 3}}}
 	ts.st.SetMonitoring("sind", &m)
 	body = pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
-	assert.Contains(t, body, `data-label="Slurm nodes up">3 of 3</td>`)
+	assert.Contains(t, body, `data-label="Take jobs">3 of 3</td>`)
 }
 
 func TestMoreMonitoringHostDNS(t *testing.T) {

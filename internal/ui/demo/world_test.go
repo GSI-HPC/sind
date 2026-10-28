@@ -59,8 +59,9 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, "25.11.8", byName["legacy"].SlurmVersion)
 
 	require.NotNil(t, sn.Monitorings["sind"])
-	// dev's six workers are Slurm's nodes; worker-4's slurmd is down.
-	assert.Equal(t, &cluster.SlurmCounts{Nodes: 6, NodesDown: 1, JobsRunning: 5, JobsPending: demoPending},
+	// dev's six workers are Slurm's nodes; worker-4's slurmd is down, and
+	// worker-5 is drained.
+	assert.Equal(t, &cluster.SlurmCounts{Nodes: 6, NodesDown: 1, NodesDrain: 1, JobsRunning: 4, JobsPending: demoPending},
 		sn.Monitorings["sind"].Clusters[0].Slurm)
 	assert.Nil(t, sn.Monitorings["ci"], "monitoring in one realm only")
 	m, ok := sn.Meshes["sind"]

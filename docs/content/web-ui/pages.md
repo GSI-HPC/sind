@@ -79,7 +79,7 @@ The mesh network, the DNS server and its records, and the containers that are co
 
 ## Monitoring
 
-The key numbers of each monitored cluster, and the state and addresses of Grafana, Prometheus, Loki and Alloy, if the realm runs them. For each cluster, the page shows its node containers that run, and from Prometheus the Slurm nodes that are up (not down), with how many are down and how many drain and the running and pending jobs. Prometheus has these numbers once it has read slurmctld, a short time after the create. Grafana has the rest.
+The key numbers of each monitored cluster, and the state and addresses of Grafana, Prometheus, Loki and Alloy, if the realm runs them. For each cluster, the page shows its node containers that run, and from Prometheus the Slurm nodes that take jobs (**Take jobs**: neither down nor in drain, as **Ready for jobs** counts them), with how many are down and how many are in drain (drained or draining: Slurm sends them no new jobs), and the running and pending jobs. Prometheus has these numbers once it has read slurmctld, a short time after the create. Grafana has the rest.
 
 **Open** uses the names under `.sind`, which resolve only on the Docker host, with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}). Each service also shows its address with the port, with **Copy**. When Doctor says that the host does not resolve the names, the page says that **Open** fails and to use the address. From another machine, forward the address with `ssh -L`, as the page shows for Grafana.
 
