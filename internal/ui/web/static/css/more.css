@@ -5,7 +5,6 @@
 .more-rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .more-scroll{max-height:340px;overflow:auto}
 .more-howto{max-width:460px;margin:0 auto 14px;text-align:left}
-.more-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .more-copied{color:var(--ok)!important}
 /* a "seg" of links, such as Diagram and Table */
 .more-seg a{padding:5px 12px}

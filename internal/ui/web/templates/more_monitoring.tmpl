@@ -63,7 +63,7 @@ its address with the port, "" for none. */}}
         <td role="cell" class="mono more-aside">{{.SlurmVersion}}</td></tr>{{end}}
     </tbody></table></div>
     {{else}}<div class="empty">No cluster of this realm is monitored.</div>{{end}}</section>
-  <section class="panel"><div class="ph"><h2>Services</h2></div><div class="tw"><table class="more-cards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Service</th><th role="columnheader">State</th><th role="columnheader">Address</th><th role="columnheader">Image</th><th role="columnheader"><span class="more-vh">Open</span></th></tr></thead><tbody role="rowgroup">
+  <section class="panel"><div class="ph"><h2>Services</h2></div><div class="tw"><table class="more-cards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Service</th><th role="columnheader">State</th><th role="columnheader">Address</th><th role="columnheader">Image</th><th role="columnheader"><span class="vh">Open</span></th></tr></thead><tbody role="rowgroup">
     {{range .Services}}<tr role="row"><td role="cell"><b>{{.Name}}</b><br><span class="mono faint">{{.Container}}</span></td>
       <td role="cell"><span class="pill{{with .Pill}} {{.}}{{end}}">{{.Text}}</span></td>
       <td role="cell" class="more-long" data-label="Address"><span class="mono">{{.URL}}</span>{{if .Addr}}<br><span class="more-addr"><span class="mono faint">{{.Addr}}</span> <button type="button" class="btn sm" data-more-copy-text="{{.Addr}}" aria-label="Copy the address of {{.Name}}">Copy</button></span>{{end}}</td>
