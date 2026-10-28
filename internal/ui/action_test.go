@@ -403,8 +403,50 @@ func TestActPreview_ListsWhatGoesAndStays(t *testing.T) {
 	assert.Contains(t, body, `<div class="callout act-list"><b>Stays</b><ul><li>the host directories it mounts, if any</li><li>the other cluster of realm sind, and its mesh</li></ul></div>`)
 
 	body = f.post("/actions/delete-realm/preview", actForm("realm", "sind")).Body.String()
-	assert.Contains(t, body, "<li>2 clusters: default, dev</li>")
+	assert.Contains(t, body, `<div class="act-lw"><table class="act-loss"><thead><tr><th>Cluster</th><th>Goes</th><th>Stays</th></tr></thead><tbody>
+<tr><td class="act-lc"><b class="mono">default</b><small>1 node</small></td>
+  <td class="act-lg" data-label="Goes">1 container, its network</td>
+  <td class="act-ls" data-label="Stays"><span class="act-lok">the host directories it mounts, if any</span></td></tr>`)
+	assert.Contains(t, body, `<span class="act-lok">the containers that sind did not make, if any</span><small>sind detaches them</small>`)
+	assert.Contains(t, body, `<p class="hint act-also">Also stays: the images.</p>`)
 	assert.Contains(t, body, actCode("sind --realm sind delete realm"))
+	assert.NotContains(t, body, "act-ack", "no data volume goes")
+
+	// Where nothing stays of a row, the row says so.
+	f.st.SetMesh("sind", store.Mesh{Info: &mesh.Info{}})
+	body = f.post("/actions/delete-realm/preview", actForm("realm", "sind")).Body.String()
+	assert.Contains(t, body, `<td class="act-ls" data-label="Stays"><span class="faint">nothing</span></td>`)
+}
+
+func TestActDelete_TickForTheData(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-dev-config"}})
+
+	// The data volume is named in red in its row, and the button stays off
+	// until the box about it is ticked.
+	form := actForm("clusters", "sind/dev")
+	body := f.post("/actions/delete-clusters/preview", form+"&confirm=1").Body.String()
+	assert.Contains(t, body, `<td class="act-lg" data-label="Goes"><span class="act-lbad">the data volume sind-dev-data: every file in /data</span><small>3 containers, its network, its config volume</small></td>`)
+	assert.Contains(t, body, `<label class="callout bad act-ack"><input type="checkbox" id="act-ack" name="ack" data-act-hold><span>I know that the data volume <b class="mono">sind-dev-data</b> of dev goes, with every file in /data.</span></label>`)
+	assert.Contains(t, body, `<span id="act-why" hx-swap-oob="innerHTML">The button stays off until you tick the box about the data.</span>`)
+	assert.Regexp(t, `id="act-ok"[^>]* disabled `, body)
+	body = f.post("/actions/delete-clusters/preview", form+"&confirm=1&ack=on").Body.String()
+	assert.Contains(t, body, `name="ack" data-act-hold checked>`)
+	assert.NotRegexp(t, `id="act-ok"[^>]* disabled `, body)
+
+	// A run without the tick runs nothing.
+	shown := f.shown(t, "delete-clusters", form)
+	w := f.postHTMX("/actions/delete-clusters/run", form+"&shown="+shown+"&confirm=1")
+	assert.Contains(t, w.Body.String(), "The button stays off until you tick the box about the data.")
+	assert.Empty(t, f.starter.specs)
+	w = f.postHTMX("/actions/delete-clusters/run", form+"&shown="+shown+"&confirm=1&ack=on")
+	assert.Equal(t, "/clusters", w.Header().Get("HX-Redirect"), w.Body.String())
+	require.Len(t, f.starter.specs, 1)
+
+	// The single delete asks for the tick too.
+	body = f.post("/actions/delete-cluster/preview", actForm("cluster", "dev", "confirm", "dev")).Body.String()
+	assert.Contains(t, body, "I know that the data volume")
+	assert.Regexp(t, `id="act-ok"[^>]* disabled `, body)
 }
 
 func TestActConnect_ProblemsAtTheirFields(t *testing.T) {

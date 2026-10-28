@@ -80,8 +80,13 @@ type Command struct {
 	// worker-5"; empty for the dialog's own label.
 	OK string
 	// Goes and Stays say what a command that deletes removes and what it
-	// keeps.
+	// keeps. A command with Losses says it for each cluster there, and
+	// Stays is then what else stays.
 	Goes, Stays []string
+	Losses      []Loss
+	// Ack is what the user ticks to confirm that data volumes go, ""
+	// when none does; a name in it is in backquotes.
+	Ack string
 	// Parts are the commands of an action that runs several, each as a
 	// task of its own, instead of Argv; Display shows them one per line.
 	Parts []Part
@@ -175,6 +180,12 @@ func (c Command) Fingerprint() string {
 		h.Write([]byte{1})
 		h.Write([]byte(d))
 	}
+	if c.Ack != "" {
+		// A data volume that came while the user looked is not deleted
+		// unseen.
+		h.Write([]byte{2})
+		h.Write([]byte(c.Ack))
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -242,6 +253,15 @@ type Action struct {
 
 // ConfirmField is the field that holds the typed confirmation.
 const ConfirmField = "confirm"
+
+// AckField is the box that the user ticks to confirm that data volumes go.
+const AckField = "ack"
+
+// Acked reports whether the form confirms the loss of the data volumes
+// of the command, if any go.
+func (c Command) Acked(f Form) bool {
+	return c.Ack == "" || f.Get(AckField) == "on"
+}
 
 // Want returns what the user must type to confirm the command, or "".
 func (a Action) Want(f Form) string {

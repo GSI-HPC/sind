@@ -350,6 +350,25 @@ func actDeleteWorkersHead(clusterName string, f action.Form) actHead {
 	}
 }
 
+// actDeleteClustersHead returns the title and the lead of a delete of the
+// clusters of the form f, which names the realms that go with them, as
+// "Delete 3 clusters and realm sind".
+func actDeleteClustersHead(sn store.Snapshot, f action.Form) actHead {
+	refs := action.ClusterRefs(f)
+	if len(refs) == 0 {
+		return actHead{"Delete clusters", "Deletes several clusters with one confirmation."}
+	}
+	title := "Delete " + pgPlural(len(refs), "cluster", "clusters")
+	switch gone := action.GoneRealms(sn, refs); len(gone) {
+	case 0:
+		return actHead{title, "This cannot be undone."}
+	case 1:
+		return actHead{title + " and realm " + gone[0], fmt.Sprintf("These are the last clusters of realm %s, so the realm goes too. This cannot be undone.", gone[0])}
+	default:
+		return actHead{title + " and realms " + pgJoin(gone), "These are the last clusters of their realms, so the realms go too. This cannot be undone."}
+	}
+}
+
 // Head is the title and the lead of a dialog whose title names what it
 // acts on, Power and Delete workers, for the form of the preview, which
 // the preview swaps in as the user changes the action or the nodes; nil
@@ -361,6 +380,8 @@ func (p actPreview) Head() *actHead {
 		h = actPowerHead(p.Snap, action.Realm(p.Form), p.Form.Get("cluster"), p.Form)
 	case "delete-worker":
 		h = actDeleteWorkersHead(p.Form.Get("cluster"), p.Form)
+	case "delete-clusters":
+		h = actDeleteClustersHead(p.Snap, p.Form)
 	default:
 		return nil
 	}

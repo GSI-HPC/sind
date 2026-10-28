@@ -227,22 +227,9 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-clusters": {
-		OK: "Delete", Danger: true,
-		Title: func(d *actDialog) string {
-			if len(d.Clusters) == 0 {
-				return "Delete clusters"
-			}
-			return "Delete " + pgPlural(len(d.Clusters), "cluster", "clusters")
-		},
-		Lead: func(d *actDialog) string {
-			switch len(d.Clusters) {
-			case 0:
-				return "Deletes several clusters with one confirmation."
-			case 1:
-				return fmt.Sprintf("Removes its %s, its network and its volumes.", pgPlural(d.ClusterNodes(), "container", "containers"))
-			}
-			return fmt.Sprintf("Removes their %s, their networks and their volumes.", pgPlural(d.ClusterNodes(), "container", "containers"))
-		},
+		OK: "Delete", Danger: true, Wide: true,
+		Title:    func(d *actDialog) string { return actDeleteClustersHead(d.Snap, d.Form).Title },
+		Lead:     func(d *actDialog) string { return actDeleteClustersHead(d.Snap, d.Form).Lead },
 		Defaults: func(d *actDialog) { d.pickClusters() },
 	},
 	"delete-worker": {
@@ -291,7 +278,7 @@ var actSpecs = map[string]actSpec{
 		},
 	},
 	"delete-realm": {
-		OK: "Delete realm", Danger: true, Removes: true,
+		OK: "Delete realm", Danger: true, Removes: true, Wide: true,
 		Title: func(d *actDialog) string { return "Delete realm " + d.Realm },
 		Lead: func(d *actDialog) string {
 			return "Deletes every cluster of realm " + d.Realm + " and what they share. This cannot be undone."
@@ -806,16 +793,10 @@ func (d *actDialog) DirFollows() bool { return d.Form.Get("dir") == actDefaultDi
 func actDefaultDir(name string) string { return "~/sind/" + name }
 
 // actClusterChoice is a cluster of the dialog that deletes several.
-type actClusterChoice struct {
-	Realm, Name, State string
-	Nodes              int
-}
+type actClusterChoice struct{ Realm, Name string }
 
 // Ref names the cluster as the field clusters does: realm/name.
 func (c actClusterChoice) Ref() string { return c.Realm + "/" + c.Name }
-
-// NodesText returns "1 node" or "3 nodes".
-func (c actClusterChoice) NodesText() string { return pgPlural(c.Nodes, "node", "nodes") }
 
 // pickClusters lists the clusters of the link that sind ui knows, and
 // keeps only those in the form, so that the title, the count to type and
@@ -825,13 +806,12 @@ func (d *actDialog) pickClusters() {
 	var known []string
 	for _, ref := range action.ClusterRefs(d.Form) {
 		realm, name, _ := strings.Cut(ref, "/")
-		c, ok := d.Snap.Cluster(realm, name)
-		if !ok {
+		if _, ok := d.Snap.Cluster(realm, name); !ok {
 			d.Gone = append(d.Gone, ref)
 			continue
 		}
 		known = append(known, ref)
-		d.Clusters = append(d.Clusters, actClusterChoice{Realm: realm, Name: name, State: string(c.State), Nodes: len(d.Snap.ClusterNodes(realm, name))})
+		d.Clusters = append(d.Clusters, actClusterChoice{Realm: realm, Name: name})
 	}
 	d.Form["clusters"] = known
 }
@@ -842,15 +822,6 @@ func (d *actDialog) GoneText() string { return strings.Join(d.Gone, ", ") }
 // Back returns the list page that a delete of several clusters goes back
 // to.
 func (d *actDialog) Back() string { return actBack(d.Form) }
-
-// ClusterNodes counts the nodes of the clusters of the dialog.
-func (d *actDialog) ClusterNodes() int {
-	n := 0
-	for _, c := range d.Clusters {
-		n += c.Nodes
-	}
-	return n
-}
 
 // actBack returns the list page that a delete of several clusters goes back
 // to: the address of the form's field back when it is the Clusters page,
@@ -1182,6 +1153,10 @@ func (p actPreview) OKButton() actOK {
 	return actOK{Label: label, Danger: p.Danger, Off: p.Blocked, Swap: true, Why: p.Confirms}
 }
 
+// actAckWhy says why the button of a delete that takes data volumes stays
+// off once the typed text matches.
+const actAckWhy = "The button stays off until you tick the box about the data."
+
 // actWhy says why what the user typed, typed, does not confirm want: a
 // name, or a number, such as the count of clusters that one dialog
 // deletes.
@@ -1431,10 +1406,30 @@ type actTextPart struct {
 func (p actPreview) NoteParts() [][]actTextPart {
 	out := make([][]actTextPart, len(p.Cmd.Notes))
 	for i, note := range p.Cmd.Notes {
-		for j, part := range strings.Split(note, "`") {
-			if part != "" {
-				out[i] = append(out[i], actTextPart{Text: part, Mono: j%2 == 1})
-			}
+		out[i] = actTextParts(note)
+	}
+	return out
+}
+
+// AlsoStays is what else a delete of clusters keeps, besides the rows of
+// its table, in one line.
+func (p actPreview) AlsoStays() string {
+	if len(p.Cmd.Stays) == 0 {
+		return ""
+	}
+	return strings.Join(p.Cmd.Stays, ", ") + "."
+}
+
+// AckParts is the sentence of the box that confirms that data volumes go,
+// in parts as NoteParts.
+func (p actPreview) AckParts() []actTextPart { return actTextParts(p.Cmd.Ack) }
+
+// actTextParts splits a text that writes names in backquotes into parts.
+func actTextParts(text string) []actTextPart {
+	var out []actTextPart
+	for j, part := range strings.Split(text, "`") {
+		if part != "" {
+			out = append(out, actTextPart{Text: part, Mono: j%2 == 1})
 		}
 	}
 	return out
@@ -1509,7 +1504,10 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 		return p
 	}
 	p.Cmd, p.Shown = cmd, cmd.Fingerprint()
-	p.Blocked = !a.Confirmed(f) || len(cmd.Problems) > 0
+	p.Blocked = !a.Confirmed(f) || !cmd.Acked(f) || len(cmd.Problems) > 0
+	if p.Why == "" && !cmd.Acked(f) {
+		p.Why = actAckWhy
+	}
 	p.Realm = action.Realm(f)
 	if len(cmd.Parts) == 0 && actLocks(a, f) {
 		p.Lock = v.Snap.Locks[p.Realm]
@@ -1601,6 +1599,8 @@ func actRunRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		// The preview lists them; the button was off.
 	case !a.Confirmed(f):
 		p.Err = "Type " + a.Want(f) + " to confirm."
+	case !p.Cmd.Acked(f):
+		p.Err = actAckWhy
 	case f.Get("shown") != p.Shown:
 		// The state changed under the dialog, such as a cluster that went.
 		p.Warn, p.Blocked = "The command changed while you looked. Check it, then press the button again.", false

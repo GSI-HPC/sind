@@ -69,11 +69,13 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
 {{if .Cmd.Budget}}{{template "act-budget" .}}{{end}}
 {{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>{{$p.ProblemsText}}</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
-{{if .Cmd.Goes}}<div class="act-gs"><div class="callout bad act-list"><b>Goes</b><ul>{{range .Cmd.Goes}}<li>{{.}}</li>{{end}}</ul></div>
+{{if .Cmd.Losses}}{{template "act-losses" .}}
+{{else if .Cmd.Goes}}<div class="act-gs"><div class="callout bad act-list"><b>Goes</b><ul>{{range .Cmd.Goes}}<li>{{.}}</li>{{end}}</ul></div>
 {{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>
 {{else}}{{with .Cmd.Stays}}<ul class="act-stays" aria-label="What stays">{{range .}}<li><span class="pg-ck y" aria-hidden="true">✓</span><span>{{.}}</span></li>{{end}}</ul>{{end}}{{end}}
 {{template "act-callouts" .}}
 <div><div class="cmdlabel">Runs</div><div class="cmd"><code class="nop act-cls">{{range .CmdLines}}<span class="act-cl">{{range $i, $w := .}}{{if $i}} {{end}}<span class="act-cw">{{$w}}</span>{{end}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
+{{if .Cmd.Ack}}<label class="callout bad act-ack"><input type="checkbox" id="act-ack" name="ack" data-act-hold{{if eq (.Form.Get "ack") "on"}} checked{{end}}><span>{{range .AckParts}}{{if .Mono}}<b class="mono">{{.Text}}</b>{{else}}{{.Text}}{{end}}{{end}}</span></label>{{end}}
 {{end}}
 {{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
 {{if .Confirms}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
@@ -90,6 +92,17 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{if eq .ID "power"}}{{with .PowerOffs}}<p class="hint act-offs" id="act-offs" hx-swap-oob="true">{{.}}</p>{{else}}<p class="hint act-offs" id="act-offs" hx-swap-oob="true" hidden></p>{{end}}{{end}}
 <span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{if .Spec.Plan}}{{template "act-status" .}}{{else}}{{template "act-fstatus" .}}{{end}}</span>
 {{end}}{{end}}
+
+{{/* act-losses is what a delete of clusters or of a realm removes and
+keeps, a row for each cluster and one for a realm that goes with its last
+cluster: the data volumes that go first, in red, then the rest that goes,
+and what stays, in green; then what else stays. */}}
+{{define "act-losses"}}<div class="act-lw"><table class="act-loss"><thead><tr><th>Cluster</th><th>Goes</th><th>Stays</th></tr></thead><tbody>
+{{range .Cmd.Losses}}<tr><td class="act-lc"><b class="mono">{{.Name}}</b><small>{{.About}}</small></td>
+  <td class="act-lg" data-label="Goes">{{if .Data}}{{range .Data}}<span class="act-lbad">{{.Line}}</span>{{end}}<small>{{.Goes}}</small>{{else}}{{.Goes}}{{end}}</td>
+  <td class="act-ls" data-label="Stays">{{range .Stays}}<span class="act-lok">{{.What}}</span>{{with .Note}}<small>{{.}}</small>{{end}}{{else}}<span class="faint">nothing</span>{{end}}</td></tr>
+{{end}}</tbody></table></div>
+{{with .AlsoStays}}<p class="hint act-also">Also stays: {{.}}</p>{{end}}{{end}}
 
 {{/* act-fstatus is the status in the footer of a dialog without a plan,
 beside its button, so that it is always in view: the problems, which lead
@@ -401,10 +414,8 @@ with the fields that the user filled in. */}}
 
 {{define "act-dlg-delete-clusters"}}
 <input type="hidden" name="back" value="{{.Val "back"}}">
-{{if .Clusters}}<div class="fld"><span class="lbl">Clusters</span>
-  <ul class="act-clusters">{{range .Clusters}}<li><input type="hidden" name="clusters" value="{{.Ref}}"><b class="mono">{{.Name}}</b> <small>realm {{.Realm}}, {{.NodesText}}, {{.State}}</small></li>{{end}}</ul></div>
+{{if .Clusters}}{{range .Clusters}}<input type="hidden" name="clusters" value="{{.Ref}}">{{end}}
 {{with .Gone}}<div class="callout warn">sind ui no longer sees <span class="mono">{{$.GoneText}}</span>, so the dialog leaves {{if eq (len .) 1}}it{{else}}them{{end}} out.</div>{{end}}
-<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{if eq (len .Clusters) 1}}this cluster go with it{{else}}these clusters go with them{{end}}. A host directory mounted as /data stays as it is; a data volume goes too.</div>
 {{else}}<div class="empty">{{if .Gone}}sind ui no longer sees <span class="mono">{{.GoneText}}</span>. {{end}}No cluster to delete. Tick clusters on <a href="{{.Back}}">the Clusters page</a> and delete them from the bar above the table.</div>
 {{end}}{{end}}
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/slurm"
@@ -172,32 +173,23 @@ func buildDeleteCluster(f Form, c Context) (Command, error) {
 	}
 	cmd := NewCommand(sindArgv(realm, append([]string{"delete", "cluster"}, clusterWord(cl.Name)...)...)...)
 	cmd.OK = "Delete cluster " + cl.Name
-	nodes := c.Snap.ClusterNodes(realm, cl.Name)
+	g := clusterGoesOf(c, realm, cl.Name)
+	for _, d := range g.data {
+		cmd.Goes = append(cmd.Goes, d.Line())
+	}
 	cmd.Goes = append(cmd.Goes,
-		fmt.Sprintf("%d container%s: %s", len(nodes), plural(len(nodes)), strings.Join(shortNames(nodes), ", ")),
+		fmt.Sprintf("%d container%s: %s", len(g.shorts), plural(len(g.shorts)), strings.Join(g.shorts, ", ")),
 		"the network "+string(cluster.NetworkName(realm, cl.Name)),
 	)
-	// The volumes that sind delete cluster removes: those of its names,
-	// not others that start alike, such as those of cluster dev-gpu.
-	var volumes []string
-	for _, t := range cluster.AllVolumeTypes {
-		name := string(cluster.VolumeName(realm, cl.Name, t))
-		if slices.ContainsFunc(c.Snap.Volumes[realm], func(v cluster.VolumeSummary) bool { return v.Name == name }) {
-			volumes = append(volumes, name)
-		}
-	}
-	if len(volumes) > 0 {
-		cmd.Goes = append(cmd.Goes, "the volume"+plural(len(volumes))+" "+strings.Join(volumes, ", "))
+	if len(g.volumes) > 0 {
+		cmd.Goes = append(cmd.Goes, "the volume"+plural(len(g.volumes))+" "+strings.Join(g.volumes, ", "))
 	}
 	cmd.Goes = append(cmd.Goes, "its jobs, its accounting and its Slurm state")
-	if st := c.Snap.Status(realm, cl.Name); st != nil {
-		for _, m := range st.Mounts {
-			if m.Type == config.StorageHostPath {
-				cmd.Stays = append(cmd.Stays, fmt.Sprintf("the host directory %s, mounted at %s", m.Source, m.Path))
-			}
-		}
-	} else {
+	if g.unseen {
 		cmd.Stays = append(cmd.Stays, "the host directories it mounts, if any")
+	}
+	for _, m := range g.dirs {
+		cmd.Stays = append(cmd.Stays, fmt.Sprintf("the host directory %s, mounted at %s", m.Source, m.Path))
 	}
 	switch others := len(c.Snap.Clusters[realm]) - 1; {
 	case others == 1:
@@ -207,7 +199,206 @@ func buildDeleteCluster(f Form, c Context) (Command, error) {
 	default:
 		cmd.Goes = append(cmd.Goes, "the mesh, the DNS server and the SSH relay of realm "+realm+", as it is its last cluster")
 	}
+	cmd.Ack = lossAck([]Loss{{Data: g.data}})
 	return cmd, nil
+}
+
+// Loss is what a delete removes and keeps of one cluster, or of a realm
+// whose last cluster goes: a row of the table of Delete clusters and
+// Delete realm.
+type Loss struct {
+	// Realm and Cluster name the cluster; Cluster is "" for the row of the
+	// realm.
+	Realm, Cluster string
+	// About says what the row is now, as "2 nodes · running".
+	About string
+	// Data are the volumes of the data of the users that go, the worst
+	// loss, which the row names first.
+	Data []DataVolume
+	// Goes is the rest that goes, and Stays what stays.
+	Goes  string
+	Stays []Kept
+}
+
+// Name names the row: the cluster, or the realm.
+func (l Loss) Name() string {
+	if l.Cluster == "" {
+		return "realm " + l.Realm
+	}
+	return l.Cluster
+}
+
+// DataVolume is a volume of a cluster that holds the data of its users.
+type DataVolume struct {
+	// Name is the volume, Cluster its cluster, and What what it holds, as
+	// "every file in /data".
+	Name, Cluster, What string
+	// Home says that it holds the home directories of the users, else it
+	// is the data volume.
+	Home bool
+}
+
+// Kind names the volume: "the data volume" or "the home volume".
+func (d DataVolume) Kind() string {
+	if d.Home {
+		return "the home volume"
+	}
+	return "the data volume"
+}
+
+// Line says what goes with the volume: "the data volume sind-dev-data:
+// every file in /data".
+func (d DataVolume) Line() string { return d.Kind() + " " + d.Name + ": " + d.What }
+
+// Kept is a thing that a delete keeps, with what it is: "/home/demo" and
+// "the host directory at /data".
+type Kept struct{ What, Note string }
+
+// clusterGoes is what a delete of a cluster removes and keeps, in parts.
+type clusterGoes struct {
+	// shorts are its nodes, volumes the names of its volumes of sind's
+	// own, and kinds their kinds.
+	shorts, volumes, kinds []string
+	data                   []DataVolume
+	// dirs are the host directories that it mounts, which stay; unseen
+	// says that sind ui has not read them.
+	dirs   []cluster.MountPoint
+	unseen bool
+}
+
+// clusterGoesOf returns what sind delete cluster removes of the cluster
+// and what it keeps. The volumes are those of its names, not others that
+// start alike, such as those of cluster dev-gpu.
+func clusterGoesOf(c Context, realm, name string) clusterGoes {
+	g := clusterGoes{shorts: shortNames(c.Snap.ClusterNodes(realm, name))}
+	st := c.Snap.Status(realm, name)
+	for _, t := range cluster.AllVolumeTypes {
+		vol := string(cluster.VolumeName(realm, name, t))
+		if !slices.ContainsFunc(c.Snap.Volumes[realm], func(v cluster.VolumeSummary) bool { return v.Name == vol }) {
+			continue
+		}
+		switch t {
+		case cluster.VolumeData:
+			path := cluster.DefaultDataMountPath
+			if st != nil {
+				for _, m := range st.Mounts {
+					if m.Data {
+						path = m.Path
+					}
+				}
+			}
+			g.data = append(g.data, DataVolume{Name: vol, Cluster: name, What: "every file in " + path})
+		case cluster.VolumeHome:
+			g.data = append(g.data, DataVolume{Name: vol, Cluster: name, What: "the home directories of its users", Home: true})
+		default:
+			g.volumes, g.kinds = append(g.volumes, vol), append(g.kinds, string(t))
+		}
+	}
+	if st == nil {
+		g.unseen = true
+		return g
+	}
+	for _, m := range st.Mounts {
+		if m.Type == config.StorageHostPath {
+			g.dirs = append(g.dirs, m)
+		}
+	}
+	return g
+}
+
+// clusterLoss is the row of the cluster in the table of a delete; named
+// says that the row names the realm of the cluster, as the table has
+// clusters of several realms.
+func clusterLoss(c Context, realm, name string, named bool) Loss {
+	g := clusterGoesOf(c, realm, name)
+	l := Loss{Realm: realm, Cluster: name, Data: g.data}
+	if g.unseen {
+		l.Stays = append(l.Stays, Kept{What: "the host directories it mounts, if any"})
+	}
+	for _, m := range g.dirs {
+		l.Stays = append(l.Stays, Kept{What: m.Source, Note: "the host directory at " + m.Path})
+	}
+	about := []string{countOf(len(g.shorts), "node")}
+	if named {
+		about = append([]string{"realm " + realm}, about...)
+	}
+	if cl, _ := c.Snap.Cluster(realm, name); cl.State != "" {
+		about = append(about, string(cl.State))
+	}
+	l.About = strings.Join(about, " · ")
+	var goes []string
+	if len(g.shorts) > 0 {
+		goes = append(goes, countOf(len(g.shorts), "container"))
+	}
+	goes = append(goes, "its network")
+	if len(g.kinds) > 0 {
+		goes = append(goes, "its "+JoinWords(g.kinds)+" volume"+plural(len(g.kinds)))
+	}
+	l.Goes = strings.Join(goes, ", ")
+	return l
+}
+
+// realmLoss is the row of a realm whose last cluster goes: what its
+// clusters share goes, and the containers that sind did not make stay.
+func realmLoss(c Context, realm string) Loss {
+	l := Loss{Realm: realm, About: "no cluster is left"}
+	goes := []string{"the mesh", "the DNS server", "the SSH relay"}
+	if c.Snap.Monitorings[realm] != nil {
+		goes = append(goes, "the monitoring stack")
+	}
+	l.Goes = JoinWords(append(goes, "the exported SSH config"))
+	// sind ui reads the containers on the mesh with the mesh; until it has,
+	// it cannot say whether there are any.
+	switch m, ok := c.Snap.Meshes[realm]; {
+	case !ok || m.Err != "":
+		l.Stays = append(l.Stays, Kept{What: "the containers that sind did not make, if any", Note: "sind detaches them"})
+	default:
+		for _, e := range m.External {
+			l.Stays = append(l.Stays, Kept{What: e, Note: "sind detaches it"})
+		}
+	}
+	return l
+}
+
+// lossAck is the sentence that the user ticks to confirm that the data
+// volumes of the rows go, "" when none does.
+func lossAck(rows []Loss) string {
+	var data []DataVolume
+	for _, r := range rows {
+		data = append(data, r.Data...)
+	}
+	switch len(data) {
+	case 0:
+		return ""
+	case 1:
+		d := data[0]
+		return fmt.Sprintf("I know that %s `%s` of %s goes, with %s.", d.Kind(), d.Name, d.Cluster, d.What)
+	}
+	names := make([]string, len(data))
+	for i, d := range data {
+		names[i] = fmt.Sprintf("`%s` of %s", d.Name, d.Cluster)
+	}
+	return "I know that the volumes " + JoinWords(names) + " go, with every file in them."
+}
+
+// GoneRealms returns the realms whose last clusters the refs, each
+// realm/name, all name: a delete of them removes the realm too.
+func GoneRealms(sn store.Snapshot, refs []string) []string {
+	n := map[string]int{}
+	for _, ref := range refs {
+		realm, name, _ := strings.Cut(ref, "/")
+		if _, ok := sn.Cluster(realm, name); ok {
+			n[realm]++
+		}
+	}
+	var out []string
+	for realm, k := range n {
+		if k == len(sn.Clusters[realm]) {
+			out = append(out, realm)
+		}
+	}
+	slices.SortFunc(out, natsort.Compare)
+	return out
 }
 
 // countOf writes n things: 1 cluster, 2 clusters.
@@ -276,8 +467,16 @@ func buildDeleteClusters(f Form, c Context) (Command, error) {
 	cmd := NewParts(parts)
 	cmd.OK = "Delete " + countOf(len(parts), "cluster")
 	cmd.Notes = append(cmd.Notes, "sind ui runs one command for each cluster. The commands of one realm run one after the other, as each waits for the lock of the realm.")
+	gone := GoneRealms(c.Snap, refs)
+	named := parts[0].Realm != parts[len(parts)-1].Realm
 	for i, p := range parts {
-		if i > 0 && parts[i-1].Realm == p.Realm {
+		cmd.Losses = append(cmd.Losses, clusterLoss(c, p.Realm, p.Cluster, named))
+		if i+1 < len(parts) && parts[i+1].Realm == p.Realm {
+			continue
+		}
+		// The last part of its realm.
+		if slices.Contains(gone, p.Realm) {
+			cmd.Losses = append(cmd.Losses, realmLoss(c, p.Realm))
 			continue
 		}
 		n := 0
@@ -286,10 +485,15 @@ func buildDeleteClusters(f Form, c Context) (Command, error) {
 				n++
 			}
 		}
-		if n == len(c.Snap.Clusters[p.Realm]) {
-			cmd.Notes = append(cmd.Notes, fmt.Sprintf("These are all the clusters of realm %s, so sind also removes its mesh, DNS server and SSH relay.", p.Realm))
+		switch others := len(c.Snap.Clusters[p.Realm]) - n; others {
+		case 1:
+			cmd.Stays = append(cmd.Stays, "the other cluster of realm "+p.Realm+" and its mesh")
+		default:
+			cmd.Stays = append(cmd.Stays, fmt.Sprintf("the other %d clusters of realm %s and its mesh", others, p.Realm))
 		}
 	}
+	cmd.Stays = append(cmd.Stays, "the images")
+	cmd.Ack = lossAck(cmd.Losses)
 	return cmd, nil
 }
 
@@ -336,40 +540,36 @@ func buildDeleteRealm(f Form, c Context) (Command, error) {
 	// this realm and not the one SIND_REALM names in another shell.
 	cmd := NewCommand("sind", "--realm", realm, "delete", "realm")
 	cmd.OK = "Delete realm " + realm
-	var names, dirs []string
-	unseen := false
+	names := make([]string, 0, len(c.Snap.Clusters[realm]))
 	for _, cl := range c.Snap.Clusters[realm] {
 		names = append(names, cl.Name)
-		st := c.Snap.Status(realm, cl.Name)
-		if st == nil {
-			unseen = true
-			continue
+	}
+	slices.SortFunc(names, natsort.Compare)
+	for _, name := range names {
+		cmd.Losses = append(cmd.Losses, clusterLoss(c, realm, name, false))
+	}
+	cmd.Losses = append(cmd.Losses, realmLoss(c, realm))
+	var others []string
+	for _, r := range c.Snap.Realms {
+		if r.Name != realm {
+			others = append(others, r.Name)
 		}
-		for _, m := range st.Mounts {
-			if m.Type == config.StorageHostPath {
-				dirs = append(dirs, fmt.Sprintf("the host directory %s, mounted at %s in %s", m.Source, m.Path, cl.Name))
-			}
+	}
+	switch len(others) {
+	case 0:
+	case 1:
+		switch n := len(c.Snap.Clusters[others[0]]); n {
+		case 0:
+			cmd.Stays = append(cmd.Stays, "the other realm "+others[0])
+		case 1:
+			cmd.Stays = append(cmd.Stays, "the other realm "+others[0]+" and its cluster")
+		default:
+			cmd.Stays = append(cmd.Stays, fmt.Sprintf("the other realm %s and its %d clusters", others[0], n))
 		}
+	default:
+		cmd.Stays = append(cmd.Stays, "the other realms "+JoinWords(others)+" and their clusters")
 	}
-	if len(names) > 0 {
-		cmd.Goes = append(cmd.Goes, countOf(len(names), "cluster")+": "+strings.Join(names, ", "))
-	}
-	cmd.Goes = append(cmd.Goes, "the mesh network, the DNS server and the SSH relay")
-	if c.Snap.Monitorings[realm] != nil {
-		cmd.Goes = append(cmd.Goes, "the monitoring stack")
-	}
-	cmd.Goes = append(cmd.Goes, "the exported SSH config")
-	cmd.Stays = append(cmd.Stays, dirs...)
-	if unseen {
-		cmd.Stays = append(cmd.Stays, "the host directories that its clusters mount, if any")
-	}
-	// sind ui reads the containers on the mesh with the mesh; until it has,
-	// it cannot say whether there are any.
-	switch m, ok := c.Snap.Meshes[realm]; {
-	case !ok || m.Err != "":
-		cmd.Stays = append(cmd.Stays, "the containers that sind did not make, if any: sind detaches them")
-	case len(m.External) > 0:
-		cmd.Stays = append(cmd.Stays, "the containers that sind did not make, "+strings.Join(m.External, ", ")+": sind detaches them")
-	}
+	cmd.Stays = append(cmd.Stays, "the images")
+	cmd.Ack = lossAck(cmd.Losses)
 	return cmd, nil
 }

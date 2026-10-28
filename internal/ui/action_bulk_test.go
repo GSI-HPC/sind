@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/state"
@@ -38,24 +39,23 @@ func TestActDeleteClusters_Dialog(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
 	// The title, the count to type and the form count the clusters that
-	// the dialog lists; it names the one that it leaves out.
-	assert.Contains(t, body, "<h2 id=\"act-title\">Delete 2 clusters</h2>")
-	assert.Contains(t, body, "Removes their 4 containers, their networks and their volumes.")
+	// the dialog keeps; it names the one that it leaves out. The last
+	// clusters of a realm take it along, and the title says so.
+	assert.Contains(t, body, "<h2 id=\"act-title\">Delete 2 clusters and realm sind</h2>")
+	assert.Contains(t, body, "These are the last clusters of realm sind, so the realm goes too. This cannot be undone.")
 	assert.Contains(t, body, `<input type="hidden" name="back" value="/clusters?realm=sind">`)
-	assert.Contains(t, body, `<li><input type="hidden" name="clusters" value="sind/dev"><b class="mono">dev</b> <small>realm sind, 3 nodes, </small></li>`)
-	assert.Contains(t, body, `<li><input type="hidden" name="clusters" value="sind/default"><b class="mono">default</b> <small>realm sind, 1 node, </small></li>`)
-	assert.NotContains(t, body, `value="sind/gone"`, "the dialog lists the clusters that it knows")
+	assert.Contains(t, body, `<input type="hidden" name="clusters" value="sind/dev"><input type="hidden" name="clusters" value="sind/default">`)
+	assert.NotContains(t, body, `value="sind/gone"`, "the dialog keeps the clusters that it knows")
 	assert.Contains(t, body, `<div class="callout warn">sind ui no longer sees <span class="mono">sind/gone</span>, so the dialog leaves it out.</div>`)
-	assert.Contains(t, body, "Slurm state of these clusters go with them.")
+	assert.Contains(t, body, `<form class="modal wide"`, "the table of what goes needs the room")
 	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">2</b> to confirm`)
 	assert.Contains(t, body, `hx-post="/actions/delete-clusters/run"`)
 
 	// One cluster is one.
 	body = f.get("/dialogs/delete-clusters?clusters=sind/dev&clusters=sind/gone&clusters=sind/old").Body.String()
 	assert.Contains(t, body, "<h2 id=\"act-title\">Delete 1 cluster</h2>")
-	assert.Contains(t, body, "Removes its 3 containers, its network and its volumes.")
+	assert.Contains(t, body, "<p id=\"act-lead\">This cannot be undone.</p>")
 	assert.Contains(t, body, "so the dialog leaves them out.")
-	assert.Contains(t, body, "Slurm state of this cluster go with it.")
 	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">1</b> to confirm`)
 
 	// Without a cluster it knows, the dialog sends the user to the list,
@@ -76,7 +76,8 @@ func TestActDeleteClusters_Run(t *testing.T) {
 	form := actForm("clusters", "sind/dev", "clusters", "sind/default", "back", "/clusters?realm=sind&q=d")
 	preview := f.post("/actions/delete-clusters/preview", form).Body.String()
 	assert.Contains(t, preview, actCode("sind delete cluster\nsind delete cluster dev"))
-	assert.Contains(t, preview, "These are all the clusters of realm sind")
+	assert.Contains(t, preview, `<tr><td class="act-lc"><b class="mono">realm sind</b><small>no cluster is left</small></td>`)
+	assert.Contains(t, preview, `<h2 id="act-title" hx-swap-oob="true">Delete 2 clusters and realm sind</h2>`)
 	assert.Contains(t, preview, `>Delete 2 clusters<kbd`, "the button names what it deletes")
 	assert.Contains(t, preview, "The button stays off until you type the number.", "a count is no name")
 	assert.Contains(t, f.post("/actions/delete-clusters/preview", form+"&confirm=3").Body.String(), "3 is not 2. Type the number as it is shown.")
@@ -130,4 +131,16 @@ func TestActDeleteClusters_Lock(t *testing.T) {
 	f.st.SetLock("sind", &state.LockHolder{Command: "sind create cluster", Host: "h", PID: 1, Since: time.Now()})
 	body = f.post("/actions/delete-clusters/preview", actForm("realm", "ci", "clusters", "sind/dev")).Body.String()
 	assert.Contains(t, body, `lock of realm <b class="mono">sind</b>`)
+}
+
+func TestActDeleteClusters_NamesTheRealmsThatGo(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}, {Name: "ci", Clusters: 1}})
+	f.st.SetClusters("ci", []cluster.Summary{{Name: "ci1"}})
+	body := f.get("/dialogs/delete-clusters?clusters=sind/dev&clusters=sind/default&clusters=ci/ci1").Body.String()
+	assert.Contains(t, body, "<h2 id=\"act-title\">Delete 3 clusters and realms ci and sind</h2>")
+	assert.Contains(t, body, "These are the last clusters of their realms, so the realms go too. This cannot be undone.")
+
+	assert.Empty(t, actPreview{}.AlsoStays())
+	assert.Equal(t, "the images, the volumes.", actPreview{Cmd: action.Command{Stays: []string{"the images", "the volumes"}}}.AlsoStays())
 }

@@ -158,10 +158,23 @@
 /* The preview at work. */
 .scrim .act-checking{align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
 .scrim .act-checking.htmx-request{visibility:visible}
-/* The clusters that a delete of several removes. */
-.scrim .act-clusters{display:grid;gap:6px;margin:0;padding:0;list-style:none;max-height:40vh;overflow-y:auto}
-.scrim .act-clusters li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:6px 10px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
-.scrim .act-clusters small{color:var(--muted)}
+/* What a delete of clusters or of a realm removes and keeps, a row for
+   each cluster: the data volumes that go in red, what stays in green;
+   then the box that confirms the data loss. */
+.scrim .act-lw{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.scrim .act-loss{width:100%;border-collapse:collapse;font-size:var(--t-md)}
+.scrim .act-loss th{padding:7px 10px;background:var(--panel-2);text-align:left;font-size:var(--t-xs);font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line-2)}
+.scrim .act-loss td{padding:8px 10px;vertical-align:top;border-bottom:1px solid var(--line-2);overflow-wrap:anywhere}
+.scrim .act-loss tr:last-child td{border-bottom:0}
+.scrim .act-loss td>*{display:block}
+.scrim .act-loss small{color:var(--muted);font-size:var(--t-sm)}
+.scrim .act-lc{width:22%}
+.scrim .act-ls{width:28%}
+.scrim .act-lbad{color:var(--bad);font-weight:500}
+.scrim .act-lok{color:var(--ok)}
+.scrim .act-also{margin:0}
+.scrim .act-ack{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:var(--t-md)}
+.scrim .act-ack input{width:16px;height:16px;margin:3px 0 0;flex:none;accent-color:var(--accent)}
 .scrim .err{font-size:var(--t-sm);color:var(--bad)}
 .scrim .err:empty,.scrim .act-why:empty,.scrim .act-rows:empty,.scrim .act-lims:empty{display:none}
 .scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}
@@ -336,6 +349,14 @@
   .scrim .act-orow>:is(.chip,.pill){grid-column:2;justify-self:start}
 }
 @media (max-width:760px){
+  /* The table of a delete stacks each row: the cluster, then what goes
+     and what stays, each under its label. */
+  .scrim .act-loss thead{display:none}
+  .scrim .act-loss,.scrim .act-loss tbody,.scrim .act-loss tr,.scrim .act-loss td{display:block;width:auto}
+  .scrim .act-loss tr{padding:8px 10px;border-bottom:1px solid var(--line-2)}
+  .scrim .act-loss tr:last-child{border-bottom:0}
+  .scrim .act-loss td{padding:2px 0;border:0}
+  .scrim .act-loss td[data-label]::before{content:attr(data-label);display:block;font-size:var(--t-xs);font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
   /* On a phone the page of the dialog scrolls, and the footer sticks to
      the bottom of the screen. */
   .scrim .modal{max-height:none}
@@ -386,7 +407,7 @@
   .scrim .fld :is(input[type=text],input[type=number],input:not([type]),select){min-height:44px}
   .scrim .act-nr{min-height:44px;grid-template-columns:24px 12px minmax(0,1fr) auto auto}
   .scrim .act-nr.act-box{grid-template-columns:24px minmax(0,1fr)}
-  .scrim .act-nr input[type=checkbox]{width:24px;height:24px}
+  .scrim .act-nr input[type=checkbox],.scrim .act-ack input{width:24px;height:24px}
   .scrim .act-nr>label.act-lab{align-self:stretch;align-content:center;min-height:44px;cursor:pointer}
   .scrim .act-nr>.act-lab>label{padding:12px 0;margin:-12px 0}
   .scrim .checks label{min-height:44px;align-items:center}

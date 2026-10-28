@@ -316,10 +316,12 @@ func TestBuildDeleteCluster(t *testing.T) {
 	assert.Equal(t, "sind delete cluster dev", cmd.Display)
 	assert.Equal(t, "Delete cluster dev", cmd.OK)
 	assert.Equal(t, []string{
+		"the data volume sind-dev-data: every file in /data",
 		"5 containers: controller, worker-0, worker-1, worker-2, worker-3", "the network sind-dev-net",
-		"the volumes sind-dev-config, sind-dev-data", "its jobs, its accounting and its Slurm state",
-	}, cmd.Goes)
+		"the volume sind-dev-config", "its jobs, its accounting and its Slurm state",
+	}, cmd.Goes, "the data volume goes first")
 	assert.Equal(t, []string{"the host directory /home/ada/dev, mounted at /data", "the other cluster of realm sind, and its mesh"}, cmd.Stays)
+	assert.Equal(t, "I know that the data volume `sind-dev-data` of dev goes, with every file in /data.", cmd.Ack)
 
 	cmd, err = build(t, "delete-cluster", form("realm", "ci", "cluster", "ci1"))
 	require.NoError(t, err)
@@ -327,17 +329,40 @@ func TestBuildDeleteCluster(t *testing.T) {
 	assert.Equal(t, []string{"1 container: worker-0", "the network ci-ci1-net", "its jobs, its accounting and its Slurm state",
 		"the mesh, the DNS server and the SSH relay of realm ci, as it is its last cluster"}, cmd.Goes)
 	assert.Equal(t, []string{"the host directories it mounts, if any"}, cmd.Stays, "sind ui has not read its status")
+	assert.Empty(t, cmd.Ack, "no data volume goes")
 
-	st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}})
+	st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-config"}, {Name: "sind-dev-munge"}})
 	st.SetClusters("sind", []cluster.Summary{{Name: "default"}, {Name: "dev"}, {Name: "hpc"}})
 	cmd, err = a.Build(form("cluster", "dev"), st.ctx())
 	require.NoError(t, err)
-	assert.Contains(t, cmd.Goes, "the volume sind-dev-data")
+	assert.Contains(t, cmd.Goes, "the volumes sind-dev-config, sind-dev-munge")
 	assert.Contains(t, cmd.Stays, "the other 2 clusters of realm sind, and its mesh")
 
 	cmd, err = build(t, "delete-cluster", form("cluster", "default"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind delete cluster", cmd.Display)
+}
+
+// lossStore is a store whose realm sind has three clusters: default with
+// a host directory, dev with a data volume at /work and a home volume,
+// and hpc whose status sind ui has not read.
+func lossStore() *testStoreT {
+	st := testStore()
+	st.SetClusters("sind", []cluster.Summary{{Name: "default", State: cluster.StateRunning}, {Name: "dev", State: cluster.StateMixed}, {Name: "hpc"}})
+	st.SetVolumes("sind", []cluster.VolumeSummary{
+		{Name: "sind-default-config"}, {Name: "sind-default-munge"},
+		{Name: "sind-dev-config"}, {Name: "sind-dev-munge"}, {Name: "sind-dev-data"}, {Name: "sind-dev-home"},
+	})
+	st.SetStatus("sind", "default", &cluster.Status{Mounts: []cluster.MountPoint{
+		{Path: "/etc/slurm", Source: "sind-default-config", Type: config.StorageVolume},
+		{Path: "/data", Source: "/home/ada/data", Type: config.StorageHostPath, Data: true},
+	}})
+	st.SetStatus("sind", "dev", &cluster.Status{Mounts: []cluster.MountPoint{
+		{Path: "/work", Source: "sind-dev-data", Type: config.StorageVolume, Data: true},
+	}})
+	st.SetMonitoring("sind", &cluster.Monitoring{})
+	st.SetMesh("sind", store.Mesh{External: []string{"kind-control-plane"}})
+	return st
 }
 
 func TestBuildDeleteClusters(t *testing.T) {
@@ -349,11 +374,22 @@ func TestBuildDeleteClusters(t *testing.T) {
 	assert.Equal(t, Part{Action: "delete-cluster", Realm: "ci", Cluster: "ci1", Argv: []string{"sind", "--realm", "ci", "delete", "cluster", "ci1"}, Display: "sind --realm ci delete cluster ci1"}, cmd.Parts[0])
 	assert.Equal(t, []string{"sind", "delete", "cluster"}, cmd.Parts[1].Argv)
 	assert.Equal(t, "Delete 3 clusters", cmd.OK)
-	assert.Contains(t, cmd.Notes[0], "one command for each cluster")
-	assert.Equal(t, []string{
-		"These are all the clusters of realm ci, so sind also removes its mesh, DNS server and SSH relay.",
-		"These are all the clusters of realm sind, so sind also removes its mesh, DNS server and SSH relay.",
-	}, cmd.Notes[1:])
+	assert.Equal(t, []string{"sind ui runs one command for each cluster. The commands of one realm run one after the other, as each waits for the lock of the realm."}, cmd.Notes)
+	// A row for each cluster, and one for each realm that goes with its
+	// last cluster, after it.
+	var names []string
+	for _, l := range cmd.Losses {
+		names = append(names, l.Name())
+	}
+	assert.Equal(t, []string{"ci1", "realm ci", "default", "dev", "realm sind"}, names)
+	// The rows name the realm of a cluster, as the table has clusters of
+	// several realms.
+	assert.Equal(t, Loss{Realm: "ci", Cluster: "ci1", About: "realm ci · 1 node", Goes: "1 container, its network",
+		Stays: []Kept{{What: "the host directories it mounts, if any"}}}, cmd.Losses[0])
+	assert.Equal(t, Loss{Realm: "ci", About: "no cluster is left", Goes: "the mesh, the DNS server, the SSH relay and the exported SSH config",
+		Stays: []Kept{{What: "the containers that sind did not make, if any", Note: "sind detaches them"}}}, cmd.Losses[1], "sind ui has not read the mesh")
+	assert.Equal(t, []string{"the images"}, cmd.Stays)
+	assert.Empty(t, cmd.Ack)
 	a, _ := Lookup("delete-clusters")
 	assert.Equal(t, "3", a.Want(form("clusters", "sind/dev,ci/ci1", "clusters", "sind/default sind/dev")))
 	assert.Empty(t, a.Want(form()), "without clusters there is nothing to confirm")
@@ -363,7 +399,9 @@ func TestBuildDeleteClusters(t *testing.T) {
 
 	cmd, err = build(t, "delete-clusters", form("clusters", "sind/dev"))
 	require.NoError(t, err)
-	assert.Len(t, cmd.Notes, 1, "sind keeps a realm that has a cluster left")
+	require.Len(t, cmd.Losses, 1, "sind keeps a realm that has a cluster left")
+	assert.Equal(t, "5 nodes", cmd.Losses[0].About, "the clusters of one realm do not name it")
+	assert.Equal(t, []string{"the other cluster of realm sind and its mesh", "the images"}, cmd.Stays)
 	assert.Equal(t, "Delete 1 cluster", cmd.OK)
 
 	_, err = build(t, "delete-clusters", form())
@@ -386,6 +424,59 @@ func TestBuildDeleteClusters(t *testing.T) {
 		require.Error(t, err, tc.value)
 		assert.Contains(t, err.Error(), tc.want, tc.value)
 	}
+}
+
+func TestBuildDeleteClusters_NamesTheDataThatGoes(t *testing.T) {
+	st := lossStore()
+	a, _ := Lookup("delete-clusters")
+	cmd, err := a.Build(form("clusters", "sind/default,sind/dev"), st.ctx())
+	require.NoError(t, err)
+	require.Len(t, cmd.Losses, 2)
+	assert.Equal(t, Loss{Realm: "sind", Cluster: "default", About: "2 nodes · running", Goes: "2 containers, its network, its config and munge volumes",
+		Stays: []Kept{{What: "/home/ada/data", Note: "the host directory at /data"}}}, cmd.Losses[0])
+	assert.Equal(t, Loss{Realm: "sind", Cluster: "dev", About: "5 nodes · mixed",
+		Data: []DataVolume{
+			{Name: "sind-dev-data", Cluster: "dev", What: "every file in /work"},
+			{Name: "sind-dev-home", Cluster: "dev", What: "the home directories of its users", Home: true},
+		},
+		Goes: "5 containers, its network, its config and munge volumes"}, cmd.Losses[1])
+	assert.Equal(t, []string{"the other cluster of realm sind and its mesh", "the images"}, cmd.Stays)
+	assert.Equal(t, "I know that the volumes `sind-dev-data` of dev and `sind-dev-home` of dev go, with every file in them.", cmd.Ack)
+
+	cmd, err = a.Build(form("clusters", "sind/default"), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the other 2 clusters of realm sind and its mesh", "the images"}, cmd.Stays)
+
+	// The last clusters of a realm take it along: its row says what goes
+	// of it, and the containers on its mesh, which stay.
+	cmd, err = a.Build(form("clusters", "sind/default,sind/dev,sind/hpc"), st.ctx())
+	require.NoError(t, err)
+	require.Len(t, cmd.Losses, 4)
+	assert.Equal(t, Loss{Realm: "sind", Cluster: "hpc", About: "0 nodes", Goes: "its network",
+		Stays: []Kept{{What: "the host directories it mounts, if any"}}}, cmd.Losses[2])
+	assert.Equal(t, Loss{Realm: "sind", About: "no cluster is left", Goes: "the mesh, the DNS server, the SSH relay, the monitoring stack and the exported SSH config",
+		Stays: []Kept{{What: "kind-control-plane", Note: "sind detaches it"}}}, cmd.Losses[3])
+	assert.Equal(t, []string{"the images"}, cmd.Stays)
+}
+
+func TestGoneRealms(t *testing.T) {
+	sn := lossStore().Snapshot()
+	assert.Empty(t, GoneRealms(sn, []string{"sind/dev", "sind/dev"}))
+	assert.Equal(t, []string{"ci"}, GoneRealms(sn, []string{"ci/ci1", "sind/dev", "sind/gone"}))
+	assert.Equal(t, []string{"ci", "sind"}, GoneRealms(sn, []string{"sind/hpc", "ci/ci1", "sind/dev", "sind/default"}))
+}
+
+func TestLossAck(t *testing.T) {
+	assert.Empty(t, lossAck(nil))
+	assert.Equal(t, "I know that the home volume `sind-x-home` of x goes, with the home directories of its users.",
+		lossAck([]Loss{{}, {Data: []DataVolume{{Name: "sind-x-home", Cluster: "x", What: "the home directories of its users", Home: true}}}}))
+
+	cmd := Command{Ack: "I know."}
+	assert.False(t, cmd.Acked(form()))
+	assert.False(t, cmd.Acked(form("ack", "yes")))
+	assert.True(t, cmd.Acked(form("ack", "on")))
+	assert.True(t, Command{}.Acked(form()), "nothing to tick")
+	assert.NotEqual(t, Command{}.Fingerprint(), cmd.Fingerprint(), "a data volume that came is no command seen")
 }
 
 func TestBuildDeleteWorker(t *testing.T) {
@@ -421,44 +512,62 @@ func TestBuildDeleteRealm(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci delete realm", cmd.Display)
 	assert.Equal(t, "Delete realm ci", cmd.OK)
-	assert.Equal(t, []string{"1 cluster: ci1", "the mesh network, the DNS server and the SSH relay", "the exported SSH config"}, cmd.Goes)
-	assert.Equal(t, []string{"the host directories that its clusters mount, if any", "the containers that sind did not make, if any: sind detaches them"}, cmd.Stays,
-		"sind ui has read neither the status of ci1 nor the mesh")
+	require.Len(t, cmd.Losses, 2)
+	assert.Equal(t, "ci1", cmd.Losses[0].Cluster)
+	assert.Equal(t, Loss{Realm: "ci", About: "no cluster is left", Goes: "the mesh, the DNS server, the SSH relay and the exported SSH config",
+		Stays: []Kept{{What: "the containers that sind did not make, if any", Note: "sind detaches them"}}}, cmd.Losses[1],
+		"sind ui has not read the mesh")
+	assert.Equal(t, []string{"the other realm sind and its 2 clusters", "the images"}, cmd.Stays)
+	assert.Empty(t, cmd.Goes)
 	assert.Empty(t, cmd.Notes)
+	assert.Empty(t, cmd.Ack)
 
 	// The default realm is named too, so that a copy deletes this realm.
-	st := testStore()
-	st.SetMonitoring("sind", &cluster.Monitoring{})
-	st.SetMesh("sind", store.Mesh{External: []string{"kind-control-plane"}})
-	st.SetStatus("sind", "default", &cluster.Status{Mounts: []cluster.MountPoint{
-		{Path: "/etc/slurm", Source: "sind-default-config", Type: config.StorageVolume},
-		{Path: "/data", Source: "/home/ada/data", Type: config.StorageHostPath},
-	}})
-	st.SetStatus("sind", "dev", &cluster.Status{})
+	st := lossStore()
+	st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "default"}})
 	a, _ := Lookup("delete-realm")
 	cmd, err = a.Build(form(), st.ctx())
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm sind delete realm", cmd.Display)
-	assert.Equal(t, []string{"2 clusters: default, dev", "the mesh network, the DNS server and the SSH relay", "the monitoring stack", "the exported SSH config"}, cmd.Goes)
-	assert.Equal(t, []string{
-		"the host directory /home/ada/data, mounted at /data in default",
-		"the containers that sind did not make, kind-control-plane: sind detaches them",
-	}, cmd.Stays)
+	var names []string
+	for _, l := range cmd.Losses {
+		names = append(names, l.Name())
+	}
+	assert.Equal(t, []string{"default", "dev", "realm sind"}, names)
+	assert.Equal(t, []Kept{{What: "kind-control-plane", Note: "sind detaches it"}}, cmd.Losses[2].Stays)
+	assert.Contains(t, cmd.Losses[2].Goes, "the monitoring stack")
+	assert.Equal(t, "I know that the volumes `sind-dev-data` of dev and `sind-dev-home` of dev go, with every file in them.", cmd.Ack)
+	assert.Equal(t, []string{"the other realm ci and its cluster", "the images"}, cmd.Stays)
+	st.SetClusters("ci", []cluster.Summary{{Name: "ci1"}, {Name: "ci2"}})
+	cmd, err = a.Build(form(), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the other realm ci and its 2 clusters", "the images"}, cmd.Stays)
+	st.SetClusters("ci", nil)
+	cmd, err = a.Build(form(), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the other realm ci", "the images"}, cmd.Stays)
 
-	// No line about containers that sind did not make where there are none.
+	// Nothing of the realm stays where no container is on its mesh.
 	st.SetMesh("sind", store.Mesh{Info: &mesh.Info{}})
 	cmd, err = a.Build(form(), st.ctx())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"the host directory /home/ada/data, mounted at /data in default"}, cmd.Stays)
-	st.SetMesh("sind", store.Mesh{Err: "docker: gone"})
+	assert.Empty(t, cmd.Losses[2].Stays)
+
+	st.SetRealms([]cluster.RealmSummary{{Name: "a"}, {Name: "b"}, {Name: "sind"}})
 	cmd, err = a.Build(form(), st.ctx())
 	require.NoError(t, err)
-	assert.Contains(t, cmd.Stays, "the containers that sind did not make, if any: sind detaches them", "sind ui could not read the mesh")
+	assert.Equal(t, []string{"the other realms a and b and their clusters", "the images"}, cmd.Stays)
+	st.SetRealms([]cluster.RealmSummary{{Name: "sind"}})
+	cmd, err = a.Build(form(), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the images"}, cmd.Stays)
 
+	st.SetRealms([]cluster.RealmSummary{{Name: "ci"}, {Name: "sind"}})
 	st.SetClusters("ci", nil)
 	cmd, err = a.Build(form("realm", "ci"), st.ctx())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"the mesh network, the DNS server and the SSH relay", "the exported SSH config"}, cmd.Goes, "a realm without clusters")
+	require.Len(t, cmd.Losses, 1, "a realm without clusters")
+	assert.Equal(t, "realm ci", cmd.Losses[0].Name())
 
 	_, err = build(t, "delete-realm", form("realm", "gone"))
 	assert.EqualError(t, err, "realm: sind ui sees no realm gone")
