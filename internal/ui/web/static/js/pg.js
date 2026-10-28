@@ -37,30 +37,8 @@
   }
 
   // fold writes node names as one node set, as sind's commands take it:
-  // worker-0 worker-1 worker-3 become worker-[0-1,3].
-  function fold(names) {
-    const groups = new Map();
-    const single = [];
-    for (const n of names) {
-      const m = /^(.*?-)(\d+)$/.exec(n);
-      if (!m) { single.push(n); continue; }
-      if (!groups.has(m[1])) groups.set(m[1], []);
-      groups.get(m[1]).push(+m[2]);
-    }
-    const parts = [...single];
-    for (const [prefix, nums] of groups) {
-      nums.sort((a, b) => a - b);
-      const ranges = [];
-      for (let i = 0; i < nums.length; i++) {
-        let j = i;
-        while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
-        ranges.push(i === j ? String(nums[i]) : nums[i] + '-' + nums[j]);
-        i = j;
-      }
-      parts.push(nums.length === 1 ? prefix + nums[0] : prefix + '[' + ranges.join(',') + ']');
-    }
-    return parts.join(' ');
-  }
+  // controller,worker-[0-1,3] (nodeset.js).
+  function fold(names) { return window.sindNodeSet.fold(names); }
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
@@ -161,27 +139,149 @@
     }
     const bar = root.querySelector('[data-pg-selbar]');
     bar.hidden = chosen.length === 0;
-    bar.querySelector('[data-pg-expr]').textContent = root.dataset.pgSelect === 'nodes'
-      ? fold(chosen.map(r => r.dataset.pgItem))
-      : chosen.map(r => r.dataset.pgLabel).join(', ');
-    // A verb shows when it fits a selected row, and acts on those it fits:
-    // only workers can be drained, resumed and deleted. Delete names what
-    // it deletes.
-    for (const a of bar.querySelectorAll('a[data-pg-fit]')) {
-      const fit = new Set(a.dataset.pgFit.split(' '));
-      const fits = chosen.filter(r => r.dataset.pgMatch.split(' ').some(w => fit.has(w)));
-      const noun = a.dataset.pgNoun || 'node';
-      a.hidden = fits.length === 0;
-      if (a.hasAttribute('data-pg-delete')) {
-        a.textContent = a.dataset.pgVerb + ' ' + (fits.length === 1 ? fits[0].dataset.pgItem : plural(fits.length, noun, noun + 's')) + '…';
-      } else {
-        a.textContent = a.dataset.pgVerb + (fits.length < chosen.length ? ' ' + plural(fits.length, noun, noun + 's') : '') + '…';
-      }
-      a.dataset.pgNodes = fits.map(r => r.dataset.pgItem).sort().join(',');
-    }
+    if (root.dataset.pgSelect === 'nodes') drawNodeBar(bar, chosen);
+    else bar.querySelector('[data-pg-expr]').textContent = chosen.map(r => r.dataset.pgLabel).join(', ');
     const bulk = bar.querySelector('a[data-pg-bulk]');
     if (bulk) bulk.textContent = chosen.length > 1 ? 'Delete ' + chosen.length + ' clusters…' : 'Delete…';
+    grid(root);
     saveSel();
+  }
+
+  // isWorker reports whether the row of the nodes tab is a worker.
+  function isWorker(r) { return r.dataset.pgMatch.split(' ').includes('worker'); }
+
+  // count says how many nodes the rows are: "3 workers" while all are
+  // workers, else "3 nodes"; the name of one.
+  function count(rows) {
+    if (rows.length === 1) return rows[0].dataset.pgItem;
+    return rows.every(isWorker) ? plural(rows.length, 'worker', 'workers') : plural(rows.length, 'node', 'nodes');
+  }
+
+  // and joins words as a sentence does: "a, b and c".
+  function and(words) {
+    return words.length < 2 ? words.join('') : words.slice(0, -1).join(', ') + ' and ' + words[words.length - 1];
+  }
+
+  // drawNodeBar fills the bar of the nodes tab: how many nodes are
+  // selected and which; each verb that fits one of them, named with the
+  // nodes it acts on, which the row's data-pg-ops say; More while one of
+  // its verbs fits; and the line that names the nodes a verb skips, as
+  // "Drain skips controller, db and worker-[4-5]."
+  function drawNodeBar(bar, chosen) {
+    bar.querySelector('[data-pg-count]').textContent = chosen.length === 1 ? '1 node' : plural(chosen.length, 'node', 'nodes');
+    bar.querySelector('[data-pg-expr]').textContent = fold(chosen.map(r => r.dataset.pgItem));
+    const skips = new Map();
+    for (const a of bar.querySelectorAll('a[data-pg-fit]')) {
+      const fits = chosen.filter(r => (r.dataset.pgOps || '').split(' ').includes(a.dataset.pgFit));
+      a.hidden = fits.length === 0;
+      const label = a.querySelector('.pg-ml') || a;
+      label.textContent = a.dataset.pgVerb + ' ' + count(fits) + '…';
+      a.dataset.pgNodes = fits.map(r => r.dataset.pgItem).sort().join(',');
+      if (a.hidden || fits.length === chosen.length) continue;
+      const skipped = and(window.sindNodeSet.parts(chosen.filter(r => !fits.includes(r)).map(r => r.dataset.pgItem)));
+      if (!skips.has(skipped)) skips.set(skipped, []);
+      skips.get(skipped).push(a.dataset.pgVerb);
+    }
+    const more = bar.querySelector('[data-pg-selmore]');
+    if (more) {
+      more.hidden = !more.querySelector('a[data-pg-fit]:not([hidden])');
+      if (more.hidden) more.open = false;
+    }
+    const line = bar.querySelector('[data-pg-skip]');
+    const parts = [...skips].map(([nodes, verbs]) => and(verbs) + (verbs.length === 1 ? ' skips ' : ' skip ') + nodes);
+    line.hidden = parts.length === 0;
+    line.textContent = parts.length ? parts.join('; ') + '.' : '';
+  }
+
+  // sayCount says how many nodes are selected, after the user changed it.
+  function sayCount(root) {
+    if (!root || root.dataset.pgSelect !== 'nodes') return;
+    const chosen = [...root.querySelectorAll('tr[data-pg-item]')].filter(r => sel.items.has(r.dataset.pgItem));
+    say(chosen.length ? plural(chosen.length, 'node', 'nodes') + ' selected: ' + fold(chosen.map(r => r.dataset.pgItem)) + '.' : 'No node selected.');
+  }
+
+  // The table of the nodes tab, [data-pg-grid], is one stop of Tab: the
+  // arrow keys move between its rows and the controls of a row, Home and
+  // End to the first and the last of a row, with Control to the first and
+  // the last row; Space ticks the node from any cell of its row, and a
+  // moves to the bar of the selection. The cell that had the focus keeps the stop.
+  const cur = { item: '', col: 0 };
+
+  // cells are the controls of a row that take the focus: the tick, the
+  // links, the buttons and the words that open their help card.
+  const focusable = 'input, a[href], button, [tabindex]';
+  function cells(r) {
+    return [...r.querySelectorAll(focusable)].filter(e => !e.disabled);
+  }
+
+  function gridRows(table) {
+    return [...table.querySelectorAll('tbody tr[data-pg-item]')].filter(r => !r.hidden && cells(r).length);
+  }
+
+  // grid gives the stop of Tab to the cell of cur, or to the first cell of
+  // the first row.
+  function grid(root) {
+    const table = root.querySelector('[data-pg-grid]');
+    if (!table) return;
+    const rows = gridRows(table);
+    for (const e of table.querySelectorAll('tbody tr[data-pg-item]')) for (const c of e.querySelectorAll(focusable)) c.tabIndex = -1;
+    if (!rows.length) return;
+    const r = rows.find(x => x.dataset.pgItem === cur.item) || rows[0];
+    const cs = cells(r);
+    cs[Math.min(cur.col, cs.length - 1)].tabIndex = 0;
+  }
+
+  function gridKeys(ev) {
+    const t = ev.target;
+    const table = t.closest && t.closest('[data-pg-grid]');
+    const row = table && t.closest('tbody tr[data-pg-item]');
+    if (!row || ev.altKey || ev.metaKey) return;
+    const rows = gridRows(table);
+    let ri = rows.indexOf(row);
+    let ci = cells(row).indexOf(t);
+    if (ri < 0 || ci < 0) return;
+    // Space ticks the node from any cell of its row; on the tick itself,
+    // the checkbox does.
+    if (ev.key === ' ' && !ev.ctrlKey && !t.matches('input[data-pg-sel]')) {
+      const box = row.querySelector('input[data-pg-sel]');
+      ev.preventDefault();
+      if (box && !box.disabled) box.click();
+      return;
+    }
+    if (ev.key === 'a' && !ev.ctrlKey && !ev.shiftKey) {
+      const bar = table.closest('[data-pg-select]').querySelector('[data-pg-selbar]');
+      const first = bar && !bar.hidden && bar.querySelector('a.btn:not([hidden]), summary, button');
+      if (first) { ev.preventDefault(); first.focus(); }
+      return;
+    }
+    switch (ev.key) {
+      case 'ArrowDown': ri = Math.min(ri + 1, rows.length - 1); break;
+      case 'ArrowUp': ri = Math.max(ri - 1, 0); break;
+      case 'ArrowRight': ci++; break;
+      case 'ArrowLeft': ci = Math.max(ci - 1, 0); break;
+      case 'Home': if (ev.ctrlKey) ri = 0; ci = 0; break;
+      case 'End': if (ev.ctrlKey) ri = rows.length - 1; ci = 1e9; break;
+      default: return;
+    }
+    ev.preventDefault();
+    const cs = cells(rows[ri]);
+    const next = cs[Math.min(ci, cs.length - 1)];
+    cur.item = rows[ri].dataset.pgItem;
+    cur.col = cs.indexOf(next);
+    grid(table.closest('[data-pg-select]'));
+    next.focus();
+  }
+
+  // The cell that takes the focus, by the mouse too, keeps the stop.
+  function gridFocus(ev) {
+    const t = ev.target;
+    const row = t.closest && t.closest('[data-pg-grid] tbody tr[data-pg-item]');
+    if (!row) return;
+    const ci = cells(row).indexOf(t);
+    if (ci < 0) return;
+    cur.item = row.dataset.pgItem;
+    cur.col = ci;
+    grid(row.closest('[data-pg-select]'));
   }
 
   // forget drops the selection of the Clusters list once a delete of its
@@ -230,7 +330,7 @@
   // which skip none, as a verb that is off says why; Escape and Tab close
   // it, and a click beside it too. A verb opens its dialog, which gives the
   // focus back to the menu's button when it closes.
-  function menuItems(m) { return [...m.querySelectorAll('[role="menuitem"]')]; }
+  function menuItems(m) { return [...m.querySelectorAll('[role="menuitem"]')].filter(i => !i.hidden); }
 
   function closeMenu(m, focus) {
     if (!m.open) return;
@@ -346,6 +446,8 @@
   }
 
   menus();
+  document.addEventListener('keydown', gridKeys);
+  document.addEventListener('focusin', gridFocus);
 
   document.addEventListener('DOMContentLoaded', () => {
     realmPicker();
@@ -355,12 +457,14 @@
         ensure();
         if (t.checked) sel.items.add(t.dataset.pgSel); else sel.items.delete(t.dataset.pgSel);
         draw();
+        sayCount(t.closest('[data-pg-select]'));
       } else if (t.matches('input[data-pg-all]')) {
         ensure();
         for (const r of t.closest('[data-pg-select]').querySelectorAll('tr[data-pg-item]')) {
           if (t.checked && !r.hidden && selectable(r)) sel.items.add(r.dataset.pgItem); else sel.items.delete(r.dataset.pgItem);
         }
         draw();
+        sayCount(t.closest('[data-pg-select]'));
       }
     });
 
@@ -393,6 +497,9 @@
       const dlg = t.closest('a[data-pg-dialog]');
       if (dlg) {
         ev.preventDefault();
+        // A verb of More closes it; the dialog gives the focus back to More.
+        const m = dlg.closest('details[data-pg-menu]');
+        if (m) closeMenu(m, true);
         openDialog(dlg.getAttribute('href') + '&nodes=' + encodeURIComponent(dlg.dataset.pgNodes || ''));
         return;
       }
@@ -402,7 +509,16 @@
         openDialog(bulkURL(bulk.closest('[data-pg-select]')));
         return;
       }
-      if (t.closest('[data-pg-clear]')) { sel.items.clear(); draw(); return; }
+      if (t.closest('[data-pg-clear]')) {
+        const root = t.closest('[data-pg-select]');
+        sel.items.clear();
+        draw();
+        sayCount(root);
+        // The focus goes back to the table, as the bar hides.
+        const stop = root && root.querySelector('[data-pg-grid] tbody [tabindex="0"]');
+        if (stop) stop.focus();
+        return;
+      }
       const cp = t.closest('[data-pg-copy]');
       if (cp) {
         const code = cp.closest('.cmd').querySelector('code');

@@ -124,8 +124,10 @@ nav.rail .more,.rail-sheet{display:none}
 .nav.on .g{color:var(--accent)}
 
 /* The page scrolls in .main. A control that takes the focus scrolls clear
-   of the task dock, whose height app.js keeps in --dock-h. */
-.main{grid-row:3;grid-column:2;overflow-y:auto;padding:20px 24px 200px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0;scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 24px)}
+   of the task dock, whose height app.js keeps in --dock-h. --main-pb is its
+   bottom padding, which a bar that sticks to the bottom of .main takes
+   back. */
+.main{--main-pb:200px;grid-row:3;grid-column:2;overflow-y:auto;padding:20px 24px var(--main-pb);padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0;scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 24px)}
 .crumbs{font:var(--t-sm) var(--f-mono);color:var(--faint);margin-bottom:6px}
 .crumbs a{color:var(--muted)}
 .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}
@@ -241,7 +243,7 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
    only. */
 @media (max-width:760px),(max-height:500px){
   .app{grid-template-columns:minmax(0,1fr)}
-  .main{grid-column:1;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(176px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+  .main{--main-pb:calc(176px + env(safe-area-inset-bottom,0px));grid-column:1;padding:16px max(16px,env(safe-area-inset-right,0px)) var(--main-pb) max(16px,env(safe-area-inset-left,0px))}
   nav.rail{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:stretch;padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);border-right:0;border-top:1px solid var(--line);overflow:visible;box-shadow:0 -4px 14px rgba(15,23,42,.08)}
   nav.rail .rgl,nav.rail .rgl:has(.rgs){display:none}
   nav.rail .rg{display:flex;min-width:0}

@@ -287,6 +287,17 @@ func TestPgOpOff(t *testing.T) {
 	assert.Equal(t, []string{"drain: sinfo does not list it"}, off("drain"))
 }
 
+func TestPgNodeOps(t *testing.T) {
+	n := fixWorker()
+	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	assert.Equal(t, "drain shutdown reboot freeze cycle cut delete", n.Ops())
+	n.Creating = true
+	assert.Empty(t, n.Ops(), "sind creates it now")
+	n.Creating = false
+	n.Role = config.RoleController
+	assert.Equal(t, "shutdown reboot freeze cycle cut", n.Ops())
+}
+
 func TestPgNodeActs(t *testing.T) {
 	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.Local)
 	end := now.Add(-time.Minute)

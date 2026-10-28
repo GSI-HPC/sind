@@ -160,12 +160,12 @@ type pgClusterView struct {
 	// Services are the columns of the health matrix, Matrix its rows.
 	Services []string
 	Matrix   []pgMatrixRow
-	// Selection holds the dialogs that the nodes tab offers for the
-	// selected nodes, WorkerSelection and Delete those it offers while only
-	// workers are selected.
-	Selection       []pgAction
-	WorkerSelection []pgAction
-	Delete          pgAction
+	// Selection holds the dialogs that the bar of the nodes tab offers
+	// for the selected nodes, SelectionMore those under its More, and
+	// Delete the one that deletes the selected workers.
+	Selection     []pgAction
+	SelectionMore []pgAction
+	Delete        pgAction
 	// Network tab.
 	Networks []pgNetRow
 	Mounts   []pgMount
@@ -315,27 +315,21 @@ func pgDataMount(st *cluster.Status) *cluster.MountPoint {
 	return nil
 }
 
-// pgNodesTab prepares the dialogs that the selection of nodes opens. The
-// page script shows those that fit a selected node, and appends the
-// selected nodes that each fits, as ?nodes=worker-0,worker-1.
+// pgNodesTab prepares the dialogs that the selection of nodes opens: the
+// verbs of the bar, the rarer ones under More, and Delete. Each names the
+// op of pgNode.Ops that it is; the page script shows those that fit a
+// selected node, and appends the selected nodes that each fits, as
+// ?nodes=worker-0,worker-1.
 func pgNodesTab(d *pgClusterView) {
-	power := func(verb, op, fit string) pgAction {
+	power := func(verb, op string) pgAction {
 		a := pgDialogAction(verb+"…", "", "power", "realm", d.Realm, "cluster", d.Name, "op", op)
-		a.Verb, a.Fit = verb, fit
+		a.Verb, a.Fit = verb, op
 		return a
 	}
-	notRunning := string(cluster.StateStopped) + " " + string(cluster.StateUnknown)
-	running := string(cluster.StateRunning)
-	d.Selection = []pgAction{
-		power("Start", "start", notRunning), power("Shut down", "stop", running), power("Reboot", "reboot", running),
-		power("Freeze", "pause", running), power("Unfreeze", "unpause", string(cluster.StatePaused)),
-	}
-	// Drain and Resume act on workers, as Delete does, which names the
-	// workers that it deletes; the page script counts them in each label.
-	worker := string(config.RoleWorker)
-	d.WorkerSelection = []pgAction{power("Drain", "drain", worker), power("Resume", "resume", worker)}
+	d.Selection = []pgAction{power("Start", "on"), power("Reboot", "reboot"), power("Drain", "drain"), power("Resume", "resume")}
+	d.SelectionMore = []pgAction{power("Shut down", "shutdown"), power("Freeze", "freeze"), power("Unfreeze", "unfreeze")}
 	d.Delete = pgDialogAction("Delete…", "danger", "delete-worker", "realm", d.Realm, "cluster", d.Name)
-	d.Delete.Verb, d.Delete.Fit = "Delete", worker
+	d.Delete.Verb, d.Delete.Fit = "Delete", pgOpDelete
 }
 
 // pgNetworkTab fills the networks, the mounts and the volumes. The

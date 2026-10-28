@@ -168,6 +168,22 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-expr{font:600 var(--t-md) var(--f-mono);overflow-wrap:anywhere}
 .pg-chk{width:30px}
 tr.pg-sel td{background:var(--accent-soft)}
+/* the bar of the nodes tab sticks at the bottom of the page while the table
+   is in view, above the task dock: how many nodes and which, the nodes a
+   verb skips, and the verbs. A sticky box keeps clear of the padding of
+   .main, which its offset takes back. */
+.pg-seldock{position:sticky;bottom:calc(min(var(--dock-h,0px),50vh) + 24px - var(--main-pb,0px));z-index:5;margin:8px;border:1px solid var(--accent);border-radius:10px;box-shadow:var(--shadow);gap:8px 12px}
+.pg-selwhat{flex:1 1 220px;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
+.pg-skip{flex-basis:100%;font-size:var(--t-sm);color:var(--muted)}
+.pg-selacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.pg-selmore .pg-menu{top:auto;bottom:calc(100% + 6px);min-width:180px}
+@media (max-width:760px),(max-height:500px){
+  .pg-seldock{bottom:calc(min(var(--dock-h,0px),50vh) + 73px + env(safe-area-inset-bottom,0px) - var(--main-pb,0px));margin:8px 0 0}
+}
+@media (max-width:760px),(pointer:coarse){
+  .pg-selacts .btn{min-height:44px}
+  .pg-selmore .pg-mi{min-height:44px;align-content:center}
+}
 tr[data-href]{cursor:pointer}
 
 /* the lists: the filter field, the chips and the column heads that sort */

@@ -17,7 +17,7 @@
   howtos: [first-cluster, clean-up, tidy-clusters]
 - id: cluster
   title: Cluster
-  summary: One cluster. Its tabs show the health of its nodes and services, what Slurm says about them, the logs, the network and how to connect.
+  summary: One cluster. Its tabs show the health of its nodes and services, what Slurm says about them, the logs, the network and how to connect. Tick nodes on the Nodes tab to act on several at once; the bar at the bottom offers what fits them and names the nodes that a verb skips.
   route: /clusters/{realm}/{cluster}
   doc: usage/diagnostics#cluster-status
   words: [cluster, node-roles, managed, nodeset, data, identity, slurmctld, slurmd, munge]

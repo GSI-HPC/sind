@@ -63,18 +63,26 @@ node stands. It takes a pgLife. */}}
   {{else}}<span class="muted">Network health appears once sind ui has probed the cluster.</span>{{end}}</div></section>
 </div>{{end}}
 
-{{define "pg-tab-nodes"}}<section class="panel" data-pg-select="nodes">
-  <div class="pg-selbar" data-pg-selbar hidden><span>Selection: <span class="pg-expr" data-pg-expr></span></span><span class="pg-grow"></span>
-    {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}">{{.Label}}</a>{{end}}{{range .WorkerSelection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}" data-pg-noun="worker">{{.Label}}</a>{{end}}{{with .Delete}}<a class="btn sm danger" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}" data-pg-noun="worker" data-pg-delete>{{.Label}}</a>{{end}}<button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
-  <div class="tw"><table class="cards chk"><thead><tr><th class="pg-chk c-chk"><label class="pg-all"><input type="checkbox" data-pg-all aria-label="Select all nodes"><span class="pg-phone">All</span></label></th><th>Node</th><th>Role</th><th>State</th><th>Slurm</th><th>IP</th><th>Services</th><th><span class="vh">Actions</span></th></tr></thead><tbody>
-  {{range .Cluster.Nodes}}{{$n := .}}<tr data-pg-item="{{.Short}}" data-pg-label="{{.Short}}" data-pg-match="{{.Match}}"><td class="c-chk"><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"{{if .Life}} disabled title="sind {{if .Deleting}}deletes{{else}}creates{{end}} this node."{{end}}></td>
+{{/* pg-tab-nodes is the table of the nodes of a cluster, a grid that the
+keyboard moves in, and the bar of the selected nodes, which sticks at the
+bottom of the page: how many, which, the verbs that fit them, each with
+the nodes it acts on, and the nodes that a verb skips. */}}
+{{define "pg-tab-nodes"}}<section class="panel pg-nodes" data-pg-select="nodes">
+  <div class="tw"><table class="cards chk" data-pg-grid aria-label="Nodes of {{.Name}}" aria-describedby="pg-grid-keys"><thead><tr><th class="pg-chk c-chk"><label class="pg-all"><input type="checkbox" data-pg-all aria-label="Select all nodes"><span class="pg-phone">All</span></label></th><th>Node</th><th>Role</th><th>State</th><th>Slurm</th><th>IP</th><th>Services</th><th><span class="vh">Actions</span></th></tr></thead><tbody>
+  {{range .Cluster.Nodes}}{{$n := .}}<tr data-pg-item="{{.Short}}" data-pg-label="{{.Short}}" data-pg-match="{{.Match}}" data-pg-ops="{{.Ops}}"><td class="c-chk"><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"{{if .Life}} disabled title="sind {{if .Deleting}}deletes{{else}}creates{{end}} this node."{{end}}></td>
     <td class="mono c-name"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td data-label="Role"><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$n.Short}} is {{.Text}}." data-say-key="{{$n.Short}}">{{.Text}}</span>{{end}}</td>
     <td data-label="Slurm">{{if .Life}}<span class="faint">–</span>{{else if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint pg-small">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td><td class="mono" data-label="IP">{{.IP}}</td>
     <td data-label="Services">{{if .Life}}<span class="faint">{{.LifeText}}</span>{{else}}{{range .ServiceIssues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}{{if .Known}}<span class="faint">{{.ServiceUp}} up</span>{{else}}<span class="faint">–</span>{{end}}{{end}}{{end}}</td>
     <td class="act c-act">{{if not .Life}}{{with .RowFix}}{{template "pg-action" .}}{{end}}{{end}}<a class="btn sm ghost" href="{{.LogsLink}}" aria-label="{{.LogsName}}">Logs</a><button type="button" class="btn sm ghost pg-cpssh" data-pg-copy-text="{{.SSH}}" data-pg-copy-say="Copied: {{.SSH}}. Paste it in a terminal." aria-label="Copy ssh: {{.SSH}}" title="Copy {{.SSH}}">{{template "pg-copy-icon"}}Copy ssh</button></td></tr>
   {{else}}<tr><td colspan="8"><div class="empty">This cluster has no node.</div></td></tr>{{end}}
-  </tbody></table></div></section>
-<p class="muted pg-hint">Tick nodes to act on several at once; the bar offers only what fits them. A row that needs a look has its first fix beside its Logs. Copy ssh copies the command that logs in to the node. The selection stays when the table updates. Slurm is the state that <span class="mono">sinfo</span> reports for a worker.</p>{{end}}
+  </tbody></table></div>
+  <div class="pg-selbar pg-seldock" data-pg-selbar role="region" aria-label="Selected nodes" hidden>
+    <div class="pg-selwhat"><b data-pg-count></b> <span class="pg-expr" data-pg-expr></span><span class="pg-skip" data-pg-skip hidden></span></div>
+    <div class="pg-selacts">{{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}">{{.Label}}</a>{{end}}
+      {{- with .SelectionMore}}<details class="pg-mw pg-selmore" data-pg-menu data-pg-selmore><summary class="btn sm pg-mbtn" aria-haspopup="menu">More<span class="pg-caret" aria-hidden="true"></span></summary>
+      <div class="pg-menu" role="menu" aria-label="More actions">{{range .}}<a class="pg-mi" role="menuitem" tabindex="-1" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}"><span class="pg-ml">{{.Label}}</span></a>{{end}}</div></details>{{end}}
+      {{- with .Delete}}<a class="btn sm danger" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}" data-pg-delete>{{.Label}}</a>{{end}}<button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div></div></section>
+<p class="muted pg-hint" id="pg-grid-keys">Tick nodes to act on several at once; the bar at the bottom offers what fits them and names the nodes that a verb skips. <span class="kbd-only">In the table, the arrow keys move between the rows and the cells, Space ticks a node and <kbd>a</kbd> goes to the bar.</span> A row that needs a look has its first fix beside its Logs. Copy ssh copies the command that logs in to the node. The selection stays when the table updates. Slurm is the state that <span class="mono">sinfo</span> reports for a worker.</p>{{end}}
 
 {{/* pg-slurm-note says why the Slurm view is empty; it takes a pgSlurmView. */}}
 {{define "pg-slurm-note"}}{{if not .Read}}<div class="callout">The Slurm state appears once sind ui has asked <span class="mono">sinfo</span> on the controller.</div>{{else if .Err}}<div class="callout bad"><b>sinfo on the controller did not answer.</b> <span class="mono">{{.Err}}</span></div>{{end}}{{end}}

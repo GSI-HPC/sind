@@ -344,6 +344,25 @@ func pgOpOff(n pgNode, op string) string {
 	return ""
 }
 
+// pgOpDelete is the op of pgNode.Ops that deletes a worker.
+const pgOpDelete = "delete"
+
+// Ops are the ops that fit the node, as the bar of the nodes tab offers
+// them: the power ops that pgOpOff lets through, and delete for a worker,
+// separated by spaces.
+func (n pgNode) Ops() string {
+	var ops []string
+	for _, op := range action.PowerOps {
+		if pgOpOff(n, op.ID) == "" {
+			ops = append(ops, op.ID)
+		}
+	}
+	if n.Worker() && !n.Life() {
+		ops = append(ops, pgOpDelete)
+	}
+	return strings.Join(ops, " ")
+}
+
 // --- what works on the node, and what changed on it
 
 // pgNodeAct is a command that worked on the node: a run of its event log,

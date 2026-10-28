@@ -126,6 +126,8 @@
 
   // mark gives the dotted words their look. Only the first mark of a word
   // takes the focus, so that a table of roles adds one stop, not one a row.
+  // In a table that the arrow keys move in, [data-pg-grid], a word is a
+  // cell that pg.js gives the stop of Tab to.
   function mark() {
     const first = new Set();
     for (const el of document.querySelectorAll('[data-word]')) {
@@ -133,6 +135,10 @@
       el.classList.add('term-word');
       el.classList.toggle('seen', H.seen.has(id));
       if (el.closest('a, button, label, summary')) continue;
+      if (el.closest('[data-pg-grid] tbody')) {
+        if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+        continue;
+      }
       if (!first.has(id)) {
         first.add(id);
         if (!el.hasAttribute('tabindex') || el.dataset.wordTab) { el.setAttribute('tabindex', '0'); el.dataset.wordTab = '1'; }
