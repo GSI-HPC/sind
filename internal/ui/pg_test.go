@@ -162,7 +162,7 @@ func TestPgOverview(t *testing.T) {
 	assert.Contains(t, body, `href="/dialogs/restart-service?cluster=dev&amp;nodes=worker-1&amp;realm=sind&amp;unit=slurmd"`, "a restart of the service first")
 	assert.Contains(t, body, `<span class="pill bad">2 nodes need a look</span>`, "the realm row")
 	assert.Contains(t, body, `<span aria-hidden="true">3<span class="u"> need a look</span></span><span class="vh">, 3 nodes need a look in all realms</span>`, "the rail: two in sind, one in ci")
-	assert.Contains(t, body, `<td class="c-ready"><span class="pill warn">needs a look</span><span class="pg-fsub">2 of 4 workers take jobs</span></td>`, "the probe counts the workers that take jobs")
+	assert.Contains(t, body, `<td class="c-ready"><span class="pill bad">needs a look</span><span class="pg-fsub">2 of 4 workers take jobs</span></td>`, "the probe counts the workers that take jobs")
 	assert.Contains(t, body, `<div class="pg-fis"><a class="mono" href="/nodes/sind/dev/worker-1">worker-1</a> slurmd down</div><div class="pg-fis"><a class="mono" href="/nodes/sind/dev/worker-3">worker-3</a> stopped</div></td>`)
 
 	// A chip keeps the clusters that need a look, and the realms that

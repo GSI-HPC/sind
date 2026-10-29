@@ -178,7 +178,8 @@ func pgLifeNow(l *pgLife) (node, text string) {
 // blame. The pill is "ready"; "a command runs" while a command works on
 // the cluster and no node needs a look by the rule of every page
 // (pgCluster.NeedsLook): it may be starting what is down; "not ready" when
-// it runs no job, "needs a look" when it runs jobs but something is wrong;
+// it runs no job, "needs a look" (red or amber, as pgLook colours the count
+// of the nodes that need a look) when it runs jobs but something is wrong;
 // and "not checked yet" before the first probe of a cluster that looks
 // fine. A command that creates or deletes it says how far it got.
 func pgFleetReadyOf(sn store.Snapshot, c pgCluster) (pill pgPill, words, note string) {
@@ -190,9 +191,15 @@ func pgFleetReadyOf(sn store.Snapshot, c pgCluster) (pill pgPill, words, note st
 	d := &pgClusterView{Realm: c.Realm, Name: c.Name, Cluster: c, Status: st, Slurm: pgSlurmOf(sn.Slurm(c.Realm, c.Name), c.Nodes), Data: pgDataMount(st)}
 	r := pgReadyOf(d)
 	look := c.NeedsLook()
+	needsLook := pgPill{"needs a look", "warn"}
+	if n, class := pgLook(c.Nodes); n > 0 {
+		// The colour of every count of the nodes that need a look: red
+		// when a node does not run or a service is down.
+		needsLook.Class = class
+	}
 	if !r.Checked {
 		if look {
-			return pgPill{"needs a look", "warn"}, "sind ui has not probed it yet", ""
+			return needsLook, "sind ui has not probed it yet", ""
 		}
 		return pgPill{"not checked yet", ""}, "sind ui has not probed it yet", ""
 	}
@@ -200,7 +207,7 @@ func pgFleetReadyOf(sn store.Snapshot, c pgCluster) (pill pgPill, words, note st
 	if len(c.Runs) > 0 && !look {
 		return pgPill{"a command runs", "run"}, workers, ""
 	}
-	notReady, needsLook := pgPill{"not ready", "bad"}, pgPill{"needs a look", "warn"}
+	notReady := pgPill{"not ready", "bad"}
 	switch ctl, wk := r.Checks[0], r.Checks[1]; {
 	case ctl.State == "bad":
 		return notReady, ctl.Title, ctl.Detail

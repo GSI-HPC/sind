@@ -54,15 +54,15 @@ func TestPgFleetReadyOf(t *testing.T) {
 	}{
 		{"every worker takes jobs", probed, c(ctl, w0, w1), pgPill{"ready", "ok"}, "2 of 2 workers take jobs", ""},
 		{"one worker", probed, c(ctl, w0), pgPill{"ready", "ok"}, "1 of 1 worker takes jobs", ""},
-		{"a worker takes none", probed, c(ctl, w0, down), pgPill{"needs a look", "warn"}, "1 of 2 workers takes jobs", ""},
+		{"a worker takes none", probed, c(ctl, w0, down), pgPill{"needs a look", "bad"}, "1 of 2 workers takes jobs", ""},
 		{"no worker takes jobs", probed, c(ctl, down), pgPill{"not ready", "bad"}, "no worker takes jobs", ""},
 		{"no worker at all", probed, c(ctl), pgPill{"not ready", "bad"}, "no worker", "Slurm runs jobs on workers. Add one."},
 		{"the controller is down", probed, c(fleetNode("controller", config.RoleController, "slurmctld", "slurmctld"), w0), pgPill{"not ready", "bad"}, "The controller does not answer", "controller: slurmctld is down."},
 		{"sinfo fails", noSinfo, c(ctl, w0), pgPill{"not ready", "bad"}, "The controller does not answer", "sinfo fails: slurm_load_partitions: Unable to contact slurm controller"},
-		{"a node that is no worker needs a look", probed, c(ctl, w0, fleetNode("db", config.RoleDB, "slurmdbd", "slurmdbd")), pgPill{"needs a look", "warn"}, "1 of 1 worker takes jobs", ""},
+		{"a node that is no worker needs a look", probed, c(ctl, w0, fleetNode("db", config.RoleDB, "slurmdbd", "slurmdbd")), pgPill{"needs a look", "bad"}, "1 of 1 worker takes jobs", ""},
 		{"its data volume is missing", noData, c(ctl, w0), pgPill{"needs a look", "warn"}, "The data volume is missing", "Docker has no volume sind-c-data, so /data is empty."},
 		{"before the first probe", store.Snapshot{}, c(ctl, w0), pgPill{"not checked yet", ""}, "sind ui has not probed it yet", ""},
-		{"a stopped node before the first probe", store.Snapshot{}, c(ctl, pgNode{Short: "worker-0", Role: config.RoleWorker, State: cluster.StateStopped}), pgPill{"needs a look", "warn"}, "sind ui has not probed it yet", ""},
+		{"a stopped node before the first probe", store.Snapshot{}, c(ctl, pgNode{Short: "worker-0", Role: config.RoleWorker, State: cluster.StateStopped}), pgPill{"needs a look", "bad"}, "sind ui has not probed it yet", ""},
 		{"a command works on a worker", probed, busy(ctl, w0, down), pgPill{"a command runs", "run"}, "1 of 2 workers takes jobs", ""},
 		{"a command works on the only worker", probed, busy(ctl, down), pgPill{"a command runs", "run"}, "no worker takes jobs", ""},
 		{"a command runs while a node is stopped", probed, func() pgCluster {
