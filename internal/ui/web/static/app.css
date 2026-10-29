@@ -87,6 +87,8 @@ kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-botto
 .live.off i{background:var(--warn);animation:none}
 .hostchip{font:var(--t-sm) var(--f-mono);color:var(--muted);display:flex;gap:6px;align-items:center}
 .hostchip i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+/* the address gives way, so that the top bar stays on one row beside the rail */
+@media (max-width:820px){.hostchip{display:none}}
 .iconbtn{border:1px solid transparent;background:none;border-radius:var(--r);padding:4px 8px;cursor:pointer;color:var(--muted);font:600 var(--t-base) var(--f-mono)}
 .iconbtn:hover{background:var(--panel-2);border-color:var(--line)}
 

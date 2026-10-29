@@ -41,19 +41,26 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .ts-x{display:contents}
 /* the title keeps its room, so that the step line gives way first; a long
    title loses its flags before its name */
-.ts-t{order:1;display:flex;align-items:center;gap:8px;min-width:0;flex:0 0 auto;max-width:45%}
+.ts-t{order:1;display:flex;align-items:center;gap:8px;min-width:0;flex:0 1 auto;max-width:45%}
 .ts-t b{font:600 var(--t-md) var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .ts-t b a{color:inherit}
-.tstrip>.segbar{order:2;flex:none;width:140px;height:6px}
+.tstrip>.segbar{order:2;flex:0 1 auto;width:140px;min-width:36px;height:6px}
 .ts-s{order:3;display:flex;gap:8px;min-width:0;flex:0 1 auto;font:var(--t-sm) var(--f-mono);color:var(--muted)}
 .ts-l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ts-l.bad{color:var(--bad)} .ts-l.warn{color:var(--warn)}
 .ts-r{display:none;flex:none}
 .ts-s .num{flex:none;color:var(--faint)}
 .tstrip>.grow{order:4}
+/* in a window just wider than a phone the step line gives way, and the
+   title keeps room for its name */
+@media (min-width:761px) and (max-width:800px){
+  .ts-s{display:none}
+  .ts-t{max-width:60%;min-width:min-content}
+  .ts-t b{min-width:22ch}
+}
 .ts-more,.ts-f{order:5}
 .ts-more{color:var(--muted);font-weight:400}
-.ts-b{order:6;display:flex;gap:6px}
+.ts-b{order:6;display:flex;flex:none;gap:6px}
 .ts-show{order:7}
 .ts-f,.ts-show{display:none}
 .ts-f{align-items:center;gap:5px;padding:2px 8px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--bad);font:600 var(--t-sm) var(--f-body);cursor:pointer}
