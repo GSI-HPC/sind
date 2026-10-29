@@ -297,7 +297,9 @@ tr.sel .pill.run{border-color:var(--run)}
 .miss-links{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .miss-links li{display:flex;gap:6px;align-items:center}
 
-@media (max-width:760px){
+/* a row of Needs you stacks while the column of the page is narrow, as on a
+   window just wider than a phone, with the rail beside it */
+@media (max-width:900px){
   .pg-it{grid-template-columns:4px minmax(0,1fr) auto;gap:4px 12px;align-items:center}
   .pg-it > .pg-bar{grid-row:1 / span 3}
   .pg-kind{grid-column:2;grid-row:1}
@@ -306,6 +308,8 @@ tr.sel .pill.run{border-color:var(--run)}
   .pg-bb{grid-column:2;grid-row:3;justify-content:flex-start}
   .pg-fixc{grid-column:3;grid-row:3}
   .pg-fixc > .btn{flex:0 1 auto}
+}
+@media (max-width:760px){
   /* the strip names the commands that run; the task dock has their steps */
   .pg-now-h{width:auto}
   .pg-now-r{flex-wrap:wrap;gap:4px 10px}
