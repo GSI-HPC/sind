@@ -59,11 +59,16 @@ matches, which the page script shows and hides as the user types. */}}
   <td class="c-chk"><input type="checkbox" data-pg-sel="{{.Key}}" aria-label="Select {{.Label}}"{{with .Life}} disabled title="sind {{.Verb}} this cluster."{{end}}></td>
   <td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}<td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$c.Name}} is {{.Text}}." data-say-key="{{$c.Realm}}/{{$c.Name}}">{{.Text}}</span>{{end}}{{with .Life}}<div class="pg-lifebar">{{template "run-segbar" .}}</div>{{end}}</td><td class="mono" data-label="Slurm">{{.Slurm}}</td><td class="num" data-label="Nodes">{{len .Nodes}}</td>
   <td class="c-wide" data-label="Roles"><div class="pg-nodemap">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div></td><td data-label="Monitoring">{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</td>
-  <td class="act c-act">{{with .Stop}}{{template "run-stop" .}}{{else}}{{with .Life}}<a class="btn sm" href="{{.Run.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a>{{else}}{{template "pg-menu" .Menu}}{{end}}{{end}}</td></tr>
+  <td class="act c-act">{{template "pg-cluster-act" .}}</td></tr>
 {{end}}{{template "pg-list-none" (.None "cluster")}}
 </tbody></table></div>
 {{if .Clusters}}<div class="pg-key">{{template "pg-legend" .AnyLife}}</div>{{end}}
 {{end}}{{end}}
+
+{{/* pg-cluster-act is what a row of a cluster offers, a pgClusterRow: its
+⋯ menu, or, while a command creates or deletes the cluster, Stop… for a
+create of sind ui, else Show progress. */}}
+{{define "pg-cluster-act"}}{{with .Stop}}{{template "run-stop" .}}{{else}}{{with .Life}}<a class="btn sm" href="{{.Run.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a>{{else}}{{template "pg-menu" .Menu}}{{end}}{{end}}{{end}}
 
 {{define "pg-nodes-head"}}{{with .Data}}
 <div class="head"><div class="t"><h1>Nodes</h1><div class="sub">{{template "pg-list-scope" (.Scope "node" "nodes")}}<span>A node's name is its short name and its cluster, as sind's commands take it.</span></div></div></div>

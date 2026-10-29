@@ -37,18 +37,83 @@ td.mono:has(.pg-copy){white-space:nowrap}
 
 /* Slurm: a config file */
 .pg-conf{margin:0;padding:12px 14px;max-height:420px;overflow:auto;background:var(--term-bg);color:var(--term-fg);font:var(--t-sm)/1.55 var(--f-mono);white-space:pre;border-radius:0 0 var(--r) var(--r)}
-section[id^="slurm-file-"]:focus,.pg-attn:focus{outline:none}
+section[id^="slurm-file-"]:focus,.pg-attn:focus,.pg-fleet:focus{outline:none}
 .pg-attn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* cluster cards */
-.pg-ccard{display:flex;flex-direction:column;gap:12px;padding:14px;color:var(--fg)}
-.pg-ccard:hover{border-color:var(--accent);text-decoration:none}
-.pg-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.pg-name{font-size:var(--t-xl);font-weight:700;letter-spacing:-.025em}
-.pg-ver{margin-left:auto;font:var(--t-sm) var(--f-mono);color:var(--faint)}
-.pg-pills{display:flex;gap:6px;flex-wrap:wrap}
+/* the fleet table of the Overview: a row for each realm, which heads the
+   rows of its clusters; each says whether it is ready for jobs, with its
+   tiles and its issues in words. The legend of the tiles is below it. The
+   width of the panel, not of the window, decides its layout, so that the
+   rail does not push the actions into a sideways scroll: below 1000px the
+   Slurm column goes, and below 760px each cluster is a card. */
+.pg-fleet{container:fleet/inline-size}
+.pg-fleet-note{font-size:var(--t-md)}
+.pg-fleet-t th[scope="col"]:nth-child(1){width:11%}
+.pg-fleet-t th[scope="col"]:nth-child(2){width:15%}
+.pg-fleet-t th[scope="col"]:nth-child(3){width:26%}
+.pg-fleet-t th[scope="col"]:nth-child(5){width:1%}
+.pg-fleet-t th[scope="col"]:nth-child(6){width:1%}
+.pg-fr th,.pg-fr td{padding:7px 12px;background:var(--panel-2);border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+.pg-fleet-t tbody:first-of-type .pg-fr :is(th,td){border-top:0}
+.pg-fr th{font:inherit;text-transform:none;letter-spacing:0;color:var(--fg);white-space:normal}
+.pg-frh{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.pg-frn{color:var(--fg);font-size:var(--t-md)}
+.pg-frn b{font-weight:600}
+.pg-frw{color:var(--muted);font-weight:400}
+.pg-frm{color:var(--muted);font-size:var(--t-sm)}
+.pg-frl{margin-left:auto;font-size:var(--t-sm)}
+.pg-fr td.act{display:table-cell}
+.pg-fc .c-name b{font:600 var(--t-md) var(--f-mono)}
+.pg-fc .c-ready .pill{display:flex;width:max-content}
+.pg-fc .c-map .pg-nodemap{min-width:150px}
+.pg-fsub{display:block;margin-top:3px;font-size:var(--t-sm);color:var(--muted)}
+.pg-fis{font-size:var(--t-sm);color:var(--muted);overflow-wrap:anywhere}
+.pg-fis+.pg-fis{margin-top:2px}
+.pg-fis :is(a,b).mono{font-weight:600;color:var(--fg)}
+.pg-fis a.mono:hover{color:var(--accent)}
+.pg-fnow{display:flex;flex-direction:column;gap:5px}
+.pg-fnow .pg-lifebar{margin:0;max-width:180px}
+.pg-fc .c-slurm{white-space:nowrap;color:var(--faint)}
+.pg-fc .c-slurm .chip{margin-left:4px}
+.pg-fnone .empty{padding:14px}
+.pg-fnone .empty .btn{margin-left:8px}
 .pg-key{padding:10px 14px 12px;border-top:1px solid var(--line-2)}
 .pg-key .pg-legend{margin:0}
+@container fleet (max-width:999px){
+  .pg-fleet-t th[scope="col"]:nth-child(5),.pg-fc .c-slurm,.pg-fleet-note{display:none}
+}
+@container fleet (max-width:759px){
+  /* each realm is a heading, and each cluster a card: its name and its
+     pill, why, its tiles and its issues; nothing scrolls sideways */
+  .pg-fleet .tw{overflow:visible;-webkit-mask-image:none;mask-image:none;animation:none}
+  .pg-fleet-t,.pg-fleet-t tbody{display:block}
+  .pg-fleet-t thead{display:none}
+  .pg-fleet>.ph .pg-chips{order:1;flex-basis:100%}
+  .pg-fr{display:flex;align-items:center;gap:8px;background:var(--panel-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line-2)}
+  .pg-fleet-t tbody:first-of-type .pg-fr{border-top:0}
+  .pg-fr th,.pg-fr td{display:block;padding:6px 0;border:0;background:none}
+  .pg-fr th{flex:1;min-width:0;padding-left:14px}
+  .pg-fr td.act{display:flex;align-items:center;padding-right:14px}
+  .pg-fr .pg-frh .pill{white-space:normal}
+  .pg-fc{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px 10px;padding:12px 14px;border-bottom:1px solid var(--line-2)}
+  .pg-fc:last-child{border-bottom:0}
+  .pg-fc td{display:block;padding:0;border:0;background:none;min-width:0}
+  .pg-fc.click:hover td{background:none}
+  .pg-fc.click:hover{background:var(--hover)}
+  .pg-fc .c-name{grid-column:1;grid-row:1;overflow-wrap:anywhere}
+  .pg-fc .c-name b{font-size:var(--t-base)}
+  .pg-fc .c-ready{display:contents}
+  .pg-fc .c-ready .pill{grid-column:2;grid-row:1;justify-self:end;white-space:normal}
+  .pg-fsub{grid-column:1/-1;grid-row:2;margin:-2px 0 0}
+  .pg-fc .c-act{grid-column:3;grid-row:1}
+  .pg-fc .c-act:empty{display:none}
+  .pg-fc .c-map{grid-column:1/-1;grid-row:3}
+  .pg-fc .c-map .pg-nodemap{min-width:0}
+  .pg-fc .c-issues{grid-column:1/-1;grid-row:4}
+  .pg-fc .c-issues:has(> .pg-fnil){display:none}
+  .pg-fnone{display:block}
+  .pg-fnone td{display:block;border:0}
+}
 
 /* node tiles: they echo the logo; the controller is deep teal with three
    lines, service nodes teal, workers sky; a stopped node is an outline, a
@@ -97,7 +162,6 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 /* the thin bar of such a command in a list and on a card */
 .pg-lifebar{margin-top:6px;max-width:180px}
 .pg-lifebar .segbar{height:4px}
-.pg-ccard .pg-lifebar{max-width:none;margin-top:-4px}
 /* what the card says while the create goes on, in place of the commands */
 .pg-wait{margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:var(--r);color:var(--muted);font-size:var(--t-md)}
 
@@ -263,8 +327,6 @@ tr.sel .pill.run{border-color:var(--run)}
      with the bar of a command that creates or deletes the cluster */
   table.cards td.c-state:has(.pg-lifebar){flex-direction:column;align-items:flex-end}
   table.cards td.c-state .pg-lifebar{width:140px;margin-top:2px}
-  /* the health of a realm wraps rather than leave the screen */
-  .pg-realms td .pill{white-space:normal}
   td.act .btn + .btn{margin-left:0}
 }
 /* On a touch screen, the chips, the realm links, the filter, the heads that

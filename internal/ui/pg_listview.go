@@ -121,6 +121,8 @@ func pgMatch(text string, words []string) bool {
 
 // pgChip is a state filter of a list, with the count of its rows.
 type pgChip struct {
+	// Key is the chip's state, "" for all.
+	Key   string
 	Label string
 	N     int
 	On    bool
@@ -134,7 +136,7 @@ type pgChip struct {
 func pgChips(q pgListQuery, defs []pgChipDef, count func(key string) int) []pgChip {
 	out := make([]pgChip, 0, len(defs))
 	for _, d := range defs {
-		c := pgChip{Label: d.Label, N: count(d.Key), On: d.Key == q.State, URL: q.URL("state", d.Key)}
+		c := pgChip{Key: d.Key, Label: d.Label, N: count(d.Key), On: d.Key == q.State, URL: q.URL("state", d.Key)}
 		if d.Optional && c.N == 0 && !c.On {
 			continue
 		}

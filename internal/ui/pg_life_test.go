@@ -119,7 +119,7 @@ func TestPgWorkOfACreate(t *testing.T) {
 	assert.Equal(t, "c1", run.ID)
 
 	// The realm says what goes on in it.
-	rows := pgRealmRows(sn, "", pgNow)
+	rows := pgRealmRows(sn, pgNow)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []pgPill{{"creating nightly", "run"}}, rows[0].Lives)
 
@@ -349,9 +349,16 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 
 	ts.st.SetLock("ci", &state.LockHolder{Command: "sind create cluster nightly", PID: 9})
 	body = pgBody(t, ts, "/?realm=", 200)
-	assert.Contains(t, body, `<td><span class="pill run">creating nightly</span> </td>`)
+	assert.Contains(t, body, `<span class="pg-frm">1 cluster · 4 nodes</span><span class="pill run">creating nightly</span><a class="pg-frl" href="/mesh?realm=ci">`)
 	assert.NotContains(t, body, "a command runs", "the health says it already")
-	assert.Contains(t, body, `<span class="mono">create cluster nightly</span> started today 11:59 from sind ui</div>`)
+	// The row of the cluster says how far the create got, not the faults of
+	// what is not up yet, and offers its progress, as the dock has Stop.
+	assert.Contains(t, body, `<td class="c-ready"><span class="pill run">being created</span><span class="pg-fsub">nodes 1 of 3 ready</span></td>`)
+	assert.Contains(t, body, `<td class="c-issues"><div class="pg-fnow"><div class="pg-lifebar"><div class="segbar" role="progressbar" aria-label="Progress of create cluster nightly"`)
+	assert.Contains(t, body, `<span class="pg-fis"><b class="mono">worker-0</b> waits for munge · 19s of 5m</span></div></td>`)
+	assert.Contains(t, body, `<td class="act c-act"><a class="btn sm" href="/runs/c1" aria-label="Show progress: create cluster nightly">Show progress</a></td>`)
+	assert.Contains(t, body, ">Creating <span class=\"n\">1</span></a>")
+	assert.Contains(t, body, "being created or deleted</li>", "the legend explains the dashed tiles")
 }
 
 func TestPgPagesWhileACommandDeletesANode(t *testing.T) {

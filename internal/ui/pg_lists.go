@@ -144,13 +144,13 @@ type pgNodeList struct {
 	Nodes []pgNodeRow
 }
 
-// pgRealmRows returns the realms with their counts, the one named realm lit.
-func pgRealmRows(sn store.Snapshot, realm string, now time.Time) []pgRealmRow {
+// pgRealmRows returns the realms with their counts.
+func pgRealmRows(sn store.Snapshot, now time.Time) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
 		row := pgRealmRow{
 			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]),
-			Locked: sn.Locks[r] != nil, On: r == realm,
+			Locked: sn.Locks[r] != nil, MeshErr: sn.Meshes[r].Err,
 		}
 		for _, c := range sn.Clusters[r] {
 			if l := pgWorkOf(sn, r, c.Name, now).Life; l != nil {
@@ -212,6 +212,23 @@ func pgRealmDeleteHint(sn store.Snapshot, realm string) string {
 	return "Every cluster of it goes, with the files on their " + pgDataVolumes(kinds, n) + "."
 }
 
+// pgClusterRowOf builds the row of a cluster in a list: the Clusters list
+// or the fleet table of the Overview. Its label names the realm too when
+// the list shows every realm, and a command of sind ui that creates the
+// cluster has its Stop button, with the CSRF token of the page.
+func pgClusterRowOf(sn store.Snapshot, c pgCluster, allRealms bool, csrf string) pgClusterRow {
+	row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name, DataKinds: pgDataKinds(sn, c.Realm, c.Name)}
+	if allRealms {
+		row.Label = c.Name + " (" + c.Realm + ")"
+	}
+	if l := c.Life; l != nil && l.Kind == pgCreating && l.Stop != nil {
+		stop := *l.Stop
+		stop.CSRF, stop.Small, stop.Label = csrf, true, ""
+		row.Stop = &stop
+	}
+	return row
+}
+
 func pgLoadClusters(v *View) (*pgClusterList, error) {
 	q, err := pgListQueryOf(v, "/clusters", "name", pgClusterChips, pgClusterCols)
 	if err != nil {
@@ -227,15 +244,7 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 		if !pgClusterIn(c, q.State) {
 			continue
 		}
-		row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name, DataKinds: pgDataKinds(v.Snap, c.Realm, c.Name)}
-		if q.Realm == "" {
-			row.Label = c.Name + " (" + c.Realm + ")"
-		}
-		if l := c.Life; l != nil && l.Kind == pgCreating && l.Stop != nil {
-			stop := *l.Stop
-			stop.CSRF, stop.Small, stop.Label = v.CSRF, true, ""
-			row.Stop = &stop
-		}
+		row := pgClusterRowOf(v.Snap, c, q.Realm == "", v.CSRF)
 		row.Hidden = !pgMatch(row.Text, words)
 		if !row.Hidden {
 			d.Shown++

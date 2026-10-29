@@ -118,7 +118,7 @@ func (r railRealm) Label() string {
 // known. A scope that the snapshot does not hold, such as a realm that
 // Docker has no trace of while it is down, is an entry of its own.
 func railRealmOf(v *View) *railRealm {
-	rows := pgRealmRows(v.Snap, "", v.Now)
+	rows := pgRealmRows(v.Snap, v.Now)
 	if len(rows) == 0 && v.Scope == "" {
 		return nil
 	}

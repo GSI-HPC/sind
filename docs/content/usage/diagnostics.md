@@ -475,7 +475,7 @@ sind get realms
 {{< /cli >}}
 {{< ui >}}
 
-The **Realms** table of the Overview lists each realm with its clusters, nodes and health. The realm switcher at the head of the **Realm** group of the rail selects the realm that Clusters, Nodes, Mesh and DNS, Monitoring and Topology show.
+The **Clusters** table of the Overview has a row for each realm with its clusters, nodes and health, and the rows of its clusters under it. The realm switcher at the head of the **Realm** group of the rail selects the realm that Clusters, Nodes, Mesh and DNS, Monitoring and Topology show.
 
 {{< uishot "overview" >}}
 

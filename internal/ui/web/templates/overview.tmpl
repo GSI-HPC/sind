@@ -1,7 +1,7 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
 {{/* page-overview is the Overview page: what needs the user first, when
-anything does, then the realms, a card for each cluster, and the latest
+anything does, then the fleet table of the clusters by realm, and the latest
 runs. Each part is a fragment. */}}
 {{define "page-overview"}}
 <div hx-swap="morph:innerHTML" sse-swap="pg-overview-head">{{fragment "pg-overview-head" .}}</div>
@@ -18,24 +18,31 @@ runs. Each part is a fragment. */}}
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
-{{define "pg-overview-cards"}}{{with .Data}}
+{{/* pg-overview-cards is the fleet table: one table of every cluster,
+grouped by realm, with the chips that keep the clusters that need a look or
+that a command makes. A realm row says what the realm holds and how it is,
+with its mesh, a link to Mesh and DNS and its ⋯ menu; a cluster row whether
+it is ready for jobs, its nodes as tiles, what is wrong in words or how far
+the command that creates or deletes it got, its Slurm and its ⋯ menu. The
+column heads and the legend of the tiles show while a cluster row does. In a
+narrow panel each realm row is a heading and each cluster a card. */}}
+{{define "pg-overview-cards"}}{{with .Data}}{{$d := .}}
 {{if .Empty}}{{template "pg-first-steps" .}}{{else}}
-<section class="panel"><div class="ph"><h2>Realms</h2><span class="grow"></span><span class="faint">a <span data-word="realm">realm</span> keeps its clusters apart</span></div>
-  <div class="tw"><table class="pg-realms"><thead><tr><th>Realm</th><th class="num">Clusters</th><th class="num">Nodes</th><th>Health</th><th></th></tr></thead><tbody>
-  {{range .Realms}}<tr{{if .On}} class="sel"{{end}}><td class="mono"><a href="/?realm={{.Name}}"><b>{{.Name}}</b></a></td><td class="num">{{.Clusters}}</td><td class="num">{{.Nodes}}</td>
-    <td>{{range .Lives}}<span class="pill {{.Class}}">{{.Text}}</span> {{end}}{{if .Look}}<span class="pill {{.LookClass}}">{{.LookText}}</span>{{else if .Lives}}{{else if .Nodes}}<span class="pill ok">all running</span>{{else}}<span class="faint">–</span>{{end}}</td>
-    <td class="act">{{if and .Locked (not .Lives)}}<span class="pill run">a command runs</span> {{end}}<a class="btn sm ghost" href="/clusters?realm={{.Name}}">Clusters<span class="vh"> of {{.Name}}</span></a> {{template "pg-menu" .Menu}}</td></tr>
-  {{end}}</tbody></table></div></section>
-{{if .Clusters}}<div class="grid g3 pg-block">{{range .Clusters}}<a class="panel pg-ccard" href="{{.Link}}">
-  <div class="pg-top"><span class="pg-name">{{.Name}}</span>{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}<span class="pg-ver">{{with .Slurm}}Slurm {{.}}{{end}}</span></div>
-  {{with .Life}}<div class="pg-lifebar">{{template "run-segbar" .}}</div>{{end}}
-  <div class="pg-nodemap" aria-label="{{.NodesText}}">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div>
-  {{with .Life}}<div class="muted pg-small"><span class="mono">{{.Title}}</span> started {{.Started}} {{.Source}}</div>{{else}}{{range .Runs}}<div class="mono muted pg-small">{{.Title}} runs now</div>{{end}}{{end}}
-  <dl class="kv"><dt>realm</dt><dd class="mono">{{.Realm}}</dd><dt>nodes</dt><dd>{{with .Roles}}{{.}}{{else}}<span class="faint">none</span>{{end}}</dd>
-    <dt>monitoring</dt><dd>{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</dd></dl>
-  {{with .Problems}}<div class="pg-pills">{{range .}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}
-</a>{{end}}</div>
-{{else}}<section class="panel pg-block"><div class="empty">No cluster{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.{{range .Actions}}{{if eq .Class "primary"}}<br><br>{{template "pg-action" .}}{{end}}{{end}}</div></section>{{end}}
+<section class="panel pg-fleet" id="fleet" tabindex="-1" aria-labelledby="pg-fleet-h"><div class="ph"><h2 id="pg-fleet-h">Clusters</h2>{{if .Clusters}}<div class="pg-chips" role="group" aria-label="Show">{{template "pg-list-chips" .}}</div>{{end}}<span class="grow"></span><span class="faint pg-fleet-note">a <span data-word="realm">realm</span> keeps its clusters apart</span><a class="btn sm ghost" href="{{.ClustersLink}}">All clusters <span aria-hidden="true">→</span></a></div>
+  <div class="tw"><table class="pg-fleet-t">{{if .Shown}}<thead><tr><th scope="col">Cluster</th><th scope="col">Ready for jobs</th><th scope="col">Nodes</th><th scope="col">Issues and progress</th><th scope="col">Slurm</th><th scope="col"><span class="vh">Actions</span></th></tr></thead>{{end}}
+  {{range .Fleet}}<tbody>
+  <tr class="pg-fr"><th colspan="5" scope="rowgroup"><span class="pg-frh"><a class="mono pg-frn" href="/?realm={{.Name}}"><span class="pg-frw">realm</span> <b>{{.Name}}</b></a><span class="pg-frm">{{.MetaText}}</span>{{range .Lives}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}{{if .Look}}<span class="pill {{.LookClass}}">{{.LookText}}</span>{{else if .Lives}}{{else if .Nodes}}<span class="pill ok">all running</span>{{end}}{{if and .Locked (not .Lives)}}<span class="pill run">a command runs</span>{{end}}{{with .MeshErr}}<span class="pill warn" title="{{.}}">mesh needs a look<span class="vh">: {{.}}</span></span>{{end}}<a class="pg-frl" href="/mesh?realm={{.Name}}">Mesh and DNS<span class="vh"> of {{.Name}}</span></a></span></th>
+    <td class="act">{{template "pg-menu" .Menu}}</td></tr>
+  {{range .Rows}}{{$r := .}}<tr class="click pg-fc" data-href="{{.Link}}"><td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>
+    <td class="c-ready"><span class="pill{{with .Ready.Class}} {{.}}{{end}}">{{.Ready.Text}}</span>{{with .ReadyText}}<span class="pg-fsub">{{.}}</span>{{end}}</td>
+    <td class="c-map"><div class="pg-nodemap" role="group" aria-label="Nodes of {{.Name}}">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div></td>
+    <td class="c-issues">{{with .Life}}<div class="pg-fnow"><div class="pg-lifebar">{{template "run-segbar" .}}</div>{{with $r.Now}}<span class="pg-fis">{{with $r.NowNode}}<b class="mono">{{.}}</b> {{end}}{{.}}</span>{{end}}</div>{{else}}{{range .Issues}}<div class="pg-fis"><a class="mono" href="{{.Node.Link}}">{{.Node.Short}}</a> {{.Text}}</div>{{end}}{{with .More}}<div class="pg-fis faint">{{.}}</div>{{end}}{{with .Note}}<div class="pg-fis">{{.}}</div>{{end}}{{range .Runs}}<div class="pg-fis"><span class="mono">{{.Title}}</span> runs now</div>{{end}}{{if not (or .Issues .Note .Runs)}}<span class="faint pg-fnil">–</span>{{end}}{{end}}</td>
+    <td class="c-slurm"><span class="mono">{{.Slurm}}</span>{{if .Monitoring}} <span class="chip brand">monitoring</span>{{end}}</td>
+    <td class="act c-act">{{template "pg-cluster-act" .}}</td></tr>
+  {{else}}<tr class="pg-fnone"><td colspan="6"><div class="empty">No cluster in realm <b class="mono">{{.Name}}</b> yet. {{template "pg-action" .NewCluster}}</div></td></tr>{{end}}
+  </tbody>{{else}}<tbody><tr class="pg-fnone"><td colspan="6"><div class="empty">{{if .State}}No cluster matches the chip. <a href="{{(index .Chips 0).URL}}">Show all</a>{{else}}No cluster{{with .Realm}} in realm <b class="mono">{{.}}</b>{{end}} yet.{{end}}</div></td></tr></tbody>{{end}}
+  </table></div>
+  {{if .Shown}}<div class="pg-key">{{template "pg-legend" .AnyLife}}</div>{{end}}</section>
 {{end}}{{end}}{{end}}
 
 {{define "pg-first-steps"}}<section class="panel"><div class="ph"><h2>No realm on this Docker daemon yet</h2></div><div class="pb"><ol class="pg-steps">

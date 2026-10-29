@@ -137,7 +137,6 @@ func TestPgCluster(t *testing.T) {
 	c.Nodes = append(c.Nodes, pgNode{Short: "worker-1", Role: config.RoleWorker, State: cluster.StatePaused})
 	assert.Equal(t, "1 controller · 1 controller-backup · 1 db · 2 workers", c.Roles())
 	assert.Equal(t, "", pgCluster{}.Roles())
-	assert.Equal(t, []pgPill{{"worker-0: stopped", "bad"}, {"worker-1: paused", "warn"}}, c.Problems())
 	assert.Equal(t, "5 nodes", c.NodesText())
 	assert.Equal(t, pgPill{"mixed", "warn"}, pgCluster{State: cluster.StateMixed}.Pill())
 	assert.Equal(t, "/clusters/sind/dev", c.Link())

@@ -79,6 +79,9 @@ type pgReady struct {
 	// Wait replaces the commands while a command creates or deletes the
 	// cluster: it says when they show.
 	Wait string
+	// Took counts the managed workers that take jobs, Of all of them,
+	// once the cluster was probed.
+	Took, Of int
 }
 
 // pgEnterCmd returns the command that opens a shell on the cluster, on
@@ -147,6 +150,7 @@ func pgReadyOf(d *pgClusterView) *pgReady {
 	r.Checked = true
 	ctl := pgControllerCheck(d)
 	workers, took, of := pgWorkersCheck(d)
+	r.Took, r.Of = took, of
 	r.Checks = []pgReadyCheck{ctl, workers, pgAccountingCheck(d)}
 	if files, ok := pgFilesCheck(d); ok {
 		r.Checks = append(r.Checks, files)

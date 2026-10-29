@@ -668,18 +668,6 @@ func (c pgCluster) Roles() string {
 	return strings.Join(parts, " · ")
 }
 
-// Problems lists what is wrong in the cluster, one entry per issue, such as
-// "worker-1: stopped".
-func (c pgCluster) Problems() []pgPill {
-	var out []pgPill
-	for _, n := range c.Nodes {
-		for _, i := range n.Issues() {
-			out = append(out, pgPill{n.Short + ": " + i.Text, i.Class})
-		}
-	}
-	return out
-}
-
 // Tabs of a cluster page, in order.
 var pgTabs = []struct{ Key, Label string }{
 	{"summary", "Summary"}, {"nodes", "Nodes"}, {"slurm", "Slurm"}, {"logs", "Logs"},

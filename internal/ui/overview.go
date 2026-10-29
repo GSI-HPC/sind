@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -12,16 +14,16 @@ func init() { defaultRegistry.AddRoute(pgRealmRoute(overviewPage, false, false))
 
 // overviewPage is the Overview page, template overview.tmpl, served by
 // pgRealmRoute. It spans every realm; ?realm= narrows it to one, which the
-// realms panel links to. That filters only this page, and the realm cookie
-// does not remember it: the page is the Overview group of the rail, not
-// the Realm group. Without ?realm= it shows every realm, whatever the
-// cookie says.
+// realm rows of its fleet table link to. That filters only this page, and
+// the realm cookie does not remember it: the page is the Overview group of
+// the rail, not the Realm group. Without ?realm= it shows every realm,
+// whatever the cookie says. ?state= is a chip of the fleet table.
 var overviewPage = Page{
 	Name:      "overview",
 	Pattern:   "GET /{$}",
 	Title:     "Overview",
 	Nav:       "overview",
-	Params:    []string{"realm"},
+	Params:    []string{"realm", "state"},
 	Fragments: []string{"pg-overview-head", "pg-overview-cards", "pg-overview-needs", "pg-overview-recent"},
 	Load:      func(v *View) (err error) { v.Data, err = pgLoadOverview(v); return },
 }
@@ -43,7 +45,7 @@ func pgOverviewFragments() []Fragment {
 	return out
 }
 
-// pgRealmRow is a realm in the realms panel of the Overview.
+// pgRealmRow is a realm in the fleet table of the Overview.
 type pgRealmRow struct {
 	Name     string
 	Clusters int
@@ -56,7 +58,9 @@ type pgRealmRow struct {
 	// now, as "creating nightly".
 	Lives  []pgPill
 	Locked bool
-	On     bool
+	// MeshErr says in one line why sind ui could not read the mesh of
+	// the realm, its DNS records or the containers on it.
+	MeshErr string
 	// Menu is the ⋯ menu of the row: Connect a container, and Delete
 	// realm apart.
 	Menu pgMenu
@@ -85,7 +89,12 @@ type pgOverview struct {
 	Realms   []pgRealmRow
 	Clusters []pgCluster
 	Nodes    int
-	Needs    []pgNeed
+	// State is the chip of the fleet table, "" for all; Fleet the realms
+	// and clusters that it shows.
+	State string
+	Chips []pgChip
+	Fleet []pgFleetRealm
+	Needs []pgNeed
 	// Running are the commands that run now, in the strip "Running now".
 	Running []pgNowRun
 	Runs    []pgRun
@@ -100,14 +109,19 @@ func pgLoadOverview(v *View) (*pgOverview, error) {
 	if err != nil {
 		return nil, err
 	}
+	state := v.Params.Get("state")
+	if !slices.ContainsFunc(pgFleetChips, func(c pgChipDef) bool { return c.Key == state }) {
+		return nil, fmt.Errorf("state: unknown filter %q: %w", state, ErrBadRequest)
+	}
 	sn := v.Snap
-	d := &pgOverview{Realm: realm}
-	d.Realms = pgRealmRows(sn, realm, v.Now)
+	d := &pgOverview{Realm: realm, State: state}
+	d.Realms = pgRealmRows(sn, v.Now)
 	d.Empty = len(d.Realms) == 0
 	for _, c := range pgClustersOf(sn, realm, v.Now) {
 		d.Clusters = append(d.Clusters, c)
 		d.Nodes += len(c.Nodes)
 	}
+	pgFleetOf(d, sn)
 	pgNeedsOf(d, sn, v.Now)
 	// Narrowed to a realm, the Overview lists the runs of that realm, as
 	// Activity does.
@@ -145,6 +159,24 @@ func pgQuickActions(d *pgOverview) []pgAction {
 	}
 	return acts
 }
+
+// AnyLife reports whether a command creates or deletes a node of a
+// cluster that the fleet table shows, whose tile the legend then explains.
+func (d *pgOverview) AnyLife() bool {
+	return slices.ContainsFunc(d.Fleet, func(r pgFleetRealm) bool {
+		return slices.ContainsFunc(r.Rows, func(c pgFleetRow) bool { return c.AnyLife() })
+	})
+}
+
+// Shown reports whether the fleet table shows a cluster: its column
+// heads and the legend of the tiles show only then.
+func (d *pgOverview) Shown() bool {
+	return slices.ContainsFunc(d.Fleet, func(r pgFleetRealm) bool { return len(r.Rows) > 0 })
+}
+
+// ClustersLink is the Clusters list of the realm that the page shows, or
+// of every realm.
+func (d *pgOverview) ClustersLink() string { return "/clusters?realm=" + url.QueryEscape(d.Realm) }
 
 // RealmsText returns "2 realms".
 func (d *pgOverview) RealmsText() string { return pgPlural(len(d.Realms), "realm", "realms") }
