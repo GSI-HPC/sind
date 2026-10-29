@@ -487,6 +487,8 @@ func (s *Sim) planCreateWorker(realm, name string, args []string) func(context.C
 	if n, err := strconv.Atoi(flagValue(args, "--count")); err == nil && n > 0 {
 		count = n
 	}
+	cpus, _ := strconv.Atoi(flagValue(args, "--cpus"))
+	memory, _ := config.MemoryMB(flagValue(args, "--memory"))
 	return func(ctx context.Context, p play) error {
 		next := 0
 		for _, n := range s.w.nodesOf(realm, name) {
@@ -498,7 +500,7 @@ func (s *Sim) planCreateWorker(realm, name string, args []string) func(context.C
 		}
 		var nodes []node
 		for i := range count {
-			nodes = append(nodes, node{name: "worker-" + strconv.Itoa(next+i), cluster: name, role: "worker", ready: ready("worker", i)})
+			nodes = append(nodes, node{name: "worker-" + strconv.Itoa(next+i), cluster: name, role: "worker", ready: ready("worker", i), cpus: max(cpus, 0), memoryMB: max(memory, 0)})
 		}
 		return p.create(ctx, createSpec{nodes: nodes})
 	}

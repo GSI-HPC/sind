@@ -34,6 +34,9 @@ type node struct {
 	// reason is why Slurm drains the node, for opDrain; unit is the
 	// service that opRestart restarts.
 	reason, unit string
+	// cpus and memoryMB are the size of the node when it is made; 0 for
+	// the size of its cluster.
+	cpus, memoryMB int
 }
 
 // Effects of a script on the world, for emit.

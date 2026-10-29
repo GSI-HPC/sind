@@ -5,6 +5,7 @@ package demo
 import (
 	"bufio"
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -143,15 +144,55 @@ func TestDaemonOf(t *testing.T) {
 
 func TestLogLine(t *testing.T) {
 	at := time.Date(2026, 10, 2, 9, 5, 7, 0, time.UTC)
-	assert.Equal(t, "Oct  2 09:05:07 db slurmdbd[100]: slurmdbd version 26.05.4 started", logLine(true, "db", "slurmdbd", 0, at))
-	assert.Equal(t, "[09:05:07] slurmdbd: slurmdbd version 26.05.4 started", logLine(false, "db", "slurmdbd", 0, at))
-	assert.Contains(t, logLine(true, "w", "slurmd", 0, at), "launch task StepId=4000.0")
-	assert.Contains(t, logLine(true, "w", "chronyd", 1, at), "chronyd[101]: reloading configuration", "a unit with no texts of its own")
-	for daemon := range messages {
+	line := func(journal bool, short, daemon string, i int) string {
+		return logLine(journal, short, daemon, messagesOf(daemon, Facts{}), i, at)
+	}
+	pid := strconv.Itoa(pidOf("slurmdbd"))
+	assert.Equal(t, "Oct  2 09:05:07 db slurmdbd["+pid+"]: slurmdbd version 26.05.4 started", line(true, "db", "slurmdbd", 0))
+	assert.Equal(t, "[09:05:07] slurmdbd: slurmdbd version 26.05.4 started", line(false, "db", "slurmdbd", 0))
+	assert.Contains(t, line(true, "w", "slurmd", 0), "launch task StepId=4000.0")
+	assert.Contains(t, line(true, "w", "chronyd", 1), "chronyd["+strconv.Itoa(pidOf("chronyd"))+"]: reloading configuration", "a unit with no texts of its own")
+	for _, daemon := range []string{"slurmctld", "slurmd", "slurmdbd", "slurmrestd", "sackd"} {
 		for i := range 8 {
-			assert.NotContains(t, logLine(true, "x", daemon, i, at), "%d")
+			assert.NotContains(t, logLine(true, "x", daemon, messagesOf(daemon, Facts{Up: []string{"worker-0"}, Down: []string{"worker-1"}}), i, at), "%d")
 		}
 	}
+}
+
+func TestPidOf(t *testing.T) {
+	assert.Equal(t, pidOf("slurmd"), pidOf("slurmd"), "one process ID for each daemon")
+	assert.NotEqual(t, pidOf("slurmd"), pidOf("slurmctld"))
+	lines := readLines(context.Background(), t, testExec(0), head, "exec", "sind-dev-worker-0", "journalctl", "--follow", "-n", "200")
+	for _, l := range lines {
+		assert.Contains(t, l, "slurmd["+strconv.Itoa(pidOf("slurmd"))+"]: ")
+	}
+}
+
+func TestControllerMessages(t *testing.T) {
+	all := strings.Join(controllerMessages(Facts{Up: []string{"worker-0", "worker-1"}, Down: []string{"worker-3", "worker-4"}}), "\n")
+	assert.Contains(t, all, "in all on worker-0", "the partition of the cluster")
+	assert.Contains(t, all, "registration complete for worker-1")
+	assert.Contains(t, all, "Nodes worker-[3-4] not responding", "only the nodes that are down")
+	assert.NotContains(t, all, "debug")
+
+	none := strings.Join(controllerMessages(Facts{Up: []string{"worker-0"}}), "\n")
+	assert.NotContains(t, none, "not responding", "no node is down")
+	idle := strings.Join(controllerMessages(Facts{Down: []string{"worker-0"}}), "\n")
+	assert.NotContains(t, idle, "Started JobId", "no node to start on")
+	assert.Contains(t, idle, "worker-0 not responding")
+}
+
+func TestExec_ControllerLogFollowsTheFacts(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e := testExec(0)
+	e.Facts = func(string) Facts {
+		return Facts{Up: []string{"worker-1"}, Down: []string{"worker-4"}}
+	}
+	lines := readLines(ctx, t, e, head, cluster.ServiceLogArgs("sind", "controller", "dev", "slurmctld", cluster.LogOptions{Follow: true})...)
+	all := strings.Join(lines, "\n")
+	assert.Contains(t, all, "Nodes worker-4 not responding")
+	assert.NotContains(t, all, "worker-3")
 }
 
 func TestExec_JournalOfAFailedUnit(t *testing.T) {

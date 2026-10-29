@@ -3,6 +3,8 @@
 package demo
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -185,6 +187,27 @@ func TestSim_CreateWorker(t *testing.T) {
 	task = s.startWait(t, st, "create", "worker") // the default cluster
 	assert.Equal(t, store.TaskOK, task.Status)
 	assert.Contains(t, nodeStates(st, "sind", "default"), "worker-1")
+}
+
+func TestSim_CreateWorkerKeepsTheSizeAsked(t *testing.T) {
+	s, st := newSim(t)
+	task := s.startWait(t, st, "create", "worker", "dev", "--count", "2", "--cpus", "4", "--memory", "2g")
+	require.Equal(t, store.TaskOK, task.Status)
+	sl := st.Snapshot().Slurm("sind", "dev")
+	require.NotNil(t, sl.Info)
+	sizes := map[string]string{}
+	for _, n := range sl.Info.Nodes {
+		sizes[n.Name] = fmt.Sprintf("%d/%d", n.CPUs, n.MemoryMB)
+	}
+	assert.Equal(t, "4/2048", sizes["worker-6"])
+	assert.Equal(t, "4/2048", sizes["worker-7"])
+	assert.Equal(t, "2/1024", sizes["worker-0"], "the others keep theirs")
+	assert.Contains(t, sl.Info.Files[1].Content, "NodeName=worker-6 CPUs=4 RealMemory=2048")
+
+	info, err := s.w.InspectContainer(context.Background(), cluster.ContainerName("sind", "dev", "worker-6"))
+	require.NoError(t, err)
+	assert.Equal(t, int64(4e9), info.HostConfig.NanoCPUs)
+	assert.Equal(t, int64(2<<30), info.HostConfig.Memory)
 }
 
 func TestSim_DeleteCluster(t *testing.T) {

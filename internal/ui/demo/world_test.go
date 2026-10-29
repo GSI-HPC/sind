@@ -334,3 +334,12 @@ func TestWorld_DriftTimesTheFailure(t *testing.T) {
 func TestWorld_ClockDefault(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), NewWorld().clock(), time.Minute)
 }
+
+func TestWorld_FactsOf(t *testing.T) {
+	w := Seeded()
+	f := w.FactsOf("sind-dev-controller")
+	assert.Equal(t, []string{"worker-4"}, f.Down, "slurmd is down")
+	assert.Equal(t, []string{"worker-0", "worker-1", "worker-2", "worker-3", "worker-5"}, f.Up)
+	assert.Equal(t, []string{"worker-1"}, w.FactsOf("sind-legacy-worker-0").Down, "a stopped node is down")
+	assert.Equal(t, Facts{}, w.FactsOf("sind-dev-nobody"))
+}

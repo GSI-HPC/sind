@@ -3,6 +3,7 @@
 package demo
 
 import (
+	"cmp"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,11 +15,15 @@ import (
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
-// The size of every worker of the demo, as slurmd reports it.
+// The size of a worker of the demo that was made without one, as slurmd
+// reports it.
 const (
 	workerCPUs     = 2
 	workerMemoryMB = 1024
 )
+
+// partitionName is the one partition of every cluster of the demo.
+const partitionName = "all"
 
 // slurmOf returns what Slurm says about a cluster, as sinfo on its
 // controller and its config files would: an error when the controller
@@ -52,13 +57,14 @@ func slurmInfoOf(c *clusterState) *cluster.SlurmInfo {
 		case config.RoleAPI:
 			opts.JWT = true
 		case config.RoleWorker:
-			workers = append(workers, slurm.NodeEntry{Name: n.short, CPUs: workerCPUs, MemoryMB: workerMemoryMB})
+			cpus, mem := n.size()
+			workers = append(workers, slurm.NodeEntry{Name: n.short, CPUs: cpus, MemoryMB: mem})
 			names = append(names, n.short)
 			info.Nodes = append(info.Nodes, slurmNode(n))
 		}
 	}
 	if len(names) > 0 {
-		info.Partitions = []slurm.PartitionInfo{{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: len(names), NodeList: hostList(names)}}
+		info.Partitions = []slurm.PartitionInfo{{Name: partitionName, Default: true, State: "up", TimeLimit: "infinite", Nodes: len(names), NodeList: hostList(names)}}
 	}
 	opts.DefMemPerCPU = slurm.DefMemPerCPU(workers)
 	info.Files = []cluster.SlurmFile{
@@ -73,20 +79,27 @@ func slurmInfoOf(c *clusterState) *cluster.SlurmInfo {
 // drained when they do not, else idle, mixed or allocated by the CPUs its
 // jobs hold.
 func slurmNode(n *nodeState) slurm.NodeInfo {
-	sn := slurm.NodeInfo{Name: n.short, State: "idle", CPUs: workerCPUs, MemoryMB: workerMemoryMB, Partitions: []string{"all"}}
+	cpus, mem := n.size()
+	sn := slurm.NodeInfo{Name: n.short, State: "idle", CPUs: cpus, MemoryMB: mem, Partitions: []string{partitionName}}
 	switch {
 	case n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd]:
 		sn.State, sn.Reason = "down*", "Not responding"
 	case n.drain != "" && n.busy > 0:
-		sn.State, sn.Reason, sn.AllocCPUs = "draining", n.drain, min(n.busy, workerCPUs)
+		sn.State, sn.Reason, sn.AllocCPUs = "draining", n.drain, min(n.busy, cpus)
 	case n.drain != "":
 		sn.State, sn.Reason = "drained", n.drain
-	case n.busy >= workerCPUs:
-		sn.State, sn.AllocCPUs = "allocated", workerCPUs
+	case n.busy >= cpus:
+		sn.State, sn.AllocCPUs = "allocated", cpus
 	case n.busy > 0:
 		sn.State, sn.AllocCPUs = "mixed", n.busy
 	}
 	return sn
+}
+
+// size returns the CPUs and the memory in MB of a worker as slurmd reports
+// them: the size the user asked for, else the size of the demo's workers.
+func (n *nodeState) size() (cpus, memoryMB int) {
+	return cmp.Or(n.cpus, workerCPUs), cmp.Or(int(n.memory>>20), workerMemoryMB)
 }
 
 // hostList writes node names as a Slurm host list: worker-0 to worker-3

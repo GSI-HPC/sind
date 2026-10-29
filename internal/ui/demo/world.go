@@ -88,6 +88,10 @@ type nodeState struct {
 	stopped time.Time
 	exit    int
 	oom     bool
+	// cpus and memory are the size the user asked for when the node was
+	// made, 0 for the size of its cluster.
+	cpus   int
+	memory int64
 }
 
 // NewWorld returns a world with nothing in it.
@@ -211,8 +215,8 @@ func (w *World) InspectContainer(_ context.Context, name docker.ContainerName) (
 					continue
 				}
 				info := &docker.ContainerInfo{Name: name, ImageRef: "ghcr.io/gsi-hpc/sind-node:" + c.slurm}
-				info.HostConfig.NanoCPUs = int64(cmp.Or(c.cpus, config.DefaultCPUs)) * 1e9
-				info.HostConfig.Memory = cmp.Or(c.memory, 512<<20)
+				info.HostConfig.NanoCPUs = int64(cmp.Or(n.cpus, c.cpus, config.DefaultCPUs)) * 1e9
+				info.HostConfig.Memory = cmp.Or(n.memory, c.memory, 512<<20)
 				return info, nil
 			}
 		}
@@ -242,6 +246,7 @@ func (w *World) apply(realmName, op string, n node) {
 			c.nodes = append(c.nodes, &nodeState{
 				short: n.name, role: config.Role(n.role), ip: fmt.Sprintf("172.%d.0.%d", c.net, c.nextHost),
 				state: cluster.StateStopped, up: map[probe.Service]bool{},
+				cpus: n.cpus, memory: int64(n.memoryMB) << 20,
 			})
 			c.nextHost++
 		}
@@ -295,8 +300,9 @@ func (w *World) prune() {
 }
 
 // readyCalm is how many times Drift leaves a node alone once its services
-// are up, so that a fix holds a while before the service fails again.
-const readyCalm = 6
+// are up, so that a fix holds for ten minutes (at driftEvery) before the
+// service fails again.
+const readyCalm = 30
 
 // Drift fails the slurmd of the node worker-4 of dev again a while after it
 // came up, as a flaky service does: not while the node is calm, after its
@@ -412,6 +418,32 @@ func (w *World) StoppedAt(container string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// FactsOf returns which workers of the cluster of the container answer,
+// and which are down, for the controller log of the demo.
+func (w *World) FactsOf(container string) Facts {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, r := range w.realms {
+		for _, c := range r.clusters {
+			if !slices.ContainsFunc(c.nodes, func(n *nodeState) bool { return string(cluster.ContainerName(r.name, c.name, n.short)) == container }) {
+				continue
+			}
+			var f Facts
+			for _, n := range c.nodes {
+				switch {
+				case n.role != config.RoleWorker:
+				case n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd]:
+					f.Down = append(f.Down, n.short)
+				default:
+					f.Up = append(f.Up, n.short)
+				}
+			}
+			return f
+		}
+	}
+	return Facts{}
 }
 
 // clusterStateOf returns the state of a cluster from the states of its
