@@ -318,6 +318,10 @@
     };
   }
 
+  // serverNow is the time of the server in milliseconds since 1970 (see
+  // run.js), so that the timeline agrees with the clocks of the page.
+  function serverNow() { return window.sindClock ? window.sindClock.now() : Date.now(); }
+
   // now is the time to draw at, in seconds since the run began.
   function nowT(ms) {
     if (run.end != null) return run.end;
@@ -861,7 +865,7 @@
     if (!root || root.g !== r.g) { root = r; rows.clear(); chosen.clear(); seenRunning.clear(); lanes.clear(); view.zoom = null; root.body.replaceChildren(); }
     read();
     if (!run) return;
-    const t = nowT(Date.now());
+    const t = nowT(serverNow());
     range(ms, t);
     drawAxis(t);
     drawRows(t);
@@ -878,7 +882,7 @@
     if (ev.target.closest('.trk')) {
       const st = run.by.get(row.dataset.key);
       if (!st || st.r == null) return;
-      const t = nowT(Date.now());
+      const t = nowT(serverNow());
       const a = st.r, b = endOf(st, t), pad = Math.max((b - a) * 0.08, 0.5);
       const z = [Math.max(a - pad, 0), b + pad];
       view.zoom = view.zoom && view.zoom[0] === z[0] ? null : z;

@@ -97,6 +97,13 @@ func TestSecurityHeaders(t *testing.T) {
 	assert.NotContains(t, contentSecurityPolicy, "http")
 }
 
+func TestPageShellStill(t *testing.T) {
+	cfg, st := testConfig(t)
+	cfg.Still = true
+	ts := newTestServerFrom(t, cfg, st).login()
+	assert.Regexp(t, `<body data-now="\d+" data-still hx-headers=`, ts.get("/demo/x").Body.String())
+}
+
 func TestPageShell(t *testing.T) {
 	cfg, st := testConfig(t)
 	cfg.FS = overlay(t, fstest.MapFS{
@@ -113,6 +120,7 @@ func TestPageShell(t *testing.T) {
 
 	assert.Contains(t, body, "<title>Demo · sind ui</title>")
 	assert.Regexp(t, `<body data-now="\d+" hx-headers='\{"X-Sind-CSRF":"`+ts.csrf+`"\}'>`, body)
+	assert.NotContains(t, body, "data-still", "a server with a running clock")
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("app.css")+`">`)
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("css/demo.css")+`">`)
 	assert.Less(t, strings.Index(body, a.URL("app.css")), strings.Index(body, a.URL("css/demo.css")), "extra styles follow app.css")

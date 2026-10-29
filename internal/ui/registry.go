@@ -53,6 +53,9 @@ type View struct {
 	Snap store.Snapshot
 	// Now is the time to measure from.
 	Now time.Time
+	// Still says that the clock of the server stands still (the still demo),
+	// so that the clocks of the page do not count on.
+	Still bool
 	// Params are the values of the request that Load reads.
 	Params Params
 	// Scope is the realm that the session works in, "" for every realm:

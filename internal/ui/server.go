@@ -65,7 +65,9 @@ type Server struct {
 	// ctx ends the live update streams when the server stops.
 	ctx context.Context
 	now func() time.Time
-	mux *http.ServeMux
+	// still is Config.Still.
+	still bool
+	mux   *http.ServeMux
 	// coalesce and keepAlive are how long changes gather before a page
 	// gets them, and how often an idle stream sends a comment: zero and
 	// sse.DefaultKeepAlive, the defaults of localweb/sse, which tests
@@ -85,6 +87,9 @@ type serverConfig struct {
 	FS fs.FS
 	// Now is the clock of the pages; nil is time.Now.
 	Now func() time.Time
+	// Still says that Now stands still, so that the clocks of the browser
+	// stand with it.
+	Still bool
 }
 
 func newServer(ctx context.Context, c serverConfig) (*Server, error) {
@@ -107,7 +112,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 	s := &Server{
 		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a, vendor: vendor,
 		styles: a.URLs("css/*.css"), scripts: a.URLs("js/*.js"),
-		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
+		log: c.Env.Log, ctx: ctx, now: c.Now, still: c.Still, mux: http.NewServeMux(),
 		keepAlive: sse.DefaultKeepAlive,
 	}
 	if s.sessions, err = session.New(session.Options{
@@ -281,7 +286,7 @@ const maxParamValues = 64
 // newView returns a view of the current snapshot with p as its Params.
 func (s *Server) newView(p Params) *View {
 	return &View{
-		Snap: s.env.Store.Snapshot(), Now: s.now(), Params: p, Addr: s.env.Addr,
+		Snap: s.env.Store.Snapshot(), Now: s.now(), Still: s.still, Params: p, Addr: s.env.Addr,
 		Asset: s.assets.URL, Vendor: s.vendor.URL, HTMXConfig: htmx.Config, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
 	}
 }

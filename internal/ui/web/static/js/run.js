@@ -20,12 +20,15 @@
   // browser's, moved by how far the server's was off when it drew the page
   // (data-now of the body). The clocks of runs then agree with the times
   // that the server writes, also when its clock stands, as in the still
-  // demo.
-  const skew = (() => {
-    const now = Number(document.body && document.body.dataset.now);
-    return now > 0 ? now - Date.now() : 0;
-  })();
-  function clock() { return Date.now() + skew; }
+  // demo. A server whose clock stands still (data-still) stands for the
+  // browser too: the clock is data-now for as long as the page is open.
+  const body = document.body;
+  const still = !!body && body.dataset.still !== undefined;
+  const base = Number(body && body.dataset.now);
+  const skew = base > 0 ? base - Date.now() : 0;
+  function clock() { return still && base > 0 ? base : Date.now() + skew; }
+  // gantt.js draws the timeline at the same time.
+  window.sindClock = Object.freeze({ now: clock });
 
   // dur writes a duration as the server's runDur does: 3.4s, 42s, 5m07s, 2h03m.
   function dur(ms) {

@@ -10,7 +10,7 @@ screen readers: app.js puts in it what a live update changed, and run.js a
 sentence when a command starts or ends, which the list of the dock and the
 run pages mark with data-say-key and data-say-state (see "run-say").
 data-now is the time of the server, which run.js counts the clocks of runs
-by. */}}
+by; data-still says that it stands still, so that the clocks stand too. */}}
 
 {{define "layout"}}<!doctype html>
 <html lang="en">
@@ -28,7 +28,7 @@ by. */}}
 <script src="{{call .Vendor "idiomorph-ext.min.js"}}" defer></script>
 {{range .Scripts}}<script src="{{.}}" defer></script>
 {{end}}</head>
-<body data-now="{{.Now.UnixMilli}}" hx-headers='{"X-Sind-CSRF":"{{.CSRF}}"}'>
+<body data-now="{{.Now.UnixMilli}}"{{if .Still}} data-still{{end}} hx-headers='{"X-Sind-CSRF":"{{.CSRF}}"}'>
 <a class="skip" href="#main">Skip to content</a>
 <div class="app"{{if .Events}} hx-ext="sse,morph" sse-connect="{{.Events}}"{{end}}>
   <div class="conn" id="conn" role="status"></div>

@@ -140,7 +140,7 @@ func Run(ctx context.Context, o Options) error {
 		env.Exec = d.Exec()
 		services = demoServices(d, services)
 		if o.Still {
-			cfg.Now = d.Now
+			cfg.Now, cfg.Still = d.Now, true
 		}
 	}
 	for _, svc := range services {
