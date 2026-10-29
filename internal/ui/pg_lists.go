@@ -132,6 +132,12 @@ type pgClusterList struct {
 	Actions  []pgAction
 }
 
+// AnyLife reports whether a command creates or deletes a node of a
+// cluster of the list, whose tile the legend then explains.
+func (d *pgClusterList) AnyLife() bool {
+	return slices.ContainsFunc(d.Clusters, func(r pgClusterRow) bool { return r.AnyLife() })
+}
+
 // pgNodeList is what the Nodes page shows.
 type pgNodeList struct {
 	pgList

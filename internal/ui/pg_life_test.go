@@ -317,6 +317,7 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 	assert.NotContains(t, body, `aria-label="Delete nightly…"`)
 	assert.Contains(t, body, `>Creating <span class="n">1</span></a>`)
 	assert.Contains(t, body, `>Running <span class="n">0</span></a>`, "a cluster that sind creates does not run yet")
+	assert.Contains(t, body, "being created or deleted</li>", "the legend explains the dashed tiles")
 
 	// The Slurm tab waits for the create too.
 	body = pgBody(t, ts, "/clusters/ci/nightly?tab=slurm", 200)

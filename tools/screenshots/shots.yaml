@@ -24,7 +24,7 @@ shots:
     sizes: [desktop, phone]
 
   - name: clusters
-    alt: "Clusters: one row for each cluster of every realm, with its state, nodes and Slurm version, and a ⋯ menu of its actions"
+    alt: "Clusters: one row for each cluster of every realm, with its state, nodes and Slurm version, and a ⋯ menu of its actions, then the legend of the tiles"
     path: /clusters
     hide: "#tasks"
     page: clusters

@@ -62,6 +62,7 @@ matches, which the page script shows and hides as the user types. */}}
   <td class="act c-act">{{with .Stop}}{{template "run-stop" .}}{{else}}{{with .Life}}<a class="btn sm" href="{{.Run.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a>{{else}}{{template "pg-menu" .Menu}}{{end}}{{end}}</td></tr>
 {{end}}{{template "pg-list-none" (.None "cluster")}}
 </tbody></table></div>
+{{if .Clusters}}<div class="pg-key">{{template "pg-legend" .AnyLife}}</div>{{end}}
 {{end}}{{end}}
 
 {{define "pg-nodes-head"}}{{with .Data}}

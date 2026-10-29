@@ -216,6 +216,8 @@ func TestPgClusters(t *testing.T) {
 	// command that it shows.
 	assert.Contains(t, body, `<a class="pg-mi" role="menuitem" tabindex="-1" href="/clusters/sind/dev?tab=logs"><span class="pg-ml">Logs</span><span class="pg-mx">Read the logs of its nodes.</span></a>`)
 	assert.Contains(t, body, `<button type="button" class="pg-mi" role="menuitem" tabindex="-1" data-pg-copy-text="sind enter dev" data-pg-copy-say="Copied: sind enter dev. Paste it in a terminal."><span class="pg-ml">Copy shell command</span><span class="pg-mx mono">sind enter dev</span></button>`)
+	// The legend of the tiles is below the table.
+	assert.Contains(t, body, `<div class="pg-key"><ul class="pg-legend" aria-label="What the tiles mean">`)
 	assert.Contains(t, body, `href="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Delete cluster…</span><span class="pg-mx">Its containers, network and volumes go.</span></a>`)
 	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-hpc-home"}, {Name: "sind-hpc-config"}})
 	body = pgBody(t, ts, "/clusters", 200)

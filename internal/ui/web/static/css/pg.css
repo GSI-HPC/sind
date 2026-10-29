@@ -47,6 +47,8 @@ section[id^="slurm-file-"]:focus,.pg-attn:focus{outline:none}
 .pg-name{font-size:var(--t-xl);font-weight:700;letter-spacing:-.025em}
 .pg-ver{margin-left:auto;font:var(--t-sm) var(--f-mono);color:var(--faint)}
 .pg-pills{display:flex;gap:6px;flex-wrap:wrap}
+.pg-key{padding:10px 14px 12px;border-top:1px solid var(--line-2)}
+.pg-key .pg-legend{margin:0}
 
 /* node tiles: they echo the logo; the controller is deep teal with three
    lines, service nodes teal, workers sky; a stopped node is an outline, a
