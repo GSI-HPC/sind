@@ -46,7 +46,7 @@ func TestActDialog_Frame(t *testing.T) {
 	assert.Contains(t, body, `<div class="mf" id="act-mf"><span class="act-status" id="act-status"></span><span class="act-checking"`)
 	body = f.get("/dialogs/delete-cluster?cluster=dev").Body.String()
 	assert.Contains(t, body, `class="btn danger solid" id="act-ok"`)
-	assert.Regexp(t, `(?s)<div class="mf" id="act-mf">.*<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">dev</b> to confirm</label>.*data-act-close>Cancel</button>`, body)
+	assert.Regexp(t, `(?s)<div class="mf" id="act-mf">.*<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">dev</b><span id="act-confirm-what"></span> to confirm</label>.*data-act-close>Cancel</button>`, body)
 	assert.Contains(t, body, `name="confirm" placeholder=" " autocomplete="off"`, "the hint of why shows once the user typed")
 
 	// New cluster is a page, which keeps a draft and has the status at the

@@ -20,8 +20,8 @@ func init() {
 	register(
 		Action{ID: "create-worker", Build: buildCreateWorker, Cluster: formCluster},
 		Action{ID: "delete-cluster", Build: buildDeleteCluster, Cluster: formCluster, Typed: formCluster},
-		Action{ID: "delete-clusters", Build: buildDeleteClusters, Typed: typedClusters},
-		Action{ID: "delete-worker", Build: buildDeleteWorker, Cluster: formCluster, Typed: deleteWorkerTyped},
+		Action{ID: "delete-clusters", Build: buildDeleteClusters, Typed: typedClusters, TypedWhat: func(Form) string { return "the number of clusters" }},
+		Action{ID: "delete-worker", Build: buildDeleteWorker, Cluster: formCluster, Typed: deleteWorkerTyped, TypedWhat: deleteWorkerTypedWhat},
 		Action{ID: "delete-realm", Build: buildDeleteRealm, Typed: func(f Form) string { return Realm(f) }},
 	)
 }
@@ -39,6 +39,15 @@ func deleteWorkerTyped(f Form) string {
 	default:
 		return strconv.Itoa(len(names))
 	}
+}
+
+// deleteWorkerTypedWhat says what deleteWorkerTyped is: the name of the
+// worker, or the number of workers.
+func deleteWorkerTypedWhat(f Form) string {
+	if len(NodeNames(f)) == 1 {
+		return "the name of the worker"
+	}
+	return "the number of workers"
 }
 
 func buildCreateWorker(f Form, c Context) (Command, error) {

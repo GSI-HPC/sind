@@ -493,16 +493,18 @@ func actRunSum(p actPreview) string {
 	if p.PullOn() {
 		sum = "Pull"
 	}
-	switch wait := p.Form.Get("wait"); wait {
+	wait := p.Form.Get("wait")
+	if wait == "other" {
+		wait = strings.TrimSpace(p.Form.Get("wait_other"))
+	}
+	switch wait {
 	case "0":
 		return sum + ", no wait limit"
-	case "other":
-		return sum + ", wait " + strings.TrimSpace(p.Form.Get("wait_other"))
-	case "":
-		return sum + ", wait " + action.DefaultWait
-	default:
-		return sum + ", wait " + wait
+	case "", action.DefaultWait:
+		// The command leaves out --wait: sind waits this long without it.
+		return sum + ", wait " + action.DefaultWait + " (default)"
 	}
+	return sum + ", wait " + wait
 }
 
 // PullOn reports whether the command of a new cluster pulls the image.
@@ -716,6 +718,8 @@ type actDialog struct {
 	// Title, Lead and Typed are the heading, the line below it and what the
 	// user must type to confirm, if anything.
 	Title, Lead, Typed string
+	// TypedWhat says what the typed word is, "the number of workers".
+	TypedWhat string
 	// Confirms says that the action asks the user to type something,
 	// which may be nothing yet, as for workers before one is picked.
 	Confirms bool
@@ -1132,7 +1136,7 @@ func actOpen(s *Server, w http.ResponseWriter, r *http.Request, a action.Action)
 	if spec.Defaults != nil && !d.Draft {
 		spec.Defaults(d)
 	}
-	d.Typed, d.Confirms = a.Want(d.Form), a.Typed != nil
+	d.Typed, d.TypedWhat, d.Confirms = a.Want(d.Form), a.WantWhat(d.Form), a.Typed != nil
 	d.Title, d.Lead = spec.Title(d), spec.Lead(d)
 	return d, true
 }
@@ -1215,7 +1219,9 @@ type actPreview struct {
 	// says why the typed text does not confirm yet. Confirms says that the
 	// action asks for it.
 	Typed, Why string
-	Confirms   bool
+	// TypedWhat says what the typed word is, "the number of workers".
+	TypedWhat string
+	Confirms  bool
 	// Home is the home directory of the user, which the plan writes as ~.
 	Home string
 }
@@ -1559,6 +1565,7 @@ func actEvaluate(v *View, a action.Action, f action.Form, ctx action.Context) ac
 		p.Danger = true
 	}
 	p.Confirms = a.Typed != nil
+	p.TypedWhat = a.WantWhat(f)
 	if p.Typed = a.Want(f); !a.Confirmed(f) {
 		p.Why = actWhy(p.Typed, f.Get(action.ConfirmField))
 	}

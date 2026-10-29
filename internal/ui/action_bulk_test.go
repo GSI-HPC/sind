@@ -48,7 +48,7 @@ func TestActDeleteClusters_Dialog(t *testing.T) {
 	assert.NotContains(t, body, `value="sind/gone"`, "the dialog keeps the clusters that it knows")
 	assert.Contains(t, body, `<div class="callout warn">sind ui no longer sees <span class="mono">sind/gone</span>, so the dialog leaves it out.</div>`)
 	assert.Contains(t, body, `<form class="modal wide"`, "the table of what goes needs the room")
-	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">2</b> to confirm`)
+	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">2</b><span id="act-confirm-what">, the number of clusters,</span> to confirm`)
 	assert.Contains(t, body, `hx-post="/actions/delete-clusters/run"`)
 
 	// One cluster is one.
@@ -56,14 +56,14 @@ func TestActDeleteClusters_Dialog(t *testing.T) {
 	assert.Contains(t, body, "<h2 id=\"act-title\">Delete 1 cluster</h2>")
 	assert.Contains(t, body, "<p id=\"act-lead\">This cannot be undone.</p>")
 	assert.Contains(t, body, "so the dialog leaves them out.")
-	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">1</b> to confirm`)
+	assert.Contains(t, body, `Type <b class="mono" id="act-confirm-word">1</b><span id="act-confirm-what">, the number of clusters,</span> to confirm`)
 
 	// Without a cluster it knows, the dialog sends the user to the list,
 	// and asks nothing to type: the field hides while its word is empty.
 	body = f.get("/dialogs/delete-clusters?clusters=sind/gone").Body.String()
 	assert.Contains(t, body, "<h2 id=\"act-title\">Delete clusters</h2>")
 	assert.Contains(t, body, `<div class="empty">sind ui no longer sees <span class="mono">sind/gone</span>. No cluster to delete. Tick clusters on <a href="/clusters">the Clusters page</a> and delete them from the bar above the table.</div>`)
-	assert.Contains(t, body, `<b class="mono" id="act-confirm-word"></b> to confirm`)
+	assert.Contains(t, body, `<b class="mono" id="act-confirm-word"></b><span id="act-confirm-what"></span> to confirm`)
 	body = f.get("/dialogs/delete-clusters").Body.String()
 	assert.Contains(t, body, "Deletes several clusters with one confirmation.")
 	assert.Contains(t, body, `<div class="empty">No cluster to delete.`)

@@ -139,6 +139,10 @@ func TestAction_Confirmation(t *testing.T) {
 	assert.Equal(t, "worker-1", workers.Want(form("cluster", "dev", "nodes", "worker-1")))
 	assert.Equal(t, "2", workers.Want(form("cluster", "dev", "nodes", "worker-1,worker-2")))
 	assert.Empty(t, workers.Want(form("cluster", "dev")))
+	assert.Equal(t, "the name of the worker", workers.WantWhat(form("cluster", "dev", "nodes", "worker-1")))
+	assert.Equal(t, "the number of workers", workers.WantWhat(form("cluster", "dev", "nodes", "worker-1,worker-2")))
+	assert.Empty(t, workers.WantWhat(form("cluster", "dev")), "no word, nothing to say about it")
+	assert.Empty(t, del.WantWhat(f), "the name of a cluster needs no words")
 }
 
 func TestAction_Target(t *testing.T) {
@@ -403,6 +407,7 @@ func TestBuildDeleteClusters(t *testing.T) {
 	assert.Empty(t, cmd.Ack)
 	a, _ := Lookup("delete-clusters")
 	assert.Equal(t, "3", a.Want(form("clusters", "sind/dev,ci/ci1", "clusters", "sind/default sind/dev")))
+	assert.Equal(t, "the number of clusters", a.WantWhat(form("clusters", "sind/dev")))
 	assert.Empty(t, a.Want(form()), "without clusters there is nothing to confirm")
 	realm, cl := a.Target(form("clusters", "sind/dev"))
 	assert.Equal(t, "sind", realm)

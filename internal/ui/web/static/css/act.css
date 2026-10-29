@@ -20,9 +20,10 @@
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
 .scrim .mb{padding:10px 18px 16px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0;min-height:0;flex:1 1 auto;overflow-y:auto;align-content:start}
 .scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2);flex:none}
-/* The name or number to type sits in the footer, beside the button that
-   it guards; why the button stays off shows once the user typed. */
+/* The name or number to type sits in the footer, on a line above the
+   buttons that it guards; why the button stays off shows once the user typed. */
 :is(.scrim,.act-page) .act-confirm{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:var(--t-md)}
+.scrim .act-confirm{flex-basis:100%;order:-1}
 :is(.scrim,.act-page) .act-confirm:has(#act-confirm-word:empty){display:none}
 :is(.scrim,.act-page) .act-confirm label{font-weight:500}
 :is(.scrim,.act-page) .act-confirm input{width:9em;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono)}

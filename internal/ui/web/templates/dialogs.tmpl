@@ -32,7 +32,7 @@ into its target, not its content. */}}
     {{template "act-preview-slot" .}}
   </div>
   <div class="mf" id="act-mf"><span class="act-status" id="act-status"></span><span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>
-    {{- if .Confirms}}<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.Typed}}</b> to confirm</label>
+    {{- if .Confirms}}<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.Typed}}</b>{{template "act-confirm-what" .}} to confirm</label>
       <input type="text" id="act-confirm" name="confirm" placeholder=" " autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"></div>{{end -}}
     <button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}
     {{- if .Confirms}}<span class="hint act-why" id="act-why" role="status"></span>{{end}}</div>
@@ -43,6 +43,10 @@ into its target, not its content. */}}
 </form>
 </div>
 {{end}}
+
+{{/* act-confirm-what says what the typed word is, as in "Type 3, the number
+of workers, to confirm". */}}
+{{define "act-confirm-what"}}<span id="act-confirm-what">{{with .TypedWhat}}, {{.}},{{end}}</span>{{end}}
 
 {{/* act-ok is the button that runs the command, an actOK. It is off until
 a preview says that the command can run, and each preview swaps it.
@@ -71,7 +75,7 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{if .Cmd.Ack}}<label class="callout bad act-ack"><input type="checkbox" id="act-ack" name="ack" data-act-hold{{if eq (.Form.Get "ack") "on"}} checked{{end}}><span>{{range .AckParts}}{{if .Mono}}<b class="mono">{{.Text}}</b>{{else}}{{.Text}}{{end}}{{end}}</span></label>{{end}}
 {{end}}
 {{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
-{{if .Confirms}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
+{{if .Confirms}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-confirm-what" hx-swap-oob="true">{{with .TypedWhat}}, {{.}},{{end}}</span><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
 {{end}}
 {{template "act-ok" .OKButton}}
 {{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}

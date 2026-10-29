@@ -247,6 +247,9 @@ type Action struct {
 	// Typed returns what the user must type to confirm the command, or
 	// "" if none. The server checks it, whatever the browser did.
 	Typed func(f Form) string
+	// TypedWhat says what the typed word is when the name of the action
+	// does not tell: "the number of workers". "" for nothing.
+	TypedWhat func(f Form) string
 	// Cluster returns the cluster the command works on, or "".
 	Cluster func(f Form) string
 }
@@ -269,6 +272,14 @@ func (a Action) Want(f Form) string {
 		return ""
 	}
 	return a.Typed(f)
+}
+
+// WantWhat says what the word of Want is, or "".
+func (a Action) WantWhat(f Form) string {
+	if a.TypedWhat == nil || a.Want(f) == "" {
+		return ""
+	}
+	return a.TypedWhat(f)
 }
 
 // Confirmed reports whether the form holds the confirmation that a requires,
