@@ -212,6 +212,10 @@ func TestPgClusters(t *testing.T) {
 	assert.Contains(t, body, `<summary class="btn pg-mbtn pg-micon" aria-haspopup="menu" aria-label="Actions for dev (sind)" title="Actions for dev (sind)">`)
 	assert.Contains(t, body, `href="/dialogs/create-worker?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Add workers…</span>`)
 	assert.Contains(t, body, `href="/dialogs/power?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Power…</span>`)
+	// Logs is a page, not a dialog, and Copy shell command copies the
+	// command that it shows.
+	assert.Contains(t, body, `<a class="pg-mi" role="menuitem" tabindex="-1" href="/clusters/sind/dev?tab=logs"><span class="pg-ml">Logs</span><span class="pg-mx">Read the logs of its nodes.</span></a>`)
+	assert.Contains(t, body, `<button type="button" class="pg-mi" role="menuitem" tabindex="-1" data-pg-copy-text="sind enter dev" data-pg-copy-say="Copied: sind enter dev. Paste it in a terminal."><span class="pg-ml">Copy shell command</span><span class="pg-mx mono">sind enter dev</span></button>`)
 	assert.Contains(t, body, `href="/dialogs/delete-cluster?cluster=dev&amp;realm=sind" data-pg-menu-item><span class="pg-ml">Delete cluster…</span><span class="pg-mx">Its containers, network and volumes go.</span></a>`)
 	ts.st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}, {Name: "sind-hpc-home"}, {Name: "sind-hpc-config"}})
 	body = pgBody(t, ts, "/clusters", 200)

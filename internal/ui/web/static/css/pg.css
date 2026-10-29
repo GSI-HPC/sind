@@ -317,6 +317,7 @@ td.act .pg-menu{text-align:left;white-space:normal}
 .pg-mg+.pg-mg{border-top:1px solid var(--line-2);margin-top:4px;padding-top:4px}
 .pg-mh{padding:6px 10px 2px;font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
 .pg-mi{display:grid;gap:1px;padding:6px 10px;border-radius:var(--r);color:var(--fg);text-decoration:none;cursor:pointer}
+button.pg-mi{width:100%;border:0;background:none;font:inherit;text-align:left}
 .pg-mi:hover,.pg-mi:focus{background:var(--hover);text-decoration:none;outline:none}
 .pg-mi:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
 .pg-ml{font-weight:500}

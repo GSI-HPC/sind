@@ -20,11 +20,12 @@ and the tabs Overview and Logs, then the tab. */}}
 
 {{/* pg-menu is a menu of the head of a node page, a pgMenu: a button that
 opens a list of verbs, grouped, each with a hint of what it does or why it
-is off. pg.js opens it, moves with the arrow keys and closes it with Escape;
-the morph keeps it open. */}}
+is off. A verb that is a page is a plain link, and one that copies a command
+shows the command as its hint. pg.js opens it, moves with the arrow keys and
+closes it with Escape; the morph keeps it open. */}}
 {{define "pg-menu"}}<details class="pg-mw" data-pg-menu><summary class="btn pg-mbtn{{if .Icon}} pg-micon{{end}}" aria-haspopup="menu"{{if .Icon}} aria-label="{{.Label}}" title="{{.Label}}"{{end}}>{{if .Icon}}<span aria-hidden="true">{{.Icon}}</span>{{else}}{{.Label}}<span class="pg-caret" aria-hidden="true"></span>{{end}}</summary>
   <div class="pg-menu" role="menu" aria-label="{{.Label}}">{{range .Groups}}<div class="pg-mg{{if .Danger}} danger{{end}}" role="group" aria-label="{{.Label}}"><div class="pg-mh" aria-hidden="true">{{.Label}}</div>
-    {{range .Items}}{{if .Off}}<span class="pg-mi off" role="menuitem" aria-disabled="true" tabindex="-1"><span class="pg-ml">{{.Label}}</span><span class="pg-mx">{{.Hint}}</span></span>{{else}}<a class="pg-mi" role="menuitem" tabindex="-1" href="{{.URL}}" data-pg-menu-item><span class="pg-ml">{{.Label}}</span><span class="pg-mx">{{.Hint}}</span></a>{{end}}{{end}}</div>{{end}}</div></details>{{end}}
+    {{range .Items}}{{if .Off}}<span class="pg-mi off" role="menuitem" aria-disabled="true" tabindex="-1"><span class="pg-ml">{{.Label}}</span><span class="pg-mx">{{.Hint}}</span></span>{{else if .Copy}}<button type="button" class="pg-mi" role="menuitem" tabindex="-1" data-pg-copy-text="{{.Copy}}" data-pg-copy-say="Copied: {{.Copy}}. Paste it in a terminal."><span class="pg-ml">{{.Label}}</span><span class="pg-mx mono">{{.Copy}}</span></button>{{else}}<a class="pg-mi" role="menuitem" tabindex="-1" href="{{.URL}}"{{if not .Link}} data-pg-menu-item{{end}}><span class="pg-ml">{{.Label}}</span><span class="pg-mx">{{.Hint}}</span></a>{{end}}{{end}}</div>{{end}}</div></details>{{end}}
 
 {{define "pg-node-body"}}{{with .Data}}{{if .Found}}{{if eq .Tab "logs"}}{{template "pg-node-logs" $}}{{else}}{{template "pg-node-overview" .}}{{end}}{{end}}{{end}}{{end}}
 

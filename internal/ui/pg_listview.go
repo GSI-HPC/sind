@@ -306,7 +306,8 @@ type pgClusterRow struct {
 }
 
 // Menu is the ⋯ menu of the row: the dialogs that act on the cluster,
-// with Delete apart as the one that can lose data.
+// its logs and the command that opens a shell on it, with Delete apart as
+// the one that can lose data.
 func (r pgClusterRow) Menu() pgMenu {
 	del := "Its containers, network and volumes go."
 	if len(r.DataKinds) > 0 {
@@ -316,6 +317,8 @@ func (r pgClusterRow) Menu() pgMenu {
 		{Label: "Cluster", Items: []pgMenuItem{
 			{Label: "Add workers…", Hint: "Create more worker nodes.", URL: pgDialog("create-worker", "realm", r.Realm, "cluster", r.Name)},
 			{Label: "Power…", Hint: "Start, stop or reboot its nodes.", URL: pgDialog("power", "realm", r.Realm, "cluster", r.Name)},
+			{Label: "Logs", Hint: "Read the logs of its nodes.", URL: pgClusterURL(r.Realm, r.Name, "logs"), Link: true},
+			{Label: "Copy shell command", Copy: pgSind(r.Realm) + " enter" + pgClusterArg(r.Name)},
 		}},
 		{Label: "Can lose data", Danger: true, Items: []pgMenuItem{{Label: "Delete cluster…", Hint: del, URL: r.DeleteURL()}}},
 	}}

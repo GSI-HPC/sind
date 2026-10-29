@@ -242,9 +242,12 @@ type pgMenuGroup struct {
 }
 
 // pgMenuItem is a verb of a menu: a dialog, with a hint of what it does,
-// or why it is off now.
+// or why it is off now; a page, with Link; or, with Copy, a command that it
+// copies, which its hint shows.
 type pgMenuItem struct {
 	Label, Hint, URL string
+	Link             bool
+	Copy             string
 	// Off says why the verb does not fit the node now; the item then does
 	// nothing and Hint says it.
 	Off string

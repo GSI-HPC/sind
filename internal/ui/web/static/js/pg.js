@@ -426,8 +426,9 @@
       if (t.closest('[role="menuitem"][aria-disabled="true"]')) { ev.preventDefault(); return; }
       const item = t.closest('a[data-pg-menu-item]');
       // A link of the menu, such as a realm of the switcher, goes where it
-      // leads, and the help that one opens closes the menu.
-      if (!item) { if (t.closest('[role^="menuitem"]')) closeMenu(m, false); return; }
+      // leads, and the help that one opens closes the menu; a verb that
+      // copies closes it and gives the focus back to its button.
+      if (!item) { if (t.closest('[role^="menuitem"]')) closeMenu(m, !!t.closest('button[role="menuitem"]')); return; }
       ev.preventDefault();
       const summary = m.querySelector('summary');
       closeMenu(m, true);
