@@ -67,7 +67,7 @@ a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
 .pg-nm-paused{background:repeating-linear-gradient(45deg,var(--warn) 0 3px,transparent 3px 6px)!important;border:1px solid var(--warn);opacity:1}
 .pg-nm-unknown{background:transparent!important;border:2px dotted var(--warn);opacity:1}
 .pg-nm-svcdown{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--bad)}
-.pg-nm-slurm{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--warn)}
+.pg-nm-slurm{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--warn);background-image:repeating-linear-gradient(-45deg,transparent 0 3px,color-mix(in srgb,var(--panel) 55%,transparent) 3px 6px)}
 /* a node that a command creates or deletes: dashed in the colour of work
    that goes on, and the one it works on now pulses */
 .pg-nm-creating,.pg-nm-deleting{background:var(--run-soft)!important;border:2px dashed var(--run);opacity:1}
