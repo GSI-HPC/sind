@@ -413,9 +413,11 @@ func jumpNodeVerb(vq jumpVerbQuery, g []pgNode) []jumpItem {
 			if len(workers) == 1 {
 				sub = "Removes the worker container. Jobs on it fail"
 			}
+			// The command names the default cluster too, as the dialog's
+			// does (buildDeleteWorker).
 			out = append(out, jumpItem{Label: "Delete " + pgArg(n.Cluster, ws) + "…", Sub: sub,
 				Href: pgDialog("delete-worker", "realm", n.Realm, "cluster", n.Cluster, "nodes", strings.Join(workers, ",")), Dialog: true,
-				CLI: sind + " delete worker " + pgArg(n.Cluster, ws), Kind: "action"})
+				CLI: sind + " delete worker " + ws + "." + n.Cluster, Kind: "action"})
 		}
 	case jumpVerbAdd:
 		out = append(out, jumpClusterVerb(vq, pgCluster{Realm: n.Realm, Name: n.Cluster})...)
@@ -465,9 +467,11 @@ func jumpAddItem(c pgCluster) jumpItem {
 		Href: pgDialog("create-worker", "realm", c.Realm, "cluster", c.Name), Dialog: true, CLI: pgSind(c.Realm) + " create worker" + pgClusterArg(c.Name), Kind: "action"}
 }
 
+// jumpDeleteItem's command names the default cluster too, as the dialog's
+// does (buildDeleteCluster).
 func jumpDeleteItem(c pgCluster) jumpItem {
 	return jumpItem{Label: "Delete cluster " + c.Name + "…", Sub: "Asks first. This cannot be undone",
-		Href: pgDialog("delete-cluster", "realm", c.Realm, "cluster", c.Name), Dialog: true, CLI: pgSind(c.Realm) + " delete cluster" + pgClusterArg(c.Name), Kind: "action"}
+		Href: pgDialog("delete-cluster", "realm", c.Realm, "cluster", c.Name), Dialog: true, CLI: pgSind(c.Realm) + " delete cluster " + c.Name, Kind: "action"}
 }
 
 func jumpEnterItem(c pgCluster) jumpItem {

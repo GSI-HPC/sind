@@ -81,7 +81,7 @@ A variable is not part of the command line, so a value that sind cannot use is n
 
 ## sind ui and the MCP server
 
-`sind ui` runs the commands of its dialogs without the variables that stand in for a flag or an argument, whatever its own environment holds, so that a run does what the command it shows says.
+`sind ui` runs the commands of its dialogs without the variables that stand in for a flag or an argument, whatever its own environment holds, so that a run does what the command it shows says. The commands it shows leave out the realm `sind` and the cluster `default`, as you would type them, so in a shell with `SIND_REALM` or `SIND_CLUSTER`, a copy of one acts in the realm or on the cluster that these name. Some always name them: **Copy script** of New cluster names the realm and the cluster, Delete realm the realm, Delete cluster and Delete clusters each cluster, and Delete workers the cluster of the workers, `default` too.
 
 The [MCP server]({{< relref "/guides/mcp" >}}) runs its tool calls in its own environment, with these changes: `--realm` of `sind mcp start` or `sind mcp stream`, when given, sets `SIND_REALM`; `SIND_PROGRESS` is `none`, `SIND_PROGRESS_LOG` is not set, and `SIND_LOG_TIMESTAMPS` is `false`. An editor starts the server with the environment of its entry, not that of your shell: `sind mcp <editor> enable` writes the realm into the entry.
 

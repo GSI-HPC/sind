@@ -75,7 +75,7 @@ func TestActDeleteClusters_Run(t *testing.T) {
 	f := newActFixture(t)
 	form := actForm("clusters", "sind/dev", "clusters", "sind/default", "back", "/clusters?realm=sind&q=d")
 	preview := f.post("/actions/delete-clusters/preview", form).Body.String()
-	assert.Contains(t, preview, actCode("sind delete cluster\nsind delete cluster dev"))
+	assert.Contains(t, preview, actCode("sind delete cluster default\nsind delete cluster dev"))
 	assert.Contains(t, preview, `<tr><td class="act-lc"><b class="mono">realm sind</b><small>no cluster is left</small></td>`)
 	assert.Contains(t, preview, `<h2 id="act-title" hx-swap-oob="true">Delete 2 clusters and realm sind</h2>`)
 	assert.Contains(t, preview, `><span class="act-okl">Delete 2 clusters</span><kbd`, "the button names what it deletes")
@@ -86,7 +86,7 @@ func TestActDeleteClusters_Run(t *testing.T) {
 	w := f.postHTMX("/actions/delete-clusters/run", form+"&shown="+shown+"&confirm=2 ")
 	assert.Equal(t, "/clusters?realm=sind&q=d", w.Header().Get("HX-Redirect"), w.Body.String())
 	require.Len(t, f.starter.specs, 2)
-	assert.Equal(t, run.Spec{Action: "delete-cluster", Argv: []string{"sind", "delete", "cluster"}, Display: "sind delete cluster", Realm: "sind", Cluster: "default",
+	assert.Equal(t, run.Spec{Action: "delete-cluster", Argv: []string{"sind", "delete", "cluster", "default"}, Display: "sind delete cluster default", Realm: "sind", Cluster: "default",
 		Form: url.Values{"realm": {"sind"}, "cluster": {"default"}}}, f.starter.specs[0])
 	assert.Equal(t, "dev", f.starter.specs[1].Cluster)
 
