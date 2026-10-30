@@ -3,10 +3,12 @@
 package envvar
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLookup(t *testing.T) {
@@ -35,4 +37,16 @@ func TestAll(t *testing.T) {
 		assert.True(t, seen[name], "%s is missing from All", name)
 	}
 	assert.Len(t, All, len(CommandLine)+2)
+}
+
+// TestDocumented checks that DESIGN.md and the docs page of the variables
+// give every variable a row of its table.
+func TestDocumented(t *testing.T) {
+	for _, path := range []string{"../../DESIGN.md", "../../docs/content/usage/environment.md"} {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		for _, name := range All {
+			assert.Contains(t, string(data), "| `"+name+"` |", "%s lists no %s", path, name)
+		}
+	}
 }

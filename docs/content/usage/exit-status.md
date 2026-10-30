@@ -48,7 +48,7 @@ This covers:
 - `sind exec` without `--` and a command, and `sind ssh` with a remote command that does not follow `--`: `sind ssh worker-0 hostname`
 - a `--progress` mode sind does not know, or one it cannot show, such as `tty` where standard error is not a terminal, and a `--progress-log` file it cannot use: `sind --progress tree get clusters`, `sind --progress tty create cluster 2>create.log` (see [Progress Display]({{< relref "/usage/progress" >}}))
 
-`SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`. `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command: with a value sind cannot use, it shows no progress, or writes no event log, and says why in one line when it does not know the mode or cannot use the file. The default activity log never fails a command and never says a word when it cannot be written.
+`SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`. `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command: with a value sind cannot use, it shows no progress, or writes no event log, and says why in one line when it does not know the mode or cannot use the file. The default activity log never fails a command and never says a word when it cannot be written. See [Environment Variables]({{< relref "/usage/environment" >}}).
 
 ## Commands that run a program
 

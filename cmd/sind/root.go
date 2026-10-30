@@ -9,6 +9,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,8 @@ func NewRootCommand() *cobra.Command {
 	cmd.SetVersionTemplate("{{.Version}}\n")
 	cmd.SetFlagErrorFunc(cobratree.FlagError)
 
-	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
+	cmd.PersistentFlags().String("realm", "",
+		"realm namespace for resource isolation (default: "+envvar.Realm+", else the realm of a config file, else "+mesh.DefaultRealm+")")
 	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
 	cmd.PersistentFlags().String("progress", "",
 		"how create, delete, connect, disconnect and power show their progress on standard error: "+progressModes()+

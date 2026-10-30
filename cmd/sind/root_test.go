@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -179,5 +181,29 @@ func TestFlagHelpDefaults(t *testing.T) {
 				assert.NotContains(t, stdout, tt.notWant)
 			}
 		})
+	}
+}
+
+// TestEnvVarsInHelp checks that each variable of envvar.CommandLine stands
+// in for the flag of its name (SIND_PROGRESS_LOG for --progress-log), and
+// that the usage of every flag of that name names the variable.
+func TestEnvVarsInHelp(t *testing.T) {
+	seen := map[string]bool{}
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		for _, name := range envvar.CommandLine {
+			flag := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(name, "SIND_")), "_", "-")
+			if f := cmd.LocalFlags().Lookup(flag); f != nil {
+				assert.Contains(t, f.Usage, "(default: "+name+", else ", "--%s of %s", flag, cmd.CommandPath())
+				seen[name] = true
+			}
+		}
+		for _, sub := range cmd.Commands() {
+			walk(sub)
+		}
+	}
+	walk(NewRootCommand())
+	for _, name := range envvar.CommandLine {
+		assert.True(t, seen[name], "%s stands in for no flag", name)
 	}
 }
