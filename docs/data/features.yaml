@@ -67,7 +67,7 @@
       link: usage/progress
     - icon: window
       title: Web UI
-      text: '`sind ui` shows realms, clusters, nodes and runs live in your browser, and its dialogs show the exact `sind` command before they run it.'
+      text: '`sind ui` shows realms, clusters, nodes and runs live in your browser, says what needs a look and which fix to try first, and shows the exact `sind` command before it runs one.'
       link: web-ui
     - icon: link
       title: Connect outside containers

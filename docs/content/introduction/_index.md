@@ -58,7 +58,7 @@ With `monitoring: true`, or `sind create cluster --monitoring`, a [monitoring st
 
 ### Web UI
 
-[`sind ui`]({{< relref "/web-ui" >}}) serves a web UI on 127.0.0.1 that shows the realms, clusters, nodes, networks and the runs of sind commands, and updates live. Its dialogs create clusters, add workers, power nodes and delete, and show the exact `sind` command first, so the UI also teaches the CLI. `sind ui --demo` shows made-up clusters without Docker.
+[`sind ui`]({{< relref "/web-ui" >}}) serves a web UI on 127.0.0.1 that shows the realms, clusters, nodes, networks and the runs of sind commands, and updates live. It says what needs a look and which fix to try first, such as a restart of a service that failed. Its pages and dialogs create clusters, add workers, power nodes, restart services and delete, and show the exact `sind` command first, so the UI also teaches the CLI. `sind ui --demo` shows made-up clusters without Docker.
 
 ### Connect outside containers
 
