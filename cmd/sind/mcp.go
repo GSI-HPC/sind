@@ -159,9 +159,13 @@ var mcpExcludedFlags = []string{
 // schema has no default. ophis takes a flag's default from its DefValue,
 // but these flags mean something else when they are not given than with
 // that value, which a client that fills in the defaults of a schema would
-// send: logs --tail 0 shows no line, and logs without it every line.
+// send: logs --tail 0 shows no line, and logs without it every line; the
+// create commands without --wait and --pull take SIND_WAIT and SIND_PULL
+// from the server's environment, and --wait 0 waits without a limit.
 var mcpNoDefault = map[string][]string{
-	"logs": {"tail"},
+	"logs":           {"tail"},
+	"create cluster": {"wait", "pull"},
+	"create worker":  {"wait", "pull"},
 }
 
 // mcpFlagUsage replaces, by command path below the root and flag name, the

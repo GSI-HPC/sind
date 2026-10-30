@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
@@ -26,19 +27,64 @@ import (
 // defaultWait is the --wait default of create cluster and create worker.
 const defaultWait = 5 * time.Minute
 
-// addWaitFlag adds --wait to a create command.
+// addWaitFlag adds --wait to a create command. The flag's own default is 0,
+// which its help does not show: the default is SIND_WAIT, else defaultWait
+// (waitFlag).
 func addWaitFlag(cmd *cobra.Command) {
-	cmd.Flags().Duration("wait", defaultWait,
-		"how long to wait for the nodes and Slurm to become ready, counted from when the node containers have started (0: no limit)")
+	cmd.Flags().Duration("wait", 0,
+		"how long to wait for the nodes and Slurm to become ready, counted from when the node containers have started (0: no limit) "+
+			"(default: "+envvar.Wait+", else "+defaultWait.String()+")")
 }
 
-// waitFlag returns the value of --wait. A negative one is a usage error.
+// waitFlag returns the wait limit of a create command: --wait, else
+// SIND_WAIT, else defaultWait. A negative --wait is a usage error; a
+// SIND_WAIT that is no duration, or a negative one, is an error that names
+// the variable.
 func waitFlag(cmd *cobra.Command) (time.Duration, error) {
-	wait, _ := cmd.Flags().GetDuration("wait")
-	if wait < 0 {
-		return 0, cobratree.Usagef("--wait must not be negative, got %s", wait)
+	if cmd.Flags().Changed("wait") {
+		wait, _ := cmd.Flags().GetDuration("wait")
+		if wait < 0 {
+			return 0, cobratree.Usagef("--wait must not be negative, got %s", wait)
+		}
+		return wait, nil
+	}
+	env, ok := envvar.Lookup(envvar.Wait)
+	if !ok {
+		return defaultWait, nil
+	}
+	wait, err := time.ParseDuration(env)
+	switch {
+	case err != nil:
+		return 0, invalidEnvValue(envvar.Wait, env, "a duration with a unit, such as 90s, 5m or 1h30m")
+	case wait < 0:
+		return 0, fmt.Errorf("%s must not be negative, got %s", envvar.Wait, env)
 	}
 	return wait, nil
+}
+
+// addPullFlag adds --pull to a create command, with usage, which it ends
+// with the default: SIND_PULL, else false (pullFlag).
+func addPullFlag(cmd *cobra.Command, usage string) {
+	cmd.Flags().Bool("pull", false, usage+" (default: "+envvar.Pull+", else false)")
+}
+
+// pullFlag returns whether a create command pulls its images: --pull, else
+// SIND_PULL, else not. A SIND_PULL that is no boolean, as strconv.ParseBool
+// reads one, is an error that names the variable.
+func pullFlag(cmd *cobra.Command) (bool, error) {
+	if cmd.Flags().Changed("pull") {
+		pull, _ := cmd.Flags().GetBool("pull")
+		return pull, nil
+	}
+	env, ok := envvar.Lookup(envvar.Pull)
+	if !ok {
+		return false, nil
+	}
+	pull, err := strconv.ParseBool(env)
+	if err != nil {
+		return false, invalidEnvValue(envvar.Pull, env, "true or false")
+	}
+	return pull, nil
 }
 
 func newCreateCommand() *cobra.Command {
@@ -75,7 +121,7 @@ func newCreateClusterCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
 	cmd.Flags().String("data", ".", `host directory to mount read-write as /data on every node, or "volume" for a Docker volume`)
-	cmd.Flags().Bool("pull", false, "pull images before creating containers")
+	addPullFlag(cmd, "pull images before creating containers")
 	cmd.Flags().Bool("monitoring", false, "collect the cluster's metrics and logs in the realm's monitoring stack (adds to the config's monitoring)")
 	addWaitFlag(cmd)
 
@@ -119,6 +165,10 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if err != nil {
 		return err
 	}
+	pull, err := pullFlag(cmd)
+	if err != nil {
+		return err
+	}
 	if err := checkNotEmpty(cmd, "config"); err != nil {
 		return err
 	}
@@ -152,7 +202,6 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		}
 	}
 
-	pull, _ := cmd.Flags().GetBool("pull")
 	cfg.Pull = pull
 	cfg.Wait = wait
 	// --monitoring=false leaves a config's monitoring: true alone.

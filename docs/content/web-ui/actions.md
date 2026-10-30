@@ -20,7 +20,7 @@ When the command starts, the dialog closes and you stay on your page. The strip 
 
 Esc, **Cancel**, a click beside the dialog or Back in the browser closes it, and the focus goes back to the button that opened it. When you have changed a field, the dialog asks first: **Keep editing** or **Discard**. When you leave the page while such a dialog is open, your browser asks first. **New cluster** keeps a draft instead.
 
-You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. On the New cluster page, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm` and the name of the cluster, as `SIND_REALM` and `SIND_CLUSTER` in your shell would otherwise take the place of the config's realm and name.
+You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. On the New cluster page, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm` and the name of the cluster, as `SIND_REALM` and `SIND_CLUSTER` in your shell would otherwise take the place of the config's realm and name. Like the command, it leaves out a wait of 5 minutes and a pull that is off, so `SIND_WAIT` and `SIND_PULL` in your shell apply to it.
 
 {{< uishot "dialog-create-worker" "Each dialog shows the command that it runs, here `sind create worker dev`." >}}
 

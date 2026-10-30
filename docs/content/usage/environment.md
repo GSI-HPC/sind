@@ -44,6 +44,8 @@ $ sind --help
 | `SIND_CLUSTER` | the cluster argument, `NAME` or `CLUSTER`, and the cluster of a node argument that names none | `default`; for `sind create cluster` the `name` of the config file, else `default` | [The cluster](#the-cluster) |
 | `SIND_OUTPUT` | `-o`, `--output` of `sind get` and `sind doctor` | `human` | [Output](#output) |
 | `SIND_VERBOSE` | `-v`, as a number: `2` is `-vv` | `0`: errors only | [Verbose logging]({{< relref "/usage/diagnostics#verbose-logging" >}}) |
+| `SIND_WAIT` | `--wait` of `sind create cluster` and `sind create worker` | `5m` | [Wait and pull](#wait-and-pull) |
+| `SIND_PULL` | `--pull` of `sind create cluster`, and of `sind create worker` with `--image` | `false` | [Wait and pull](#wait-and-pull) |
 | `SIND_PROGRESS` | `--progress` | `auto` | [Progress Display]({{< relref "/usage/progress" >}}) |
 | `SIND_PROGRESS_LOG` | `--progress-log` | the [activity log]({{< relref "/usage/progress#the-activity-log" >}}) | [Progress Display]({{< relref "/usage/progress#event-log" >}}) |
 | `SIND_LOG_TIMESTAMPS` | no flag: `false` leaves the time stamp off log lines | time stamps | [MCP]({{< relref "/guides/mcp" >}}) |
@@ -76,6 +78,19 @@ ssh -F "$(sind get ssh-config -o human)" controller.default.sind.sind
 
 The tools of the [MCP server]({{< relref "/guides/mcp" >}}) always run with `-o json`, whatever `SIND_OUTPUT` says.
 
+## Wait and pull
+
+`SIND_WAIT` and `SIND_PULL` set how long `sind create cluster` and `sind create worker` wait for the nodes, and whether they pull the images first, for example on a slow CI runner that must run the newest image of a tag:
+
+```bash
+export SIND_WAIT=15m SIND_PULL=true
+sind create cluster --config ci.yaml   # pulls its images, waits up to 15 minutes
+sind create worker                     # runs the image of the newest worker: no pull
+sind create worker --image "$IMAGE"    # pulls $IMAGE
+```
+
+`SIND_WAIT` takes what `--wait` takes: a duration with a unit, such as `90s` or `15m`, or `0` for no limit (see [What happens during creation]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})). `SIND_PULL` takes what `--pull=VALUE` takes, such as `true` or `false`. Without `--image`, `sind create worker` runs the image of the cluster's newest worker, which it does not pull, so it does not read `SIND_PULL` (see [Image and Slurm version]({{< relref "/usage/worker-management#image-and-slurm-version" >}})).
+
 ## Values sind cannot use
 
 A variable is not part of the command line, so a value that sind cannot use is no usage error, which exits `2` (see [Exit Status]({{< relref "/usage/exit-status" >}})):
@@ -91,7 +106,7 @@ A variable is not part of the command line, so a value that sind cannot use is n
   12:00:00.000 ERRO invalid SIND_OUTPUT value "yaml": want human or json
   ```
 
-  sind checks the variable only when it is in effect: `sind --realm ci get clusters` does not read `SIND_REALM`, `sind version` reads no realm, and `sind ssh worker-0.dev` reads no `SIND_CLUSTER`.
+  sind checks the variable only when it is in effect: `sind --realm ci get clusters` does not read `SIND_REALM`, `sind version` reads no realm, `sind ssh worker-0.dev` reads no `SIND_CLUSTER`, and `sind create worker` without `--image` reads no `SIND_PULL`.
 
 - A variable that changes only what sind shows on standard error fails no command. With a value of `SIND_PROGRESS` or `SIND_PROGRESS_LOG` that sind cannot use, it shows no progress, or writes no event log, and says why in one line. A `SIND_VERBOSE` that is no number is ignored:
 
@@ -104,9 +119,9 @@ A variable is not part of the command line, so a value that sind cannot use is n
 
 ## sind ui and the MCP server
 
-`sind ui` runs the commands of its dialogs without the variables that stand in for a flag or an argument, whatever its own environment holds, so that a run does what the command it shows says. The commands it shows leave out the realm `sind` and the cluster `default`, as you would type them, so in a shell with `SIND_REALM` or `SIND_CLUSTER`, a copy of one acts in the realm or on the cluster that these name. Some always name them: **Copy script** of New cluster names the realm and the cluster, Delete realm the realm, Delete cluster and Delete clusters each cluster, and Delete workers the cluster of the workers, `default` too.
+`sind ui` runs the commands of its dialogs without the variables that stand in for a flag or an argument, whatever its own environment holds, so that a run does what the command it shows says. The commands it shows leave out what you would not type: the realm `sind`, the cluster `default`, a `--wait` of `5m` and a `--pull` that is off. In a shell with `SIND_REALM`, `SIND_CLUSTER`, `SIND_WAIT` or `SIND_PULL`, a copy of one takes their values instead. Some always name the realm or the cluster: **Copy script** of New cluster names the realm and the cluster, Delete realm the realm, Delete cluster and Delete clusters each cluster, and Delete workers the cluster of the workers, `default` too.
 
-The [MCP server]({{< relref "/guides/mcp" >}}) runs its tool calls in its own environment, with these changes: `--realm` of `sind mcp start` or `sind mcp stream`, when given, sets `SIND_REALM`; `SIND_PROGRESS` is `none`, `SIND_PROGRESS_LOG` is not set, and `SIND_LOG_TIMESTAMPS` is `false`. An editor starts the server with the environment of its entry, not that of your shell: `sind mcp <editor> enable` writes the realm into the entry.
+The [MCP server]({{< relref "/guides/mcp" >}}) runs its tool calls in its own environment, with these changes: `--realm` of `sind mcp start` or `sind mcp stream`, when given, sets `SIND_REALM`; `SIND_PROGRESS` is `none`, `SIND_PROGRESS_LOG` is not set, and `SIND_LOG_TIMESTAMPS` is `false`. A call that leaves out a flag or the cluster takes the variable of that environment, as a command does: `sind_create_cluster` without `wait` waits as long as `SIND_WAIT` says. An editor starts the server with the environment of its entry, not that of your shell: `sind mcp <editor> enable` writes the realm into the entry.
 
 ## Other variables
 

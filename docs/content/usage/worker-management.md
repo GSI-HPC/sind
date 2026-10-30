@@ -45,8 +45,8 @@ The dialog sets no other flag. For the other flags, copy the command from the **
 | `--memory` | the newest worker's, else `512m` | Memory limit, without swap; it covers the node's services and `/tmp` files too |
 | `--tmp-size` | the newest worker's, else `256m` | `/tmp` tmpfs size, part of `--memory` |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
-| `--pull` | `false` | Pull the `--image` once before creating containers; needs `--image` |
-| `--wait` | `5m` | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit |
+| `--pull` | `SIND_PULL`, else `false` | Pull the `--image` once before creating containers; needs `--image`, and without one sind does not read `SIND_PULL` |
+| `--wait` | `SIND_WAIT`, else `5m` | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit |
 | `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`); `--cap-add=` for none |
 | `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable); `--cap-drop=` for none |
 | `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`); `--device=` for none |

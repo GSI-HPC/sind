@@ -24,6 +24,10 @@ const (
 	Output = "SIND_OUTPUT"
 	// Verbose stands in for -v: a number, 2 for -vv.
 	Verbose = "SIND_VERBOSE"
+	// Wait stands in for the --wait of create cluster and create worker.
+	Wait = "SIND_WAIT"
+	// Pull stands in for the --pull of create cluster and create worker.
+	Pull = "SIND_PULL"
 	// Progress stands in for --progress.
 	Progress = "SIND_PROGRESS"
 	// ProgressLog stands in for --progress-log.
@@ -44,7 +48,7 @@ const (
 // CommandLine lists the variables that stand in for a flag or an argument.
 // sind ui runs its commands without them, so that a run does what its
 // command line says.
-var CommandLine = []string{Realm, Cluster, Output, Verbose, Progress, ProgressLog}
+var CommandLine = []string{Realm, Cluster, Output, Verbose, Wait, Pull, Progress, ProgressLog}
 
 // All lists every variable that sind reads.
 var All = append(slices.Clone(CommandLine), LogTimestamps, MCPToken)

@@ -38,7 +38,7 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd.Flags().String("memory", "", fmt.Sprintf("memory limit per node (default: the newest worker's, else %s)", config.DefaultMemory))
 	cmd.Flags().String("tmp-size", "", fmt.Sprintf("/tmp tmpfs size (default: the newest worker's, else %s)", config.DefaultTmpSize))
 	cmd.Flags().Bool("unmanaged", false, "don't start slurmd, don't add to slurm.conf")
-	cmd.Flags().Bool("pull", false, "pull the --image before creating containers")
+	addPullFlag(cmd, "pull the --image before creating containers")
 	cmd.Flags().StringSlice("cap-add", nil, "add Linux capabilities, e.g. SYS_ADMIN; --cap-add= for none (default: the newest worker's)")
 	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities; --cap-drop= for none (default: the newest worker's)")
 	cmd.Flags().StringSlice("device", nil, "host devices to expose, e.g. /dev/fuse; --device= for none (default: the newest worker's)")
@@ -82,11 +82,18 @@ func createWorkerOptions(cmd *cobra.Command, clusterName string) (cluster.Worker
 	}
 	count, _ := cmd.Flags().GetInt("count")
 	image, _ := cmd.Flags().GetString("image")
+	// Without --image there is nothing to pull, so SIND_PULL is not in
+	// effect; a --pull is, and Check refuses it.
+	var pull bool
+	if image != "" || cmd.Flags().Changed("pull") {
+		if pull, err = pullFlag(cmd); err != nil {
+			return cluster.WorkerAddOptions{}, err
+		}
+	}
 	cpus, _ := cmd.Flags().GetInt("cpus")
 	memory, _ := cmd.Flags().GetString("memory")
 	tmpSize, _ := cmd.Flags().GetString("tmp-size")
 	unmanaged, _ := cmd.Flags().GetBool("unmanaged")
-	pull, _ := cmd.Flags().GetBool("pull")
 	capAdd := listFlag(cmd, "cap-add")
 	capDrop := listFlag(cmd, "cap-drop")
 	devices := listFlag(cmd, "device")
