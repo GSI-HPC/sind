@@ -192,7 +192,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 	if err := checkProgressFlag(cmd); err != nil {
 		return err
 	}
-	applyVerbosity(cmd)
+	if note := applyVerbosity(cmd); note != "" {
+		cmd.PrintErrln(note)
+	}
 
 	clusterName, command, err := parseExecArgs(flags.Args(), flags.ArgsLenAtDash())
 	if err != nil {

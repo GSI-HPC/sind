@@ -287,6 +287,21 @@ func TestExec_VerboseAfterExec(t *testing.T) {
 	assert.Contains(t, stderr, "TRAC")
 }
 
+// TestExec_VerboseNote checks that exec writes the note of a SIND_VERBOSE
+// that is no number once, and none when its own -v is in effect.
+func TestExec_VerboseNote(t *testing.T) {
+	t.Setenv("SIND_VERBOSE", "lots")
+	for args, notes := range map[string]int{"exec -- hostname": 1, "exec -v -- hostname": 0} {
+		var m mock.Executor
+		m.AddResult("", "", assert.AnError) // docker ps for the exec target
+
+		_, stderr, err := executeWithMock(&m, strings.Fields(args)...)
+
+		require.Error(t, err)
+		assert.Equal(t, notes, strings.Count(stderr, "SIND_VERBOSE is"), "%s: %s", args, stderr)
+	}
+}
+
 func TestExec_UnknownFlag(t *testing.T) {
 	_, _, err := executeCommand("exec", "--bogus", "--", "hostname")
 	require.ErrorContains(t, err, "unknown flag: --bogus")

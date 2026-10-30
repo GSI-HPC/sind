@@ -321,7 +321,7 @@ func throughDisplay(cmd *cobra.Command, p *cliprogress.Session) (context.Context
 	}
 	top.SetErr(p.Writer(stderr))
 	ctx = withStderr(ctx, top.ErrOrStderr())
-	v, _ := top.Flags().GetCount("verbose")
+	v, _ := verbosity(cmd)
 	logger := newLogHandler(p.Lines(stderr), v)
 	logger.SetColorProfile(lipgloss.NewRenderer(stderr).ColorProfile())
 	return sindlog.With(ctx, slog.New(logger)), func() {

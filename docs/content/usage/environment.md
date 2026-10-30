@@ -43,6 +43,7 @@ $ sind --help
 | `SIND_REALM` | `--realm` | the `realm` of the config file, else `sind` | [Realms]({{< relref "/configuration/realms" >}}) |
 | `SIND_CLUSTER` | the cluster argument, `NAME` or `CLUSTER`, and the cluster of a node argument that names none | `default`; for `sind create cluster` the `name` of the config file, else `default` | [The cluster](#the-cluster) |
 | `SIND_OUTPUT` | `-o`, `--output` of `sind get` and `sind doctor` | `human` | [Output](#output) |
+| `SIND_VERBOSE` | `-v`, as a number: `2` is `-vv` | `0`: errors only | [Verbose logging]({{< relref "/usage/diagnostics#verbose-logging" >}}) |
 | `SIND_PROGRESS` | `--progress` | `auto` | [Progress Display]({{< relref "/usage/progress" >}}) |
 | `SIND_PROGRESS_LOG` | `--progress-log` | the [activity log]({{< relref "/usage/progress#the-activity-log" >}}) | [Progress Display]({{< relref "/usage/progress#event-log" >}}) |
 | `SIND_LOG_TIMESTAMPS` | no flag: `false` leaves the time stamp off log lines | time stamps | [MCP]({{< relref "/guides/mcp" >}}) |
@@ -92,7 +93,14 @@ A variable is not part of the command line, so a value that sind cannot use is n
 
   sind checks the variable only when it is in effect: `sind --realm ci get clusters` does not read `SIND_REALM`, `sind version` reads no realm, and `sind ssh worker-0.dev` reads no `SIND_CLUSTER`.
 
-- A variable that changes only what sind shows on standard error fails no command. With a value of `SIND_PROGRESS` or `SIND_PROGRESS_LOG` that sind cannot use, it shows no progress, or writes no event log, and says why in one line.
+- A variable that changes only what sind shows on standard error fails no command. With a value of `SIND_PROGRESS` or `SIND_PROGRESS_LOG` that sind cannot use, it shows no progress, or writes no event log, and says why in one line. A `SIND_VERBOSE` that is no number is ignored:
+
+  ```console
+  $ SIND_VERBOSE=-vv sind get realms
+  sind: SIND_VERBOSE is "-vv"; it takes a number, such as 2 for -vv; it is ignored
+  NAME  CLUSTERS
+  sind  2
+  ```
 
 ## sind ui and the MCP server
 

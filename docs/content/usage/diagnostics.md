@@ -192,6 +192,8 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 | `-vv` | debug | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
+[`SIND_VERBOSE`]({{< relref "/usage/environment" >}}) gives the number of `-v` when the command line has none: `export SIND_VERBOSE=2` logs every command as `-vv` does.
+
 Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete` and `power` go above their progress display, never into it.
 
 ```bash

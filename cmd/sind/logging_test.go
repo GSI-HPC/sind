@@ -5,7 +5,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewLogger_ErrorOnly(t *testing.T) {
@@ -137,4 +140,63 @@ func TestVerboseFlag_InjectsLogger(t *testing.T) {
 	assert.NoError(t, err)
 	// Logger was injected — once operations emit logs, they'll appear on stderr.
 	// For now we just verify the flag is accepted and execution succeeds.
+}
+
+// TestVerbosity covers SIND_VERBOSE: the verbosity without -v, which wins
+// over it, and a value that is no count, which is ignored with a note.
+func TestVerbosity(t *testing.T) {
+	note := "sind: SIND_VERBOSE is %q; it takes a number, such as 2 for -vv; it is ignored"
+	for _, tc := range []struct {
+		env  string
+		args []string
+		want int
+		note string
+	}{
+		{"", nil, 0, ""},
+		{"0", nil, 0, ""},
+		{"2", nil, 2, ""},
+		{"2", []string{"-v"}, 1, ""},
+		{"lots", nil, 0, fmt.Sprintf(note, "lots")},
+		{"-1", nil, 0, fmt.Sprintf(note, "-1")},
+		{"-vv", nil, 0, fmt.Sprintf(note, "-vv")},
+		{"lots", []string{"-vv"}, 2, ""},
+	} {
+		t.Setenv("SIND_VERBOSE", tc.env)
+		root := NewRootCommand()
+		require.NoError(t, root.ParseFlags(tc.args))
+		v, got := verbosity(root)
+		assert.Equal(t, tc.want, v, "SIND_VERBOSE=%s %v", tc.env, tc.args)
+		assert.Equal(t, tc.note, got, "SIND_VERBOSE=%s %v", tc.env, tc.args)
+	}
+}
+
+// TestVerbosity_FromEnv checks that SIND_VERBOSE sets the level of a
+// command's logger, and that the command writes the note of an invalid one
+// once, and goes on.
+func TestVerbosity_FromEnv(t *testing.T) {
+	ctx := context.Background()
+	for env, level := range map[string]slog.Level{"2": slog.LevelDebug, "lots": slog.LevelError} {
+		t.Setenv("SIND_VERBOSE", env)
+		var m mock.Executor
+		m.AddResult("", "", nil) // get realms: no containers
+		root := NewRootCommand()
+		var stderr bytes.Buffer
+		root.SetOut(io.Discard)
+		root.SetErr(&stderr)
+		root.SetArgs([]string{"get", "realms"})
+		root.SetContext(withClient(ctx, docker.NewClient(&m)))
+
+		require.NoError(t, root.Execute())
+
+		get, _, err := root.Find([]string{"get", "realms"})
+		require.NoError(t, err)
+		log := sindlog.From(get.Context())
+		assert.True(t, log.Enabled(ctx, level), env)
+		assert.False(t, log.Enabled(ctx, level-1), env)
+		notes := 0
+		if env == "lots" {
+			notes = 1
+		}
+		assert.Equal(t, notes, strings.Count(stderr.String(), "SIND_VERBOSE"), stderr.String())
+	}
 }
