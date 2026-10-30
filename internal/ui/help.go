@@ -95,6 +95,12 @@ func helpKeys() []helpKeyGroup {
 			{Keys: []string{"Enter"}, Text: "Open the result, or pick the cluster of an action"},
 			{Keys: []string{"Backspace"}, Text: "In an empty box: back from the choice of a cluster"},
 		}},
+		{Title: "In the nodes of a cluster", Keys: []helpKey{
+			{Keys: []string{"↑", "↓"}, Join: "or", Text: "Move between the rows of the table, which is one stop of Tab"},
+			{Keys: []string{"←", "→"}, Join: "or", Text: "Move between the tick, the links and the buttons of a row"},
+			{Keys: []string{"Space"}, Text: "Tick or untick the node"},
+			{Keys: []string{"a"}, Text: "Go to the bar of the selected nodes"},
+		}},
 		{Title: "In the help pane", Keys: []helpKey{
 			{Keys: []string{"Tab"}, Text: "Move between the search, the links and the buttons"},
 			{Keys: []string{"Esc"}, Text: "Close the pane and go back to where you were"},

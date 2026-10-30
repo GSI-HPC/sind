@@ -7,12 +7,22 @@
 {{end}}
 
 {{define "pg-cluster-head"}}{{with .Data}}{{if not .Found}}{{template "pg-gone" .Name}}{{else}}
-<div class="head"><div class="t"><h1>{{.Name}} <span class="pill {{.Cluster.StateClass}}" data-say="{{.Name}} is {{.Cluster.State}}.">{{.Cluster.State}}</span></h1>
-  <div class="sub">{{with .Cluster.Slurm}}<span class="mono">Slurm {{.}}</span>{{end}}<span>{{with .Cluster.Roles}}{{.}}{{else}}no nodes{{end}}</span>{{if .Cluster.Monitoring}}<span class="chip brand">monitoring</span>{{end}}</div></div>
-  <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
-{{with .Cluster.Banner}}<div class="callout run pg-run"><span class="spin"></span><span class="pg-grow">{{if .Command}}<b class="mono">{{.Command}}</b>{{else}}<b>{{.Count}}</b>{{end}} {{.Text}}</span><a class="btn sm" href="{{.Href}}">{{.Action}}</a></div>{{end}}
-<div class="tabs">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}{{if .Count}}<span class="n" title="{{.CountLabel}}"><span aria-hidden="true">{{.Count}}</span><span class="vh">, {{.CountLabel}}</span></span>{{end}}{{with .Problems}}<span class="n bad"><span class="vh">, </span>{{.}}</span>{{end}}</a>{{end}}</div>
+<div class="head"><div class="t"><h1>{{.Name}} {{with .Cluster.Pill}}<span class="pill {{.Class}}" data-say="{{$.Data.Name}} is {{.Text}}.">{{.Text}}</span>{{end}}</h1>
+  <div class="sub">{{with .Cluster.Life}}<span>started {{.Started}} {{.Source}}</span>{{end}}{{with .Cluster.Slurm}}<span class="mono">Slurm {{.}}</span>{{end}}<span>{{with .Cluster.Roles}}{{.}}{{else}}no nodes{{end}}</span>{{if .Cluster.Monitoring}}<span class="chip brand">monitoring</span>{{end}}</div></div>
+  <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}{{with .Cluster.Life}}{{with .Stop}}{{template "run-stop" .}}{{end}}{{end}}</div></div>
+{{with .Cluster.Life}}{{template "pg-life" .}}{{else}}{{with .Cluster.Banner}}<div class="callout run pg-run"><span class="spin"></span><span class="pg-grow">{{if .Command}}<b class="mono">{{.Command}}</b>{{else}}<b>{{.Count}}</b>{{end}} {{.Text}}</span><a class="btn sm" href="{{.Href}}">{{.Action}}</a></div>{{end}}{{end}}
+<div class="tabs">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}{{if .Count}}<span class="n" title="{{.CountLabel}}"><span aria-hidden="true">{{.Count}}</span><span class="vh">, {{.CountLabel}}</span></span>{{end}}{{if .Look}}<span class="n {{.LookClass}}"><span class="vh">, </span>{{.Look}}</span>{{end}}</a>{{end}}</div>
 {{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
+
+{{/* pg-life is the progress of the command that creates or deletes a
+cluster, at the top of its page: what it does now, its steps, and where each
+node stands. It takes a pgLife. */}}
+{{define "pg-life"}}<section class="panel pg-life" aria-label="Progress of {{.Title}}">
+  <div class="pg-life-h">{{if .Run.Waiting}}<span class="pg-ck wait" aria-hidden="true">○</span>{{else}}<span class="spin" aria-hidden="true"></span>{{end}}<b>{{if .Run.Waiting}}{{.Title}} waits for the lock of the realm{{else}}sind {{.Verb}} {{.Name}}{{end}}</b>{{with .Step}}<span class="pill run nodot">{{.}}</span>{{end}}<span class="grow"></span>{{template "run-elapsed" .}}<a class="btn sm primary" href="{{.Run.Link}}">Show progress</a></div>
+  {{template "run-segbar" .}}
+  {{with .Steps}}<ol class="pg-life-steps" aria-hidden="true">{{range .}}<li class="{{.Class}}">{{.Text}}</li>{{end}}</ol>{{end}}
+  {{with .Nodes}}<ul class="pg-life-nodes">{{range .}}<li class="pg-ph {{.State}}"><span class="pg-ck {{.State}}" aria-hidden="true">{{.Mark}}</span><span class="pg-ph-t"><b class="mono">{{.Node}}</b>{{with .Role}} <span class="faint">{{.}}</span>{{end}}<span class="pg-ph-d">{{.Text}}</span></span></li>{{end}}</ul>{{end}}
+</section>{{end}}
 
 {{define "pg-cluster-body"}}{{with .Data}}{{if .Found}}
 {{if eq .Tab "summary"}}{{template "pg-tab-summary" .}}
@@ -25,21 +35,21 @@
 
 {{define "pg-tab-summary"}}<div class="grid g2">
 {{with .Ready}}<section class="panel pg-wide pg-ready"><div class="ph"><h2>Ready for jobs</h2><span class="pill {{.Class}}">{{.Verdict}}</span></div>
-  <div class="pb pg-ready-b"><div>{{if .Checked}}<ul class="pg-checks">{{range .Checks}}<li><span class="pg-ck {{.State}}" aria-hidden="true">{{.Mark}}</span><div><span class="vh">{{.Word}}: </span><b>{{.Title}}</b>{{with .Detail}} <span class="muted">{{.}}</span>{{end}}{{with .Actions}}<div class="pg-fix">{{range .}}{{template "pg-action" .}}{{end}}</div>{{end}}</div></li>{{end}}</ul>
+  <div class="pb pg-ready-b"><div>{{if .Checked}}<ul class="pg-checks">{{range .Checks}}<li><span class="pg-ck {{.State}}" aria-hidden="true">{{.Mark}}</span><div><span class="vh">{{.Word}}: </span><b>{{.Title}}</b>{{with .Detail}} <span class="muted">{{.}}</span>{{end}}{{with .Actions}}<div class="pg-fix">{{range .}}{{template "pg-action" .}}{{end}}</div>{{end}}{{with .Nodes}}<ul class="pg-rrows">{{range .}}<li><a class="mono pg-rrn" href="{{.Link}}"><b>{{.Short}}</b></a><span class="pg-rri">{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}{{with .Cause}}<span class="faint pg-small">{{.}}</span>{{end}}</span><span class="pg-rra">{{with .RowLogs}}{{template "pg-action" .}}{{end}}{{with .RowFix}}{{template "pg-action" .}}{{end}}</span></li>{{end}}</ul>{{end}}{{with .More}}<p class="muted pg-flat">{{.}}</p>{{end}}</div></li>{{end}}</ul>
     {{else}}<p class="muted pg-flat">sind ui checks the controller, the workers, accounting and the files once it has probed the cluster.</p>{{end}}</div>
-  <div class="stack"><div class="cmdlabel">Run a first job</div>{{range .Commands}}{{template "pg-cmd" .}}{{end}}<p class="hint pg-flat">{{.Note}} More commands are on <a href="{{$.ConnectLink}}">Connect</a>.</p></div></div></section>{{end}}
+  <div class="stack"><div class="cmdlabel">Run a first job</div>{{with .Wait}}<p class="pg-wait">{{.}}</p>{{else}}{{range .Commands}}{{template "pg-cmd" .}}{{end}}<p class="hint pg-flat">{{.Note}} More commands are on <a href="{{$.ConnectLink}}">Connect</a>.</p>{{end}}</div></div></section>{{end}}
 <section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">{{.Cluster.NodesText}}</span></div><div class="pb">
   <div class="pg-nodemap pg-big">{{range .Cluster.Nodes}}<a class="{{.Tile}}" href="{{.Link}}" title="{{.TileTitle}}" aria-label="{{.TileLabel}}"></a>{{else}}<span class="muted">This cluster has no node.</span>{{end}}</div>
-  {{if .Cluster.Nodes}}{{template "pg-legend"}}{{end}}</div></section>
-<section class="panel pg-wide"><div class="ph"><h2>Health</h2><span class="grow"></span><span class="faint mono">sind get cluster{{.ClusterArg}}</span></div>
+  {{if .Cluster.Nodes}}{{template "pg-legend" .Cluster.AnyLife}}{{end}}</div></section>
+<section class="panel pg-wide"><div class="ph"><h2>Health</h2><span class="grow"></span><span class="pg-cli faint">{{with .GetCmd}}<code class="mono">{{.}}</code>{{template "pg-copy" .}}{{end}}</span></div>
   {{if not .Status}}<div class="pb"><div class="callout">Service health appears once sind ui has probed the cluster.</div></div>{{end}}
-  <div class="tw"><table class="pg-mx"><thead><tr><th>Node</th><th>State</th>{{range .Services}}<th class="mono pg-svc"><span data-word="{{.}}">{{.}}</span></th>{{end}}</tr></thead><tbody>
-  {{range .Matrix}}<tr class="click" data-href="{{.Node.Link}}"><td class="mono"><a href="{{.Node.Link}}"><b>{{.Node.Short}}</b></a></td><td><span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></td>{{range .Cells}}<td title="{{.Text}}"><span class="pg-ck {{.Class}}" aria-hidden="true">{{.Mark}}</span><span class="vh">{{.Text}}</span></td>{{end}}</tr>
+  <div class="tw"><table class="pg-mx"><thead><tr><th>Node</th><th>State</th>{{if .Slurm.Nodes}}<th class="pg-mx-sl">Slurm</th>{{end}}{{range .Services}}<th class="mono pg-svc"><span data-word="{{.}}">{{.}}</span></th>{{end}}</tr></thead><tbody>
+  {{range .Matrix}}<tr class="click" data-href="{{.Node.Link}}"><td class="mono"><a href="{{.Node.Link}}"><b>{{.Node.Short}}</b></a></td><td>{{with .Node.Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</td>{{if $.Slurm.Nodes}}<td class="pg-mx-sl">{{if and .Node.Slurm (not .Node.Life)}}<span class="pill {{.Node.SlurmClass}}">{{.Node.Slurm.State}}</span>{{else}}<span class="faint">–</span>{{end}}</td>{{end}}{{range .Cells}}<td title="{{.Text}}"><span class="pg-ck {{.Class}}" aria-hidden="true">{{.Mark}}</span><span class="vh">{{.Text}}</span></td>{{end}}</tr>
   {{end}}</tbody></table></div>
-  {{if .Matrix}}<p class="hint pg-hint pg-mx-key"><span aria-hidden="true"><span class="pg-ck y">✓</span> active · <span class="pg-ck n">✗</span> down · <span class="pg-ck na">–</span> node not running · <span class="pg-ck na">·</span> not on this node</span></p>{{end}}</section>
+  {{if .Matrix}}<p class="hint pg-hint pg-mx-key"><span aria-hidden="true"><span class="pg-ck y">✓</span> active · <span class="pg-ck n">✗</span> down · <span class="pg-ck na">–</span> node not running · <span class="pg-ck na">·</span> not on this node{{if .Cluster.Life}} · <span class="pg-ck wait">○</span> starting or stopping{{end}}</span></p>{{end}}</section>
 <section class="panel"><div class="ph"><h2>Cluster</h2></div><div class="pb"><dl class="kv">
   <dt><span data-word="realm">realm</span></dt><dd class="mono">{{.Realm}}</dd>
-  <dt>state</dt><dd><span class="pill {{.Cluster.StateClass}}">{{.Cluster.State}}</span></dd>
+  <dt>state</dt><dd>{{with .Cluster.Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</dd>
   {{with .Cluster.Slurm}}<dt>Slurm</dt><dd class="mono">{{.}}</dd>{{end}}
   {{with .Slurm.Partitions}}<dt>partitions</dt><dd class="mono">{{$.Slurm.PartitionsText}}</dd>{{end}}
   {{if .Slurm.HasConf}}<dt>config</dt><dd><a href="{{.SlurmConfLink}}">View slurm.conf</a></dd>{{end}}
@@ -53,18 +63,26 @@
   {{else}}<span class="muted">Network health appears once sind ui has probed the cluster.</span>{{end}}</div></section>
 </div>{{end}}
 
-{{define "pg-tab-nodes"}}<section class="panel" data-pg-select="nodes">
-  <div class="pg-selbar" data-pg-selbar hidden><span>Selection: <span class="pg-expr" data-pg-expr></span></span><span class="pg-grow"></span>
-    {{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}">{{.Label}}</a>{{end}}{{range .WorkerSelection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}" data-pg-noun="worker">{{.Label}}</a>{{end}}{{with .Delete}}<a class="btn sm danger" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}" data-pg-noun="worker" data-pg-delete>{{.Label}}</a>{{end}}<button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
-  <div class="tw"><table class="cards chk"><thead><tr><th class="pg-chk c-chk"><label class="pg-all"><input type="checkbox" data-pg-all aria-label="Select all nodes"><span class="pg-phone">All</span></label></th><th>Node</th><th>Role</th><th>State</th><th>Slurm</th><th>IP</th><th>Services</th><th><span class="vh">Actions</span></th></tr></thead><tbody>
-  {{range .Cluster.Nodes}}{{$n := .}}<tr data-pg-item="{{.Short}}" data-pg-label="{{.Short}}" data-pg-match="{{.Match}}"><td class="c-chk"><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"></td>
-    <td class="mono c-name"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td data-label="Role"><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td class="c-state"><span class="pill {{.StateClass}}" data-say="{{.Short}} is {{.State}}." data-say-key="{{.Short}}">{{.State}}</span></td>
-    <td data-label="Slurm">{{if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint pg-small">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td><td class="mono" data-label="IP">{{.IP}}</td>
-    <td data-label="Services">{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}{{if .Known}}<span class="faint">{{.ServiceUp}} up</span>{{else}}<span class="faint">–</span>{{end}}{{end}}</td>
-    <td class="act c-act">{{with .RowPower}}<a class="btn sm" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false" aria-label="{{.Verb}} {{$n.Short}}…">{{.Label}}</a>{{end}}<a class="btn sm ghost" href="{{.LogsLink}}" aria-label="Logs of {{.Short}}">Logs</a><button type="button" class="btn sm ghost" data-pg-copy-text="{{.SSH}}" aria-label="Shell: copy {{.SSH}}" title="Copy {{.SSH}}">Shell</button></td></tr>
+{{/* pg-tab-nodes is the table of the nodes of a cluster, a grid that the
+keyboard moves in, and the bar of the selected nodes, which sticks at the
+bottom of the page: how many, which, the verbs that fit them, each with
+the nodes it acts on, and the nodes that a verb skips. */}}
+{{define "pg-tab-nodes"}}<section class="panel pg-nodes" data-pg-select="nodes">
+  <div class="tw"><table class="cards chk" data-pg-grid aria-label="Nodes of {{.Name}}" aria-describedby="pg-grid-keys"><thead><tr><th class="pg-chk c-chk"><label class="pg-all"><input type="checkbox" data-pg-all aria-label="Select all nodes"><span class="pg-phone">All</span></label></th><th>Node</th><th>Role</th><th>State</th><th>Slurm</th><th>IP</th><th>Services</th><th><span class="vh">Actions</span></th></tr></thead><tbody>
+  {{range .Cluster.Nodes}}{{$n := .}}<tr data-pg-item="{{.Short}}" data-pg-label="{{.Short}}" data-pg-match="{{.Match}}" data-pg-ops="{{.Ops}}"><td class="c-chk"><input type="checkbox" data-pg-sel="{{.Short}}" aria-label="Select {{.Short}}"{{if .Life}} disabled title="sind {{if .Deleting}}deletes{{else}}creates{{end}} this node."{{end}}></td>
+    <td class="mono c-name"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td data-label="Role"><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$n.Short}} is {{.Text}}." data-say-key="{{$n.Short}}">{{.Text}}</span>{{end}}</td>
+    <td data-label="Slurm">{{if .Life}}<span class="faint">–</span>{{else if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint pg-small">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td><td class="mono" data-label="IP">{{.IP}}</td>
+    <td data-label="Services">{{if .Life}}<span class="faint">{{.LifeText}}</span>{{else}}{{range .ServiceIssues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}{{if .Known}}<span class="faint">{{.ServiceUp}} up</span>{{else}}<span class="faint">–</span>{{end}}{{end}}{{end}}</td>
+    <td class="act c-act">{{if not .Life}}{{with .RowFix}}{{template "pg-action" .}}{{end}}{{end}}<a class="btn sm ghost" href="{{.LogsLink}}" aria-label="{{.LogsName}}">Logs</a><button type="button" class="btn sm ghost pg-cpssh" data-pg-copy-text="{{.SSH}}" data-pg-copy-say="Copied: {{.SSH}}. Paste it in a terminal." aria-label="Copy ssh: {{.SSH}}" title="Copy {{.SSH}}">{{template "pg-copy-icon"}}Copy ssh</button></td></tr>
   {{else}}<tr><td colspan="8"><div class="empty">This cluster has no node.</div></td></tr>{{end}}
-  </tbody></table></div></section>
-<p class="muted pg-hint">Tick nodes to act on several at once; the bar offers only what fits them. Shell copies the command that logs in to the node. The selection stays when the table updates. Slurm is the state that <span class="mono">sinfo</span> reports for a worker.</p>{{end}}
+  </tbody></table></div>
+  <div class="pg-selbar pg-seldock" data-pg-selbar role="region" aria-label="Selected nodes" hidden>
+    <div class="pg-selwhat"><b data-pg-count></b> <span class="pg-expr" data-pg-expr></span><span class="pg-skip" data-pg-skip hidden></span></div>
+    <div class="pg-selacts">{{range .Selection}}<a class="btn sm" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}">{{.Label}}</a>{{end}}
+      {{- with .SelectionMore}}<details class="pg-mw pg-selmore" data-pg-menu data-pg-selmore><summary class="btn sm pg-mbtn" aria-haspopup="menu">More<span class="pg-caret" aria-hidden="true"></span></summary>
+      <div class="pg-menu" role="menu" aria-label="More actions">{{range .}}<a class="pg-mi" role="menuitem" tabindex="-1" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}"><span class="pg-ml">{{.Label}}</span></a>{{end}}</div></details>{{end}}
+      {{- with .Delete}}<a class="btn sm danger" href="{{.URL}}" data-pg-dialog data-pg-verb="{{.Verb}}" data-pg-fit="{{.Fit}}" data-pg-delete>{{.Label}}</a>{{end}}<button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div></div></section>
+<p class="muted pg-hint" id="pg-grid-keys">Tick nodes to act on several at once; the bar at the bottom offers what fits them and names the nodes that a verb skips. <span class="kbd-only">In the table, the arrow keys move between the rows and the cells, Space ticks a node and <kbd>a</kbd> goes to the bar.</span> A row that needs a look has its first fix beside its Logs. Copy ssh copies the command that logs in to the node. The selection stays when the table updates. Slurm is the state that <span class="mono">sinfo</span> reports for a worker.</p>{{end}}
 
 {{/* pg-slurm-note says why the Slurm view is empty; it takes a pgSlurmView. */}}
 {{define "pg-slurm-note"}}{{if not .Read}}<div class="callout">The Slurm state appears once sind ui has asked <span class="mono">sinfo</span> on the controller.</div>{{else if .Err}}<div class="callout bad"><b>sinfo on the controller did not answer.</b> <span class="mono">{{.Err}}</span></div>{{end}}{{end}}
@@ -72,13 +90,14 @@
 {{define "pg-tab-slurm"}}{{with .Slurm}}{{template "pg-slurm-note" .}}
 {{if or .Files (and .Read (not .Err))}}<div class="grid g2">
 {{if and .Read (not .Err)}}<section class="panel pg-wide"><div class="ph"><h2>Partitions</h2><span class="grow"></span><span class="faint mono">sinfo</span></div>
-  <div class="tw"><table><thead><tr><th>Partition</th><th>State</th><th>Time limit</th><th class="num">Nodes</th><th>Node list</th></tr></thead><tbody>
-  {{range .Partitions}}<tr><td class="mono"><b>{{.Name}}</b>{{if .Default}} <span class="chip brand">default</span>{{end}}</td><td><span class="pill {{if eq .State "up"}}ok{{else}}bad{{end}}">{{.State}}</span></td><td class="mono">{{.TimeLimit}}</td><td class="num">{{.Nodes}}</td><td class="mono">{{.NodeList}}</td></tr>
+  <div class="tw"><table class="cards"><thead><tr><th>Partition</th><th>State</th><th>Time limit</th><th class="num">Nodes</th><th>Node list</th></tr></thead><tbody>
+  {{range .Partitions}}<tr><td class="mono c-name"><b>{{.Name}}</b>{{if .Default}} <span class="chip brand">default</span>{{end}}</td><td class="c-state"><span class="pill {{if eq .State "up"}}ok{{else}}bad{{end}}">{{.State}}</span></td><td class="mono" data-label="Time limit">{{.TimeLimit}}</td><td class="num" data-label="Nodes">{{.Nodes}}</td><td class="mono" data-label="Node list">{{.NodeList}}</td></tr>
   {{else}}<tr><td colspan="5"><div class="empty">Slurm has no partition. A cluster without workers has none.</div></td></tr>{{end}}</tbody></table></div></section>
 <section class="panel pg-wide"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint mono">sinfo --Node</span></div>
-  <div class="tw"><table><thead><tr><th>Node</th><th>State</th><th>Reason</th><th>CPUs</th><th>Memory</th><th>Partitions</th></tr></thead><tbody>
-  {{range .Nodes}}<tr class="click" data-href="{{.Link}}"><td class="mono"><a href="{{.Link}}"><b>{{.Short}}</b></a></td><td><span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span></td><td>{{with .Slurm.Reason}}{{.}}{{else}}<span class="faint">–</span>{{end}}</td><td>{{.SlurmCPUs}}</td><td>{{.SlurmMemory}}</td><td class="mono">{{.SlurmPartitions}}</td></tr>
-  {{else}}<tr><td colspan="6"><div class="empty">sinfo lists no node of this cluster.</div></td></tr>{{end}}</tbody></table></div></section>{{end}}
+  <div class="tw"><table class="cards pg-sl"><thead><tr><th>Node</th><th>State</th><th>Reason</th><th>CPUs</th><th>Memory</th><th>Partitions</th><th><span class="vh">Actions</span></th></tr></thead><tbody>
+  {{range .Nodes}}<tr><td class="mono c-name"><a href="{{.Link}}"><b>{{.Short}}</b></a></td>{{if .Life}}<td class="c-state">{{with .Pill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</td><td data-label="Reason"><span class="faint">{{.LifeText}}</span></td>{{else}}<td class="c-state"><span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span></td><td data-label="Reason">{{with .Slurm.Reason}}{{.}}{{else}}<span class="faint">–</span>{{end}}</td>{{end}}<td data-label="CPUs">{{.SlurmCPUs}}</td><td data-label="Memory">{{.SlurmMemory}}</td><td class="mono" data-label="Partitions">{{.SlurmPartitions}}</td>
+    <td class="act c-act">{{range .SlurmActions}}{{template "pg-action" .}}{{end}}</td></tr>
+  {{else}}<tr><td colspan="7"><div class="empty">sinfo lists no node of this cluster.</div></td></tr>{{end}}</tbody></table></div></section>{{end}}
 {{range .Files}}<section class="panel pg-wide" id="{{.ID}}" tabindex="-1"><div class="ph"><h2 class="mono">{{.Name}}</h2><span class="grow"></span><span class="faint mono">{{.Path}}</span><button type="button" class="btn sm" data-pg-copy-from="{{.ID}}-text">Copy</button></div>
   <pre class="pg-conf" id="{{.ID}}-text">{{.Content}}</pre></section>{{end}}
 </div>{{end}}
@@ -107,5 +126,7 @@
   {{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
 <section class="panel"><div class="ph"><h2>Services</h2></div><div class="pb stack">
   {{if .API}}<dl class="kv"><dt><span data-word="slurmrestd">slurmrestd</span></dt><dd class="mono">{{.API}}</dd></dl>{{else}}<p class="muted pg-flat">No api node, so no slurmrestd. Add <span class="mono">api</span> to the nodes of the config.</p>{{end}}
-  {{with .Grafana}}<dl class="kv"><dt>Grafana</dt><dd class="mono">{{.}}</dd></dl>{{end}}</div></section></div>
+  {{with .Grafana}}<dl class="kv"><dt>Grafana</dt><dd class="mono">{{.}}</dd></dl>{{end}}</div></section>
+<section class="panel"><div class="ph"><h2>Your files</h2></div><div class="pb stack">
+  {{with .Files}}{{template "pg-files" .}}{{else}}<p class="muted pg-flat">Where your files are appears once sind ui has probed the cluster.</p>{{end}}</div></section></div>
 <p class="muted pg-hint">There is no terminal in the browser. Each command runs in your own terminal.</p>{{end}}

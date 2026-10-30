@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/collect"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +26,7 @@ func TestMoreMeshPage(t *testing.T) {
 		"sind-mesh", "172.18.0.0/16", "sind-dns", "172.18.255.254", "sind.sind", "sind-ssh-config", "2 records",
 		"worker-0.default.sind.sind", "kind-control-plane",
 		"/dialogs/connect?realm=sind", "/dialogs/delete-realm?realm=ci",
-		"/dialogs/disconnect?nodes=kind-control-plane&amp;realm=sind",
+		"/dialogs/disconnect?container=kind-control-plane&amp;realm=sind",
 		"Realm ci has no mesh", "No other containers", `sse-swap="more-mesh"`, `href="/static/`,
 	} {
 		assert.Contains(t, body, want)
@@ -46,7 +48,7 @@ func TestMoreMeshPage(t *testing.T) {
 	}
 
 	one := pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
-	assert.NotContains(t, one, "Realm <b")
+	assert.NotContains(t, one, "<h2>Realm <b", "one realm needs no head of its own")
 	assert.NotContains(t, one, "has no mesh")
 
 	body = pgBody(t, ts, "/mesh?realm=nope", http.StatusNotFound)
@@ -55,6 +57,52 @@ func TestMoreMeshPage(t *testing.T) {
 	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=">All realms</a>`)
 	body = pgBody(t, ts, "/mesh?realm=sindd", http.StatusNotFound)
 	assert.Contains(t, body, `<a class="btn primary" href="/mesh?realm=sind">Realm sind</a>`)
+}
+
+func TestMoreMeshOffersContainersToConnect(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	ts.st.SetMesh("ci", store.Mesh{
+		Info: &mesh.Info{Network: "ci-mesh"},
+		Connectable: []store.Outside{
+			{Name: "db", Image: "postgres:16", State: "exited"},
+			{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours"},
+			{Name: "my-app", Image: "python:3.12-slim", State: "running"},
+		},
+	})
+	body := pgBody(t, ts, "/mesh?realm=ci", http.StatusOK)
+	// While no container is connected, the card lists those that run and
+	// can connect, each with Connect, and the command for any name.
+	assert.Contains(t, body, `<span class="faint">none connected yet</span>`)
+	assert.Contains(t, body, `<b class="mono">kind-control-plane</b><small>kindest/node:v1.31.0 · up 5 hours · also in realm sind</small>`)
+	assert.Contains(t, body, `<a class="btn sm" href="/dialogs/connect?container=my-app&amp;realm=ci"`)
+	assert.Contains(t, body, `aria-label="Connect my-app to realm ci…">Connect…</a>`)
+	assert.NotContains(t, body, `container=db`, "one that does not run cannot connect")
+	assert.Contains(t, body, `<span class="pg-cli"><code class="mono">sind --realm ci connect container NAME</code><button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="sind --realm ci connect container NAME"`)
+	assert.NotContains(t, body, "No other containers")
+
+	ts.st.SetMesh("sind", store.Mesh{Info: &mesh.Info{Network: "sind-mesh"}, Connectable: []store.Outside{{Name: "x", State: "running"}}})
+	body = pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `<code class="mono">sind connect container NAME</code>`)
+	assert.Contains(t, body, `<b class="mono">x</b><small></small>`)
+}
+
+func TestMoreMeshShowsTheFirstRecords(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	m := ts.st.Snapshot().Meshes["sind"]
+	m.Records = nil
+	for i := range 12 {
+		m.Records = append(m.Records, mesh.DNSRecord{Hostname: fmt.Sprintf("worker-%d.dev.sind.sind", i), IP: fmt.Sprintf("172.18.0.%d", i+2)})
+	}
+	ts.st.SetMesh("sind", m)
+	body := pgBody(t, ts, "/mesh?realm=sind", http.StatusOK)
+	assert.Contains(t, body, `<tr role="row" data-more-row="172.18.0.11 worker-9.dev.sind.sind"><td`)
+	assert.Contains(t, body, `<tr role="row" data-more-row="172.18.0.12 worker-10.dev.sind.sind" data-more-cut hidden><td`)
+	assert.Contains(t, body, `<button type="button" class="btn sm" data-more-all="dns-sind" aria-controls="dns-sind">Show all 12 records</button>`)
+	assert.NotContains(t, body, "more-scroll", "no box that scrolls in the page")
+
+	m.Records = m.Records[:10]
+	ts.st.SetMesh("sind", m)
+	assert.NotContains(t, pgBody(t, ts, "/mesh?realm=sind", http.StatusOK), "data-more-all")
 }
 
 func TestMoreMeshStates(t *testing.T) {
@@ -106,7 +154,7 @@ func TestMoreNoRealms(t *testing.T) {
 	}
 	n := moreNoRealms(store.DockerState{Checked: true, Err: "x"})
 	assert.Equal(t, "/doctor", n.Href)
-	assert.Equal(t, "/dialogs/create-cluster", moreNoRealms(store.DockerState{Checked: true}).Href)
+	assert.Equal(t, "/clusters/new", moreNoRealms(store.DockerState{Checked: true}).Href)
 	assert.Empty(t, moreNoRealms(store.DockerState{}).Href)
 }
 
@@ -143,8 +191,8 @@ func TestMoreMonitoringPage(t *testing.T) {
 
 	empty := pgBody(t, ts, "/monitoring?realm=ci", http.StatusOK)
 	assert.Contains(t, empty, "Realm <b class=\"mono\">ci</b> has no monitoring stack")
-	assert.Contains(t, empty, "sind create cluster --monitoring")
-	assert.Contains(t, empty, "/dialogs/create-cluster?realm=ci")
+	assert.Contains(t, empty, "sind --realm ci create cluster --monitoring", "the command works in the realm of the page")
+	assert.Contains(t, empty, "/clusters/new?realm=ci")
 	assert.Contains(t, empty, "Slurm 26.05")
 
 	pgBody(t, ts, "/monitoring?realm=nope", http.StatusNotFound)
@@ -178,12 +226,11 @@ func TestMoreMonitoringNumbers(t *testing.T) {
 	ts.st.SetMonitoring("sind", &m)
 	body := pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
 	for _, want := range []string{
-		"Nodes running", "Slurm nodes up", "Jobs running", "Jobs pending",
-		// A draining node is up: the counts do not tell whether the
-		// down one drains too.
-		`<td role="cell" class="num" data-label="Slurm nodes up">2 of 3<br><span class="faint more-nowrap">1 down, 1 draining</span></td>`,
+		"Nodes running", "Take jobs", "Jobs running", "Jobs pending",
+		// A node in drain takes no jobs, as Ready for jobs counts it.
+		`<td role="cell" class="num" data-label="Take jobs">1 of 3<br><span class="faint more-nowrap" title="Slurm sends no new jobs to a node that is down or in drain, which is drained or draining. A node can be both at once.">1 down, 1 in drain</span></td>`,
 		`<td role="cell" class="num" data-label="Jobs running">7</td><td role="cell" class="num" data-label="Jobs pending">12</td>`,
-		`<td role="cell" class="num" data-label="Nodes running">2 of 2</td>`, `data-label="Slurm nodes up">0 of 1<br>`,
+		`<td role="cell" class="num" data-label="Nodes running">2 of 2</td>`, `data-label="Take jobs">0 of 1<br>`,
 		// On a phone, each row is a card with the labels in it.
 		`<table class="more-cards more-moncards" role="table">`, `<td role="cell" class="mono more-aside">26.05.1</td>`,
 	} {
@@ -195,7 +242,7 @@ func TestMoreMonitoringNumbers(t *testing.T) {
 	m.Clusters = []cluster.MonitoredCluster{{Name: "dev", Slurm: &cluster.SlurmCounts{Nodes: 3}}}
 	ts.st.SetMonitoring("sind", &m)
 	body = pgBody(t, ts, "/monitoring?realm=sind", http.StatusOK)
-	assert.Contains(t, body, `data-label="Slurm nodes up">3 of 3</td>`)
+	assert.Contains(t, body, `data-label="Take jobs">3 of 3</td>`)
 }
 
 func TestMoreMonitoringHostDNS(t *testing.T) {
@@ -246,9 +293,9 @@ func TestMoreServiceState(t *testing.T) {
 }
 
 func TestMoreMonitoringCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}, time.Time{}), "no stack, no badge")
+	assert.Equal(t, NavCount{}, moreMonitoringCount(store.Snapshot{}, "", time.Time{}), "no stack, no badge")
 	ts, _ := moreTestServer(t, true, false)
-	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot(), time.Time{}))
+	assert.Equal(t, NavCount{Text: "1 starting", Class: "warn", Label: "1 monitoring service is not ready yet"}, moreMonitoringCount(ts.st.Snapshot(), "", time.Time{}))
 	stack := func(states ...string) store.Snapshot {
 		m := &cluster.Monitoring{}
 		for _, s := range states {
@@ -256,10 +303,10 @@ func TestMoreMonitoringCount(t *testing.T) {
 		}
 		return store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": m}}
 	}
-	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running"), time.Time{}))
-	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused"), time.Time{}))
-	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created"), time.Time{}).Label)
-	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited"), time.Time{}).Label)
+	assert.Equal(t, NavCount{Class: "ok", Label: "2 monitoring services are ready"}, moreMonitoringCount(stack("running", "running"), "", time.Time{}))
+	assert.Equal(t, NavCount{Text: "2 down", Class: "bad", Label: "2 monitoring services are down"}, moreMonitoringCount(stack("running", "exited", "missing", "paused"), "", time.Time{}))
+	assert.Equal(t, "2 monitoring services are not ready yet", moreMonitoringCount(stack("paused", "created"), "", time.Time{}).Label)
+	assert.Equal(t, "1 monitoring service is down", moreMonitoringCount(stack("exited"), "", time.Time{}).Label)
 }
 
 func TestMoreMonitoringInterval(t *testing.T) {
@@ -571,15 +618,15 @@ func TestMoreDoctorCheck(t *testing.T) {
 }
 
 func TestMoreDoctorCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}, time.Time{}))
+	assert.Equal(t, NavCount{}, moreDoctorCount(store.Snapshot{}, "", time.Time{}))
 	ok := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}}}
-	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}, time.Time{}))
+	assert.Equal(t, NavCount{Class: "ok", Label: "every host check passed"}, moreDoctorCount(store.Snapshot{Doctor: ok}, "", time.Time{}))
 	warn := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "ok"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}, time.Time{}))
+	assert.Equal(t, NavCount{Text: "1 warning", Class: "warn", Label: "1 warning"}, moreDoctorCount(store.Snapshot{Doctor: warn}, "", time.Time{}))
 	bad := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "warning"}, {Status: "failed"}, {Status: "warning"}}}
-	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}, time.Time{}))
+	assert.Equal(t, NavCount{Text: "1 failed", Class: "bad", Label: "1 host check failed, 2 warnings"}, moreDoctorCount(store.Snapshot{Doctor: bad}, "", time.Time{}))
 	worse := &store.DoctorReport{Checks: []store.DoctorCheck{{Status: "failed"}, {Status: "failed"}}}
-	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}, time.Time{}))
+	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 host checks failed"}, moreDoctorCount(store.Snapshot{Doctor: worse}, "", time.Time{}))
 
 	// The rail of any page shows both badges, with their meaning in words.
 	ts, _ := moreTestServer(t, true, false)
@@ -654,4 +701,26 @@ func TestMoreListPagesReadTheRealmCookie(t *testing.T) {
 		require.Equal(t, http.StatusFound, w.Code, path)
 		assert.Equal(t, path+"?realm=ci", w.Header().Get("Location"), path)
 	}
+}
+
+func TestPgOutsides(t *testing.T) {
+	sn := store.Snapshot{
+		Realms: []cluster.RealmSummary{{Name: "a"}, {Name: "b"}, {Name: "c"}},
+		Meshes: map[string]store.Mesh{
+			"a": {Connectable: []store.Outside{{Name: "kind", Image: "kindest/node", State: "running", Status: "Up About an hour", Networks: []string{"kind"}}}},
+			"b": {External: []string{"kind"}},
+			"c": {External: []string{"kind"}},
+		},
+	}
+	assert.Equal(t, []pgOutside{{
+		Name: "kind", Image: "kindest/node", Networks: "network kind", Up: "up about an hour", State: "running",
+		Also: "also in realms b and c", ConnectURL: "/dialogs/connect?container=kind&realm=a",
+	}}, pgOutsides(sn, "a"))
+	assert.Nil(t, pgOutsides(sn, "b"))
+
+	// The monitoring stack of another realm is sind's, though the docker ps
+	// of this realm does not tell it apart.
+	sn.Meshes["b"] = store.Mesh{Connectable: []store.Outside{{Name: "a-mesh-grafana-1", State: "running"}}}
+	sn.Monitorings = map[string]*cluster.Monitoring{"a": {Services: []cluster.MonitoringService{{Container: "a-mesh-grafana-1"}}}}
+	assert.Nil(t, pgOutsides(sn, "b"))
 }

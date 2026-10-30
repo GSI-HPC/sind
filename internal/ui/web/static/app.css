@@ -71,17 +71,15 @@ button,input,select,textarea{font:inherit;color:inherit}
 .main:focus{outline:none}
 
 /* shell */
-.app{display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);height:100%}
+.app{display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;height:100%}
 header.top{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:12px;padding:8px 16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;position:relative;z-index:5}
-.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--t-xl);letter-spacing:-.03em;color:var(--fg)}
+.brand:not(.chip){display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--t-xl);letter-spacing:-.03em;color:var(--fg)}
 .brand img{width:24px;height:24px}
 .brand small{font:500 var(--t-xs) var(--f-mono);color:var(--faint);letter-spacing:0}
 .jump{flex:1 1 200px;max-width:420px;display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);color:var(--faint);cursor:text;text-align:left}
 .jump span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--panel);color:var(--muted)}
 .spacer{flex:1}
-.realm{display:flex;align-items:center;gap:6px;font:var(--t-sm) var(--f-body);color:var(--muted)}
-.realm select{font:600 var(--t-sm) var(--f-mono);padding:4px 6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
 .live{display:flex;align-items:center;gap:6px;font:var(--t-sm) var(--f-body);color:var(--ok)}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
 @keyframes pulse{50%{opacity:.35}}
@@ -89,6 +87,8 @@ kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-botto
 .live.off i{background:var(--warn);animation:none}
 .hostchip{font:var(--t-sm) var(--f-mono);color:var(--muted);display:flex;gap:6px;align-items:center}
 .hostchip i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+/* the address gives way, so that the top bar stays on one row beside the rail */
+@media (max-width:820px){.hostchip{display:none}}
 .iconbtn{border:1px solid transparent;background:none;border-radius:var(--r);padding:4px 8px;cursor:pointer;color:var(--muted);font:600 var(--t-base) var(--f-mono)}
 .iconbtn:hover{background:var(--panel-2);border-color:var(--line)}
 
@@ -102,9 +102,11 @@ kbd{font:500 var(--t-xs) var(--f-mono);border:1px solid var(--line);border-botto
 .app.stale .main :is(button,.btn,input,select,textarea,summary){pointer-events:none}
 .app.stale .hostchip i{background:var(--deco)}
 
-nav.rail{grid-row:3;grid-column:1;background:var(--panel);border-right:1px solid var(--line);padding:12px 8px;overflow-y:auto}
+nav.rail{grid-row:3/5;grid-column:1;background:var(--panel);border-right:1px solid var(--line);padding:12px 8px;overflow-y:auto}
 nav.rail .rgl{display:block;margin:14px 10px 6px;font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.09em;color:var(--faint)}
 nav.rail .rgl:first-child{margin-top:2px}
+nav.rail .rgl:has(.rgs){display:flex;align-items:baseline;gap:8px}
+nav.rail .rgs{margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0}
 nav.rail ul{list-style:none;margin:0;padding:0}
 /* the More entry and its sheet are a phone's */
 nav.rail .more,.rail-sheet{display:none}
@@ -120,10 +122,24 @@ nav.rail .more,.rail-sheet{display:none}
 .nav .n.ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .nav.on{background:var(--accent-soft);font-weight:600}
 .nav.on .g{color:var(--accent)}
+/* The realm switcher at the head of the Realm group: the realm, its
+   clusters, a dot when another realm needs a look; its menu (pg.css) lists
+   the realms. */
+nav.rail .rail-rsw{display:block;margin:0 0 6px}
+.rail-rbtn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);color:var(--fg);cursor:pointer;list-style:none;user-select:none}
+.rail-rbtn::-webkit-details-marker{display:none}
+.rail-rbtn:hover,.rail-rsw[open]>.rail-rbtn{border-color:var(--accent)}
+.rail-rbtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rail-rbtn b{font-weight:600;font-size:var(--t-md);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-rbtn .faint{font-size:var(--t-sm);white-space:nowrap}
+.rail-rbtn .pg-caret{margin-left:auto;color:var(--faint)}
+.rail-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.rail-dot.bad{background:var(--bad)}
 
-/* The page scrolls in .main. A control that takes the focus scrolls clear
-   of the task dock, whose height app.js keeps in --dock-h. */
-.main{grid-row:3;grid-column:2;overflow-y:auto;padding:20px 24px 200px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0;scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 24px)}
+/* The page scrolls in .main, above the strip of the task dock, which so
+   covers nothing. --main-pb is its bottom padding, which a bar that sticks
+   to the bottom of .main takes back. */
+.main{--main-pb:32px;grid-row:3;grid-column:2;overflow-y:auto;padding:20px 24px var(--main-pb);padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0;scroll-padding-bottom:24px}
 .crumbs{font:var(--t-sm) var(--f-mono);color:var(--faint);margin-bottom:6px}
 .crumbs a{color:var(--muted)}
 .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}
@@ -151,7 +167,7 @@ h3{font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.0
 .btn.danger.solid{background:var(--bad);border-color:var(--bad);color:#fff}
 .btn.ghost{border-color:transparent;background:none}
 .btn.sm{padding:3px 8px;font-size:var(--t-sm)}
-.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn[disabled],.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 .pill{display:inline-flex;align-items:center;vertical-align:middle;line-height:18px;gap:6px;padding:1px 9px 1px 8px;border-radius:99px;font:500 var(--t-sm) var(--f-body);background:var(--panel-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap;letter-spacing:0}
 .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .pill.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
@@ -190,6 +206,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tab.on{color:var(--fg);font-weight:600;border-color:var(--accent)}
 .tab .n{font:var(--t-xs) var(--f-mono);color:var(--faint);margin-left:4px}
 .tab .n.bad{color:var(--bad);font-weight:700}
+.tab .n.warn{color:var(--warn);font-weight:700}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
 .seg :is(button,a){border:0;background:none;padding:5px 10px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
 .seg :is(button,a):last-child{border-right:0}
@@ -205,6 +222,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .cmd code{flex:1;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
 .cmd code::before{content:"$ ";color:var(--term-prompt);user-select:none}
 .cmd code.nop::before{content:""}
+/* A word, or a part of a path up to a slash, that stays whole while it
+   fits on a line, and breaks only where it does not. */
+.tok{display:inline-block;max-width:100%;overflow-wrap:anywhere;text-indent:0}
 .cmd button{border:0;border-left:1px solid #26354d;background:none;color:var(--term-dim);padding:0 12px;cursor:pointer;font:var(--t-xs) var(--f-body)}
 .cmd button:hover{color:var(--term-fg)}
 pre.term{margin:0;background:var(--term-bg);color:var(--term-fg);border-radius:var(--r);padding:10px 12px;font:var(--t-sm)/1.55 var(--f-mono);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -214,10 +234,10 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--queued);flex:none}
 .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.warn{background:var(--warn)} .dot.run{background:var(--run);animation:pulse 1.2s infinite}
 
-/* the task dock's place; the cards inside are the dock's own styles. The
-   bottom padding of .main is higher than a card, so that the end of a page
-   scrolls clear of the dock. */
-.tasks{grid-template-columns:minmax(0,1fr);position:fixed;right:16px;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(400px,calc(100% - 32px));z-index:40;display:grid;gap:10px}
+/* the place of the strip of the task dock, below the main column; the
+   strip has the dock's own styles (run.css). app.js keeps its height in
+   --dock-h, which the toasts keep above. */
+.tasks{grid-row:4;grid-column:2;min-width:0;z-index:4}
 
 /* the page that tells a refused browser how to get the address */
 .signin{max-width:640px;margin:0 auto;padding:40px max(20px,env(safe-area-inset-right,0px)) 40px max(20px,env(safe-area-inset-left,0px));display:grid;gap:14px}
@@ -228,18 +248,21 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
 .signin-steps li>*+*{margin-top:8px}
 
 /* toast */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:7px 14px;border-radius:99px;z-index:70;font-size:var(--t-md)}
+.toast{position:fixed;bottom:calc(24px + var(--dock-h,0px));left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:7px 14px;border-radius:99px;z-index:70;font-size:var(--t-md)}
 
 /* A phone, and a window too short for the rail, such as a phone on its
    side: one column, and the pages in a bar at the bottom of the screen. The
    bar holds the Main entries and More, which opens a sheet with the others.
-   A count shows on the corner of its icon when it is red or blue; a plain
-   one is for screen readers only. */
+   A count shows on the corner of its icon when it is red or blue, or a
+   number with a unit, as "3 need a look"; any other is for screen readers
+   only. */
 @media (max-width:760px),(max-height:500px){
-  .app{grid-template-columns:minmax(0,1fr)}
-  .main{grid-column:1;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(176px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+  /* the grid ends above the bar, which so covers nothing */
+  .app{grid-template-columns:minmax(0,1fr);padding-bottom:calc(57px + env(safe-area-inset-bottom,0px))}
+  .main{--main-pb:24px;grid-column:1;padding:16px max(16px,env(safe-area-inset-right,0px)) var(--main-pb) max(16px,env(safe-area-inset-left,0px))}
   nav.rail{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:stretch;padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);border-right:0;border-top:1px solid var(--line);overflow:visible;box-shadow:0 -4px 14px rgba(15,23,42,.08)}
-  nav.rail .rgl{display:none}
+  nav.rail .rgl,nav.rail .rgl:has(.rgs),nav.rail>.rail-rsw{display:none}
+  nav.rail .rail-sheet .rail-rsw{display:block;margin:8px 0}
   nav.rail .rg{display:flex;min-width:0}
   nav.rail .rg-0{display:none}
   nav.rail .rg-1{flex:1 1 0} nav.rail .rg-2{flex:2 1 0} nav.rail .rg-3{flex:3 1 0} nav.rail .rg-4{flex:4 1 0}
@@ -251,26 +274,26 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   nav.rail .rg .nav.on,nav.rail .more.on,nav.rail .more[aria-expanded=true]{color:var(--accent);font-weight:600}
   nav.rail .rg .nav.on .g,nav.rail .more.on .g,nav.rail .more[aria-expanded=true] .g{color:var(--accent)}
   nav.rail .rg .nav .n,nav.rail .more .n{position:absolute;top:4px;left:calc(50% + 6px);margin:0;min-width:18px;padding:0 5px}
-  nav.rail .rg .nav .n:not(.bad):not(.run){width:1px;height:1px;min-width:0;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  nav.rail .rg .nav .n .u{display:none}
+  nav.rail .rg .nav .n:not(.bad):not(.run):not(:has(.u)){width:1px;height:1px;min-width:0;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .rail-sheet:not([hidden]){display:block;position:fixed;left:0;right:0;bottom:calc(57px + env(safe-area-inset-bottom,0px));max-height:calc(100% - 120px);overflow-y:auto;padding:6px max(12px,env(safe-area-inset-right,0px)) 6px max(12px,env(safe-area-inset-left,0px));background:var(--panel);border:1px solid var(--line);border-bottom:0;border-radius:14px 14px 0 0;box-shadow:var(--shadow)}
   .rail-sheet .nav{min-height:48px;padding:10px 12px;border-bottom:1px solid var(--line-2);border-radius:0}
   .rail-sheet li:last-child .nav{border-bottom:0}
-  /* the open sheet and its shade cover the task dock, which would hide its last entries */
+  /* the open sheet and its shade cover the strip of the task dock */
   nav.rail.open{z-index:50}
   nav.rail.open::before{content:"";position:fixed;left:0;right:0;top:0;bottom:calc(57px + env(safe-area-inset-bottom,0px));background:rgba(6,11,22,.4)}
-  .tasks{left:calc(8px + env(safe-area-inset-left,0px));right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(65px + env(safe-area-inset-bottom,0px));width:auto}
-  .toast{bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+  .tasks{grid-column:1}
+  .toast{bottom:calc(72px + var(--dock-h,0px) + env(safe-area-inset-bottom,0px))}
   header.top{gap:8px}
-  .hostchip,.brand small,.realm label{display:none}
+  .hostchip,.brand small{display:none}
   /* the dot says live; the word shows when the page is not */
   .live:not(.off) span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   /* The tab strip of a cluster stays at the top while its tab scrolls: its
      fragment's box gives way, so that the strip sticks within the page. */
   .main>[sse-swap="pg-cluster-head"]{display:contents}
   .tabs{position:sticky;top:-16px;z-index:4;margin-top:-16px;padding-top:16px;background:var(--bg)}
-  /* A control that takes the focus scrolls clear of the bar and the dock
-     at the bottom, and of the tab strip that sticks at the top. */
-  .main{scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 73px + env(safe-area-inset-bottom,0px))}
+  /* A control that takes the focus scrolls clear of the tab strip that
+     sticks at the top. */
   .main:has(.tabs){scroll-padding-top:64px}
 }
 /* On a screen that is short, such as a phone on its side, the bar is one
@@ -280,12 +303,10 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   nav.rail .rg .nav .g,nav.rail .more .g{width:18px;height:18px}
   nav.rail .rg .nav .n,nav.rail .more .n{position:static}
   .rail-sheet:not([hidden]),nav.rail.open::before{bottom:calc(45px + env(safe-area-inset-bottom,0px))}
-  .tasks{bottom:calc(53px + env(safe-area-inset-bottom,0px))}
-  .main{scroll-padding-bottom:calc(min(var(--dock-h,0px),50vh) + 61px + env(safe-area-inset-bottom,0px))}
+  .app{padding-bottom:calc(45px + env(safe-area-inset-bottom,0px))}
 }
 @media (max-width:760px){
   .jump{order:5;flex-basis:100%;max-width:none}
-  .realm select{max-width:120px}
 }
 /* A table of class cards shows each row as a card on a phone: the name and
    the state on the first line, the other cells after it, each with its label
@@ -309,8 +330,11 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
   table.cards tr.click:hover{background:var(--hover)}
   table.cards tr td.c-chk,table.cards tr.click:hover td.c-chk{position:absolute;left:0;top:0;width:46px;height:48px;align-items:center;justify-content:center;cursor:pointer}
   table.cards .c-chk input{width:24px;height:24px;margin:0}
-  table.cards td.c-name{order:-2;flex:1 1 50%;font-size:var(--t-base);overflow-wrap:anywhere}
-  table.cards td.c-state{order:-1;margin-left:auto}
+  table.cards td.c-name{order:-2;flex:1 1 0;font-size:var(--t-base);overflow-wrap:anywhere}
+  table.cards td.c-state{order:-1;flex:0 1 auto;max-width:65%;justify-content:flex-end}
+  table.cards td.c-state .pill{white-space:normal}
+  /* the name and the state make the first line of a card */
+  table.cards tbody tr:has(> td.c-name)::after{content:"";order:-1;flex-basis:100%;height:0;margin-top:-6px}
   table.cards td.c-wide,table.cards td.c-act,table.cards td[colspan]{flex:1 1 100%}
   table.cards td[data-label]::before{content:attr(data-label);font:600 var(--t-xs) var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
   table.cards td.c-act{gap:8px}
@@ -321,13 +345,13 @@ pre.term .d{color:var(--term-dim)} pre.term .p{color:var(--term-prompt)} pre.ter
    tap anywhere in a table cell that holds only a checkbox ticks it. */
 @media (pointer:coarse){
   .iconbtn{min-width:44px;min-height:44px}
-  .jump,.realm select,.btn,.seg button,.tab,.nav,.cmd button{min-height:44px}
+  .jump,.btn,.seg button,.tab,.nav,.cmd button,.rail-rbtn{min-height:44px}
   .btn{justify-content:center}
   .tab{display:inline-flex;align-items:center}
   .cmd button{min-width:56px}
   input[type=checkbox],input[type=radio]{width:22px;height:22px}
   :is(td,th):has(>input[type=checkbox]:only-child){height:48px;cursor:pointer}
   table.cards td.c-act .btn{min-height:44px}
-  .brand,.skip{display:inline-flex;align-items:center;min-height:44px}
+  .brand:not(.chip),.skip{display:inline-flex;align-items:center;min-height:44px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

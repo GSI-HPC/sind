@@ -1,225 +1,386 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 
-/* Dialogs of the actions (dialogs.tmpl). Every rule sits below .scrim, so
-   that the names of the form parts, which the mock shares with other
-   screens, stay these dialogs' own; only the notices of the commands that
-   the dialogs start, which outlive them, are .act-notes. */
+/* Dialogs of the actions (dialogs.tmpl) and the page of New cluster
+   (act_page.tmpl). Every rule sits below .scrim or .act-page, so that the
+   names of the form parts, which the mock shares with other screens, stay
+   these forms' own. */
 
 /* --act-mf-h is the height of the footer, which act.js keeps: a field that
    gets the focus scrolls clear of the footer that sticks to the bottom of
    a small screen, above the padding of the scrim. */
 .scrim{position:fixed;inset:0;background:rgba(6,11,22,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow-y:auto;scroll-padding:12px 0 calc(var(--act-mf-h,64px) + 28px)}
-.scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line)}
+/* Every dialog is a column: the head, a body that scrolls, and the footer
+   with the status, the confirmation and the buttons, always in view. */
+.scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line);display:flex;flex-direction:column;max-height:calc(94vh - 32px)}
 .scrim .modal:focus{outline:none}
 .scrim .modal.wide{width:min(880px,100%)}
 .scrim .mh{padding:16px 18px 6px}
 .scrim .mtop{display:flex;gap:10px;align-items:flex-start}
 .scrim .mh h2{font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em;flex:1;min-width:0;overflow-wrap:anywhere}
 .scrim .mh p{margin:4px 0 0;color:var(--muted)}
-.scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
-.scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.scrim .mb{padding:10px 18px 16px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0;min-height:0;flex:1 1 auto;overflow-y:auto;align-content:start}
+.scrim .mf{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2);flex:none}
+/* The name or number to type sits in the footer, on a line above the
+   buttons that it guards; why the button stays off shows once the user typed. */
+:is(.scrim,.act-page) .act-confirm{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:var(--t-md)}
+.scrim .act-confirm{flex-basis:100%;order:-1}
+:is(.scrim,.act-page) .act-confirm:has(#act-confirm-word:empty){display:none}
+:is(.scrim,.act-page) .act-confirm label{font-weight:500}
+:is(.scrim,.act-page) .act-confirm input{width:9em;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono)}
+.scrim .mf>.act-why{flex-basis:100%;text-align:right;order:9;margin-top:-2px}
+.scrim .mf:has(#act-confirm:placeholder-shown)>.act-why{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The button that runs the command shows its key, Ctrl+Enter or on macOS
    Cmd+Enter, where there is a keyboard. */
-.scrim .act-kbd{margin-left:2px;background:transparent;color:inherit;border-color:currentColor;opacity:.7}
-.scrim .act-k-cmd,.act-mac .scrim .act-k-ctrl{display:none}
-.act-mac .scrim .act-k-cmd{display:inline}
-@media (hover:none) and (pointer:coarse){.scrim .act-kbd{display:none}}
+:is(.scrim,.act-page) .act-kbd{margin-left:2px;background:transparent;color:inherit;border-color:currentColor;opacity:.7}
+:is(.scrim,.act-page) .act-k-cmd,.act-mac :is(.scrim,.act-page) .act-k-ctrl{display:none}
+.act-mac :is(.scrim,.act-page) .act-k-cmd{display:inline}
+@media (hover:none) and (pointer:coarse){:is(.scrim,.act-page) .act-kbd{display:none}}
 
 /* The question before a close loses changes takes the place of the
    footer; the draft bar sits below the heading. */
-.scrim .act-ask{background:var(--warn-soft);border-radius:0 0 10px 10px}
-.scrim .act-askq{flex:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:min(100%,240px)}
-.scrim .act-draftbar{margin:0 18px 10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
-.scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
-.scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
-.scrim .fld label,.scrim .fld .lbl{font-size:var(--t-md);font-weight:500}
-.scrim .fld input[type=text],.scrim .fld input[type=number],.scrim .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono);width:100%}
-.scrim .act-missing{margin:0;font-size:var(--t-md)}
-.scrim .checks{display:grid;gap:8px}
-.scrim .checks label{display:flex;gap:8px;align-items:flex-start}
-.scrim .checks small{color:var(--muted);display:block}
-.scrim .checks.act-nodes label{flex-wrap:wrap}
-.scrim .checks.act-nodes{grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))}
-.scrim .checks.act-nodes small{display:inline}
-/* Power and drain: the actions in groups, the ones that can lose data
-   apart, and the reason of a drain only while Drain is picked. */
-.scrim fieldset.act-ops{border:0;margin:0;padding:0}
-.scrim fieldset.act-ops legend{padding:0;margin-bottom:6px}
-.scrim fieldset.act-danger{border:1px solid var(--bad);border-radius:var(--r);padding:8px 10px 10px;background:var(--bad-soft)}
-.scrim fieldset.act-danger legend{color:var(--bad);padding:0 4px;margin-bottom:0}
-.scrim .act-reason{display:none;margin-top:8px}
-.scrim form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
-/* What a delete removes and keeps, and the line about new workers. */
-.scrim .act-list ul,.scrim .act-probs ul{margin:4px 0 0;padding-left:18px}
-.scrim .act-list li{overflow-wrap:anywhere}
-.scrim .act-sum{margin:0;font-weight:500}
+:is(.scrim,.act-page) .act-ask{background:var(--warn-soft);border-radius:0 0 10px 10px}
+:is(.scrim,.act-page) .act-askq{flex:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:min(100%,240px)}
+:is(.scrim,.act-page) .act-draftbar{margin:0 18px 10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+:is(.scrim,.act-page) .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
+:is(.scrim,.act-page) .fld{display:grid;gap:5px;min-width:0;align-content:start}
+:is(.scrim,.act-page) .fld label,:is(.scrim,.act-page) .fld .lbl{font-size:var(--t-md);font-weight:500}
+:is(.scrim,.act-page) .fld input[type=text],:is(.scrim,.act-page) .fld input[type=number],:is(.scrim,.act-page) .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono);width:100%}
+:is(.scrim,.act-page) .act-missing{margin:0;font-size:var(--t-md)}
+:is(.scrim,.act-page) .checks{display:grid;gap:8px}
+:is(.scrim,.act-page) .checks label{display:flex;gap:8px;align-items:flex-start}
+:is(.scrim,.act-page) .checks small{color:var(--muted);display:block}
+/* Power and drain. A short confirmation names the nodes, with the other
+   actions folded away; the picker has the action segment in groups, the
+   ones that can lose data in red, the quick picks, the node set and the
+   table of the nodes, which scrolls inside the dialog. The reason of a
+   drain shows only while Drain is picked. */
+:is(.scrim,.act-page) .act-power{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+:is(.scrim,.act-page) .act-target{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+:is(.scrim,.act-page) .act-tl{list-style:none;margin:0;padding:0;flex:1;min-width:0;display:grid;gap:4px}
+:is(.scrim,.act-page) .act-tl li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+:is(.scrim,.act-page) .act-why2{font-size:var(--t-sm)}
+/* A word of a command breaks only where it does not fit a line. */
+:is(.scrim,.act-page) .act-cw{display:inline-block;max-width:100%}
+/* Each command of the Runs block is a line of its own, which, when it
+   wraps, goes on indented under its first word. */
+:is(.scrim,.act-page) .cmd code.act-cls{text-indent:0}
+:is(.scrim,.act-page) .act-cl{display:block;padding-left:2ch;text-indent:-2ch}
+:is(.scrim,.act-page) .act-cl::before{content:"$ ";color:var(--term-prompt);user-select:none}
+:is(.scrim,.act-page) .act-cl .act-cw{text-indent:0}
+:is(.scrim,.act-page) .act-other{border:1px solid var(--line-2);border-radius:var(--r);padding:8px 12px}
+:is(.scrim,.act-page) .act-other>summary{cursor:pointer;display:flex;align-items:center;gap:8px;min-width:0}
+:is(.scrim,.act-page) .act-other>summary .pg-caret{flex:none;margin-left:-2px;transform:rotate(-90deg);transition:transform .15s}
+:is(.scrim,.act-page) .act-other[open]>summary .pg-caret{transform:none}
+:is(.scrim,.act-page) .act-other>summary b{white-space:nowrap}
+:is(.scrim,.act-page) .act-otherops{font-size:var(--t-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+:is(.scrim,.act-page) .act-other[open]>summary{margin-bottom:10px}
+:is(.scrim,.act-page) .act-other[open] .act-otherops{display:none}
+:is(.scrim,.act-page) fieldset.act-opseg{border:0;margin:0;padding:0;min-width:0}
+:is(.scrim,.act-page) fieldset.act-opseg legend{padding:0;margin-bottom:6px}
+:is(.scrim,.act-page) .act-opsrow{display:flex;flex-wrap:wrap;gap:8px 12px}
+:is(.scrim,.act-page) .act-og{display:grid;gap:3px}
+:is(.scrim,.act-page) .act-ogl{font-size:var(--t-xs);color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+:is(.scrim,.act-page) .act-og .act-seg{flex-wrap:wrap}
+:is(.scrim,.act-page) .act-og.danger .act-ogl{color:var(--bad)}
+:is(.scrim,.act-page) .act-og.danger .act-seg{border-color:var(--bad)}
+:is(.scrim,.act-page) .act-og.danger .act-seg label{border-color:var(--bad)}
+:is(.scrim,.act-page) .act-og.danger .act-seg span{color:var(--bad)}
+:is(.scrim,.act-page) .act-og.danger .act-seg input:checked+span{background:var(--bad-soft);box-shadow:inset 0 -2px 0 var(--bad)}
+:is(.scrim,.act-page) .act-seg label.off span{color:var(--faint);text-decoration:line-through;text-decoration-color:var(--deco)}
+:is(.scrim,.act-page) .act-seg label:has(input:disabled){cursor:not-allowed}
+:is(.scrim,.act-page) .act-offs{margin:6px 0 0}
+:is(.scrim,.act-page) .act-reason{display:none}
+:is(.scrim,.act-page) form:has(input[name=op][value=drain]:checked) .act-reason{display:grid}
+:is(.scrim,.act-page) .act-pick{display:grid;gap:6px}
+/* Connect: the realms to switch to, and the containers to pick one from,
+   each with its image, networks and uptime; one that does not run is
+   off, and Another name shows its field once picked. */
+:is(.scrim,.act-page) .act-realms{justify-self:start}
+:is(.scrim,.act-page) .act-realms button{padding:5px 12px;border:0;background:none;color:var(--fg);font:inherit;cursor:pointer}
+:is(.scrim,.act-page) .act-realms button+button{border-left:1px solid var(--line)}
+:is(.scrim,.act-page) .act-realms button.on{background:var(--accent-soft);box-shadow:inset 0 -2px 0 var(--accent);font-weight:600}
+:is(.scrim,.act-page) .act-outs{border:0;margin:0;padding:0;min-width:0}
+:is(.scrim,.act-page) .act-olist{display:grid;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+:is(.scrim,.act-page) .act-orow{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer}
+:is(.scrim,.act-page) .act-olist>*+*{border-top:1px solid var(--line-2)}
+:is(.scrim,.act-page) .act-orow:hover{background:var(--hover)}
+:is(.scrim,.act-page) .act-orow:has(input:checked){background:var(--accent-soft)}
+:is(.scrim,.act-page) .act-orow:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+:is(.scrim,.act-page) .act-orow input{margin:0}
+:is(.scrim,.act-page) .act-on{display:grid;gap:1px;min-width:0}
+:is(.scrim,.act-page) .act-on small{color:var(--muted);font-size:var(--t-sm);overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-orow.off{cursor:not-allowed;color:var(--faint)}
+:is(.scrim,.act-page) .act-orow.off:hover{background:none}
+:is(.scrim,.act-page) .act-orow.off small{color:var(--faint)}
+:is(.scrim,.act-page) .act-outs .act-oother input.act-oname{display:none;box-sizing:border-box;margin:0 12px 10px 40px;width:calc(100% - 52px);padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono)}
+:is(.scrim,.act-page) .act-oother:has(#act-other-pick:checked){background:var(--accent-soft)}
+:is(.scrim,.act-page) .act-outs .act-oother:has(#act-other-pick:checked) input.act-oname{display:block}
+:is(.scrim,.act-page) .act-oother .act-orow:has(input:checked){background:none}
+/* Add workers: the clusters to pick from, by realm, and the cluster that
+   it adds to, with Change. */
+:is(.scrim,.act-page) .act-cls{display:grid;gap:10px;max-height:min(360px,46vh);overflow-y:auto}
+:is(.scrim,.act-page) .act-clg{display:grid;border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden}
+:is(.scrim,.act-page) .act-clg>.act-ogl{padding:6px 12px 4px;background:var(--panel-2)}
+:is(.scrim,.act-page) .act-crow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:8px 12px;border:0;border-top:1px solid var(--line-2);background:var(--panel);color:var(--fg);font:inherit;text-align:left;cursor:pointer}
+:is(.scrim,.act-page) .act-crow:hover:not(:disabled){background:var(--hover)}
+:is(.scrim,.act-page) .act-crow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+:is(.scrim,.act-page) .act-crow:disabled{cursor:not-allowed;color:var(--faint)}
+:is(.scrim,.act-page) .act-crow:disabled .pill{opacity:.8}
+:is(.scrim,.act-page) .act-crn{display:grid;gap:2px;min-width:0}
+:is(.scrim,.act-page) .act-crn small{color:var(--muted);font-size:var(--t-sm)}
+:is(.scrim,.act-page) .act-crow:disabled small{color:var(--faint)}
+:is(.scrim,.act-page) .act-ctarget .act-crn{flex:1 1 16em}
+:is(.scrim,.act-page) .act-ph2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px}
+:is(.scrim,.act-page) .act-picks{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+:is(.scrim,.act-page) .act-qn{font:var(--t-xs) var(--f-mono);color:var(--faint);margin-left:2px}
+:is(.scrim,.act-page) .act-qn.bad{color:var(--bad);font-weight:600}
+:is(.scrim,.act-page) #act-nodeset{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md) var(--f-mono);width:100%}
+:is(.scrim,.act-page) .act-pick:has(#act-nodeset-err:not(:empty)) #act-nodeset{border-color:var(--bad)}
+/* The node table grows in the body of the dialog, which scrolls; its head
+   sticks at the top of the body. */
+:is(.scrim,.act-page) .act-nt{border:1px solid var(--line-2);border-radius:var(--r);margin-top:4px}
+:is(.scrim,.act-page) .act-ntab{width:100%;border-collapse:collapse;font-size:var(--t-md)}
+:is(.scrim,.act-page) .act-ntab th{position:sticky;top:-10px;background:var(--panel-2);text-align:left;font-size:var(--t-xs);font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line-2);z-index:1}
+:is(.scrim,.act-page) .act-ntab th:first-child{border-top-left-radius:var(--r)}
+:is(.scrim,.act-page) .act-ntab th:last-child{border-top-right-radius:var(--r)}
+:is(.scrim,.act-page) .act-ntab td{padding:5px 8px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+:is(.scrim,.act-page) .act-ntab tr:last-child td{border-bottom:0}
+:is(.scrim,.act-page) .act-ntab td:first-child,:is(.scrim,.act-page) .act-ntab th:first-child{width:28px;padding-right:0}
+:is(.scrim,.act-page) .act-ntab label{cursor:pointer;white-space:nowrap}
+:is(.scrim,.act-page) .act-ntab tr:has(input:checked){background:var(--accent-soft)}
+/* What a delete removes and keeps, side by side, what stays as an action
+   runs, and the line about new workers. */
+:is(.scrim,.act-page) .act-gs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:10px;align-items:start}
+:is(.scrim,.act-page) .act-stays{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+:is(.scrim,.act-page) .act-stays li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px}
+:is(.scrim,.act-page) .act-list ul,:is(.scrim,.act-page) .act-probs ul{margin:4px 0 0;padding-left:18px}
+:is(.scrim,.act-page) .act-list li{overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-sum{margin:0;font-weight:500}
 /* The preview at work. */
-.scrim .act-checking{margin-right:auto;align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
-.scrim .act-checking.htmx-request{visibility:visible}
-/* The clusters that a delete of several removes. */
-.scrim .act-clusters{display:grid;gap:6px;margin:0;padding:0;list-style:none;max-height:40vh;overflow-y:auto}
-.scrim .act-clusters li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:6px 10px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
-.scrim .act-clusters small{color:var(--muted)}
-.scrim .err{font-size:var(--t-sm);color:var(--bad)}
-.scrim .err:empty,.scrim .act-why:empty,.scrim .act-rows:empty,.scrim .act-lims:empty{display:none}
-.scrim .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),.scrim .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}
+:is(.scrim,.act-page) .act-checking{align-self:center;font-size:var(--t-sm);color:var(--muted);visibility:hidden}
+:is(.scrim,.act-page) .act-checking.htmx-request{visibility:visible}
+/* What a delete of clusters or of a realm removes and keeps, a row for
+   each cluster: the data volumes that go in red, what stays in green;
+   then the box that confirms the data loss. */
+:is(.scrim,.act-page) .act-lw{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+:is(.scrim,.act-page) .act-loss{width:100%;border-collapse:collapse;font-size:var(--t-md)}
+:is(.scrim,.act-page) .act-loss th{padding:7px 10px;background:var(--panel-2);text-align:left;font-size:var(--t-xs);font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line-2)}
+:is(.scrim,.act-page) .act-loss td{padding:8px 10px;vertical-align:top;border-bottom:1px solid var(--line-2);overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-loss tr:last-child td{border-bottom:0}
+:is(.scrim,.act-page) .act-loss td>*{display:block}
+:is(.scrim,.act-page) .act-loss small{color:var(--muted);font-size:var(--t-sm)}
+:is(.scrim,.act-page) .act-lc{width:22%}
+:is(.scrim,.act-page) .act-ls{width:28%}
+:is(.scrim,.act-page) .act-lbad{color:var(--bad);font-weight:500}
+:is(.scrim,.act-page) .act-lok{color:var(--ok)}
+:is(.scrim,.act-page) .act-also{margin:0}
+:is(.scrim,.act-page) .act-ack{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:var(--t-md)}
+:is(.scrim,.act-page) .act-ack input{width:16px;height:16px;margin:3px 0 0;flex:none;accent-color:var(--accent)}
+:is(.scrim,.act-page) .err{font-size:var(--t-sm);color:var(--bad)}
+:is(.scrim,.act-page) .err:empty,:is(.scrim,.act-page) .act-why:empty,:is(.scrim,.act-page) .act-rows:empty,:is(.scrim,.act-page) .act-lims:empty{display:none}
+:is(.scrim,.act-page) .fld:has(>.err:not(:empty)) :is(input[type=text],input[type=number],select),:is(.scrim,.act-page) .fld:has(>.err:not(:empty)) .act-step{border-color:var(--bad)}
 
-/* New cluster: the fields at the left, the plan at the right, the footer
-   always in view. */
-.scrim .modal.split{display:flex;flex-direction:column;max-height:calc(94vh - 32px)}
-.scrim .modal.split .mb{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;padding:0;min-height:0;flex:1;border-top:1px solid var(--line-2)}
-.scrim .act-form{overflow-y:auto;padding:14px 18px 18px;display:grid;gap:14px;align-content:start;min-width:0}
-.scrim .act-planpane{overflow-y:auto;background:var(--panel-2);border-left:1px solid var(--line-2);padding:14px;min-width:0}
-.scrim .act-planpane .stack{gap:12px;grid-template-columns:minmax(0,1fr)}
-.scrim .act-wide{grid-column:span 2}
-.scrim .act-roles{border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.scrim .act-nr{display:grid;grid-template-columns:18px 12px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line-2)}
-.scrim .act-roles>.act-nr:first-child{border-top:0}
-.scrim label.act-nr{cursor:pointer}
-.scrim .act-nr.sub{padding-left:28px;background:var(--panel-2)}
-.scrim .act-nr.act-box{grid-template-columns:18px minmax(0,1fr);border:1px solid var(--line);border-radius:8px}
-.scrim .act-nr input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
-.scrim .act-lab{display:grid;gap:1px;min-width:0}
-.scrim .act-lab b{font:600 var(--t-md) var(--f-mono)}
-.scrim .act-lab small{font:400 var(--t-sm) var(--f-mono);color:var(--faint)}
-.scrim .act-lab>label{cursor:pointer}
-.scrim .act-nr:has(input[type=checkbox]:not(:checked)) .act-sq{opacity:.4}
-.scrim .act-sq{width:12px;height:12px;border-radius:3px;background:var(--deco)}
-.scrim .act-sq.controller{background:var(--brand)}
-.scrim .act-sq.backup{background:var(--brand-2)}
-.scrim .act-sq.worker{background:var(--brand-sky)}
-.scrim .act-always{font-size:var(--t-sm);font-weight:600;color:var(--brand-ink);border:1px solid var(--brand);border-radius:99px;padding:1px 8px}
-.scrim .act-step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
-.scrim .act-step button{width:28px;height:28px;border:0;background:none;cursor:pointer;font-size:var(--t-lg);color:var(--fg)}
-.scrim .act-step input[type=number]{width:52px;text-align:center;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);border-radius:0;padding:5px 2px;background:var(--panel);font:var(--t-md) var(--f-mono);-moz-appearance:textfield;appearance:textfield}
-.scrim .act-step input::-webkit-inner-spin-button,.scrim .act-step input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-.scrim .act-nr:has(.err:not(:empty)) .act-step{border-color:var(--bad)}
-.scrim .act-seg{align-self:start}
-.scrim .act-seg label{position:relative;display:flex;cursor:pointer;border-right:1px solid var(--line)}
-.scrim .act-seg label:last-child{border-right:0}
-.scrim .act-seg input{position:absolute;opacity:0;width:1px;height:1px}
-.scrim .act-seg span{padding:5px 10px;color:var(--muted);font-size:var(--t-md)}
-.scrim .act-seg input:checked+span{background:var(--accent-soft);color:var(--fg);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
-.scrim .act-seg input:checked+span::before{content:"✓ "}
-.scrim .act-seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:-2px}
-.scrim input[readonly]{opacity:.55}
-.scrim .act-groups{display:contents}
-.scrim .act-cz{border:1px solid var(--line);border-radius:99px;background:var(--panel);padding:2px 9px;font:var(--t-sm) var(--f-mono);color:var(--muted);cursor:pointer;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
-.scrim .act-cz .own{color:var(--accent);font-weight:600}
-.scrim .act-cz::after{content:" ▾"}
-.scrim .act-cz[aria-expanded=true]::after{content:" ▴"}
-.scrim .act-nr:has(>input[type=checkbox]:not(:checked)) .act-cz{visibility:hidden}
-.scrim .act-nr:has(>input[type=checkbox]:not(:checked))+.act-ned{display:none}
-.scrim .act-ned{display:grid;gap:8px;padding:10px 12px 12px 40px;border-top:1px dashed var(--line-2);background:var(--panel-2)}
-.scrim .act-edg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.scrim .act-edg label{font-size:var(--t-sm)}
-.scrim .act-full{grid-column:1/-1}
-.scrim .act-more>summary{cursor:pointer;font-size:var(--t-md);color:var(--muted)}
-.scrim .act-more[open]>summary{margin-bottom:8px}
-.scrim .act-more .act-edg{grid-template-columns:repeat(2,minmax(0,1fr))}
-.scrim .act-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
-.scrim .act-ned .act-inline{margin-top:0;justify-content:space-between}
-.scrim .act-k{display:inline-flex;gap:4px;align-items:center}
-.scrim .act-x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:var(--t-md);padding:4px 6px;border-radius:var(--r)}
-.scrim .act-x:hover{color:var(--bad)}
-.scrim .act-groups:not(:has(.act-wgrow~.act-wgrow)) .act-x{display:none}
-.scrim .act-size{display:grid;gap:8px}
-.scrim .act-sizes span{display:grid;line-height:1.3}
-.scrim .act-sizes small{font:var(--t-xs) var(--f-mono);color:var(--faint);font-weight:400}
-.scrim .act-sizes input:checked+span::before,.scrim .act-stabs input:checked+span::before{content:none}
-.scrim .act-size:not(:has(input[name=size][value=x]:checked)) .act-custom{display:none}
-.scrim .act-sec{border:1px solid var(--line);border-radius:8px;min-width:0}
-.scrim .act-sec>summary{display:flex;gap:8px;align-items:baseline;padding:8px 10px;cursor:pointer;list-style:none}
-.scrim .act-sec>summary::-webkit-details-marker{display:none}
-.scrim .act-sec>summary::before{content:"▸";color:var(--muted);width:10px}
-.scrim .act-sec[open]>summary::before{content:"▾"}
-.scrim .act-st{font-weight:600;white-space:nowrap}
-.scrim .act-ss{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:var(--t-sm) var(--f-mono)}
-.scrim .act-sb{color:var(--bad);font-size:var(--t-sm);font-weight:600;white-space:nowrap}
-.scrim .act-waits{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.scrim .act-waits input[type=text]{width:120px}
-.scrim .act-waits:not(:has(input[value=other]:checked)) input[type=text]{display:none}
-.scrim .act-sbody{display:grid;gap:10px;padding:10px 10px 12px;border-top:1px solid var(--line-2)}
-.scrim .act-rows{display:grid;gap:6px}
-.scrim .act-row{display:grid;gap:4px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2)}
-.scrim .act-rowf{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:6px;align-items:center}
-.scrim #act-rows-group .act-rowf,.scrim #act-rows-account>.act-row>.act-rowf,.scrim .act-lim{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
-.scrim .act-rowf input,.scrim .act-rowf select{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);font:var(--t-md) var(--f-mono);width:100%;min-width:0}
-.scrim .act-row .act-more .fld input,.scrim .act-row .act-more .fld select{background:var(--panel)}
-.scrim .act-lims{display:grid;gap:4px;padding-left:14px}
-.scrim .act-row>.btn.sm{justify-self:start}
-.scrim [aria-invalid=true]{border-color:var(--bad)}
-.scrim .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
-.scrim .act-sl{display:none}
-.scrim .act-yamled{display:grid;gap:8px}
-.scrim .act-yamlbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.scrim .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
-/* In YAML mode the editor takes the place of the form, but for the name
-   and the realm, which stay beside it, and the run options. */
-.scrim .act-form.act-yamlmode>:not(#act-yamled,#act-sec-run,.act-idrow){display:none}
-.scrim .act-yamlstart{margin-top:0}
-.scrim .act-yamlhead{margin-top:0;justify-content:space-between}
-.scrim .act-yamled textarea.act-drop{border-color:var(--accent);outline:2px dashed var(--accent)}
-.scrim .act-tools{display:flex;gap:8px;flex-wrap:wrap}
-.scrim .act-dot{color:var(--accent);font-weight:700}
-.scrim .act-stabs{max-width:100%;overflow-x:auto}
-.scrim .act-stabs label>span{padding:4px 8px;white-space:nowrap}
-.scrim .act-slurm:has(input[name=stab][value=main]:checked) .act-sl-main,
-.scrim .act-slurm:has(input[name=stab][value=cgroup]:checked) .act-sl-cgroup,
-.scrim .act-slurm:has(input[name=stab][value=gres]:checked) .act-sl-gres,
-.scrim .act-slurm:has(input[name=stab][value=topology]:checked) .act-sl-topology,
-.scrim .act-slurm:has(input[name=stab][value=plugstack]:checked) .act-sl-plugstack,
-.scrim .act-slurm:has(input[name=stab][value=slurmdbd]:checked) .act-sl-slurmdbd{display:grid}
-.scrim .act-ids:not(:has(input[name=identity][value=clientIds]:checked)) .act-ctlusers{display:none}
+/* The form of New cluster, on its page. */
+:is(.scrim,.act-page) .act-wide{grid-column:span 2}
+:is(.scrim,.act-page) .act-roles{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+:is(.scrim,.act-page) .act-nr{display:grid;grid-template-columns:18px 12px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line-2)}
+:is(.scrim,.act-page) .act-roles>.act-nr:first-child{border-top:0}
+:is(.scrim,.act-page) label.act-nr{cursor:pointer}
+:is(.scrim,.act-page) .act-nr.sub{padding-left:28px;background:var(--panel-2)}
+:is(.scrim,.act-page) .act-nr.act-box{grid-template-columns:18px minmax(0,1fr);border:1px solid var(--line);border-radius:8px}
+:is(.scrim,.act-page) .act-nr input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
+:is(.scrim,.act-page) .act-lab{display:grid;gap:1px;min-width:0}
+:is(.scrim,.act-page) .act-lab b{font:600 var(--t-md) var(--f-mono)}
+/* The label of a checkbox is a word, not a name. */
+:is(.scrim,.act-page) .act-box .act-lab b{font-family:var(--f-body)}
+:is(.scrim,.act-page) .act-lab small{font:400 var(--t-sm) var(--f-mono);color:var(--faint)}
+:is(.scrim,.act-page) .act-lab>label{cursor:pointer}
+:is(.scrim,.act-page) .act-nr:has(input[type=checkbox]:not(:checked)) .act-sq{opacity:.4}
+:is(.scrim,.act-page) .act-sq{width:12px;height:12px;border-radius:3px;background:var(--deco)}
+:is(.scrim,.act-page) .act-sq.controller{background:var(--brand)}
+:is(.scrim,.act-page) .act-sq.backup{background:var(--brand-2)}
+:is(.scrim,.act-page) .act-sq.worker{background:var(--brand-sky)}
+:is(.scrim,.act-page) .act-always{font-size:var(--t-sm);font-weight:600;color:var(--brand-ink);border:1px solid var(--brand);border-radius:99px;padding:1px 8px}
+:is(.scrim,.act-page) .act-step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+:is(.scrim,.act-page) .act-step button{width:28px;height:28px;border:0;background:none;cursor:pointer;font-size:var(--t-lg);color:var(--fg)}
+:is(.scrim,.act-page) .act-step input[type=number]{width:52px;text-align:center;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);border-radius:0;padding:5px 2px;background:var(--panel);font:var(--t-md) var(--f-mono);-moz-appearance:textfield;appearance:textfield}
+:is(.scrim,.act-page) .act-step input::-webkit-inner-spin-button,:is(.scrim,.act-page) .act-step input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+:is(.scrim,.act-page) .act-nr:has(.err:not(:empty)) .act-step{border-color:var(--bad)}
+:is(.scrim,.act-page) .act-seg{align-self:start}
+:is(.scrim,.act-page) .act-seg label{position:relative;display:flex;cursor:pointer;border-right:1px solid var(--line)}
+:is(.scrim,.act-page) .act-seg label:last-child{border-right:0}
+:is(.scrim,.act-page) .act-seg input{position:absolute;opacity:0;width:1px;height:1px}
+:is(.scrim,.act-page) .act-seg span{padding:5px 10px;color:var(--muted);font-size:var(--t-md)}
+:is(.scrim,.act-page) .act-seg input:checked+span{background:var(--accent-soft);color:var(--fg);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
+:is(.scrim,.act-page) .act-seg input:checked+span::before{content:"✓ "}
+:is(.scrim,.act-page) .act-seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:-2px}
+:is(.scrim,.act-page) input[readonly]{opacity:.55}
+:is(.scrim,.act-page) .act-groups{display:contents}
+:is(.scrim,.act-page) .act-cz{border:1px solid var(--line);border-radius:99px;background:var(--panel);padding:2px 9px;font:var(--t-sm) var(--f-mono);color:var(--muted);cursor:pointer;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+:is(.scrim,.act-page) .act-cz .own{color:var(--accent);font-weight:600}
+:is(.scrim,.act-page) .act-cz::after{content:" ▾"}
+:is(.scrim,.act-page) .act-cz[aria-expanded=true]::after{content:" ▴"}
+:is(.scrim,.act-page) .act-nr:has(>input[type=checkbox]:not(:checked)) .act-cz{visibility:hidden}
+:is(.scrim,.act-page) .act-nr:has(>input[type=checkbox]:not(:checked))+.act-ned{display:none}
+:is(.scrim,.act-page) .act-ned{display:grid;gap:8px;padding:10px 12px 12px 40px;border-top:1px dashed var(--line-2);background:var(--panel-2)}
+:is(.scrim,.act-page) .act-edg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+:is(.scrim,.act-page) .act-edg label{font-size:var(--t-sm)}
+:is(.scrim,.act-page) .act-full{grid-column:1/-1}
+:is(.scrim,.act-page) .act-more>summary{cursor:pointer;font-size:var(--t-md);color:var(--muted)}
+:is(.scrim,.act-page) .act-more[open]>summary{margin-bottom:8px}
+:is(.scrim,.act-page) .act-more .act-edg{grid-template-columns:repeat(2,minmax(0,1fr))}
+:is(.scrim,.act-page) .act-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
+:is(.scrim,.act-page) .act-ned .act-inline{margin-top:0;justify-content:space-between}
+:is(.scrim,.act-page) .act-k{display:inline-flex;gap:4px;align-items:center}
+:is(.scrim,.act-page) .act-x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:var(--t-md);padding:4px 6px;border-radius:var(--r)}
+:is(.scrim,.act-page) .act-x:hover{color:var(--bad)}
+:is(.scrim,.act-page) .act-groups:not(:has(.act-wgrow~.act-wgrow)) .act-x{display:none}
+:is(.scrim,.act-page) .act-size{display:grid;gap:8px}
+:is(.scrim,.act-page) .act-sizes span{display:grid;line-height:1.3}
+:is(.scrim,.act-page) .act-sizes small{font:var(--t-xs) var(--f-mono);color:var(--faint);font-weight:400}
+:is(.scrim,.act-page) .act-sizes input:checked+span::before,:is(.scrim,.act-page) .act-stabs input:checked+span::before{content:none}
+:is(.scrim,.act-page) .act-size:not(:has(input[name=size][value=x]:checked)) .act-custom{display:none}
+:is(.scrim,.act-page) .act-sec{border:1px solid var(--line);border-radius:8px;min-width:0}
+:is(.scrim,.act-page) .act-sec>summary{display:flex;gap:8px;align-items:baseline;padding:8px 10px;cursor:pointer;list-style:none}
+:is(.scrim,.act-page) .act-sec>summary::-webkit-details-marker{display:none}
+:is(.scrim,.act-page) .act-sec>summary::before{content:"▸";color:var(--muted);width:10px}
+:is(.scrim,.act-page) .act-sec[open]>summary::before{content:"▾"}
+:is(.scrim,.act-page) .act-st{font-weight:600;white-space:nowrap}
+:is(.scrim,.act-page) .act-ss{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:var(--t-sm) var(--f-mono)}
+:is(.scrim,.act-page) .act-sb{color:var(--bad);font-size:var(--t-sm);font-weight:600;white-space:nowrap}
+:is(.scrim,.act-page) .act-waits{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+:is(.scrim,.act-page) .act-waits input[type=text]{width:120px}
+:is(.scrim,.act-page) .act-waits:not(:has(input[value=other]:checked)) input[type=text]{display:none}
+:is(.scrim,.act-page) .act-sbody{display:grid;gap:10px;padding:10px 10px 12px;border-top:1px solid var(--line-2)}
+:is(.scrim,.act-page) .act-rows{display:grid;gap:6px}
+:is(.scrim,.act-page) .act-row{display:grid;gap:4px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2)}
+:is(.scrim,.act-page) .act-rowf{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:6px;align-items:center}
+:is(.scrim,.act-page) #act-rows-group .act-rowf,:is(.scrim,.act-page) #act-rows-account>.act-row>.act-rowf,:is(.scrim,.act-page) .act-lim{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+:is(.scrim,.act-page) .act-rowf input,:is(.scrim,.act-page) .act-rowf select{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);font:var(--t-md) var(--f-mono);width:100%;min-width:0}
+:is(.scrim,.act-page) .act-row .act-more .fld input,:is(.scrim,.act-page) .act-row .act-more .fld select{background:var(--panel)}
+:is(.scrim,.act-page) .act-lims{display:grid;gap:4px;padding-left:14px}
+:is(.scrim,.act-page) .act-row>.btn.sm{justify-self:start}
+:is(.scrim,.act-page) [aria-invalid=true]{border-color:var(--bad)}
+:is(.scrim,.act-page) .act-sec textarea{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.45 var(--f-mono);width:100%;resize:vertical;min-height:110px}
+:is(.scrim,.act-page) .act-sl{display:none}
+:is(.scrim,.act-page) .act-yamled{display:grid;gap:8px}
+:is(.scrim,.act-page) .act-yamlbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+:is(.scrim,.act-page) .act-yamled textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-md)/1.5 var(--f-mono);width:100%;resize:vertical;min-height:360px;tab-size:2}
+:is(.scrim,.act-page) .act-retry-yaml{margin:0}
+:is(.scrim,.act-page) .act-yamlstart{margin-top:0}
+:is(.scrim,.act-page) .act-yamlhead{margin-top:0;justify-content:space-between}
+:is(.scrim,.act-page) .act-yamled textarea.act-drop{border-color:var(--accent);outline:2px dashed var(--accent)}
+:is(.scrim,.act-page) .act-tools{display:flex;gap:8px;flex-wrap:wrap}
+:is(.scrim,.act-page) .act-dot{color:var(--accent);font-weight:700}
+:is(.scrim,.act-page) .act-stabs{max-width:100%;overflow-x:auto}
+:is(.scrim,.act-page) .act-stabs label>span{padding:4px 8px;white-space:nowrap}
+:is(.scrim,.act-page) .act-slurm:has(input[name=stab][value=main]:checked) .act-sl-main,
+:is(.scrim,.act-page) .act-slurm:has(input[name=stab][value=cgroup]:checked) .act-sl-cgroup,
+:is(.scrim,.act-page) .act-slurm:has(input[name=stab][value=gres]:checked) .act-sl-gres,
+:is(.scrim,.act-page) .act-slurm:has(input[name=stab][value=topology]:checked) .act-sl-topology,
+:is(.scrim,.act-page) .act-slurm:has(input[name=stab][value=plugstack]:checked) .act-sl-plugstack,
+:is(.scrim,.act-page) .act-slurm:has(input[name=stab][value=slurmdbd]:checked) .act-sl-slurmdbd{display:grid}
+:is(.scrim,.act-page) .act-ids:not(:has(input[name=identity][value=clientIds]:checked)) .act-ctlusers{display:none}
 
 /* The plan pane. */
-.scrim .act-meter{display:grid;gap:2px}
-.scrim .act-meter meter{width:100%;height:8px}
-.scrim .act-ph{display:flex;align-items:center;gap:8px}
-.scrim .act-ph h3{flex:1;margin:0}
-.scrim .act-probs a{color:var(--bad);font-weight:600}
-.scrim .act-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:5px}
-.scrim .act-tile{border:1px solid var(--line);border-left:4px solid var(--deco);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 var(--t-sm) var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.scrim .act-tile.controller{border-left-color:var(--brand)}
-.scrim .act-tile.controller-backup{border-left-color:var(--brand-2);border-left-style:dashed}
-.scrim .act-tile.worker{border-left-color:var(--brand-sky)}
-.scrim .act-tile.more{border-left-color:var(--line);color:var(--muted);font-weight:400}
-.scrim .act-planpane .callout{overflow-wrap:anywhere}
-.scrim .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
-.scrim .act-yaml,.scrim .act-after,.scrim .act-confpre{max-height:320px;margin:0;overflow:auto}
-.scrim .act-conf{display:grid;gap:6px;margin-top:8px}
-.scrim .act-conf summary{cursor:pointer;font-weight:500;width:max-content}
-.scrim .act-status{margin-right:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
-.scrim button.pill{cursor:pointer}
-.scrim .act-go:hover{text-decoration:underline}
-.scrim .act-imgs{display:grid;gap:6px}
-.scrim .act-img{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel)}
-.scrim .act-img .mono{font-size:var(--t-sm);overflow-wrap:anywhere}
-.scrim .act-img small{color:var(--muted);font-size:var(--t-sm)}
-.scrim .act-img .act-ver{color:var(--fg)}
-.scrim .act-img .btn{justify-self:start;margin-top:2px}
-.scrim .act-img .btn.htmx-request::after{content:" …"}
+/* The budget of the host: a bar of the memory of the nodes that run now
+   and of the new ones, against the host, which is a mark once they come to
+   more; with its legend and the number of nodes. */
+:is(.scrim,.act-page) .act-hb{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2)}
+:is(.scrim,.act-page) .act-hbh{display:flex;justify-content:space-between;gap:8px;font-size:var(--t-md)}
+:is(.scrim,.act-page) .act-hbh b{font-weight:600}
+:is(.scrim,.act-page) .act-hbh .mono{white-space:nowrap}
+:is(.scrim,.act-page) .act-hbar{display:block;width:100%;height:10px;border-radius:5px;background:var(--line-2)}
+:is(.scrim,.act-page) .act-hbar .now,:is(.scrim,.act-page) .act-sw.now{fill:var(--deco);background:var(--deco)}
+:is(.scrim,.act-page) .act-hbar .add,:is(.scrim,.act-page) .act-sw.add{fill:var(--accent);background:var(--accent)}
+:is(.scrim,.act-page) .act-hb.high .act-hbar .add,:is(.scrim,.act-page) .act-hb.high .act-sw.add{fill:var(--warn);background:var(--warn)}
+:is(.scrim,.act-page) .act-hb.over .act-hbar .add,:is(.scrim,.act-page) .act-hb.over .act-sw.add{fill:var(--bad);background:var(--bad)}
+:is(.scrim,.act-page) .act-hbar .host{fill:var(--fg)}
+:is(.scrim,.act-page) .act-hbl{display:flex;flex-wrap:wrap;gap:2px 14px}
+:is(.scrim,.act-page) .act-sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+:is(.scrim,.act-page) .act-meter{display:grid;gap:2px}
+:is(.scrim,.act-page) .act-meter meter{width:100%;height:8px}
+:is(.scrim,.act-page) .act-budget{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;min-width:0}
+:is(.scrim,.act-page) .act-ph{display:flex;align-items:center;gap:8px}
+:is(.scrim,.act-page) .act-ph h3{flex:1;margin:0}
+:is(.scrim,.act-page) .act-probs a{color:var(--bad);font-weight:600}
+:is(.scrim,.act-page) .act-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:5px}
+:is(.scrim,.act-page) .act-tile{border:1px solid var(--line);border-left:4px solid var(--deco);border-radius:5px;padding:3px 7px;background:var(--panel);font:600 var(--t-sm) var(--f-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(.scrim,.act-page) .act-tile.controller{border-left-color:var(--brand)}
+:is(.scrim,.act-page) .act-tile.controller-backup{border-left-color:var(--brand-2);border-left-style:dashed}
+:is(.scrim,.act-page) .act-tile.worker{border-left-color:var(--brand-sky)}
+:is(.scrim,.act-page) .act-tile.more{border-left-color:var(--line);color:var(--muted);font-weight:400}
+:is(.scrim,.act-page) .act-retry{display:grid;gap:8px;font-size:var(--t-md)}
+:is(.scrim,.act-page) .act-retry ul{margin:0;padding-left:18px;display:grid;gap:4px}
+:is(.scrim,.act-page) .act-retry .mono{overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-fromrun{font-weight:400;margin-left:6px}
+:is(.scrim,.act-page) .act-retry-wait{color:var(--warn)}
+:is(.scrim,.act-page) .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-yaml,:is(.scrim,.act-page) .act-after,:is(.scrim,.act-page) .act-confpre{max-height:320px;margin:0;overflow:auto}
+:is(.scrim,.act-page) .act-conf{display:grid;gap:6px;margin-top:8px}
+:is(.scrim,.act-page) .act-conf summary{cursor:pointer;font-weight:500;width:max-content}
+:is(.scrim,.act-page) .act-status{margin-right:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
+/* The first problem or warning shows beside its count, on a line of the
+   footer of its own, above the buttons. */
+:is(.scrim,.act-page) .act-status:has(>.act-fnote){display:flex;flex-basis:100%}
+:is(.scrim,.act-page) .act-fnote{flex:1 1 0;min-width:0;font-size:var(--t-sm);color:var(--muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+:is(.scrim,.act-page) button.pill{cursor:pointer}
+:is(.scrim,.act-page) .act-go:hover{text-decoration:underline}
+:is(.scrim,.act-page) .act-imgs{display:grid;gap:6px}
+:is(.scrim,.act-page) .act-img{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel)}
+:is(.scrim,.act-page) .act-img .mono{font-size:var(--t-sm);overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-img small{color:var(--muted);font-size:var(--t-sm)}
+:is(.scrim,.act-page) .act-img .act-ver{color:var(--fg)}
+:is(.scrim,.act-page) .act-img .btn{justify-self:start;margin-top:2px}
+:is(.scrim,.act-page) .act-img .btn.htmx-request::after{content:" …"}
+@media (max-width:480px){
+  /* A container to connect has the realms that it is in already, or its
+     state, under its name, which keeps the width of the row. */
+  :is(.scrim,.act-page) .act-orow{grid-template-columns:18px minmax(0,1fr)}
+  :is(.scrim,.act-page) .act-orow>:is(.chip,.pill){grid-column:2;justify-self:start}
+}
 @media (max-width:760px){
-  .scrim .modal.split{max-height:none}
-  .scrim .modal.split .mb{grid-template-columns:1fr}
-  .scrim .act-form,.scrim .act-planpane{overflow:visible}
-  .scrim .act-planpane{border-left:0;border-top:1px solid var(--line-2)}
-  .scrim:has(.modal.split){padding-bottom:0}
-  .scrim .modal.split .mf{position:sticky;bottom:0;background:var(--panel);border-radius:0 0 10px 10px}
-  .scrim .modal.split .mf.act-ask{background:var(--warn-soft)}
+  /* The table of a delete stacks each row: the cluster, then what goes
+     and what stays, each under its label. */
+  :is(.scrim,.act-page) .act-loss thead{display:none}
+  :is(.scrim,.act-page) .act-loss,:is(.scrim,.act-page) .act-loss tbody,:is(.scrim,.act-page) .act-loss tr,:is(.scrim,.act-page) .act-loss td{display:block;width:auto}
+  :is(.scrim,.act-page) .act-loss tr{padding:8px 10px;border-bottom:1px solid var(--line-2)}
+  :is(.scrim,.act-page) .act-loss tr:last-child{border-bottom:0}
+  :is(.scrim,.act-page) .act-loss td{padding:2px 0;border:0}
+  :is(.scrim,.act-page) .act-loss td[data-label]::before{content:attr(data-label);display:block;font-size:var(--t-xs);font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+  /* On a phone the page of the dialog scrolls, and the footer sticks to
+     the bottom of the screen. */
+  .scrim .modal{max-height:none}
+  .scrim .mb{overflow:visible}
+  .scrim{padding-bottom:0}
+  .scrim .mf{position:sticky;bottom:0;z-index:2;background:var(--panel);border-radius:0 0 10px 10px}
+  .scrim .mf.act-ask{background:var(--warn-soft)}
+  :is(.scrim,.act-page) .act-confirm{flex-basis:100%;order:-1}
+  :is(.scrim,.act-page) .act-confirm input{flex:1}
+  .scrim .mf>.act-why{text-align:left}
   /* The status button and the buttons share a line, the totals take the
      next. */
-  .scrim .act-status{display:contents}
-  .scrim .act-status>.pill{margin-right:auto}
-  .scrim .act-tot{order:3;flex-basis:100%}
-  .scrim .act-wide{grid-column:auto}
-  .scrim .act-edg,.scrim .act-more .act-edg{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .scrim .act-ned{padding-left:12px}
-  .scrim .act-nr{grid-template-columns:18px 12px minmax(0,1fr) auto}
-  .scrim .act-nr>.act-k,.scrim .act-nr>.act-always{grid-column:3/-1;justify-self:start}
-  .scrim .act-rowf{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
-  .scrim .act-rowf>input[name$=-accounts]{grid-column:1/3}
+  :is(.scrim,.act-page) .act-status{display:contents}
+  :is(.scrim,.act-page) .act-status>.pill{margin-right:auto}
+  :is(.scrim,.act-page) .act-tot{order:3;flex-basis:100%}
+  :is(.scrim,.act-page) .act-wide{grid-column:auto}
+  :is(.scrim,.act-page) .act-edg,:is(.scrim,.act-page) .act-more .act-edg{grid-template-columns:repeat(2,minmax(0,1fr))}
+  :is(.scrim,.act-page) .act-ned{padding-left:12px}
+  :is(.scrim,.act-page) .act-nr{grid-template-columns:18px 12px minmax(0,1fr) auto}
+  :is(.scrim,.act-page) .act-nr>.act-k,:is(.scrim,.act-page) .act-nr>.act-always{grid-column:3/-1;justify-self:start}
+  :is(.scrim,.act-page) .act-rowf{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+  :is(.scrim,.act-page) .act-rowf>input[name$=-accounts]{grid-column:1/3}
+  /* Each node of the table is a card: the tick, then the name and the
+     role on one line, the Slurm state and the issues below them; a cell
+     with nothing to say drops out. */
+  :is(.scrim,.act-page) .act-ntab thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  :is(.scrim,.act-page) .act-ntab tr{display:grid;grid-template-columns:28px auto minmax(0,1fr);align-items:center;gap:4px 8px;padding:8px 10px;border-bottom:1px solid var(--line-2)}
+  :is(.scrim,.act-page) .act-ntab tr:last-child{border-bottom:0}
+  :is(.scrim,.act-page) .act-ntab td{display:block;padding:0;border:0;height:auto;min-width:0}
+  :is(.scrim,.act-page) .act-ntab td:first-child{grid-row:1;width:auto;height:auto;align-self:center}
+  :is(.scrim,.act-page) .act-ntab :is(.act-nslurm,.act-nissues){grid-column:2/-1;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+  :is(.scrim,.act-page) .act-ntab :is(.act-nslurm,.act-nissues):has(>.faint:only-child){display:none}
 }
 @media (max-width:520px){.scrim{padding-top:2vh}}
 /* On a touch screen, the controls of a dialog are 44 px too: the fields,
@@ -227,29 +388,205 @@
    segments, the summaries and the status button. A checkbox itself is
    24 px, inside its row of 44. */
 @media (pointer:coarse){
-  .scrim .act-step button{width:44px;height:44px}
-  .scrim .act-step input[type=number]{height:44px}
-  .scrim .act-cz,.scrim .act-x{min-height:44px;min-width:44px}
-  .scrim .act-sec>summary{min-height:44px;align-items:center}
-  .scrim .act-more>summary{padding:12px 0}
-  .scrim .fld :is(input[type=text],input[type=number],input:not([type]),select){min-height:44px}
-  .scrim .act-nr{min-height:44px;grid-template-columns:24px 12px minmax(0,1fr) auto auto}
-  .scrim .act-nr.act-box{grid-template-columns:24px minmax(0,1fr)}
-  .scrim .act-nr input[type=checkbox]{width:24px;height:24px}
-  .scrim .act-nr>label.act-lab{align-self:stretch;align-content:center;min-height:44px;cursor:pointer}
-  .scrim .act-nr>.act-lab>label{padding:12px 0;margin:-12px 0}
-  .scrim .checks label{min-height:44px;align-items:center}
-  .scrim .act-seg span{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
-  .scrim .act-conf summary{padding:12px 0}
-  .scrim button.pill{min-height:44px}
+  :is(.scrim,.act-page) .act-step button{width:44px;height:44px}
+  :is(.scrim,.act-page) .act-step input[type=number]{height:44px}
+  :is(.scrim,.act-page) .act-cz,:is(.scrim,.act-page) .act-x{min-height:44px;min-width:44px}
+  :is(.scrim,.act-page) .act-sec>summary{min-height:44px;align-items:center}
+  :is(.scrim,.act-page) .act-more>summary{padding:12px 0}
+  :is(.scrim,.act-page) .fld :is(input[type=text],input[type=number],input:not([type]),select){min-height:44px}
+  :is(.scrim,.act-page) .act-nr{min-height:44px;grid-template-columns:24px 12px minmax(0,1fr) auto auto}
+  :is(.scrim,.act-page) .act-nr.act-box{grid-template-columns:24px minmax(0,1fr)}
+  :is(.scrim,.act-page) .act-nr input[type=checkbox],:is(.scrim,.act-page) .act-ack input{width:24px;height:24px}
+  :is(.scrim,.act-page) .act-nr>label.act-lab{align-self:stretch;align-content:center;min-height:44px;cursor:pointer}
+  :is(.scrim,.act-page) .act-nr>.act-lab>label{padding:12px 0;margin:-12px 0}
+  :is(.scrim,.act-page) .checks label{min-height:44px;align-items:center}
+  :is(.scrim,.act-page) .act-ntab td{height:44px}
+  :is(.scrim,.act-page) .act-ntab input[type=checkbox]{width:24px;height:24px}
+  :is(.scrim,.act-page) .act-qp,:is(.scrim,.act-page) [data-act-change],:is(.scrim,.act-page) .act-target .btn{min-height:44px}
+  :is(.scrim,.act-page) .act-crow{min-height:52px}
+  :is(.scrim,.act-page) .act-other>summary{min-height:44px;align-items:center}
+  :is(.scrim,.act-page) .act-seg span{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
+  :is(.scrim,.act-page) .act-conf summary{padding:12px 0}
+  :is(.scrim,.act-page) button.pill{min-height:44px}
 }
 @media (pointer:coarse) and (max-width:760px){
-  .scrim .act-nr{grid-template-columns:24px 12px minmax(0,1fr) auto}
+  :is(.scrim,.act-page) .act-nr{grid-template-columns:24px 12px minmax(0,1fr) auto}
+  :is(.scrim,.act-page) .act-ntab td{height:auto}
+  :is(.scrim,.act-page) .act-ntab tr{min-height:52px}
 }
-/* The notices of the commands that dialogs started, with a link to the
-   run, below the top bar. */
-.act-notes{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:60;display:grid;gap:8px;width:min(560px,calc(100% - 32px))}
-.act-notes:empty{display:none}
-.act-note{display:flex;align-items:flex-start;gap:10px;padding:8px 8px 8px 12px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;box-shadow:var(--shadow);font-size:var(--t-md)}
-.act-note p{flex:1;margin:4px 0;min-width:0}
-.act-note code{font:var(--t-sm) var(--f-mono);overflow-wrap:anywhere}
+
+/* The page of New cluster: the form in numbered sections at the left, the
+   plan at the right, which stays in view as the form scrolls, with the
+   button that runs the command at its foot. */
+.act-page{margin-top:4px}
+.act-h1{display:flex;align-items:center;gap:10px}
+.act-h1 h1{flex:1;min-width:0}
+.act-page .act-pform{display:grid;gap:12px}
+.act-page .act-draftbar{margin:0}
+.act-page .act-np{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px);gap:24px;align-items:start}
+.act-page .act-npform{display:grid;gap:22px;min-width:0;counter-reset:act-sect}
+.act-page .act-sect{display:grid;gap:10px;min-width:0;counter-increment:act-sect}
+.act-page .act-sect>h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:var(--t-lg);font-weight:600;margin:0}
+.act-page .act-n::before{content:counter(act-sect)}
+.act-page .act-n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--fg);font:600 var(--t-sm) var(--f-mono);flex:none;align-self:center}
+.act-page .act-sr{margin-left:auto;font-size:var(--t-md);font-weight:400;color:var(--muted)}
+.act-page .act-card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:14px}
+.act-page .act-good{font-size:var(--t-sm);color:var(--ok)}
+.act-page .act-good:empty{display:none}
+/* In YAML mode the editor takes the place of the form, but for the name,
+   the realm and the run options. */
+.act-page .act-yamlmode .act-noyaml{display:none}
+.act-page .act-npform:not(.act-yamlmode) .act-retry-yaml{display:none}
+/* The starts: a card for each, which draws its nodes, and the list of
+   the clusters to copy. */
+.act-page .act-tpl{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.act-page .act-tc{position:relative;display:grid;gap:4px;align-content:start;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;cursor:pointer;min-width:0}
+.act-page .act-tc:hover{border-color:var(--deco)}
+.act-page .act-tc[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+.act-page .act-tc[aria-pressed=true]::after{content:"✓";position:absolute;top:10px;right:10px;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--panel);display:grid;place-items:center;font-size:11px;font-weight:700}
+.act-page .act-tc b{font-weight:600}
+.act-page .act-tc small{color:var(--muted);font-size:var(--t-sm);line-height:1.4}
+.act-page .act-tmeta{font:var(--t-xs) var(--f-mono);color:var(--faint);margin-top:4px}
+.act-page .act-tsq{display:flex;gap:3px;margin-bottom:6px}
+.act-page .act-tsq i{width:12px;height:12px;border-radius:3px;background:var(--deco)}
+.act-page .act-tsq i.controller{background:var(--brand)}
+.act-page .act-tsq i.backup{background:var(--brand-2)}
+.act-page .act-tsq i.worker{background:var(--brand-sky)}
+.act-page .act-copies{display:grid;gap:6px}
+.act-page .act-copies[hidden]{display:none}
+.act-page .act-cprow{display:flex;align-items:center;gap:10px;text-align:left;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--fg);font:inherit;cursor:pointer}
+.act-page .act-cprow[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.act-page .act-cprn{display:grid;gap:1px;min-width:0}
+.act-page .act-cprn small{color:var(--muted);font-size:var(--t-sm)}
+.act-page .act-yamlstart{margin-top:0}
+.act-page .act-retry-yaml{margin:0}
+/* The nodes lead with what they do; what runs on them comes second. */
+.act-page .act-roles{background:var(--panel)}
+.act-page .act-purp{display:block;line-height:1.45}
+.act-page .act-purp b{font:600 var(--t-md) var(--f-mono)}
+.act-page .act-purp>label{cursor:pointer}
+.act-page .act-d{font:var(--t-sm) var(--f-mono);color:var(--faint);margin-left:4px}
+.act-page .act-opt{font-size:var(--t-xs);color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:0 6px;margin-left:6px;white-space:nowrap}
+.act-page .act-morenodes{border-top:1px solid var(--line-2)}
+.act-page .act-morenodes>summary{display:flex;gap:8px;align-items:baseline;padding:8px 10px;cursor:pointer;list-style:none}
+.act-page .act-morenodes>summary::-webkit-details-marker{display:none}
+.act-page .act-morenodes>summary::before{content:"▸";color:var(--muted);width:10px}
+.act-page .act-morenodes[open]>summary::before{content:"▾"}
+.act-page .act-wgadd .act-lab{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+/* Your files: the host side, the path in the nodes, and what to do. */
+.act-page .act-files{display:grid;gap:12px}
+.act-page .act-fhead{display:flex;gap:12px;align-items:flex-start}
+.act-page .act-fmap{flex:1;min-width:0}
+.act-page .act-fed{display:grid;gap:10px;padding-top:12px;border-top:1px solid var(--line-2)}
+.act-page .act-fed[hidden],.act-page [data-act-dtype][hidden]{display:none}
+.act-page .act-sec{background:var(--panel)}
+.act-page .act-sect>.act-sec+.act-sec{margin-top:-2px}
+
+/* The plan card sticks below the top of the page and scrolls inside
+   itself when it is longer than the screen. */
+.act-page .act-pcard{position:sticky;top:12px;display:flex;flex-direction:column;max-height:calc(100vh - 210px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:0}
+.act-page #act-preview{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;gap:0}
+.act-page .act-ph{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line-2)}
+.act-page .act-ph h2{flex:1;margin:0;font:600 var(--t-sm) var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.act-page .act-pb{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:14px 16px;overflow-y:auto;min-height:0;align-content:start}
+.act-page .act-pb>p{margin:0}
+.act-page .act-pb .callout{overflow-wrap:anywhere}
+/* The footer is one row that keeps its shape: Draft saved, Cancel and
+   Create. The status and what the nodes use are a phone's; the plan above
+   says both. */
+.act-page .act-pf{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line-2);background:var(--panel);border-radius:0 0 10px 10px;flex:none}
+.act-page .act-pf>.btn{flex:none;white-space:nowrap}
+.act-page .act-pf>#act-ok{flex:0 1 auto;min-width:0;display:inline-flex;align-items:center}
+.act-page .act-okl{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.act-page .act-pf .act-kbd{flex:none}
+.act-page .act-pf.act-ask{flex-wrap:wrap;background:var(--warn-soft)}
+.act-page .act-pf[hidden]{display:none}
+.act-page .act-pfplan,.act-page .act-pf .act-status,.act-page .act-tot{display:none}
+.act-page .act-pfst{flex:1 0 auto;display:flex;align-items:center;gap:8px}
+.act-page .act-saved{white-space:nowrap}
+.act-page .act-saved:empty{display:none}
+.act-page .act-draftbar[hidden]{display:none}
+.act-page .act-draftbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.act-page .act-draftbar>span{flex:1;min-width:0}
+/* What the nodes take of the host, a bar for each, and the limits of the
+   Doctor. */
+.act-page .act-tiles{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.act-page .act-host{display:grid;gap:6px}
+.act-page .act-br{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:var(--t-sm)}
+.act-page .act-bk{color:var(--muted)}
+.act-page .act-bv{font:var(--t-sm) var(--f-mono);color:var(--muted);white-space:nowrap}
+.act-page .act-br.high .act-hbar .add{fill:var(--warn)}
+.act-page .act-br.over .act-hbar .add{fill:var(--bad)}
+.act-page .act-br.over .act-bv{color:var(--bad);font-weight:600}
+.act-page .act-br.over .act-hbar .host{fill:var(--bad)}
+:is(.scrim,.act-page) .act-hw{display:block;min-width:0}
+:is(.scrim,.act-page) .act-hw>.act-fix{margin-top:6px}
+:is(.scrim,.act-page) .act-fix>summary{cursor:pointer;color:var(--accent);font-weight:500;width:max-content}
+:is(.scrim,.act-page) .act-fix[open]>summary{margin-bottom:6px}
+:is(.scrim,.act-page) .act-fix .hint{margin:0 0 6px;overflow-wrap:anywhere}
+:is(.scrim,.act-page) .act-fixtext{margin:0 0 6px}
+:is(.scrim,.act-page) .act-fix .cmd{margin-bottom:6px}
+/* The checks, a line each. */
+.act-page .act-plist{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:var(--t-md)}
+.act-page .act-plist li{display:flex;gap:8px;align-items:baseline;min-width:0}
+.act-page .act-plist li>span:last-child{min-width:0;overflow-wrap:anywhere}
+/* The command, an argument to a line as a script writes it. A line breaks
+   between the words and after a slash of a long path (.tok), never inside
+   a word that fits on a line. */
+.act-page .act-runs{display:grid;gap:8px;min-width:0}
+.act-page .act-run{position:relative;background:var(--term-bg);color:var(--term-fg);border-radius:var(--r);font:var(--t-md)/1.55 var(--f-mono)}
+.act-page .act-run code{display:block;padding:10px 12px;white-space:pre-wrap;overflow-wrap:normal;word-break:normal}
+.act-page .act-rl{display:block;padding-left:4ch;text-indent:-4ch}
+.act-page .act-rl:first-child{padding-left:2ch;padding-right:56px;text-indent:-2ch}
+.act-page .act-rl:first-child::before{content:"$ ";color:var(--term-prompt);user-select:none}
+.act-page .act-rl.act-rlsub{padding-left:6ch}
+.act-page .act-run>button{position:absolute;top:6px;right:6px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;font:var(--t-xs) var(--f-body);border-radius:4px;padding:2px 8px;cursor:pointer}
+.act-page .act-tog{display:flex;flex-wrap:wrap;gap:6px}
+.act-page .act-runs>.hint{margin:0}
+.act-page .act-fpanel{display:grid;gap:6px}
+.act-page .act-fpanel[hidden]{display:none}
+.act-page .act-fph{margin-top:0;justify-content:space-between}
+.act-page .act-fpanel .hint{margin:0}
+/* slurm.conf keeps its lines; a long one scrolls, the user's are marked. */
+.act-page .act-confpre{white-space:pre;overflow-wrap:normal;overflow-x:auto}
+.act-page .act-own{background:var(--accent-soft);color:var(--fg);box-shadow:-12px 0 0 var(--accent-soft),12px 0 0 var(--accent-soft)}
+
+@media (max-width:1100px){
+  .act-page .act-np{grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+}
+/* On a phone the plan follows the form, and its footer sticks to the
+   bottom of the screen: what the nodes use, the status with Show the plan,
+   and the buttons. */
+@media (max-width:760px){
+  .act-page .act-np{grid-template-columns:minmax(0,1fr)}
+  /* The footer is an item of the grid of the whole page, so that it sticks
+     while the form scrolls. */
+  .act-page .act-pcard{display:contents}
+  .act-page #act-preview{display:block;border:1px solid var(--line);border-radius:10px;background:var(--panel);scroll-margin-top:12px}
+  .act-page .act-pb{overflow:visible}
+  .act-page .act-pf{position:sticky;bottom:calc(0px - var(--main-pb,0px));z-index:2;flex-wrap:wrap;margin:12px -16px 0;border-radius:0;box-shadow:0 -4px 12px rgba(6,11,22,.08)}
+  .act-page .act-pfst{flex-basis:100%;flex-wrap:wrap;min-width:0}
+  .act-page .act-pfplan{display:block;margin-left:auto;font-size:var(--t-sm);white-space:nowrap}
+  .act-page .act-pf .act-status{display:contents}
+  .act-page .act-pf .act-go{max-width:100%}
+  .act-page .act-tot{display:block;flex-basis:100%;order:-1}
+  .act-page .act-tot:empty{display:none}
+  .act-page .act-pf>.btn,.act-page .act-pf>#act-ok{flex:1;justify-content:center}
+  .act-page .act-tpl{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .act-page .act-tc{padding:10px 12px}
+  .act-page .act-fhead{flex-direction:column;align-items:stretch}
+  .act-page .act-fhead>.btn{align-self:flex-start}
+  .act-page .act-card{padding:12px}
+  .act-page .act-br{grid-template-columns:52px minmax(0,1fr) auto}
+}
+@media (pointer:coarse){
+  .act-page .act-morenodes>summary{min-height:44px;align-items:center}
+  .act-page .act-tc,.act-page .act-cprow{min-height:52px}
+}
+/* A command of a fix keeps its lines, which scroll sideways when they are
+   longer than the warning is wide, with Copy below them, so that the
+   command has the width of the warning. */
+:is(.scrim,.act-page) .act-fix,:is(.scrim,.act-page) .act-fix .cmd{min-width:0}
+:is(.scrim,.act-page) .act-fix .cmd{flex-direction:column}
+:is(.scrim,.act-page) .act-fix .cmd code{white-space:pre;overflow-wrap:normal;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--term-dim) transparent}
+:is(.scrim,.act-page) .act-fix .cmd button{border-left:0;border-top:1px solid #26354d;padding:4px 12px;text-align:right}

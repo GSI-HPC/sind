@@ -13,7 +13,6 @@ package action
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -63,6 +62,10 @@ type Command struct {
 	// accept.
 	Containers, CPUs, MemoryMB int
 	OverHost                   bool
+	// Budget is what the new nodes of a command that adds workers take
+	// of the Docker host, beside the nodes that run on it, nil while sind
+	// ui does not know.
+	Budget *Budget
 	// Images are the images of Nodes and what sind ui knows of them.
 	Images []PlanImage
 	// After is what the command runs once the nodes are up, and SlurmConf
@@ -77,8 +80,13 @@ type Command struct {
 	// worker-5"; empty for the dialog's own label.
 	OK string
 	// Goes and Stays say what a command that deletes removes and what it
-	// keeps.
+	// keeps. A command with Losses says it for each cluster there, and
+	// Stays is then what else stays.
 	Goes, Stays []string
+	Losses      []Loss
+	// Ack is what the user ticks to confirm that data volumes go, ""
+	// when none does; a name in it is in backquotes.
+	Ack string
 	// Parts are the commands of an action that runs several, each as a
 	// task of its own, instead of Argv; Display shows them one per line.
 	Parts []Part
@@ -172,6 +180,12 @@ func (c Command) Fingerprint() string {
 		h.Write([]byte{1})
 		h.Write([]byte(d))
 	}
+	if c.Ack != "" {
+		// A data volume that came while the user looked is not deleted
+		// unseen.
+		h.Write([]byte{2})
+		h.Write([]byte(c.Ack))
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -208,6 +222,9 @@ type Context struct {
 	Image func(image string) ImageFacts
 	// Worker tells the size of a worker container; nil knows nothing.
 	Worker func(container string) WorkerFacts
+	// Sizes tells the sizes of node containers, in their order, as one
+	// look at Docker; nil knows nothing.
+	Sizes func(containers []string) []WorkerFacts
 }
 
 // WorkerFacts is what sind ui knows of the size of a worker container.
@@ -230,6 +247,9 @@ type Action struct {
 	// Typed returns what the user must type to confirm the command, or
 	// "" if none. The server checks it, whatever the browser did.
 	Typed func(f Form) string
+	// TypedWhat says what the typed word is when the name of the action
+	// does not tell: "the number of workers". "" for nothing.
+	TypedWhat func(f Form) string
 	// Cluster returns the cluster the command works on, or "".
 	Cluster func(f Form) string
 }
@@ -237,12 +257,29 @@ type Action struct {
 // ConfirmField is the field that holds the typed confirmation.
 const ConfirmField = "confirm"
 
+// AckField is the box that the user ticks to confirm that data volumes go.
+const AckField = "ack"
+
+// Acked reports whether the form confirms the loss of the data volumes
+// of the command, if any go.
+func (c Command) Acked(f Form) bool {
+	return c.Ack == "" || f.Get(AckField) == "on"
+}
+
 // Want returns what the user must type to confirm the command, or "".
 func (a Action) Want(f Form) string {
 	if a.Typed == nil {
 		return ""
 	}
 	return a.Typed(f)
+}
+
+// WantWhat says what the word of Want is, or "".
+func (a Action) WantWhat(f Form) string {
+	if a.TypedWhat == nil || a.Want(f) == "" {
+		return ""
+	}
+	return a.TypedWhat(f)
 }
 
 // Confirmed reports whether the form holds the confirmation that a requires,
@@ -329,7 +366,7 @@ func findCluster(f Form, c Context) (string, cluster.Summary, error) {
 	}
 	name := formCluster(f)
 	if name == "" {
-		return "", cluster.Summary{}, errors.New("cluster: say which cluster")
+		return "", cluster.Summary{}, &Missing{Field: "cluster", Text: "pick a cluster"}
 	}
 	if err := config.CheckName("cluster", name); err != nil {
 		return "", cluster.Summary{}, fmt.Errorf("cluster: %w", err)

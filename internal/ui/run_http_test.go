@@ -49,12 +49,12 @@ func TestRunPageRenders(t *testing.T) {
 		`&#34;title&#34;:&#34;create cluster dev&#34;`,
 		`&#34;n&#34;:&#34;nodes&#34;`,
 		`<div class="gantt" data-g="gantt">`,
-		"/events?f=rail&amp;f=run-facts&amp;f=run-failed&amp;f=run-head&amp;f=run-summary&amp;f=tasks&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
+		"/events?f=rail&amp;f=run-command&amp;f=run-facts&amp;f=run-head&amp;f=run-outcome&amp;f=run-summary&amp;f=tasks&amp;f=tasks-menu&amp;id=r-mid&amp;nav=activity&amp;run=r-mid",
 		`/css/run.css`, `/js/run.js`, `/js/gantt.js`,
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
 	}
-	assert.NotContains(t, body, `class="task running"`, "the dock does not repeat the run on show")
+	assert.NotContains(t, body, `class="tstrip`, "the strip does not repeat the run on show")
 	assert.NotContains(t, body, "style=", "the CSP allows no inline style")
 	assert.NotContains(t, body, "<script>", "no inline script")
 	assert.NotContains(t, body, "What failed")
@@ -64,24 +64,32 @@ func TestRunPageRenders(t *testing.T) {
 	assert.Equal(t, body, ts.get("/runs/r-mid").Body.String())
 
 	failed := ts.get("/runs/r-failed").Body.String()
-	assert.Contains(t, failed, "<h2>What failed</h2>")
-	assert.Contains(t, failed, `<b class="mono">worker-[1,2]</b>`)
-	assert.Contains(t, failed, "Nothing is left behind")
-	assert.Contains(t, failed, `<a href="/doctor">Doctor</a>`)
+	assert.Contains(t, failed, `<section class="panel rout bad" aria-labelledby="rout-t">`)
+	assert.Contains(t, failed, `<h2 id="rout-t">create cluster failed</h2>`)
+	assert.Contains(t, failed, `worker-[1-2] ran out of the 5m wait · sind rolled back · nothing is left`)
+	assert.Contains(t, failed, `<b class="mono">worker-[1-2]</b>`)
+	assert.Contains(t, failed, `<p class="rout-say"><span data-word="munge">munge</span> on worker-[1-2] did not start in time. Without munge, the nodes cannot talk to slurmctld.</p>`)
+	assert.Contains(t, failed, `<b>Why this often happens</b>`)
+	assert.Contains(t, failed, `<a class="btn" href="/doctor">Check the host in Doctor</a>`)
+	assert.Contains(t, failed, `<button type="button" class="btn" data-pg-copy-text="setting up nodes: node worker-1: timed out; last probe error: probe munge: munge not ready">Copy the error</button>`)
+	assert.Contains(t, failed, `Try again with a 10m wait, at the top, opens New cluster, rebuilt from the event log.`)
 	assert.Contains(t, failed, `<span class="pill bad">failed</span>`)
 	assert.NotContains(t, failed, "from a terminal, so sind ui cannot stop it", "an ended run has nothing to stop")
-	// From a terminal: the command of its title, and New cluster filled in
-	// from it, with a longer wait after the timeout.
-	assert.Contains(t, failed, `<code>sind create cluster</code>`)
-	assert.Contains(t, failed, `<p class="hint">The event log names the command and what it worked on, not its flags.</p>`)
-	assert.Contains(t, failed, `hx-get="/dialogs/create-cluster?wait=10m" hx-target="#layer" hx-swap="innerHTML">Edit and try again…</a>`)
+	// From a terminal: the command of its title, to copy with a note on
+	// its flags, and New cluster rebuilt from the run.
+	assert.Contains(t, failed, `<div class="cmdlabel">What the event log names</div><div class="cmd"><code>sind create cluster</code>`)
+	assert.Contains(t, failed, `<p class="hint">Its flags and config are not in the log.</p>`)
+	assert.Contains(t, failed, `data-pg-copy-text="# The event log keeps no flags of this command; add them, such as --config FILE.`+"\n"+`sind create cluster" aria-label="Copy sind create cluster with a note on its flags">Copy with a note</button>`)
+	assert.Contains(t, failed, `<a class="btn primary" href="/clusters/new?from=r-failed">Try again with a 10m wait…</a>`)
+	assert.NotContains(t, failed, `aria-label="Copy sind create cluster">Copy</button>`, "a command from the log is copied with its note only")
 
 	canceled := ts.get("/runs/r-canceled").Body.String()
-	assert.Contains(t, canceled, "<h2>Stopped</h2>")
-	assert.Contains(t, canceled, `<span class="pill warn">canceled</span>`)
+	assert.Contains(t, canceled, `<section class="panel rout warn" aria-labelledby="rout-t">`)
+	assert.NotContains(t, canceled, "Copy the error", "a stopped run has no error to copy")
+	assert.Contains(t, canceled, `<span class="pill warn">stopped</span>`)
 
 	ok := ts.get("/runs/r-ok").Body.String()
-	assert.NotContains(t, ok, "rfail")
+	assert.NotContains(t, ok, "rout-fail")
 	assert.Contains(t, ok, `&#34;state&#34;:&#34;ok&#34;`)
 	assert.Contains(t, ok, "Show progress", "the dock holds the cards of the other runs")
 }
@@ -102,16 +110,16 @@ func TestRunPageOffersToTryAgain(t *testing.T) {
 	for _, want := range []string{
 		`<div class="cmdlabel">Command</div><div class="cmd"><code>sind create cluster --config /c/dev.yaml</code><button type="button" data-pg-copy aria-label="Copy sind create cluster --config /c/dev.yaml">Copy</button></div>`,
 		`<details class="runcfg"><summary>Config used</summary><div class="runcfg-path mono">/c/dev.yaml</div><pre class="mono">name: dev` + "\n" + `realm: sind` + "\n" + `</pre></details>`,
-		`action="/tasks/t-failed/retry"`,
-		`<button type="submit" class="btn primary">Try again</button>`,
-		`<a class="btn" href="/dialogs/create-cluster?task=t-failed" hx-get="/dialogs/create-cluster?task=t-failed" hx-target="#layer" hx-swap="innerHTML">Edit and try again…</a>`,
-		`<a class="btn" href="/clusters">Open Clusters</a>`,
+		// Back, the dialog with a longer wait, as nodes ran out of
+		// theirs, and Try again, in that order.
+		`<div class="actions"><a class="btn" href="/clusters">Open Clusters</a><a class="btn primary" href="/clusters/new?task=t-failed&amp;wait=10m">Try again with a 10m wait…</a><form class="inline" method="post" action="/tasks/t-failed/retry"`,
+		`<button type="submit" class="btn">Try again</button>`,
 	} {
 		assert.Contains(t, body, want)
 	}
 	assert.NotContains(t, body, "style=", "the CSP allows no inline style")
 
-	// Clear done hides the card, and the run page keeps all of it.
+	// Clear ended hides the command, and the run page keeps all of it.
 	require.Equal(t, http.StatusNoContent, ts.post("/tasks/clear", "").Code)
 	assert.Equal(t, head, runFragment(t, ts, runNow, "run-head", "id", "r-failed"))
 }

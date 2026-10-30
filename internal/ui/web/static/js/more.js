@@ -10,6 +10,10 @@
   // table, so that a live update, which draws the table and the field
   // again, keeps it.
   const filters = new Map();
+  // all holds the ids of the tables whose rows the user asked to see all
+  // of, with Show all; until then, a table shows its first rows, and the
+  // rest while a filter looks for them.
+  const all = new Set();
 
   function flash(btn, text) {
     const label = btn.dataset.moreLabel || btn.textContent;
@@ -95,7 +99,9 @@
   }
 
   // filter shows the rows of the table id that hold what was typed, and
-  // says how many.
+  // says how many; with nothing typed, the first rows, or all after Show
+  // all. A row that the filter leaves out is data-more-miss, which Copy
+  // list leaves out too.
   function filter(id) {
     const table = document.getElementById(id);
     if (!table) return;
@@ -104,7 +110,8 @@
     let shown = 0;
     for (const r of rows) {
       const hit = !q || r.dataset.moreRow.toLowerCase().includes(q);
-      r.hidden = !hit;
+      r.hidden = !hit || (!q && !all.has(id) && r.hasAttribute('data-more-cut'));
+      r.toggleAttribute('data-more-miss', !hit);
       if (hit) shown++;
     }
     const count = byData('data-more-count', id);
@@ -112,14 +119,16 @@
     if (count) count.textContent = q ? shown + ' of ' + records : records;
     const none = byData('data-more-none', id);
     if (none) none.hidden = shown > 0;
+    const more = byData('data-more-all', id);
+    if (more) more.parentElement.hidden = !!q || all.has(id);
   }
 
-  // refilter puts back what was typed after a live update.
+  // refilter puts back what was typed, and Show all, after a live update.
   function refilter() {
     for (const input of document.querySelectorAll('[data-more-filter]')) {
       const id = input.dataset.moreFilter;
-      if (!filters.has(id)) continue;
-      if (input.value !== filters.get(id)) input.value = filters.get(id);
+      if (!filters.has(id) && !all.has(id)) continue;
+      if (filters.has(id) && input.value !== filters.get(id)) input.value = filters.get(id);
       filter(id);
     }
   }
@@ -167,12 +176,23 @@
       copy(value, text, () => shownText(text, value));
       return;
     }
+    const more = t.closest('[data-more-all]');
+    if (more) {
+      const id = more.dataset.moreAll;
+      all.add(id);
+      filter(id);
+      // The focus goes on to the first row that was hidden.
+      const table = document.getElementById(id);
+      const next = table && table.querySelector('tr[data-more-cut] a, tr[data-more-cut] button');
+      if (next) next.focus();
+      return;
+    }
     const rows = t.closest('[data-more-copy-rows]');
     if (rows) {
       const id = rows.dataset.moreCopyRows;
       const table = document.getElementById(id);
       if (!table) return;
-      const lines = [...table.tBodies[0].rows].filter(r => !r.hidden).map(r => r.dataset.moreRow).join('\n') + '\n';
+      const lines = [...table.tBodies[0].rows].filter(r => !r.hasAttribute('data-more-miss')).map(r => r.dataset.moreRow).join('\n') + '\n';
       copy(lines, rows, () => copyBox(rows, id, lines));
     }
   });

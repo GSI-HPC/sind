@@ -17,13 +17,14 @@ import (
 // wave2Actions are the action ids that the actions part of sind ui owns.
 var wave2Actions = []string{
 	"create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-worker",
-	"power", "connect", "disconnect", "delete-realm",
+	"power", "restart-service", "connect", "disconnect", "delete-realm",
 }
 
 // wave2Paths are the pages of sind ui, as paths and the page that serves each.
 var wave2Paths = map[string]string{
 	"/":                        "overview",
 	"/clusters":                "clusters",
+	"/clusters/new":            "new-cluster",
 	"/clusters/sind/dev":       "cluster",
 	"/nodes":                   "nodes",
 	"/nodes/sind/dev/worker-1": "node",

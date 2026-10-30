@@ -42,7 +42,7 @@ func TestRailIsListsWithLabels(t *testing.T) {
 	assert.Contains(t, body, `<li><a class="nav" href="/doctor">`)
 	// More opens the sheet of the entries that a phone's bar leaves out.
 	assert.Contains(t, body, `<button type="button" class="nav more" data-rail-more aria-expanded="false" aria-controls="rail-sheet">`)
-	assert.Contains(t, body, `<div class="rail-sheet" id="rail-sheet" hidden><ul aria-label="More pages"><li><a class="nav" href="/mesh">`)
+	assert.Contains(t, body, `<div class="rail-sheet" id="rail-sheet" hidden><ul aria-label="More pages"><li><a class="nav" href="/activity">`, "no realm, no realm switcher")
 	assert.Contains(t, body, `icons.svg#more"></use></svg>More</button>`, "More has no count when the sheet has none to show")
 }
 
@@ -60,18 +60,18 @@ func TestRailMore(t *testing.T) {
 	for _, e := range d.Sheet {
 		sheet = append(sheet, e.Key)
 	}
-	assert.Equal(t, []string{"mesh", "monitoring", "topology", "activity"}, sheet)
+	assert.Equal(t, []string{"activity", "mesh", "monitoring", "topology"}, sheet)
 	assert.True(t, reg.rail(view("topology")).More.On, "a page of the sheet lights More")
 
 	// More shows the most urgent count of the sheet: a failure before work
 	// that goes on, and a plain count never.
-	reg.SetNavCount("monitoring", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "4"} })
+	reg.SetNavCount("monitoring", func(store.Snapshot, string, time.Time) NavCount { return NavCount{Text: "4"} })
 	assert.Equal(t, NavCount{}, reg.rail(view("")).More.Count)
-	reg.SetNavCount("activity", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "2 running", Class: "run"} })
+	reg.SetNavCount("activity", func(store.Snapshot, string, time.Time) NavCount { return NavCount{Text: "2 running", Class: "run"} })
 	m := reg.rail(view("")).More
 	assert.Equal(t, NavCount{Text: "▸", Class: "run"}, m.Count)
 	assert.Equal(t, "Activity: 2 running", m.Note)
-	reg.SetNavCount("mesh", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "1", Class: "bad"} })
+	reg.SetNavCount("mesh", func(store.Snapshot, string, time.Time) NavCount { return NavCount{Text: "1", Class: "bad"} })
 	m = reg.rail(view("")).More
 	assert.Equal(t, NavCount{Text: "!", Class: "bad"}, m.Count, "the failure of Mesh stays over the work of Activity")
 	assert.Equal(t, "Mesh and DNS: 1", m.Note)
@@ -79,7 +79,7 @@ func TestRailMore(t *testing.T) {
 
 func TestRailMoreCountInThePage(t *testing.T) {
 	cfg, st := testConfig(t)
-	cfg.Registry.SetNavCount("activity", func(store.Snapshot, time.Time) NavCount { return NavCount{Text: "1 running", Class: "run"} })
+	cfg.Registry.SetNavCount("activity", func(store.Snapshot, string, time.Time) NavCount { return NavCount{Text: "1 running", Class: "run"} })
 	ts := newTestServerFrom(t, cfg, st).login()
 	body := ts.get("/demo/x").Body.String()
 	assert.Contains(t, body, `More<span class="n run" aria-hidden="true">▸</span><span class="vh">, Activity: 1 running</span></button>`)

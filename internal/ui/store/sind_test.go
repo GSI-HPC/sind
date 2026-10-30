@@ -67,7 +67,9 @@ func setters() []setter {
 				s.SetMesh("r", Mesh{Info: &mesh.Info{Network: "r-mesh"}, External: []string{"b", "a"}})
 			},
 			func(s *Store) { s.SetMesh("r", Mesh{Err: "boom"}) },
-			func(s *Store) { s.SetMesh("r", Mesh{Records: []mesh.DNSRecord{}, External: []string{}}) },
+			func(s *Store) {
+				s.SetMesh("r", Mesh{Records: []mesh.DNSRecord{}, External: []string{}, Connectable: []Outside{}})
+			},
 			func(sn Snapshot) any { return sn.Meshes["r"] }},
 		{"status", StatusTopic("r", "c"),
 			func(s *Store) { s.SetStatus("r", "c", &cluster.Status{Name: "c"}) },
@@ -164,11 +166,14 @@ func TestPublishedSnapshotNeverChanges(t *testing.T) {
 		s := New()
 		ext := []string{"b", "a"}
 		recs := []mesh.DNSRecord{{Hostname: "h"}}
-		s.SetMesh("r", Mesh{External: ext, Records: recs})
+		outs := []Outside{{Name: "app", Networks: []string{"bridge"}}}
+		s.SetMesh("r", Mesh{External: ext, Records: recs, Connectable: outs})
 		ext[0], recs[0].Hostname = "z", "z"
+		outs[0].Name, outs[0].Networks[0] = "z", "z"
 		m, ok := s.Snapshot().Meshes["r"]
 		require.True(t, ok)
 		assert.Equal(t, []string{"a", "b"}, m.External)
+		assert.Equal(t, []Outside{{Name: "app", Networks: []string{"bridge"}}}, m.Connectable)
 		assert.Equal(t, "h", m.Records[0].Hostname)
 
 		checks := []DoctorCheck{{Name: "x"}}
@@ -230,17 +235,6 @@ func TestSetSlurmAndKeepStatuses(t *testing.T) {
 	assert.Nil(t, s.Snapshot().Slurm("r", "b"))
 	s.SetSlurm("r", "a", nil)
 	assert.Empty(t, s.Snapshot().Slurms)
-
-	// KeepSlurms leaves the statuses.
-	s.SetStatus("r", "a", &cluster.Status{Name: "a"})
-	s.SetSlurm("r", "a", &Slurm{})
-	s.SetSlurm("r", "b", &Slurm{})
-	sub.Take()
-	s.KeepSlurms(StatusKey{"r", "b"})
-	assert.Empty(t, sub.Take(), "dropping notifies nothing")
-	assert.Nil(t, s.Snapshot().Slurm("r", "a"))
-	assert.NotNil(t, s.Snapshot().Slurm("r", "b"))
-	assert.NotNil(t, s.Snapshot().Status("r", "a"))
 }
 
 func TestSortingAndReaders(t *testing.T) {

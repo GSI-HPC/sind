@@ -9,6 +9,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/config"
 )
 
 // maxFragments is the most fragments one stream may name.
@@ -17,8 +18,8 @@ const maxFragments = 32
 // events streams a page's live updates as Server-Sent Events: each event
 // is named after a fragment and carries its HTML, which htmx's SSE
 // extension swaps into the element with that sse-swap name. The query
-// names the fragments (f), the lit rail entry (nav) and the Params that
-// the fragments declare.
+// names the fragments (f), the lit rail entry (nav), the scope of the page
+// (scope) and the Params that the fragments declare.
 //
 // The stream opens with every fragment, as the page may have been rendered
 // before a change the stream does not hear of. Then changes gather for a
@@ -110,11 +111,17 @@ func (s *Server) eventsRequest(r *http.Request) ([]Fragment, *View, error) {
 	if len(nav) > maxParamLen {
 		return nil, nil, fmt.Errorf("the value of nav is longer than %d bytes: %w", maxParamLen, ErrBadRequest)
 	}
+	scope := q.Get("scope")
+	if err := config.CheckName("realm", scope); scope != "" && err != nil {
+		return nil, nil, fmt.Errorf("scope: %w: %w", err, ErrBadRequest)
+	}
 	v, err := s.View(r, keys...)
 	if err != nil {
 		return nil, nil, err
 	}
-	v.Nav = nav
+	// The fragments show the scope of the page, which a pick in another
+	// tab does not change.
+	v.Nav, v.Scope = nav, scope
 	return frags, v, nil
 }
 

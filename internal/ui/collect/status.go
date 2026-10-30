@@ -135,9 +135,11 @@ func compareKeys(a, b store.StatusKey) int {
 //     event of the cluster.
 //
 // The status of a cluster that the store no longer lists, and that no page
-// watches, is dropped. With the status of a cluster whose page is open, it
-// reads what Slurm says (cluster.GetSlurmInfo), which goes when the page
-// closes.
+// watches, is dropped. With the status of each cluster it reads what Slurm
+// says (cluster.GetSlurmInfo), as every page counts a worker that Slurm
+// sends no jobs, such as a drained one, too; it goes with the status, as
+// does why the nodes that need a look do (readFaults), which the node page
+// explains.
 type Status struct {
 	Store   *store.Store
 	Client  *docker.Client
@@ -215,7 +217,6 @@ func (s *Status) Run(ctx context.Context) {
 		case <-s.Watched.wake:
 			keep := s.keep()
 			s.Store.KeepStatuses(keep...)
-			s.Store.KeepSlurms(s.Watched.Keys()...)
 			for k := range due {
 				if !slices.Contains(keep, k) {
 					delete(due, k)
@@ -307,17 +308,16 @@ func (s *Status) readEach(ctx context.Context, keys []store.StatusKey) {
 	wg.Wait()
 }
 
-// read reads the status of one cluster into the store and, while its page
-// is open, what Slurm says (cluster.GetSlurmInfo), at the same time. It
-// stores each as soon as it has it, so a slurmctld that is slow to answer
-// does not hold up the status. A cluster that is gone has neither; what
-// cannot be read otherwise stays as it is. A status that the store would
-// not keep (keep), as the cluster went while it was read, is not stored.
+// read reads the status of one cluster into the store and what Slurm says
+// (cluster.GetSlurmInfo), at the same time, and after the status why the
+// nodes that need a look do (readFaults). It stores each as soon as it has
+// it, so a slurmctld that is slow to answer does not hold up the status. A
+// cluster that is gone has none of them; what cannot be read otherwise
+// stays as it is. What the store would not keep (keep), as the cluster went
+// while it was read, is not stored.
 func (s *Status) read(ctx context.Context, k store.StatusKey) {
 	var slurm sync.WaitGroup
-	if slices.Contains(s.Watched.Keys(), k) {
-		slurm.Go(func() { s.readSlurm(ctx, k) })
-	}
+	slurm.Go(func() { s.readSlurm(ctx, k) })
 	defer slurm.Wait()
 	st, err := cluster.GetStatus(ctx, s.Client, k.Realm, k.Cluster)
 	switch {
@@ -325,20 +325,27 @@ func (s *Status) read(ctx context.Context, k store.StatusKey) {
 		slurm.Wait()
 		s.Store.SetStatus(k.Realm, k.Cluster, nil)
 		s.Store.SetSlurm(k.Realm, k.Cluster, nil)
+		s.Store.SetFaults(k.Realm, k.Cluster, nil)
 	case err != nil:
 		if ctx.Err() == nil {
 			logOr(s.Log).Debug("reading the status", "realm", k.Realm, "cluster", k.Cluster, "err", err)
 		}
 	default:
-		if slices.Contains(s.keep(), k) {
-			s.Store.SetStatus(k.Realm, k.Cluster, st)
+		if !slices.Contains(s.keep(), k) {
+			return
+		}
+		s.Store.SetStatus(k.Realm, k.Cluster, st)
+		faults := readFaults(ctx, s.Client, k.Realm, k.Cluster, st)
+		if ctx.Err() == nil && slices.Contains(s.keep(), k) {
+			s.Store.SetFaults(k.Realm, k.Cluster, faults)
 		}
 	}
 }
 
 // readSlurm reads what Slurm says about one cluster into the store, with
 // its error, as a page shows why sinfo did not answer; unless the read was
-// cancelled, or the cluster's page closed while it was read.
+// cancelled, or the store would not keep the cluster (keep), as it went
+// while it was read.
 func (s *Status) readSlurm(ctx context.Context, k store.StatusKey) {
 	info, err := cluster.GetSlurmInfo(ctx, s.Client, k.Realm, k.Cluster)
 	sl := &store.Slurm{Info: info}
@@ -348,7 +355,7 @@ func (s *Status) readSlurm(ctx context.Context, k store.StatusKey) {
 		}
 		sl.Err = doctor.ErrorLine(err)
 	}
-	if slices.Contains(s.Watched.Keys(), k) {
+	if slices.Contains(s.keep(), k) {
 		s.Store.SetSlurm(k.Realm, k.Cluster, sl)
 	}
 }

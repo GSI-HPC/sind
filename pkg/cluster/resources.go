@@ -44,7 +44,7 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 
 // SlurmConfFiles returns slurm.conf and sind-nodes.conf as
 // WriteClusterConfig writes them for cfg, after ApplyDefaults: what the
-// New cluster dialog of sind ui shows before the cluster exists.
+// New cluster page of sind ui shows before the cluster exists.
 func SlurmConfFiles(cfg *config.Cluster) (slurmConf, nodesConf string, err error) {
 	workers, err := slurm.ManagedWorkers(cfg.Nodes)
 	if err != nil {

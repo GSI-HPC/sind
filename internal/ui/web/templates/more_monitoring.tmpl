@@ -3,7 +3,7 @@
 {{/* page-more-monitoring is the Monitoring page. */}}
 {{define "page-more-monitoring"}}
 <div class="head"><div class="t"><h1>Monitoring</h1>
-  <div class="sub">{{template "pg-realm-scope" .}}<span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals. This page shows the key numbers; Grafana has the rest.</span></div></div>
+  <div class="sub">{{template "pg-realm-line" .}}<span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals. This page shows the key numbers; Grafana has the rest.</span></div></div>
   <div class="more-iv">{{fragment "more-mon-interval" .}}</div></div>
 <div class="stack" id="more-monitoring" hx-swap="morph:innerHTML" sse-swap="more-monitoring">{{fragment "more-monitoring" .}}</div>
 {{end}}
@@ -42,9 +42,9 @@ its address with the port, "" for none. */}}
   <p>Create a cluster with Monitoring on, and sind starts Prometheus, Loki, Grafana and Alloy for the realm. It needs Slurm 26.05.</p>
   <div class="more-howto">
     <p class="cmdlabel">From your terminal</p>
-    <div class="cmd"><code>sind create cluster --monitoring</code><button type="button" data-more-copy aria-label="Copy sind create cluster --monitoring">Copy</button></div>
+    <div class="cmd"><code>{{.CreateCmd}}</code><button type="button" data-more-copy aria-label="Copy {{.CreateCmd}}">Copy</button></div>
   </div>
-  <p><a class="btn primary" href="{{.NewURL}}" hx-get="{{.NewURL}}" hx-target="#layer" hx-swap="innerHTML">New cluster…</a></p>
+  <p><a class="btn primary" href="{{.NewURL}}">New cluster…</a></p>
 </div></section>
 {{end}}
 {{range .Realms}}{{$realm := .Name}}
@@ -54,10 +54,10 @@ its address with the port, "" for none. */}}
     <span class="grow"></span><span class="faint">{{len .Services}} services</span>
   </div>
   <section class="panel"><div class="ph"><h2>Monitored clusters</h2><span class="grow"></span><span class="faint">Slurm numbers from Prometheus</span></div>
-    {{if .Clusters}}<div class="tw"><table class="more-cards more-moncards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Cluster</th><th role="columnheader" class="num">Nodes running</th><th role="columnheader" class="num">Slurm nodes up</th><th role="columnheader" class="num">Jobs running</th><th role="columnheader" class="num">Jobs pending</th><th role="columnheader">Slurm</th></tr></thead><tbody role="rowgroup">
+    {{if .Clusters}}<div class="tw"><table class="more-cards more-moncards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Cluster</th><th role="columnheader" class="num">Nodes running</th><th role="columnheader" class="num">Take jobs</th><th role="columnheader" class="num">Jobs running</th><th role="columnheader" class="num">Jobs pending</th><th role="columnheader">Slurm</th></tr></thead><tbody role="rowgroup">
       {{range .Clusters}}<tr role="row"><td role="cell"><a href="/clusters/{{$realm}}/{{.Name}}"><b>{{.Name}}</b></a></td>
         <td role="cell" class="num" data-label="Nodes running">{{.Running}} of {{.Total}}</td>
-        {{if .Slurm}}<td role="cell" class="num" data-label="Slurm nodes up">{{.Up}} of {{.Slurm.Nodes}}{{if or .Slurm.NodesDown .Slurm.NodesDrain}}<br><span class="faint more-nowrap">{{.Slurm.NodesDown}} down, {{.Slurm.NodesDrain}} draining</span>{{end}}</td>
+        {{if .Slurm}}<td role="cell" class="num" data-label="Take jobs">{{.Take}} of {{.Slurm.Nodes}}{{if or .Slurm.NodesDown .Slurm.NodesDrain}}<br><span class="faint more-nowrap" title="Slurm sends no new jobs to a node that is down or in drain, which is drained or draining. A node can be both at once.">{{.Slurm.NodesDown}} down, {{.Slurm.NodesDrain}} in drain</span>{{end}}</td>
         <td role="cell" class="num" data-label="Jobs running">{{.Slurm.JobsRunning}}</td><td role="cell" class="num" data-label="Jobs pending">{{.Slurm.JobsPending}}</td>
         {{else}}<td role="cell" colspan="3" class="faint more-nonum">No numbers yet: Prometheus has them once it has read slurmctld.</td>{{end}}
         <td role="cell" class="mono more-aside">{{.SlurmVersion}}</td></tr>{{end}}

@@ -50,8 +50,8 @@ func TestBuildCreateCluster_Minimal(t *testing.T) {
 	assert.Equal(t, []PlannedNode{{"controller", "controller", "controller"}, {"worker-0", "worker", "w0"}, {"worker-1", "worker", "w0"}}, cmd.Nodes)
 	assert.Equal(t, "3 containers, 3 CPUs, 1.5 GiB of memory.", cmd.Summary)
 	assert.Empty(t, cmd.Warns)
-	require.Len(t, cmd.Notes, 1)
-	assert.Contains(t, cmd.Notes[0], "saves the config to /state/sind/ui/configs/hpc.yaml (mode 0600)")
+	assert.Empty(t, cmd.Notes, "the plan says below the command where the config goes")
+	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", cmd.Config.Path)
 }
 
 func TestBuildCreateCluster_Everything(t *testing.T) {
@@ -92,9 +92,9 @@ monitoring: true
 	assert.Equal(t, "8 containers, 16 CPUs, 8 GiB of memory.", cmd.Summary)
 	assert.Contains(t, cmd.Nodes, PlannedNode{"controller-backup", "controller-backup", "backup"})
 	assert.Contains(t, cmd.Nodes, PlannedNode{"api", "api", "api"})
-	require.Len(t, cmd.Notes, 3)
-	assert.Contains(t, cmd.Notes[1], "Monitoring needs Slurm 26.05 or later")
-	assert.Contains(t, cmd.Notes[2], "The api node needs slurmrestd")
+	require.Len(t, cmd.Notes, 2)
+	assert.Contains(t, cmd.Notes[0], "Monitoring needs Slurm 26.05 or later")
+	assert.Contains(t, cmd.Notes[1], "The api node needs slurmrestd")
 	assert.Empty(t, cmd.Problems)
 }
 
@@ -203,7 +203,6 @@ func TestBuildCreateCluster_DataDirectory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Problems)
 	assert.Equal(t, []string{"/scratch/missing"}, cmd.Dirs)
-	assert.Contains(t, cmd.Notes, "sind ui creates the directory /scratch/missing first. It stays if the create fails.")
 
 	cmd, err = build(t, "create-cluster", valid("dir", "/scratch/missing"))
 	require.NoError(t, err)
@@ -260,19 +259,21 @@ func TestBuildCreateCluster_HostMemory(t *testing.T) {
 	assert.Equal(t, 5, cmd.Containers, "controller and four workers")
 	assert.Equal(t, 10, cmd.CPUs)
 	assert.True(t, cmd.OverHost)
-	assert.Equal(t, []Problem{{Field: "overcommit", Label: "Memory", Text: "the nodes may use 5 GiB, more than the 4 GiB of the Docker host; give them less memory, or tick Create anyway"}}, cmd.Problems)
+	require.NotNil(t, cmd.Budget)
+	assert.Equal(t, []int{5 * 1024, 10, 5}, []int{cmd.Budget.AddMB, cmd.Budget.AddCPUs, cmd.Budget.AddNodes}, "the new cluster beside the nodes that run now")
+	assert.Equal(t, []Problem{{Field: "overcommit", Label: "Memory", Text: "with the nodes that run now, the memory limits come to 5 GiB, more than the 4 GiB of the Docker host; give the nodes less memory, or tick Create anyway"}}, cmd.Problems)
 	assert.Empty(t, cmd.Warns, "the problem says it")
 
 	cmd, err = a.Build(valid("w0-count", "4", "size", "m", "overcommit", "on"), st.ctx())
 	require.NoError(t, err)
 	assert.True(t, cmd.OverHost, "the plan keeps the box")
 	assert.Empty(t, cmd.Problems)
-	assert.Equal(t, []string{"The nodes may use 5 GiB of memory, 125% of the 4 GiB of the Docker host, which then can run out of memory."}, cmd.Warns)
+	assert.Equal(t, []string{"You create it anyway: the memory limits come to 5 GiB, more than the 4 GiB of the Docker host."}, cmd.Warns)
 
 	cmd, err = a.Build(valid("w0-count", "3", "size", "m"), st.ctx())
 	require.NoError(t, err)
 	assert.False(t, cmd.OverHost)
-	assert.Equal(t, []string{"The nodes may use 4 GiB of memory, 100% of the 4 GiB of the Docker host, which then can run out of memory."}, cmd.Warns, "all of it is no problem yet")
+	assert.Equal(t, []string{"The memory limits of the nodes then come to 4 GiB, 100% of the 4 GiB of the Docker host, which then can run out of memory."}, cmd.Warns, "all of it is no problem yet")
 
 	cmd, err = a.Build(valid("w0-count", "2", "size", "m"), st.ctx())
 	require.NoError(t, err)
@@ -295,7 +296,7 @@ func TestBuildCreateCluster_MonitoringStackNote(t *testing.T) {
 
 	cmd, err = a.Build(valid(), st.ctx())
 	require.NoError(t, err)
-	assert.Len(t, cmd.Notes, 1)
+	assert.Empty(t, cmd.Notes)
 }
 
 func TestBuildCreateCluster_Problems(t *testing.T) {
@@ -316,7 +317,8 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"image", valid("image", "bad image"), "image", "use no spaces", true},
 		{"image option", valid("image", "-v"), "image", "write an image reference", true},
 		{"cpus", valid("cpus", "0"), "cpus", "write a number from 1 to 1024", true},
-		{"memory", valid("memory", "lots"), "memory", `invalid memory "lots"`, true},
+		{"memory", valid("memory", "lots"), "memory", "write a size such as 2g or 512m", true},
+		{"memory too small", valid("memory", "1k"), "memory", "write a size such as 2g or 512m; it is below Docker's minimum of 6m", true},
 		{"workers missing", valid("w0-count", ""), "w0-count", "write a number from 1 to 1024", true},
 		{"workers many", valid("w0-count", "1025"), "w0-count", "write a number from 1 to 1024", true},
 		{"checkbox", valid("db", "2"), "db", "tick the box or leave it empty", true},

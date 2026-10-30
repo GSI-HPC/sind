@@ -88,6 +88,14 @@ func Seeded() *World {
 	sind := w.realmOf("sind")
 	sind.monitoring = true
 	sind.external = []string{"kind-control-plane"}
+	// Containers of other tools run beside the clusters, and one has
+	// stopped.
+	w.outside = []store.Outside{
+		{Name: "gitlab-runner", Image: "gitlab/gitlab-runner:v17.5.0", State: "running", Status: "Up 3 days", Networks: []string{"bridge"}},
+		{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind"}},
+		{Name: "my-app", Image: "python:3.12-slim", State: "running", Status: "Up 2 hours", Networks: []string{"bridge"}},
+		{Name: "postgres-test", Image: "postgres:16", State: "exited", Status: "Exited (0) 2 days ago", Networks: []string{"bridge"}},
+	}
 	// slurmd of one worker of dev is down: the page shows a failed service.
 	// Slurm runs jobs on two others and has drained one.
 	dev := w.lookup("sind", "dev")
@@ -96,8 +104,9 @@ func Seeded() *World {
 	dev.find("worker-1").busy = 1
 	dev.find("worker-5").drain = "memory errors, admin 09:02"
 	// A worker of legacy is stopped: the cluster is mixed.
+	// The kernel killed it, as it ran out of memory.
 	legacy := w.lookup("sind", "legacy").find("worker-1")
-	legacy.state, legacy.up = cluster.StateStopped, map[probe.Service]bool{}
+	legacy.state, legacy.up, legacy.exit, legacy.oom = cluster.StateStopped, map[probe.Service]bool{}, 137, true
 	return w
 }
 
@@ -108,7 +117,7 @@ func Checks() []store.DoctorCheck {
 		{Name: "Docker daemon", Status: "ok", Detail: "rootful, no userns-remap"},
 		{Name: "Docker host", Status: "ok", Detail: "local daemon at unix:///var/run/docker.sock"},
 		{Name: "cgroup v2", Status: "ok", Detail: "cgroup2 with nsdelegate"},
-		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_instances is 128; 9 nodes and more can run out",
+		{Name: "inotify", Status: "warning", Detail: "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)",
 			Remediation: "Raise the limit now:\n\nsudo sysctl fs.inotify.max_user_instances=1024\n\n" +
 				"Keep it across reboots:\n\necho fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf"},
 		{Name: "DNS policy", Status: "ok", Detail: "systemd-resolved forwards *.sind to sind-dns"},

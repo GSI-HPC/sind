@@ -121,6 +121,16 @@ func TestRunUsual(t *testing.T) {
 	assert.Zero(t, total)
 	assert.Zero(t, n)
 
+	// Runs of one command count however their titles name the nodes:
+	// each create worker makes new ones.
+	cur := runOf(0, "", runSp("step", "nodes", runStartedAt(0)))
+	cur.Title, cur.Command = "create worker worker-3.legacy", "create worker legacy"
+	prev := earlier("prev", 8, 8, false)
+	prev.Title, prev.Command = "create worker worker-2.legacy", "create worker legacy"
+	_, total, n = runUsual(store.Snapshot{Runs: []store.Run{cur, prev}}, cur)
+	assert.Equal(t, 1, n)
+	assert.Equal(t, int64(8000), total)
+
 	g := runGanttOf(runCtx{Run: run, Found: true, Snap: store.Snapshot{Runs: runs}, Now: runAt(5)})
 	assert.Equal(t, 5, g.UsualN)
 	assert.Equal(t, int64(30000), g.UsualRun)

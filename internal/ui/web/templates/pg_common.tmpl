@@ -5,7 +5,7 @@ prefix, pg, is part of the pages, clusters and nodes. */}}
 
 {{/* pg-action is a button of a page; a dialog link opens the dialog in the
 layer, and is a plain link without script. .Class holds btn modifiers. */}}
-{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{with .Name}} aria-label="{{.}}"{{end}}{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
+{{define "pg-action"}}{{if .Off}}<button type="button" class="btn{{with .Class}} {{.}}{{end}}" aria-disabled="true" title="{{.Off}}"{{with .Name}} aria-label="{{.}}"{{end}}>{{.Label}}<span class="vh"> ({{.Off}})</span></button>{{else}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{with .Name}} aria-label="{{.}}"{{end}}{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}{{end}}
 
 {{/* pg-docker-note says when Docker does not answer; it takes the view. */}}
 {{define "pg-docker-note"}}{{with .Snap.Docker}}{{if not .Checked}}<div class="callout pg-note">sind ui has not read Docker yet. The pages fill in when it has.</div>{{else if .Err}}<div class="callout bad pg-note"><b>Docker is not reachable.</b> {{.Err}}. The pages show what sind ui read last, and no action works until Docker answers. <a href="/doctor">Doctor</a> checks the host.</div>{{end}}{{end}}{{end}}
@@ -17,29 +17,52 @@ layer, and is a plain link without script. .Class holds btn modifiers. */}}
 {{define "pg-tile"}}<i class="{{.Tile}}" title="{{.TileTitle}}" role="img" aria-label="{{.TileLabel}}"></i>{{end}}
 
 {{/* pg-legend shows what the tiles of a node map mean, with a tile of
-each kind. */}}
+each kind; it takes whether a command creates or deletes a node of the map,
+which adds the tile of such a node. */}}
 {{define "pg-legend"}}<ul class="pg-legend" aria-label="What the tiles mean">
   <li><i class="pg-nm pg-nm-controller pg-nm-running" aria-hidden="true"></i>controller</li>
   <li><i class="pg-nm pg-nm-db pg-nm-running" aria-hidden="true"></i>other service node</li>
   <li><i class="pg-nm pg-nm-worker pg-nm-running" aria-hidden="true"></i>worker</li>
   <li><i class="pg-nm pg-nm-worker pg-nm-stopped" aria-hidden="true"></i>not running</li>
   <li><i class="pg-nm pg-nm-worker pg-nm-paused" aria-hidden="true"></i>paused</li>
-  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-svcdown" aria-hidden="true"></i>a service is down</li></ul>{{end}}
+  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-svcdown" aria-hidden="true"></i>a service is down</li>
+  <li><i class="pg-nm pg-nm-worker pg-nm-running pg-nm-slurm" aria-hidden="true"></i>takes no jobs</li>{{if .}}
+  <li><i class="pg-nm pg-nm-worker pg-nm-creating" aria-hidden="true"></i>being created or deleted</li>{{end}}</ul>{{end}}
 
 {{/* pg-copy is a small Copy button for the string it takes. */}}
 {{define "pg-copy"}}<button type="button" class="btn sm ghost pg-copy" data-pg-copy-text="{{.}}" aria-label="Copy {{.}}">Copy</button>{{end}}
 
+{{/* pg-copy-icon is the sign of a button that copies. */}}
+{{define "pg-copy-icon"}}<svg class="pg-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></svg>{{end}}
+
+{{/* pg-files says where the files of the jobs of a cluster are, a pgFiles:
+the host side and the path in the nodes, a sentence, and the command that
+copies a job script in. */}}
+{{define "pg-files"}}<div class="pg-files"><div class="pg-fmap"><span class="pg-fside"><small>{{.Kind}}</small><b class="mono">{{with .Host}}{{template "pg-pieces" .Pieces}}{{else}}–{{end}}</b></span><span class="pg-farrow" aria-hidden="true">→</span><span class="pg-fside"><small>In every node</small><b class="mono">{{template "pg-pieces" .Node.Pieces}}</b></span></div>
+  <p class="pg-ftext">{{template "pg-pieces" .Text.Pieces}}</p>{{with .Copy}}<div class="cmd"><code>{{template "pg-pieces" .Pieces}}</code><button type="button" data-pg-copy aria-label="Copy {{.}}">Copy</button></div>{{end}}</div>{{end}}
+
+{{/* pg-pieces sets the pieces of a pgText: each word, or part of a path up
+to a slash, stays whole while it fits on a line (.tok), so that a line
+breaks between them, not at a hyphen of a name. */}}
+{{define "pg-pieces"}}{{range .}}{{if .Space}} {{else}}<span class="tok">{{.Text}}</span>{{end}}{{end}}{{end}}
+
 {{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
 {{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy aria-label="Copy {{.Text}}">Copy</button></div></div>{{end}}
 
-{{/* pg-realm-filter lets a list switch to one realm, with the filters it
-has; it takes the list. */}}
-{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.URL "realm" ""}}" data-pg-keep>All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.URL "realm" .Name}}" data-pg-keep>{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
+{{/* pg-realm-scope says which realm the Overview or Activity shows when its
+address narrows it to one, which filters only that page and leaves the realm
+of the rail as it is, with a link to the same page with all realms; it takes
+the view, and is empty on a page that shows every realm. */}}
+{{define "pg-realm-scope"}}{{with .PgRealmScope}}{{if .Realm}}<span class="pg-scope">Only realm <b class="mono">{{.Realm}}</b> on this page. <a href="{{.ShowAll}}">Show all realms</a></span>{{end}}{{end}}{{end}}
 
-{{/* pg-realm-scope says which realm a page shows, with a link to the same
-page with all realms; it takes the view, and is empty on a page that shows
-every realm. */}}
-{{define "pg-realm-scope"}}{{with .PgRealmScope}}{{if .Realm}}<span class="pg-scope">Showing realm <b class="mono">{{.Realm}}</b> · <a href="{{.ShowAll}}">Show all</a></span>{{end}}{{end}}{{end}}
+{{/* pg-realm-line says which realm a page of the Realm group of the rail
+shows, which the realm switcher picks; it takes the view, and is empty on a
+page that shows every realm. */}}
+{{define "pg-realm-line"}}{{with .Params.Get "realm"}}<span>Realm <b class="mono">{{.}}</b>.</span>{{end}}{{end}}
 
 {{/* pg-gone is what a page of a cluster or a node shows after it was deleted. */}}
 {{define "pg-gone"}}<div class="callout warn pg-gone"><b>{{.}}</b> no longer exists. Someone may have deleted it. <a href="/clusters">Back to the clusters</a></div>{{end}}
+
+{{/* pg-cli says how to list what a page shows in a terminal: one command,
+or one for each realm, each with Copy. It takes the commands. */}}
+{{define "pg-cli"}}{{if eq (len .) 1}}In a terminal: {{else}}In a terminal, once for each realm: {{end}}{{range .}}<span class="pg-cli"><code class="mono">{{.}}</code>{{template "pg-copy" .}}</span>{{end}}{{end}}

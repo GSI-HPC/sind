@@ -34,6 +34,13 @@
   // nouns are what the counts of the summary call the targets of a step,
   // in the singular.
   const nouns = { 'pull images': 'image', nodes: 'node' };
+  // verbs say what a command did to its nodes, as the Result column of
+  // Activity does (runNodeVerbs).
+  const verbs = {
+    'create cluster': 'ready', 'create worker': 'ready', 'delete cluster': 'removed', 'delete worker': 'removed',
+    'power on': 'powered on', 'power unfreeze': 'unfrozen', 'power cut': 'cut off', 'power cycle': 'power-cycled',
+    'power freeze': 'frozen', 'power reboot': 'rebooted', 'power shutdown': 'shut down',
+  };
 
   // ---- format ----
 
@@ -66,6 +73,17 @@
   // phaseName is what a target does in a call or a wait: "create" for the
   // call "docker create".
   function phaseName(s) { return s.n.replace(/^docker /, ''); }
+  // phaseWord says what a target does in a phase that goes on: waits for
+  // munge, starts its container, runs setup.
+  function phaseWord(p) {
+    if (p.k === 'wait') return 'waits for ' + (p.m || p.n);
+    if (/^docker (create|start)$/.test(p.n)) return 'starts its container';
+    if (p.n === 'docker pull') return 'pulls its image';
+    if (p.n === 'docker exec' || p.n === 'setup') return 'runs setup';
+    return phaseName(p);
+  }
+  // said is the word of a state: a run that was canceled was stopped.
+  function said(s) { return s === 'canceled' ? 'stopped' : s; }
 
   // ---- the run ----
 
@@ -300,6 +318,10 @@
     };
   }
 
+  // serverNow is the time of the server in milliseconds since 1970 (see
+  // run.js), so that the timeline agrees with the clocks of the page.
+  function serverNow() { return window.sindClock ? window.sindClock.now() : Date.now(); }
+
   // now is the time to draw at, in seconds since the run began.
   function nowT(ms) {
     if (run.end != null) return run.end;
@@ -397,16 +419,16 @@
         if (m.running.length > 1) small = m.running.length + ' running';
         else if (m.running.length === 1) {
           const r0 = m.running[0], ph = phases(r0).filter(p => !ended(p)).pop();
-          small = (r0.node || r0.n) + (ph ? ' · ' + phaseName(ph) : '');
+          small = (r0.node || r0.n) + (ph ? ' ' + phaseWord(ph) : '');
         }
         return [m.done + '/' + m.n + failed, small];
       }
-      return [m.done + '/' + m.n + failed + ' · ' + dur(el, true), m.s === 'ok' ? usually : m.s];
+      return [m.done + '/' + m.n + failed + ' · ' + dur(el, true), m.s === 'ok' ? usually : said(m.s)];
     }
     const w = m.waits.filter(x => !ended(x)).pop();
     if (m.s === 'running') return [dur(el, true), w ? 'waits ' + dur(elapsed(w, t)) : usually];
     const waited = m.waits.reduce((s, x) => s + elapsed(x, t), 0);
-    return [dur(el, true), waited >= 1 ? 'waited ' + dur(waited) : (m.s === 'ok' ? usually : m.s)];
+    return [dur(el, true), waited >= 1 ? 'waited ' + dur(waited) : (m.s === 'ok' ? usually : said(m.s))];
   }
 
   // stepCaption is the second line of a step without targets: what it
@@ -487,7 +509,7 @@
       const s = state(x);
       let c = { queued: 'q', running: 'run', ok: 'ok', failed: 'bad', canceled: 'cx', skipped: 'q' }[s] || 'q';
       if (s === 'running' && x.u && firstByte(x) == null) c = 'w';
-      return [c, '', (x.node || x.n) + ': ' + s, 'i'];
+      return [c, '', (x.node || x.n) + ': ' + said(s), 'i'];
     });
     if (m.n > max) out.push(['more', '+' + (m.n - max)]);
     return out;
@@ -518,7 +540,7 @@
       const a = amountAt(tg, t), z = tg.z;
       const amount = isBytes ? bytes(a) + (z > 0 ? ' / ' + (tg.m === 'size estimated' ? '≈' : '') + bytes(z) : '')
         : a + (z > 0 ? ' / ' + z : '') + ' layers';
-      let word = s, rate = '';
+      let word = said(s), rate = '';
       if (s === 'running') {
         const nt = newest(tg, t);
         if (fb == null) word = 'waiting';
@@ -540,10 +562,10 @@
       let text;
       if (s === 'running') {
         const quiet = cur.k === 'call' && elapsed(cur, t) > 2 && /create|pull/.test(cur.n);
-        text = phaseName(cur) + (cur.m ? ' · ' + cur.m : '') + ' · ' + dur(elapsed(cur, t), true) + (quiet ? ' · no progress reported' : '');
+        text = phaseWord(cur) + ' · ' + dur(elapsed(cur, t), true) + (quiet ? ' · no progress reported' : '');
         if (cur.k === 'wait' && cur.to) text += ' of ' + dur(cur.to);
       } else if (s === 'failed') text = tg.err || 'failed';
-      else text = dur(end - tg.r, true) + (s === 'ok' ? '' : ' · ' + s);
+      else text = dur(end - tg.r, true) + (s === 'ok' ? '' : ' · ' + said(s));
       if (tg.u === 'bytes' && tg.w.length) text += ' · pulled ' + bytes(amountAt(tg, t));
       res.push(['txt' + (s === 'failed' ? ' bad' : ''), text, s === 'failed' ? text : '']);
     } else {
@@ -673,21 +695,32 @@
     return { lead: (withT.length ? withT : top).sort((a, b) => b.r - a.r)[0], n: top.length };
   }
 
+  // counts say in units what the run got done: "3 of 3 nodes ready",
+  // "5 of 5 steps ok", and what did not, "1 timed out", "1 stopped". A
+  // count of none, as while the run waits for the realm lock, is left out.
   function counts(t) {
     const steps = run.root.kids.filter(s => s.k === 'step' && visible(s, t));
-    const out = [['ct', 'steps ' + steps.filter(s => ['ok', 'skipped'].includes(state(s))).length + '/' + steps.length]];
+    const out = [];
     for (const st of steps) {
       const noun = nouns[st.n];
       if (!noun) continue;
-      const tg = targets(st, t);
-      out.push(['ct', noun + 's ' + tg.filter(x => state(x) === 'ok').length + '/' + Math.max(tg.length, st.tot)]);
+      const tg = targets(st, t), total = Math.max(tg.length, st.tot || 0);
+      if (!total) continue;
+      const verb = noun === 'image' ? 'pulled' : verbs[run.root.n] || 'done';
+      out.push(['ct', tg.filter(x => state(x) === 'ok').length + ' of ' + plural(total, noun) + ' ' + verb]);
     }
-    let failed = 0;
+    if (steps.length) out.push(['ct', steps.filter(s => ['ok', 'skipped'].includes(state(s))).length + ' of ' + plural(steps.length, 'step') + ' ok']);
+    let timedOut = 0, failed = 0, stopped = 0;
     for (const s of run.spans) {
-      if (!visible(s, t) || state(s) !== 'failed') continue;
-      if (s.k === 'target' || (s.k === 'step' && !targets(s, t).length)) failed++;
+      if (!visible(s, t) || !(s.k === 'target' || (s.k === 'step' && !targets(s, t).length))) continue;
+      const st = state(s);
+      if (st === 'failed' && s.ec === 'timeout') timedOut++;
+      else if (st === 'failed') failed++;
+      else if (st === 'canceled' && s.k === 'target') stopped++;
     }
-    out.push(['ct' + (failed ? ' bad' : ''), 'failed ' + failed]);
+    if (timedOut) out.push(['ct bad', timedOut + ' timed out']);
+    if (failed) out.push(['ct bad', failed + ' failed']);
+    if (stopped) out.push(['ct warn', stopped + ' stopped']);
     return out;
   }
 
@@ -724,20 +757,22 @@
       const steps = run.root.kids.filter(s => s.k === 'step' && visible(s, t) && s.r != null);
       const longest = steps.sort((a, b) => elapsed(b, t) - elapsed(a, t))[0];
       const lng = longest ? ' The longest step was ' + longest.n + ' (' + dur(elapsed(longest, t), true) + (run.usual[longest.n] ? ', usually ' + dur(run.usual[longest.n] / 1000, true) : '') + ').' : '';
-      if (run.state === 'ok') return ['ok', 'Done in ' + dur(took, true) + '.' + usual + lng];
+      // The head line says how long the run took; the note adds to it.
+      if (run.state === 'ok') return ['ok', (usual + lng).trim()];
       if (run.state === 'failed') {
         if (failedT) return ['bad', (failedT.node || failedT.n) + ' failed after ' + dur(failedT.e, true) + ': ' + failedT.err];
-        return ['bad', 'Failed after ' + dur(took, true) + '.' + lng];
+        return ['bad', lng.trim()];
       }
       if (run.unfinished && !run.status) return ['warn', 'The event log holds no end of this run; its last event came after ' + dur(run.last, true) + '.'];
-      if (run.state === 'canceled') return ['warn', 'Stopped after ' + dur(took, true) + '.'];
+      if (run.state === 'canceled') return ['warn', lng.trim()];
       return ['', 'Ended after ' + dur(took, true) + '.'];
     }
     if (run.suspended) return ['warn', 'Suspended: the command is stopped, and goes on once it is resumed.'];
     if (failedT) return ['bad', (failedT.node || failedT.n) + ' failed at ' + dur(failedT.e) + ': ' + failedT.err];
     if (run.stopping) return ['warn', 'Stopping: what runs stops, and what is queued does not start.'];
     const lock = run.root.kids.find(s => s.k === 'wait' && !ended(s));
-    if (lock) return ['', 'Waiting for the ' + lock.n + (lock.m ? ' held by ' + lock.m : '') + ' for ' + dur(elapsed(lock, t)) + '.'];
+    // The head of the page links what holds the lock.
+    if (lock) return ['', 'Waits for the ' + lock.n + ' for ' + dur(elapsed(lock, t)) + '.'];
     // The spans that run, the newest first, for what the run does.
     const live = run.spans.filter(s => s.r != null && !ended(s) && s.k !== 'command').sort((a, b) => b.r - a.r);
     if (t - run.last > quietAfter) {
@@ -757,7 +792,7 @@
     }
     if (worst && elapsed(worst, t) > 1) {
       const tg = run.by.get(worst.p);
-      return [most >= 0.8 ? 'bad' : most >= 0.5 ? 'warn' : '', (tg ? (tg.node || tg.n) + ' waits' : 'Waits') + ' for ' + worst.n + (worst.m ? ' (' + worst.m + ')' : '') + ': ' + dur(elapsed(worst, t)) + ' of its ' + dur(worst.to) + ' limit.'];
+      return [most >= 0.8 ? 'bad' : most >= 0.5 ? 'warn' : '', (tg ? (tg.node || tg.n) + ' waits' : 'Waits') + ' for ' + (worst.m || worst.n) + ': ' + dur(elapsed(worst, t)) + ' of its ' + dur(worst.to) + ' limit.'];
     }
     for (const st of run.root.kids) {
       if (st.k !== 'step' || !visible(st, t) || ended(st)) continue;
@@ -775,15 +810,15 @@
   function headline(t) {
     if (run.end != null) {
       const steps = run.root.kids.filter(s => s.k === 'step' && visible(s, t));
-      const parts = [['b', run.state === 'ok' ? 'done' : run.state === 'ended' ? 'ended' : run.state, '', 'b']];
-      parts.push(['', ' in ' + dur(run.end, true)]);
-      parts.push(['sep', ' · '], ['', plural(steps.length, 'step')]);
+      const parts = [['b', run.state === 'ok' ? 'done' : run.state === 'ended' ? 'ended' : said(run.state), '', 'b']];
+      parts.push(['', (run.state === 'canceled' ? ' after ' : ' in ') + dur(run.end, true)]);
+      // The counts below say the steps and the nodes; the line adds what
+      // the pulls got.
       for (const st of steps) {
         const m = stepModel(st, t);
-        if (!nouns[st.n]) continue;
-        let s = plural(m.done, nouns[st.n]);
-        if (m.bytes) { const p = pullSum(m, t); if (p.a) s += ', ' + bytes(p.a); }
-        parts.push(['sep', ' · '], ['', s]);
+        if (!m.bytes) continue;
+        const p = pullSum(m, t);
+        if (p.a) parts.push(['sep', ' · '], ['', bytes(p.a) + ' pulled']);
       }
       return parts;
     }
@@ -830,7 +865,7 @@
     if (!root || root.g !== r.g) { root = r; rows.clear(); chosen.clear(); seenRunning.clear(); lanes.clear(); view.zoom = null; root.body.replaceChildren(); }
     read();
     if (!run) return;
-    const t = nowT(Date.now());
+    const t = nowT(serverNow());
     range(ms, t);
     drawAxis(t);
     drawRows(t);
@@ -847,7 +882,7 @@
     if (ev.target.closest('.trk')) {
       const st = run.by.get(row.dataset.key);
       if (!st || st.r == null) return;
-      const t = nowT(Date.now());
+      const t = nowT(serverNow());
       const a = st.r, b = endOf(st, t), pad = Math.max((b - a) * 0.08, 0.5);
       const z = [Math.max(a - pad, 0), b + pad];
       view.zoom = view.zoom && view.zoom[0] === z[0] ? null : z;

@@ -4,15 +4,15 @@ package ui
 
 import (
 	"strconv"
-	"strings"
+
+	"github.com/GSI-HPC/sind/internal/ui/action"
 )
 
 // The templates of the main pages register no template function: the
 // templates of every part are parsed together, so a function that one part
 // adds would break every server that is built without that part. They call
-// methods of their data instead: PgRealmOptions, PgRealmNext and
-// PgRealmScope on the view (pg_realm.go), and the methods of the pg view
-// models.
+// methods of their data instead: PgRealmScope on the view (pg_realm.go),
+// and the methods of the pg view models.
 
 // pgPlural returns "1 cluster" or "2 clusters".
 func pgPlural(n int, one, many string) string {
@@ -23,9 +23,4 @@ func pgPlural(n int, one, many string) string {
 }
 
 // pgJoin joins words as a sentence does: "a", "a and b", "a, b and c".
-func pgJoin(words []string) string {
-	if len(words) < 2 {
-		return strings.Join(words, "")
-	}
-	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
-}
+func pgJoin(words []string) string { return action.JoinWords(words) }

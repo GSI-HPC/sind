@@ -19,7 +19,7 @@ into its target, not its content. */}}
 
 {{define "act-frame"}}
 <div class="scrim" id="act-dialog" hx-ext="ignore:morph"{{if not .Spec.Draft}} data-act-scrim{{end}}>
-<form class="modal{{if .Spec.Wide}} wide{{end}}{{if .Spec.Plan}} split{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"
+<form class="modal{{if .Spec.Wide}} wide{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="act-title" aria-describedby="act-lead" tabindex="-1"
   {{- if .Spec.Draft}} data-act-draft="{{.ID}}"{{end}}{{if .Draft}} data-act-restored{{end}}
   hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
   {{template "csrf-field" .View}}
@@ -27,34 +27,31 @@ into its target, not its content. */}}
   <div class="mh"><div class="mtop"><h2 id="act-title">{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
     <p id="act-lead">{{.Lead}}</p></div>
   {{if .Draft}}<div class="callout act-draftbar"><span>This is your draft from before.</span><button type="button" class="btn sm" data-act-restart>Start over</button></div>{{end}}
-  {{if .Spec.Plan}}
-  <div class="mb">
-    <div class="act-form{{if .YAMLMode}} act-yamlmode{{end}}">{{include (print "act-dlg-" .ID) .}}</div>
-    <aside class="act-planpane" aria-label="Plan">{{template "act-preview-slot" .}}</aside>
-  </div>
-  {{else}}
   <div class="mb">
     {{include (print "act-dlg-" .ID) .}}
     {{template "act-preview-slot" .}}
-    {{with .Typed}}<div class="fld act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.}}</b> to confirm</label>
-      <input type="text" id="act-confirm" name="confirm" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why">
-      <span class="hint act-why" id="act-why" role="status"></span></div>{{end}}
   </div>
-  {{end}}
-  <div class="mf" id="act-mf">{{if .Spec.Plan}}<span class="act-status" id="act-status"></span>{{else}}<span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>{{end}}<button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}</div>
+  <div class="mf" id="act-mf"><span class="act-status" id="act-status"></span><span class="act-checking" id="act-checking" aria-hidden="true">Checking…</span>
+    {{- if .Confirms}}<div class="act-confirm"><label for="act-confirm">Type <b class="mono" id="act-confirm-word">{{.Typed}}</b>{{template "act-confirm-what" .}} to confirm</label>
+      <input type="text" id="act-confirm" name="confirm" placeholder=" " autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="act-why"></div>{{end -}}
+    <button type="button" class="btn" data-act-close>Cancel</button>{{template "act-ok" .OKButton}}
+    {{- if .Confirms}}<span class="hint act-why" id="act-why" role="status"></span>{{end}}</div>
   <div class="mf act-ask" id="act-ask" role="group" aria-labelledby="act-ask-q" hidden>
     <span class="act-askq" id="act-ask-q"><span class="pill warn nodot">Unsaved</span> <span data-act-ask="close">Close and lose your changes<span data-act-ask-of hidden> to <b class="mono" data-act-ask-name></b></span>?</span><span data-act-ask="restart" hidden>Start over and lose your changes?</span></span>
     <button type="button" class="btn" data-act-keep>Keep editing</button><button type="button" class="btn danger solid" data-act-discard>Discard</button>
   </div>
-  {{if .Spec.Plan}}<span class="vh" id="act-say" role="status"></span>{{end}}
 </form>
 </div>
 {{end}}
 
+{{/* act-confirm-what says what the typed word is, as in "Type 3, the number
+of workers, to confirm". */}}
+{{define "act-confirm-what"}}<span id="act-confirm-what">{{with .TypedWhat}}, {{.}},{{end}}</span>{{end}}
+
 {{/* act-ok is the button that runs the command, an actOK. It is off until
 a preview says that the command can run, and each preview swaps it.
 Ctrl+Enter, or Cmd+Enter on macOS, presses it. */}}
-{{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}{{if .Why}} aria-describedby="act-why"{{end}}>{{.Label}}<kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
+{{define "act-ok"}}<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Swap}} hx-swap-oob="true"{{end}}{{if .Off}} disabled{{end}}{{if .Why}} aria-describedby="act-why"{{end}}><span class="act-okl">{{.Label}}</span><kbd class="act-kbd" aria-hidden="true"><span class="act-k-ctrl">Ctrl</span><span class="act-k-cmd">⌘</span> ↵</kbd></button>{{end}}
 
 {{define "act-preview-slot"}}<div id="act-preview" class="stack" hx-post="/actions/{{.ID}}/preview" hx-target="this" hx-swap="innerHTML"
       hx-trigger="load, input from:closest form delay:150ms, change from:closest form"{{if not .Spec.Plan}} hx-indicator="#act-checking"{{end}}></div>{{end}}
@@ -64,81 +61,79 @@ it, and the button and the parts of the dialog that depend on it. */}}
 {{define "act-preview"}}{{with .Data}}{{$p := .}}
 {{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
 {{if .Spec.Plan}}{{template "act-plan" .}}{{else}}
-{{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}<p class="hint act-missing">{{.Hint}}</p>{{else}}
+{{if .ErrAtField}}<p class="hint act-missing">Fix the field above to see the command.</p>{{else if .Err}}<div class="callout bad">{{.Err}}</div>{{else if .Hint}}{{/* the footer says what the form lacks */}}{{else}}
 {{with .Cmd.Summary}}<p class="act-sum">{{.}}</p>{{end}}
-{{with .Cmd.Goes}}<div class="callout bad act-list"><b>Goes</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
-{{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
-{{end}}
+{{if .Cmd.Budget}}{{template "act-budget" .}}{{end}}
+{{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>{{$p.ProblemsText}}</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
+{{with .Defaulted}}<p class="hint">The command takes the defaults for {{.}} until you fix them.</p>{{end}}
+{{if .Cmd.Losses}}{{template "act-losses" .}}
+{{else if .Cmd.Goes}}<div class="act-gs"><div class="callout bad act-list"><b>Goes</b><ul>{{range .Cmd.Goes}}<li>{{.}}</li>{{end}}</ul></div>
+{{with .Cmd.Stays}}<div class="callout act-list"><b>Stays</b><ul>{{range .}}<li>{{.}}</li>{{end}}</ul></div>{{end}}</div>
+{{else}}{{with .Cmd.Stays}}<ul class="act-stays" aria-label="What stays">{{range .}}<li><span class="pg-ck y" aria-hidden="true">✓</span><span>{{.}}</span></li>{{end}}</ul>{{end}}{{end}}
 {{template "act-callouts" .}}
-{{if .Typed}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code class="nop act-cls">{{range .CmdLines}}<span class="act-cl">{{range $i, $w := .}}{{if $i}} {{end}}<span class="act-cw">{{$w}}</span>{{end}}</span>{{end}}</code><button type="button" data-pg-copy-text="{{.Cmd.Display}}">Copy</button></div></div>
+{{if .Cmd.Ack}}<label class="callout bad act-ack"><input type="checkbox" id="act-ack" name="ack" data-act-hold{{if eq (.Form.Get "ack") "on"}} checked{{end}}><span>{{range .AckParts}}{{if .Mono}}<b class="mono">{{.Text}}</b>{{else}}{{.Text}}{{end}}{{end}}</span></label>{{end}}
+{{end}}
+{{if or .Err .Hint}}{{template "act-callouts" .}}{{end}}
+{{if .Confirms}}<b class="mono" id="act-confirm-word" hx-swap-oob="true">{{.Typed}}</b><span id="act-confirm-what" hx-swap-oob="true">{{with .TypedWhat}}, {{.}},{{end}}</span><span id="act-why" hx-swap-oob="innerHTML">{{.Why}}</span>{{end}}
 {{end}}
 {{template "act-ok" .OKButton}}
 {{range .Fields}}<span class="err" id="act-err-{{.}}" hx-swap-oob="innerHTML">{{$p.ProblemOf .}}</span>{{end}}
-{{if .Spec.Plan}}{{range .NodeViews}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}} hx-swap-oob="true">{{.Chip}}</span>{{if .Group}}<span class="hint" id="act-range-{{.Key}}" hx-swap-oob="true">{{$p.RangeOf .Key}}</span>{{end}}{{end}}
+{{if .Spec.Plan}}{{template "act-page-oob" .}}{{range .NodeViews}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}} hx-swap-oob="true">{{.Chip}}</span>{{if .Group}}<span id="act-range-{{.Key}}" hx-swap-oob="innerHTML">{{$p.RangeOf .Key}}</span>{{end}}{{end}}
 {{with .Eff}}<span id="act-eff" hidden hx-swap-oob="true" data-image="{{.Image}}" data-cpus="{{.CPUs}}" data-memory="{{.Memory}}" data-tmp="{{.TmpSize}}"></span>{{end}}
 <span class="hint" id="act-pull-hint" data-act-pull="{{if .PullOn}}on{{else}}off{{end}}" hx-swap-oob="true">{{.PullHint}}</span>
 <datalist id="act-dl-groups" hx-swap-oob="true">{{range .GroupNames}}<option value="{{.}}"></option>{{end}}</datalist><datalist id="act-dl-accounts" hx-swap-oob="true">{{range .AccountNames}}<option value="{{.}}"></option>{{end}}</datalist>
 {{range .SlurmFiles}}<span class="act-dot" id="act-dot-{{.ID}}" hx-swap-oob="true">{{if $p.SlurmSet .ID}} •{{end}}</span>{{end}}
-{{range .Sections}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span><span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
-{{if .Spec.Plan}}<span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{template "act-status" .}}</span>{{end}}
+{{range .Sections}}{{if .Summary}}<span class="act-ss" id="act-sum-{{.ID}}" hx-swap-oob="innerHTML">{{.Summary}}</span>{{end}}<span class="act-sb" id="act-bad-{{.ID}}" hx-swap-oob="innerHTML">{{with .Bad}}{{.}} problem{{if ne . 1}}s{{end}}{{end}}</span>{{end}}{{end}}
+{{with .Head}}<h2 id="act-title" hx-swap-oob="true">{{.Title}}</h2><p id="act-lead" hx-swap-oob="true">{{.Lead}}</p>{{end}}
+{{if eq .ID "power"}}{{with .PowerOffs}}<p class="hint act-offs" id="act-offs" hx-swap-oob="true">{{.}}</p>{{else}}<p class="hint act-offs" id="act-offs" hx-swap-oob="true" hidden></p>{{end}}{{end}}
+<span class="act-status" id="act-status" hx-swap-oob="innerHTML">{{if .Spec.Plan}}{{template "act-pstatus" .}}{{else}}{{template "act-fstatus" .}}{{end}}</span>
 {{end}}{{end}}
+
+{{/* act-losses is what a delete of clusters or of a realm removes and
+keeps, a row for each cluster and one for a realm that goes with its last
+cluster: the data volumes that go first, in red, then the rest that goes,
+and what stays, in green; then what else stays. */}}
+{{define "act-losses"}}<div class="act-lw"><table class="act-loss"><thead><tr><th>Cluster</th><th>Goes</th><th>Stays</th></tr></thead><tbody>
+{{range .Cmd.Losses}}<tr><td class="act-lc"><b class="mono">{{.Name}}</b><small>{{.About}}</small></td>
+  <td class="act-lg" data-label="Goes">{{if .Data}}{{range .Data}}<span class="act-lbad">{{.Line}}</span>{{end}}<small>{{.Goes}}</small>{{else}}{{.Goes}}{{end}}</td>
+  <td class="act-ls" data-label="Stays">{{range .Stays}}<span class="act-lok">{{.What}}</span>{{with .Note}}<small>{{.}}</small>{{end}}{{else}}<span class="faint">nothing</span>{{end}}</td></tr>
+{{end}}</tbody></table></div>
+{{with .AlsoStays}}<p class="hint act-also">Also stays: {{.}}</p>{{end}}{{end}}
+
+{{/* act-fstatus is the status in the footer of a dialog without a plan,
+beside its button, so that it is always in view: the problems, which lead
+to the first, what the form still lacks, or the warnings, which lead to the
+first of them; the first problem or warning says itself in short. */}}
+{{define "act-fstatus"}}
+{{- if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button><span class="act-fnote" title="{{.First.Text}}">{{.First.Text}}</span>
+{{- else if .Hint}}<span class="hint act-tot">{{.Hint}}</span>
+{{- else if .Warnings}}<button type="button" class="pill warn nodot act-go" data-act-go="@warn" aria-label="{{.WarningsText}}. Show them." title="Show the warnings">{{.WarningsText}} <span aria-hidden="true">↑</span></button><span class="act-fnote" title="{{.FirstWarn}}">{{.FirstWarn}}</span>{{end}}{{end}}
+
+{{/* act-budget is what new workers take of the Docker host beside the
+nodes that run on it: the memory limits of all of them against the memory
+of the host, as a bar of the nodes that run now and the new ones, on which
+the host is a mark once they come to more; the number of nodes, the
+Doctor's inotify warning once they reach it, and, while the limits come to
+more than the host has, the box that adds them anyway. */}}
+{{define "act-budget"}}{{$p := .}}{{with .Cmd.Budget}}<div class="act-budget" id="act-budget">
+<div class="act-hb{{if .Over}} over{{else if .High}} high{{end}}">
+  <div class="act-hbh"><b>Memory of the Docker host</b><span class="mono">{{$p.MemoryLabel .TotalMB}} of {{$p.MemoryLabel .HostMB}}</span></div>
+  <svg class="act-hbar" viewBox="0 0 1000 10" preserveAspectRatio="none" aria-hidden="true"><rect class="now" width="{{.NowW}}" height="10"/><rect class="add" x="{{.NowW}}" width="{{.AddW}}" height="10"/>{{if .Over}}<rect class="host" x="{{.HostX}}" width="5" height="10"/>{{end}}</svg>
+  <div class="act-hbl hint"><span><i class="act-sw now" aria-hidden="true"></i>the {{$p.NodesText .NowNodes}} that run now: {{$p.MemoryLabel .NowMB}}{{with .Unknown}}, {{$p.NodesText .}} of them of a size sind ui cannot read{{end}}</span>
+    <span><i class="act-sw add" aria-hidden="true"></i>the new {{if eq .AddNodes 1}}worker{{else}}workers{{end}}: {{$p.MemoryLabel .AddMB}}{{if .Over}}, more than the host has{{end}}</span></div>
+  <div class="act-hbh"><span>Nodes on the host then</span><span class="mono">{{.Nodes}}</span></div></div>
+{{range $p.HostWarns}}{{template "act-hostwarn" .}}{{end}}
+{{if .Over}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if $p.Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Add anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
+</div>{{end}}{{end}}
 
 {{/* act-callouts are what to know about the command of a preview. */}}
 {{define "act-callouts"}}
 {{if .Warn}}<div class="callout warn">{{.Warn}}</div>{{end}}
-{{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. The command waits until it ends; its run page shows the realm lock wait.</div>{{end}}
-{{range .Cmd.Notes}}<div class="callout">{{.}}</div>{{end}}
+{{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. {{.LockWaits}}</div>{{end}}
+{{range .NoteParts}}<div class="callout">{{range .}}{{if .Mono}}<span class="mono">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</div>{{end}}
 {{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
 {{end}}
-
-{{/* act-status is the status in the footer of a dialog with a plan: a
-button that goes to the first problem, or Ready, and what the nodes of the
-plan use. act.js says the status to assistive technology when its
-data-act-key changes. */}}
-{{define "act-status"}}
-{{- if not .Blocked}}<span class="pill {{if .Warnings}}warn{{else}}ok{{end}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Ready{{with .Warnings}} · {{.}} warning{{if ne . 1}}s{{end}}{{end}}</span>
-{{- else if .Problems}}<button type="button" class="pill bad nodot act-go" data-act-go="{{.First.Field}}" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}" aria-label="{{.StatusText}}. {{.StatusGo}}." title="{{.StatusGo}}">{{.StatusText}} <span aria-hidden="true">↑</span></button>
-{{- else}}<span class="pill bad" data-act-say="{{.Say}}" data-act-key="{{.SayKey}}">Not ready</span>{{end}}
-{{- with .Totals}}<span class="hint act-tot">{{.}}</span>{{end}}{{end}}
-
-{{/* act-pill says whether the command can run, and with how many
-warnings. */}}
-{{define "act-pill"}}{{if .Blocked}}<span class="pill bad">Not ready · {{.Problems}} problem{{if ne .Problems 1}}s{{end}}</span>{{else if .Warnings}}<span class="pill warn">Ready · {{.Warnings}} warning{{if ne .Warnings 1}}s{{end}}</span>{{else}}<span class="pill ok">Ready</span>{{end}}{{end}}
-
-{{/* act-plan is the plan pane of a dialog that makes a cluster: it shows
-the nodes, the command and the config also while a field is wrong. */}}
-{{define "act-plan"}}{{$p := .}}
-<div class="act-ph"><h3>Plan</h3>{{template "act-pill" .}}</div>
-{{if .Err}}<div class="callout bad" id="act-probs" tabindex="-1">{{.Err}}</div>{{else}}
-<div class="act-tools">{{if not .YAMLMode}}<button type="button" class="btn sm" data-act-yaml-edit>Edit YAML</button>{{end}}<button type="button" class="btn sm" data-pg-copy-text="{{.Cmd.Config.Content}}">Copy YAML</button></div>
-{{with .Cmd.Problems}}<div class="callout bad act-probs" id="act-probs" tabindex="-1"><b>Fix these to create the cluster:</b><ul>{{range .}}<li>{{if .Field}}<a href="#act-{{.Field}}" data-act-jump="{{.Field}}">{{.Label}}</a>{{else}}<b>{{.Label}}</b>{{end}}: {{.Text}}</li>{{end}}</ul></div>{{end}}
-{{with .Defaulted}}<p class="hint">The plan takes the defaults for {{.}} until you fix them.</p>{{end}}
-<div class="act-tiles">{{range .Tiles}}<span class="act-tile {{.Role}}">{{.Short}}</span>{{end}}{{with .More}}<span class="act-tile more">{{.}} more</span>{{end}}</div>
-<p class="hint">{{.Cmd.Summary}}</p>
-{{with .HostMB}}<div class="act-meter"><meter min="0" max="{{.}}" value="{{$p.Cmd.MemoryMB}}" high="{{$p.HostHigh}}" optimum="0" aria-label="Memory of the Docker host"></meter><span class="hint">{{$p.MemoryLabel $p.Cmd.MemoryMB}} of the {{$p.MemoryLabel .}} of the Docker host</span></div>{{end}}
-{{if .Cmd.OverHost}}<label class="act-nr act-box"><input type="checkbox" id="act-overcommit" name="overcommit"{{if .Form.Get "overcommit"}} checked{{end}} data-act-hold aria-describedby="act-hint-overcommit"><span class="act-lab"><b>Create anyway</b><span class="hint" id="act-hint-overcommit">Docker caps the memory of each node but sets none aside, so idle nodes use less. Jobs that use it all make the host run out of memory.</span></span></label>{{end}}
-{{with .Cmd.Images}}<div class="act-imgs"><div class="cmdlabel">Images</div>{{range .}}<div class="act-img"><span class="mono">{{.Image}}</span><small>{{.Of}}</small>
-  <span class="hint{{if .Version}} act-ver{{end}}">{{$p.ImageLine .}}</span>{{if .CanCheck}}<button type="button" class="btn sm" hx-post="/actions/create-cluster/check" hx-vals="{{$p.CheckVals .Image}}" hx-target="#act-preview" hx-swap="innerHTML" hx-disabled-elt="this">Check image</button>{{end}}</div>{{end}}</div>{{end}}
-<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-pg-copy-text="{{.Cmd.Script}}">Copy script</button></div>
-  <p class="hint">The script saves the config{{if .Cmd.Dirs}}, creates the directory{{end}} and runs the command, as Create does.</p></div>
-{{with .Cmd.After}}<div><div class="cmdlabel">Then sind runs</div><pre class="term act-after">{{range $i, $s := .}}{{if $i}}
-{{end}}# {{.Where}}
-{{range .Lines}}{{.}}
-{{end}}{{end}}</pre></div>{{end}}
-{{template "act-callouts" .}}
-{{if .YAMLMode}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><p class="hint">The YAML that you edit, as it is.</p>{{template "act-slurmconf" .}}</div>
-{{else}}<div><div class="cmdlabel">Config <span class="act-path">{{.Cmd.Config.Path}}</span></div><pre class="term act-yaml">{{.Cmd.Config.Content}}</pre>
-  {{template "act-slurmconf" .}}
-  <p class="hint">Edit YAML, at the top of the plan, gives you the whole config, also what the form has no field for, such as named Slurm config fragments or capabilities of the node defaults. The form stays locked until you discard the edits.</p></div>{{end}}
-{{end}}
-{{end}}
-
-{{/* act-slurmconf is the slurm.conf that sind writes for the config of
-the plan, folded; act.js keeps it open across the previews. */}}
-{{define "act-slurmconf"}}{{with .Cmd.SlurmConf}}<details class="act-conf" id="act-conf" data-act-hold><summary>Preview slurm.conf</summary>
-  <pre class="term act-confpre">{{.}}</pre>
-  <p class="hint">sind's lines, then those of Slurm config, then the include of sind-nodes.conf with the workers and the partition all. The other files of Slurm config are files of their own.</p></details>{{end}}{{end}}
 
 {{/* act-chip is the size button of a node of a new cluster, which opens
 its editor. */}}
@@ -146,8 +141,9 @@ its editor. */}}
 
 {{define "act-chip-text"}}<span id="act-chip-{{.Key}}"{{if .Own}} class="own"{{end}}>{{.Chip}}</span>{{end}}
 
-{{/* act-group is a worker group of a new cluster: its row and editor. */}}
-{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><b>{{.Label}}</b><span class="hint" id="act-range-{{.Key}}">{{.Range}}</span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
+{{/* act-group is a worker group of a new cluster: its row, which says
+what the workers do first and what runs on them second, and its editor. */}}
+{{define "act-group"}}<div class="act-nr act-wgrow" id="act-wg-{{.Key}}"><span><input type="hidden" name="wg" value="{{.Key}}"></span><i class="act-sq worker"></i><label class="act-lab" for="act-{{.Key}}-count"><span class="act-purp"><b data-word="worker">{{.Label}}</b> run your jobs <span class="act-d"><span data-word="slurmd">slurmd</span> · <span id="act-range-{{.Key}}">{{.Range}}</span></span></span><span class="err" id="act-err-{{.Key}}-count"></span></label>{{template "act-chip" .}}
   <span class="act-k"><span class="act-step"><button type="button" id="act-{{.Key}}-less" data-act-step="{{.Key}}-count" data-d="-1" aria-label="Fewer in {{.Label}}" aria-labelledby="act-{{.Key}}-less act-range-{{.Key}}">−</button><input type="number" id="act-{{.Key}}-count" name="{{.Key}}-count" value="{{.Val "count"}}" min="1" aria-describedby="act-err-{{.Key}}-count"><button type="button" id="act-{{.Key}}-more" data-act-step="{{.Key}}-count" data-d="1" aria-label="More in {{.Label}}" aria-labelledby="act-{{.Key}}-more act-range-{{.Key}}">+</button></span><button type="button" class="act-x" id="act-{{.Key}}-del" data-act-wgdel="{{.Key}}" aria-label="Remove {{.Label}}" aria-labelledby="act-{{.Key}}-del act-range-{{.Key}}">✕</button></span></div>
 {{template "act-ned" .}}{{end}}
 
@@ -223,130 +219,21 @@ button are named after the limit, which act.js keeps up as it is typed. */}}
   <button type="button" class="act-x" data-act-rowdel aria-label="Remove {{with .Key}}{{.}}{{else}}the limit{{end}}" data-act-limname="Remove ">✕</button>
 </div>{{end}}
 
-{{/* act-realm is the realm field of a dialog with Spec.RealmField: the
-realm of the link, another one that sind ui sees, or a new one. */}}
-{{define "act-realm"}}<div class="fld"><label for="act-realm">Realm</label><input type="text" id="act-realm" name="realm" value="{{.Realm}}" list="act-dl-realms" autocapitalize="off" spellcheck="false" aria-describedby="act-err-realm act-hint-realm">
-  <span class="err" id="act-err-realm"></span><span class="hint" id="act-hint-realm">{{.RealmHint}}</span>
-  <datalist id="act-dl-realms">{{range .RealmNames}}<option value="{{.}}"></option>{{end}}</datalist></div>{{end}}
-
-{{/* act-nodes is the picker of the nodes of a cluster. */}}
-{{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
-  {{if .Nodes}}<div class="checks act-nodes">{{range .Nodes}}<label><input type="checkbox" name="nodes" value="{{.Short}}"{{if .On}} checked{{end}}> <span class="mono">{{.Short}}</span> <small>{{.Role}}, {{.State}}</small></label>{{end}}</div>
-  {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
-
-{{define "act-dlg-create-cluster"}}
-<div class="row act-idrow">
-  <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}"{{if .Defaulted "name"}} data-act-select{{end}} autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="act-err-name act-hint-name">
-    <span class="err" id="act-err-name"></span><span class="hint" id="act-hint-name">Lowercase letters, digits and -. 1 to 63 characters, 40 with a db node. Not ssh.</span></div>
-  {{template "act-realm" .}}
-</div>
-<div class="act-inline act-yamlstart"><button type="button" class="btn sm" data-act-yaml-start>Start from YAML…</button><span class="hint">Paste a cluster config, or open a file of one.</span></div>
-<div class="act-yamled" id="act-yamled"{{if not .YAMLMode}} hidden{{end}}>
-  <input type="hidden" id="act-yaml-on" name="yaml_on" value="1"{{if not .YAMLMode}} disabled{{end}}>
-  <div class="callout act-yamlbar"><span><b>You edit the YAML.</b> The plan follows it, and Name and Realm change the name and the realm in it. The rest of the form is locked; Run options still apply.</span><button type="button" class="btn sm" data-act-yaml-discard>Discard YAML edits</button></div>
-  <div class="act-inline act-yamlhead"><label class="lbl" for="act-yaml">Config</label><button type="button" class="btn sm" data-act-yaml-open aria-describedby="act-hint-yaml">Open a file…</button>
-    <input type="file" id="act-yaml-file" accept=".yaml,.yml,application/yaml,text/yaml,text/plain" hidden></div>
-  <textarea id="act-yaml" name="yaml" rows="26" placeholder="kind: Cluster&#10;name: hpc&#10;nodes:&#10;  - controller&#10;  - worker: 2" autocapitalize="off" spellcheck="false" aria-describedby="act-err-yaml act-hint-yaml"{{if not .YAMLMode}} disabled{{end}}>{{.Val "yaml"}}</textarea>
-  <span class="err" id="act-err-yaml"></span><span class="hint" id="act-hint-yaml">Paste a config, open a file, or drop one here. At most 64 KiB.</span>
-</div>
-<div class="fld"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-image act-hint-image">
-  <span class="err" id="act-err-image"></span><span class="hint" id="act-hint-image">The Slurm release of the image is the cluster's.</span></div>
-<div class="fld"><span class="lbl">Nodes</span>
-<div class="act-roles" id="act-roles">
-  <div class="act-nr"><span></span><i class="act-sq controller"></i><span class="act-lab"><b data-word="controller">controller</b><span class="hint"><span data-word="slurmctld">slurmctld</span>. Every cluster has one.</span></span>{{template "act-chip" (.Node "controller")}}<span class="act-always">always</span></div>
-  {{template "act-ned" (.Node "controller")}}
-  {{range .Roles}}<div class="act-nr{{if .Sub}} sub{{end}}"><input type="checkbox" id="act-{{.Name}}" name="{{.Name}}"{{if $.On .Name}} checked{{end}} aria-describedby="act-hint-{{.Name}} act-err-{{.Name}}"><i class="act-sq {{.Name}}"></i><span class="act-lab"><label for="act-{{.Name}}"><b data-word="{{.Word}}">{{.Label}}</b>{{with .Small}} <small>{{.}}</small>{{end}}</label><span class="hint" id="act-hint-{{.Name}}">{{range .Hint}}{{if .Word}}<span data-word="{{.Word}}">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</span><span class="err" id="act-err-{{.Name}}"></span></span>{{if not .Sub}}{{template "act-chip" ($.Node .Name)}}{{end}}</div>
-  {{if not .Sub}}{{template "act-ned" ($.Node .Name)}}{{end}}{{end}}
-  <div class="act-groups" id="act-groups">{{range .Groups}}{{template "act-group" ($.Node .)}}{{end}}</div>
-</div>
-<div class="act-inline"><button type="button" class="btn sm" data-act-wgadd>+ Add worker group</button><span class="hint">Each group has its own size. sind create worker later copies the last group.</span></div>
-<span id="act-eff" hidden></span>
-<template id="act-wg-tpl">{{template "act-group" (.Node "__WG__")}}</template>
-</div>
-<label class="act-nr act-box"><input type="checkbox" id="act-monitoring" name="monitoring"{{if .On "monitoring"}} checked{{end}} aria-describedby="act-err-monitoring"><span class="act-lab"><b>Monitoring</b><span class="hint">Adds the nodes to the realm's Prometheus, Loki and Grafana. Needs Slurm 26.05 or later in the image.</span><span class="err" id="act-err-monitoring"></span></span></label>
-<div class="fld"><span class="lbl" id="act-size-lbl">Node defaults</span>
-  <div class="act-size">
-    <div class="seg act-seg act-sizes" role="radiogroup" aria-labelledby="act-size-lbl">{{range .Sizes}}<label><input type="radio" name="size" value="{{.ID}}"{{if $.Is "size" .ID}} checked{{end}}{{if eq .ID "s"}} id="act-size"{{end}}><span>{{.Label}}<small>{{.CPUs}} CPU{{if ne .CPUs 1}}s{{end}} · {{.Memory}} · /tmp {{or .TmpSize "256m"}}</small></span></label>{{end}}<label><input type="radio" name="size" value="x"{{if .Is "size" "x"}} checked{{end}}><span>Custom<small>your values</small></span></label></div>
-    <div class="row act-custom">
-      <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" min="1" aria-describedby="act-err-cpus"><span class="err" id="act-err-cpus"></span></div>
-      <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" list="act-memories" placeholder="512m" autocapitalize="off" spellcheck="false" aria-describedby="act-err-memory act-hint-memory">
-        <span class="err" id="act-err-memory"></span><span class="hint" id="act-hint-memory">Such as 512m, 2g or 1.5g.</span></div>
-      <div class="fld"><label for="act-tmp">/tmp</label><input type="text" id="act-tmp" name="tmp" value="{{.Val "tmp"}}" placeholder="256m" autocapitalize="off" spellcheck="false" aria-describedby="act-err-tmp"><span class="err" id="act-err-tmp"></span></div>
-    </div>
-  </div>
-  <span class="err" id="act-err-size"></span>
-  <span class="hint">Every node takes these values. The size button of a node changes them for that node or worker group.</span>
-  <datalist id="act-memories"><option value="512m"></option><option value="1g"></option><option value="2g"></option><option value="4g"></option><option value="8g"></option></datalist>
-</div>
-<details class="act-sec" id="act-sec-users"{{if or (.Rows "user") (.Rows "group") (.Rows "account")}} open{{end}}><summary><span class="act-st">Users and accounts</span><span class="act-ss" id="act-sum-users"></span><span class="act-sb" id="act-bad-users"></span></summary>
-  <div class="act-sbody">
-    <div class="fld"><span class="lbl">Users</span>
-      <div class="act-rows" id="act-rows-user">{{range .Rows "user"}}{{template "act-user" .}}{{end}}</div>
-      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="user" data-act-into="act-rows-user" data-act-prefix="u">+ Add user</button><span class="hint">sind creates them on the nodes, with a home in /home. An empty UID takes the next free one from 1000.</span></div></div>
-    <div class="fld"><span class="lbl">Groups</span>
-      <div class="act-rows" id="act-rows-group">{{range .Rows "group"}}{{template "act-group-row" .}}{{end}}</div>
-      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="group" data-act-into="act-rows-group" data-act-prefix="g">+ Add group</button><span class="hint">For the group and groups of a user. Each user has a private group of its own name too.</span></div></div>
-    <div class="fld"><span class="lbl">Slurm accounts</span>
-      <div class="act-rows" id="act-rows-account">{{range .Rows "account"}}{{template "act-account" .}}{{end}}</div>
-      <div class="act-inline"><button type="button" class="btn sm" data-act-rowadd="account" data-act-into="act-rows-account" data-act-prefix="a">+ Add account</button><span class="hint">Need the db node. sind creates them with sacctmgr below root, a parent before its children. A new cluster has only the QOS normal; sind creates no QOS.</span></div></div>
-    <datalist id="act-dl-groups"></datalist><datalist id="act-dl-accounts"></datalist>
-    <datalist id="act-dl-limits">{{range .LimitKeys}}<option value="{{.}}"></option>{{end}}</datalist>
-    <template id="act-tpl-user">{{template "act-user" (.Row "__ROW__")}}</template>
-    <template id="act-tpl-group">{{template "act-group-row" (.Row "__ROW__")}}</template>
-    <template id="act-tpl-account">{{template "act-account" (.Row "__ROW__")}}</template>
-    <template id="act-tpl-limit">{{template "act-limit" (.Row "__ROW__").Blank}}</template>
-  </div>
-</details>
-<details class="act-sec" id="act-sec-identity"{{if ne (.Val "identity") "local"}} open{{end}}><summary><span class="act-st">Identity</span><span class="act-ss" id="act-sum-identity"></span><span class="act-sb" id="act-bad-identity"></span></summary>
-  <div class="act-sbody act-ids">
-    <div class="checks" role="radiogroup" aria-label="Identity mode">{{range .Identities}}<label><input type="radio" name="identity" value="{{.Mode}}"{{if $.Is "identity" (print .Mode)}} checked{{end}}{{if eq (print .Mode) "local"}} id="act-identity"{{end}}> <span class="mono">{{.Mode}}</span> <small>{{.Hint}}</small></label>{{end}}</div>
-    <span class="err" id="act-err-identity"></span>
-    <label class="act-nr act-box act-ctlusers"><input type="checkbox" id="act-ctlusers" name="ctlusers"{{if .On "ctlusers"}} checked{{end}} aria-describedby="act-err-ctlusers"><span class="act-lab"><b>Users on the controllers too</b><span class="hint">For a partition with AllowGroups: slurmctld checks the groups on its own node.</span><span class="err" id="act-err-ctlusers"></span></span></label>
-    <span class="hint">Where the nodes find the users, and how Slurm authenticates them. nssSlurm and clientIds need a managed cluster.</span>
-  </div>
-</details>
-<details class="act-sec act-slurm" id="act-sec-slurm"{{range .SlurmFiles}}{{if $.Val (print "slurm-" .ID)}} open{{end}}{{end}}><summary><span class="act-st">Slurm config</span><span class="act-ss" id="act-sum-slurm"></span><span class="act-sb" id="act-bad-slurm"></span></summary>
-  <div class="act-sbody">
-    <div class="seg act-seg act-stabs" role="radiogroup" aria-label="Slurm config file">{{range .SlurmFiles}}<label><input type="radio" name="stab" value="{{.ID}}"{{if $.Is "stab" .ID}} checked{{end}}><span>{{.ID}}<span class="act-dot" id="act-dot-{{.ID}}"></span></span></label>{{end}}</div>
-    {{range .SlurmFiles}}<div class="fld act-sl act-sl-{{.ID}}"><label for="act-slurm-{{.ID}}">Lines to add to <span class="mono">{{.File}}</span></label>
-      <textarea id="act-slurm-{{.ID}}" name="slurm-{{.ID}}" rows="6" placeholder="such as {{.Example}}" autocapitalize="off" spellcheck="false" aria-describedby="act-err-slurm-{{.ID}}">{{$.Val (print "slurm-" .ID)}}</textarea><span class="err" id="act-err-slurm-{{.ID}}"></span></div>{{end}}
-    <span class="hint">sind writes these lines after its own, and Slurm takes the last value of a parameter, so yours wins. sind checks only a few parameters, such as SlurmctldHost with a backup controller and the database ones of slurmdbd.conf. The plan warns when slurm.conf sets ClusterName, SlurmctldHost, SlurmUser, the spool directories or PlugStackConfig, which the cluster needs as sind sets them.</span>
-  </div>
-</details>
-<details class="act-sec" id="act-sec-data"><summary><span class="act-st">Data</span><span class="act-ss" id="act-sum-data"></span><span class="act-sb" id="act-bad-data"></span></summary>
-  <div class="act-sbody">
-    <div class="seg act-seg" role="radiogroup" aria-label="Data storage">
-      <label><input type="radio" id="act-dtype" name="dtype" value="hostPath"{{if ne (.Val "dtype") "volume"}} checked{{end}}><span>Host directory</span></label><label><input type="radio" id="act-dtype-volume" name="dtype" value="volume"{{if eq (.Val "dtype") "volume"}} checked{{end}}><span>Docker volume</span></label></div>
-    <span class="err" id="act-err-dtype"></span>
-    <div class="row">
-      <div class="fld act-wide"><label for="act-dir">Directory</label><input type="text" id="act-dir" name="dir" value="{{.Val "dir"}}" autocapitalize="off" spellcheck="false"{{if .DirFollows}} data-act-follow{{end}}{{if eq (.Val "dtype") "volume"}} readonly{{end}} aria-describedby="act-err-dir act-hint-dir">
-        <span class="err" id="act-err-dir"></span><span class="hint" id="act-hint-dir">On the host. Jobs write here as root.</span></div>
-      <div class="fld"><label for="act-mount">Mount path</label><input type="text" id="act-mount" name="mount" value="{{.Val "mount"}}" placeholder="/data" autocapitalize="off" spellcheck="false" aria-describedby="act-err-mount act-hint-mount">
-        <span class="err" id="act-err-mount"></span><span class="hint" id="act-hint-mount">In the nodes.</span></div>
-    </div>
-    <label class="act-nr act-box"><input type="checkbox" id="act-mkdir" name="mkdir"{{if .On "mkdir"}} checked{{end}} aria-describedby="act-err-mkdir"><span class="act-lab"><b>Create the directory if it is missing</b><span class="hint">Docker mounts only a directory that exists.</span><span class="err" id="act-err-mkdir"></span></span></label>
-    <label class="act-nr act-box"><input type="checkbox" id="act-cvmfs" name="cvmfs"{{if .On "cvmfs"}} checked{{end}} aria-describedby="act-err-cvmfs"><span class="act-lab"><b>CVMFS</b><span class="hint">Mounts CVMFS read-only at /cvmfs on every node, from the cvmfs Docker volume plugin or from /cvmfs of the host.</span><span class="err" id="act-err-cvmfs"></span></span></label>
-    <span class="hint">sind ui writes the data storage into the config, so the saved file alone makes the same cluster again.</span>
-  </div>
-</details>
-<details class="act-sec" id="act-sec-run"><summary><span class="act-st">Run options</span><span class="act-ss" id="act-sum-run"></span><span class="act-sb" id="act-bad-run"></span></summary>
-  <div class="act-sbody">
-    {{if .Val "pull_auto"}}<input type="hidden" id="act-pull-auto" name="pull_auto" value="1">{{end}}
-    <label class="act-nr act-box"><input type="checkbox" id="act-pull" name="pull"{{if .On "pull"}} checked{{end}} aria-describedby="act-err-pull act-pull-hint"><span class="act-lab"><b>Pull the image</b><span class="hint" id="act-pull-hint">Gets the newest image first, even if Docker has one.</span><span class="err" id="act-err-pull"></span></span></label>
-    <div class="fld"><span class="lbl" id="act-wait-lbl">Wait for ready</span>
-      <div class="act-waits"><div class="seg act-seg" role="radiogroup" aria-labelledby="act-wait-lbl">{{range .Waits}}<label><input type="radio" name="wait" value="{{.Value}}"{{if $.Is "wait" .Value}} checked{{end}}{{if eq .Value "2m"}} id="act-wait"{{end}}><span>{{.Label}}</span></label>{{end}}</div>
-      <input type="text" id="act-wait_other" name="wait_other" value="{{.Val "wait_other"}}" placeholder="such as 15m" autocapitalize="off" spellcheck="false" aria-label="Other time to wait" aria-describedby="act-err-wait_other"></div>
-      <span class="err" id="act-err-wait"></span><span class="err" id="act-err-wait_other"></span>
-      <span class="hint">For each node, from the start of its container; pulls do not count. If a node is not ready in time, sind removes the cluster again.</span></div>
-  </div>
-</details>
-{{end}}
-
+{{/* act-dlg-create-worker adds workers: to the cluster of the link, which
+a row names with Change, or, when the link names none, to the cluster that
+the user picks first from the list, which opens the dialog again for it
+with the fields that the user filled in. */}}
 {{define "act-dlg-create-worker"}}
+{{if .Picking}}<div class="fld"><span class="lbl" id="act-cl-lbl">Cluster</span>
+  <div class="act-cls" role="group" aria-labelledby="act-cl-lbl">{{range .ClusterGroups}}<div class="act-clg" role="group" aria-label="Realm {{.Realm}}"><span class="act-ogl" aria-hidden="true">realm {{.Realm}}</span>
+    {{range .Rows}}<button type="button" class="act-crow" hx-get="{{.URL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" data-act-focus{{if .Off}} disabled{{end}}><span class="act-crn"><b class="mono">{{.Name}}</b><small>{{with .Off}}{{.}}{{else}}{{.Workers}}{{end}}</small></span>{{if .Pill.Text}}<span class="pill {{.Pill.Class}}">{{.Pill.Text}}</span>{{end}}</button>{{end}}</div>{{end}}</div>
+  <span class="hint">Or open Add workers on the page of a cluster to skip this step.</span></div>
+{{else}}{{with .ClusterRow}}<div class="act-target act-ctarget"><span class="act-crn"><span><span class="faint">Cluster</span> <b class="mono">{{.Name}}</b></span><small>realm {{.Realm}} · {{.Workers}}</small></span>{{if .Pill.Text}}<span class="pill {{.Pill.Class}}">{{.Pill.Text}}</span>{{end}}
+  {{- if $.CanChange}}<button type="button" class="btn sm" hx-get="{{$.ChangeURL}}" hx-include="#act-count,#act-cpus,#act-memory" hx-target="#layer" hx-swap="innerHTML" aria-label="Change the cluster">Change…</button>{{end}}</div>{{end}}{{end}}
 <div class="row">
-  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"></div>
-  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{.LikeNewest}}" min="1"></div>
-  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{.LikeNewest}}" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
+  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1"{{if .Picking}} readonly{{end}} aria-describedby="act-err-count"><span class="err" id="act-err-count"></span></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" min="1"{{if .Picking}} readonly{{end}} aria-describedby="act-err-cpus"><span class="err" id="act-err-cpus"></span></div>
+  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="{{if .Picking}}as its newest worker{{else}}{{.LikeNewest}}{{end}}" autocapitalize="off" spellcheck="false"{{if .Picking}} readonly{{end}} aria-describedby="act-err-memory act-hint-memory"><span class="err" id="act-err-memory"></span><span class="hint" id="act-hint-memory">Such as 1g or 512m.</span></div>
 </div>
 {{end}}
 
@@ -354,27 +241,85 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 
 {{define "act-dlg-delete-clusters"}}
 <input type="hidden" name="back" value="{{.Val "back"}}">
-{{if .Clusters}}<div class="fld"><span class="lbl">Clusters</span>
-  <ul class="act-clusters">{{range .Clusters}}<li><input type="hidden" name="clusters" value="{{.Ref}}"><b class="mono">{{.Name}}</b> <small>realm {{.Realm}}, {{.NodesText}}, {{.State}}</small></li>{{end}}</ul></div>
+{{if .Clusters}}{{range .Clusters}}<input type="hidden" name="clusters" value="{{.Ref}}">{{end}}
 {{with .Gone}}<div class="callout warn">sind ui no longer sees <span class="mono">{{$.GoneText}}</span>, so the dialog leaves {{if eq (len .) 1}}it{{else}}them{{end}} out.</div>{{end}}
-<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{if eq (len .Clusters) 1}}this cluster go with it{{else}}these clusters go with them{{end}}. A host directory mounted as /data stays as it is; a data volume goes too.</div>
 {{else}}<div class="empty">{{if .Gone}}sind ui no longer sees <span class="mono">{{.GoneText}}</span>. {{end}}No cluster to delete. Tick clusters on <a href="{{.Back}}">the Clusters page</a> and delete them from the bar above the table.</div>
 {{end}}{{end}}
 
-{{define "act-dlg-delete-worker"}}
-{{template "act-nodes" .}}
+{{define "act-dlg-delete-worker"}}<div class="fld"><span class="lbl">Workers of {{.Cluster}}</span>
+{{if .Nodes}}{{template "act-ntable" .}}{{else}}<div class="empty">sind ui sees no worker of {{.Cluster}}.</div>{{end}}</div>
 {{end}}
 
-{{define "act-dlg-power"}}
-{{template "act-nodes" .}}
-{{range .OpGroups}}<fieldset class="fld act-ops{{if eq .ID "danger"}} act-danger{{end}}"><legend class="lbl">{{.Label}}</legend><div class="checks">
-  {{range .Ops}}<label><input type="radio" name="op" value="{{.ID}}"{{if $.Is "op" .ID}} checked{{end}}> <span>{{.Label}} <small>{{.Text}}</small></span></label>{{end}}
-</div>{{if eq .ID "slurm"}}<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{$.Val "reason"}}" placeholder="such as disk test" maxlength="200"><span class="hint">sinfo -R shows it.</span></div>{{end}}</fieldset>{{end}}
+{{/* act-dlg-power is the Power dialog: a short confirmation of the
+action and the nodes of its link, whose picker waits behind Change nodes,
+or the picker, when the link names no action or no nodes. act.js keeps the
+node set field and the ticks in step, and turns off the actions that fit no
+ticked node. */}}
+{{define "act-dlg-power"}}<div class="act-power" data-act-power>
+{{if .Short}}<div class="act-target" data-act-target>
+  <ul class="act-tl">{{range .Picked}}{{template "act-node-line" .}}{{end}}</ul>
+  <button type="button" class="btn sm" data-act-change aria-controls="act-pick" aria-expanded="false">Change nodes…</button></div>
+<details class="act-other" data-act-other><summary><b>Other actions</b><span class="pg-caret" aria-hidden="true"></span> <span class="faint act-otherops">{{.OtherOps}}</span></summary>{{template "act-opseg" .}}</details>
+{{else}}{{template "act-opseg" .}}{{end}}
+<div class="fld act-reason"><label for="act-reason">Reason for the drain</label><input type="text" id="act-reason" name="reason" value="{{.Val "reason"}}" placeholder="such as disk test" maxlength="200" aria-describedby="act-hint-reason"><span class="hint" id="act-hint-reason">sinfo -R shows it.</span></div>
+<div class="act-pick" id="act-pick"{{if .Short}} hidden{{end}}>
+{{if .Nodes}}<div class="act-ph2"><label class="lbl" for="act-nodeset">Nodes of {{.Cluster}}</label>
+  <span class="act-picks" role="group" aria-label="Tick"><span class="faint">Tick:</span>{{range .Picks}}<button type="button" class="btn sm act-qp" data-act-pick="{{.Nodes}}"{{if not .N}} disabled{{end}}>{{.Label}} <span class="act-qn{{if and .N .Class}} {{.Class}}{{end}}">{{.N}}</span></button>{{end}}</span></div>
+<input type="text" id="act-nodeset" value="{{.PickedSet}}" placeholder="such as worker-[0-3]" autocapitalize="off" autocomplete="off" spellcheck="false" aria-describedby="act-nodeset-err act-nodeset-hint" data-act-nodeset>
+<span class="err" id="act-nodeset-err" role="status"></span><span class="hint" id="act-nodeset-hint">A node set as the CLI takes it. The ticks follow it, and it follows the ticks.</span>
+{{template "act-ntable" .}}
+{{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}
+</div></div>
 {{end}}
 
+{{/* act-opseg is the action segment of the Power dialog, in groups: the
+ops of Slurm, those of the containers, and those that can lose data. */}}
+{{define "act-opseg"}}<fieldset class="fld act-opseg"><legend class="lbl">Action</legend>
+  <div class="act-opsrow">{{range .OpSegs}}<div class="act-og{{if eq .ID "danger"}} danger{{end}}"><span class="act-ogl" id="act-og-{{.ID}}" aria-hidden="true">{{.Label}}</span><div class="seg act-seg" role="group" aria-labelledby="act-og-{{.ID}}">{{range .Ops}}<label title="{{.Text}}"><input type="radio" name="op" value="{{.ID}}"{{if .On}} checked{{end}}><span>{{.Label}}</span></label>{{end}}</div></div>{{end}}</div>
+  <p class="hint act-offs" id="act-offs" hidden></p></fieldset>{{end}}
+
+{{/* act-node-line is a picked node of a short confirmation: its name,
+role, state and issues. */}}
+{{define "act-node-line"}}{{with .Node}}<li><b class="mono">{{.Short}}</b> <span class="chip {{.RoleClass}}">{{.Role}}</span>{{template "act-node-state" .}}</li>{{end}}{{end}}
+
+{{/* act-node-state is what a node of a picker says of itself: what is
+wrong with its container and its services, and its Slurm state with the
+reason. */}}
+{{define "act-node-state"}}{{if .Life}} <span class="pill run">{{.Pill.Text}}</span>{{else}}{{range .ServiceIssues}} <span class="pill {{.Class}}">{{.Text}}</span>{{end}}{{with .Slurm}} <span class="pill {{$.SlurmClass}}" title="Slurm state">{{.State}}</span>{{with .Reason}} <span class="faint act-why2">{{.}}</span>{{end}}{{end}}{{end}}{{end}}
+
+{{/* act-ntable is the table of the nodes of a picker, whose boxes the
+form posts as nodes. */}}
+{{define "act-ntable"}}{{$roles := ne .ID "delete-worker"}}<div class="act-nt" role="group" aria-label="Nodes of {{.Cluster}}"><table class="act-ntab"><thead><tr><th><span class="vh">Tick</span></th><th>Node</th>{{if $roles}}<th>Role</th>{{end}}<th>Slurm</th><th>Issues</th></tr></thead><tbody>
+{{range .Nodes}}<tr data-act-node="{{.Short}}" data-act-offs="{{.Offs}}"><td><input type="checkbox" name="nodes" value="{{.Short}}" id="act-n-{{.Short}}"{{if .On}} checked{{end}}></td>
+  <td class="mono act-nn"><label for="act-n-{{.Short}}"><b>{{.Short}}</b></label></td>{{if $roles}}<td class="act-nrole"><span class="chip {{.Node.RoleClass}}">{{.Role}}</span></td>{{end}}
+  {{with .Node}}<td class="act-nslurm">{{if .Life}}<span class="pill run">{{.Pill.Text}}</span>{{else if .Slurm}}<span class="pill {{.SlurmClass}}">{{.Slurm.State}}</span>{{with .Slurm.Reason}} <span class="faint act-why2">{{.}}</span>{{end}}{{else}}<span class="faint">–</span>{{end}}</td>
+  <td class="act-nissues">{{if .Life}}<span class="faint">–</span>{{else}}{{range .ServiceIssues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}{{end}}</td>{{end}}</tr>{{end}}
+</tbody></table></div>{{end}}
+
+{{define "act-dlg-restart-service"}}{{if .Val "nodes"}}<input type="hidden" name="nodes" value="{{.Val "nodes"}}">
+<fieldset class="fld"><legend class="lbl">Service of <span class="mono">{{.Val "nodes"}}</span></legend>
+  {{with .NodeServices}}<div class="checks">{{range .}}<label><input type="radio" name="unit" value="{{.Name}}"{{if $.Is "unit" .Name}} checked{{end}}> <span class="mono">{{.Name}}</span> <small>{{.Word}}</small></label>{{end}}</div>
+  {{else}}<div class="empty">sind ui has not probed this node yet.</div>{{end}}</fieldset>
+{{else}}<div class="fld"><label for="act-nodes">Node</label><select id="act-nodes" name="nodes" hx-get="/dialogs/restart-service" hx-include="closest form" hx-target="#layer" hx-swap="innerHTML" aria-describedby="act-hint-nodes"><option value="">Pick a node</option>{{range .ServiceNodes}}<option value="{{.Short}}">{{.Label}}</option>{{end}}</select><span class="hint" id="act-hint-nodes">A node that runs. The dialog then lists the services that sind checks on it.</span></div>
+{{end}}{{end}}
+
+{{/* act-dlg-connect is the Connect dialog: the realms to switch to, each
+of which opens the dialog again with the container picked so far, and the containers that sind did not make
+and that are not on the mesh of the realm, as a list to pick one from,
+those that do not run turned off, and Another name for one that starts
+later; without such a container, the field for its name. */}}
 {{define "act-dlg-connect"}}
-<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">The name of a running container that no realm has yet.</span></div>
-{{template "act-realm" .}}
+{{with .RealmChoices}}<div class="fld"><span class="lbl" id="act-realms-lbl">Realm</span>
+  <div class="seg act-seg act-realms" role="group" aria-labelledby="act-realms-lbl">{{range .}}<button type="button" hx-get="{{.URL}}" hx-include=".act-olist input[name=container], #act-container" hx-target="#layer" hx-swap="innerHTML"{{if .On}} aria-pressed="true" class="on"{{else}} aria-pressed="false"{{end}}>{{.Name}}</button>{{end}}</div></div>{{end}}
+{{with .Outsides}}<fieldset class="fld act-outs"><legend class="lbl">Containers that sind did not make</legend>
+  <div class="act-olist">{{range .}}<label class="act-orow{{if .Off}} off{{end}}"><input type="radio" name="container" value="{{.Name}}"{{if $.Is "container" .Name}} checked data-act-focus{{end}}{{if .Off}} disabled{{end}}>
+    <span class="act-on"><b class="mono">{{.Name}}</b><small>{{.Image}}{{if .Off}} · stopped. Start it first.{{else}}{{with .Networks}} · {{.}}{{end}}{{with .Up}} · {{.}}{{end}}{{end}}</small></span>
+    {{- if .Off}}<span class="pill">{{.State}}</span>{{else}}{{with .Also}}<span class="chip">{{.}}</span>{{end}}{{end}}</label>{{end}}
+    <div class="act-oother"><label class="act-orow"><input type="radio" name="container" value="" id="act-other-pick"{{if and (not ($.Val "container")) ($.Val "other")}} checked{{end}}>
+      <span class="act-on"><b>Another name…</b><small>For a container that starts later.</small></span></label>
+      <input type="text" class="act-oname" id="act-container" name="other" value="{{$.Val "other"}}" placeholder="such as kind-control-plane" autocapitalize="off" spellcheck="false" aria-label="Name of the container" aria-describedby="act-err-container"{{if and (not ($.Val "container")) ($.Val "other")}} data-act-focus{{end}}></div></div>
+  <span class="err" id="act-err-container"></span></fieldset>
+{{else}}<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="other" value="{{.Val "other"}}" placeholder="such as kind-control-plane" autocapitalize="off" spellcheck="false" aria-describedby="act-err-container act-hint-container"><span class="err" id="act-err-container"></span><span class="hint" id="act-hint-container">sind ui sees no container that sind did not make and that is not on the mesh of realm {{.Realm}}. Write the name of one that starts later.</span></div>{{end}}
 {{end}}
 
 {{define "act-dlg-disconnect"}}
@@ -383,7 +328,3 @@ realm of the link, another one that sind ui sees, or a new one. */}}
 
 {{define "act-dlg-delete-realm"}}{{end}}
 
-{{/* act-started is the notice of a command that a dialog started, which
-htmx adds to #act-notes of the layout. act.js takes it away after a while,
-unless the pointer or the focus is on it. */}}
-{{define "act-started"}}{{with .Data}}<div class="act-note" data-act-note><p>Started <code>{{.Display}}</code>. <a href="/tasks/{{.ID}}">Show progress</a></p><button type="button" class="iconbtn" data-act-note-close aria-label="Close this notice" title="Close">×</button></div>{{end}}{{end}}

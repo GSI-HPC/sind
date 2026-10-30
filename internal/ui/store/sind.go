@@ -71,8 +71,22 @@ type Mesh struct {
 	// External are the containers outside sind on the mesh network,
 	// sorted.
 	External []string
+	// Connectable are the containers outside sind that are not on the
+	// mesh network, running or not, sorted by name: those that sind
+	// connect container can attach.
+	Connectable []Outside
 	// Err says in one line why the mesh could not be read.
 	Err string
+}
+
+// Outside is a container that sind did not make, as docker ps lists it.
+type Outside struct {
+	Name, Image string
+	// State is Docker's word for it, such as running or exited, and
+	// Status what docker ps says of it for people, such as "Up 2 hours".
+	State, Status string
+	// Networks are those that it is on.
+	Networks []string
 }
 
 // Slurm is what Slurm says about a cluster, read next to its status.
@@ -175,7 +189,17 @@ func (s *Store) SetClusters(realm string, clusters []cluster.Summary) {
 func (s *Store) SetNodes(realm string, nodes []cluster.NodeSummary) {
 	nodes = slices.SortedStableFunc(slices.Values(nodes), compareNodes)
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Nodes, realm, nodes, len(nodes) == 0)
+		old := sn.Nodes[realm]
+		if !setEntry(&sn.Nodes, realm, nodes, len(nodes) == 0) {
+			return false
+		}
+		record(sn, s.clock(), nodeChanges(realm, old, nodes))
+		forget(sn, realm, "", func(k NodeKey) bool {
+			return slices.ContainsFunc(nodes, func(n cluster.NodeSummary) bool {
+				return n.Container == string(cluster.ContainerName(realm, k.Cluster, k.Node))
+			})
+		})
+		return true
 	}, NodesTopic(realm))
 }
 
@@ -227,6 +251,13 @@ func (s *Store) SetMesh(realm string, m Mesh) {
 	m.Records = slices.Clone(m.Records)
 	m.External = slices.Clone(m.External)
 	slices.Sort(m.External)
+	m.Connectable = slices.Clone(m.Connectable)
+	for i := range m.Connectable {
+		m.Connectable[i].Networks = slices.Clone(m.Connectable[i].Networks)
+	}
+	if len(m.Connectable) == 0 {
+		m.Connectable = nil
+	}
 	if len(m.Records) == 0 {
 		m.Records = nil
 	}
@@ -243,7 +274,14 @@ func (s *Store) SetMesh(realm string, m Mesh) {
 func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 	k := StatusKey{realm, name}
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Statuses, k, st, st == nil)
+		old := sn.Statuses[k]
+		if !setEntry(&sn.Statuses, k, st, st == nil) {
+			return false
+		}
+		if old != nil && st != nil {
+			record(sn, s.clock(), statusChanges(realm, name, old, st))
+		}
+		return true
 	}, k.Topic())
 }
 
@@ -253,7 +291,14 @@ func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 func (s *Store) SetSlurm(realm, name string, sl *Slurm) {
 	k := StatusKey{realm, name}
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Slurms, k, sl, sl == nil)
+		old := sn.Slurms[k]
+		if !setEntry(&sn.Slurms, k, sl, sl == nil) {
+			return false
+		}
+		if old != nil && sl != nil {
+			record(sn, s.clock(), slurmChanges(realm, name, old, sl))
+		}
+		return true
 	}, k.Topic())
 }
 
@@ -267,22 +312,14 @@ func keepEntries[V any](m *map[StatusKey]V, keep []StatusKey) {
 	*m = next
 }
 
-// KeepStatuses drops the status, and what Slurm says, of every cluster
-// that is not in keep, as the cluster is gone and no page shows it. It
-// notifies nothing: no page shows a dropped status.
+// KeepStatuses drops the status, what Slurm says and the faults of the
+// nodes of every cluster that is not in keep, as the cluster is gone and no
+// page shows it. It notifies nothing: no page shows a dropped status.
 func (s *Store) KeepStatuses(keep ...StatusKey) {
 	s.change(func(sn *Snapshot) bool {
 		keepEntries(&sn.Statuses, keep)
 		keepEntries(&sn.Slurms, keep)
-		return false
-	})
-}
-
-// KeepSlurms drops what Slurm says of every cluster that is not in keep,
-// as the pages that showed it are closed. It notifies nothing.
-func (s *Store) KeepSlurms(keep ...StatusKey) {
-	s.change(func(sn *Snapshot) bool {
-		keepEntries(&sn.Slurms, keep)
+		keepEntries(&sn.Faults, keep)
 		return false
 	})
 }

@@ -37,8 +37,8 @@
 //     the fragment again when a topic it depends on changes (Topics for
 //     exact topics, Prefixes for prefixes such as "run/", Watch for topics
 //     that depend on the Params), and sends it only when its HTML differs
-//     from what that stream sent before. The rail and the task dock are
-//     part of every page (shellFragments).
+//     from what that stream sent before. The rail and the two parts of the
+//     task dock are part of every page (shellFragments).
 //  4. Routes for everything else, registered with AddRoute: dialogs,
 //     POST actions, helpers that answer with one fragment. A route is a
 //     function of the *Server and the request. A request that changes

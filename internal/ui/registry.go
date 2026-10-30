@@ -53,8 +53,16 @@ type View struct {
 	Snap store.Snapshot
 	// Now is the time to measure from.
 	Now time.Time
+	// Still says that the clock of the server stands still (the still demo),
+	// so that the clocks of the page do not count on.
+	Still bool
 	// Params are the values of the request that Load reads.
 	Params Params
+	// Scope is the realm that the session works in, "" for every realm:
+	// the realm that the browser remembers (pg_realm.go), or the one that a
+	// page of one realm or all of them shows. The rail shows it, scopes its
+	// Realm group to it, and /events renders with the scope of the page.
+	Scope string
 	// Data is what Load sets, for the template.
 	Data any
 	// CSRF is the session's token, for forms: {{template "csrf-field" .}}.
@@ -159,11 +167,15 @@ type Route struct {
 }
 
 // NavCount is the badge behind a rail entry: a count with its unit, such
-// as "1 down", or a dot when all is well.
+// as "1 warning", or a dot when all is well.
 type NavCount struct {
 	// Text is the count with its unit; empty shows none, or a dot with
 	// Class ok.
 	Text string
+	// Unit, when set, follows Text, which is then the number alone: the
+	// bar of a phone, which has no room for it, leaves it out, as "3" of
+	// "3 need a look".
+	Unit string
 	// Class colours it: "", "run", "warn", "bad", or "ok" for the dot.
 	Class string
 	// Label says what the badge means in words, for screen readers and
@@ -172,8 +184,10 @@ type NavCount struct {
 }
 
 // NavCountFunc returns the badge of a rail entry from the snapshot, at
-// the time of the view.
-type NavCountFunc func(sn store.Snapshot, now time.Time) NavCount
+// the time of the view. realm is the scope of an entry of the Realm group
+// of the rail, which counts only that realm; it is "" for every realm, and
+// for the other entries.
+type NavCountFunc func(sn store.Snapshot, realm string, now time.Time) NavCount
 
 // A Service is background work of sind ui.
 type Service struct {
@@ -321,5 +335,5 @@ func wildcards(pattern string) []string {
 }
 
 // shellFragments are the fragments that every page includes, in name
-// order: the rail and the task dock.
-var shellFragments = []string{"rail", "tasks"}
+// order: the rail, the strip of the task dock, and its button and list.
+var shellFragments = []string{"rail", "tasks", "tasks-menu"}

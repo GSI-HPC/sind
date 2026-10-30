@@ -30,10 +30,10 @@ sind create cluster --config ha.yaml
 {{< ui >}}
 
 1. Press **New cluster…**.
-2. Tick **backup** below the controller.
+2. Open **More nodes** below the nodes and tick **backup**.
 3. Press **Create**.
 
-{{< uishot "dialog-create-cluster" >}}
+{{< uishot "new-cluster" >}}
 
 {{< /ui >}}
 {{< /ways >}}

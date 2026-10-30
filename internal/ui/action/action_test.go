@@ -3,7 +3,6 @@
 package action
 
 import (
-	"errors"
 	"io/fs"
 	"net/url"
 	"slices"
@@ -89,7 +88,7 @@ func build(t *testing.T, id string, f Form) (Command, error) {
 
 func TestIDs(t *testing.T) {
 	assert.Equal(t, []string{
-		"connect", "create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-realm", "delete-worker", "disconnect", "power",
+		"connect", "create-cluster", "create-worker", "delete-cluster", "delete-clusters", "delete-realm", "delete-worker", "disconnect", "power", "restart-service",
 	}, IDs())
 	_, ok := Lookup("nope")
 	assert.False(t, ok)
@@ -135,11 +134,15 @@ func TestAction_Confirmation(t *testing.T) {
 	assert.Equal(t, "sind", realm.Want(form()))
 	assert.Equal(t, "ci", realm.Want(form("realm", " ci ")))
 
-	// One worker is confirmed with its name, more with the cluster's.
+	// One worker is confirmed with its name, more with their count.
 	workers, _ := Lookup("delete-worker")
 	assert.Equal(t, "worker-1", workers.Want(form("cluster", "dev", "nodes", "worker-1")))
-	assert.Equal(t, "dev", workers.Want(form("cluster", "dev", "nodes", "worker-1,worker-2")))
-	assert.Equal(t, "dev", workers.Want(form("cluster", "dev")))
+	assert.Equal(t, "2", workers.Want(form("cluster", "dev", "nodes", "worker-1,worker-2")))
+	assert.Empty(t, workers.Want(form("cluster", "dev")))
+	assert.Equal(t, "the name of the worker", workers.WantWhat(form("cluster", "dev", "nodes", "worker-1")))
+	assert.Equal(t, "the number of workers", workers.WantWhat(form("cluster", "dev", "nodes", "worker-1,worker-2")))
+	assert.Empty(t, workers.WantWhat(form("cluster", "dev")), "no word, nothing to say about it")
+	assert.Empty(t, del.WantWhat(f), "the name of a cluster needs no words")
 }
 
 func TestAction_Target(t *testing.T) {
@@ -182,7 +185,7 @@ func TestFindCluster_Errors(t *testing.T) {
 		want string
 	}{
 		{"bad realm", form("realm", "Bad Realm", "cluster", "dev"), "realm: use "},
-		{"no cluster", form(), "cluster: say which cluster"},
+		{"no cluster", form(), "cluster: pick a cluster"},
 		{"bad cluster", form("cluster", "Dev!"), "cluster: invalid cluster name"},
 		{"unknown cluster", form("cluster", "nope"), "realm sind has no cluster nope"},
 		{"other realm", form("realm", "ci", "cluster", "dev"), "realm ci has no cluster dev"},
@@ -197,12 +200,20 @@ func TestFindCluster_Errors(t *testing.T) {
 	}
 }
 
+// A form without a cluster lacks a value: the dialog asks for it.
+func TestFindCluster_Missing(t *testing.T) {
+	_, err := build(t, "create-worker", form())
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "Pick a cluster.", missing.Hint())
+}
+
 func TestBuildCreateWorker(t *testing.T) {
 	cmd, err := build(t, "create-worker", form("cluster", "dev", "count", "2"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "create", "worker", "dev", "--count", "2"}, cmd.Argv)
 	assert.Equal(t, "sind create worker dev --count 2", cmd.Display)
-	assert.Equal(t, []string{"sind adds the workers, then tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, []string{"The new workers join the partition `all`. Your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure` on the controller, and running jobs go on."}, cmd.Notes)
 	assert.Equal(t, "2 × the CPUs of worker-3, the memory of worker-3: worker-4 … worker-5", cmd.Summary)
 	assert.Equal(t, []PlannedNode{{Short: "worker-4", Role: "worker"}, {Short: "worker-5", Role: "worker"}}, cmd.Nodes)
 	assert.Equal(t, "Add 2 workers", cmd.OK)
@@ -242,7 +253,7 @@ func TestBuildCreateWorker_Sizes(t *testing.T) {
 	cmd, err = a.Build(form("cluster", "default", "count", "1"), c)
 	require.NoError(t, err)
 	assert.Equal(t, "1 × the CPUs of worker-0, the memory of worker-0: worker-1", cmd.Summary)
-	assert.Equal(t, []string{"sind ui cannot look at the size of worker-0: docker: gone. sind adds the workers, then tells slurmctld about them."}, cmd.Notes)
+	assert.Equal(t, []string{"sind ui cannot look at the size of worker-0: docker: gone.", "The new workers join the partition `all`. Your own `PartitionName` lines do not change. sind then runs `scontrol reconfigure` on the controller, and running jobs go on."}, cmd.Notes)
 
 	// A worker without limits gives new workers sind's defaults, as sind
 	// does.
@@ -276,19 +287,30 @@ func TestBuildCreateWorker_Sizes(t *testing.T) {
 }
 
 func TestBuildCreateWorker_Errors(t *testing.T) {
-	for field, tc := range map[string]struct{ f, want string }{
-		"count":  {"count=0", "How many: write a number from 1 to 1024"},
-		"count2": {"", "How many: write a number from 1 to 1024"},
-		"cpus":   {"count=1&cpus=x", "CPUs: write a number from 1 to 1024"},
-		"memory": {"count=1&memory=lots", `memory: invalid memory "lots"`},
+	for field, tc := range map[string]struct{ f, field, want, argv string }{
+		"count":  {"count=0", "count", "write a number from 1 to 1024", "sind create worker dev"},
+		"count2": {"", "count", "write a number from 1 to 1024", "sind create worker dev"},
+		"cpus":   {"count=2&cpus=x", "cpus", "write a number from 1 to 1024", "sind create worker dev --count 2"},
+		"memory": {"count=1&memory=lots", "memory", "write a size such as 2g or 512m", "sind create worker dev"},
 	} {
 		t.Run(field, func(t *testing.T) {
 			f, _ := url.ParseQuery(tc.f)
 			f.Set("cluster", "dev")
-			_, err := build(t, "create-worker", f)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.want)
+			cmd, err := build(t, "create-worker", f)
+			require.NoError(t, err, "a wrong field keeps the command, with its default")
+			require.NotEmpty(t, cmd.Problems)
+			assert.Equal(t, Problem{Field: tc.field, Label: cmd.Problems[0].Label, Text: tc.want, Default: true}, cmd.Problems[0])
+			assert.Equal(t, tc.argv, cmd.Display)
 		})
+	}
+}
+
+func TestBuildCreateWorker_MemoryAsPeopleWriteIt(t *testing.T) {
+	for in, want := range map[string]string{"2 GB": "2g", "512 MiB": "512m", "1.5g": "1.5g", "2048 m": "2048m", "1 GiB": "1g"} {
+		cmd, err := build(t, "create-worker", form("cluster", "dev", "count", "1", "memory", in))
+		require.NoError(t, err)
+		assert.Empty(t, cmd.Problems, in)
+		assert.Equal(t, "sind create worker dev --memory "+want, cmd.Display, in)
 	}
 }
 
@@ -309,10 +331,12 @@ func TestBuildDeleteCluster(t *testing.T) {
 	assert.Equal(t, "sind delete cluster dev", cmd.Display)
 	assert.Equal(t, "Delete cluster dev", cmd.OK)
 	assert.Equal(t, []string{
+		"the data volume sind-dev-data: every file in /data",
 		"5 containers: controller, worker-0, worker-1, worker-2, worker-3", "the network sind-dev-net",
-		"the volumes sind-dev-config, sind-dev-data", "its jobs, its accounting and its Slurm state",
-	}, cmd.Goes)
+		"the volume sind-dev-config", "its jobs, its accounting and its Slurm state",
+	}, cmd.Goes, "the data volume goes first")
 	assert.Equal(t, []string{"the host directory /home/ada/dev, mounted at /data", "the other cluster of realm sind, and its mesh"}, cmd.Stays)
+	assert.Equal(t, "I know that the data volume `sind-dev-data` of dev goes, with every file in /data.", cmd.Ack)
 
 	cmd, err = build(t, "delete-cluster", form("realm", "ci", "cluster", "ci1"))
 	require.NoError(t, err)
@@ -320,17 +344,40 @@ func TestBuildDeleteCluster(t *testing.T) {
 	assert.Equal(t, []string{"1 container: worker-0", "the network ci-ci1-net", "its jobs, its accounting and its Slurm state",
 		"the mesh, the DNS server and the SSH relay of realm ci, as it is its last cluster"}, cmd.Goes)
 	assert.Equal(t, []string{"the host directories it mounts, if any"}, cmd.Stays, "sind ui has not read its status")
+	assert.Empty(t, cmd.Ack, "no data volume goes")
 
-	st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-data"}})
+	st.SetVolumes("sind", []cluster.VolumeSummary{{Name: "sind-dev-config"}, {Name: "sind-dev-munge"}})
 	st.SetClusters("sind", []cluster.Summary{{Name: "default"}, {Name: "dev"}, {Name: "hpc"}})
 	cmd, err = a.Build(form("cluster", "dev"), st.ctx())
 	require.NoError(t, err)
-	assert.Contains(t, cmd.Goes, "the volume sind-dev-data")
+	assert.Contains(t, cmd.Goes, "the volumes sind-dev-config, sind-dev-munge")
 	assert.Contains(t, cmd.Stays, "the other 2 clusters of realm sind, and its mesh")
 
 	cmd, err = build(t, "delete-cluster", form("cluster", "default"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind delete cluster", cmd.Display)
+}
+
+// lossStore is a store whose realm sind has three clusters: default with
+// a host directory, dev with a data volume at /work and a home volume,
+// and hpc whose status sind ui has not read.
+func lossStore() *testStoreT {
+	st := testStore()
+	st.SetClusters("sind", []cluster.Summary{{Name: "default", State: cluster.StateRunning}, {Name: "dev", State: cluster.StateMixed}, {Name: "hpc"}})
+	st.SetVolumes("sind", []cluster.VolumeSummary{
+		{Name: "sind-default-config"}, {Name: "sind-default-munge"},
+		{Name: "sind-dev-config"}, {Name: "sind-dev-munge"}, {Name: "sind-dev-data"}, {Name: "sind-dev-home"},
+	})
+	st.SetStatus("sind", "default", &cluster.Status{Mounts: []cluster.MountPoint{
+		{Path: "/etc/slurm", Source: "sind-default-config", Type: config.StorageVolume},
+		{Path: "/data", Source: "/home/ada/data", Type: config.StorageHostPath, Data: true},
+	}})
+	st.SetStatus("sind", "dev", &cluster.Status{Mounts: []cluster.MountPoint{
+		{Path: "/work", Source: "sind-dev-data", Type: config.StorageVolume, Data: true},
+	}})
+	st.SetMonitoring("sind", &cluster.Monitoring{})
+	st.SetMesh("sind", store.Mesh{External: []string{"kind-control-plane"}})
+	return st
 }
 
 func TestBuildDeleteClusters(t *testing.T) {
@@ -342,13 +389,25 @@ func TestBuildDeleteClusters(t *testing.T) {
 	assert.Equal(t, Part{Action: "delete-cluster", Realm: "ci", Cluster: "ci1", Argv: []string{"sind", "--realm", "ci", "delete", "cluster", "ci1"}, Display: "sind --realm ci delete cluster ci1"}, cmd.Parts[0])
 	assert.Equal(t, []string{"sind", "delete", "cluster"}, cmd.Parts[1].Argv)
 	assert.Equal(t, "Delete 3 clusters", cmd.OK)
-	assert.Contains(t, cmd.Notes[0], "one command for each cluster")
-	assert.Equal(t, []string{
-		"These are all the clusters of realm ci, so sind also removes its mesh, DNS server and SSH relay.",
-		"These are all the clusters of realm sind, so sind also removes its mesh, DNS server and SSH relay.",
-	}, cmd.Notes[1:])
+	assert.Equal(t, []string{"sind ui runs one command for each cluster. The commands of one realm run one after the other, as each waits for the lock of the realm."}, cmd.Notes)
+	// A row for each cluster, and one for each realm that goes with its
+	// last cluster, after it.
+	var names []string
+	for _, l := range cmd.Losses {
+		names = append(names, l.Name())
+	}
+	assert.Equal(t, []string{"ci1", "realm ci", "default", "dev", "realm sind"}, names)
+	// The rows name the realm of a cluster, as the table has clusters of
+	// several realms.
+	assert.Equal(t, Loss{Realm: "ci", Cluster: "ci1", About: "realm ci · 1 node", Goes: "1 container, its network",
+		Stays: []Kept{{What: "the host directories it mounts, if any"}}}, cmd.Losses[0])
+	assert.Equal(t, Loss{Realm: "ci", About: "no cluster is left", Goes: "the mesh, the DNS server, the SSH relay and the exported SSH config",
+		Stays: []Kept{{What: "the containers that sind did not make, if any", Note: "sind detaches them"}}}, cmd.Losses[1], "sind ui has not read the mesh")
+	assert.Equal(t, []string{"the images"}, cmd.Stays)
+	assert.Empty(t, cmd.Ack)
 	a, _ := Lookup("delete-clusters")
 	assert.Equal(t, "3", a.Want(form("clusters", "sind/dev,ci/ci1", "clusters", "sind/default sind/dev")))
+	assert.Equal(t, "the number of clusters", a.WantWhat(form("clusters", "sind/dev")))
 	assert.Empty(t, a.Want(form()), "without clusters there is nothing to confirm")
 	realm, cl := a.Target(form("clusters", "sind/dev"))
 	assert.Equal(t, "sind", realm)
@@ -356,7 +415,9 @@ func TestBuildDeleteClusters(t *testing.T) {
 
 	cmd, err = build(t, "delete-clusters", form("clusters", "sind/dev"))
 	require.NoError(t, err)
-	assert.Len(t, cmd.Notes, 1, "sind keeps a realm that has a cluster left")
+	require.Len(t, cmd.Losses, 1, "sind keeps a realm that has a cluster left")
+	assert.Equal(t, "5 nodes", cmd.Losses[0].About, "the clusters of one realm do not name it")
+	assert.Equal(t, []string{"the other cluster of realm sind and its mesh", "the images"}, cmd.Stays)
 	assert.Equal(t, "Delete 1 cluster", cmd.OK)
 
 	_, err = build(t, "delete-clusters", form())
@@ -381,14 +442,67 @@ func TestBuildDeleteClusters(t *testing.T) {
 	}
 }
 
+func TestBuildDeleteClusters_NamesTheDataThatGoes(t *testing.T) {
+	st := lossStore()
+	a, _ := Lookup("delete-clusters")
+	cmd, err := a.Build(form("clusters", "sind/default,sind/dev"), st.ctx())
+	require.NoError(t, err)
+	require.Len(t, cmd.Losses, 2)
+	assert.Equal(t, Loss{Realm: "sind", Cluster: "default", About: "2 nodes · running", Goes: "2 containers, its network, its config and munge volumes",
+		Stays: []Kept{{What: "/home/ada/data", Note: "the host directory at /data"}}}, cmd.Losses[0])
+	assert.Equal(t, Loss{Realm: "sind", Cluster: "dev", About: "5 nodes · mixed",
+		Data: []DataVolume{
+			{Name: "sind-dev-data", Cluster: "dev", What: "every file in /work"},
+			{Name: "sind-dev-home", Cluster: "dev", What: "the home directories of its users", Home: true},
+		},
+		Goes: "5 containers, its network, its config and munge volumes"}, cmd.Losses[1])
+	assert.Equal(t, []string{"the other cluster of realm sind and its mesh", "the images"}, cmd.Stays)
+	assert.Equal(t, "I know that the volumes `sind-dev-data` of dev and `sind-dev-home` of dev go, with every file in them.", cmd.Ack)
+
+	cmd, err = a.Build(form("clusters", "sind/default"), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the other 2 clusters of realm sind and its mesh", "the images"}, cmd.Stays)
+
+	// The last clusters of a realm take it along: its row says what goes
+	// of it, and the containers on its mesh, which stay.
+	cmd, err = a.Build(form("clusters", "sind/default,sind/dev,sind/hpc"), st.ctx())
+	require.NoError(t, err)
+	require.Len(t, cmd.Losses, 4)
+	assert.Equal(t, Loss{Realm: "sind", Cluster: "hpc", About: "0 nodes", Goes: "its network",
+		Stays: []Kept{{What: "the host directories it mounts, if any"}}}, cmd.Losses[2])
+	assert.Equal(t, Loss{Realm: "sind", About: "no cluster is left", Goes: "the mesh, the DNS server, the SSH relay, the monitoring stack and the exported SSH config",
+		Stays: []Kept{{What: "kind-control-plane", Note: "sind detaches it"}}}, cmd.Losses[3])
+	assert.Equal(t, []string{"the images"}, cmd.Stays)
+}
+
+func TestGoneRealms(t *testing.T) {
+	sn := lossStore().Snapshot()
+	assert.Empty(t, GoneRealms(sn, []string{"sind/dev", "sind/dev"}))
+	assert.Equal(t, []string{"ci"}, GoneRealms(sn, []string{"ci/ci1", "sind/dev", "sind/gone"}))
+	assert.Equal(t, []string{"ci", "sind"}, GoneRealms(sn, []string{"sind/hpc", "ci/ci1", "sind/dev", "sind/default"}))
+}
+
+func TestLossAck(t *testing.T) {
+	assert.Empty(t, lossAck(nil))
+	assert.Equal(t, "I know that the home volume `sind-x-home` of x goes, with the home directories of its users.",
+		lossAck([]Loss{{}, {Data: []DataVolume{{Name: "sind-x-home", Cluster: "x", What: "the home directories of its users", Home: true}}}}))
+
+	cmd := Command{Ack: "I know."}
+	assert.False(t, cmd.Acked(form()))
+	assert.False(t, cmd.Acked(form("ack", "yes")))
+	assert.True(t, cmd.Acked(form("ack", "on")))
+	assert.True(t, Command{}.Acked(form()), "nothing to tick")
+	assert.NotEqual(t, Command{}.Fingerprint(), cmd.Fingerprint(), "a data volume that came is no command seen")
+}
+
 func TestBuildDeleteWorker(t *testing.T) {
 	cmd, err := build(t, "delete-worker", form("cluster", "dev", "nodes", "worker-3, worker-2", "nodes", "worker-2"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "delete", "worker", "worker-[2-3].dev"}, cmd.Argv)
 	assert.Equal(t, "sind delete worker 'worker-[2-3].dev'", cmd.Display)
 	assert.Equal(t, "Delete 2 workers", cmd.OK)
-	assert.Equal(t, []string{"the containers sind-dev-worker-3, sind-dev-worker-2 and their DNS records", "their Slurm nodes: jobs on them fail"}, cmd.Goes)
-	assert.Equal(t, []string{"dev with 2 workers, its controller and its data"}, cmd.Stays)
+	assert.Equal(t, []string{"the containers of worker-[2-3] and their DNS records", "their Slurm nodes: jobs on them fail"}, cmd.Goes)
+	assert.Equal(t, []string{"dev with 2 workers (worker-[0-1]), its controller and its data"}, cmd.Stays)
 
 	cmd, err = build(t, "delete-worker", form("cluster", "default", "nodes", "worker-0"))
 	require.NoError(t, err)
@@ -399,7 +513,7 @@ func TestBuildDeleteWorker(t *testing.T) {
 
 	cmd, err = build(t, "delete-worker", form("cluster", "dev", "nodes", "worker-1"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"dev with 3 workers, its controller and its data"}, cmd.Stays)
+	assert.Equal(t, []string{"dev with 3 workers (worker-[0,2-3]), its controller and its data"}, cmd.Stays)
 
 	_, err = build(t, "delete-worker", form("cluster", "dev"))
 	assert.EqualError(t, err, "nodes: pick at least one node of dev")
@@ -414,44 +528,62 @@ func TestBuildDeleteRealm(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci delete realm", cmd.Display)
 	assert.Equal(t, "Delete realm ci", cmd.OK)
-	assert.Equal(t, []string{"1 cluster: ci1", "the mesh network, the DNS server and the SSH relay", "the exported SSH config"}, cmd.Goes)
-	assert.Equal(t, []string{"the host directories that its clusters mount, if any", "the containers that sind did not make, if any: sind detaches them"}, cmd.Stays,
-		"sind ui has read neither the status of ci1 nor the mesh")
+	require.Len(t, cmd.Losses, 2)
+	assert.Equal(t, "ci1", cmd.Losses[0].Cluster)
+	assert.Equal(t, Loss{Realm: "ci", About: "no cluster is left", Goes: "the mesh, the DNS server, the SSH relay and the exported SSH config",
+		Stays: []Kept{{What: "the containers that sind did not make, if any", Note: "sind detaches them"}}}, cmd.Losses[1],
+		"sind ui has not read the mesh")
+	assert.Equal(t, []string{"the other realm sind and its 2 clusters", "the images"}, cmd.Stays)
+	assert.Empty(t, cmd.Goes)
 	assert.Empty(t, cmd.Notes)
+	assert.Empty(t, cmd.Ack)
 
 	// The default realm is named too, so that a copy deletes this realm.
-	st := testStore()
-	st.SetMonitoring("sind", &cluster.Monitoring{})
-	st.SetMesh("sind", store.Mesh{External: []string{"kind-control-plane"}})
-	st.SetStatus("sind", "default", &cluster.Status{Mounts: []cluster.MountPoint{
-		{Path: "/etc/slurm", Source: "sind-default-config", Type: config.StorageVolume},
-		{Path: "/data", Source: "/home/ada/data", Type: config.StorageHostPath},
-	}})
-	st.SetStatus("sind", "dev", &cluster.Status{})
+	st := lossStore()
+	st.SetClusters("sind", []cluster.Summary{{Name: "dev"}, {Name: "default"}})
 	a, _ := Lookup("delete-realm")
 	cmd, err = a.Build(form(), st.ctx())
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm sind delete realm", cmd.Display)
-	assert.Equal(t, []string{"2 clusters: default, dev", "the mesh network, the DNS server and the SSH relay", "the monitoring stack", "the exported SSH config"}, cmd.Goes)
-	assert.Equal(t, []string{
-		"the host directory /home/ada/data, mounted at /data in default",
-		"the containers that sind did not make, kind-control-plane: sind detaches them",
-	}, cmd.Stays)
+	var names []string
+	for _, l := range cmd.Losses {
+		names = append(names, l.Name())
+	}
+	assert.Equal(t, []string{"default", "dev", "realm sind"}, names)
+	assert.Equal(t, []Kept{{What: "kind-control-plane", Note: "sind detaches it"}}, cmd.Losses[2].Stays)
+	assert.Contains(t, cmd.Losses[2].Goes, "the monitoring stack")
+	assert.Equal(t, "I know that the volumes `sind-dev-data` of dev and `sind-dev-home` of dev go, with every file in them.", cmd.Ack)
+	assert.Equal(t, []string{"the other realm ci and its cluster", "the images"}, cmd.Stays)
+	st.SetClusters("ci", []cluster.Summary{{Name: "ci1"}, {Name: "ci2"}})
+	cmd, err = a.Build(form(), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the other realm ci and its 2 clusters", "the images"}, cmd.Stays)
+	st.SetClusters("ci", nil)
+	cmd, err = a.Build(form(), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the other realm ci", "the images"}, cmd.Stays)
 
-	// No line about containers that sind did not make where there are none.
+	// Nothing of the realm stays where no container is on its mesh.
 	st.SetMesh("sind", store.Mesh{Info: &mesh.Info{}})
 	cmd, err = a.Build(form(), st.ctx())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"the host directory /home/ada/data, mounted at /data in default"}, cmd.Stays)
-	st.SetMesh("sind", store.Mesh{Err: "docker: gone"})
+	assert.Empty(t, cmd.Losses[2].Stays)
+
+	st.SetRealms([]cluster.RealmSummary{{Name: "a"}, {Name: "b"}, {Name: "sind"}})
 	cmd, err = a.Build(form(), st.ctx())
 	require.NoError(t, err)
-	assert.Contains(t, cmd.Stays, "the containers that sind did not make, if any: sind detaches them", "sind ui could not read the mesh")
+	assert.Equal(t, []string{"the other realms a and b and their clusters", "the images"}, cmd.Stays)
+	st.SetRealms([]cluster.RealmSummary{{Name: "sind"}})
+	cmd, err = a.Build(form(), st.ctx())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the images"}, cmd.Stays)
 
+	st.SetRealms([]cluster.RealmSummary{{Name: "ci"}, {Name: "sind"}})
 	st.SetClusters("ci", nil)
 	cmd, err = a.Build(form("realm", "ci"), st.ctx())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"the mesh network, the DNS server and the SSH relay", "the exported SSH config"}, cmd.Goes, "a realm without clusters")
+	require.Len(t, cmd.Losses, 1, "a realm without clusters")
+	assert.Equal(t, "realm ci", cmd.Losses[0].Name())
 
 	_, err = build(t, "delete-realm", form("realm", "gone"))
 	assert.EqualError(t, err, "realm: sind ui sees no realm gone")
@@ -471,19 +603,27 @@ func TestBuildPower(t *testing.T) {
 		danger := tc.sub == "cut" || tc.sub == "cycle"
 		assert.Equal(t, danger, len(cmd.Warns) == 1, tc.op)
 		op, _ := PowerOpOf(tc.sub)
-		assert.Equal(t, op.Label+" 3 nodes", cmd.OK)
+		assert.Equal(t, op.Heading("3 workers"), cmd.OK, "the button names the workers")
 	}
+	cmd, err := build(t, "power", form("cluster", "dev", "op", "cut", "nodes", "controller,worker-0"))
+	require.NoError(t, err)
+	assert.Equal(t, "Cut power to 2 nodes", cmd.OK)
 
-	cmd, err := build(t, "power", form("realm", "ci", "cluster", "ci1", "op", "on", "nodes", "worker-0"))
+	cmd, err = build(t, "power", form("realm", "ci", "cluster", "ci1", "op", "on", "nodes", "worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci power on worker-0.ci1", cmd.Display)
 	assert.Equal(t, "Start worker-0", cmd.OK)
 
 	_, err = build(t, "power", form("cluster", "dev", "op", "melt", "nodes", "worker-0"))
 	assert.EqualError(t, err, "op: pick what to do with the nodes")
+	// No action is picked for the user.
+	_, err = build(t, "power", form("cluster", "dev", "nodes", "worker-0"))
+	var missing *Missing
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "Pick an action.", missing.Hint())
+	assert.Equal(t, "op", missing.Field)
 	_, err = build(t, "power", form("cluster", "dev", "op", "on"))
 	assert.EqualError(t, err, "nodes: pick at least one node of dev")
-	var missing *Missing
 	require.ErrorAs(t, err, &missing)
 	assert.Equal(t, "Pick at least one node of dev.", missing.Hint())
 	cmd, err = build(t, "power", form("cluster", "dev", "op", "on", "nodes", "controller"))
@@ -548,12 +688,36 @@ func TestBuildPower_Warnings(t *testing.T) {
 	assert.Empty(t, warns("shutdown", "worker-1"))
 }
 
+func TestBuildPower_Stays(t *testing.T) {
+	st := store.New()
+	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 1}})
+	st.SetClusters("sind", []cluster.Summary{{Name: "dev"}})
+	stopped := node("dev", "worker-3", config.RoleWorker)
+	stopped.State = cluster.StateStopped
+	st.SetNodes("sind", []cluster.NodeSummary{
+		node("dev", "controller", config.RoleController), node("dev", "db", config.RoleDB),
+		node("dev", "worker-0", config.RoleWorker), node("dev", "worker-1", config.RoleWorker), node("dev", "worker-2", config.RoleWorker), stopped,
+	})
+	a, _ := Lookup("power")
+	stays := func(op, nodes string) []string {
+		t.Helper()
+		cmd, err := a.Build(form("cluster", "dev", "op", op, "nodes", nodes), (&testStoreT{st}).ctx())
+		require.NoError(t, err)
+		return cmd.Stays
+	}
+	assert.Equal(t, []string{"2 other workers keep running.", "dev still takes jobs."}, stays("reboot", "worker-0"))
+	assert.Equal(t, []string{"1 other worker keeps running.", "dev still takes jobs."}, stays("cut", "worker-0,worker-1"))
+	assert.Equal(t, []string{"2 other workers keep running."}, stays("shutdown", "controller,worker-0"), "the controller goes")
+	assert.Empty(t, stays("freeze", "worker-0,worker-1,worker-2"), "no running worker stays")
+	assert.Empty(t, stays("on", "worker-3"), "start stops nothing")
+}
+
 func TestBuildPower_SlurmState(t *testing.T) {
 	cmd, err := build(t, "power", form("cluster", "dev", "op", "drain", "nodes", "worker-0,worker-1", "reason", " disk test "))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-[0-1]", "State=DRAIN", "Reason=disk test"}, cmd.Argv)
 	assert.Equal(t, "sind exec dev -- scontrol update 'NodeName=worker-[0-1]' State=DRAIN 'Reason=disk test'", cmd.Display)
-	assert.Equal(t, "Drain 2 nodes", cmd.OK)
+	assert.Equal(t, "Drain 2 workers", cmd.OK)
 	assert.Contains(t, cmd.Notes[0], "Running jobs go on")
 	assert.Empty(t, cmd.Warns)
 
@@ -613,7 +777,12 @@ func TestPowerOpOf(t *testing.T) {
 	for _, op := range PowerOps {
 		assert.NotEmpty(t, op.Label)
 		assert.NotEmpty(t, op.Text)
+		assert.NotEmpty(t, op.One)
 	}
+	op, _ = PowerOpOf("reboot")
+	assert.Equal(t, "Reboot worker-4", op.Heading("worker-4"))
+	op, _ = PowerOpOf("cut")
+	assert.Equal(t, "Cut power to worker-4", op.Heading("worker-4"))
 }
 
 func TestPowerGroups(t *testing.T) {
@@ -636,7 +805,17 @@ func TestBuildConnect(t *testing.T) {
 	cmd, err := build(t, "connect", form("container", "kind-control-plane"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"sind", "connect", "container", "kind-control-plane"}, cmd.Argv)
-	assert.Empty(t, cmd.Warns, "a realm that sind ui sees")
+	assert.Equal(t, "Connect kind-control-plane", cmd.OK)
+	assert.Empty(t, cmd.Warns, "a realm that sind ui sees, whose mesh it has not read")
+	assert.Empty(t, cmd.Notes)
+
+	// The name of the list wins over the one written.
+	cmd, err = build(t, "connect", form("container", "", "other", "my-app"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind connect container my-app", cmd.Display)
+	cmd, err = build(t, "connect", form("container", "a", "other", "b"))
+	require.NoError(t, err)
+	assert.Equal(t, "sind connect container a", cmd.Display)
 
 	cmd, err = build(t, "connect", form("realm", "new", "container", "kind-control-plane"))
 	require.NoError(t, err)
@@ -647,18 +826,98 @@ func TestBuildConnect(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns, "disconnect leaves the realm to sind")
 
-	cmd, err = build(t, "disconnect", form("realm", "ci", "container", " kind-1 "))
+	cmd, err = build(t, "disconnect", form("realm", "ci", "container", " kind-1 ", "other", "x"))
 	require.NoError(t, err)
 	assert.Equal(t, "sind --realm ci disconnect container kind-1", cmd.Display)
+	_, err = build(t, "disconnect", form("other", "x"))
+	var missing *Missing
+	assert.ErrorAs(t, err, &missing, "disconnect takes no other name")
 
 	for _, bad := range []string{"", " ", "-rf", "a b", "a;b", "$(x)"} {
 		_, err = build(t, "connect", form("container", bad))
-		assert.EqualError(t, err, "container: write the name of a container, such as kind-control-plane", bad)
-		var missing *Missing
-		assert.Equal(t, strings.TrimSpace(bad) == "", errors.As(err, &missing), bad)
+		if strings.TrimSpace(bad) == "" {
+			assert.EqualError(t, err, "container: pick a container, or write the name of one, such as kind-control-plane", bad)
+			assert.ErrorAs(t, err, &missing, bad)
+			continue
+		}
+		assert.EqualError(t, err, "container: use letters, digits, _, . and - in the name of a container, and start it with a letter or a digit", bad)
 	}
 	_, err = build(t, "connect", form("realm", "No", "container", "x"))
 	assert.ErrorContains(t, err, "realm: use ")
+	_, err = build(t, "disconnect", form("realm", "No", "container", "x"))
+	assert.ErrorContains(t, err, "realm: use ")
+}
+
+func TestBuildConnect_ChecksTheContainer(t *testing.T) {
+	st := testStore()
+	st.SetMesh("ci", store.Mesh{
+		Info:     &mesh.Info{Network: "ci-mesh", DNSContainer: "ci-dns", SSHContainer: "ci-ssh"},
+		Records:  []mesh.DNSRecord{{Hostname: "controller.ci1.ci.sind"}, {Hostname: "worker-0.ci1.ci.sind"}, {Hostname: "worker-1.ci1.ci.sind"}},
+		External: []string{"kind-control-plane"},
+		Connectable: []store.Outside{
+			{Name: "my-app", State: "running"}, {Name: "pg", State: "exited"},
+		},
+	})
+	run := func(name string) (Command, error) {
+		a, _ := Lookup("connect")
+		return a.Build(form("realm", "ci", "container", name), st.ctx())
+	}
+	cmd, err := run("my-app")
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns)
+	assert.Equal(t, []string{"`my-app` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` and the other 2 nodes by name."}, cmd.Notes)
+
+	cmd, err = run("pg")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"pg does not run, it is exited. It reaches the nodes once you start it."}, cmd.Warns)
+	cmd, err = run("kind-control-plane")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"kind-control-plane is on the mesh of realm ci already. sind adds only the networks that it lacks."}, cmd.Warns)
+	assert.Empty(t, cmd.Notes, "it joins no network that it is on")
+	cmd, err = run("nosuch")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sind ui sees no container nosuch. The command fails unless it runs by then."}, cmd.Warns)
+	assert.Empty(t, cmd.Notes, "sind ui cannot say what a container that it does not see reaches")
+
+	// The containers of sind cannot connect: the nodes and the mesh.
+	_, err = run("ci-ci1-worker-0")
+	assert.EqualError(t, err, "container: ci-ci1-worker-0 is a container of sind in realm ci; pick one that sind did not make")
+	_, err = run("ci-dns")
+	assert.EqualError(t, err, "container: ci-dns is a container of sind in realm ci; pick one that sind did not make")
+	_, err = run("ci-ssh")
+	require.Error(t, err)
+	st.SetMonitoring("sind", &cluster.Monitoring{Services: []cluster.MonitoringService{{Container: "sind-mesh-grafana-1"}}})
+	_, err = run("sind-mesh-grafana-1")
+	assert.EqualError(t, err, "container: sind-mesh-grafana-1 is a container of sind in realm sind; pick one that sind did not make")
+	_, ok := SindContainer(store.Snapshot{Monitorings: map[string]*cluster.Monitoring{"sind": nil}}, "sind-mesh-grafana-1")
+	assert.False(t, ok, "a realm without a stack")
+
+	// A mesh that sind ui could not read fully knows no container for sure.
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Records: []mesh.DNSRecord{{Hostname: "controller.ci1.ci.sind"}}, Err: "boom"})
+	cmd, err = run("nosuch")
+	require.NoError(t, err)
+	assert.Empty(t, cmd.Warns)
+	assert.Equal(t, []string{"`nosuch` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` by name."}, cmd.Notes)
+
+	x := []store.Outside{{Name: "x", State: "running"}}
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
+	st.SetClusters("ci", []cluster.Summary{{Name: "b"}, {Name: "a"}, {Name: "c"}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach the nodes of realm ci by name."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{{Hostname: "a.ci1.ci.sind"}, {Hostname: "b.ci1.ci.sind"}}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node by name."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
+	st.SetClusters("ci", nil)
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh`. It can then reach the nodes of realm ci by name."}, cmd.Notes)
+}
+
+func TestJoinWords(t *testing.T) {
+	assert.Empty(t, JoinWords(nil))
+	assert.Equal(t, "a", JoinWords([]string{"a"}))
+	assert.Equal(t, "a and b", JoinWords([]string{"a", "b"}))
+	assert.Equal(t, "a, b and c", JoinWords([]string{"a", "b", "c"}))
 }
 
 func TestNodeWords(t *testing.T) {
@@ -671,9 +930,15 @@ func TestNodeWords(t *testing.T) {
 	assert.Equal(t, []string{"x[.dev"}, nodeWords("dev", []string{"x["}))
 }
 
+func TestNodeSet(t *testing.T) {
+	assert.Equal(t, "worker-[0-2]", NodeSet([]string{"worker-2", "worker-0", "worker-1"}))
+	assert.Equal(t, "controller,worker-[0,4]", NodeSet([]string{"worker-4", "controller", "worker-0"}))
+	assert.Empty(t, NodeSet(nil))
+}
+
 func TestNodeNames(t *testing.T) {
-	assert.Equal(t, []string{"a", "b", "c"}, nodeNames(form("nodes", "a, b", "nodes", "b\tc\n")))
-	assert.Empty(t, nodeNames(form()))
+	assert.Equal(t, []string{"a", "b", "c"}, NodeNames(form("nodes", "a, b", "nodes", "b\tc\n")))
+	assert.Empty(t, NodeNames(form()))
 	assert.True(t, strings.HasPrefix(ShortName(node("dev", "worker-0", config.RoleWorker)), "worker-0"))
 }
 

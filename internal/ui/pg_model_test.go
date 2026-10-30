@@ -9,6 +9,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -136,9 +137,8 @@ func TestPgCluster(t *testing.T) {
 	c.Nodes = append(c.Nodes, pgNode{Short: "worker-1", Role: config.RoleWorker, State: cluster.StatePaused})
 	assert.Equal(t, "1 controller · 1 controller-backup · 1 db · 2 workers", c.Roles())
 	assert.Equal(t, "", pgCluster{}.Roles())
-	assert.Equal(t, []pgPill{{"worker-0: stopped", "bad"}, {"worker-1: paused", "warn"}}, c.Problems())
 	assert.Equal(t, "5 nodes", c.NodesText())
-	assert.Equal(t, "warn", c.StateClass())
+	assert.Equal(t, pgPill{"mixed", "warn"}, pgCluster{State: cluster.StateMixed}.Pill())
 	assert.Equal(t, "/clusters/sind/dev", c.Link())
 	assert.Equal(t, "/dialogs/delete-cluster?cluster=dev&realm=sind", c.DeleteURL())
 }
@@ -182,12 +182,14 @@ func TestPgRunsOn(t *testing.T) {
 		{ID: "3", Title: "dev"},
 		{ID: "4", Title: "create cluster dev", End: &time.Time{}},
 		{ID: "5", Title: "delete cluster other dev"},
+		{ID: "6", Title: "power on worker-0", Root: store.Span{Node: "dev"}},
 	}}
 	var ids []string
 	for _, r := range pgRunsOn(sn, "sind", "dev", pgNow) {
 		ids = append(ids, r.ID)
 	}
-	assert.Equal(t, []string{"5", "1"}, ids, "oldest first")
+	assert.Equal(t, []string{"6", "5", "1"}, ids, "oldest first; the target of the command names the cluster")
+	sn.Runs = sn.Runs[:5]
 
 	// A run of sind ui counts in the realm of its task only.
 	sn.Tasks = []store.Task{{Trace: "x", Realm: "ci"}}
@@ -232,70 +234,128 @@ func TestPgNodesOfABusyClusterAreNoProblem(t *testing.T) {
 		Runs:     []store.Run{{ID: "1", Title: "create cluster nightly", Start: pgNow}},
 	}
 	// dev's worker-0 has slurmd down; the nodes of nightly are being made.
-	assert.Equal(t, 1, pgCount(pgSnapNodes(sn, ""), pgNode.Problem))
-	for _, n := range pgSnapNodes(sn, "sind") {
+	assert.Equal(t, 1, pgCount(pgSnapNodes(sn, "", pgNow), pgNode.Problem))
+	for _, n := range pgSnapNodes(sn, "sind", pgNow) {
 		assert.Equal(t, n.Cluster == "nightly", n.Busy && n.Creating, n.Arg)
 	}
 	c := pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
 	assert.True(t, c.Nodes[0].Creating)
 	assert.False(t, c.Nodes[0].Problem())
 	assert.False(t, c.Nodes[1].Problem())
-	assert.Equal(t, []pgPill{{"slurmd down", "bad"}}, c.Nodes[0].Issues(), "the cluster page still lists what it found")
+	assert.Empty(t, c.Nodes[0].Issues(), "a node that is not up yet has no fault")
+	assert.Equal(t, pgPill{"creating", "run"}, c.Pill())
 	var titles []string
-	for _, need := range pgNeeds(sn, "", pgNow) {
-		titles = append(titles, need.Title)
+	d := &pgOverview{}
+	pgNeedsOf(d, sn, pgNow)
+	for _, need := range d.Needs {
+		titles = append(titles, need.Subject+" "+need.Title)
 	}
 	assert.Equal(t, []string{"worker-0.dev has slurmd down"}, titles)
 
 	// A command that adds workers may start services, but a stopped node
 	// is a problem all the same.
 	sn.Runs = []store.Run{{ID: "2", Title: "create worker nightly", Start: pgNow}}
-	assert.Equal(t, 2, pgCount(pgSnapNodes(sn, ""), pgNode.Problem))
+	assert.Equal(t, 2, pgCount(pgSnapNodes(sn, "", pgNow), pgNode.Problem))
 	c = pgClusterOf(sn, "sind", cluster.Summary{Name: "nightly"}, nil, pgNow)
 	assert.False(t, c.Nodes[0].Problem())
 	assert.True(t, c.Nodes[1].Problem())
 
 	// A command on a node of the cluster works on the cluster.
 	sn.Runs = []store.Run{{ID: "3", Title: "power reboot worker-0.dev", Start: pgNow}}
-	busy, creating := pgBusy(sn, "sind", "dev")
-	assert.True(t, busy)
-	assert.False(t, creating)
-	busy, _ = pgBusy(sn, "sind", "nightly")
-	assert.False(t, busy)
+	w := pgWorkOf(sn, "sind", "dev", pgNow)
+	assert.True(t, w.Busy)
+	assert.Nil(t, w.Life)
+	assert.False(t, pgWorkOf(sn, "sind", "nightly", pgNow).Busy)
 }
 
-func TestPgNodeNeed(t *testing.T) {
-	sn := store.Snapshot{Clusters: map[string][]cluster.Summary{"r": {{Name: "c", State: cluster.StateMixed}}}}
-	n := pgNode{Realm: "r", Cluster: "c", Short: "w", Arg: "w.c"}
-	n.State = cluster.StateUnknown
-	need := pgNodeNeed(sn, n)
-	assert.Equal(t, "warn", need.Sev)
-	assert.Equal(t, "w.c is unknown", need.Title)
-	assert.Contains(t, need.Detail, "a state that sind does not know. The cluster c is mixed.")
-	assert.Len(t, need.Actions, 1, "a node in an unknown state cannot be started or paused")
-	// A cluster that the snapshot does not hold.
-	n.Cluster = "gone"
-	assert.Contains(t, pgNodeNeed(sn, n).Detail, "The cluster gone is unknown.")
-	// A node that runs with two services down.
-	n.State = cluster.StateRunning
-	n.Services = []pgSvc{{"munge", false}, {"sshd", true}, {"slurmd", false}}
-	need = pgNodeNeed(sn, n)
-	assert.Equal(t, pgNeed{Sev: "bad", Kind: pgNeedService, Title: "w.c has munge, slurmd down", Detail: "The container runs, but munge and slurmd are not active."},
-		pgNeed{Sev: need.Sev, Kind: need.Kind, Title: need.Title, Detail: need.Detail})
-	assert.Equal(t, "/clusters/r/gone?node=w&tab=logs", need.Actions[0].URL)
+func TestPgSlurmIssue(t *testing.T) {
+	n := pgNode{Short: "worker-5", Role: config.RoleWorker, State: cluster.StateRunning, Services: []pgSvc{{"slurmd", true}}}
+	_, ok := n.SlurmIssue()
+	assert.False(t, ok, "sinfo did not list it")
+	n.Slurm = &slurm.NodeInfo{Name: "worker-5", State: "mixed"}
+	assert.Empty(t, n.Issues(), "it takes jobs")
+	assert.False(t, n.Problem())
+
+	// Slurm sends it no jobs: it needs a look, unless a command works on
+	// its cluster or creates it.
+	for state, class := range map[string]string{"drained": "warn", "draining": "warn", "down*": "bad", "idle*": "bad", "fail": "bad"} {
+		n.Slurm.State = state
+		assert.Equal(t, []pgPill{{state, class}}, n.Issues(), state)
+		assert.True(t, n.Problem(), state)
+	}
+	n.Busy = true
+	assert.False(t, n.Problem(), "a command may be resuming it")
+	n.Busy, n.Creating = false, true
+	assert.False(t, n.Problem())
+	n.Creating = false
+
+	// A service that is down is why: the node has that issue alone.
+	n.Services = []pgSvc{{"slurmd", false}}
+	assert.Equal(t, []pgPill{{"slurmd down", "bad"}}, n.Issues())
+	assert.Equal(t, n.Issues(), n.ServiceIssues())
+	n.State = cluster.StateStopped
+	assert.Equal(t, []pgPill{{"stopped", "bad"}}, n.Issues())
+
+	// The cluster says how many of its nodes need a look, in its pill,
+	// whatever its state, amber for a worker that Slurm sends no jobs.
+	n.State, n.Services, n.Slurm.State = cluster.StateRunning, []pgSvc{{"slurmd", true}}, "drained"
+	assert.Equal(t, "warn", n.Sev())
+	assert.Equal(t, pgPill{"running · drained", "warn"}, n.HeadPill(), "the node page says why it needs a look")
+	c := pgCluster{State: cluster.StateRunning, Nodes: []pgNode{n, {State: cluster.StateRunning}}}
+	assert.Equal(t, 1, c.Look())
+	assert.Equal(t, pgPill{"running · 1 needs a look", "warn"}, c.Pill())
+	c.State = cluster.StateMixed
+	assert.Equal(t, pgPill{"mixed · 1 needs a look", "warn"}, c.Pill())
+	// Red once a node is stopped or has a service down.
+	down := pgNode{State: cluster.StateRunning, Known: true, Services: []pgSvc{{"slurmd", false}}}
+	assert.Equal(t, "bad", down.Sev())
+	assert.Equal(t, pgPill{"running · slurmd down", "bad"}, down.HeadPill())
+	c.Nodes = append(c.Nodes, down)
+	assert.Equal(t, pgPill{"mixed · 2 need a look", "bad"}, c.Pill())
+	look, class := pgLook(c.Nodes)
+	assert.Equal(t, 2, look)
+	assert.Equal(t, "bad", class)
+	c.Nodes = c.Nodes[:2]
+	c.Nodes[0].Slurm.State = "idle"
+	c.State = cluster.StateRunning
+	assert.Equal(t, pgPill{"running", "ok"}, c.Pill())
+	assert.Empty(t, c.Nodes[0].Sev())
+	assert.Equal(t, pgPill{"running · takes jobs", "ok"}, c.Nodes[0].HeadPill(), "a worker says that it takes jobs")
+	c.Nodes[0].Slurm = nil
+	assert.Equal(t, pgPill{"running", "ok"}, c.Nodes[0].HeadPill(), "until sinfo lists it")
+	w := pgNode{Role: config.RoleWorker, State: cluster.StateRunning, Known: true, Managed: true, Services: []pgSvc{{"munge", false}, {"slurmd", false}}}
+	assert.Equal(t, pgPill{"running · takes no jobs", "bad"}, w.HeadPill(), "a worker whose slurmd is down")
+	// While a command works on the cluster, a drained worker, or one with a
+	// service down, needs no look yet, but it does not say that it takes
+	// jobs either.
+	w.Busy, w.Slurm = true, &slurm.NodeInfo{State: "drained"}
+	assert.Equal(t, pgPill{"running", "ok"}, w.HeadPill(), "a busy worker with slurmd down")
+	w.Services = []pgSvc{{"munge", true}, {"slurmd", true}}
+	assert.Equal(t, pgPill{"running", "ok"}, w.HeadPill(), "a busy worker that Slurm drained")
+	w.Slurm.State = "idle"
+	assert.Equal(t, pgPill{"running · takes jobs", "ok"}, w.HeadPill(), "a busy worker that takes jobs")
+	assert.Equal(t, "1 node needs a look", pgLookText(1))
+	assert.Equal(t, "2 nodes need a look", pgLookText(2))
+	assert.Equal(t, "1 needs a look", pgLookShort(1))
+	assert.Equal(t, "3 need a look", pgLookShort(3))
+	assert.Equal(t, "needs a look", pgLookUnit(1))
+	assert.Equal(t, "need a look", pgLookUnit(3))
 }
 
 func TestPgOverviewSummary(t *testing.T) {
 	d := &pgOverview{}
 	assert.Empty(t, d.Summary())
-	d.Needs = []pgNeed{{Sev: "run", Kind: pgNeedLock}}
-	assert.Empty(t, d.Summary(), "a lock is work, not a problem")
+	d.Needs = []pgNeed{{Sev: "ok", Kind: pgNeedFixed}}
+	assert.Empty(t, d.Summary(), "a row that is fixed is no problem")
 	assert.Equal(t, "warn", d.SummaryClass())
+	d.Needs = append(d.Needs, pgNeed{Sev: "warn", Kind: pgNeedLock})
+	assert.Equal(t, "1 realm stays locked", d.Summary())
+	d.Needs = d.Needs[:1]
 	d.Needs = append(d.Needs, pgNeed{Sev: "warn", Kind: pgNeedWarning}, pgNeed{Sev: "warn", Kind: pgNeedUnknown}, pgNeed{Sev: "warn", Kind: pgNeedWarning})
-	assert.Equal(t, "1 node is in an unknown state · 2 host warnings", d.Summary())
+	assert.Equal(t, "1 node needs a look · 2 host warnings", d.Summary())
 	assert.Equal(t, "warn", d.SummaryClass())
-	d.Needs = append(d.Needs, pgNeed{Sev: "bad", Kind: pgNeedService}, pgNeed{Sev: "bad", Kind: pgNeedService}, pgNeed{Sev: "bad", Kind: pgNeedRun}, pgNeed{Sev: "bad", Kind: pgNeedRun})
-	assert.Equal(t, "1 node is in an unknown state · 2 nodes have a service down · 2 runs failed · 2 host warnings", d.Summary())
+	d.Needs = append(d.Needs, pgNeed{Sev: "bad", Kind: pgNeedService}, pgNeed{Sev: "warn", Kind: pgNeedSlurm}, pgNeed{Sev: "bad", Kind: pgNeedRun}, pgNeed{Sev: "bad", Kind: pgNeedRun})
+	assert.Equal(t, "3 nodes need a look · 2 runs failed · 2 host warnings", d.Summary(), "one count of the nodes, whatever is wrong with them")
 	assert.Equal(t, "bad", d.SummaryClass())
 }
 
@@ -307,12 +367,15 @@ func TestPgRealmNames(t *testing.T) {
 	}
 	assert.Equal(t, []string{"a", "b", "c2", "c10"}, pgRealmNames(sn, ""))
 	assert.Equal(t, []string{"zz"}, pgRealmNames(sn, "zz"))
-	assert.Equal(t, "/clusters", (&View{Page: "cluster"}).PgRealmNext())
-	assert.Equal(t, "/clusters", (&View{Page: "run"}).PgRealmNext())
-	assert.Equal(t, "/nodes", (&View{Page: "nodes"}).PgRealmNext())
-	assert.Equal(t, "/nodes", (&View{Page: "node"}).PgRealmNext())
-	assert.Equal(t, "/mesh", (&View{Page: "more-mesh"}).PgRealmNext())
-	assert.Equal(t, "/", (&View{Page: "overview"}).PgRealmNext())
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "cluster", Nav: "clusters"}))
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "run"}))
+	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "nodes", Nav: "nodes"}))
+	assert.Equal(t, "/nodes", pgRealmNext(&View{Page: "node", Nav: "nodes"}))
+	assert.Equal(t, "/mesh", pgRealmNext(&View{Page: "more-mesh", Nav: "mesh"}))
+	// The Overview and Activity show every realm: a pick goes to the
+	// clusters of the realm.
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "overview", Nav: "overview"}))
+	assert.Equal(t, "/clusters", pgRealmNext(&View{Page: "run-activity", Nav: "activity"}))
 }
 
 func TestPgClusterTopics(t *testing.T) {
@@ -364,4 +427,13 @@ func TestPgFragmentsDependOnWhatTheyShow(t *testing.T) {
 	assert.True(t, dep("pg-node-body", p, store.StatusTopic("r", "c")))
 	assert.True(t, dep("pg-node-head", p, store.NodesTopic("r")))
 	assert.False(t, dep("pg-node-head", p, store.NodesTopic("other")))
+	// A run that starts, goes on or ends changes what a command creates or
+	// deletes: the pill, the phase and the actions of the node and cluster
+	// pages, but for the logs tab, whose stream a render would end.
+	assert.True(t, dep("pg-node-head", p, store.TopicRuns))
+	assert.True(t, dep("pg-node-body", p, store.TopicRuns))
+	for _, tab := range []string{"", "summary", "nodes", "slurm", "network"} {
+		assert.True(t, dep("pg-cluster-body", Params{"realm": {"r"}, "cluster": {"c"}, "tab": {tab}}, store.TopicRuns), tab)
+	}
+	assert.False(t, dep("pg-cluster-body", Params{"realm": {"r"}, "cluster": {"c"}, "tab": {"logs"}}, store.TopicRuns))
 }

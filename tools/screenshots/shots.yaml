@@ -18,13 +18,13 @@ sizes:
   phone: {width: 390, height: 844}
 shots:
   - name: overview
-    alt: "Overview: what needs you first, with the problems named in the head, then the realms, a card for each cluster and the latest runs"
+    alt: "Overview: what needs you with what it means for the jobs and a fix for each problem, the commands that run now, then one table of the clusters by realm, each ready for jobs or not, with its tiles and issues in words, and the latest runs"
     path: /
     page: overview
     sizes: [desktop, phone]
 
   - name: clusters
-    alt: "Clusters: one row for each cluster of every realm, with its state, nodes and Slurm version"
+    alt: "Clusters: one row for each cluster of every realm, with its state, nodes and Slurm version, and a ⋯ menu of its actions, then the legend of the tiles"
     path: /clusters
     hide: "#tasks"
     page: clusters
@@ -59,7 +59,7 @@ shots:
     fit: true
 
   - name: cluster-connect
-    alt: "A cluster's Connect tab: the commands that open a shell, run a command, log in to a node or follow its log"
+    alt: "A cluster's Connect tab: the commands that open a shell, run a command, log in to a node or follow its log, and where your files are"
     path: /clusters/sind/dev?tab=connect
     hide: "#tasks"
     page: cluster
@@ -72,14 +72,21 @@ shots:
     page: nodes
 
   - name: node
-    alt: "A node whose slurmd is down: its identity, services and the commands for it"
+    alt: "A node whose slurmd failed: what failed and when, the end of its journal, the fixes to try in order, its services and what changed on it"
     path: /nodes/sind/dev/worker-4
+    hide: "#tasks"
+    page: node
+    sizes: [desktop, phone]
+
+  - name: node-logs
+    alt: "A node's Logs tab: the journal of the service that failed, with the fix to try first above it"
+    path: /nodes/sind/dev/worker-4?tab=logs&source=journal&unit=slurmd
     hide: "#tasks"
     page: node
     fit: true
 
   - name: mesh
-    alt: "Mesh and DNS: the mesh network, the DNS and SSH containers, the records and the containers that are connected"
+    alt: "Mesh and DNS: the mesh network, the DNS and SSH containers, the first records, and the containers that are connected"
     path: /mesh
     hide: "#tasks"
     page: mesh
@@ -105,19 +112,25 @@ shots:
     fit: true
 
   - name: activity
-    alt: "Activity: the runs of sind commands, from this UI and from a terminal"
+    alt: "Activity: the runs of sind commands, from this UI and from a terminal, each with what came of it, such as 3 nodes ready for jobs or worker-1 timed out"
     path: /activity
     hide: "#tasks"
     page: activity
 
+  - name: run-ok
+    alt: "A create cluster that ended ok: the cluster is ready for jobs, with the checks of its Summary, the first commands of a job and the ways on"
+    path: /runs/d3e0000000000007
+    hide: "#tasks"
+    page: run
+
   - name: run-failed
-    alt: "A run that failed: a node ran out of time, sind rolled back, and the page says what to try"
+    alt: "A create cluster that failed: bench was not created, as worker-1 ran out of the 5m wait; what munge does, why this often happens, the Doctor checks that did not pass, and Try again with a 10m wait"
     path: /runs/d3e0000000000005
     hide: "#tasks"
     page: run
 
   - name: run-canceled
-    alt: "A run that was stopped with Ctrl-C: the work that had not ended was stopped and rolled back"
+    alt: "A run that was stopped from the terminal: what worker-2 was doing at that time, and that sind removed it again"
     path: /runs/d3e0000000000006
     hide: "#tasks"
     page: run
@@ -129,19 +142,32 @@ shots:
     page: run
     sizes: [desktop, phone]
 
-  - name: dialog-create-cluster
-    alt: "The New cluster dialog: the form with the nodes and sizes, and the plan with the command and config that sind ui will run"
-    path: /clusters
-    steps:
-      - dialog: create-cluster
-    crop: "#layer [role=dialog]"
-    page: dialogs
+  - name: new-cluster
+    alt: "The New cluster page: the starts, the name and realm, the nodes by what they are for, and the plan with the nodes, what they take of this host and the command that sind ui will run"
+    path: /clusters/new
+    hide: "#tasks"
+    page: new-cluster
+    sizes: [desktop, phone]
+
+  - name: new-cluster-retry
+    alt: "New cluster rebuilt from the failed run of bench: what the event log gave, what keeps the defaults, and a longer wait with the reason"
+    path: /clusters/new?from=d3e0000000000005&name=bench
+    hide: "#tasks"
+    page: new-cluster
 
   - name: dialog-power
-    alt: "The Power dialog: Drain and Resume, the container actions and those that can lose data, and the command it runs"
+    alt: "The Power dialog confirming a reboot of worker-0.dev: the node with its Slurm state, what keeps running, the other actions, and the command it runs"
     path: /clusters/sind/dev
     steps:
       - dialog: power?realm=sind&cluster=dev&op=reboot&nodes=worker-0
+    crop: "#layer [role=dialog]"
+    page: dialogs
+
+  - name: dialog-restart-service
+    alt: "The Restart a service dialog: the services of the node with their state, and the sind ssh command that restarts one"
+    path: /nodes/sind/dev/worker-4
+    steps:
+      - dialog: restart-service?realm=sind&cluster=dev&nodes=worker-4&unit=slurmd
     crop: "#layer [role=dialog]"
     page: dialogs
 
@@ -163,8 +189,17 @@ shots:
     page: clusters
     fit: true
 
+  - name: clusters-row-menu
+    alt: "Clusters with the ⋯ menu of a row open: Add workers and Power, and apart, under Can lose data, Delete cluster with what goes too"
+    path: /clusters
+    hide: "#tasks"
+    steps:
+      - click: 'tr[data-pg-item="sind/dev"] summary'
+    page: clusters
+    fit: true
+
   - name: dialog-delete-clusters
-    alt: "The Delete clusters dialog: the clusters, the number to type and one command for each"
+    alt: "The Delete clusters dialog: a row for each cluster with what goes, its data volume in red, and what stays, the box to tick for the data, the number to type and one command for each"
     path: /clusters
     steps:
       - dialog: delete-clusters?clusters=sind/legacy&clusters=ci/pr-145
@@ -183,7 +218,7 @@ shots:
 
   # The shots of the docs' steps for the web UI (shortcode uishot).
   - name: dialog-create-worker
-    alt: "The Add workers dialog: how many workers, their size and names, and the command it runs"
+    alt: "The Add workers dialog: how many workers, their size and names, their memory beside that of the nodes that run against the Docker host, and the command it runs"
     path: /clusters/sind/dev
     steps:
       - dialog: create-worker?realm=sind&cluster=dev
@@ -191,7 +226,7 @@ shots:
     page: dialogs
 
   - name: cluster-nodes-selected
-    alt: "A cluster's Nodes tab with three workers selected, and what you can do with them"
+    alt: "A cluster's Nodes tab with three workers selected, and the bar at the bottom: their node set and the actions that fit them, each naming the workers it acts on"
     path: /clusters/sind/dev?tab=nodes
     hide: "#tasks"
     steps:
@@ -202,7 +237,7 @@ shots:
     fit: true
 
   - name: dialog-delete-worker
-    alt: "The Delete workers dialog for three workers: what goes, what stays, and the name of the cluster to type to confirm"
+    alt: "The Delete workers dialog for three workers: the workers with their Slurm state, what goes, what stays, and the number of workers to type to confirm"
     path: /clusters/sind/dev?tab=nodes
     steps:
       - dialog: delete-worker?realm=sind&cluster=dev&nodes=worker-2,worker-3,worker-4
@@ -210,15 +245,15 @@ shots:
     page: dialogs
 
   - name: dialog-connect
-    alt: "The Connect a container dialog: the container to connect to the realm's mesh, and the command it runs"
+    alt: "The Connect a container dialog: the containers that sind did not make to pick from, with their image and state, what the container then reaches, and the command it runs"
     path: /mesh
     steps:
-      - dialog: connect?realm=sind&container=kind-control-plane
+      - dialog: connect?realm=ci&container=kind-control-plane
     crop: "#layer [role=dialog]"
     page: dialogs
 
   - name: dialog-delete-realm
-    alt: "The Delete realm dialog: the clusters and the rest that goes, what stays, and the name of the realm to type to confirm"
+    alt: "The Delete realm dialog: a row for each cluster and one for the realm with what goes and what stays, the box to tick for the data, and the name of the realm to type to confirm"
     path: /mesh
     steps:
       - dialog: delete-realm?realm=sind
@@ -226,7 +261,16 @@ shots:
     page: dialogs
 
   - name: task-dock
-    alt: "The task dock: a card for a run that goes on, with its steps, the current step, Stop and Show progress"
+    alt: "The strip of the task dock: the run that goes on, with its steps, the current step, its clock, Stop and Show progress"
     path: /
-    crop: "#tasks .task"
+    crop: "#tasks .tstrip"
+    page: run
+
+  - name: task-list
+    alt: "Commands, the list of the task dock: the run that goes on, with its steps, its current step, Stop and Show progress"
+    path: /
+    steps:
+      - click: ".cmds-btn"
+      - wait: "#cmds.open #cmds-pop"
+    crop: "#cmds-pop"
     page: run

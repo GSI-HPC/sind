@@ -46,7 +46,7 @@
     lifted: null,
     // The element that had the focus before the jump box opened, and the
     // action whose cluster or realm the box asks for.
-    jumpBack: null, step: null,
+    jumpBack: null, step: null, stepOp: null,
   };
   try {
     const seen = JSON.parse(local.get(SEEN_KEY) || '[]');
@@ -126,6 +126,8 @@
 
   // mark gives the dotted words their look. Only the first mark of a word
   // takes the focus, so that a table of roles adds one stop, not one a row.
+  // In a table that the arrow keys move in, [data-pg-grid], a word is a
+  // cell that pg.js gives the stop of Tab to.
   function mark() {
     const first = new Set();
     for (const el of document.querySelectorAll('[data-word]')) {
@@ -133,6 +135,10 @@
       el.classList.add('term-word');
       el.classList.toggle('seen', H.seen.has(id));
       if (el.closest('a, button, label, summary')) continue;
+      if (el.closest('[data-pg-grid] tbody')) {
+        if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+        continue;
+      }
       if (!first.has(id)) {
         first.add(id);
         if (!el.hasAttribute('tabindex') || el.dataset.wordTab) { el.setAttribute('tabindex', '0'); el.dataset.wordTab = '1'; }
@@ -390,7 +396,7 @@
     hideHint();
     const back = document.activeElement;
     H.jumpBack = focusable(back) ? back : null;
-    H.step = null;
+    H.step = H.stepOp = null;
     layer().appendChild(shell.content.cloneNode(true));
     const input = $('jump-q');
     input.value = q || '';
@@ -403,7 +409,7 @@
     const j = jumpBox();
     if (!j) return;
     j.remove();
-    H.step = null;
+    H.step = H.stepOp = null;
     if (focusable(H.jumpBack)) H.jumpBack.focus();
     H.jumpBack = null;
   }
@@ -414,10 +420,12 @@
     const input = $('jump-q');
     const bar = $('jump-step');
     H.step = opt ? opt.dataset.jumpStep : null;
+    H.stepOp = opt ? opt.dataset.jumpOp || null : null;
     input.value = '';
     bar.hidden = !opt;
     if (opt) {
-      $('jump-step-name').textContent = opt.firstChild.textContent.replace(/…$/, '');
+      const name = opt.querySelector('.pil') || opt;
+      $('jump-step-name').textContent = name.firstChild.textContent.replace(/…$/, '');
     }
     input.placeholder = opt ? '' : 'Jump to… (start with ? for help only)';
     input.setAttribute('aria-label', 'Jump to');
@@ -431,12 +439,13 @@
     if (!input) return;
     const q = new URLSearchParams({ q: input.value, from: location.pathname + location.search });
     if (H.step) q.set('step', H.step);
+    if (H.stepOp) q.set('op', H.stepOp);
     try {
       const html = await fetchHTML('/jump?' + q);
       if (seq !== H.jumpSeq || !jumpBox()) return;
       $('jump-res').innerHTML = html;
       const list = $('jump-list');
-      const items = list ? [...list.querySelectorAll('.pi')] : [];
+      const items = list ? [...list.querySelectorAll('.pi:not(.off)')] : [];
       input.setAttribute('aria-expanded', String(items.length > 0));
       // In a step, the field names the question, which the status says too.
       if (H.step && list) {
@@ -469,7 +478,7 @@
 
   function moveJump(d) {
     const list = $('jump-list');
-    const items = list ? [...list.querySelectorAll('.pi')] : [];
+    const items = list ? [...list.querySelectorAll('.pi:not(.off)')] : [];
     if (!items.length) return;
     const i = items.findIndex(x => x.classList.contains('on'));
     setActive(items, Math.max(0, Math.min(items.length - 1, i + d)));
@@ -477,7 +486,7 @@
 
   function pickJump() {
     const list = $('jump-list');
-    const on = list && (list.querySelector('.pi.on') || list.querySelector('.pi'));
+    const on = list && (list.querySelector('.pi.on') || list.querySelector('.pi:not(.off)'));
     if (on) on.click();
   }
 
@@ -485,6 +494,15 @@
   function openDialog(href) {
     closeJump();
     htmx.ajax('GET', href, { target: '#layer', swap: 'innerHTML' });
+  }
+
+  // copyJump copies a command of the jump box, says so, and with done
+  // closes the box, as an entry that copies has nothing else to open.
+  function copyJump(text, done) {
+    const say = msg => document.dispatchEvent(new CustomEvent('sind:toast', { detail: msg }));
+    const p = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
+    p.then(() => say('Copied ' + text), () => say('Select the text and press Ctrl+C to copy'));
+    if (done) closeJump();
   }
 
   // runCmd runs a command of the jump box.
@@ -571,6 +589,8 @@
     if (stepOpt) { step(stepOpt); return; }
     const cmd = t.closest('#jump [data-jump-cmd]');
     if (cmd) { runCmd(cmd.dataset.jumpCmd); return; }
+    const cp = t.closest('#jump [data-jump-copy]');
+    if (cp) { copyJump(cp.dataset.jumpCopy, true); return; }
     const dlg = t.closest('#jump [data-jump-dialog]');
     if (dlg) { ev.preventDefault(); openDialog(dlg.getAttribute('href')); return; }
     const jumpBg = t.closest('#jump');
@@ -607,7 +627,14 @@
       else if (ev.key === 'ArrowDown') { moveJump(1); ev.preventDefault(); }
       else if (ev.key === 'ArrowUp') { moveJump(-1); ev.preventDefault(); }
       else if (ev.key === 'Enter') { ev.preventDefault(); pickJump(); }
-      else if (ev.key === 'Tab') { ev.preventDefault(); $('jump-q').focus(); }
+      else if (ev.key === 'Tab') {
+        // Tab copies the command of the active entry; the focus stays in
+        // the field.
+        ev.preventDefault();
+        const on = document.querySelector('#jump-list .pi.on[data-jump-cli]');
+        if (on && !ev.shiftKey) copyJump(on.dataset.jumpCli, false);
+        $('jump-q').focus();
+      }
       else if (ev.key === 'Backspace' && H.step && !$('jump-q').value) { ev.preventDefault(); step(null); }
       return;
     }

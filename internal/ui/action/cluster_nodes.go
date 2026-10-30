@@ -14,7 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
-// Size is a choice of the node defaults of the New cluster dialog.
+// Size is a choice of the node defaults of the New cluster page.
 type Size struct {
 	ID, Label string
 	CPUs      int
@@ -23,7 +23,7 @@ type Size struct {
 	TmpSize string
 }
 
-// Sizes are the node defaults that the New cluster dialog offers; the
+// Sizes are the node defaults that the New cluster page offers; the
 // field "size" takes their IDs, or "x" for the fields "cpus", "memory" and
 // "tmp".
 var Sizes = []Size{
@@ -32,15 +32,15 @@ var Sizes = []Size{
 	{ID: "l", Label: "Large", CPUs: 4, Memory: "4g", TmpSize: "1g"},
 }
 
-// NodeRoles are the keys of the nodes of the New cluster dialog that are
+// NodeRoles are the keys of the nodes of the New cluster page that are
 // one node, in order; a worker group has the key of the group.
 var NodeRoles = []string{"controller", "db", "api", "submitter"}
 
-// NodeAttrs are the fields of a node of the New cluster dialog, after its
+// NodeAttrs are the fields of a node of the New cluster page, after its
 // key and a dash, such as db-cpus. A worker group has KEY-count too.
 var NodeAttrs = []string{"image", "cpus", "memory", "tmp", "unmanaged", "capAdd", "capDrop", "devices", "securityOpt"}
 
-// Limits of the New cluster dialog: there are none in sind, but a form
+// Limits of the New cluster page: there are none in sind, but a form
 // must not make the preview build a million nodes.
 const (
 	maxGroups = 16
@@ -72,7 +72,7 @@ func GroupLabel(f Form, g string) string {
 	return "workers"
 }
 
-// ClusterFieldsOf returns the fields of the New cluster dialog of the form
+// ClusterFieldsOf returns the fields of the New cluster page of the form
 // in the order the dialog shows them, which its problems follow.
 func ClusterFieldsOf(f Form) []string {
 	fields := []string{"name", "realm", "image"}
@@ -131,15 +131,15 @@ func nodeDefaults(f Form, d *config.Defaults, ps *problems) {
 		ps.add("cpus", "CPUs per node", true, fmt.Errorf("write a number from 1 to %d", maxCPUs))
 		d.CPUs = small.CPUs
 	}
-	sizeOf(f, "memory", "Memory per node", config.CheckMemory, "memory", &d.Memory, ps)
-	sizeOf(f, "tmp", "/tmp per node", config.CheckTmpSize, "/tmp size", &d.TmpSize, ps)
+	sizeOf(f, "memory", "Memory per node", memorySize, &d.Memory, ps)
+	sizeOf(f, "tmp", "/tmp per node", tmpSize, &d.TmpSize, ps)
 }
 
-// sizeOf reads the memory or /tmp size of field, which check takes as
-// name, into v, which keeps its value where the field is empty or wrong.
-func sizeOf(f Form, field, label string, check func(name, value string) error, name string, v *string, ps *problems) {
+// sizeOf reads the memory or /tmp size of field with read into v, which
+// keeps its value where the field is empty or wrong.
+func sizeOf(f Form, field, label string, read func(string) (string, error), v *string, ps *problems) {
 	if s := strings.TrimSpace(f.Get(field)); s != "" {
-		if err := check(name, s); err != nil {
+		if s, err := read(s); err != nil {
 			ps.add(field, label, true, err)
 		} else {
 			*v = s
@@ -147,7 +147,7 @@ func sizeOf(f Form, field, label string, check func(name, value string) error, n
 	}
 }
 
-// clusterNodes reads the nodes of the New cluster dialog: the nodes of the
+// clusterNodes reads the nodes of the New cluster page: the nodes of the
 // config, and the same nodes one by one for the preview.
 func clusterNodes(f Form, ps *problems) ([]config.Node, []PlannedNode) {
 	controller := config.Node{Role: config.RoleController}
@@ -224,8 +224,8 @@ func nodeSize(f Form, key, label string, n *config.Node, ps *problems) {
 	} else {
 		n.CPUs = cpus
 	}
-	sizeOf(f, key+"-memory", label+" memory", config.CheckMemory, "memory", &n.Memory, ps)
-	sizeOf(f, key+"-tmp", label+" /tmp", config.CheckTmpSize, "/tmp size", &n.TmpSize, ps)
+	sizeOf(f, key+"-memory", label+" memory", memorySize, &n.Memory, ps)
+	sizeOf(f, key+"-tmp", label+" /tmp", tmpSize, &n.TmpSize, ps)
 	if key != "submitter" && checkbox(f, key+"-unmanaged", label+" unmanaged", ps) {
 		n.Managed = new(bool)
 	}
@@ -256,6 +256,15 @@ func clusterSize(d config.Defaults, nodes []config.Node) (containers, cpus, memo
 		memoryMB += count * mb
 	}
 	return containers, cpus, memoryMB
+}
+
+// nodeCPUs returns the most CPUs that one of the nodes asks for.
+func nodeCPUs(d config.Defaults, nodes []config.Node) int {
+	most := 0
+	for _, n := range nodes {
+		most = max(most, cmp.Or(n.CPUs, d.CPUs, config.DefaultCPUs))
+	}
+	return most
 }
 
 // MemoryLabel writes a size in MiB for people: 512 MiB, 1 GiB, 1.5 GiB.

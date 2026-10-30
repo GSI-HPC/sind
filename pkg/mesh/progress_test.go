@@ -212,10 +212,12 @@ func TestEnsureMesh_TreeShowsThePullInThePartsRow(t *testing.T) {
 // does: standard error always, standard output unless it is data. The pull
 // of the relay's image writes its lines to standard output, the docker
 // create of the relay the container's ID, and a frame of the tree is drawn
-// at each docker command after the pull while the relay's part runs.
+// at each docker command after the pull while the relay's part runs. The
+// parts of the mesh run in parallel, so mu guards pulled and frames.
 type teeingExecutor struct {
 	*mock.Executor
 	screen *onScreen
+	mu     sync.Mutex
 	pulled bool
 	frames []string
 }
@@ -230,6 +232,8 @@ func (e *teeingExecutor) Run(ctx context.Context, name string, args ...string) (
 		_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStdout, nil), stdout)
 	}
 	_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStderr, nil), stderr)
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.pulled && strings.Contains(joined, "sind-ssh") {
 		e.frames = append(e.frames, e.screen.draw(time.Second))
 	}

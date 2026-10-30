@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -126,24 +127,44 @@ func TestPgReadyWorkers(t *testing.T) {
 	assert.Equal(t, "warn", r.Class)
 	c := r.Checks[1]
 	assert.Equal(t, "1 of 4 workers take jobs", c.Title)
-	assert.Equal(t, "worker-1: slurmd is down; worker-2: drained in Slurm (disk check); worker-3: down* in Slurm.", c.Detail)
-	require.Len(t, c.Actions, 2)
-	assert.Equal(t, "Logs of worker-1", c.Actions[0].Label)
-	assert.Equal(t, "/clusters/sind/dev?node=worker-1&tab=logs", c.Actions[0].URL)
-	assert.Equal(t, "Reboot…", c.Actions[1].Label)
+	assert.Equal(t, "3 workers take no jobs:", c.Detail)
+	assert.Empty(t, c.Actions)
+	assert.Empty(t, c.More)
+	// A row for each, with why and its first fix: a restart of slurmd, and
+	// Resume for a worker that Slurm sends no jobs.
+	var rows, fixes []string
+	for _, n := range c.Nodes {
+		rows = append(rows, n.Short)
+		fixes = append(fixes, n.RowFix().Label)
+	}
+	assert.Equal(t, []string{"worker-1", "worker-2", "worker-3"}, rows)
+	assert.Equal(t, []string{"Restart slurmd…", "Resume…", "Resume…"}, fixes)
+	assert.Equal(t, "disk check", c.Nodes[1].Cause())
+	assert.Equal(t, "/nodes/sind/dev/worker-1?source=journal&tab=logs&unit=slurmd", c.Nodes[0].LogsLink())
+	assert.Contains(t, c.Nodes[1].RowFix().URL, "op=resume")
 
 	// None takes jobs: no.
 	stopped := readyNode("worker-5", config.RoleWorker, "slurmd")
 	stopped.State = cluster.StateStopped
 	r = pgReadyOf(readyView(ctl, stopped, drained))
 	assert.Equal(t, "no", r.Verdict)
-	assert.Equal(t, pgReadyCheck{State: "bad", Title: "No worker takes jobs", Detail: "worker-5: stopped; worker-2: drained in Slurm (disk check).", Actions: r.Checks[1].Actions}, r.Checks[1])
-	assert.Equal(t, "Start…", r.Checks[1].Actions[1].Label)
+	assert.Equal(t, pgReadyCheck{State: "bad", Title: "No worker takes jobs", Detail: "2 workers take no jobs:", Nodes: r.Checks[1].Nodes}, r.Checks[1])
+	assert.Equal(t, "Start…", r.Checks[1].Nodes[0].RowFix().Label)
 	paused := stopped
 	paused.State = cluster.StatePaused
-	assert.Equal(t, "Unfreeze…", pgReadyOf(readyView(ctl, paused)).Checks[1].Actions[1].Label)
-	r = pgReadyOf(readyView(ctl, drained))
-	assert.Len(t, r.Checks[1].Actions, 1, "a drained node has no power fix")
+	assert.Equal(t, "Unfreeze…", pgReadyOf(readyView(ctl, paused)).Checks[1].Nodes[0].RowFix().Label)
+	// Six rows at most; the others in a sentence.
+	many := []pgNode{ctl, ok}
+	for i := range 8 {
+		w := readyNode(fmt.Sprintf("worker-%d", 10+i), config.RoleWorker, "slurmd")
+		w.State = cluster.StateStopped
+		many = append(many, w)
+	}
+	r = pgReadyOf(readyView(many...))
+	assert.Len(t, r.Checks[1].Nodes, pgReadyRows)
+	assert.Equal(t, "and 2 more: worker-16: stopped; worker-17: stopped.", r.Checks[1].More)
+	// A node that needs no look has no fix.
+	assert.Nil(t, pgFix(ok, "sm"))
 
 	// No worker at all.
 	r = pgReadyOf(readyView(ctl))
@@ -179,7 +200,7 @@ func TestPgReadyController(t *testing.T) {
 	r = pgReadyOf(readyView(stopped, down(backup, "slurmctld"), w))
 	assert.Equal(t, "no", r.Verdict)
 	assert.Equal(t, pgReadyCheck{State: "bad", Title: "The controller does not answer", Detail: "controller: stopped; controller-backup: slurmctld is down.", Actions: r.Checks[0].Actions}, r.Checks[0])
-	assert.Equal(t, "Start…", r.Checks[0].Actions[1].Label)
+	assert.Equal(t, "Start controller…", r.Checks[0].Actions[1].Label)
 
 	// slurmctld runs, but sinfo fails.
 	d := readyView(ctl, w)
@@ -194,18 +215,32 @@ func TestPgReadyWhileTheClusterIsCreated(t *testing.T) {
 	ctl := down(readyNode("controller", config.RoleController, "slurmctld"), "slurmctld")
 	w := readyNode("worker-0", config.RoleWorker, "slurmd")
 	w.State = cluster.StateStopped
-	ctl.Creating, w.Creating = true, true
-	r := pgReadyOf(readyView(ctl, w))
-	assert.Equal(t, "not yet: the cluster is being created", r.Verdict)
+	d := readyView(ctl, w, readyNode("worker-1", config.RoleWorker, "slurmd"))
+	d.Status = nil
+	d.Cluster.Life = &pgLife{Kind: pgCreating}
+	r := pgReadyOf(d)
+	assert.Equal(t, "not yet: sind creates the cluster", r.Verdict)
 	assert.Equal(t, "run", r.Class)
-	assert.Equal(t, "bad", r.Checks[0].State, "the checks say what is not ready")
-	for _, c := range r.Checks {
-		assert.Empty(t, c.Actions, "no fix while the command runs")
-	}
+	assert.True(t, r.Checked, "the checks wait, before the first probe too")
+	assert.Equal(t, []pgReadyCheck{
+		{State: "wait", Title: "The controller answers", Detail: "Waits for the create."},
+		{State: "wait", Title: "Workers take jobs", Detail: "Waits for worker-0 and worker-1."},
+	}, r.Checks, "no fault and no fix while the command runs")
+	assert.Equal(t, "○", r.Checks[0].Mark())
+	assert.Equal(t, "waiting", r.Checks[0].Word())
+	assert.Contains(t, r.Wait, "show here when the create ends ok")
 
-	// Once all is up, the verdict is yes, as it is.
-	ctl = readyNode("controller", config.RoleController, "slurmctld")
-	w = readyNode("worker-0", config.RoleWorker, "slurmd")
-	ctl.Creating, w.Creating = true, true
-	assert.Equal(t, "yes", pgReadyOf(readyView(ctl, w)).Verdict)
+	// A cluster with a db node and no worker yet.
+	d = readyView(readyNode("controller", config.RoleController, "slurmctld"), readyNode("db", config.RoleDB, "slurmdbd"))
+	d.Cluster.Life = &pgLife{Kind: pgCreating}
+	r = pgReadyOf(d)
+	assert.Equal(t, "Waits for the create.", r.Checks[1].Detail)
+	assert.Equal(t, pgReadyCheck{State: "wait", Title: "Accounting works", Detail: "Waits for db."}, r.Checks[2])
+
+	// A cluster that sind deletes takes no jobs.
+	d.Cluster.Life.Kind = pgDeleting
+	r = pgReadyOf(d)
+	assert.Equal(t, "no: sind deletes the cluster", r.Verdict)
+	assert.Empty(t, r.Checks)
+	assert.Contains(t, r.Wait, "Jobs no longer run on it.")
 }

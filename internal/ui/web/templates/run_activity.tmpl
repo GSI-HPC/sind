@@ -15,13 +15,13 @@ what the user types alone. */}}
 {{define "run-list"}}{{with .Data}}<div class="tabs" role="navigation" aria-label="Filter by status">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}<span class="n">{{.N}}</span></a>{{end}}</div>
 {{if or .Realms .Clusters .Clear}}<div class="runchips">{{with .Realms}}<div class="runchips-g" role="group" aria-label="Filter by realm"><span class="faint">Realm</span>{{range .}}{{template "run-chip" .}}{{end}}</div>{{end}}{{with .Clusters}}<div class="runchips-g" role="group" aria-label="Filter by cluster"><span class="faint">Cluster</span>{{range .}}{{template "run-chip" .}}{{end}}</div>{{end}}{{with .Clear}}<a class="runchips-clear" href="{{.}}">Clear filter</a>{{end}}</div>{{end}}
 <section class="panel">{{if .Rows}}<div class="tw"><table class="runs cards">
-<thead><tr><th>Status</th><th>Command</th><th>Started</th><th class="num">Duration</th><th class="hide-s">Targets</th></tr></thead>
+<thead><tr><th>Status</th><th>Command</th><th>Started</th><th class="num">Duration</th><th class="hide-s">Result</th></tr></thead>
 <tbody>{{range .Rows}}<tr>
 <td class="c-state"><span class="pill {{.PillClass}}">{{.Pill}}</span></td>
 <td class="c-name"><a class="mono" href="/runs/{{.ID}}">{{range $i, $w := .Words}}{{if $i}} {{end}}{{if $w.Flag}}<span class="flag">{{$w.Text}}</span>{{else}}{{$w.Text}}{{end}}{{end}}</a>{{with .Realm}} <span class="chip" title="realm">{{.}}</span>{{end}}{{with .Chip}} <span class="chip">{{.}}</span>{{end}}</td>
 <td class="muted" data-label="Started">{{.Started}}</td>
 <td class="num" data-label="Duration">{{template "run-elapsed" .}}</td>
-<td class="hide-s mono muted" data-label="Targets">{{.Counts}}</td>
+<td class="hide-s{{with .ResultClass}} {{.}}{{else}} muted{{end}}" data-label="Result">{{.Result}}</td>
 </tr>{{end}}</tbody></table></div>{{if .More}}<div class="pb faint">{{.More}} older runs are not listed.</div>{{end}}
 {{else}}<div class="empty">{{if .Total}}No run matches this filter.{{with .Clear}} <a href="{{.}}">Clear filter</a>{{end}}{{else}}No runs yet. A command that sind runs, here or in a terminal, shows up as soon as it writes to the event log.{{end}}</div>{{end}}</section>{{end}}{{end}}
 

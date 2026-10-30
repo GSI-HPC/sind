@@ -168,7 +168,7 @@
     if (sheet) sheet.hidden = !open;
     if (more) more.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open) {
-      const first = sheet && sheet.querySelector('a');
+      const first = sheet && sheet.querySelector('summary, a');
       if (first) first.focus();
     }
   }
@@ -256,7 +256,9 @@
           e.focus({ preventScroll: true });
           return document.activeElement === e;
         });
-        if (!back) {
+        // A fragment marked data-own-focus, the list of the task dock,
+        // places the focus itself (run.js).
+        if (!back && !target.hasAttribute('data-own-focus')) {
           const to = document.querySelector('main h1') || document.getElementById('main');
           if (to) {
             if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
@@ -282,6 +284,9 @@
       const page = Idiomorph.defaults.callbacks.beforeAttributeUpdated;
       Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node, kind) => {
         if (name === 'hidden' && node.id === 'rail-sheet') return false;
+        // A menu of a page that is open stays open, with its button.
+        if (name === 'open' && node.hasAttribute('data-pg-menu')) return false;
+        if (name === 'aria-expanded' && node.parentElement && node.parentElement.hasAttribute('data-pg-menu')) return false;
         if (name === 'aria-expanded' && node.hasAttribute('data-rail-more')) return false;
         if (name === 'tabindex' && kind === 'remove' && node === document.activeElement) return false;
         return typeof page !== 'function' || page(name, node, kind) !== false;
@@ -339,7 +344,7 @@
       for (const s of streams) s.close();
     });
     window.addEventListener('pageshow', ev => { if (ev.persisted && streams.size) location.reload(); });
-    // The page keeps the focus clear of the task dock (app.css), which
+    // The toasts keep above the strip of the task dock (app.css), which
     // needs its height.
     const dock = document.getElementById('tasks');
     if (dock) new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', dock.offsetHeight + 'px')).observe(dock);

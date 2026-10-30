@@ -13,7 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
-// Rows is a kind of row of the New cluster dialog: users, groups or
+// Rows is a kind of row of the New cluster page: users, groups or
 // accounts. The keys of the rows are the values of the field List, in
 // order; each starts with Prefix. The fields of a row are KEY-ATTR, for
 // the Attrs.
@@ -22,7 +22,7 @@ type Rows struct {
 	Attrs        []string
 }
 
-// The rows of the New cluster dialog. An account has its limits as the
+// The rows of the New cluster page. An account has its limits as the
 // pairs of the fields KEY-lk and KEY-lv too.
 var (
 	UserRows    = Rows{List: "ur", Prefix: "u", Attrs: []string{"name", "uid", "accounts", "group", "groups", "coordinator", "admin"}}

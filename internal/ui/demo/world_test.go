@@ -4,6 +4,7 @@ package demo
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,13 +60,25 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, "25.11.8", byName["legacy"].SlurmVersion)
 
 	require.NotNil(t, sn.Monitorings["sind"])
-	// dev's six workers are Slurm's nodes; worker-4's slurmd is down.
-	assert.Equal(t, &cluster.SlurmCounts{Nodes: 6, NodesDown: 1, JobsRunning: 5, JobsPending: demoPending},
+	// dev's six workers are Slurm's nodes; worker-4's slurmd is down, and
+	// worker-5 is drained.
+	assert.Equal(t, &cluster.SlurmCounts{Nodes: 6, NodesDown: 1, NodesDrain: 1, JobsRunning: 4, JobsPending: demoPending},
 		sn.Monitorings["sind"].Clusters[0].Slurm)
 	assert.Nil(t, sn.Monitorings["ci"], "monitoring in one realm only")
 	m, ok := sn.Meshes["sind"]
 	require.True(t, ok)
 	assert.Equal(t, []string{"kind-control-plane"}, m.External)
+	names := func(os []store.Outside) (out []string) {
+		for _, o := range os {
+			out = append(out, o.Name)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"gitlab-runner", "my-app", "postgres-test"}, names(m.Connectable), "kind-control-plane is on the mesh of sind")
+	ciOut := sn.Meshes["ci"].Connectable
+	assert.Equal(t, []string{"gitlab-runner", "kind-control-plane", "my-app", "postgres-test"}, names(ciOut))
+	assert.Equal(t, store.Outside{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "sind-mesh"}}, ciOut[1],
+		"a container on the mesh of another realm is on its network")
 	assert.Equal(t, "sind-mesh", m.Info.Network)
 	assert.Len(t, m.Records, 11+2+3)
 	ci := sn.Meshes["ci"]
@@ -189,15 +202,23 @@ func TestWorld_Connect(t *testing.T) {
 func TestWorld_Drift(t *testing.T) {
 	w, st := seededStore(t)
 	require.False(t, slurmdUp(st))
-	assert.True(t, w.Drift())
+	assert.False(t, w.Drift(), "a failure stays until a fix")
+
+	// Once its services came up, as after a reboot, the node stays calm
+	// for a while, then slurmd fails again.
+	w.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
 	w.Publish(st)
-	assert.True(t, slurmdUp(st))
+	require.True(t, slurmdUp(st))
+	for range readyCalm {
+		assert.False(t, w.Drift())
+	}
 	assert.True(t, w.Drift())
 	w.Publish(st)
 	assert.False(t, slurmdUp(st))
+	assert.False(t, w.Drift())
 
 	w.apply("sind", opStop, node{name: "worker-4", cluster: "dev"})
-	assert.False(t, w.Drift(), "a node that is stopped has nothing to flip")
+	assert.False(t, w.Drift(), "a node that is stopped has nothing to fail")
 	w.apply("sind", opRemove, node{name: "worker-4", cluster: "dev"})
 	assert.False(t, w.Drift())
 	for _, n := range w.nodesOf("sind", "dev") {
@@ -228,4 +249,97 @@ func TestServices(t *testing.T) {
 		assert.Contains(t, got, probe.ServiceMunge, role)
 		assert.Len(t, got, n, role)
 	}
+}
+
+func TestWorld_Faults(t *testing.T) {
+	w := Seeded()
+	w.now = func() time.Time { return t0 }
+	st := store.New()
+	w.Publish(st)
+	sn := st.Snapshot()
+
+	// What was wrong before the demo started gets a time of its own.
+	f, ok := sn.Fault("sind", "dev", "worker-4")
+	require.True(t, ok)
+	require.Len(t, f.Units, 1)
+	u := f.Units[0]
+	assert.Equal(t, "slurmd", u.Name)
+	assert.Equal(t, "failed", u.State)
+	assert.Equal(t, t0.Add(-seededFailed), u.Since)
+	assert.Equal(t, "systemd[1]: slurmd.service: Failed with result 'exit-code'.", u.Journal[len(u.Journal)-1].Text)
+	f, ok = sn.Fault("sind", "legacy", "worker-1")
+	require.True(t, ok)
+	assert.Equal(t, &store.Exit{Code: 137, OOMKilled: true, At: t0.Add(-seededStopped)}, f.Exit)
+	_, ok = sn.Fault("sind", "dev", "worker-0")
+	assert.False(t, ok)
+
+	at, down := w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.True(t, down)
+	assert.Equal(t, t0.Add(-seededFailed), at)
+	_, down = w.FailedSince("sind-dev-worker-4", "munge")
+	assert.False(t, down)
+	_, down = w.FailedSince("sind-dev-nobody", "slurmd")
+	assert.False(t, down)
+	at, down = w.StoppedAt("sind-legacy-worker-1")
+	assert.True(t, down)
+	assert.Equal(t, t0.Add(-seededStopped), at)
+	_, down = w.StoppedAt("sind-dev-worker-4")
+	assert.False(t, down)
+	_, down = w.StoppedAt("sind-dev-nobody")
+	assert.False(t, down)
+
+	// A restart brings the service up; one of a node that does not run,
+	// or of a service the node has not, does nothing.
+	w.apply("sind", opRestart, node{name: "worker-4", cluster: "dev", unit: "slurmctld"})
+	_, down = w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.True(t, down)
+	w.apply("sind", opRestart, node{name: "worker-4", cluster: "dev", unit: "slurmd"})
+	_, down = w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.False(t, down)
+	w.apply("sind", opRestart, node{name: "worker-1", cluster: "legacy", unit: "slurmd"})
+	w.Publish(st)
+	_, ok = st.Snapshot().Fault("sind", "dev", "worker-4")
+	assert.False(t, ok, "the restart fixed it")
+	assert.True(t, slurmdUp(st))
+
+	// A stop is timed by the world's clock, and a fault of a cluster that
+	// went goes too.
+	w.apply("sind", opStop, node{name: "worker-0", cluster: "dev"})
+	w.Publish(st)
+	f, _ = st.Snapshot().Fault("sind", "dev", "worker-0")
+	assert.Equal(t, &store.Exit{At: t0}, f.Exit)
+	for _, n := range w.nodesOf("sind", "legacy") {
+		w.apply("sind", opRemove, n)
+	}
+	w.Publish(st)
+	_, ok = st.Snapshot().Fault("sind", "legacy", "worker-1")
+	assert.False(t, ok)
+}
+
+func TestWorld_DriftTimesTheFailure(t *testing.T) {
+	w, _ := seededStore(t)
+	w.now = func() time.Time { return t0 }
+	w.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
+	_, down := w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.False(t, down)
+	for range readyCalm {
+		w.Drift()
+	}
+	require.True(t, w.Drift())
+	at, down := w.FailedSince("sind-dev-worker-4", "slurmd")
+	assert.True(t, down)
+	assert.Equal(t, t0, at)
+}
+
+func TestWorld_ClockDefault(t *testing.T) {
+	assert.WithinDuration(t, time.Now(), NewWorld().clock(), time.Minute)
+}
+
+func TestWorld_FactsOf(t *testing.T) {
+	w := Seeded()
+	f := w.FactsOf("sind-dev-controller")
+	assert.Equal(t, []string{"worker-4"}, f.Down, "slurmd is down")
+	assert.Equal(t, []string{"worker-0", "worker-1", "worker-2", "worker-3", "worker-5"}, f.Up)
+	assert.Equal(t, []string{"worker-1"}, w.FactsOf("sind-legacy-worker-0").Down, "a stopped node is down")
+	assert.Equal(t, Facts{}, w.FactsOf("sind-dev-nobody"))
 }

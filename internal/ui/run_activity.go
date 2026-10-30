@@ -21,7 +21,7 @@ const runListMax = 500
 
 // runFilters are the filters of the Activity page, in the order of its tabs.
 var runFilters = []struct{ Key, Label string }{
-	{"", "All"}, {"running", "Running"}, {"ok", "OK"}, {"failed", "Failed"}, {"canceled", "Canceled"},
+	{"", "All"}, {"running", "Running"}, {"ok", "OK"}, {"failed", "Failed"}, {"canceled", "Stopped"},
 }
 
 // registerRunActivity adds the Activity page and its list of runs.
@@ -36,8 +36,8 @@ func registerRunActivity(r *Registry) {
 			return err
 		},
 	})
-	// The realm picker stays on the page, and a realm it picks is the
-	// one the lists show next.
+	// Activity shows every realm; ?realm=, from its realm chips, filters
+	// only this page and leaves the scope of the rail as it is.
 	r.AddRoute(pgRealmRoute(Page{
 		Name: "run-activity", Pattern: "GET /activity", Title: "Activity", Nav: "activity",
 		Fragments: []string{"run-list"},
@@ -46,18 +46,11 @@ func registerRunActivity(r *Registry) {
 }
 
 // runNavCount is the badge behind the Activity entry of the rail: the runs
-// that go on, or else the runs that failed lately, the ones that "Needs
-// you" lists (failedWindow). A log without either shows none.
-func runNavCount(snap store.Snapshot, now time.Time) NavCount {
-	running, failed := 0, 0
-	for _, run := range snap.Runs {
-		switch {
-		case !run.Done():
-			running++
-		case run.Status == store.StatusFailed && now.Sub(*run.End) < failedWindow:
-			failed++
-		}
-	}
+// that go on, or else the runs that failed lately and that "Needs you"
+// lists (pgFailures). A log without either shows none.
+func runNavCount(snap store.Snapshot, _ string, now time.Time) NavCount {
+	running := pgCount(snap.Runs, func(r store.Run) bool { return !r.Done() })
+	failed := pgCount(pgFailures(snap, now), func(f pgFailure) bool { return f.Fixed == nil })
 	switch {
 	case running > 0:
 		return NavCount{Text: strconv.Itoa(running) + " running", Class: "run", Label: pgPlural(running, "command runs", "commands run") + " now"}
@@ -91,7 +84,9 @@ type runListRow struct {
 	Started string
 	Elapsed string
 	Since   int64
-	Counts  string
+	// Result says what came of the run (runResult), in the class
+	// ResultClass.
+	Result, ResultClass string
 }
 
 // runWord is a word of a run's title; Flag marks a flag with its value,
@@ -189,7 +184,7 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 			e.realms = []string{t.Realm}
 		}
 	}
-	if e.realms == nil && e.cluster != "" {
+	if e.realms == nil && e.cluster != "" && !runOutlived(run) {
 		for _, realm := range slices.Sorted(maps.Keys(snap.Clusters)) {
 			if _, ok := snap.Cluster(realm, e.cluster); ok {
 				e.realms = append(e.realms, realm)
@@ -200,8 +195,27 @@ func runEntryOf(snap store.Snapshot, run store.Run) runEntry {
 		e.realm = e.realms[0]
 	}
 	e.title = cmp.Or(e.title, run.ID)
-	e.hay = strings.ToLower(strings.Join([]string{e.title, display, run.ID, e.realm}, "\n"))
+	// The names of the nodes find a run whose title folds them, as
+	// worker-[0-2].dev.
+	e.hay = strings.ToLower(strings.Join(append([]string{e.title, display, run.ID, e.realm}, activity.NodeNames(run.Root)...), "\n"))
 	return e
+}
+
+// runOutlived reports whether the cluster of a run is gone since the run
+// ended: a create cluster that did not end ok made none to keep, and a
+// delete cluster that did removed it. A cluster of the name that exists now
+// is another one, whose realm says nothing about the run's, which the log
+// does not keep.
+func runOutlived(run store.Run) bool {
+	switch {
+	case !run.Done():
+		return false
+	case run.Root.Name == "create cluster":
+		return run.Status != store.StatusOK
+	case run.Root.Name == "delete cluster":
+		return run.Status == store.StatusOK
+	}
+	return false
 }
 
 // matches reports whether the entry passes the query, but for its status.
@@ -261,8 +275,9 @@ func runListOf(v *View) (*runList, error) {
 		row := runListRow{
 			ID: run.ID, Title: e.title, Realm: e.realm, Chip: runSourceChip(runSource(v.Snap, run)),
 			Started: runWhen(run.Start, v.Now), Elapsed: runDur(runElapsed(run, v.Now)),
-			Since: runSince(run), Counts: runCountsText(run),
+			Since: runSince(run),
 		}
+		row.Result, row.ResultClass = runResult(run, v.Now)
 		row.Pill, row.PillClass = runPill(run, nil)
 		list.Rows = append(list.Rows, row)
 	}
@@ -316,22 +331,4 @@ func runChips(entries []runEntry, q runQuery) (realms, clusters []runTab) {
 		clusters = append(clusters, runTab{Label: name, Href: chip.href(), N: clusterN[name], On: name == q.Cluster, Tip: tip})
 	}
 	return realms, clusters
-}
-
-// runCountsText sums up a run's targets: "3 ok · 1 failed", "–" for none.
-func runCountsText(run store.Run) string {
-	c := activity.CountTargets(run.Root)
-	var parts []string
-	for _, p := range []struct {
-		n    int
-		what string
-	}{{c.OK, "ok"}, {c.Running, "running"}, {c.Queued, "queued"}, {c.Failed, "failed"}, {c.Canceled, "canceled"}, {c.Skipped, "skipped"}} {
-		if p.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.what))
-		}
-	}
-	if len(parts) == 0 {
-		return "–"
-	}
-	return strings.Join(parts, " · ")
 }

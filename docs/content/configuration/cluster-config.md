@@ -13,9 +13,9 @@ Write the config into a YAML file, and pass it to `sind create cluster --config 
 {{< /cli >}}
 {{< ui >}}
 
-The New cluster dialog of `sind ui` writes the config from its form. **Edit YAML**, at the top of the plan, opens the whole config in an editor, also the fields that the form has no field for; **Start from YAML…** opens the editor for a config that you paste or open from a file, and **Copy YAML** copies the config. sind ui saves the config in `~/.local/state/sind/ui/configs/`, so you can use it with the CLI too (see [Actions]({{< relref "/web-ui/actions#new-cluster" >}})).
+The New cluster page of `sind ui` writes the config from its form. **Edit YAML**, under **Show YAML** in the plan, opens the whole config in an editor, also the fields that the form has no field for; **Start from YAML…** opens the editor for a config that you paste or open from a file, and **Copy YAML** copies the config. sind ui saves the config in `~/.local/state/sind/ui/configs/`, so you can use it with the CLI too (see [Actions]({{< relref "/web-ui/actions#new-cluster" >}})).
 
-{{< uishot "dialog-create-cluster" >}}
+{{< uishot "new-cluster" >}}
 
 {{< /ui >}}
 {{< /ways >}}

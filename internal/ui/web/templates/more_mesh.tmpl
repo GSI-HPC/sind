@@ -3,14 +3,14 @@
 {{/* page-more-mesh is the Mesh and DNS page. */}}
 {{define "page-more-mesh"}}
 <div class="head"><div class="t"><h1>Mesh and DNS</h1>
-  <div class="sub">{{template "pg-realm-scope" .}}<span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
+  <div class="sub">{{template "pg-realm-line" .}}<span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
 <div class="stack" id="more-mesh" hx-swap="morph:innerHTML" sse-swap="more-mesh">{{fragment "more-mesh" .}}</div>
 {{end}}
 
 {{/* more-mesh is the live body of the page; .Data is moreMeshData. */}}
 {{define "more-mesh"}}{{with .Data}}
 {{template "more-top" .}}
-{{range .Realms}}
+{{range .Realms}}{{$r := .}}
 <div class="stack more-realm">
   <div class="more-rhead">
     {{if $.Data.Multi}}<h2>Realm <b class="mono">{{.Name}}</b></h2>{{end}}
@@ -33,23 +33,28 @@
   {{else if not .Err}}
   <section class="panel"><div class="empty">Realm {{.Name}} has no mesh. sind creates it with the first cluster.</div></section>
   {{end}}
-  <div class="grid g2">
+  <div class="grid g2 more-g2">
     <section class="panel"><div class="ph"><h2>DNS records</h2><span class="grow"></span>
       {{if .Records}}<button type="button" class="btn sm" data-more-copy-rows="dns-{{.Name}}" aria-label="Copy list of realm {{.Name}}, as lines of /etc/hosts">Copy list</button>{{end}}</div>
       {{if .Records}}<div class="pb more-filterbar"><input type="search" class="more-filter" data-more-filter="dns-{{.Name}}" placeholder="Filter by name or address" aria-label="Filter the DNS records of realm {{.Name}}" autocomplete="off" spellcheck="false">
         <span class="faint" role="status" data-more-count="dns-{{.Name}}">{{.RecordsText}}</span></div>
-      <div class="tw more-scroll"><table id="dns-{{.Name}}" class="more-cards more-dnscards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Name</th><th role="columnheader">Address</th><th role="columnheader"><span class="vh">Copy</span></th></tr></thead><tbody role="rowgroup">
-      {{range .Records}}<tr role="row" data-more-row="{{.IP}} {{.Hostname}}"><td role="cell" class="mono">{{if .Href}}<a href="{{.Href}}">{{.Hostname}}</a>{{else}}{{.Hostname}}{{end}}</td><td role="cell" class="mono">{{.IP}}</td>
+      <div class="tw"><table id="dns-{{.Name}}" class="more-cards more-dnscards" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader">Name</th><th role="columnheader">Address</th><th role="columnheader"><span class="vh">Copy</span></th></tr></thead><tbody role="rowgroup">
+      {{range $i, $_ := .Records}}<tr role="row" data-more-row="{{.IP}} {{.Hostname}}"{{if $r.Cut $i}} data-more-cut hidden{{end}}><td role="cell" class="mono">{{if .Href}}<a href="{{.Href}}">{{.Hostname}}</a>{{else}}{{.Hostname}}{{end}}</td><td role="cell" class="mono">{{.IP}}</td>
         <td role="cell" class="act"><button type="button" class="btn sm ghost" data-more-copy-text="{{.Hostname}}" aria-label="Copy {{.Hostname}}">Copy</button></td></tr>
       {{end}}</tbody></table><p class="empty" data-more-none="dns-{{.Name}}" hidden>No record matches the filter.</p></div>
+      {{if .CutAny}}<div class="pb more-all"><button type="button" class="btn sm" data-more-all="dns-{{.Name}}" aria-controls="dns-{{.Name}}">Show all {{len .Records}} records</button></div>{{end}}
       {{if .Has}}<div class="pb more-dig"><p class="cmdlabel">Ask the DNS server from this host</p>
         <div class="cmd"><code>dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}</code><button type="button" data-more-copy aria-label="Copy dig +short @{{.Info.DNSIP}} {{(index .Records 0).Hostname}}">Copy</button></div></div>{{end}}
       {{else}}<div class="empty">No DNS records yet. Each node adds its name when it starts.</div>{{end}}</section>
-    <section class="panel"><div class="ph"><h2>Other containers</h2><span class="grow"></span><span class="faint">connected with sind connect container</span></div>
+    <section class="panel"><div class="ph"><h2>Other containers</h2><span class="grow"></span><span class="faint">{{if .External}}connected with sind connect container{{else}}none connected yet{{end}}</span></div>
       {{if .External}}<div class="tw"><table><tbody>
       {{range .External}}<tr><td class="mono"><b>{{.Name}}</b></td><td><span class="pill ok">connected</span></td>
         <td class="act"><a class="btn sm" href="{{.DisconnectURL}}" hx-get="{{.DisconnectURL}}" hx-target="#layer" hx-swap="innerHTML">Disconnect…</a></td></tr>
       {{end}}</tbody></table></div>
+      {{else if .Outsides}}<div class="pb stack more-outs"><p class="muted">A container on the mesh reaches the nodes by name. These containers run, and can connect to realm {{.Name}}:</p>
+        <div class="more-olist">{{range .Outsides}}<div class="more-orow"><span class="more-on"><b class="mono">{{.Name}}</b><small>{{.Image}}{{with .Up}} · {{.}}{{end}}{{with .Also}} · {{.}}{{end}}</small></span>
+          <a class="btn sm" href="{{.ConnectURL}}" hx-get="{{.ConnectURL}}" hx-target="#layer" hx-swap="innerHTML" aria-label="Connect {{.Name}} to realm {{$r.Name}}…">Connect…</a></div>{{end}}</div>
+        <p class="hint">Or connect one by name: <span class="pg-cli"><code class="mono">{{.ConnectCommand}}</code>{{template "pg-copy" .ConnectCommand}}</span></p></div>
       {{else}}<div class="empty">No other containers. Connect one, such as a kind node, to reach the clusters by name.</div>{{end}}</section>
   </div>
 </div>

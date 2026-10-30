@@ -4,7 +4,7 @@ title: "Exit Status"
 description: "What sind's exit status tells a script"
 toc: true
 webui: none
-webuiNote: "The web UI shows no exit status. A run there ends as ok, failed or canceled (see [Runs and Progress](../../web-ui/runs/))."
+webuiNote: "The web UI shows no exit status. A run there ends as ok, failed or stopped (see [Runs and Progress](../../web-ui/runs/))."
 ---
 
 Scripts branch on sind's exit status, so it is part of the command line contract: a status may be added, but never renumbered.

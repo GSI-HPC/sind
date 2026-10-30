@@ -1,17 +1,31 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
 {{/* rail is the fragment of the page list; .Data is a railData. Each group
-is a list that its label names. On a phone the rail is a bar at the bottom
-of the screen with the Main entries and More, which opens the sheet of the
-other entries; app.js keeps the sheet open across live updates. */}}
-{{define "rail"}}{{with .Data}}{{range .Groups}}<span class="rgl" id="{{.ID}}">{{.Title}}</span>
-<ul class="rg rg-{{.Main}}" aria-labelledby="{{.ID}}">{{range .Items}}<li{{if not .Main}} class="sec"{{end}}>{{template "rail-link" .}}</li>{{end}}</ul>
+is a list that its label names; the label of the Overview group says that
+its pages show every realm, and the realm switcher heads the Realm group,
+whose entries show and count the realm it picks. On a phone the rail is a
+bar at the bottom of the screen with the Main entries and More, which opens
+the sheet of the other entries, with the switcher at its top; app.js keeps
+the sheet open across live updates, and the menu of the switcher too. */}}
+{{define "rail"}}{{with .Data}}{{$d := .}}{{range .Groups}}<span class="rgl" id="{{.ID}}">{{.Title}}{{if .AllRealms}}<span class="rgs">all realms</span>{{end}}</span>
+{{if .Scope}}{{template "rail-realm" ($d.Realm.At "rail-realm")}}{{end}}<ul class="rg rg-{{.Main}}" aria-labelledby="{{.ID}}">{{range .Items}}<li{{if not .Main}} class="sec"{{end}}>{{template "rail-link" .}}</li>{{end}}</ul>
 {{end}}{{with .More}}<button type="button" class="nav more{{if .On}} on{{end}}" data-rail-more aria-expanded="false" aria-controls="rail-sheet"><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>More{{if .Count.Text}}<span class="n {{.Count.Class}}" aria-hidden="true">{{.Count.Text}}</span><span class="vh">, {{.Note}}</span>{{end}}</button>{{end}}
-<div class="rail-sheet" id="rail-sheet" hidden><ul aria-label="More pages">{{range .Sheet}}<li>{{template "rail-link" .}}</li>{{end}}</ul></div>{{end}}{{end}}
+<div class="rail-sheet" id="rail-sheet" hidden>{{with .Realm}}{{template "rail-realm" (.At "rail-realm-m")}}{{end}}<ul aria-label="More pages">{{range .Sheet}}<li>{{template "rail-link" .}}</li>{{end}}</ul></div>{{end}}{{end}}
 
 {{/* rail-link is an entry of the rail: a navEntry. */}}
 {{define "rail-link"}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><svg class="g" aria-hidden="true"><use href="{{.Icon}}"></use></svg>{{.Label}}{{template "rail-count" .Count}}</a>{{end}}
 
 {{/* rail-count is the badge of a rail entry: its count with a unit, or a
-dot when all is well. Label says the same in words, for screen readers. */}}
-{{define "rail-count"}}{{if .Label}}<span class="n{{with .Class}} {{.}}{{end}}" title="{{.Label}}">{{with .Text}}<span aria-hidden="true">{{.}}</span>{{end}}<span class="vh">, {{.Label}}</span></span>{{else if .Text}}<span class="n{{with .Class}} {{.}}{{end}}">{{.Text}}</span>{{end}}{{end}}
+dot when all is well. Label says the same in words, for screen readers. A
+Unit of its own (class u) is left out in the bar of a phone. */}}
+{{define "rail-count"}}{{if .Label}}<span class="n{{with .Class}} {{.}}{{end}}" title="{{.Label}}">{{with .Text}}<span aria-hidden="true">{{.}}{{with $.Unit}}<span class="u"> {{.}}</span>{{end}}</span>{{end}}<span class="vh">, {{.Label}}</span></span>{{else if .Text}}<span class="n{{with .Class}} {{.}}{{end}}">{{.Text}}</span>{{end}}{{end}}
+
+{{/* rail-realm is the realm switcher, a railRealm: a menu (pg.js) whose
+button shows the realm of the scope and its clusters, with a dot when
+another realm needs a look, and whose entries are links to the page in each
+realm. The last entry opens the word realm in help, below a note on which
+pages the scope concerns, which the button names as its description. */}}
+{{define "rail-realm"}}<details class="pg-mw rail-rsw" data-pg-menu><summary class="rail-rbtn" aria-haspopup="menu" aria-label="{{.Label}}" aria-describedby="{{.ID}}-note"><b class="mono">{{if .Scope}}{{.Scope}}{{else}}All realms{{end}}</b><span class="faint">{{.Text}}</span>{{with .LookClass}}<span class="rail-dot {{.}}" title="{{$.Look}}" aria-hidden="true"></span>{{end}}<span class="pg-caret" aria-hidden="true"></span></summary>
+<div class="pg-menu rail-rmenu"><div role="menu" aria-label="Show realm"><div class="pg-mh" aria-hidden="true">Show realm</div>
+{{range .Options}}<a class="pg-mi rail-ro{{if .On}} on{{end}}" role="menuitemradio" aria-checked="{{if .On}}true{{else}}false{{end}}" tabindex="-1" href="{{.URL}}"><span class="rail-ck" aria-hidden="true">{{if .On}}✓{{end}}</span><span class="pg-ml{{if .Name}} mono{{end}}">{{.Label}}</span>{{with .Look}}<span class="rail-dot {{.}}" aria-hidden="true"></span>{{end}}<span class="pg-mx">{{.Text}}</span></a>
+{{end}}<div class="rail-rsep" role="separator"></div><a class="pg-mi rail-rhelp" role="menuitem" tabindex="-1" href="/help?topic=word/realm" data-help-topic="word/realm"><span class="pg-mx" id="{{.ID}}-note">{{.Note}}</span><span class="pg-ml">What is a realm?</span></a></div></div></details>{{end}}

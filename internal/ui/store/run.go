@@ -48,9 +48,15 @@ type Run struct {
 	Program string
 	Version string
 	// Title is the command as a user would read it, such as
-	// "create cluster dev": the name of the root span.
+	// "create cluster dev": the name of the root span and what it works
+	// on, the nodes of a command that works on nodes, as "power reboot
+	// worker-[0-2].dev".
 	Title string
-	Start time.Time
+	// Command is the command as the log names it: the name of the root
+	// span and its target, the cluster of a command that works on nodes,
+	// as "power reboot dev".
+	Command string
+	Start   time.Time
 	// End is when the root span ended, nil while the run goes on.
 	End *time.Time
 	// Last is the time of the newest event of the run.
@@ -163,6 +169,10 @@ type Task struct {
 	// token, the fingerprint and the typed confirmation, so that the user
 	// can try the command again; nil for a command that no form built.
 	Form map[string][]string
+	// Fixes are the nodes, by short name, that needed a look when a command
+	// that brings nodes back started, such as one that reboots or resumes
+	// them; "Needs you" shows them as fixed for a while once it ends ok.
+	Fixes []string
 	// ConfigPath and Config are the file that the command saved and runs
 	// with, such as the config of a new cluster; empty for none.
 	ConfigPath string
@@ -182,7 +192,7 @@ type Task struct {
 	// Output is the end of what the command wrote to standard error,
 	// escaped for display.
 	Output string
-	// Hidden is set once the user closed the card of the task after it
+	// Hidden is set once the user cleared the task from the dock after it
 	// ended: the dock leaves it out, and its run page still shows its
 	// command and offers to try it again.
 	Hidden bool

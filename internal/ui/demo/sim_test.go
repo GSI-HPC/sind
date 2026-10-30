@@ -3,10 +3,13 @@
 package demo
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -186,6 +189,27 @@ func TestSim_CreateWorker(t *testing.T) {
 	assert.Contains(t, nodeStates(st, "sind", "default"), "worker-1")
 }
 
+func TestSim_CreateWorkerKeepsTheSizeAsked(t *testing.T) {
+	s, st := newSim(t)
+	task := s.startWait(t, st, "create", "worker", "dev", "--count", "2", "--cpus", "4", "--memory", "2g")
+	require.Equal(t, store.TaskOK, task.Status)
+	sl := st.Snapshot().Slurm("sind", "dev")
+	require.NotNil(t, sl.Info)
+	sizes := map[string]string{}
+	for _, n := range sl.Info.Nodes {
+		sizes[n.Name] = fmt.Sprintf("%d/%d", n.CPUs, n.MemoryMB)
+	}
+	assert.Equal(t, "4/2048", sizes["worker-6"])
+	assert.Equal(t, "4/2048", sizes["worker-7"])
+	assert.Equal(t, "2/1024", sizes["worker-0"], "the others keep theirs")
+	assert.Contains(t, sl.Info.Files[1].Content, "NodeName=worker-6 CPUs=4 RealMemory=2048")
+
+	info, err := s.w.InspectContainer(context.Background(), cluster.ContainerName("sind", "dev", "worker-6"))
+	require.NoError(t, err)
+	assert.Equal(t, int64(4e9), info.HostConfig.NanoCPUs)
+	assert.Equal(t, int64(2<<30), info.HostConfig.Memory)
+}
+
 func TestSim_DeleteCluster(t *testing.T) {
 	s, st := newSim(t)
 	task := s.startWait(t, st, "delete", "cluster", "legacy")
@@ -282,6 +306,34 @@ func TestSim_ExecWritesNoRun(t *testing.T) {
 	_, ok := st.Snapshot().RunOfTrace(task.Trace)
 	assert.False(t, ok, "sind exec writes no event log")
 	assert.Nil(t, st.Snapshot().Locks["sind"], "and takes no lock")
+}
+
+func TestSim_ExecDrainsAndResumes(t *testing.T) {
+	s, st := newSim(t)
+	slurmOf := func(name string) slurm.NodeInfo {
+		for _, n := range st.Snapshot().Slurm("sind", "dev").Info.Nodes {
+			if n.Name == name {
+				return n
+			}
+		}
+		return slurm.NodeInfo{}
+	}
+	require.Equal(t, "drained", slurmOf("worker-5").State)
+	s.startWait(t, st, "--realm", "sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-5", "State=RESUME")
+	assert.NotEqual(t, "drained", slurmOf("worker-5").State, "Resume puts the node back")
+	s.startWait(t, st, "--realm", "sind", "exec", "dev", "--", "scontrol", "update", "NodeName=worker-0,worker-1", "State=DRAIN", "Reason=disk test")
+	// Both run jobs, which go on.
+	assert.Equal(t, slurm.NodeInfo{State: "draining", Reason: "disk test"}, slurm.NodeInfo{State: slurmOf("worker-1").State, Reason: slurmOf("worker-1").Reason})
+	assert.Equal(t, "draining", slurmOf("worker-0").State)
+	// Any other command changes nothing.
+	for _, argv := range [][]string{
+		{"exec", "dev", "--", "scontrol", "update", "NodeName=worker-0", "State=IDLE"},
+		{"exec", "dev", "--", "sinfo"},
+		{"exec", "dev"},
+	} {
+		s.startWait(t, st, append([]string{"--realm", "sind"}, argv...)...)
+	}
+	assert.Equal(t, "draining", slurmOf("worker-0").State)
 }
 
 func TestSim_ExecCanceled(t *testing.T) {
@@ -411,4 +463,33 @@ func TestReady(t *testing.T) {
 	assert.Equal(t, 19*time.Second, ready("worker", 0))
 	assert.Equal(t, 19*time.Second, ready("worker", 6), "the pattern repeats")
 	assert.Equal(t, 16*time.Second, ready("db", 1))
+}
+
+func TestSim_SSHRestartsAService(t *testing.T) {
+	s, st := newSim(t)
+	require.False(t, slurmdUp(st))
+	// Any other command changes nothing, and writes no run.
+	for _, argv := range [][]string{
+		{"ssh", "worker-4.dev", "--", "systemctl", "status", "slurmd"},
+		{"ssh", "worker-4.dev"},
+		{"ssh", "worker-4.dev", "--", "systemctl", "restart"},
+	} {
+		task := s.startWait(t, st, append([]string{"--realm", "sind"}, argv...)...)
+		assert.Equal(t, store.TaskOK, task.Status)
+		_, ok := st.Snapshot().RunOfTrace(task.Trace)
+		assert.False(t, ok, "sind ssh writes no event log")
+	}
+	require.False(t, slurmdUp(st))
+	s.startWait(t, st, "--realm", "sind", "ssh", "worker-4.dev", "--", "systemctl", "restart", "slurmd")
+	assert.True(t, slurmdUp(st))
+}
+
+func TestSim_SSHCanceled(t *testing.T) {
+	w, st := seededStore(t)
+	s := NewSim(st, w, liveClock{speed: 1})
+	t.Cleanup(func() { s.Shutdown(10 * time.Second) })
+	id, err := s.Start(run.Spec{Argv: []string{"sind", "ssh", "worker-0", "--", "systemctl", "restart", "slurmd"}})
+	require.NoError(t, err)
+	require.NoError(t, s.Cancel(id))
+	assert.Equal(t, store.TaskCanceled, waitTask(t, st, id).Status)
 }

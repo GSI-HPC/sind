@@ -45,7 +45,7 @@ func runTestServerAt(t *testing.T, clock func() time.Time) *testServer {
 	cfg, st := testConfig(t)
 	reg := NewRegistry()
 	reg.AddFragment(railFragment())
-	reg.AddFragment(tasksFragment())
+	registerDock(reg)
 	registerRun(reg)
 	cfg.Registry = reg
 	cfg.Now = clock

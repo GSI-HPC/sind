@@ -18,12 +18,21 @@ import (
 
 // pgReadyCheck is one check of the card.
 type pgReadyCheck struct {
-	// State is ok, warn, bad, or none for a check that does not apply.
+	// State is ok, warn, bad, wait for a check that waits for the
+	// command that creates the cluster, or none for one that does not
+	// apply.
 	State   string
 	Title   string
 	Detail  string
 	Actions []pgAction
+	// Nodes are the nodes that fail the check, each in a row of its own
+	// with why and its fix; More counts those that do not show.
+	Nodes []pgNode
+	More  string
 }
+
+// pgReadyRows is how many nodes a check lists in rows.
+const pgReadyRows = 6
 
 // Mark returns the sign of the check's state.
 func (c pgReadyCheck) Mark() string {
@@ -34,6 +43,8 @@ func (c pgReadyCheck) Mark() string {
 		return "!"
 	case "bad":
 		return "✗"
+	case "wait":
+		return "○"
 	}
 	return "–"
 }
@@ -47,6 +58,8 @@ func (c pgReadyCheck) Word() string {
 		return "warning"
 	case "bad":
 		return "failed"
+	case "wait":
+		return "waiting"
 	}
 	return "does not apply"
 }
@@ -63,6 +76,12 @@ type pgReady struct {
 	// files go.
 	Commands []pgCmd
 	Note     string
+	// Wait replaces the commands while a command creates or deletes the
+	// cluster: it says when they show.
+	Wait string
+	// Took counts the managed workers that take jobs, Of all of them,
+	// once the cluster was probed.
+	Took, Of int
 }
 
 // pgEnterCmd returns the command that opens a shell on the cluster, on
@@ -75,28 +94,14 @@ func pgEnterCmd(d *pgClusterView) pgCmd {
 	return pgCmd{"Open a shell on the " + entry, pgSind(d.Realm) + " enter" + pgClusterArg(d.Name)}
 }
 
-// pgPowerFix returns the power dialog that may fix a node that does not
-// take jobs, and whether there is one: Start for a stopped node, Unfreeze
-// for a paused one, Reboot for one with a service down.
-func pgPowerFix(n pgNode) (pgAction, bool) {
-	op, label := "reboot", "Reboot…"
-	switch {
-	case n.State == cluster.StatePaused:
-		op, label = "unpause", "Unfreeze…"
-	case n.State != cluster.StateRunning:
-		op, label = "start", "Start…"
-	case len(n.Down()) == 0:
-		return pgAction{}, false
-	}
-	return n.power(label, "sm ghost", op), true
-}
-
-// pgFixActions returns the links that help with a node: its logs, and
-// the power dialog that may fix it.
+// pgFixActions returns the links that help with a node of a check: its
+// logs, and its first fix (pgLadder). The check speaks of the cluster, so
+// the fix names the node: "Start controller…".
 func pgFixActions(n pgNode) []pgAction {
-	acts := []pgAction{{Label: "Logs of " + n.Short, URL: n.LogsLink(), Class: "sm ghost"}}
-	if fix, ok := pgPowerFix(n); ok {
-		acts = append(acts, fix)
+	acts := []pgAction{n.LogsAction("Logs of " + n.Short)}
+	if fix := pgFix(n, "sm"); fix != nil {
+		fix.Label = strings.TrimSuffix(fix.Name, n.Arg+"…") + n.Short + "…"
+		acts = append(acts, *fix)
 	}
 	return acts
 }
@@ -136,12 +141,16 @@ func pgReadyOf(d *pgClusterView) *pgReady {
 	if d.Data != nil && d.Data.Type == config.StorageHostPath {
 		r.Note = "Put job scripts in " + data + ": it is " + d.Data.Source + " on this host, and the output of the test job lands there."
 	}
+	if l := d.Cluster.Life; l != nil {
+		return pgReadyLife(r, d, l)
+	}
 	if d.Status == nil {
 		return r
 	}
 	r.Checked = true
 	ctl := pgControllerCheck(d)
 	workers, took, of := pgWorkersCheck(d)
+	r.Took, r.Of = took, of
 	r.Checks = []pgReadyCheck{ctl, workers, pgAccountingCheck(d)}
 	if files, ok := pgFilesCheck(d); ok {
 		r.Checks = append(r.Checks, files)
@@ -159,13 +168,40 @@ func pgReadyOf(d *pgClusterView) *pgReady {
 			}
 		}
 	}
-	if r.Class != "ok" && slices.ContainsFunc(d.Cluster.Nodes, func(n pgNode) bool { return n.Creating }) {
-		// A command creates the cluster: what is not ready may be starting,
-		// and a fix would get in its way.
-		r.Verdict, r.Class = "not yet: the cluster is being created", "run"
-		for i := range r.Checks {
-			r.Checks[i].Actions = nil
+	return r
+}
+
+// pgReadyLife fills the card while a command creates or deletes the
+// cluster: what is not up yet is no fault, and a fix would get in the
+// command's way. Each check waits for the create, and the first commands
+// show once it has ended ok.
+func pgReadyLife(r *pgReady, d *pgClusterView, l *pgLife) *pgReady {
+	r.Checked, r.Class = true, "run"
+	if l.Kind == pgDeleting {
+		r.Verdict, r.Wait = "no: sind deletes the cluster", "sind deletes the cluster and its nodes. Jobs no longer run on it."
+		return r
+	}
+	r.Verdict = "not yet: sind creates the cluster"
+	r.Wait = "The commands to open a shell and submit a test job show here when the create ends ok."
+	var workers []string
+	db := ""
+	for _, n := range d.Cluster.Nodes {
+		switch n.Role {
+		case config.RoleWorker:
+			workers = append(workers, n.Short)
+		case config.RoleDB:
+			db = n.Short
 		}
+	}
+	wait := "Waits for the create."
+	r.Checks = []pgReadyCheck{{State: "wait", Title: "The controller answers", Detail: wait}}
+	wk := pgReadyCheck{State: "wait", Title: "Workers take jobs", Detail: wait}
+	if len(workers) > 0 {
+		wk.Detail = "Waits for " + pgJoin(workers) + "."
+	}
+	r.Checks = append(r.Checks, wk)
+	if db != "" {
+		r.Checks = append(r.Checks, pgReadyCheck{State: "wait", Title: "Accounting works", Detail: "Waits for " + db + "."})
 	}
 	return r
 }
@@ -215,17 +251,15 @@ func pgControllerCheck(d *pgClusterView) pgReadyCheck {
 // slurmd is up, and Slurm schedules on them.
 func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
 	var why []string
-	var first *pgNode
-	for i, n := range d.Cluster.Nodes {
+	var broken []pgNode
+	for _, n := range d.Cluster.Nodes {
 		if n.Role != config.RoleWorker || !n.Managed {
 			continue
 		}
 		of++
 		if w := pgWhyNot(n, "slurmd"); w != "" {
 			why = append(why, n.Short+": "+w)
-			if first == nil {
-				first = &d.Cluster.Nodes[i]
-			}
+			broken = append(broken, n)
 			continue
 		}
 		took++
@@ -239,7 +273,11 @@ func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
 	case took == of:
 		return pgReadyCheck{State: "ok", Title: fmt.Sprintf("All %d workers take jobs", of)}, took, of
 	}
-	c = pgReadyCheck{State: "warn", Title: fmt.Sprintf("%d of %d workers take jobs", took, of), Detail: strings.Join(why, "; ") + ".", Actions: pgFixActions(*first)}
+	c = pgReadyCheck{State: "warn", Title: fmt.Sprintf("%d of %d workers take jobs", took, of), Nodes: broken[:min(len(broken), pgReadyRows)]}
+	c.Detail = pgPlural(len(broken), "worker takes", "workers take") + " no jobs:"
+	if len(broken) > pgReadyRows {
+		c.More = fmt.Sprintf("and %d more: %s.", len(broken)-pgReadyRows, strings.Join(why[pgReadyRows:], "; "))
+	}
 	if took == 0 {
 		c.State, c.Title = "bad", "No worker takes jobs"
 	}

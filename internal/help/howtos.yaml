@@ -5,10 +5,10 @@
   summary: From nothing to a job that has run on a worker.
   steps:
     - Press New cluster on the Overview.
-    - Keep the defaults, or change the nodes. Press Create.
+    - Keep Quick test, or pick another start. Press Create.
     - When the run is done, open the cluster. Ready for jobs at the top says whether it can run a job.
     - Run a job with the two commands beside it.
-    - Read its output in slurm-JOBID.out in the data directory of the cluster.
+    - Read its output in slurm-JOBID.out in the data directory, which Your files on the Connect tab names.
     - When you are done, press Delete… on the page of the cluster.
   commands:
     - sind create cluster
@@ -76,8 +76,8 @@
   summary: Grow a running cluster.
   steps:
     - Open the cluster.
-    - Press Add workers and choose how many.
-    - Press Add. The card at the bottom right shows the progress.
+    - Press Add workers and choose how many. The dialog shows what they take of the Docker host.
+    - Press Add, such as Add 2 workers. The card at the bottom right shows the progress.
   commands:
     - sind create worker dev --count 2
   doc: usage/worker-management

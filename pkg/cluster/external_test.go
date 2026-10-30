@@ -157,6 +157,20 @@ func TestConnectableContainers(t *testing.T) {
 		"kind-worker joins the mesh already, and sind's containers of any realm are left out")
 }
 
+func TestConnectable(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["db"] = externalContainer{networks: []string{"bridge"}}
+
+	entries, err := Connectable(t.Context(), c, mesh.NewManager(c, "sind"))
+
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, docker.ContainerName("db"), entries[0].Name)
+	assert.Equal(t, []docker.NetworkName{"bridge"}, entries[0].Networks)
+	assert.Equal(t, "img", entries[0].Image)
+	assert.Equal(t, docker.ContainerName("kind-control-plane"), entries[1].Name)
+}
+
 func TestConnectableContainers_Error(t *testing.T) {
 	f, c, _ := newExternalFake(t)
 	f.fail["ps"] = mock.Result{Err: fmt.Errorf("daemon unreachable")}

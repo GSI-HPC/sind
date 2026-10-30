@@ -3,7 +3,8 @@
 
 .more-realm{gap:14px}
 .more-rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.more-scroll{max-height:340px;overflow:auto}
+/* the cards of a row of the mesh are as tall as their content */
+.more-g2{align-items:start}
 .more-howto{max-width:460px;margin:0 auto 14px;text-align:left}
 .more-copied{color:var(--ok)!important}
 /* a "seg" of links, such as Diagram and Table */
@@ -35,6 +36,16 @@
    lines of Copy list, shown for Ctrl+C when the browser copies nothing */
 .more-clip{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}
 .more-copybox{display:block;box-sizing:border-box;width:calc(100% - 28px);margin:10px 14px 4px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-sm)/1.5 var(--f-mono);color:var(--fg);resize:vertical}
+
+/* mesh: the containers that can connect, while none is, and Show all of
+   the DNS records */
+.more-outs p{margin:0}
+.more-olist{display:grid;border:1px solid var(--line);border-radius:var(--r)}
+.more-orow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px}
+.more-orow+.more-orow{border-top:1px solid var(--line-2)}
+.more-on{display:grid;gap:1px;min-width:0}
+.more-on small{color:var(--muted);font-size:var(--t-sm);overflow-wrap:anywhere}
+.more-all{padding-top:10px;border-top:1px solid var(--line-2)}
 
 /* mesh: the filter of the DNS records */
 .more-filterbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:4px}

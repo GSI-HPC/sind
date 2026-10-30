@@ -20,10 +20,10 @@ func ShortName(n cluster.NodeSummary) string {
 	return short
 }
 
-// nodeNames returns the node names of the form's field "nodes", which may
+// NodeNames returns the node names of the form's field "nodes", which may
 // repeat and may hold several names separated by commas or spaces, without
 // duplicates, in the order given.
-func nodeNames(f Form) []string {
+func NodeNames(f Form) []string {
 	var names []string
 	for _, v := range f["nodes"] {
 		for _, n := range splitList(v) {
@@ -39,7 +39,7 @@ func nodeNames(f Form) []string {
 // names, which must all exist and, where workersFor says what the command
 // does to them, such as "deleted", be workers.
 func pickNodes(f Form, c Context, realm, clusterName, workersFor string) ([]cluster.NodeSummary, error) {
-	names := nodeNames(f)
+	names := NodeNames(f)
 	if len(names) == 0 {
 		return nil, &Missing{Field: "nodes", Text: "pick at least one node of " + clusterName}
 	}
@@ -79,6 +79,13 @@ func nodeWords(clusterName string, shorts []string) []string {
 		}
 	}
 	return names
+}
+
+// NodeSet folds the short names of nodes into one node set as sind takes
+// them, such as worker-[0-2], or joins them with commas where they do not
+// fold.
+func NodeSet(shorts []string) string {
+	return strings.Join(nodeWords(config.DefaultClusterName, shorts), ",")
 }
 
 // nextWorkers returns the short names that new workers of a cluster with the

@@ -178,12 +178,12 @@ func TestRunStatusClassAndPill(t *testing.T) {
 		"task running": {runOf(0, ""), &store.Task{}, runRunning, "running", "run"},
 		"ok":           {over("ok"), nil, runOK, "ok", "ok"},
 		"failed":       {over("failed"), nil, runFailed, "failed", "bad"},
-		"canceled":     {over("canceled"), nil, runCanceled, "canceled", "warn"},
+		"canceled":     {over("canceled"), nil, runCanceled, "stopped", "warn"},
 		"odd status":   {over("weird"), nil, runEnded, "weird", ""},
 		"skipped":      {over("skipped"), nil, runEnded, "skipped", ""},
 		"no status":    {over(""), nil, runEnded, "ended", ""},
 		"no end":       {func() store.Run { r := over(""); r.Unfinished = true; return r }(), nil, runEnded, "no end recorded", "warn"},
-		"no end, task": {func() store.Run { r := over("canceled"); r.Unfinished = true; return r }(), nil, runCanceled, "canceled", "warn"},
+		"no end, task": {func() store.Run { r := over("canceled"); r.Unfinished = true; return r }(), nil, runCanceled, "stopped", "warn"},
 	} {
 		assert.Equal(t, tc.class, runStatusClass(tc.run), name)
 		label, pill := runPill(tc.run, tc.task)
@@ -230,7 +230,7 @@ func TestRunClockOfARun(t *testing.T) {
 func TestRunWhen(t *testing.T) {
 	now := runAt(30)
 	assert.Equal(t, "–", runWhen(time.Time{}, now))
-	assert.Equal(t, runAt(5).Local().Format("15:04:05"), runWhen(runAt(5), now))
+	assert.Equal(t, "today "+runAt(5).Local().Format("15:04"), runWhen(runAt(5), now))
 	assert.Equal(t, runAt(-86400).Local().Format("Jan 2 15:04"), runWhen(runAt(-86400), now))
 	assert.Equal(t, "", runStamp(time.Time{}))
 	assert.Contains(t, runStamp(runAt(1)), "2026-10-14")
@@ -298,7 +298,7 @@ func TestRunLine(t *testing.T) {
 	}{
 		"ok":        {runOf(12, "ok"), nil, "done in 12s"},
 		"failed":    {runOf(75, "failed"), nil, "failed in 1m15s"},
-		"canceled":  {runOf(3, "canceled"), nil, "canceled in 3.0s"},
+		"canceled":  {runOf(3, "canceled"), nil, "stopped after 3.0s"},
 		"no status": {runOf(3, ""), nil, "ended in 3.0s"},
 		"no end":    {func() store.Run { r := runOf(3, ""); r.Unfinished = true; return r }(), nil, "no end recorded; the last event came after 3.0s"},
 		"suspended": {func() store.Run { r := runOf(0, ""); r.Suspended = true; return r }(), nil, "suspended"},
@@ -322,7 +322,7 @@ func TestRunLine(t *testing.T) {
 			runSp("step", "mesh", runStartedAt(1)),
 			runSp("step", "done", runEndedAt(0, 1, "ok")),
 			runSp("step", "later"),
-		), nil, "waiting for realm lock create cluster (pid 4) on host  |  docker info  |  nodes 0/1 · worker-2 ready munge  |  mesh"},
+		), nil, "waiting for realm lock create cluster (pid 4) on host  |  docker info  |  nodes 0/1 · worker-2 waits for munge  |  mesh"},
 	} {
 		assert.Equal(t, tc.want, runLine(tc.run, tc.task, now), name)
 	}
@@ -485,7 +485,7 @@ func TestRunFailure(t *testing.T) {
 	assert.Equal(t, "node worker-1: timed out", runFailure(one))
 	two := runOf(5, store.StatusFailed,
 		runSp(activity.KindTarget, "w1", failed("worker-1")), runSp(activity.KindTarget, "w2", failed("worker-2")))
-	assert.Equal(t, "worker-[1,2]: node {}: timed out", runFailure(two))
+	assert.Equal(t, "worker-[1-2]: node {}: timed out", runFailure(two))
 	cmd := runOf(5, store.StatusFailed)
 	cmd.Err = "no such cluster"
 	assert.Equal(t, "no such cluster", runFailure(cmd))

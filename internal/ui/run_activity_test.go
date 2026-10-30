@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
@@ -28,14 +29,17 @@ func TestRunActivityPage(t *testing.T) {
 		`<a class="tab" href="/activity?status=running">Running<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=ok">OK<span class="n">1</span></a>`,
 		`<a class="tab" href="/activity?status=failed">Failed<span class="n">1</span></a>`,
-		`<a class="tab" href="/activity?status=canceled">Canceled<span class="n">1</span></a>`,
+		`<a class="tab" href="/activity?status=canceled">Stopped<span class="n">1</span></a>`,
 		`<a class="mono" href="/runs/r-mid">create cluster dev</a>`,
 		`<span class="pill run">running</span>`,
 		`<span class="pill bad">failed</span>`,
-		"3 ok · 2 failed · 1 canceled",
-		"1 ok · 3 running",
+		`<th class="hide-s">Result</th>`,
+		`<td class="hide-s muted" data-label="Result">3 nodes ready for jobs</td>`,
+		`<td class="hide-s bad" data-label="Result">worker-[1-2] timed out · rolled back</td>`,
+		`<td class="hide-s warn" data-label="Result">stopped in services of worker-[0-1] · nothing left</td>`,
+		`<td class="hide-s muted" data-label="Result">nodes 0/3 · controller waits for munge</td>`,
 		`<span class="chip">terminal</span>`,
-		"/events?f=rail&amp;f=run-list&amp;f=tasks&amp;nav=activity",
+		"/events?f=rail&amp;f=run-list&amp;f=tasks&amp;f=tasks-menu&amp;nav=activity",
 	} {
 		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
 	}
@@ -93,18 +97,24 @@ func TestRunActivityLimit(t *testing.T) {
 }
 
 func TestRunNavCount(t *testing.T) {
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{}, runNow))
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{}, "", runNow))
 	over := store.Run{End: runPtr(runAt(1)), Status: store.StatusOK}
-	failed := store.Run{End: runPtr(runAt(1)), Status: store.StatusFailed}
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{over, over}}, runNow), "runs that ended well need no badge")
+	failed := store.Run{ID: "f", Title: "create cluster a", End: runPtr(runAt(1)), Status: store.StatusFailed}
+	other := store.Run{ID: "o", Title: "create cluster b", End: runPtr(runAt(1)), Status: store.StatusFailed}
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{over, over}}, "", runNow), "runs that ended well need no badge")
 	assert.Equal(t, NavCount{Text: "2 failed", Class: "bad", Label: "2 runs failed in the last 6 hours"},
-		runNavCount(store.Snapshot{Runs: []store.Run{failed, over, failed}}, runNow))
-	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{failed}}, runNow.Add(7*time.Hour)), "an old failure is old news")
-	assert.Equal(t, NavCount{Text: "1 running", Class: "run", Label: "1 command runs now"}, runNavCount(store.Snapshot{Runs: []store.Run{failed, {}}}, runNow))
-	assert.Equal(t, "2 commands run now", runNavCount(store.Snapshot{Runs: []store.Run{{}, {}}}, runNow).Label)
+		runNavCount(store.Snapshot{Runs: []store.Run{failed, over, other}}, "", runNow))
+	assert.Equal(t, "1 failed", runNavCount(store.Snapshot{Runs: []store.Run{failed, other}, Dismissed: map[string]bool{"o": true}}, "", runNow).Text,
+		"a run that the user dismissed from Needs you")
+	again := store.Run{Title: "create cluster b", End: runPtr(runAt(1)), Status: store.StatusOK}
+	assert.Equal(t, "1 failed", runNavCount(store.Snapshot{Runs: []store.Run{again, failed, other}}, "", runNow).Text,
+		"a run whose command ended ok since")
+	assert.Equal(t, NavCount{}, runNavCount(store.Snapshot{Runs: []store.Run{failed}}, "", runNow.Add(7*time.Hour)), "an old failure is old news")
+	assert.Equal(t, NavCount{Text: "1 running", Class: "run", Label: "1 command runs now"}, runNavCount(store.Snapshot{Runs: []store.Run{failed, {}}}, "", runNow))
+	assert.Equal(t, "2 commands run now", runNavCount(store.Snapshot{Runs: []store.Run{{}, {}}}, "", runNow).Label)
 }
 
-func TestRunMatchesAndCounts(t *testing.T) {
+func TestRunMatches(t *testing.T) {
 	ok := store.Run{End: runPtr(runAt(1)), Status: "ok"}
 	assert.True(t, runMatches(ok, ""))
 	assert.True(t, runMatches(ok, "ok"))
@@ -112,12 +122,6 @@ func TestRunMatchesAndCounts(t *testing.T) {
 	assert.False(t, runMatches(ok, "running"))
 	assert.True(t, runMatches(store.Run{}, "running"))
 	assert.False(t, runMatches(store.Run{}, "ok"), "a run that goes on has no status")
-	assert.Equal(t, "–", runCountsText(runOf(0, "")))
-	assert.Equal(t, "1 ok · 1 running · 1 queued · 1 failed · 1 canceled · 1 skipped",
-		runCountsText(runOf(0, "", runSp("step", "s", runStartedAt(0), runKids(
-			runSp("target", "a", runEndedAt(0, 1, "ok")), runSp("target", "b", runStartedAt(0)), runSp("target", "c"),
-			runSp("target", "d", runEndedAt(0, 1, "failed")), runSp("target", "e", runEndedAt(0, 1, "canceled")),
-			runSp("target", "f", runEndedAt(0, 1, "skipped")))))))
 }
 
 // runSearchStore fills the store with runs on clusters of two realms: a
@@ -134,9 +138,13 @@ func runSearchStore(ts *testServer) {
 		}
 		return r
 	}
+	power := run("r-dev", "power reboot dev", "dev", "ok")
+	power.Root.Children = []store.Span{{Kind: activity.KindStep, Name: "stopping", Children: []store.Span{
+		{Kind: activity.KindTarget, Node: "worker-0", Role: "worker"}, {Kind: activity.KindTarget, Node: "worker-1", Role: "worker"},
+	}}}
 	ts.st.SetRuns([]store.Run{
 		run("r-ui", "create worker dev", "dev", ""),
-		run("r-dev", "power reboot dev", "dev", "ok"),
+		power,
 		run("r-lab", "create cluster lab", "lab", "failed"),
 		run("r-none", "doctor", "", "ok"),
 	})
@@ -186,6 +194,11 @@ func TestRunActivitySearch(t *testing.T) {
 	assert.Contains(t, body, `href="/runs/r-dev"`, "a terminal run on a cluster of that name")
 	assert.NotContains(t, body, `href="/runs/r-lab"`)
 
+	// The names of the nodes find a run whose title folds them.
+	body = ts.get("/activity?q=worker-1").Body.String()
+	assert.Contains(t, body, `href="/runs/r-dev"`)
+	assert.Equal(t, 1, strings.Count(body, `<a class="mono" href="/runs/`))
+
 	body = ts.get("/activity?q=nothing").Body.String()
 	assert.Contains(t, body, `No run matches this filter. <a href="/activity">Clear filter</a>`)
 }
@@ -215,4 +228,23 @@ func TestRunListRowWords(t *testing.T) {
 	assert.Equal(t, []runWord{
 		{"create", false}, {"cluster", false}, {"--pull", true}, {"--wait 5m", true}, {"--memory=8g", true}, {"x", false},
 	}, r.Words())
+}
+
+func TestRunOutlived(t *testing.T) {
+	of := func(name, status string) store.Run {
+		run := runOf(9, status)
+		run.Root.Name = name
+		return run
+	}
+	assert.True(t, runOutlived(of("create cluster", "failed")), "a failed create left no cluster")
+	assert.False(t, runOutlived(of("create cluster", "ok")))
+	assert.True(t, runOutlived(of("delete cluster", "ok")), "a delete removed it")
+	assert.False(t, runOutlived(of("delete cluster", "failed")))
+	assert.False(t, runOutlived(of("create worker", "failed")))
+	assert.False(t, runOutlived(runOf(0, "")), "a run that goes on")
+	// Its realm then does not come from a cluster of the name now.
+	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"sind": {{Name: "dev"}}}}
+	failed := of("create cluster", "failed")
+	failed.Root.Node = "dev"
+	assert.Empty(t, runEntryOf(snap, failed).realm)
 }

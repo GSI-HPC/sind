@@ -1,6 +1,7 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* page-node is the page of one node. */}}
+{{/* page-node is the page of one node: its head with the verbs in menus
+and the tabs Overview and Logs, then the tab. */}}
 {{define "page-node"}}
 <div class="crumbs"><a href="/nodes">Nodes</a> / <a href="/clusters/{{.Params.Get "realm"}}/{{.Params.Get "cluster"}}">{{.Params.Get "cluster"}}</a> / {{.Params.Get "node"}}</div>
 <div hx-swap="morph:innerHTML" sse-swap="pg-node-head">{{fragment "pg-node-head" .}}</div>
@@ -8,30 +9,73 @@
 {{end}}
 
 {{define "pg-node-head"}}{{with .Data}}{{if .Found}}
-<div class="head"><div class="t"><h1>{{.Node.Arg}} <span class="pill {{.Node.StateClass}}" data-say="{{.Node.Arg}} is {{.Node.State}}.">{{.Node.State}}</span></h1>
+<div class="head"><div class="t"><h1>{{.Node.Arg}} {{with .Node.HeadPill}}<span class="pill {{.Class}}" data-say="{{$.Data.Node.Arg}} is {{.Text}}.">{{.Text}}</span>{{end}}</h1>
   <div class="sub"><span class="chip {{.Node.RoleClass}}" data-word="{{.Node.Role}}">{{.Node.Role}}</span>{{with .Node.IP}}<span class="mono">{{.}}</span>{{end}}{{with .Node.HA}}<span>HA position {{.Position}}{{if .InControl}} · in control{{else}} · standby{{end}}</span>{{end}}</div></div>
-  <div class="actions"><a class="btn" href="{{.LogsLink}}">Logs</a>{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
+  <div class="actions">{{range .Menus}}{{template "pg-menu" .}}{{end}}</div></div>
+{{with .Run}}<div class="callout run pg-run"><span class="spin"></span><span class="pg-grow"><b class="mono">{{.Title}}</b> {{if $.Data.Node.Deleting}}deletes{{else}}creates{{end}} this node: {{$.Data.Node.LifeText}}.</span><a class="btn sm" href="{{.Link}}">Show progress</a></div>
+{{else}}{{range .Works}}<div class="callout run pg-run"><span class="spin"></span><span class="pg-grow"><b class="mono">{{.Title}}</b> runs on this node, {{.SourceText}}. The page shows the result when it ends.</span><a class="btn sm" href="{{.Link}}">Show progress</a></div>{{end}}{{end}}
+<div class="tabs">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</div>
+{{if and (eq .Tab "logs") .Diag}}{{with .Diag}}<div class="callout {{.Sev}} pg-strip"{{with .ShowAt}} data-show-at="{{.}}"{{end}}><span class="pg-grow"><b>{{.Title}}</b>{{with .Since}} <span class="faint">{{.}}</span>{{end}}{{with $.Data.LogsEnd}}<span class="pg-strip-x">{{.}}</span>{{end}}</span>{{with .Ladder}}{{with index . 0}}{{template "pg-action" .Act}}{{end}}{{end}}<a class="btn sm ghost" href="{{$.Data.Node.Link}}">Show the card</a></div>{{end}}{{end}}
 {{else}}{{template "pg-gone" .Short}}{{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
 
-{{define "pg-node-body"}}{{with .Data}}{{$d := .}}{{if .Found}}<div class="grid g2">
-  {{if .Node.Problem}}<section class="panel pg-wide"><div class="ph"><h2>Issues</h2></div><div class="pb stack">
-    {{range .Node.Issues}}<div class="pg-issue"><span class="pill {{.Class}}">{{.Text}}</span></div>{{end}}
-    <div><a class="btn sm" href="{{.IssueLogsLink}}">Logs</a></div></div></section>{{end}}
+{{/* pg-menu is a menu of the head of a node page, a pgMenu: a button that
+opens a list of verbs, grouped, each with a hint of what it does or why it
+is off. A verb that is a page is a plain link, and one that copies a command
+shows the command as its hint. pg.js opens it, moves with the arrow keys and
+closes it with Escape; the morph keeps it open. */}}
+{{define "pg-menu"}}<details class="pg-mw" data-pg-menu><summary class="btn pg-mbtn{{if .Icon}} pg-micon{{end}}" aria-haspopup="menu"{{if .Icon}} aria-label="{{.Label}}" title="{{.Label}}"{{end}}>{{if .Icon}}<span aria-hidden="true">{{.Icon}}</span>{{else}}{{.Label}}<span class="pg-caret" aria-hidden="true"></span>{{end}}</summary>
+  <div class="pg-menu" role="menu" aria-label="{{.Label}}">{{range .Groups}}<div class="pg-mg{{if .Danger}} danger{{end}}" role="group" aria-label="{{.Label}}"><div class="pg-mh" aria-hidden="true">{{.Label}}</div>
+    {{range .Items}}{{if .Off}}<span class="pg-mi off" role="menuitem" aria-disabled="true" tabindex="-1"><span class="pg-ml">{{.Label}}</span><span class="pg-mx">{{.Hint}}</span></span>{{else if .Copy}}<button type="button" class="pg-mi" role="menuitem" tabindex="-1" data-pg-copy-text="{{.Copy}}" data-pg-copy-say="Copied: {{.Copy}}. Paste it in a terminal."><span class="pg-ml">{{.Label}}</span><span class="pg-mx mono">{{.Copy}}</span></button>{{else}}<a class="pg-mi" role="menuitem" tabindex="-1" href="{{.URL}}"{{if not .Link}} data-pg-menu-item{{end}}><span class="pg-ml">{{.Label}}</span><span class="pg-mx">{{.Hint}}</span></a>{{end}}{{end}}</div>{{end}}</div></details>{{end}}
+
+{{define "pg-node-body"}}{{with .Data}}{{if .Found}}{{if eq .Tab "logs"}}{{template "pg-node-logs" $}}{{else}}{{template "pg-node-overview" .}}{{end}}{{end}}{{end}}{{end}}
+
+{{/* pg-node-logs is the Logs tab of a node page: the log viewer of the
+cluster page, with the node fixed. */}}
+{{define "pg-node-logs"}}{{with .Data.LogsNote}}<div class="callout warn pg-note">{{.}}</div>{{end}}{{template "node-logs-tab" .}}{{end}}
+
+{{/* pg-node-overview is the Overview tab of a node page: the card of its
+problem or of its fix, its services, Slurm and container, what changed on
+it, and its commands. */}}
+{{define "pg-node-overview"}}{{$d := .}}
+{{with .Fixed}}<section class="panel pg-diag {{.Class}}" data-hide-at="{{.HideAt}}" aria-labelledby="pg-fix-t"><div class="ph"><span class="pg-dmark {{.Class}}" aria-hidden="true">{{if .Wait}}…{{else}}✓{{end}}</span><h2 id="pg-fix-t">{{.Title}}</h2><span class="grow"></span><span class="faint">Shows for <span data-until="{{.HideAt}}">{{.Left}} s</span> more</span></div>
+  <div class="pb pg-diag-b"><div class="pg-diag-l"><p class="pg-flat">{{.What}} sind ui then checked {{$d.Node.Short}} again:</p>
+    <ul class="pg-checks">{{range .Checks}}<li><span class="pg-ck {{if .OK}}ok{{else}}wait{{end}}" aria-hidden="true">{{if .OK}}✓{{else}}○{{end}}</span><div>{{.Text}}</div></li>{{end}}</ul>
+    <p class="pg-flat faint">{{if .Wait}}sind ui probes {{$d.Node.Short}} again within seconds. If the problem stays, the card of the problem shows once this one hides.{{else}}No change for <span data-since="{{.Quiet}}">{{.QuietFor}}</span>. sind ui keeps checking, and this card turns red if {{.Unit}} fails again.{{end}}</p></div>
+    <div class="stack pg-diag-r"><div class="cmdlabel">The command</div><div class="cmd"><code>{{.Cmd}}</code><button type="button" data-pg-copy aria-label="Copy {{.Cmd}}">Copy</button></div><div><a class="btn sm" href="{{.Link}}">Show the task</a></div></div></div></section>{{end}}
+{{with .Diag}}<section class="panel pg-diag {{.Sev}}"{{with .ShowAt}} data-show-at="{{.}}"{{end}} aria-labelledby="pg-diag-t"><div class="ph"><span class="pg-dmark {{.Sev}}" aria-hidden="true">!</span><h2 id="pg-diag-t">{{.Title}}</h2><span class="grow"></span>{{with .Since}}<span class="faint">{{.}}</span>{{end}}</div>
+  <div class="pb pg-diag-b">
+    <div class="pg-diag-l">{{with .Again}}<div class="callout bad pg-flat">{{.}}</div>{{end}}
+      <p class="pg-flat">{{.Text}}</p>
+      {{if or .Facts .Last}}<dl class="kv pg-facts">{{range .Facts}}<dt{{if .Rep}} class="rep"{{end}}>{{.Label}}</dt><dd class="mono{{if .Rep}} rep{{end}}">{{.Text}}</dd>{{end}}{{with .Last}}<dt>last action</dt><dd><a href="{{.Link}}">{{.Title}}</a> at {{.When}}, {{.SourceText}}, {{.Text}}</dd>{{end}}</dl>{{end}}</div>
+    {{with .Ladder}}<div class="pg-ladder"><div class="cmdlabel">Try in this order</div><ol>{{range .}}<li class="pg-rung{{if .First}} first{{end}}"><span class="pg-rn" aria-hidden="true">{{.N}}</span><div class="pg-rt"><span><b>{{.Title}}</b>{{if .First}} <span class="chip brand">recommended</span>{{end}}</span><span class="pg-rx">{{.Text}}</span><code class="pg-rc">{{.Cmd}}</code></div>{{template "pg-action" .Button}}</li>{{end}}</ol></div>{{end}}
+    {{with .Journal}}<div class="pg-jr"><div class="pg-jh"><span class="cmdlabel">Last lines of the {{.Unit}} journal</span><span class="grow"></span><a class="btn sm" href="{{.Link}}">Open the full journal</a><button type="button" class="btn sm ghost" data-pg-copy-text="{{.Text}}" aria-label="Copy the lines of the {{.Unit}} journal">Copy lines</button></div>
+      <pre class="term pg-jl" tabindex="0" aria-label="Last lines of the {{.Unit}} journal">{{range .Lines}}<span class="pg-jline{{with .Class}} {{.}}{{end}}"><span class="pg-jt">{{.When}}</span> {{.Text}}</span>
+{{end}}</pre></div>{{end}}
+  </div></section>{{end}}
+<div class="grid g3">
   <section class="panel"><div class="ph"><h2>Services</h2><span class="grow"></span><span class="faint">systemd</span></div><div class="pb">
-    {{if .Node.Known}}<dl class="kv">{{range .Node.Services}}<dt class="mono"><span data-word="{{.Name}}">{{.Name}}</span></dt><dd>{{if not $d.Node.Running}}<span class="pill">not running</span>{{else if .OK}}<span class="pill ok">active</span>{{else}}<span class="pill bad">failed</span>{{end}}{{if $d.Node.Running}} <a class="btn sm ghost" href="{{$d.ServiceLogsLink .Name}}" aria-label="Logs of {{.Name}}">Logs</a>{{end}}</dd>
-      {{else}}<dt>none</dt><dd class="muted">This node has no service that sind checks.</dd>{{end}}</dl>
+    {{if .Node.Known}}{{with .Services}}<ul class="pg-svcs">{{range .}}{{$s := .}}<li><span class="mono pg-svcn"><span data-word="{{.Name}}">{{.Name}}</span></span><span class="pill{{with .Pill.Class}} {{.}}{{end}}">{{.Pill.Text}}</span>{{with .Restart}}{{template "pg-action" .}}{{end}}{{with .Logs}}<a class="btn sm ghost" href="{{.}}" aria-label="Logs of {{$s.Name}}">Logs</a>{{end}}{{with .Note}}<span class="faint pg-svcnote">{{.}}</span>{{end}}</li>{{end}}</ul>
+      {{else}}<span class="muted">This node has no service that sind checks.</span>{{end}}
     {{else}}<span class="muted">No probe result yet. sind ui probes the nodes of every cluster while a page is open.</span>{{end}}</div></section>
   <section class="panel"><div class="ph"><h2>Slurm</h2><span class="grow"></span><span class="faint mono">sinfo</span></div><div class="pb">
-    {{if .Node.Slurm}}<dl class="kv"><dt>state</dt><dd><span class="pill {{.Node.SlurmClass}}">{{.Node.Slurm.State}}</span></dd>
+    {{if .Node.Deleting}}<span class="muted">sind deletes this node.</span>
+    {{else if .Node.Creating}}<span class="muted">sind creates this node. Its Slurm state shows once it is ready.</span>
+    {{else if .Node.Slurm}}<dl class="kv"><dt>state</dt><dd><span class="pill {{.Node.SlurmClass}}">{{.Node.Slurm.State}}</span></dd>
       {{with .Node.Slurm.Reason}}<dt>reason</dt><dd>{{.}}</dd>{{end}}
       <dt>CPUs</dt><dd>{{.Node.SlurmCPUs}}</dd><dt>memory</dt><dd>{{.Node.SlurmMemory}}</dd><dt>partitions</dt><dd class="mono">{{.Node.SlurmPartitions}}</dd></dl>
     {{else if or .Slurm.Err (not .Slurm.Read)}}{{template "pg-slurm-note" .Slurm}}
     {{else if .Node.Worker}}<span class="muted">sinfo does not list this node. Slurm runs no job on it.</span>
     {{else}}<span class="muted">Slurm runs jobs on the workers only. This node is a {{.Node.Role}}.</span>{{end}}</div></section>
   <section class="panel"><div class="ph"><h2>Container</h2></div><div class="pb"><dl class="kv">
-    <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.Node.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
+    <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.Node.ClusterLink}}">{{.Cluster}}</a> {{with .ClusterPill}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</dd>
     <dt>realm</dt><dd class="mono">{{.Realm}}</dd>
     {{if .Node.Known}}<dt>managed</dt><dd>{{if .Node.Managed}}yes{{else}}no{{end}}</dd>{{end}}
-    <dt>FQDN</dt><dd class="mono">{{.Node.FQDN}} <button type="button" class="btn sm" data-pg-copy-text="{{.Node.FQDN}}">Copy</button></dd></dl></div></section>
-  <section class="panel pg-wide"><div class="ph"><h2>From your terminal</h2></div><div class="pb stack">{{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
-</div>{{end}}{{end}}{{end}}
+    {{with .Node.Exit}}<dt>exit code</dt><dd class="mono">{{.Code}}{{if .OOMKilled}} · out of memory{{end}}</dd>{{end}}
+    <dt>FQDN</dt><dd class="mono pg-fqdn">{{.Node.FQDN}} <button type="button" class="btn sm" data-pg-copy-text="{{.Node.FQDN}}">Copy</button></dd></dl></div></section>
+</div>
+<div class="grid g2 pg-node-more">
+  <section class="panel pg-changes"><div class="ph"><h2>Recent changes</h2><span class="grow"></span><a class="faint" href="/activity">All in Activity</a></div>
+    {{with .Changes}}<ul class="pg-chl">{{range .}}<li><span class="mono faint pg-chw">{{.When}}</span><span class="dot {{.Class}}" aria-hidden="true"></span><span class="pg-cht">{{.Pre}}{{if .Link}}<a href="{{.Link}}">{{.Strong}}</a>{{else}}<b>{{.Strong}}</b>{{end}}{{.Post}}</span><span class="faint pg-chs">{{.Source}}</span></li>{{end}}</ul>
+    {{else}}<div class="pb"><span class="muted">Nothing changed on {{.Node.Short}} since sind ui started.</span></div>{{end}}</section>
+  <section class="panel"><div class="ph"><h2>From your terminal</h2></div><div class="pb stack">{{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
+</div>{{end}}

@@ -2,7 +2,8 @@
 
 {{/* page-clusters and page-nodes are the list pages. The head, the chips and
 the table are fragments, so that the head follows the realm that the page
-shows. The filter field is not: a live update never changes what the user
+shows; the realm switcher of the rail picks it. The line below the list
+gives the commands that list the same in a terminal. The filter field is not: a live update never changes what the user
 types. The page script filters the rows as the user types, tells screen
 readers how many rows match, and keeps the text in the address. data-pg-list
 names a row. */}}
@@ -11,16 +12,16 @@ names a row. */}}
 <div class="pg-tools">{{template "pg-list-filter" (.Filter "Filter by name, realm or node" "Filter the clusters")}}
   <div class="pg-chips" role="group" aria-label="Show" hx-swap="morph:innerHTML" sse-swap="pg-clusters-chips">{{fragment "pg-clusters-chips" $}}</div></div>
 <div hx-swap="morph:innerHTML" sse-swap="pg-clusters-table">{{fragment "pg-clusters-table" $}}</div>
-</section>{{end}}
-<p class="muted pg-hint">Tick clusters to delete several at once. In a terminal: <code class="mono">sind get clusters</code></p>{{end}}
+</section>
+<p class="muted pg-hint">Tick clusters to delete several at once. {{template "pg-cli" (.Commands "clusters")}}</p>{{end}}{{end}}
 
 {{define "page-nodes"}}<div hx-swap="morph:innerHTML" sse-swap="pg-nodes-head">{{fragment "pg-nodes-head" .}}</div>
 {{with .Data}}<section class="panel pg-list" data-pg-list="node">
 <div class="pg-tools">{{template "pg-list-filter" (.Filter "Filter by node, cluster, state or IP" "Filter the nodes")}}
   <div class="pg-chips" role="group" aria-label="Show" hx-swap="morph:innerHTML" sse-swap="pg-nodes-chips">{{fragment "pg-nodes-chips" $}}</div></div>
 <div hx-swap="morph:innerHTML" sse-swap="pg-nodes-table">{{fragment "pg-nodes-table" $}}</div>
-</section>{{end}}
-<p class="muted pg-hint">In a terminal: <code class="mono">sind get nodes</code></p>{{end}}
+</section>
+<p class="muted pg-hint">{{template "pg-cli" (.Commands "nodes")}}</p>{{end}}{{end}}
 
 {{/* pg-list-filter is the filter field of a list: a form that works without
 script too. It takes a pgFilterView. */}}
@@ -28,6 +29,9 @@ script too. It takes a pgFilterView. */}}
   <input type="hidden" name="realm" value="{{.Realm}}">{{with .State}}<input type="hidden" name="state" value="{{.}}">{{end}}{{with .SortParam}}<input type="hidden" name="sort" value="{{.}}">{{end}}
   <input type="search" name="q" value="{{.Q}}" placeholder="{{$.Placeholder}}" aria-label="{{$.Label}}" data-pg-filter autocomplete="off" autocapitalize="off" spellcheck="false">
 </form>{{end}}{{end}}
+
+{{/* pg-list-scope says what a list holds; it takes a pgListScope. */}}
+{{define "pg-list-scope"}}<span class="pg-scope">{{.Count}}{{with .Realm}} in realm <b class="mono">{{.}}</b>{{end}}{{with .Realms}} in {{.}}{{end}}.</span>{{end}}
 
 {{/* pg-list-chips are the state filters of a list; they take the list. */}}
 {{define "pg-list-chips"}}{{range .Chips}}<a class="pg-chip{{if .On}} on{{end}}{{with .Class}} {{.}}{{end}}" href="{{.URL}}" data-pg-keep{{if .On}} aria-current="true"{{end}}>{{.Label}} <span class="n">{{.N}}</span></a>{{end}}{{end}}
@@ -41,9 +45,8 @@ matches, which the page script shows and hides as the user types. */}}
 {{define "pg-list-none"}}<tr class="pg-none" data-pg-none{{if .Shown}} hidden{{end}}><td colspan="9"><div class="empty">{{if .Total}}No {{.Noun}} matches the filter. <a href="{{.URL "q" "" "state" ""}}">Show all</a>{{else}}No {{.Noun}}{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.{{end}}</div></td></tr>{{end}}
 
 {{define "pg-clusters-head"}}{{with .Data}}
-<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every cluster of every realm. {{end}}sind finds them by their Docker labels.</span></div></div>
+<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">{{template "pg-list-scope" (.Scope "cluster" "clusters")}}<span>sind finds them by their Docker labels.</span></div></div>
   <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
-{{template "pg-realm-filter" .}}
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
 {{define "pg-clusters-chips"}}{{with .Data}}{{template "pg-list-chips" .}}{{end}}{{end}}
@@ -52,18 +55,23 @@ matches, which the page script shows and hides as the user types. */}}
 <div class="pg-selbar" data-pg-selbar hidden><span>Selection: <span class="pg-expr" data-pg-expr></span></span><span class="pg-grow"></span>
   <a class="btn sm danger" href="/dialogs/delete-clusters" data-pg-bulk data-pg-verb="Delete">Delete…</a><button type="button" class="btn sm ghost" data-pg-clear>Clear</button></div>
 <div class="tw" data-say="{{.Total}} {{if eq .Total 1}}cluster{{else}}clusters{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><table class="cards sorts chk"><thead><tr><th class="pg-chk c-chk"><label class="pg-all"><input type="checkbox" data-pg-all aria-label="Select all clusters shown"><span class="pg-phone">All</span></label></th>{{template "pg-list-head" .}}<th><span class="vh">Actions</span></th></tr></thead><tbody>
-{{range .Clusters}}<tr class="click" data-href="{{.Link}}" data-pg-item="{{.Key}}" data-pg-label="{{.Label}}" data-pg-one="{{.DeleteURL}}" data-pg-text="{{.Text}}"{{if .Hidden}} hidden{{end}}>
-  <td class="c-chk"><input type="checkbox" data-pg-sel="{{.Key}}" aria-label="Select {{.Label}}"></td>
-  <td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}<td class="c-state"><span class="pill {{.StateClass}}" data-say="{{.Name}} is {{.State}}." data-say-key="{{.Realm}}/{{.Name}}">{{.State}}</span></td><td class="mono" data-label="Slurm">{{.Slurm}}</td><td class="num" data-label="Nodes">{{len .Nodes}}</td>
+{{range .Clusters}}{{$c := .}}<tr class="click" data-href="{{.Link}}" data-pg-item="{{.Key}}" data-pg-label="{{.Label}}" data-pg-one="{{.DeleteURL}}" data-pg-text="{{.Text}}"{{if .Hidden}} hidden{{end}}>
+  <td class="c-chk"><input type="checkbox" data-pg-sel="{{.Key}}" aria-label="Select {{.Label}}"{{with .Life}} disabled title="sind {{.Verb}} this cluster."{{end}}></td>
+  <td class="c-name"><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}<td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$c.Name}} is {{.Text}}." data-say-key="{{$c.Realm}}/{{$c.Name}}">{{.Text}}</span>{{end}}{{with .Life}}<div class="pg-lifebar">{{template "run-segbar" .}}</div>{{end}}</td><td class="mono" data-label="Slurm">{{.Slurm}}</td><td class="num" data-label="Nodes">{{len .Nodes}}</td>
   <td class="c-wide" data-label="Roles"><div class="pg-nodemap">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div></td><td data-label="Monitoring">{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</td>
-  <td class="act c-act"><a class="btn sm danger" href="{{.DeleteURL}}" hx-get="{{.DeleteURL}}" hx-target="#layer" hx-push-url="false" aria-label="Delete {{.Label}}…">Delete…</a></td></tr>
+  <td class="act c-act">{{template "pg-cluster-act" .}}</td></tr>
 {{end}}{{template "pg-list-none" (.None "cluster")}}
 </tbody></table></div>
+{{if .Clusters}}<div class="pg-key">{{template "pg-legend" .AnyLife}}</div>{{end}}
 {{end}}{{end}}
 
+{{/* pg-cluster-act is what a row of a cluster offers, a pgClusterRow: its
+⋯ menu, or, while a command creates or deletes the cluster, Stop… for a
+create of sind ui, else Show progress. */}}
+{{define "pg-cluster-act"}}{{with .Stop}}{{template "run-stop" .}}{{else}}{{with .Life}}<a class="btn sm" href="{{.Run.Link}}" aria-label="Show progress: {{.Title}}">Show progress</a>{{else}}{{template "pg-menu" .Menu}}{{end}}{{end}}{{end}}
+
 {{define "pg-nodes-head"}}{{with .Data}}
-<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">{{template "pg-realm-scope" $}}<span>{{if not .Realm}}Every node of every realm. {{end}}A node's name is its short name and its cluster, as sind's commands take it.</span></div></div></div>
-{{template "pg-realm-filter" .}}
+<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">{{template "pg-list-scope" (.Scope "node" "nodes")}}<span>A node's name is its short name and its cluster, as sind's commands take it.</span></div></div></div>
 {{end}}{{template "pg-docker-note" .}}{{end}}
 
 {{define "pg-nodes-chips"}}{{with .Data}}{{template "pg-list-chips" .}}{{end}}{{end}}
@@ -71,8 +79,8 @@ matches, which the page script shows and hides as the user types. */}}
 {{define "pg-nodes-table"}}{{with .Data}}{{$d := .}}
 <div class="tw" data-say="{{.Total}} {{if eq .Total 1}}node{{else}}nodes{{end}} in {{if .Realm}}realm {{.Realm}}{{else}}every realm{{end}}." data-say-key="count"><table class="cards sorts"><thead><tr>{{template "pg-list-head" .}}</tr></thead><tbody>
 {{range .Nodes}}<tr class="click" data-href="{{.Link}}" data-pg-text="{{.Text}}"{{if .Hidden}} hidden{{end}}><td class="mono c-name"><a href="{{.Link}}"><b>{{.Arg}}</b></a></td><td data-label="Cluster"><a href="{{.ClusterLink}}">{{.Cluster}}</a></td>{{if not $d.Realm}}<td class="mono" data-label="Realm">{{.Realm}}</td>{{end}}
-  <td data-label="Role"><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td><td class="c-state"><span class="pill {{.StateClass}}" data-say="{{.Arg}} is {{.State}}." data-say-key="{{.Realm}}/{{.Arg}}">{{.State}}</span></td><td class="mono" data-label="IP">{{.IP}}</td>
-  <td data-label="Issues">{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}</td></tr>
+  <td data-label="Role"><span class="chip {{.RoleClass}}" data-word="{{.Role}}">{{.Role}}</span></td>{{$n := .}}<td class="c-state">{{with .Pill}}<span class="pill {{.Class}}" data-say="{{$n.Arg}} is {{.Text}}." data-say-key="{{$n.Realm}}/{{$n.Arg}}">{{.Text}}</span>{{end}}</td><td class="mono" data-label="IP">{{.IP}}</td>
+  <td data-label="Issues">{{if .Life}}<span class="faint">{{.LifeText}}</span>{{else}}{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}{{with .SlurmReason}}<span class="faint pg-small">{{.}}</span>{{end}}{{end}}</td></tr>
 {{end}}{{template "pg-list-none" (.None "node")}}
 </tbody></table></div>
 {{end}}{{end}}

@@ -40,8 +40,12 @@ type pgListQuery struct {
 	def string
 }
 
-// pgChipDef and pgColDef are a chip and a column of a list.
-type pgChipDef struct{ Key, Label string }
+// pgChipDef and pgColDef are a chip and a column of a list. A chip that
+// is Optional shows only while it has rows or is on.
+type pgChipDef struct {
+	Key, Label string
+	Optional   bool
+}
 
 type pgColDef struct {
 	Key, Label, Class string
@@ -117,6 +121,8 @@ func pgMatch(text string, words []string) bool {
 
 // pgChip is a state filter of a list, with the count of its rows.
 type pgChip struct {
+	// Key is the chip's state, "" for all.
+	Key   string
 	Label string
 	N     int
 	On    bool
@@ -130,7 +136,10 @@ type pgChip struct {
 func pgChips(q pgListQuery, defs []pgChipDef, count func(key string) int) []pgChip {
 	out := make([]pgChip, 0, len(defs))
 	for _, d := range defs {
-		c := pgChip{Label: d.Label, N: count(d.Key), On: d.Key == q.State, URL: q.URL("state", d.Key)}
+		c := pgChip{Key: d.Key, Label: d.Label, N: count(d.Key), On: d.Key == q.State, URL: q.URL("state", d.Key)}
+		if d.Optional && c.N == 0 && !c.On {
+			continue
+		}
 		if d.Key == "problem" && c.N > 0 {
 			c.Class = "bad"
 		}
@@ -193,7 +202,10 @@ func pgOrder[T any](rows []T, desc bool, cmpFn func(a, b T) int) {
 
 // The clusters list.
 
-var pgClusterChips = []pgChipDef{{"", "All"}, {"problem", "Needs a look"}, {"running", "Running"}, {"monitoring", "With monitoring"}}
+var pgClusterChips = []pgChipDef{
+	{Key: "", Label: "All"}, {Key: "problem", Label: "Needs a look"}, {Key: pgCreating, Label: "Creating", Optional: true},
+	{Key: pgDeleting, Label: "Deleting", Optional: true}, {Key: "running", Label: "Running"}, {Key: "monitoring", Label: "With monitoring"},
+}
 
 var pgClusterCols = []pgColDef{
 	{Key: "name", Label: "Name"}, {Key: "realm", Label: "Realm", AllRealms: true}, {Key: "state", Label: "State"},
@@ -202,26 +214,35 @@ var pgClusterCols = []pgColDef{
 
 // NeedsLook reports whether the cluster does not run as it should: it is
 // not running, or a node of it needs a look by the rule of every page
-// (pgNode.Problem).
+// (pgNode.Problem). A cluster that a command creates or deletes does not:
+// it is not up yet, or no longer.
 func (c pgCluster) NeedsLook() bool {
-	return c.State != cluster.StateRunning || slices.ContainsFunc(c.Nodes, pgNode.Problem)
+	return c.Life == nil && (c.State != cluster.StateRunning || slices.ContainsFunc(c.Nodes, pgNode.Problem))
 }
 
-// pgClusterIn reports whether the cluster is one of the chip's.
+// pgClusterIn reports whether the cluster is one of the chip's. One that a
+// command creates or deletes is Creating or Deleting, not Running, as its
+// pill says.
 func pgClusterIn(c pgCluster, chip string) bool {
 	switch chip {
 	case "problem":
 		return c.NeedsLook()
+	case pgCreating, pgDeleting:
+		return c.Life != nil && c.Life.Kind == chip
 	case "running":
-		return c.State == cluster.StateRunning
+		return c.Life == nil && c.State == cluster.StateRunning
 	case "monitoring":
 		return c.Monitoring
 	}
 	return true
 }
 
-// pgClusterRank orders clusters from the worst state to the best.
+// pgClusterRank orders clusters from the worst state to the best; one
+// that a command creates or deletes comes just before those that run well.
 func pgClusterRank(c pgCluster) int {
+	if c.Life != nil {
+		return 5
+	}
 	switch c.State {
 	case cluster.StateStopped:
 		return 0
@@ -230,10 +251,10 @@ func pgClusterRank(c pgCluster) int {
 	case cluster.StatePaused:
 		return 3
 	case cluster.StateRunning:
-		if len(c.Problems()) > 0 {
+		if c.Look() > 0 {
 			return 4
 		}
-		return 5
+		return 6
 	}
 	return 1
 }
@@ -278,6 +299,31 @@ type pgClusterRow struct {
 	// Label names the cluster in its row's buttons and in the selection:
 	// its name, and its realm when the list shows every realm.
 	Label string
+	// Stop is the Stop button of a command of sind ui that creates the
+	// cluster, which takes the place of its menu; nil for none.
+	Stop *runStop
+	// DataKinds are the kinds of its volumes that hold the data of its
+	// users, which go with it: "data", "home", both or none.
+	DataKinds []string
+}
+
+// Menu is the ⋯ menu of the row: the dialogs that act on the cluster,
+// its logs and the command that opens a shell on it, with Delete apart as
+// the one that can lose data.
+func (r pgClusterRow) Menu() pgMenu {
+	del := "Its containers, network and volumes go."
+	if len(r.DataKinds) > 0 {
+		del = "The files on its " + pgDataVolumes(r.DataKinds, len(r.DataKinds)) + " go too."
+	}
+	return pgMenu{ID: "cluster", Label: "Actions for " + r.Label, Icon: "⋯", Groups: []pgMenuGroup{
+		{Label: "Cluster", Items: []pgMenuItem{
+			{Label: "Add workers…", Hint: "Create more worker nodes.", URL: pgDialog("create-worker", "realm", r.Realm, "cluster", r.Name)},
+			{Label: "Power…", Hint: "Start, stop or reboot its nodes.", URL: pgDialog("power", "realm", r.Realm, "cluster", r.Name)},
+			{Label: "Logs", Hint: "Read the logs of its nodes.", URL: pgClusterURL(r.Realm, r.Name, "logs"), Link: true},
+			{Label: "Copy shell command", Copy: pgSind(r.Realm) + " enter" + pgClusterArg(r.Name)},
+		}},
+		{Label: "Can lose data", Danger: true, Items: []pgMenuItem{{Label: "Delete cluster…", Hint: del, URL: r.DeleteURL()}}},
+	}}
 }
 
 // Key identifies the cluster in a selection: realm/name.
@@ -294,22 +340,31 @@ func pgClusterText(c pgCluster) string {
 
 // The nodes list.
 
-var pgNodeChips = []pgChipDef{{"", "All"}, {"problem", "Needs a look"}, {"running", "Running"}, {"stopped", "Not running"}}
+var pgNodeChips = []pgChipDef{
+	{Key: "", Label: "All"}, {Key: "problem", Label: "Needs a look"}, {Key: pgCreating, Label: "Creating", Optional: true},
+	{Key: pgDeleting, Label: "Deleting", Optional: true}, {Key: "running", Label: "Running"}, {Key: "stopped", Label: "Not running"},
+}
 
 var pgNodeCols = []pgColDef{
 	{Key: "node", Label: "Node"}, {Key: "cluster", Label: "Cluster"}, {Key: "realm", Label: "Realm", AllRealms: true},
 	{Key: "role", Label: "Role"}, {Key: "state", Label: "State"}, {Key: "ip", Label: "IP"}, {Label: "Issues"},
 }
 
-// pgNodeIn reports whether the node is one of the chip's.
+// pgNodeIn reports whether the node is one of the chip's. One that a
+// command creates or deletes is Creating or Deleting, neither Running nor
+// Not running, as its pill says.
 func pgNodeIn(n pgNode, chip string) bool {
 	switch chip {
 	case "problem":
 		return n.Problem()
+	case pgCreating:
+		return n.Creating
+	case pgDeleting:
+		return n.Deleting
 	case "running":
-		return n.Running()
+		return !n.Life() && n.Running()
 	case "stopped":
-		return !n.Running()
+		return !n.Life() && !n.Running()
 	}
 	return true
 }
@@ -322,7 +377,7 @@ func pgNodeRank(n pgNode) int {
 	case cluster.StatePaused:
 		return 2
 	case cluster.StateRunning:
-		if len(n.Down()) > 0 {
+		if len(n.Issues()) > 0 {
 			return 3
 		}
 		return 4

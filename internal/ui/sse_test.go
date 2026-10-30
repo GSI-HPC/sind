@@ -208,7 +208,7 @@ func TestEventsOpenWithAChangeBetweenPageAndStream(t *testing.T) {
 
 func TestEventsRailFollowsAnyTopicAndNav(t *testing.T) {
 	ts := newTestServer(t).login()
-	ts.srv.reg.SetNavCount("nodes", func(sn store.Snapshot, _ time.Time) NavCount {
+	ts.srv.reg.SetNavCount("nodes", func(sn store.Snapshot, _ string, _ time.Time) NavCount {
 		return NavCount{Text: fmt.Sprint(len(sn.Runs))}
 	})
 	c := ts.connect("f=rail&nav=nodes")

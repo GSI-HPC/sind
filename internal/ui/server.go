@@ -65,7 +65,9 @@ type Server struct {
 	// ctx ends the live update streams when the server stops.
 	ctx context.Context
 	now func() time.Time
-	mux *http.ServeMux
+	// still is Config.Still.
+	still bool
+	mux   *http.ServeMux
 	// coalesce and keepAlive are how long changes gather before a page
 	// gets them, and how often an idle stream sends a comment: zero and
 	// sse.DefaultKeepAlive, the defaults of localweb/sse, which tests
@@ -85,6 +87,9 @@ type serverConfig struct {
 	FS fs.FS
 	// Now is the clock of the pages; nil is time.Now.
 	Now func() time.Time
+	// Still says that Now stands still, so that the clocks of the browser
+	// stand with it.
+	Still bool
 }
 
 func newServer(ctx context.Context, c serverConfig) (*Server, error) {
@@ -107,7 +112,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 	s := &Server{
 		env: c.Env, reg: reg, hosts: c.Bound.Answers, assets: a, vendor: vendor,
 		styles: a.URLs("css/*.css"), scripts: a.URLs("js/*.js"),
-		log: c.Env.Log, ctx: ctx, now: c.Now, mux: http.NewServeMux(),
+		log: c.Env.Log, ctx: ctx, now: c.Now, still: c.Still, mux: http.NewServeMux(),
 		keepAlive: sse.DefaultKeepAlive,
 	}
 	if s.sessions, err = session.New(session.Options{
@@ -254,6 +259,7 @@ func (s *Server) View(r *http.Request, keys ...string) (*View, error) {
 	}
 	v := s.newView(p)
 	v.CSRF = session.CSRF(r.Context())
+	v.Scope = pgScopeOf(r, v.Snap)
 	return v, nil
 }
 
@@ -280,7 +286,7 @@ const maxParamValues = 64
 // newView returns a view of the current snapshot with p as its Params.
 func (s *Server) newView(p Params) *View {
 	return &View{
-		Snap: s.env.Store.Snapshot(), Now: s.now(), Params: p, Addr: s.env.Addr,
+		Snap: s.env.Store.Snapshot(), Now: s.now(), Still: s.still, Params: p, Addr: s.env.Addr,
 		Asset: s.assets.URL, Vendor: s.vendor.URL, HTMXConfig: htmx.Config, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
 	}
 }
@@ -416,7 +422,7 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 // of r and shows what m says.
 func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m *Miss) {
 	v := s.newView(Params{})
-	v.CSRF = session.CSRF(r.Context())
+	v.CSRF, v.Scope = session.CSRF(r.Context()), pgScopeOf(r, v.Snap)
 	v.Title, v.Content = "Not found", "page-notfound"
 	if status != http.StatusNotFound {
 		v.Title = "Bad address"
@@ -429,7 +435,8 @@ func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m
 }
 
 // eventsURL returns the URL of the live updates of the shell fragments and
-// of the named ones, with the Params they declare and the lit rail entry.
+// of the named ones, with the Params they declare, the lit rail entry and
+// the scope.
 func (s *Server) eventsURL(names []string, v *View) string {
 	names = slices.Compact(slices.Sorted(slices.Values(slices.Concat(shellFragments, names))))
 	q := url.Values{"f": names}
@@ -442,6 +449,9 @@ func (s *Server) eventsURL(names []string, v *View) string {
 	}
 	if v.Nav != "" {
 		q.Set("nav", v.Nav)
+	}
+	if v.Scope != "" {
+		q.Set("scope", v.Scope)
 	}
 	return "/events?" + q.Encode()
 }

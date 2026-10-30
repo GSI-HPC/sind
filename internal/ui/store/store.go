@@ -11,6 +11,7 @@ package store
 import (
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -28,6 +29,8 @@ const (
 	TopicRuns Topic = "runs"
 	// TopicTasks changes when a task starts, ends or is dismissed.
 	TopicTasks Topic = "tasks"
+	// TopicNeeds changes when the user dismisses a run from "Needs you".
+	TopicNeeds Topic = "needs"
 )
 
 // RunTopic is the topic of one run, which changes with every event of it,
@@ -40,6 +43,9 @@ type Snapshot struct {
 	Runs []Run
 	// Tasks are the commands sind ui started, oldest first.
 	Tasks []Task
+	// Dismissed holds the IDs of the runs that failed and that the user
+	// dismissed from "Needs you", for as long as sind ui runs.
+	Dismissed map[string]bool
 
 	// The sind data. Maps are replaced, never changed, by the setters in
 	// sind.go; the keys are realm names unless noted.
@@ -54,14 +60,19 @@ type Snapshot struct {
 	// Statuses are keyed by realm and cluster, for the clusters listed
 	// and the ones whose page is open.
 	Statuses map[StatusKey]*cluster.Status
-	// Slurms are what Slurm says about the clusters whose page is open,
-	// keyed alike.
+	// Slurms are what Slurm says about the clusters, keyed alike; the
+	// store keeps them with the statuses, and so the Faults of their
+	// nodes, by short name.
 	Slurms      map[StatusKey]*Slurm
+	Faults      map[StatusKey]map[string]Fault
 	Locks       map[string]*state.LockHolder
 	Monitorings map[string]*cluster.Monitoring
 	// Doctor is the last host check, nil before the first.
 	Doctor *DoctorReport
 	Docker DockerState
+	// NodeChanges are what changed on each node while sind ui ran, the
+	// newest first (Changes).
+	NodeChanges map[NodeKey][]Change
 }
 
 // Store holds the current Snapshot and notifies subscribers of changes.
@@ -75,6 +86,8 @@ type Store struct {
 	// ended holds the tasks that have ended, by their trace, so that their
 	// runs end with them even when the log has no end.
 	ended map[string]Task
+	// now is the clock of the changes of the nodes, nil for time.Now.
+	now func() time.Time
 }
 
 // MaxEndedTasks is how many tasks that have ended the store keeps, the
@@ -258,6 +271,19 @@ func (s *Store) HideTasks(hide func(Task) bool) {
 			}
 		}
 	}, TopicTasks)
+}
+
+// DismissRun dismisses the run with the ID id from "Needs you" and
+// notifies TopicNeeds.
+func (s *Store) DismissRun(id string) {
+	s.update(func(sn *Snapshot) {
+		d := make(map[string]bool, len(sn.Dismissed)+1)
+		for k := range sn.Dismissed {
+			d[k] = true
+		}
+		d[id] = true
+		sn.Dismissed = d
+	}, TopicNeeds)
 }
 
 // Task returns the task with the ID id.

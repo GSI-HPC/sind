@@ -35,7 +35,7 @@ sind exec dev -- ls /cvmfs/sft.cern.ch
 {{< ui >}}
 
 1. Press **New cluster…**.
-2. Open **Data** and tick **CVMFS**.
+2. Under **Your files**, press **Change…** and tick **CVMFS**.
 3. Press **Create**.
 
 The web UI has no terminal. Run `sind exec dev -- ls /cvmfs/sft.cern.ch` in your terminal to check the mount.

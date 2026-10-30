@@ -32,6 +32,9 @@ type fake struct {
 	nodes map[string][]testutil.PsEntry
 	// external are the containers outside sind, by realm: those on its mesh.
 	external map[string][]string
+	// outside are the containers outside sind on no mesh, which a ps
+	// without filters lists with the nodes.
+	outside []testutil.PsEntry
 	// locks are the realms whose lock is held, with the command.
 	locks map[string]string
 	// meshes are the realms that have a mesh.
@@ -44,6 +47,8 @@ type fake struct {
 	calls map[string]int
 	// failing makes the commands whose arguments contain it fail.
 	failing string
+	// failingAll makes a ps without filters fail.
+	failingAll bool
 
 	// gate, when set, holds the command `docker info` until it closes.
 	gate chan struct{}
@@ -169,11 +174,14 @@ func (f *fake) call(args []string, _ string) mock.Result {
 		if realm, ok := realmOf(); ok {
 			return mock.Result{Stdout: ndjson(f.nodes[realm])}
 		}
+		if f.failingAll {
+			return mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(f.t)}
+		}
 		var all []testutil.PsEntry
 		for _, realm := range slices.Sorted(maps.Keys(f.nodes)) {
 			all = append(all, f.nodes[realm]...)
 		}
-		return mock.Result{Stdout: ndjson(all)}
+		return mock.Result{Stdout: ndjson(append(all, f.outside...))}
 	case "network":
 		switch args[1] {
 		case "ls":

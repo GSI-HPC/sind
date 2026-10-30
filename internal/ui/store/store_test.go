@@ -62,6 +62,18 @@ func TestTasks(t *testing.T) {
 	assert.Len(t, s.Snapshot().Tasks, 2)
 }
 
+func TestDismissRun(t *testing.T) {
+	s := New()
+	sub := s.Notifier().Subscribe()
+	defer sub.Close()
+	s.DismissRun("a")
+	before := s.Snapshot()
+	s.DismissRun("b")
+	assert.Equal(t, []Topic{TopicNeeds}, sub.Take())
+	assert.Equal(t, map[string]bool{"a": true, "b": true}, s.Snapshot().Dismissed)
+	assert.Equal(t, map[string]bool{"a": true}, before.Dismissed, "a published snapshot never changes")
+}
+
 func TestEndedTasksAreCapped(t *testing.T) {
 	s := New()
 	end := time.Now()

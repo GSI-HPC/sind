@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,7 @@ func TestSindReadsEverythingAtStart(t *testing.T) {
 	f.fake.set(func() {
 		f.fake.meshes["sind"] = true
 		f.fake.external["sind"] = []string{"kind-control-plane"}
+		f.fake.outside = []testutil.PsEntry{{ID: "app", Names: "my-app", State: "running", Status: "Up 2 hours", Image: "python:3.12-slim", Networks: "bridge"}}
 	})
 	start(t, f.sind.Run)
 
@@ -67,6 +69,8 @@ func TestSindReadsEverythingAtStart(t *testing.T) {
 	require.NotNil(t, m.Info)
 	assert.Equal(t, "10.0.0.2", m.Info.DNSIP)
 	assert.Equal(t, []string{"kind-control-plane"}, m.External)
+	assert.Equal(t, []store.Outside{{Name: "my-app", Image: "python:3.12-slim", State: "running", Status: "Up 2 hours", Networks: []string{"bridge"}}}, m.Connectable,
+		"the nodes are sind's")
 	require.Len(t, m.Records, 2)
 	assert.Equal(t, "controller.dev.sind", m.Records[0].Hostname)
 	assert.Empty(t, m.Err)
@@ -247,6 +251,16 @@ func TestSindMeshErrors(t *testing.T) {
 		waitFor(t, "mesh", func() bool { m, ok := f.st.Snapshot().Meshes["sind"]; return ok && m.Err != "" })
 		m := f.st.Snapshot().Meshes["sind"]
 		assert.Equal(t, "boom", m.Err)
+		assert.Len(t, m.Records, 2)
+	})
+	t.Run("containers that can connect", func(t *testing.T) {
+		f := newSindFixture(t)
+		f.addCluster("sind", "dev")
+		f.fake.set(func() { f.fake.meshes["sind"] = true; f.fake.failingAll = true })
+		m, ok := readMesh(t.Context(), f.fake.client(), "sind")
+		assert.True(t, ok)
+		assert.Equal(t, "boom", m.Err)
+		assert.Nil(t, m.Connectable)
 		assert.Len(t, m.Records, 2)
 	})
 }

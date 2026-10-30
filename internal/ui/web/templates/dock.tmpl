@@ -1,22 +1,52 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* tasks is the fragment of the task dock: a card for each command that sind
-ui started, and for each run that a terminal writes to the event log, and a
-bar that sums them up when there are several. The dock shows the first card
-only, until Show all opens it (run.js); a card of a command that ended ok
-hides by itself at data-hide-at. A card of a command that failed or was
-stopped is compact: its title, the first line of the error or how it ended,
-and its buttons; the run page has the rest. The cards are built in dock.go. */}}
-{{define "tasks"}}{{with .Data}}{{if .Bar}}<div class="dock-bar">{{if .Running}}<span class="spin" aria-hidden="true"></span>{{end}}<span class="dock-sum">{{range $i, $p := .Parts}}{{if $i}} · {{end}}{{if .Strong}}<b>{{.Text}}</b>{{else}}{{.Text}}{{end}}{{end}}</span>
-  {{if .Clear}}<form class="inline" method="post" action="/tasks/clear" hx-post="/tasks/clear" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="btn sm">Clear done</button></form>{{end}}{{if .Toggle}}<button type="button" class="btn sm" data-dock-toggle aria-controls="tasks" aria-expanded="false">Show all</button>{{end}}</div>
-{{end}}{{range $card := .Cards}}<div class="task {{.Class}}"{{if .HideAt}} data-hide-at="{{.HideAt}}"{{end}}>{{template "run-say" .}}
-  <div class="th">{{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}" aria-hidden="true">{{.Mark}}</span>{{end}}<b><a href="{{.Href}}" title="{{or .Tip .Title}}">{{.Title}}</a></b>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}{{with .Chip}}<span class="chip">{{.}}</span>{{end}}
-    {{if .Dismiss}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/dismiss" hx-post="/tasks/{{.TaskID}}/dismiss" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="iconbtn" aria-label="Hide the card of {{.Title}}" title="Hide">×</button></form>{{end}}</div>
-  {{if not .Compact}}{{template "run-segbar" .}}{{end}}
-  {{with .Why}}<div class="tl terr"><span title="{{.}}">{{.}}</span>{{template "run-elapsed" $card}}</div>{{else}}<div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>{{end}}
-  <div class="tf">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}" aria-label="{{.Action}}: {{.Title}}">{{.Action}}</a></div>
+{{/* tasks is the strip of the task dock, at the bottom of the main column:
+the command that started last of those that run, else for a short while the
+one that ended last (dockData.Strip, from dock.go), with its steps, its
+current step or how it ended, its clock and its buttons. run.js takes an
+ended command off at data-hide-at. On a phone the strip sits above the bar of
+the pages, in two lines, with Show, which opens the list of tasks-menu as a
+sheet. The strip is not a live region: the list marks the announcements. */}}
+{{define "tasks"}}{{with .Data}}{{$d := .}}{{with .Strip}}<div class="tstrip {{.Class}}"{{if .HideAt}} data-hide-at="{{.HideAt}}"{{end}} role="group" aria-label="The command{{if eq .Class "running"}} that runs{{else}} that ended{{end}}">
+  {{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}" aria-hidden="true">{{.Mark}}</span>{{end}}<div class="ts-x"><span class="ts-t"><b><a href="{{.Href}}" title="{{or .Tip .Title}}">{{template "dock-title" .}}</a></b>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}{{with .Chip}}<span class="chip">{{.}}</span>{{end}}</span>
+  <span class="ts-s">{{with .Realm}}<span class="ts-r">{{.}} ·</span>{{end}}{{if eq .Class "running"}}<span class="ts-l">{{.Line}}</span>{{template "run-elapsed" .}}{{else}}<span class="ts-l{{with .ResultClass}} {{.}}{{end}}" title="{{.Result}}">{{.Result}}</span>{{end}}</span></div>
+  {{if eq .Class "running"}}{{template "run-segbar" .}}{{end}}<span class="grow"></span>
+  {{with $d.StripMore}}<button type="button" class="btn ghost sm ts-more" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false">{{.}}</button>{{end}}{{with $d.Failed}}<button type="button" class="ts-f" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false" aria-label="{{.}} failed: show the commands"><i class="dot bad" aria-hidden="true"></i>{{.}}</button>{{end}}
+  <span class="ts-b">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if and (eq .Class "running") (not .Open)}} primary{{end}}" href="{{.Href}}" aria-label="{{.Action}}: {{.Title}}">{{.Action}}</a>{{with .Open}}<a class="btn sm primary" href="{{.Href}}">{{.Label}}</a>{{end}}</span>
+  <button type="button" class="btn sm ts-show" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false" aria-label="Show the commands">Show</button>
 </div>
-{{end}}{{if .More}}<a class="task more" href="/activity">{{.More}} more in Activity</a>{{end}}{{end}}{{end}}
+{{end}}{{end}}{{end}}
+
+{{/* tasks-menu is the button of the top bar that counts the commands (the
+ones that run and the ones that failed, else the ones that ended) and the
+list that it opens, Commands: those that run, with their steps, Stop and Show
+progress, then those that ended, one line each with how they ended. run.js
+opens and closes it, a popover below the button, or a sheet on a phone; Clear
+ended hides the commands that ended (POST /tasks/clear), × one of them. The
+list marks what run.js announces when a command starts or ends. */}}
+{{define "tasks-menu"}}{{with .Data}}{{if .Parts}}<button type="button" class="cmds-btn" data-dock-toggle aria-controls="cmds-pop" aria-expanded="false" aria-label="{{.Label}}">{{range $i, $p := .Parts}}{{if $i}}<span class="sep" aria-hidden="true"></span>{{end}}<span class="cmds-p{{with .Class}} {{.}}{{end}}">{{if eq .Class "run"}}<span class="spin" aria-hidden="true"></span>{{else}}<i class="dot{{with .Class}} {{.}}{{end}}" aria-hidden="true"></i>{{end}}{{.N}}<span class="u"> {{.Word}}</span></span>{{end}}</button>
+<div class="cmds-shade" data-dock-close></div>
+<section class="cmds-pop" id="cmds-pop" role="dialog" aria-labelledby="cmds-h" tabindex="-1">
+  <div class="cmds-hd"><h2 id="cmds-h">Commands</h2><a href="/activity">All in Activity</a></div>
+  {{with .Running}}<div class="cmds-g"><h3>Running</h3>{{range .}}{{template "cmds-row" .}}{{end}}</div>
+  {{end}}{{with .Ended}}<div class="cmds-g"><h3>{{$.Data.EndedLabel}}</h3>{{range .}}{{template "cmds-row" .}}{{end}}{{with $.Data.More}}<a class="cmds-more" href="/activity">{{.}} more in Activity</a>{{end}}</div>
+  {{end}}<div class="cmds-ft">{{if .Ended}}<form class="inline" method="post" action="/tasks/clear" hx-post="/tasks/clear" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="btn sm">Clear ended</button></form>{{end}}<span class="faint">A command from a terminal shows while it runs.</span></div>
+</section>
+{{end}}{{end}}{{end}}
+
+{{/* cmds-row is a command of the list: its mark, its title and realm, and
+its clock, or when it ended; for one that runs, its steps, its current step,
+Stop and Show progress; for one that ended, how it ended and ×. */}}
+{{define "cmds-row"}}<div class="cmds-r {{.Class}}">{{template "run-say" .}}{{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}" aria-hidden="true">{{.Mark}}</span>{{end}}<span class="cmds-t"><a href="{{.Href}}" title="{{or .Tip .Title}}">{{template "dock-title" .}}</a>{{with .Realm}}<span class="chip" title="realm">{{.}}</span>{{end}}{{with .Chip}}<span class="chip">{{.}}</span>{{end}}</span>
+  {{if eq .Class "running"}}{{template "run-elapsed" .}}{{template "run-segbar" .}}<span class="cmds-s">{{.Line}}</span>
+  <span class="cmds-b">{{with .Stop}}{{template "run-stop" .}}{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm primary" href="{{.Href}}" aria-label="Show progress: {{.Title}}">Show progress</a></span>
+  {{else}}<span class="cmds-w num">{{.When}}</span>{{if .Dismiss}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/dismiss" hx-post="/tasks/{{.TaskID}}/dismiss" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="iconbtn" aria-label="Clear {{.Title}}" title="Clear">×</button></form>{{end}}<span class="cmds-s{{with .ResultClass}} {{.}}{{end}}">{{.Result}}{{with .Open}} · <a href="{{.Href}}">{{.Label}}</a>{{end}}</span>
+  {{end}}</div>
+{{end}}
+
+{{/* dock-title is the title of a command: its name, then its flags, which a
+narrow strip or list leaves out (dockCard.Name and Flags). */}}
+{{define "dock-title"}}{{if .Name}}{{.Name}}{{with .Flags}}<span class="fl"> {{.}}</span>{{end}}{{else}}{{.Title}}{{end}}{{end}}
 
 {{/* run-segbar draws the bar of a run's steps, .Segs, as a progressbar
 named after .Title. */}}
@@ -33,7 +63,9 @@ page opens. */}}
 
 {{/* run-stop is the Stop button of a task that runs, from a runStop: it asks
 in the page what stays when the command stops, before it posts the stop.
-run.js closes the question on Keep running and Escape. */}}
-{{define "run-stop"}}<details class="stopc{{if .Small}} sm{{end}}"><summary class="btn{{if .Small}} sm{{end}}" aria-label="Stop {{.Title}}…">Stop…</summary>
+run.js closes the question on Keep running and Escape. The question stays
+open across a live update, unless the button then stops another task
+(data-stop-task). */}}
+{{define "run-stop"}}<details class="stopc{{if .Small}} sm{{end}}" data-stop-task="{{.TaskID}}"><summary class="btn{{if .Small}} sm{{end}}" aria-label="Stop {{.Title}}…">{{or .Label "Stop…"}}</summary>
 <div class="stopc-pop" role="group" aria-label="Stop {{.Title}}?"><p><b>Stop {{.Title}}?</b> {{.Text}}</p>
 <div class="stopc-b"><button type="button" class="btn sm" data-stop-keep>Keep running</button><form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none">{{template "csrf-field" .}}<button type="submit" class="btn sm danger">Stop it</button></form></div></div></details>{{end}}

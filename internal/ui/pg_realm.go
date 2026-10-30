@@ -13,11 +13,12 @@ import (
 )
 
 // The realm of a page that shows one realm or all of them is in its
-// address, ?realm=. The realm picker in the top bar and the realm links of
-// the lists are plain links and forms to such an address. The browser
-// remembers the last realm picked in the cookie sind_realm: a list page
-// without ?realm= goes to the address with the remembered realm, so that
-// the address always says what the page shows.
+// address, ?realm=. The realm switcher of the rail and the realm links of
+// the pages are plain links to such an address. The browser remembers the
+// last realm picked in the cookie sind_realm, the scope of the session
+// (View.Scope): a page of the Realm group of the rail without ?realm= goes
+// to the address with the remembered realm, so that the address always
+// says what the page shows, and the rail's links carry it.
 
 // realmCookie is the cookie that remembers the realm picked last.
 const realmCookie = "sind_realm"
@@ -26,20 +27,21 @@ const realmCookie = "sind_realm"
 const realmCookieAge = 365 * 24 * 3600
 
 // pgRealmPages are the pages that show one realm or all of them, by the
-// name they are registered with, and their addresses. The realm picker
-// stays on such a page.
+// name they are registered with, and their addresses. The realm switcher
+// stays on such a page of the Realm group of the rail.
 var pgRealmPages = map[string]string{
 	"overview": "/", "clusters": "/clusters", "nodes": "/nodes",
 	"more-mesh": "/mesh", "more-monitoring": "/monitoring", "more-topology": "/topology",
 	"run-activity": "/activity",
 }
 
-// PgRealmNext returns the address that the realm picker in the top bar of
-// a page's view goes to: the page itself when it shows one realm or all,
-// the list of nodes from a node page, and the list of clusters from any
-// other page.
-func (v *View) PgRealmNext() string {
-	if p, ok := pgRealmPages[v.Page]; ok {
+// pgRealmNext returns the address that a pick of the realm switcher of the
+// rail goes to, without its ?realm=: the page itself when it is a page of
+// the Realm group of the rail, the list of nodes from a node page, and the
+// list of clusters from any other page, as the Overview and Activity show
+// every realm whatever the switcher says.
+func pgRealmNext(v *View) string {
+	if p, ok := pgRealmPages[v.Page]; ok && navGroupOf(v.Nav) == navRealmGroup {
 		return p
 	}
 	if v.Page == "node" {
@@ -48,34 +50,9 @@ func (v *View) PgRealmNext() string {
 	return "/clusters"
 }
 
-// PgRealmOption is an entry of the realm picker.
-type PgRealmOption struct {
-	Value    string
-	Label    string
-	Selected bool
-}
-
-// PgRealmOptions returns the entries of the realm picker: every realm of
-// the snapshot with its cluster count, the realm of the page when the
-// snapshot does not know it, and the entry for all realms.
-func (v *View) PgRealmOptions() []PgRealmOption {
-	cur := v.Params.Get("realm")
-	opts := []PgRealmOption{{Value: "", Label: "all realms", Selected: cur == ""}}
-	seen := false
-	for _, r := range v.Snap.Realms {
-		seen = seen || r.Name == cur
-		opts = append(opts, PgRealmOption{
-			Value: r.Name, Label: fmt.Sprintf("%s · %d", r.Name, r.Clusters), Selected: r.Name == cur,
-		})
-	}
-	if cur != "" && !seen {
-		opts = append(opts, PgRealmOption{Value: cur, Label: cur, Selected: true})
-	}
-	return opts
-}
-
-// PgRealmScope is what a page that shows one realm says about it: the
-// realm, and the address of the same page with every realm.
+// PgRealmScope is what the Overview or Activity says when its address
+// narrows it to one realm, which filters only that page: the realm, and
+// the address of the same page with every realm.
 type PgRealmScope struct {
 	Realm   string
 	ShowAll string
@@ -109,11 +86,13 @@ func pgRealmKnown(sn store.Snapshot, realm string) bool {
 
 // pgRealmRoute serves a page that shows one realm or all of them as a
 // route, as a Page cannot see the request's cookies. A ?realm= in the
-// address is what the page shows, and the cookie remembers it when it
-// names a realm that exists or every realm, and a page of sind ui led
-// there (Sec-Fetch-Site: same-origin). Without ?realm=, a page that
-// remembers goes to its address with the remembered realm; one that does
-// not, the Overview, shows every realm. The title names the realm shown.
+// address is what the page shows. On a page that remembers, a page of the
+// Realm group of the rail, it is the scope too, and the cookie remembers
+// it when it names a realm that exists or every realm, and a page of sind
+// ui led there (Sec-Fetch-Site: same-origin); without ?realm=, such a page
+// goes to its address with the remembered realm. A page that does not
+// remember, the Overview or Activity, shows every realm without ?realm=,
+// and ?realm= filters only that page: the scope stays the cookie's. The title names the realm shown.
 // A realm that Docker has no trace of is the Not found page, with the
 // realms of a name close to it; while Docker is unknown or down, the page
 // shows the realm empty. Only the page checks: its live updates keep
@@ -130,6 +109,12 @@ func pgRealmRoute(p Page, remember, anyRealm bool) Route {
 				return err
 			}
 		}
+		// A page of the Realm group shows the realm of its address, which
+		// the cookie remembers from now on: the rail shows it as the
+		// scope. The Overview and Activity narrow only themselves.
+		if realm := v.Params.Get("realm"); remember && v.Params.Has("realm") && (realm == "" || config.CheckName("realm", realm) == nil) {
+			v.Scope = realm
+		}
 		if realm := v.Params.Get("realm"); realm != "" {
 			if d := v.Snap.Docker; !anyRealm && d.Checked && d.Err == "" && !pgRealmKnown(v.Snap, realm) {
 				return pgRealmMiss(v.Snap, base, realm)
@@ -141,12 +126,9 @@ func pgRealmRoute(p Page, remember, anyRealm bool) Route {
 	return Route{Pattern: p.Pattern, Handle: func(s *Server, w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		sn := s.env.Store.Snapshot()
-		old := ""
-		if c, err := r.Cookie(realmCookie); err == nil && config.CheckName("realm", c.Value) == nil {
-			old = c.Value
-		}
+		old := pgCookieRealm(r)
 		switch {
-		case q.Has("realm"):
+		case remember && q.Has("realm"):
 			// Only a page of sind ui changes what the browser remembers,
 			// not a link of another site nor a typed address.
 			realm := q.Get("realm")
@@ -177,4 +159,24 @@ func pgRememberRealm(w http.ResponseWriter, realm string) {
 		c.MaxAge = -1
 	}
 	http.SetCookie(w, c)
+}
+
+// pgCookieRealm returns the realm that the cookie of r remembers, "" for
+// none or for a name that is no realm name.
+func pgCookieRealm(r *http.Request) string {
+	if c, err := r.Cookie(realmCookie); err == nil && config.CheckName("realm", c.Value) == nil {
+		return c.Value
+	}
+	return ""
+}
+
+// pgScopeOf returns the scope of a request: the realm that its cookie
+// remembers, "" for every realm, also when Docker no longer has the
+// realm.
+func pgScopeOf(r *http.Request, sn store.Snapshot) string {
+	realm := pgCookieRealm(r)
+	if d := sn.Docker; realm != "" && d.Checked && d.Err == "" && !pgRealmKnown(sn, realm) {
+		return ""
+	}
+	return realm
 }

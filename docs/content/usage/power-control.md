@@ -17,14 +17,18 @@ sind power <action> NODES
 {{< /cli >}}
 {{< ui >}}
 
-1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node.
-2. Press the action, such as **Reboot…**. The bar offers only the actions that fit the nodes you selected, and when one fits only some of them, its label counts them, such as **Start 2 nodes…**. The dialog groups the actions and selects the one that you pressed. To start one node that does not run, press **Start…** in its row.
-3. Read the warnings: the dialog says when the nodes include the controller in control, the standby controller of a pair, the db node or every running worker of the cluster.
-4. Press the button, which names the action and the nodes, such as **Reboot 3 nodes**.
+1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node and its **Power** menu, which greys out the actions that do not fit the node and says why.
+2. Press the action in the bar at the bottom of the page, such as **Reboot 3 nodes…**. The bar says how many nodes you selected and their node set, offers only the actions that fit them, and names in each button the nodes it acts on. When an action fits only some of them, a line names the nodes it skips, such as `Drain skips controller.` Shut down, Freeze and Unfreeze are under **More**. To start one node that does not run, press **Start…** in its row.
+3. The dialog confirms the action in short: its title names the action and the nodes, such as **Reboot worker-4.dev**, and it lists the nodes with their Slurm state and issues, and what keeps running. Read the warnings: the dialog says when the nodes include the controller in control, the standby controller of a pair, the db node or every running worker of the cluster.
+4. Press the button, which names the action and the nodes, such as **Reboot 3 workers**.
+
+To pick other nodes or another action, press **Change nodes…** or open **Other actions**. Opened without nodes, as from the jump box, the dialog shows its picker: the actions in groups, quick picks such as **Need a look** and **Drained**, a node set field such as `worker-[0-3]`, and a table of the nodes with their role, Slurm state and issues. An action that fits none of the ticked nodes is off, and a line says why, such as `Start (each runs already)`.
 
 {{< uishot "dialog-power" >}}
 
 The dialog names the actions as below: Start, Shut down, Reboot, Freeze and Unfreeze under **Containers**, and Power-cycle and Cut power under **Can lose data**. Its **Slurm (scontrol)** group has Drain and Resume (see [Drain and resume](#drain-and-resume)).
+
+In the table of the **Nodes** tab, the arrow keys move between the rows and the buttons of a row, Space ticks the node of the row and <kbd>a</kbd> moves to the bar.
 
 {{< /ui >}}
 {{< /ways >}}
@@ -106,12 +110,38 @@ sind exec dev -- scontrol update 'NodeName=worker-[2-3]' State=RESUME
 {{< /cli >}}
 {{< ui >}}
 
-1. Open the cluster, then the **Nodes** tab, and select the workers. Or open the page of one worker.
+1. Open the cluster, then the **Nodes** tab, and select the workers. Or open the page of one worker and its **Slurm** menu.
 2. Press **Drain…** or **Resume…**. The Power dialog opens with that action.
 3. For Drain, write the reason, at most 200 characters on one line. `sinfo -R` shows it.
-4. Press the button, such as **Drain 2 nodes**.
+4. Press the button, such as **Drain 2 workers**.
 
-The dialog runs the `sind exec … scontrol update` command above. It writes no progress, so the task has no run page. The buttons appear when you select a worker; when you select other nodes too, they act only on the workers and count them, such as **Drain 2 workers…**. The dialog refuses the workers of an unmanaged cluster, and unmanaged workers, as sind runs no Slurm there.
+The dialog runs the `sind exec … scontrol update` command above. It writes no progress, so the task has no run page. The buttons appear when you select a worker that Slurm lists and that is not drained already (Drain) or does not take jobs (Resume); they act only on those workers and count them, such as **Drain 2 workers…**, and the bar names the nodes they skip. The dialog refuses the workers of an unmanaged cluster, and unmanaged workers, as sind runs no Slurm there.
+
+{{< /ui >}}
+{{< /ways >}}
+
+## Restart a service
+
+When one service of a running node failed, such as `slurmd`, restart that unit before you reboot the node: the container and its other processes go on. sind has no command of its own for this; run `systemctl` on the node. When munge failed too, restart munge first, as the Slurm daemons need it. When sshd is down, `sind ssh` cannot log in: reboot the node.
+
+{{< ways >}}
+{{< cli >}}
+
+```bash
+sind ssh worker-4.dev -- systemctl status slurmd
+sind ssh worker-4.dev -- systemctl restart slurmd
+```
+
+{{< /cli >}}
+{{< ui >}}
+
+1. Open the page of the node. Its card says what failed, when and with which exit status, shows the last lines of the unit's journal, and lists the fixes under **Try in this order**.
+2. Press **Restart slurmd…**, the first fix. **Restart…** beside a failed service in **Services**, and the fix of the row in **Needs you**, open the same dialog.
+3. The dialog shows the `sind ssh … -- systemctl restart` command. Press **Restart slurmd**.
+
+{{< uishot "dialog-restart-service" >}}
+
+The command writes no progress, so the task has no run page. Once the node's services are up again, the card turns green, **Fixed**, for 30 seconds and says what it checked. Until the status shows the service active, the card is blue and waits. If the restart does not help, **Reboot…** is the next fix.
 
 {{< /ui >}}
 {{< /ways >}}

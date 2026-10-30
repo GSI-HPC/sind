@@ -50,13 +50,14 @@ type runWait struct {
 	// NoRun says that the command writes no event log, so it never has a
 	// run page.
 	NoRun bool
-	// Command, Back, RetryID and Edit are those of the run page (runHead),
+	// Command, Back, RetryID, Edit and RetryPrimary are those of the run page (runHead),
 	// for a command that ended before it wrote a run.
-	Command *pgCmd
-	Back    *runLink
-	RetryID string
-	Edit    *runLink
-	CSRF    string
+	Command      *pgCmd
+	Back         *runLink
+	RetryID      string
+	Edit         *runLink
+	RetryPrimary bool
+	CSRF         string
 	// SayKey, SayState and Say are what run.js announces when the task
 	// ends while the page waits. The key is the page's own, and the page
 	// announces no start: the run page that follows at once does.
@@ -75,7 +76,7 @@ func runWaitOf(v *View) *runWait {
 	if run, ok := v.Snap.RunOfTrace(t.Trace); ok {
 		w.Redirect = "/runs/" + run.ID
 	}
-	// The page names the task as its card and its run page do.
+	// The page names the task as the dock and its run page do.
 	card := dockTaskCard(t, nil, v.Now)
 	w.Title, w.Class, w.Elapsed, w.Since = card.Title, card.Class, card.Elapsed, card.Since
 	w.PillClass = runPillClass(card.Class)
@@ -89,6 +90,7 @@ func runWaitOf(v *View) *runWait {
 		w.Command = &pgCmd{Label: "Command", Text: t.Display}
 	}
 	w.RetryID, w.Edit = runRetry(t, card.Class)
+	w.RetryPrimary = w.RetryID != ""
 	return w
 }
 
@@ -143,9 +145,10 @@ func runTaskMiss(sn store.Snapshot, id string) *Miss {
 	return m
 }
 
-// runTaskDismiss answers POST /tasks/{id}/dismiss: it hides the card of a
-// task that has ended. The task stays, so that its run page still shows its
-// command and Try again. A task that is gone counts as dismissed.
+// runTaskDismiss answers POST /tasks/{id}/dismiss, the × of a command that
+// ended in the list of the dock: it clears the task from the dock. The
+// task stays, so that its run page still shows its command and Try again.
+// A task that is gone counts as dismissed.
 func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 	v, err := s.View(r)
 	if err != nil {
@@ -163,8 +166,8 @@ func runTaskDismiss(s *Server, w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// runTaskClear answers POST /tasks/clear, the Clear done of the dock: it
-// hides the cards of all tasks that have ended.
+// runTaskClear answers POST /tasks/clear, the Clear ended of the list of the
+// dock: it clears every task that has ended from the dock.
 func runTaskClear(s *Server, w http.ResponseWriter, _ *http.Request) {
 	s.env.Store.HideTasks(taskEnded)
 	w.WriteHeader(http.StatusNoContent)

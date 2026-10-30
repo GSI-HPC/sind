@@ -72,7 +72,7 @@ func TestDemo_Still(t *testing.T) {
 	assert.Equal(t, store.TaskRunning, task.Status)
 	assert.NotNil(t, a.Locks["ci"])
 	assert.Equal(t, 5, len(a.Clusters["sind"])+len(a.Clusters["ci"]), "nightly is there, half made")
-	assert.Equal(t, cluster.StateMixed, a.Clusters["ci"][0].State)
+	assert.Equal(t, cluster.StateRunning, a.Clusters["ci"][0].State, "its containers run, as the run started them")
 	for _, r := range a.Runs {
 		assert.False(t, r.Start.After(Epoch))
 		if r.End != nil {
@@ -153,8 +153,11 @@ func TestDemo_Drifts(t *testing.T) {
 	d := New(st, false)
 	d.driftEvery = time.Millisecond
 	d.Setup()
+	d.world.apply("sind", opReady, node{name: "worker-4", cluster: "dev"})
+	d.world.Publish(st)
+	require.True(t, slurmdUp(st))
 	stop := running(d)
-	require.Eventually(t, func() bool { return slurmdUp(st) }, 5*time.Second, time.Millisecond, "a service flips by itself")
+	require.Eventually(t, func() bool { return !slurmdUp(st) }, 5*time.Second, time.Millisecond, "a service fails again by itself")
 	stop()
 
 	// Where nothing can flip, nothing is published.

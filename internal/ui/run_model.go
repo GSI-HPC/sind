@@ -3,7 +3,9 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -182,7 +184,7 @@ func runPill(run store.Run, task *store.Task) (label, class string) {
 	case c == runFailed:
 		return "failed", "bad"
 	case c == runCanceled:
-		return "canceled", "warn"
+		return "stopped", "warn"
 	case run.Unfinished && run.Status == "":
 		return "no end recorded", "warn"
 	}
@@ -260,6 +262,8 @@ type runStop struct {
 	CSRF string
 	// Small makes the button small, as in the dock.
 	Small bool
+	// Label is the text of the button; empty for "Stop…".
+	Label string
 }
 
 // newRunStop returns the Stop button of the task t, whose run may be nil,
@@ -320,10 +324,24 @@ func runSourceChip(source string) string {
 	return ""
 }
 
-// runTitle is the title of a run that task t started, with the cluster the
-// task works on, which the log of an older sind does not name.
+// runCommandOf is the command of a run as the log names it, which tells
+// the runs of one command from others: "create worker legacy" for every
+// create worker of legacy, whatever nodes each one made. A run whose log
+// gives no command has its title.
+func runCommandOf(r store.Run) string { return cmp.Or(r.Command, r.Title) }
+
+// runTitle is the title of a run that task t started, with the nodes or
+// the cluster the task works on, which the log may not name: "power reboot
+// worker-4.dev" from the command words of the task when the run's title
+// starts them or are the title, else the title and the cluster, unless
+// the title names the nodes of the cluster already, as that of a node
+// command on the default cluster does: "power reboot worker-4".
 func runTitle(run store.Run, t *store.Task) string {
-	if run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) {
+	if words, _ := taskWords(t.Argv); run.Title != "" && (strings.Join(words, " ") == run.Title || strings.HasPrefix(strings.Join(words, " "), run.Title+" ")) {
+		return strings.Join(words, " ")
+	}
+	named := run.Root.Node == t.Cluster && run.Command != "" && run.Title != run.Command
+	if named || run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) || slices.ContainsFunc(strings.Fields(run.Title), func(w string) bool { return strings.HasSuffix(w, "."+t.Cluster) }) {
 		return run.Title
 	}
 	return run.Title + " " + t.Cluster
@@ -490,8 +508,8 @@ func runPartial(s store.Span) float64 {
 }
 
 // runDetail says what a span that goes on is doing now: its message, or the
-// visible span below it that goes on with its message, or how far its
-// transfer is.
+// visible span below it that goes on with its message, as "waits for
+// munge" for a wait, or how far its transfer is.
 func runDetail(s store.Span) string {
 	if s.Message != "" {
 		return s.Message
@@ -500,11 +518,15 @@ func runDetail(s store.Span) string {
 		if c.Done() || c.State == activity.StateQueued {
 			continue
 		}
-		if c.Kind == activity.KindBatch {
+		switch c.Kind {
+		case activity.KindBatch:
 			if d := runDetail(c); d != "" {
 				return d
 			}
 			continue
+		case activity.KindWait:
+			// As the pages of a cluster say it (pgPhaseText).
+			return "waits for " + pgOr(c.Message, c.Name)
 		}
 		return strings.TrimSpace(c.Name + " " + c.Message)
 	}
@@ -582,6 +604,8 @@ func runLine(run store.Run, task *store.Task, now time.Time) string {
 			return "ended in " + elapsed
 		case run.Status == store.StatusOK:
 			return "done in " + elapsed
+		case run.Status == store.StatusCanceled:
+			return "stopped after " + elapsed
 		}
 		return run.Status + " in " + elapsed
 	}

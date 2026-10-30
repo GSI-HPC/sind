@@ -11,7 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
-// The texts of the New cluster dialog say what to change, in the words of
+// The texts of the New cluster page say what to change, in the words of
 // the form: sind's own errors name the keys of the config and quote Go
 // strings, which suit a config file, not a form.
 
@@ -51,6 +51,35 @@ func nameError(kind, name string) error {
 		return fmt.Errorf("%s is the name of the SSH relay of the realm; pick another name", name)
 	}
 	return fmt.Errorf("a name may not end in -%s, as the SSH relay of a realm uses it; pick another name", config.ReservedClusterName)
+}
+
+// memoryPattern is a memory size as people write it, in lowercase and
+// without spaces: a number, and a unit with an optional b or ib, such as
+// 2g, 2gb or 2gib, or b for bytes.
+var memoryPattern = regexp.MustCompile(`^(\d+(?:\.\d+)?)(?:([kmgtp])(?:i?b)?|b)?$`)
+
+// memorySize reads a memory size as people write it, such as 2 GB or
+// 512 MiB, and returns it in Docker's short form, 2g or 512m. Docker's
+// units are powers of 1024, so GB reads as GiB.
+func memorySize(s string) (string, error) {
+	m := memoryPattern.FindStringSubmatch(strings.ToLower(strings.Join(strings.Fields(s), "")))
+	if m == nil {
+		return "", errors.New("write a size such as 2g or 512m")
+	}
+	v := m[1] + m[2]
+	if _, err := config.MemoryMB(v); err != nil {
+		return "", fmt.Errorf("write a size such as 2g or 512m; %w", err)
+	}
+	return v, nil
+}
+
+// tmpSize reads the size of the /tmp of a node, which the kernel takes as
+// it is.
+func tmpSize(s string) (string, error) {
+	if config.CheckTmpSize("", s) != nil {
+		return "", errors.New("write a whole number with a unit, such as 256m or 1g, or a share of the memory, such as 10%")
+	}
+	return s, nil
 }
 
 // slug makes a name that sind takes of s: lowercase, with a hyphen for each

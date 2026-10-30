@@ -81,7 +81,7 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 			Detail: fmt.Sprintf("max_user_instances %d (>= %d)", n, MinInotifyInstances)}
 		if n < MinInotifyInstances {
 			inotify = clidoctor.Check{Name: "inotify", Status: clidoctor.StatusWarning,
-				Detail:      fmt.Sprintf("max_user_instances %d (clusters of 10 or more nodes need %d; optional)", n, MinInotifyInstances),
+				Detail:      fmt.Sprintf("max_user_instances %d (clusters of %d or more nodes need %d; optional)", n, InotifyNodes, MinInotifyInstances),
 				Remediation: inotifyRemediation}
 		}
 		checks = append(checks, inotify)

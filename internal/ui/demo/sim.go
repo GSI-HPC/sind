@@ -4,6 +4,7 @@ package demo
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -127,7 +128,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 	tc := uiTrace(n)
 	t := store.Task{
 		ID: fmt.Sprintf("%016x", 0x7a5c000000000000+n), Action: spec.Action, Display: spec.Display, Argv: spec.Argv, Realm: spec.Realm, Cluster: spec.Cluster,
-		Form: spec.Form, ConfigPath: spec.ConfigPath, Config: spec.Config, Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,
+		Form: spec.Form, Fixes: spec.Fixes, ConfigPath: spec.ConfigPath, Config: spec.Config, Trace: traceHex(tc), Start: s.clk.Now(), Status: store.TaskRunning,
 	}
 	s.st.AddTask(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,7 +150,7 @@ func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, 
 	if p.silent {
 		// A command that writes no event log, such as sind exec, and takes
 		// no lock.
-		err = p.work(ctx, play{clk: s.clk})
+		err = p.work(ctx, play{clk: s.clk, emit: s.emitter(p.realm, nil)})
 	} else {
 		log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, RunID: id, AdvanceEvery: 250 * time.Millisecond, FlushEvery: 25 * time.Millisecond})
 		bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
@@ -302,6 +303,51 @@ func clusterWord(words []string) string {
 	return config.DefaultClusterName
 }
 
+// scontrol plays what the scontrol update of a drain or a resume, which
+// the power dialog runs through sind exec with args, does to the nodes it
+// names: "[CLUSTER] -- scontrol update NodeName=a,b State=DRAIN
+// Reason=why". It does nothing to any other command.
+func scontrol(p play, args []string) {
+	i := slices.Index(args, "--")
+	if i < 0 || len(args) < i+5 || args[i+1] != "scontrol" || args[i+2] != "update" {
+		return
+	}
+	n := node{cluster: clusterWord(positional(args[:i]))}
+	names := ""
+	op := ""
+	for _, a := range args[i+3:] {
+		k, v, _ := strings.Cut(a, "=")
+		switch strings.ToLower(k) {
+		case "nodename":
+			names = v
+		case "state":
+			op = map[string]string{"drain": opDrain, "resume": opResume}[strings.ToLower(v)]
+		case "reason":
+			n.reason = v
+		}
+	}
+	if op == "" {
+		return
+	}
+	for _, name := range strings.Split(names, ",") {
+		n.name = name
+		p.do(op, n)
+	}
+}
+
+// systemctl plays what the restart of a service, which the restart dialog
+// runs through sind ssh with args, does to the node it names:
+// "NODE[.CLUSTER] -- systemctl restart UNIT". It does nothing to any other
+// command.
+func systemctl(p play, args []string) {
+	i := slices.Index(args, "--")
+	if i != 1 || len(args) != 5 || args[2] != "systemctl" || args[3] != "restart" {
+		return
+	}
+	short, cl, _ := strings.Cut(args[0], ".")
+	p.do(opRestart, node{name: short, cluster: cmp.Or(cl, config.DefaultClusterName), unit: args[4]})
+}
+
 // plan reads the command line of a command that a dialog built and makes
 // the script that plays it. A command it does not know plays as one step.
 func (s *Sim) plan(argv []string) (plan, error) {
@@ -313,7 +359,22 @@ func (s *Sim) plan(argv []string) (plan, error) {
 		// sind exec runs a command in a node, such as the scontrol of a
 		// drain, and draws no progress.
 		return plan{title: "exec", realm: realm, silent: true, work: func(ctx context.Context, p play) error {
-			return p.clk.Sleep(ctx, 600*time.Millisecond)
+			if err := p.clk.Sleep(ctx, 600*time.Millisecond); err != nil {
+				return err
+			}
+			scontrol(p, argv[1:])
+			return nil
+		}}, nil
+	}
+	if len(argv) > 0 && argv[0] == "ssh" {
+		// sind ssh runs a command in a node, such as the systemctl restart
+		// of a service, and draws no progress either.
+		return plan{title: "ssh", realm: realm, silent: true, work: func(ctx context.Context, p play) error {
+			if err := p.clk.Sleep(ctx, 900*time.Millisecond); err != nil {
+				return err
+			}
+			systemctl(p, argv[1:])
+			return nil
 		}}, nil
 	}
 	if len(argv) < 2 {
@@ -426,6 +487,8 @@ func (s *Sim) planCreateWorker(realm, name string, args []string) func(context.C
 	if n, err := strconv.Atoi(flagValue(args, "--count")); err == nil && n > 0 {
 		count = n
 	}
+	cpus, _ := strconv.Atoi(flagValue(args, "--cpus"))
+	memory, _ := config.MemoryMB(flagValue(args, "--memory"))
 	return func(ctx context.Context, p play) error {
 		next := 0
 		for _, n := range s.w.nodesOf(realm, name) {
@@ -437,7 +500,7 @@ func (s *Sim) planCreateWorker(realm, name string, args []string) func(context.C
 		}
 		var nodes []node
 		for i := range count {
-			nodes = append(nodes, node{name: "worker-" + strconv.Itoa(next+i), cluster: name, role: "worker", ready: ready("worker", i)})
+			nodes = append(nodes, node{name: "worker-" + strconv.Itoa(next+i), cluster: name, role: "worker", ready: ready("worker", i), cpus: max(cpus, 0), memoryMB: max(memory, 0)})
 		}
 		return p.create(ctx, createSpec{nodes: nodes})
 	}

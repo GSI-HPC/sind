@@ -202,8 +202,9 @@ func (s *Sind) ok(ctx context.Context, realm, what string, err error) bool {
 // noMesh is what mesh.Manager.GetInfo says for a realm without mesh.
 const noMesh = "no mesh found for realm"
 
-// readMesh reads the mesh of a realm: its infrastructure, DNS records and
-// the containers outside sind that are on its network. A realm without
+// readMesh reads the mesh of a realm: its infrastructure, DNS records,
+// the containers outside sind that are on its network and those that can
+// join it. A realm without
 // mesh has the zero Mesh; a mesh that cannot be read fully has Err.
 func readMesh(ctx context.Context, client *docker.Client, realm string) (store.Mesh, bool) {
 	mgr := mesh.NewHostManager(client, realm)
@@ -225,6 +226,17 @@ func readMesh(ctx context.Context, client *docker.Client, realm string) (store.M
 	}
 	for _, name := range external {
 		m.External = append(m.External, string(name))
+	}
+	others, err := cluster.Connectable(ctx, client, mgr)
+	if err != nil {
+		errs = append(errs, doctor.ErrorLine(err))
+	}
+	for _, e := range others {
+		o := store.Outside{Name: string(e.Name), Image: e.Image, State: string(e.State), Status: e.Status}
+		for _, n := range e.Networks {
+			o.Networks = append(o.Networks, string(n))
+		}
+		m.Connectable = append(m.Connectable, o)
 	}
 	m.Err = strings.Join(errs, "; ")
 	return m, ctx.Err() == nil

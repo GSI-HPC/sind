@@ -140,15 +140,18 @@ async function type(text, delay = 90) {
 mark("overview"); await wait(6000);
 
 mark("dialog");
-await click('a[href="/dialogs/create-cluster"]', "New cluster…"); await wait(2500);
+await click('a[href="/clusters/new"]', "New cluster…"); await wait(2500);
+await click('[data-act-start="history"]', "With job history"); await wait(1500);
 await click("#act-name", "name"); await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
 await park("#act-name"); await type("lab", 140); await wait(1200);
-mark("api"); await click("#act-api", "api"); await wait(1800);
+mark("api"); await click("#act-morenodes > summary", "More nodes"); await wait(600);
+await click("#act-api", "api"); await wait(1800);
 mark("workers"); await click("#act-w0-count", "workers");
 await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
 await park("#act-w0-count"); await type("3", 150); await wait(2200);
 mark("slurmconf"); await click("#act-sec-slurm > summary", "Slurm config"); await wait(2500);
-mark("yaml"); await click("button[data-act-yaml-edit]", "Edit YAML"); await wait(3000);
+mark("yaml"); await click('[data-act-fold="act-yamlv"]', "Show YAML"); await wait(1200);
+await click("button[data-act-yaml-edit]", "Edit YAML"); await wait(3000);
 await click("button[data-act-yaml-discard]", "Discard YAML edits"); await wait(1200);
 mark("create"); await click("#act-ok", "Create");
 await page.waitForFunction(() => location.pathname.startsWith("/runs/"), { timeout: 30000 });
@@ -158,16 +161,6 @@ await hz(15); mark("rundone"); await wait(3500);
 
 mark("failed");
 await go("/activity"); await wait(1200);
-// The dock keeps the card of the run until it is hidden.
-for (const b of await page.$$('#tasks form[action$="/dismiss"] button')) {
-  const r = await b.boundingBox();
-  if (!r) continue;
-  await moveTo(r.x + r.width / 2, r.y + r.height / 2, "Hide");
-  await wait(250);
-  mark("click", { x: px, y: py, label: "Hide" });
-  await page.mouse.click(px, py);
-  await wait(900);
-}
 const failed = await page.evaluate(() => {
   const a = [...document.querySelectorAll('a[href^="/runs/"]')]
     .find(a => /\bfailed\b/i.test(a.closest("tr,li,article,.row")?.innerText || ""));
@@ -182,7 +175,7 @@ mark("nodes");
 await click('a.tab[href$="tab=nodes"]', "Nodes"); await wait(1500);
 for (const w of ["worker-1", "worker-2", "worker-3"]) { await click(`input[data-pg-sel="${w}"]`, w); await wait(500); }
 await wait(1800);
-mark("power"); await click('a[href*="/dialogs/power"][href*="op=reboot"]', "Reboot…"); await wait(3500);
+mark("power"); await click('[data-pg-selbar] a[data-pg-fit="reboot"]', "Reboot 3 workers…"); await wait(3500);
 await page.keyboard.press("Escape"); await page.evaluate(() => document.querySelector("[data-act-close]")?.click()); await wait(800);
 
 mark("logs");
