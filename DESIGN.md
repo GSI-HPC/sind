@@ -247,16 +247,16 @@ sind <verb> <noun> [ARGS] [FLAGS]
 
 | Pattern | Positional | Default | Examples |
 |---------|-----------|---------|---------|
-| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get auth-key` |
+| Cluster name | `[NAME]` or `[CLUSTER]` | `SIND_CLUSTER`, else `"default"` | `get cluster`, `enter`, `get auth-key` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
-| Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
+| Node format | `shortname.cluster` | cluster defaults to `SIND_CLUSTER`, else `"default"` | `worker-0.dev`, `controller` |
 | Node sets | ranges and set operators | — | `worker-[0-2].dev`, `worker-[0-3]!worker-2` |
 | Pass-through | after `--` separator | — | `ssh NODE -- cmd`, `exec -- cmd` |
 
 Rules:
 - Cluster names are **always positional**, never flags
 - Node targets are node set expressions; a command joins its node arguments with a space, which is a union
-- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, read with `clusterArg` (the default cluster without one), `cobra.MinimumNArgs(1)` for required nodes, and `noArgs` for none: it says `accepts no arguments, received N` in the words of cobra's other arity checks, where `cobra.NoArgs` calls the argument an unknown command
+- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, read with `clusterArg` (without one, `SIND_CLUSTER`, else the default cluster: `cluster.ResolveCluster`), `cobra.MinimumNArgs(1)` for required nodes, and `noArgs` for none: it says `accepts no arguments, received N` in the words of cobra's other arity checks, where `cobra.NoArgs` calls the argument an unknown command
 
 ### Flag Conventions
 
@@ -271,16 +271,17 @@ Rules:
 
 A `SIND_*` variable stands in for a flag, or for an argument, that the command line does not give, so that a value that stays the same for a shell or a CI job is set once. `internal/envvar` names every variable that sind reads and lists those that stand in for the command line (`envvar.CommandLine`); the CLI, `pkg/cluster` and sind ui name a variable only by its constant there.
 
-- **Name**: `SIND_` and the long name of the flag in capitals, with `_` for `-`: `--progress-log` is `SIND_PROGRESS_LOG`.
+- **Name**: `SIND_` and the long name of the flag in capitals, with `_` for `-`: `--progress-log` is `SIND_PROGRESS_LOG`. The cluster argument, `NAME` or `CLUSTER`, and the cluster of a node argument are `SIND_CLUSTER`.
 - **Precedence**, the same for every variable: the command line, then the variable, then the config file, which only `create cluster` reads, then the default. A flag given empty is given: `--progress-log ""` wins over `SIND_PROGRESS_LOG`.
 - **Empty is not set**: a variable set to the empty string counts as not set (`envvar.Lookup`), except `SIND_PROGRESS_LOG`, whose empty value writes no event log.
 - **Bad values**: a variable is not the command line, so a value that sind cannot use is no usage error. A variable that changes where or how a command acts fails the command with exit status `1`, and the error names it: `SIND_REALM: invalid realm name "ci_42": ...`. sind checks it only when it is in effect, not when the command line wins over it or the command does not use it. A variable that changes only what sind shows on stderr fails no command and says why in one line (`SIND_PROGRESS`, `SIND_PROGRESS_LOG`).
-- **Help**: the usage of each flag that a variable stands in for names the variable, in one form: `(default: SIND_PROGRESS, else auto, ...)`. `TestEnvVarsInHelp` checks it for every flag whose name a variable of `envvar.CommandLine` takes.
+- **Help**: the usage of each flag that a variable stands in for names the variable, in one form: `(default: SIND_PROGRESS, else auto, ...)`. `TestEnvVarsInHelp` checks it for every flag whose name a variable of `envvar.CommandLine` takes, and that the help of every command whose arguments name a cluster or nodes names `SIND_CLUSTER`: `CLUSTER defaults to SIND_CLUSTER, else "default".`
 - sind ui hands its children none of the variables of `envvar.CommandLine` (see Web UI), and the MCP server hands its tool calls its own environment, with the changes `asMCPServer` makes (see MCP Server).
 
 | Variable | Stands in for | Default |
 |----------|---------------|---------|
 | `SIND_REALM` | `--realm` | the config's `realm`, else `sind` |
+| `SIND_CLUSTER` | the cluster argument, and the cluster of a node argument that names none | `default`; for `create cluster` the config's `name`, else `default` |
 | `SIND_PROGRESS` | `--progress` | `auto` |
 | `SIND_PROGRESS_LOG` | `--progress-log` | the activity log |
 | `SIND_LOG_TIMESTAMPS` | nothing: `false` leaves the time stamp off log lines, which the MCP server sets for its tool calls | time stamps on |
@@ -459,7 +460,7 @@ sind get auth-key [CLUSTER] [--type munge|slurm|jwt]
 
 All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
 
-NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
+NAME/CLUSTER defaults to `SIND_CLUSTER`, else `default`, if omitted, except for `get nodes`, which then lists the nodes of every cluster, whatever `SIND_CLUSTER` names. The NAME of `create cluster` defaults to `SIND_CLUSTER`, else the config's `name`, else `default`: as `SIND_REALM` does, `SIND_CLUSTER` wins over the config, so that the commands that follow act on the cluster that `create cluster` made.
 
 `sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. An empty `--config ""` is a usage error, as is an empty `--data`: an unset variable in `--config "$CFG"` would otherwise create the default cluster, or read a piped stdin. Without `--config` it creates the default cluster (1 controller + 1 worker). Reading a stdin that is not a terminal without `--config -` is deprecated in v0.11.0 and will be removed: until then sind still reads it, but first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
 
@@ -660,7 +661,7 @@ sind enter [CLUSTER] [--user USER]               # Interactive shell on submitte
 sind exec [CLUSTER] [--user USER] -- <cmd>       # Command on submitter/controller
 ```
 
-NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
+NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `SIND_CLUSTER`, else `default`.
 
 `USER@` and `--user|-u USER` log in as a cluster user (see Users) instead of root. `sind ssh USER@NODE` is `ssh -l USER`; `enter` and `exec` run as USER in its home directory, `/home/USER`. `--user root` is the default. A USER that is not a valid user name is a usage error.
 
@@ -966,7 +967,7 @@ Commands accepting node arguments use DNS-style names, written as a node set exp
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name. Its errors quote the term of the argument that named the node, as typed (`typedTerm`): `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`. `ssh`, `logs` and `get node` act on one node and parse their argument the same way (`parseOneNode`): a node set that names another number of nodes is the usage error `<command> requires exactly one node, got N`.
+The cluster suffix defaults to `SIND_CLUSTER`, else `default`, if omitted (`withDefaultCluster`). sind reads `SIND_CLUSTER` only for a name without a suffix, and only once every name has parsed, so an invalid one exits `1`, after the usage errors of the names. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name. Its errors quote the term of the argument that named the node, as typed (`typedTerm`): `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`. `ssh`, `logs` and `get node` act on one node and parse their argument the same way (`parseOneNode`): a node set that names another number of nodes is the usage error `<command> requires exactly one node, got N`.
 
 ### Node Sets
 
@@ -1007,6 +1008,7 @@ sind power freeze 'worker-[0-3].dev'                 # 4 nodes in dev cluster
 sind power reboot 'controller,worker-[0-1]'          # multiple nodes in default
 sind power on 'worker-[0-3]' '!worker-2'             # 3 nodes in default
 sind delete worker 'worker-[0-1].dev' worker-3.prod  # nodes in two clusters
+SIND_CLUSTER=dev sind power on worker-0 controller.prod  # worker-0.dev, controller.prod
 ```
 
 ## Configuration Schema
@@ -1270,7 +1272,7 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 - a cluster is not named `ssh`: its config volume, `<realm>-ssh-config`, would be the realm's SSH volume, which `sind delete cluster ssh` would then try to remove. Nor does its name end in `-ssh`: the config volume of cluster `x-ssh` in realm `a`, `a-x-ssh-config`, would be the SSH volume of realm `a-x`. The mesh also refuses an SSH volume whose labels name another realm or another volume, such as the config volume of a cluster `x-ssh` that an earlier sind created, rather than mount it into the relay as `/root/.ssh`
 - with a managed db node, the cluster name has at most 40 characters: slurmdbd names the cluster's MariaDB tables `<cluster>_<table>`, MariaDB allows 64 characters, and Slurm documents the limit of 40. A longer name would keep slurmdbd from registering the cluster
 
-sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
+sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `SIND_CLUSTER`, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` and `SIND_CLUSTER` are only checked when they are in effect. The defaults `default` and `sind` are valid.
 
 The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when a command does not find a cluster in its realm, the error names the clusters the realm holds and the other realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`). Every command that takes a cluster or a node reports a missing cluster this way (`ErrClusterNotFound`, `clusterNotFound`), `get nodes CLUSTER` included, which fails with exit status 1 instead of listing no nodes, and `logs` and `ssh` check the node first (`cluster.CheckNode`), as `get node` does when docker finds no container, so docker's error with an internal container name never reaches the user. A node missing from an existing cluster is `node "x" not found in cluster "dev"` (`ErrNodeNotFound`).
 

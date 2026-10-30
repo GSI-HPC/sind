@@ -359,7 +359,7 @@ Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster.
 {{< /ui >}}
 {{< /ways >}}
 
-Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `default`. A full DNS name ending in `.sind` is rejected.
+Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `SIND_CLUSTER`, else `default`. A full DNS name ending in `.sind` is rejected.
 
 ```
 CONTAINER            ROLE        FQDN                      IP          STATUS

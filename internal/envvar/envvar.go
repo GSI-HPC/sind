@@ -17,6 +17,9 @@ import (
 const (
 	// Realm stands in for --realm.
 	Realm = "SIND_REALM"
+	// Cluster stands in for the cluster argument of the commands that
+	// take one, and for the cluster of a node argument that names none.
+	Cluster = "SIND_CLUSTER"
 	// Progress stands in for --progress.
 	Progress = "SIND_PROGRESS"
 	// ProgressLog stands in for --progress-log.
@@ -37,7 +40,7 @@ const (
 // CommandLine lists the variables that stand in for a flag or an argument.
 // sind ui runs its commands without them, so that a run does what its
 // command line says.
-var CommandLine = []string{Realm, Progress, ProgressLog}
+var CommandLine = []string{Realm, Cluster, Progress, ProgressLog}
 
 // All lists every variable that sind reads.
 var All = append(slices.Clone(CommandLine), LogTimestamps, MCPToken)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cliout"
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -92,8 +93,12 @@ func fromMesh[T any](get func(*mesh.Manager, context.Context) (T, error)) fetchF
 
 func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "nodes [CLUSTER]",
-		Short:             "List the nodes of a cluster, or of every cluster of the realm",
+		Use:   "nodes [CLUSTER]",
+		Short: "List the nodes of a cluster, or of every cluster of the realm",
+		Long: `List the nodes of a cluster, or of every cluster of the realm.
+
+Without CLUSTER, it lists the nodes of every cluster of the realm, whatever
+` + envvar.Cluster + ` names.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -282,7 +287,11 @@ otherwise.
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runGetAuthKey(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runGetAuthKey(cmd, name)
 		},
 	}
 	cmd.Flags().String("type", "", "authentication plugin of the key: munge, slurm or jwt (default: the cluster's AuthType)")
@@ -421,7 +430,11 @@ func newGetClusterCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runGetCluster(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runGetCluster(cmd, name)
 		},
 	}
 }

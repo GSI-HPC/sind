@@ -201,6 +201,23 @@ func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 	assert.ErrorContains(t, err, "at most one argument before --")
 }
 
+// TestParseExecArgs_ClusterFromEnv covers SIND_CLUSTER, the cluster of exec
+// without CLUSTER, which sind checks only then.
+func TestParseExecArgs_ClusterFromEnv(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "dev")
+	cluster, _, err := parseExecArgs([]string{"hostname"}, 0)
+	require.NoError(t, err)
+	assert.Equal(t, "dev", cluster)
+
+	t.Setenv("SIND_CLUSTER", "Dev")
+	cluster, _, err = parseExecArgs([]string{"prod", "hostname"}, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "prod", cluster)
+	_, _, err = parseExecArgs([]string{"hostname"}, 0)
+	require.EqualError(t, err, `SIND_CLUSTER: invalid cluster name "Dev": it has uppercase letters`)
+	assert.False(t, cobratree.IsUsage(err))
+}
+
 func TestSSH_Help(t *testing.T) {
 	for _, flag := range []string{"-h", "--help"} {
 		t.Run(flag, func(t *testing.T) {

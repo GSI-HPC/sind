@@ -88,6 +88,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
+  ├── clustername.go Cluster resolution (ResolveCluster: argument > SIND_CLUSTER > config > default)
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)

@@ -921,6 +921,31 @@ func TestCommandTargets(t *testing.T) {
 	}
 }
 
+// SIND_CLUSTER names the target of a command whose arguments name no
+// cluster, and that of create cluster before its configuration. An invalid
+// one names none, as the command fails on it.
+func TestCommandTargets_ClusterFromEnv(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "dev")
+	cmd := &cobra.Command{}
+	assert.Equal(t, "prod", clusterTarget(cmd, []string{"prod"}))
+	assert.Equal(t, "dev", clusterTarget(cmd, nil))
+	assert.Equal(t, "dev,prod", nodesTarget(cmd, []string{"worker-0", "worker-0.prod"}))
+	assert.Equal(t, "dev", deleteClusterTarget(newDeleteClusterCommand(), nil))
+
+	named := filepath.Join(t.TempDir(), "named.yaml")
+	require.NoError(t, os.WriteFile(named, []byte("kind: Cluster\nname: from-file\n"), 0o600))
+	for _, config := range []string{named, configStdin, ""} {
+		assert.Equal(t, "dev", createClusterTarget(&config)(cmd, nil), config)
+	}
+	assert.Equal(t, "prod", createClusterTarget(&named)(cmd, []string{"prod"}))
+
+	t.Setenv("SIND_CLUSTER", "Dev")
+	assert.Equal(t, "prod", clusterTarget(cmd, []string{"prod"}))
+	assert.Empty(t, clusterTarget(cmd, nil))
+	assert.Empty(t, nodesTarget(cmd, []string{"worker-0"}))
+	assert.Empty(t, createClusterTarget(&named)(cmd, nil))
+}
+
 // A command that learns its target as it runs ends its span with it; one
 // that names none has no Node, and nameTarget without a command span does
 // nothing.

@@ -16,6 +16,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -58,8 +59,9 @@ func newCreateClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster [NAME]",
 		Short: "Create a Slurm cluster",
-		Long:  "Create a Slurm cluster.\n\nNAME overrides the name in the configuration, which defaults to \"" + config.DefaultClusterName + "\".",
-		Args:  optionalCluster,
+		Long: "Create a Slurm cluster.\n\nNAME defaults to " + envvar.Cluster + ", else the name in the configuration, else \"" +
+			config.DefaultClusterName + "\".",
+		Args: optionalCluster,
 		// The name is new: the existing ones would conflict.
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: withProgressOn(createClusterTarget(&configFile), func(cmd *cobra.Command, args []string) error {
@@ -82,17 +84,19 @@ func newCreateClusterCommand() *cobra.Command {
 
 // createClusterTarget returns the target of create cluster, whose
 // configuration is read from *configFile: the cluster that NAME names, else
-// the one the configuration file names, else the default one when the
-// configuration is the default one. A configuration from stdin is read only
-// once, as the command runs, which names the cluster then.
+// the one SIND_CLUSTER names, else the one the configuration file names,
+// else the default one when the configuration is the default one. A
+// configuration from stdin is read only once, as the command runs, which
+// names the cluster then.
 func createClusterTarget(configFile *string) commandTarget {
 	return func(cmd *cobra.Command, args []string) string {
-		switch {
-		case len(args) > 0:
-			return args[0]
-		case *configFile == configStdin:
+		if _, ok := envvar.Lookup(envvar.Cluster); ok || len(args) > 0 {
+			return clusterTarget(cmd, args)
+		}
+		switch *configFile {
+		case configStdin:
 			return ""
-		case *configFile == "":
+		case "":
 			if stdinHasData(cmd.InOrStdin()) {
 				return ""
 			}
@@ -131,9 +135,12 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	if name != "" {
-		cfg.Name = name
+	if name == "" {
+		if name, err = cluster.ResolveCluster(cfg.Name); err != nil {
+			return err
+		}
 	}
+	cfg.Name = name
 
 	dataFlag, _ := cmd.Flags().GetString("data")
 	if err := applyDataStorage(cfg, dataFlag); err != nil {

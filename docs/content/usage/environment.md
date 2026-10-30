@@ -41,10 +41,26 @@ $ sind --help
 | Variable | Stands in for | Default | See |
 |----------|---------------|---------|-----|
 | `SIND_REALM` | `--realm` | the `realm` of the config file, else `sind` | [Realms]({{< relref "/configuration/realms" >}}) |
+| `SIND_CLUSTER` | the cluster argument, `NAME` or `CLUSTER`, and the cluster of a node argument that names none | `default`; for `sind create cluster` the `name` of the config file, else `default` | [The cluster](#the-cluster) |
 | `SIND_PROGRESS` | `--progress` | `auto` | [Progress Display]({{< relref "/usage/progress" >}}) |
 | `SIND_PROGRESS_LOG` | `--progress-log` | the [activity log]({{< relref "/usage/progress#the-activity-log" >}}) | [Progress Display]({{< relref "/usage/progress#event-log" >}}) |
 | `SIND_LOG_TIMESTAMPS` | no flag: `false` leaves the time stamp off log lines | time stamps | [MCP]({{< relref "/guides/mcp" >}}) |
 | `SIND_MCP_TOKEN` | no flag: the bearer token of `sind mcp stream`, which a command line would show to the other users of the host | a new random token at every start | [MCP]({{< relref "/guides/mcp" >}}) |
+
+## The cluster
+
+`SIND_CLUSTER` names the cluster of every command that takes a cluster or nodes and names none, so a shell that works on one cluster does not repeat its name:
+
+```bash
+export SIND_CLUSTER=dev
+sind create cluster           # creates dev
+sind ssh worker-0             # worker-0.dev
+sind exec -- sinfo            # runs sinfo in dev
+sind power off worker-1.prod  # worker-1 of prod: the node names its cluster
+sind get nodes                # the nodes of every cluster, as without SIND_CLUSTER
+```
+
+As `SIND_REALM` wins over the `realm` of a config file, `SIND_CLUSTER` wins over its `name`: `sind create cluster --config lab.yaml` creates `dev`, not the cluster `lab.yaml` names. Give the name as `NAME` to create that one: `sind create cluster lab --config lab.yaml`.
 
 ## Values sind cannot use
 
@@ -59,7 +75,7 @@ A variable is not part of the command line, so a value that sind cannot use is n
   1
   ```
 
-  sind checks the variable only when it is in effect: `sind --realm ci get clusters` does not read `SIND_REALM`, and `sind version` reads no realm.
+  sind checks the variable only when it is in effect: `sind --realm ci get clusters` does not read `SIND_REALM`, `sind version` reads no realm, and `sind ssh worker-0.dev` reads no `SIND_CLUSTER`.
 
 - A variable that changes only what sind shows on standard error fails no command. With a value of `SIND_PROGRESS` or `SIND_PROGRESS_LOG` that sind cannot use, it shows no progress, or writes no event log, and says why in one line.
 

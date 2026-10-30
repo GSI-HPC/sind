@@ -180,8 +180,12 @@ func nameTarget(ctx context.Context, name string) {
 }
 
 // clusterTarget is the target of a command whose argument is a cluster,
-// the default one when there is none.
-func clusterTarget(_ *cobra.Command, args []string) string { return clusterArg(args) }
+// the one SIND_CLUSTER names, else the default one, when there is none, and
+// "" for a SIND_CLUSTER that does not name one, as the command fails on it.
+func clusterTarget(_ *cobra.Command, args []string) string {
+	name, _ := clusterArg(args)
+	return name
+}
 
 // nodesTarget is the target of a command whose arguments are nodes: their
 // clusters, each once, in the order the command works on them, "" for nodes

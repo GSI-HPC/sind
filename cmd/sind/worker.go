@@ -24,7 +24,11 @@ func newCreateWorkerCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgressOn(clusterTarget, func(cmd *cobra.Command, args []string) error {
-			return runCreateWorker(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runCreateWorker(cmd, name)
 		}),
 	}
 

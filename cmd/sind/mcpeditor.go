@@ -246,9 +246,11 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	if f.logLevel != "" {
 		entry.Args = append(entry.Args, "--log-level", f.logLevel)
 	}
-	if env, ok := f.env[envvar.Realm]; ok {
-		if err := config.CheckName("realm", env); err != nil {
-			return mcpconfig.Server{}, cobratree.Usagef("--env %s: %w", envvar.Realm, err)
+	for _, v := range []struct{ name, kind string }{{envvar.Realm, "realm"}, {envvar.Cluster, "cluster"}} {
+		if env, ok := f.env[v.name]; ok {
+			if err := config.CheckName(v.kind, env); err != nil {
+				return mcpconfig.Server{}, cobratree.Usagef("--env %s: %w", v.name, err)
+			}
 		}
 	}
 	if len(f.env) > 0 {

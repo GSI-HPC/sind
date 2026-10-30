@@ -110,7 +110,7 @@ nodes:
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `kind` | yes | — | Must be `"Cluster"` |
-| `name` | no | `"default"` | Cluster name, used in resource naming; must be a valid name (see below) |
+| `name` | no | `"default"` | Cluster name, used in resource naming; must be a valid name (see below). The `NAME` argument of `sind create cluster` and `SIND_CLUSTER` take precedence: see [Create a cluster]({{< relref "/usage/cluster-lifecycle#create-a-cluster" >}}) |
 | `realm` | no | `"sind"` | Realm namespace for resource isolation; must be a valid name (see below). `--realm` and `SIND_REALM` take precedence, and later commands do not read it: see [Realms]({{< relref "/configuration/realms#setting-the-realm" >}}) |
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
@@ -122,7 +122,7 @@ nodes:
 | `monitoring` | no | `false` | Collect the cluster's metrics and logs in the realm's monitoring stack (see [Monitoring](#monitoring)) |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
-Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`. A cluster may not be named `ssh`, as its config volume would be the realm's SSH volume, `<realm>-ssh-config`, nor have a name ending in `-ssh`, as the config volume of cluster `x-ssh` would be the SSH volume of realm `<realm>-x`. With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), the cluster name has at most 40 characters, Slurm's limit for clusters with accounting: slurmdbd builds the names of the cluster's database tables from it.
+Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line or in `SIND_CLUSTER`, and to `--realm` and `SIND_REALM`. A cluster may not be named `ssh`, as its config volume would be the realm's SSH volume, `<realm>-ssh-config`, nor have a name ending in `-ssh`, as the config volume of cluster `x-ssh` would be the SSH volume of realm `<realm>-x`. With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), the cluster name has at most 40 characters, Slurm's limit for clusters with accounting: slurmdbd builds the names of the cluster's database tables from it.
 
 ## Defaults section
 
