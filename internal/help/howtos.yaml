@@ -62,9 +62,9 @@
   title: Find out why a create is slow
   summary: How to see which check a node waits for.
   steps:
-    - Open the run from the card at the bottom right, or from Activity.
-    - Look at the nodes. Each shows the check that it waits for, such as ready munge, and how much of the wait limit it used.
-    - Open the lines. They are the same as --progress plain in a terminal.
+    - Open the run from the strip of the task dock, or from Activity.
+    - Look at the step nodes. Each node shows what it waits for and how much of the wait limit it used, such as waits for munge · 19s of 5m00s.
+    - In a terminal, --progress plain writes the steps and the waits of the nodes as lines.
     - If a node fails, read the error and the logs of its unit.
   commands:
     - sind create cluster --progress plain
@@ -77,7 +77,7 @@
   steps:
     - Open the cluster.
     - Press Add workers and choose how many. The dialog shows what they take of the Docker host.
-    - Press Add, such as Add 2 workers. The card at the bottom right shows the progress.
+    - Press Add, such as Add 2 workers. The strip of the task dock shows the progress.
   commands:
     - sind create worker dev --count 2
   doc: usage/worker-management
