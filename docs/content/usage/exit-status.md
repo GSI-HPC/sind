@@ -12,7 +12,7 @@ Scripts branch on sind's exit status, so it is part of the command line contract
 | Status | Meaning | Typical cause |
 |--------|---------|---------------|
 | `0` | The command succeeded | |
-| `1` | The command ran and failed | Docker is not reachable, a node did not become ready within `--wait`, a cluster does not exist, a required `sind doctor` check failed, an invalid `SIND_REALM` or config file |
+| `1` | The command ran and failed | Docker is not reachable, a node did not become ready within `--wait`, a cluster does not exist, a required `sind doctor` check failed, an invalid `SIND_*` variable, such as `SIND_REALM`, or config file |
 | `2` | sind rejected the command line before acting on it | An unknown command or flag, a flag value or argument that is not valid, the wrong number of arguments |
 | `130` | SIGINT or SIGTERM interrupted the command | Ctrl-C, `timeout`, `docker stop` |
 
@@ -48,7 +48,7 @@ This covers:
 - `sind exec` without `--` and a command, and `sind ssh` with a remote command that does not follow `--`: `sind ssh worker-0 hostname`
 - a `--progress` mode sind does not know, or one it cannot show, such as `tty` where standard error is not a terminal, and a `--progress-log` file it cannot use: `sind --progress tree get clusters`, `sind --progress tty create cluster 2>create.log` (see [Progress Display]({{< relref "/usage/progress" >}}))
 
-`SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`. `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command: with a value sind cannot use, it shows no progress, or writes no event log, and says why in one line when it does not know the mode or cannot use the file. The default activity log never fails a command and never says a word when it cannot be written.
+A `SIND_*` variable, such as `SIND_REALM`, and the config file are not part of the command line: an invalid one exits `1`, with an error that names it. `SIND_PROGRESS`, `SIND_PROGRESS_LOG` and `SIND_VERBOSE` fail no command: with a value sind cannot use, it shows no progress, writes no event log, or logs as without the variable, and says why in one line when it does not know the mode or the number, or cannot use the file. The default activity log never fails a command and never says a word when it cannot be written. See [Environment Variables]({{< relref "/usage/environment" >}}).
 
 ## Commands that run a program
 

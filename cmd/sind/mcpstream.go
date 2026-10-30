@@ -19,6 +19,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/fsutil"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,12 +27,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mcpTokenEnv names the environment variable that sets the bearer token
-// `sind mcp stream` requires.
-const mcpTokenEnv = "SIND_MCP_TOKEN"
-
 // mcpTokenFile is the file in sind's state directory that holds the token
-// `sind mcp stream` generated when mcpTokenEnv is not set.
+// `sind mcp stream` generated when SIND_MCP_TOKEN is not set.
 const mcpTokenFile = "mcp-token"
 
 // mcpShutdownTimeout bounds how long a stopped stream waits for requests
@@ -114,9 +111,9 @@ func printMCPStreamHint(cmd *cobra.Command, addr net.Addr, tokenPath string) {
 		_, _ = fmt.Fprintf(w, "MCP server listening on %s\n", url)
 	}
 	if tokenPath != "" {
-		_, _ = fmt.Fprintf(w, "Bearer token in %s (new at every start; set %s to keep one)\n", tokenPath, mcpTokenEnv)
+		_, _ = fmt.Fprintf(w, "Bearer token in %s (new at every start; set %s to keep one)\n", tokenPath, envvar.MCPToken)
 	} else {
-		_, _ = fmt.Fprintf(w, "Bearer token from %s\n", mcpTokenEnv)
+		_, _ = fmt.Fprintf(w, "Bearer token from %s\n", envvar.MCPToken)
 	}
 	_, _ = fmt.Fprintf(w, "Client config: {\"type\": \"http\", \"url\": %q, \"headers\": {\"Authorization\": \"Bearer <token>\"}}\n", url)
 }
@@ -142,12 +139,12 @@ func streamURL(addr net.Addr) string {
 // which it writes to mcpTokenFile in sind's state directory, readable by
 // the user alone, and whose path it returns.
 func mcpStreamToken() (token, path string, err error) {
-	if token := os.Getenv(mcpTokenEnv); token != "" {
+	if token, ok := envvar.Lookup(envvar.MCPToken); ok {
 		if len(token) < mcpMinTokenLength {
-			return "", "", fmt.Errorf("%s: a token has at least %d characters, e.g. from openssl rand -hex 32", mcpTokenEnv, mcpMinTokenLength)
+			return "", "", fmt.Errorf("%s: a token has at least %d characters, e.g. from openssl rand -hex 32", envvar.MCPToken, mcpMinTokenLength)
 		}
 		if strings.ContainsFunc(token, func(c rune) bool { return c <= ' ' || c > '~' }) {
-			return "", "", fmt.Errorf("%s: a token is printable ASCII without spaces", mcpTokenEnv)
+			return "", "", fmt.Errorf("%s: a token is printable ASCII without spaces", envvar.MCPToken)
 		}
 		return token, "", nil
 	}

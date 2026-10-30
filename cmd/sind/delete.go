@@ -45,7 +45,11 @@ and its exported SSH configuration, as delete realm does.`,
 				}
 				return runDeleteClustersAll(cmd)
 			}
-			return runDeleteCluster(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runDeleteCluster(cmd, name)
 		}),
 	}
 
@@ -80,7 +84,7 @@ func deleteClusterTarget(cmd *cobra.Command, args []string) string {
 	if all, _ := cmd.Flags().GetBool("all"); all {
 		return ""
 	}
-	return clusterArg(args)
+	return clusterTarget(cmd, args)
 }
 
 func runDeleteCluster(cmd *cobra.Command, name string) error {

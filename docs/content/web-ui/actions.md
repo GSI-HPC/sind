@@ -20,7 +20,7 @@ When the command starts, the dialog closes and you stay on your page. The strip 
 
 Esc, **Cancel**, a click beside the dialog or Back in the browser closes it, and the focus goes back to the button that opened it. When you have changed a field, the dialog asks first: **Keep editing** or **Discard**. When you leave the page while such a dialog is open, your browser asks first. **New cluster** keeps a draft instead.
 
-You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. On the New cluster page, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm`, as `SIND_REALM` in your shell would otherwise take the place of the config's realm.
+You can copy the command and run it in a terminal. It makes the same change. This is useful to learn the CLI, to script the change, or to run it again later. On the New cluster page, **Copy script** gives a shell script that does all that Create does: it saves the config, creates the data directory if needed, and runs the command with `--realm` and the name of the cluster, as `SIND_REALM` and `SIND_CLUSTER` in your shell would otherwise take the place of the config's realm and name. Like the command, it leaves out a wait of 5 minutes and a pull that is off, so `SIND_WAIT` and `SIND_PULL` in your shell apply to it.
 
 {{< uishot "dialog-create-worker" "Each dialog shows the command that it runs, here `sind create worker dev`." >}}
 
@@ -105,7 +105,7 @@ To confirm, type the name of the worker when you delete one worker, the number o
 
 Every dialog keeps its footer in view: the button, Cancel, what to type, and the status, such as **1 problem: How many** or **1 warning**, which takes you to it, with the first problem or warning in words beside it.
 
-Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. It shows a table with a row for each cluster and one for the realm: what goes of each, its data volumes in red, and what stays, the host directories of the cluster or the containers that sind detaches. Open it from the **⋯** menu of the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell.
+Delete realm deletes every cluster of the realm, its mesh and its monitoring stack, and detaches the containers that sind did not make. It shows a table with a row for each cluster and one for the realm: what goes of each, its data volumes in red, and what stays, the host directories of the cluster or the containers that sind detaches. Open it from the **⋯** menu of the realm's row on the Overview, or from Mesh and DNS. Its command always names the realm, so a copy of it deletes this realm in any shell. In the same way, the commands of Delete cluster and Delete clusters name each cluster, and that of Delete workers the cluster of the workers, `default` too, so a copy deletes the same cluster or workers in a shell with `SIND_CLUSTER`.
 
 {{< uishot "dialog-delete-cluster" "A delete lists what goes and what stays, and asks you to type the name of the cluster." >}}
 

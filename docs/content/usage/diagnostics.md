@@ -192,6 +192,8 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 | `-vv` | debug | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
+[`SIND_VERBOSE`]({{< relref "/usage/environment" >}}) gives the number of `-v` when the command line has none: `export SIND_VERBOSE=2` logs every command as `-vv` does.
+
 Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete` and `power` go above their progress display, never into it.
 
 ```bash
@@ -227,7 +229,7 @@ Example output at `-vv` (colorized on interactive terminals):
 
 ## JSON output
 
-Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
+Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is [`SIND_OUTPUT`]({{< relref "/usage/environment#output" >}}), else `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
 
 ```bash
 sind get clusters -o json
@@ -359,7 +361,7 @@ Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster.
 {{< /ui >}}
 {{< /ways >}}
 
-Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `default`. A full DNS name ending in `.sind` is rejected.
+Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `SIND_CLUSTER`, else `default`. A full DNS name ending in `.sind` is rejected.
 
 ```
 CONTAINER            ROLE        FQDN                      IP          STATUS

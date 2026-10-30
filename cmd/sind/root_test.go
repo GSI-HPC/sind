@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -179,5 +182,39 @@ func TestFlagHelpDefaults(t *testing.T) {
 				assert.NotContains(t, stdout, tt.notWant)
 			}
 		})
+	}
+}
+
+// clusterArgs matches the arguments in the Use of a command that name a
+// cluster, or nodes, whose cluster SIND_CLUSTER names when they name none.
+var clusterArgs = regexp.MustCompile(`\b(NAME|CLUSTER|NODES?)\b`)
+
+// TestEnvVarsInHelp checks that each variable of envvar.CommandLine stands
+// in for the flag of its name (SIND_PROGRESS_LOG for --progress-log), or for
+// SIND_CLUSTER the arguments that name a cluster, and that the usage of
+// every flag of that name, or the help of every command with such an
+// argument, names the variable.
+func TestEnvVarsInHelp(t *testing.T) {
+	seen := map[string]bool{}
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		for _, name := range envvar.CommandLine {
+			flag := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(name, "SIND_")), "_", "-")
+			if f := cmd.LocalFlags().Lookup(flag); f != nil {
+				assert.Contains(t, f.Usage, "(default: "+name+", else ", "--%s of %s", flag, cmd.CommandPath())
+				seen[name] = true
+			}
+		}
+		if clusterArgs.MatchString(cmd.Use) {
+			assert.Contains(t, cmd.Long, envvar.Cluster, "the help of %s", cmd.CommandPath())
+			seen[envvar.Cluster] = true
+		}
+		for _, sub := range cmd.Commands() {
+			walk(sub)
+		}
+	}
+	walk(NewRootCommand())
+	for _, name := range envvar.CommandLine {
+		assert.True(t, seen[name], "%s stands in for no flag", name)
 	}
 }

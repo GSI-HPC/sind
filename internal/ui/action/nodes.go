@@ -61,15 +61,29 @@ func pickNodes(f Form, c Context, realm, clusterName, workersFor string) ([]clus
 
 // nodeWords returns the node arguments for the short names of nodes of the
 // cluster, as sind takes them: one folded set such as worker-[0-3].dev, or,
-// should folding not give back exactly these nodes, the plain names.
+// should folding not give back exactly these nodes, the plain names. The
+// nodes of the default cluster go without it, as one types them.
 func nodeWords(clusterName string, shorts []string) []string {
+	if clusterName == config.DefaultClusterName {
+		return foldNodes(shorts)
+	}
+	return namedNodeWords(clusterName, shorts)
+}
+
+// namedNodeWords is nodeWords with the cluster in the arguments, the
+// default one too, for a command whose copy must act on these nodes in a
+// shell with SIND_CLUSTER: delete worker.
+func namedNodeWords(clusterName string, shorts []string) []string {
 	names := make([]string, len(shorts))
 	for i, s := range shorts {
-		names[i] = s
-		if clusterName != config.DefaultClusterName {
-			names[i] = s + "." + clusterName
-		}
+		names[i] = s + "." + clusterName
 	}
+	return foldNodes(names)
+}
+
+// foldNodes returns node names as one folded set, or the names themselves
+// should folding not give back exactly these nodes.
+func foldNodes(names []string) []string {
 	if set, err := nodeset.Parse(strings.Join(names, ",")); err == nil {
 		folded := set.String()
 		back, err := nodeset.Parse(folded)

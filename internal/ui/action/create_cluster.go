@@ -478,8 +478,9 @@ func mountPath(f Form, ps *problems) string {
 
 // clusterScript is the shell script that does what Create does: it writes
 // the config, readable by its owner alone, creates the directories and
-// runs the command. It always names the realm, as SIND_REALM in the shell
-// would else take the place of the config's.
+// runs the command. file is the name of the cluster, which names the config
+// file too. It always names the realm and the cluster, as SIND_REALM and
+// SIND_CLUSTER in the shell would else take the place of the config's.
 func clusterScript(realm, file, content string, dirs, flags []string) string {
 	sum := sha256.Sum256([]byte(content))
 	// The tag of the here-document: a line that the config cannot hold.
@@ -491,7 +492,7 @@ func clusterScript(realm, file, content string, dirs, flags []string) string {
 	for _, d := range dirs {
 		fmt.Fprintf(&b, "mkdir -p %s\n", quoteWord(d))
 	}
-	fmt.Fprintf(&b, "sind --realm %s create cluster --config \"$cfg\"", quoteWord(realm))
+	fmt.Fprintf(&b, "sind --realm %s create cluster %s --config \"$cfg\"", quoteWord(realm), quoteWord(file))
 	if len(flags) > 0 {
 		b.WriteString(" " + Quote(flags))
 	}

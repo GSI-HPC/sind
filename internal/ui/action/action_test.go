@@ -353,9 +353,11 @@ func TestBuildDeleteCluster(t *testing.T) {
 	assert.Contains(t, cmd.Goes, "the volumes sind-dev-config, sind-dev-munge")
 	assert.Contains(t, cmd.Stays, "the other 2 clusters of realm sind, and its mesh")
 
+	// The default cluster is named too, for a copy in a shell with
+	// SIND_CLUSTER.
 	cmd, err = build(t, "delete-cluster", form("cluster", "default"))
 	require.NoError(t, err)
-	assert.Equal(t, "sind delete cluster", cmd.Display)
+	assert.Equal(t, "sind delete cluster default", cmd.Display)
 }
 
 // lossStore is a store whose realm sind has three clusters: default with
@@ -383,11 +385,11 @@ func lossStore() *testStoreT {
 func TestBuildDeleteClusters(t *testing.T) {
 	cmd, err := build(t, "delete-clusters", form("clusters", "sind/dev,ci/ci1", "clusters", "sind/default sind/dev"))
 	require.NoError(t, err)
-	assert.Equal(t, "sind --realm ci delete cluster ci1\nsind delete cluster\nsind delete cluster dev", cmd.Display)
+	assert.Equal(t, "sind --realm ci delete cluster ci1\nsind delete cluster default\nsind delete cluster dev", cmd.Display)
 	assert.Empty(t, cmd.Argv)
 	require.Len(t, cmd.Parts, 3)
 	assert.Equal(t, Part{Action: "delete-cluster", Realm: "ci", Cluster: "ci1", Argv: []string{"sind", "--realm", "ci", "delete", "cluster", "ci1"}, Display: "sind --realm ci delete cluster ci1"}, cmd.Parts[0])
-	assert.Equal(t, []string{"sind", "delete", "cluster"}, cmd.Parts[1].Argv)
+	assert.Equal(t, []string{"sind", "delete", "cluster", "default"}, cmd.Parts[1].Argv)
 	assert.Equal(t, "Delete 3 clusters", cmd.OK)
 	assert.Equal(t, []string{"sind ui runs one command for each cluster. The commands of one realm run one after the other, as each waits for the lock of the realm."}, cmd.Notes)
 	// A row for each cluster, and one for each realm that goes with its
@@ -506,7 +508,9 @@ func TestBuildDeleteWorker(t *testing.T) {
 
 	cmd, err = build(t, "delete-worker", form("cluster", "default", "nodes", "worker-0"))
 	require.NoError(t, err)
-	assert.Equal(t, "sind delete worker worker-0", cmd.Display)
+	// The default cluster is named too, for a copy in a shell with
+	// SIND_CLUSTER.
+	assert.Equal(t, "sind delete worker worker-0.default", cmd.Display)
 	assert.Equal(t, "Delete worker-0", cmd.OK)
 	assert.Equal(t, []string{"the container sind-default-worker-0 and its DNS record", "its Slurm node: jobs on it fail"}, cmd.Goes)
 	assert.Equal(t, []string{"default with no worker, its controller and its data: jobs wait until you add workers"}, cmd.Stays)

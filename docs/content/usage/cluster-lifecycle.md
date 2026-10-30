@@ -31,18 +31,18 @@ sind ui saves the config and runs `sind create cluster --config FILE`, with `--p
 
 | Argument/Flag | Default | Description |
 |---------------|---------|-------------|
-| `NAME` | `default` | Cluster name (positional, optional) |
+| `NAME` | `SIND_CLUSTER`, else the config's `name`, else `default` | Cluster name (positional, optional) |
 | `--config` | — | Path to YAML configuration file, or `-` to read it from stdin; an empty value is a usage error |
-| `--pull` | `false` | Pull each image of the cluster once before creating containers |
+| `--pull` | `SIND_PULL`, else `false` | Pull each image of the cluster once before creating containers |
 | `--data` | `.` | Host directory to mount at `/data` on all nodes, or `volume` to use a Docker volume; an empty value is a usage error. Ignored if the config sets `storage.dataStorage.type` or `hostPath`. |
 | `--monitoring` | `false` | Collect the cluster's metrics and logs in the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}); adds to the config's `monitoring`, which `--monitoring=false` does not turn off |
-| `--wait` | `5m` | How long to wait for the nodes and Slurm to become ready, counted from when the node containers have started; `0` for no limit |
+| `--wait` | `SIND_WAIT`, else `5m` | How long to wait for the nodes and Slurm to become ready, counted from when the node containers have started; `0` for no limit |
 
 Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. `--config -` reads the configuration from stdin; empty input is then an error.
 
 Reading a stdin that is not a terminal without `--config -` is deprecated and will be removed: sind still does it for now, but first prints a `Warning:`, and empty input creates the minimal cluster. A script that runs sind with a pipe it does not mean as the configuration, such as `ssh HOST sind create cluster` or a `while read` loop, should redirect stdin from `/dev/null`.
 
-When both a positional `NAME` and a config file with a `name:` field are provided, the positional argument takes precedence.
+When both a positional `NAME` and a config file with a `name:` field are provided, the positional argument takes precedence. [`SIND_CLUSTER`]({{< relref "/usage/environment#the-cluster" >}}) comes between them: it names the cluster when `NAME` does not, whatever the config's `name:` says.
 
 ```bash
 # Minimal cluster (named "default")

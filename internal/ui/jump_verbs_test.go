@@ -115,6 +115,9 @@ func TestJumpVerbs(t *testing.T) {
 		{name: "delete one worker", q: "delete worker-0.dev", want: []string{
 			"Actions | Delete worker-0.dev… | Removes the worker container. Jobs on it fail |",
 		}},
+		{name: "delete a worker of the default cluster: the command names it", q: "delete worker-0", want: []string{
+			"Actions | Delete worker-0… | Removes the worker container. Jobs on it fail | sind --realm ci delete worker worker-0.default |",
+		}},
 		{name: "delete a controller", q: "delete controller.dev", not: []string{"Actions"}},
 		{name: "delete a cluster", q: "rm cluster hpc", want: []string{
 			"Actions | Delete cluster hpc… | Asks first. This cannot be undone | sind delete cluster hpc | /dialogs/delete-cluster?cluster=hpc&realm=sind |   | ",
@@ -160,7 +163,7 @@ func TestJumpVerbs(t *testing.T) {
 		}},
 		{name: "a short name that a page has not", ctx: dev, q: "controller", not: []string{"More for controller |"}},
 		{name: "a cluster alone", q: "default", want: []string{
-			"More for default | Delete cluster default… | Asks first. This cannot be undone | sind --realm ci delete cluster | /dialogs/delete-cluster?cluster=default&realm=ci |   | ",
+			"More for default | Delete cluster default… | Asks first. This cannot be undone | sind --realm ci delete cluster default | /dialogs/delete-cluster?cluster=default&realm=ci |   | ",
 		}},
 		{name: "a node set alone is no name", q: "worker-[0-1].dev", not: []string{"More for"}},
 	} {

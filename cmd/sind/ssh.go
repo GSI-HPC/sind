@@ -103,7 +103,11 @@ func newEnterCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runEnter(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runEnter(cmd, name)
 		},
 	}
 	addUserFlag(cmd, "shell")
@@ -188,7 +192,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 	if err := checkProgressFlag(cmd); err != nil {
 		return err
 	}
-	applyVerbosity(cmd)
+	if note := applyVerbosity(cmd); note != "" {
+		cmd.PrintErrln(note)
+	}
 
 	clusterName, command, err := parseExecArgs(flags.Args(), flags.ArgsLenAtDash())
 	if err != nil {
@@ -275,14 +281,14 @@ func parseExecArgs(args []string, dashIdx int) (clusterName string, command []st
 		return "", nil, argsErrorf("expected at most one argument before --, got %d", dashIdx)
 	}
 
-	clusterName = "default"
 	if dashIdx == 1 {
-		clusterName = args[0]
-		if err := config.CheckName("cluster", clusterName); err != nil {
+		if err := config.CheckName("cluster", args[0]); err != nil {
 			return "", nil, argsError(err)
 		}
 	}
-
+	if clusterName, err = clusterArg(args[:dashIdx]); err != nil {
+		return "", nil, err
+	}
 	return clusterName, command, nil
 }
 

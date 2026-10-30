@@ -3,11 +3,14 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +35,11 @@ func NewRootCommand() *cobra.Command {
 		SilenceErrors:    true,
 		TraverseChildren: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			applyVerbosity(cmd)
+			// exec parses its own flags, -v among them, and writes the
+			// note once it has.
+			if note := applyVerbosity(cmd); note != "" && !cmd.DisableFlagParsing {
+				cmd.PrintErrln(note)
+			}
 			cmd.SetContext(withStderr(cmd.Context(), cmd.ErrOrStderr()))
 			if err := checkRealmFlag(cmd); err != nil {
 				return err
@@ -44,14 +51,15 @@ func NewRootCommand() *cobra.Command {
 	cmd.SetVersionTemplate("{{.Version}}\n")
 	cmd.SetFlagErrorFunc(cobratree.FlagError)
 
-	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
-	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
+	cmd.PersistentFlags().String("realm", "",
+		"realm namespace for resource isolation (default: "+envvar.Realm+", else the realm of a config file, else "+mesh.DefaultRealm+")")
+	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace) (default: "+envvar.Verbose+", else 0)")
 	cmd.PersistentFlags().String("progress", "",
 		"how create, delete, connect, disconnect and power show their progress on standard error: "+progressModes()+
-			" (default: "+envProgress+", else auto, a live tree when standard error is a terminal; plain writes lines for a log)")
+			" (default: "+envvar.Progress+", else auto, a live tree when standard error is a terminal; plain writes lines for a log)")
 	cmd.PersistentFlags().String("progress-log", "",
 		"append the progress events of create, delete, connect, disconnect and power to this file, one JSON object per line, "+
-			"created readable by you alone (default: "+envProgressLog+", else $XDG_STATE_HOME/sind/activity.jsonl; an empty value writes no log)")
+			"created readable by you alone (default: "+envvar.ProgressLog+", else $XDG_STATE_HOME/sind/activity.jsonl; an empty value writes no log)")
 
 	_ = cmd.RegisterFlagCompletionFunc("realm", completeRealmNames)
 	_ = cmd.RegisterFlagCompletionFunc("progress", cobra.FixedCompletions(progressModeNames(), cobra.ShellCompDirectiveNoFileComp))
@@ -84,10 +92,32 @@ func NewRootCommand() *cobra.Command {
 	return cmd
 }
 
-// applyVerbosity installs the logger for the -v count parsed so far.
-func applyVerbosity(cmd *cobra.Command) {
-	v, _ := cmd.Root().Flags().GetCount("verbose")
+// applyVerbosity installs the logger for the verbosity parsed so far
+// (verbosity), and returns its note, which the caller writes once.
+func applyVerbosity(cmd *cobra.Command) (note string) {
+	v, note := verbosity(cmd)
 	cmd.SetContext(sindlog.With(cmd.Context(), newLogger(cmd.ErrOrStderr(), v)))
+	return note
+}
+
+// verbosity returns the log verbosity of cmd: the -v count, else the number
+// SIND_VERBOSE holds, else 0. A SIND_VERBOSE that is no such number fails no
+// command, as it changes only what the logger shows: it is ignored, and the
+// note says so.
+func verbosity(cmd *cobra.Command) (v int, note string) {
+	flags := cmd.Root().Flags()
+	if flags.Changed("verbose") {
+		v, _ = flags.GetCount("verbose")
+		return v, ""
+	}
+	env, ok := envvar.Lookup(envvar.Verbose)
+	if !ok {
+		return 0, ""
+	}
+	if v, err := strconv.Atoi(env); err == nil && v >= 0 {
+		return v, ""
+	}
+	return 0, fmt.Sprintf("sind: %s is %q; it takes a number, such as 2 for -vv; it is ignored", envvar.Verbose, env)
 }
 
 // checkRealmFlag rejects an invalid --realm before any command runs, as a

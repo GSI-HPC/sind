@@ -143,6 +143,49 @@ func TestRun_InvalidSindRealmExits1(t *testing.T) {
 	assert.Contains(t, stderr.String(), `SIND_REALM: invalid realm name "Not_A_Realm"`)
 }
 
+// TestRun_InvalidSindClusterExits1 checks that an invalid SIND_CLUSTER
+// exits 1, as SIND_REALM does.
+func TestRun_InvalidSindClusterExits1(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "Dev")
+	var stderr bytes.Buffer
+
+	code := run(noDocker(t.Context()), []string{"get", "cluster"}, &stderr)
+
+	assert.Equal(t, exitFailure, code)
+	assert.Contains(t, stderr.String(), `SIND_CLUSTER: invalid cluster name "Dev": it has uppercase letters`)
+}
+
+// TestInvalidSindCluster checks that every command that takes a cluster or
+// nodes, and names none, refuses an invalid SIND_CLUSTER before it calls
+// docker, with an error that is no usage error.
+func TestInvalidSindCluster(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "Dev")
+	config := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(config, []byte("kind: Cluster\nnodes: [controller, worker]\n"), 0o644))
+	for _, args := range [][]string{
+		{"create", "cluster", "--config", config},
+		{"create", "worker"},
+		{"delete", "cluster"},
+		{"get", "cluster"},
+		{"get", "auth-key"},
+		{"enter"},
+		{"exec", "--", "sinfo"},
+		{"power", "on", "worker-0"},
+		{"delete", "worker", "worker-0"},
+		{"ssh", "worker-0"},
+		{"logs", "worker-0"},
+		{"get", "node", "worker-0"},
+	} {
+		var m mock.Executor
+
+		_, _, err := executeWithMock(&m, args...)
+
+		require.ErrorContains(t, err, `SIND_CLUSTER: invalid cluster name "Dev"`, "%v", args)
+		assert.False(t, cobratree.IsUsage(err), "%v exits 1", args)
+		assert.Empty(t, m.Calls, "%v calls no docker", args)
+	}
+}
+
 func TestNewChildExitError(t *testing.T) {
 	for _, tc := range []struct {
 		script string

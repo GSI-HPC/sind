@@ -189,13 +189,13 @@ mkdir -p "$(dirname "$cfg")"
 (umask 077 && cat >"$cfg") <<'`+tag+`'
 `+cmd.Config.Content+tag+`
 mkdir -p '/scratch/missing it'\''s'
-sind --realm sind create cluster --config "$cfg" --pull --wait 0
+sind --realm sind create cluster hpc --config "$cfg" --pull --wait 0
 `, cmd.Script)
 
 	cmd, err = build(t, "create-cluster", valid("realm", "ci", "name", "Bad"))
 	require.NoError(t, err)
 	assert.Contains(t, cmd.Script, "/configs/NAME.yaml\"\n")
-	assert.True(t, strings.HasSuffix(cmd.Script, "\nsind --realm ci create cluster --config \"$cfg\"\n"))
+	assert.True(t, strings.HasSuffix(cmd.Script, "\nsind --realm ci create cluster NAME --config \"$cfg\"\n"))
 }
 
 func TestBuildCreateCluster_DataDirectory(t *testing.T) {

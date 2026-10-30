@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
@@ -158,9 +159,13 @@ var mcpExcludedFlags = []string{
 // schema has no default. ophis takes a flag's default from its DefValue,
 // but these flags mean something else when they are not given than with
 // that value, which a client that fills in the defaults of a schema would
-// send: logs --tail 0 shows no line, and logs without it every line.
+// send: logs --tail 0 shows no line, and logs without it every line; the
+// create commands without --wait and --pull take SIND_WAIT and SIND_PULL
+// from the server's environment, and --wait 0 waits without a limit.
 var mcpNoDefault = map[string][]string{
-	"logs": {"tail"},
+	"logs":           {"tail"},
+	"create cluster": {"wait", "pull"},
+	"create worker":  {"wait", "pull"},
 }
 
 // mcpFlagUsage replaces, by command path below the root and flag name, the
@@ -429,7 +434,7 @@ their input schemas, to mcp-tools.json in the working directory.`
 		cmd.AddCommand(newMCPEditorCommand(e))
 	}
 	stream.Long = `Serve sind's MCP tools over streamable HTTP. Every request needs the
-header "Authorization: Bearer <token>". The token is ` + mcpTokenEnv + ` or, when
+header "Authorization: Bearer <token>". The token is ` + envvar.MCPToken + ` or, when
 that is not set, a new random one, written at every start to ` + mcpTokenFile + `
 in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 	stream.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -472,11 +477,11 @@ func asMCPServer(cmd *cobra.Command) {
 		root := cmd.Root()
 		if root.Flags().Changed("realm") {
 			realm, _ := root.Flags().GetString("realm")
-			_ = os.Setenv("SIND_REALM", realm)
+			_ = os.Setenv(envvar.Realm, realm)
 		}
-		_ = os.Setenv(envProgress, cliprogress.ModeNone.String())
-		_ = os.Unsetenv(envProgressLog)
-		_ = os.Setenv(envLogTimestamps, "false")
+		_ = os.Setenv(envvar.Progress, cliprogress.ModeNone.String())
+		_ = os.Unsetenv(envvar.ProgressLog)
+		_ = os.Setenv(envvar.LogTimestamps, "false")
 		root.Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
 	}

@@ -201,6 +201,23 @@ func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 	assert.ErrorContains(t, err, "at most one argument before --")
 }
 
+// TestParseExecArgs_ClusterFromEnv covers SIND_CLUSTER, the cluster of exec
+// without CLUSTER, which sind checks only then.
+func TestParseExecArgs_ClusterFromEnv(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "dev")
+	cluster, _, err := parseExecArgs([]string{"hostname"}, 0)
+	require.NoError(t, err)
+	assert.Equal(t, "dev", cluster)
+
+	t.Setenv("SIND_CLUSTER", "Dev")
+	cluster, _, err = parseExecArgs([]string{"prod", "hostname"}, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "prod", cluster)
+	_, _, err = parseExecArgs([]string{"hostname"}, 0)
+	require.EqualError(t, err, `SIND_CLUSTER: invalid cluster name "Dev": it has uppercase letters`)
+	assert.False(t, cobratree.IsUsage(err))
+}
+
 func TestSSH_Help(t *testing.T) {
 	for _, flag := range []string{"-h", "--help"} {
 		t.Run(flag, func(t *testing.T) {
@@ -268,6 +285,21 @@ func TestExec_VerboseAfterExec(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, stderr, "TRAC")
+}
+
+// TestExec_VerboseNote checks that exec writes the note of a SIND_VERBOSE
+// that is no number once, and none when its own -v is in effect.
+func TestExec_VerboseNote(t *testing.T) {
+	t.Setenv("SIND_VERBOSE", "lots")
+	for args, notes := range map[string]int{"exec -- hostname": 1, "exec -v -- hostname": 0} {
+		var m mock.Executor
+		m.AddResult("", "", assert.AnError) // docker ps for the exec target
+
+		_, stderr, err := executeWithMock(&m, strings.Fields(args)...)
+
+		require.Error(t, err)
+		assert.Equal(t, notes, strings.Count(stderr, "SIND_VERBOSE is"), "%s: %s", args, stderr)
+	}
 }
 
 func TestExec_UnknownFlag(t *testing.T) {

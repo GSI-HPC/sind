@@ -230,6 +230,21 @@ func TestDoctorCommand_JSON(t *testing.T) {
 	assert.NotContains(t, out, "remediation")
 }
 
+// TestDoctorCommand_OutputFromEnv checks that SIND_OUTPUT=json gives the
+// JSON of -o json.
+func TestDoctorCommand_OutputFromEnv(t *testing.T) {
+	t.Setenv("SIND_OUTPUT", "json")
+	var m mock.Executor
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(true)), t)
+	require.NoError(t, err)
+
+	var checks []clidoctor.Check
+	require.NoError(t, json.Unmarshal([]byte(out), &checks))
+	assert.Len(t, checks, 5)
+}
+
 func TestDoctorCommand_JSONFailures(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("27.5.0"), "", nil) // docker info

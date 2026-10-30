@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -245,9 +246,11 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	if f.logLevel != "" {
 		entry.Args = append(entry.Args, "--log-level", f.logLevel)
 	}
-	if env, ok := f.env["SIND_REALM"]; ok {
-		if err := config.CheckName("realm", env); err != nil {
-			return mcpconfig.Server{}, cobratree.Usagef("--env SIND_REALM: %w", err)
+	for _, v := range []struct{ name, kind string }{{envvar.Realm, "realm"}, {envvar.Cluster, "cluster"}} {
+		if env, ok := f.env[v.name]; ok {
+			if err := config.CheckName(v.kind, env); err != nil {
+				return mcpconfig.Server{}, cobratree.Usagef("--env %s: %w", v.name, err)
+			}
 		}
 	}
 	if len(f.env) > 0 {
@@ -255,19 +258,20 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	}
 	// The realm in effect, as every other command takes it: --realm, or
 	// else SIND_REALM, unless --env names one.
-	_, envRealm := f.env["SIND_REALM"]
-	if cmd.Root().Flags().Changed("realm") || (!envRealm && os.Getenv("SIND_REALM") != "") {
+	_, envRealm := f.env[envvar.Realm]
+	_, shellRealm := envvar.Lookup(envvar.Realm)
+	if cmd.Root().Flags().Changed("realm") || (!envRealm && shellRealm) {
 		realm, err := realmFromFlag(cmd)
 		if err != nil {
 			return mcpconfig.Server{}, err
 		}
-		if env, ok := f.env["SIND_REALM"]; ok && env != realm {
-			return mcpconfig.Server{}, cobratree.Usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
+		if env, ok := f.env[envvar.Realm]; ok && env != realm {
+			return mcpconfig.Server{}, cobratree.Usagef("--realm %s and --env %s=%s name different realms", realm, envvar.Realm, env)
 		}
 		if entry.Env == nil {
 			entry.Env = map[string]string{}
 		}
-		entry.Env["SIND_REALM"] = realm
+		entry.Env[envvar.Realm] = realm
 	}
 	return entry, nil
 }
