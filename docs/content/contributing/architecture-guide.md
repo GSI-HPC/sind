@@ -18,7 +18,7 @@ cmd/sind/          CLI commands (cobra)
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
-  ├── output.go    -o/--output handling (human, json)
+  ├── output.go    -o/--output handling (human, json; SIND_OUTPUT)
   ├── progress.go  Progress of create, delete, connect, disconnect and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis

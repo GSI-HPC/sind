@@ -227,7 +227,7 @@ Example output at `-vv` (colorized on interactive terminals):
 
 ## JSON output
 
-Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
+Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is [`SIND_OUTPUT`]({{< relref "/usage/environment#output" >}}), else `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
 
 ```bash
 sind get clusters -o json

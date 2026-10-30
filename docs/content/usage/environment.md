@@ -42,6 +42,7 @@ $ sind --help
 |----------|---------------|---------|-----|
 | `SIND_REALM` | `--realm` | the `realm` of the config file, else `sind` | [Realms]({{< relref "/configuration/realms" >}}) |
 | `SIND_CLUSTER` | the cluster argument, `NAME` or `CLUSTER`, and the cluster of a node argument that names none | `default`; for `sind create cluster` the `name` of the config file, else `default` | [The cluster](#the-cluster) |
+| `SIND_OUTPUT` | `-o`, `--output` of `sind get` and `sind doctor` | `human` | [Output](#output) |
 | `SIND_PROGRESS` | `--progress` | `auto` | [Progress Display]({{< relref "/usage/progress" >}}) |
 | `SIND_PROGRESS_LOG` | `--progress-log` | the [activity log]({{< relref "/usage/progress#the-activity-log" >}}) | [Progress Display]({{< relref "/usage/progress#event-log" >}}) |
 | `SIND_LOG_TIMESTAMPS` | no flag: `false` leaves the time stamp off log lines | time stamps | [MCP]({{< relref "/guides/mcp" >}}) |
@@ -62,6 +63,18 @@ sind get nodes                # the nodes of every cluster, as without SIND_CLUS
 
 As `SIND_REALM` wins over the `realm` of a config file, `SIND_CLUSTER` wins over its `name`: `sind create cluster --config lab.yaml` creates `dev`, not the cluster `lab.yaml` names. Give the name as `NAME` to create that one: `sind create cluster lab --config lab.yaml`.
 
+## Output
+
+`SIND_OUTPUT=json` makes every `sind get` and `sind doctor` print JSON, for a script or an agent that reads it. It changes the commands that print one value too, which then print it inside a JSON object: `sind get ssh-config`, the keys of `get ssh-private-key`, `get ssh-public-key`, `get ssh-known-hosts` and `get auth-key`, and `get coredns-config`. Give them `-o human` where a script takes the value as it is:
+
+```bash
+export SIND_OUTPUT=json
+sind get clusters                                 # JSON
+ssh -F "$(sind get ssh-config -o human)" controller.default.sind.sind
+```
+
+The tools of the [MCP server]({{< relref "/guides/mcp" >}}) always run with `-o json`, whatever `SIND_OUTPUT` says.
+
 ## Values sind cannot use
 
 A variable is not part of the command line, so a value that sind cannot use is no usage error, which exits `2` (see [Exit Status]({{< relref "/usage/exit-status" >}})):
@@ -73,6 +86,8 @@ A variable is not part of the command line, so a value that sind cannot use is n
   12:00:00.000 ERRO SIND_REALM: invalid realm name "ci_42": '_' is not a letter, a digit or a hyphen
   $ echo $?
   1
+  $ SIND_OUTPUT=yaml sind get clusters
+  12:00:00.000 ERRO invalid SIND_OUTPUT value "yaml": want human or json
   ```
 
   sind checks the variable only when it is in effect: `sind --realm ci get clusters` does not read `SIND_REALM`, `sind version` reads no realm, and `sind ssh worker-0.dev` reads no `SIND_CLUSTER`.

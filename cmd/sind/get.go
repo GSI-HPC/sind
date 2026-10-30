@@ -28,7 +28,7 @@ func newGetCommand() *cobra.Command {
 		Short: "Display resources",
 	}
 
-	cmd.PersistentFlags().StringP("output", "o", "human", "output format (human|json)")
+	cmd.PersistentFlags().StringP("output", "o", "", outputUsage)
 	registerOutputCompletion(cmd)
 
 	cmd.AddCommand(newGetClusterCommand())
