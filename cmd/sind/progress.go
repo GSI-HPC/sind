@@ -20,6 +20,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/state"
@@ -38,13 +39,6 @@ func progressModeNames() []string {
 	}
 	return words
 }
-
-// The variables that stand in for --progress and --progress-log when they
-// are not given.
-const (
-	envProgress    = "SIND_PROGRESS"
-	envProgressLog = "SIND_PROGRESS_LOG"
-)
 
 // logAdvanceEvery is the least time between two advances of a step that
 // the event log writes, so that sind ui moves a bar four times a second;
@@ -271,9 +265,9 @@ func progressOptions(interrupt context.Context, cmd *cobra.Command) cliprogress.
 	return cliprogress.Options{
 		Program: "sind",
 		Mode: cliprogress.Setting{Flag: "--progress", Given: flags.Changed("progress"), Value: mode,
-			Variable: envProgress, Env: os.Getenv(envProgress)},
+			Variable: envvar.Progress, Env: os.Getenv(envvar.Progress)},
 		Log: cliprogress.Setting{Flag: "--progress-log", Given: flags.Changed("progress-log"), Value: logPath,
-			Variable: envProgressLog, Env: os.Getenv(envProgressLog)},
+			Variable: envvar.ProgressLog, Env: os.Getenv(envvar.ProgressLog)},
 		LogOptions: progress.LogOptions{Version: strings.TrimPrefix(resolveVersion(), "v"), AdvanceEvery: logAdvanceEvery, FlushEvery: logFlushEvery},
 		Stderr:     stderr,
 		OnTerminal: onTerminal(stderr),
@@ -349,7 +343,7 @@ const activityLimit = 8 << 20
 // nothing of one that cannot be written, where a log named by the flag or
 // the variable would.
 func withActivityLog(ctx context.Context, o cliprogress.Options) cliprogress.Options {
-	if _, set := os.LookupEnv(envProgressLog); o.Log.Given || set {
+	if _, set := os.LookupEnv(envvar.ProgressLog); o.Log.Given || set {
 		return o
 	}
 	path, err := state.PrepareActivityDir()

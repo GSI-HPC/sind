@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
@@ -410,4 +411,17 @@ func TestNew_Defaults(t *testing.T) {
 func TestChildEnv(t *testing.T) {
 	got := childEnv([]string{"A=1", "SIND_REALM=x", "TRACESTATE=y", "B=2=3"}, "", "00-t-s-01")
 	assert.Equal(t, []string{"A=1", "B=2=3", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01", "TRACESTATE=sind=ui"}, got)
+}
+
+// TestChildEnv_CommandLine checks that a child gets none of the variables
+// that stand in for the command line, but those that childEnv sets, and
+// keeps the others.
+func TestChildEnv_CommandLine(t *testing.T) {
+	env := []string{"TRACEPARENT=00-x-y-01", "SIND_MCP_TOKEN=kept"}
+	for _, name := range envvar.CommandLine {
+		env = append(env, name+"=from-the-shell")
+	}
+	got := childEnv(env, "/state/activity.jsonl", "00-t-s-01")
+	assert.Equal(t, []string{"SIND_MCP_TOKEN=kept", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01",
+		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl"}, got)
 }

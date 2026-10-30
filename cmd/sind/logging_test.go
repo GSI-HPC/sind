@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/mock"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 
@@ -34,7 +35,7 @@ func TestNewLogger_Timestamps(t *testing.T) {
 	newLogger(&buf, 0).ErrorContext(t.Context(), "failed")
 	assert.Regexp(t, `^\d\d:\d\d:\d\d\.\d{3} ERRO failed\n$`, buf.String())
 
-	t.Setenv(envLogTimestamps, "false")
+	t.Setenv(envvar.LogTimestamps, "false")
 	buf.Reset()
 	newLogger(&buf, 0).ErrorContext(t.Context(), "failed")
 	assert.Equal(t, "ERRO failed\n", buf.String())

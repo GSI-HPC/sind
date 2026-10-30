@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -53,12 +54,13 @@ var fakeDockerSignals = map[string]syscall.Signal{
 	"SIGTERM": syscall.SIGTERM,
 }
 
-// TestMain runs the tests without the caller's sind settings: an exported
-// SIND_REALM, as sind-action sets it in CI, would move every command into
-// another realm than the one the tests expect, XDG_STATE_HOME would
-// point the state directory at the developer's own (they get one of their own), and SIND_PROGRESS=plain
-// would add progress lines to stderr. A test that needs one
-// of them sets it with t.Setenv.
+// TestMain runs the tests without the caller's sind settings, none of the
+// variables of envvar.All among them: an exported SIND_REALM, as
+// sind-action sets it in CI, would move every command into another realm
+// than the one the tests expect, XDG_STATE_HOME would point the state
+// directory at the developer's own (they get one of their own), and
+// SIND_PROGRESS=plain would add progress lines to stderr. A test that needs
+// one of them sets it with t.Setenv.
 //
 // Adapted from GSI-HPC/clusterctl internal/cli/main_test.go.
 func TestMain(m *testing.M) {
@@ -76,7 +78,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
-	for _, name := range []string{"SIND_REALM", envProgress, envProgressLog, envLogTimestamps} {
+	for _, name := range envvar.All {
 		_ = os.Unsetenv(name)
 	}
 	// The state directory is one of the tests' own: the commands that report

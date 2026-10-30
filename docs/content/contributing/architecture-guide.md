@@ -34,6 +34,8 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
 
+internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI, pkg/cluster and sind ui read them through it
+
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
@@ -130,6 +132,7 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 
 ```
 cmd/sind → pkg/cluster → pkg/cmdexec
+                       → internal/envvar
                        → internal/natsort
                        → pkg/config  → internal/hostname
                        → pkg/docker  → pkg/cmdexec
