@@ -14,6 +14,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cliout"
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -27,7 +28,7 @@ func newGetCommand() *cobra.Command {
 		Short: "Display resources",
 	}
 
-	cmd.PersistentFlags().StringP("output", "o", "human", "output format (human|json)")
+	cmd.PersistentFlags().StringP("output", "o", "", outputUsage)
 	registerOutputCompletion(cmd)
 
 	cmd.AddCommand(newGetClusterCommand())
@@ -92,8 +93,12 @@ func fromMesh[T any](get func(*mesh.Manager, context.Context) (T, error)) fetchF
 
 func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "nodes [CLUSTER]",
-		Short:             "List the nodes of a cluster, or of every cluster of the realm",
+		Use:   "nodes [CLUSTER]",
+		Short: "List the nodes of a cluster, or of every cluster of the realm",
+		Long: `List the nodes of a cluster, or of every cluster of the realm.
+
+Without CLUSTER, it lists the nodes of every cluster of the realm, whatever
+` + envvar.Cluster + ` names.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -282,7 +287,11 @@ otherwise.
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runGetAuthKey(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runGetAuthKey(cmd, name)
 		},
 	}
 	cmd.Flags().String("type", "", "authentication plugin of the key: munge, slurm or jwt (default: the cluster's AuthType)")
@@ -376,12 +385,19 @@ func runGetCoreDNSConfig(cmd *cobra.Command, _ []string) error {
 func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, cluster.GetMonitoring, func(cmd *cobra.Command, m *cluster.Monitoring, realm string) error {
 		out := cmd.OutOrStdout()
-		t := newTable("SERVICE", "CONTAINER", "ADDRESS", "STATUS")
+		t := newTable("SERVICE", "CONTAINER", "ADDRESS", "TYPE", "STATUS")
+		var apiOnly []string
 		for _, s := range m.Services {
-			t.Add(string(s.Name), cell(s.Container), cell(s.URL), formatServiceState(s))
+			t.Add(string(s.Name), cell(s.Container), cell(s.URL), cell(s.Interface), formatServiceState(s))
+			if s.Interface == observability.InterfaceAPI {
+				apiOnly = append(apiOnly, string(s.Name))
+			}
 		}
 		if err := writeTable(out, t); err != nil {
 			return err
+		}
+		if len(apiOnly) > 0 {
+			_, _ = fmt.Fprintf(out, "\n%s serves an API only, no web UI. To see its data, open Grafana and use Explore.\n", strings.Join(apiOnly, ", "))
 		}
 
 		_, _ = fmt.Fprintln(out)
@@ -421,7 +437,11 @@ func newGetClusterCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runGetCluster(cmd, clusterArg(args))
+			name, err := clusterArg(args)
+			if err != nil {
+				return err
+			}
+			return runGetCluster(cmd, name)
 		},
 	}
 }

@@ -192,6 +192,8 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 | `-vv` | debug | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
+[`SIND_VERBOSE`]({{< relref "/usage/environment" >}}) gives the number of `-v` when the command line has none: `export SIND_VERBOSE=2` logs every command as `-vv` does.
+
 Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete` and `power` go above their progress display, never into it.
 
 ```bash
@@ -227,7 +229,7 @@ Example output at `-vv` (colorized on interactive terminals):
 
 ## JSON output
 
-Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
+Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is [`SIND_OUTPUT`]({{< relref "/usage/environment#output" >}}), else `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
 
 ```bash
 sind get clusters -o json
@@ -352,14 +354,14 @@ sind get node NODE[.CLUSTER]
 {{< /cli >}}
 {{< ui >}}
 
-Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster. Its page shows its services, events and power state.
+Open the node from the **Nodes** page, or from the **Nodes** tab of its cluster. Its page shows its services, what Slurm says about it and what changed on it. When it needs a look, a card at the top says what failed and when, shows the last lines of the journal of that service, and lists the fixes to try in order, such as **Restart slurmd…**, then **Reboot…**.
 
 {{< uishot "node" >}}
 
 {{< /ui >}}
 {{< /ways >}}
 
-Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `default`. A full DNS name ending in `.sind` is rejected.
+Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `SIND_CLUSTER`, else `default`. A full DNS name ending in `.sind` is rejected.
 
 ```
 CONTAINER            ROLE        FQDN                      IP          STATUS
@@ -386,9 +388,9 @@ sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 {{< /cli >}}
 {{< ui >}}
 
-Open the cluster, then the **Logs** tab, or press **Logs** on the page of a node. Select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log; **Start with** shows more. Use **Pause** to stop the stream and **Follow** to resume it. **Filter** and **Errors and warnings only** narrow the lines, and **Download** saves them.
+Open the **Logs** tab of the node's page, or press **Logs** beside the node or one of its services anywhere in sind ui. It opens the log that tells the most: the journal of a service that failed, of the node's Slurm service while it runs, otherwise its container log. The **Logs** tab of a cluster shows the log of any of its nodes: select the node, and its container log or the journal of one of its services. The tab starts with the last 200 lines and follows the log; **Start with** shows more. Use **Pause** to stop the stream and **Follow** to resume it. The log of a stopped node ends where it stopped, and the tab says when. **Filter** and **Errors and warnings only** narrow the lines, and **Download** saves them.
 
-{{< uishot "cluster-logs" >}}
+{{< uishot "node-logs" >}}
 
 {{< /ui >}}
 {{< /ways >}}
@@ -475,7 +477,7 @@ sind get realms
 {{< /cli >}}
 {{< ui >}}
 
-The **Realms** table of the Overview lists each realm with its clusters, nodes and health. The realm switch in the top bar selects the realm that the pages show.
+The **Clusters** table of the Overview has a row for each realm with its clusters, nodes and health, and the rows of its clusters under it. The realm switcher at the head of the **Realm** group of the rail selects the realm that Clusters, Nodes, Mesh and DNS, Monitoring and Topology show.
 
 {{< uishot "overview" >}}
 
@@ -611,7 +613,7 @@ sind get monitoring
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows the clusters that the stack collects, with their key numbers from Prometheus, and Grafana, Prometheus, Loki and Alloy with their addresses and states.
+Open **Monitoring**. It shows the clusters that the stack collects, with their key numbers from Prometheus, and Grafana, Prometheus, Loki and Alloy with their addresses, what each serves and their states. Loki has no web UI, so its row links to Grafana's Explore.
 
 {{< uishot "monitoring" >}}
 
@@ -621,11 +623,13 @@ Open **Monitoring**. It shows the clusters that the stack collects, with their k
 Shows the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}): each service's container, address and state, and the clusters it collects, with their number of monitored nodes and their Slurm version.
 
 ```
-SERVICE     CONTAINER        ADDRESS                           STATUS
-grafana     sind-grafana     http://grafana.sind.sind:3000     running
-prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
-loki        sind-loki        http://loki.sind.sind:3100        running
-alloy       sind-alloy       http://172.18.0.9:12345           running
+SERVICE     CONTAINER        ADDRESS                           TYPE          STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     web UI        running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  web UI + API  running
+loki        sind-loki        http://loki.sind.sind:3100        API           running
+alloy       sind-alloy       http://172.18.0.9:12345           web UI        running
+
+loki serves an API only, no web UI. To see its data, open Grafana and use Explore.
 
 CLUSTERS
 NAME     NODES  SLURM
@@ -633,13 +637,13 @@ default  3      26.05.5
 dev      5      26.05.5
 ```
 
-`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
+`TYPE` says what the port serves: a web UI, an API, or both. Loki serves an API only, so a browser that opens its address shows no page; read its logs in Grafana, under Explore. `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, `interface` (`web UI`, `web UI + API` or `API`), address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
 
 ```json
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
   "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",

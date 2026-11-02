@@ -14,13 +14,16 @@ import (
 // What the pages show of what Slurm says (store.Slurm): the state of each
 // node, the partitions and the config files.
 
-// pgAttachSlurm gives each node of nodes what sinfo says about it, when
-// it lists it.
-func pgAttachSlurm(nodes []pgNode, sl *store.Slurm) {
+// pgAttachSlurm gives each node of the cluster name in nodes what sinfo
+// on that cluster says about it, when it lists it.
+func pgAttachSlurm(nodes []pgNode, name string, sl *store.Slurm) {
 	if sl == nil || sl.Info == nil {
 		return
 	}
 	for i := range nodes {
+		if nodes[i].Cluster != name {
+			continue
+		}
 		for j, sn := range sl.Info.Nodes {
 			if sn.Name == nodes[i].Short {
 				nodes[i].Slurm = &sl.Info.Nodes[j]

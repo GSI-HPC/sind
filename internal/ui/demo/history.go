@@ -31,9 +31,6 @@ func history(now time.Time) [][]byte {
 		node{name: "db", cluster: "dev", role: "db", ready: 18 * time.Second},
 		node{name: "api", cluster: "dev", role: "api", ready: 17 * time.Second},
 		node{name: "submitter", cluster: "dev", role: "submitter", ready: 15 * time.Second})
-	create := func(s createSpec) func(context.Context, play) error {
-		return func(ctx context.Context, p play) error { return p.create(ctx, s) }
-	}
 	runs := []recording{
 		{title: "create cluster", target: "legacy", start: now.Add(-72 * time.Hour),
 			work: create(createSpec{image: node25, mesh: true, nodes: nodeSet("legacy", 14*time.Second, 19*time.Second, 22*time.Second)})},
@@ -76,9 +73,7 @@ func midRun(now time.Time) []byte {
 	start := now.Add(-midRunAge)
 	log := record(recording{
 		id: runID(midRunIndex), trace: uiTrace(midRunIndex), title: "create cluster", target: "nightly", start: start,
-		work: func(ctx context.Context, p play) error {
-			return p.create(ctx, createSpec{image: "ghcr.io/gsi-hpc/sind-node:26.05.4", mesh: true, nodes: nodeSet("nightly", 14*time.Second, 19*time.Second, 22*time.Second)})
-		},
+		work: create(createSpec{image: "ghcr.io/gsi-hpc/sind-node:26.05.4", mesh: true, nodes: nodeSet("nightly", 14*time.Second, 19*time.Second, 22*time.Second)}),
 	})
 	return cutAfter(log, now)
 }

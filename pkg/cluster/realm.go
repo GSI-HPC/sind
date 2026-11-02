@@ -4,8 +4,8 @@ package cluster
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
@@ -43,9 +43,9 @@ func ResolveRealm(flag *string, configRealm string) (string, error) {
 		}
 		return *flag, nil
 	}
-	if env := os.Getenv("SIND_REALM"); env != "" {
+	if env, ok := envvar.Lookup(envvar.Realm); ok {
 		if err := config.CheckName("realm", env); err != nil {
-			return "", fmt.Errorf("SIND_REALM: %w", err)
+			return "", fmt.Errorf("%s: %w", envvar.Realm, err)
 		}
 		return env, nil
 	}

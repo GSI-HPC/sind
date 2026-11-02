@@ -37,6 +37,14 @@ func invalidFlagValue(name, value string, words ...string) error {
 	return cobratree.InvalidValue(name, value, oneOf(words))
 }
 
+// invalidEnvValue returns the error for a value of the variable name that
+// sind cannot use, in the form of invalidFlagValue: invalid SIND_OUTPUT
+// value "yaml": want human or json. It is no usage error, as the variable
+// is not the command line: the command exits 1.
+func invalidEnvValue(name, value, want string) error {
+	return fmt.Errorf("invalid %s value %q: want %s", name, value, want)
+}
+
 // oneOf lists words as "a, b or c".
 func oneOf(words []string) string {
 	if len(words) < 2 {

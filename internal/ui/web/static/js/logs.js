@@ -63,7 +63,7 @@
     function showUnit() { unitFld.hidden = sourceSel.value !== 'journal'; }
 
     // showCommand writes the command of a terminal that shows the same log,
-    // as logsCommand in Go does.
+    // as LogsTabView.Command in Go does.
     function showCommand() {
       const arg = nodeSel.value + suffix;
       const n = ' -f -n ' + linesSel.value;
@@ -77,7 +77,9 @@
       const u = new URL(location.href);
       const q = u.searchParams;
       q.set('tab', 'logs');
-      q.set('node', nodeSel.value);
+      // The Logs tab of a node page has its node in the path.
+      if (root.hasAttribute('data-logs-fixed')) q.delete('node');
+      else q.set('node', nodeSel.value);
       if (sourceSel.value === 'journal') {
         q.set('source', 'journal');
         q.set('unit', unitSel.value);
@@ -188,8 +190,20 @@
       if (es) { es.close(); es = null; }
     }
 
+    // ended says that the stream ended: no new line comes, so Follow and
+    // Pause are off, and the tab of a node that does not run says where
+    // its log ends (data-logs-ended).
+    function ended() {
+      flush();
+      for (const b of [followBtn, pauseBtn]) { b.disabled = true; b.setAttribute('aria-pressed', 'false'); }
+      setState(root.dataset.logsEnded || 'The log ended');
+    }
+
     function start() {
       stop();
+      followBtn.disabled = pauseBtn.disabled = false;
+      followBtn.setAttribute('aria-pressed', String(!paused));
+      pauseBtn.setAttribute('aria-pressed', String(paused));
       const q = new URLSearchParams({ node: nodeSel.value, source: sourceSel.value, lines: linesSel.value });
       if (sourceSel.value === 'journal' && unitSel.value) q.set('unit', unitSel.value);
       es = new EventSource('/logs/' + encodeURIComponent(realm) + '/' + encodeURIComponent(cluster) + '?' + q);
@@ -198,7 +212,7 @@
       mine.onopen = () => setState(paused ? 'Paused' : 'Following');
       mine.addEventListener('line', ev => push(ev.data, lineClass(ev.data)));
       mine.addEventListener('notice', ev => push(ev.data, 'logs-notice'));
-      mine.addEventListener('end', () => { mine.close(); setState('The log ended'); });
+      mine.addEventListener('end', () => { mine.close(); ended(); });
       // The browser would reconnect and send the first lines again.
       mine.onerror = () => { mine.close(); if (es === mine) { es = null; setState('Not connected. Change a choice to connect again.'); } };
     }
@@ -219,8 +233,6 @@
 
     function setPaused(p) {
       paused = p;
-      followBtn.classList.toggle('on', !p);
-      pauseBtn.classList.toggle('on', p);
       followBtn.setAttribute('aria-pressed', String(!p));
       pauseBtn.setAttribute('aria-pressed', String(p));
       if (es) setState(p ? 'Paused' : 'Following');
@@ -286,10 +298,8 @@
 
   // A live update of the page morphs the tab in again: the panel that this
   // script runs stays as it is, with its stream and its lines.
-  if (window.Idiomorph) {
-    Idiomorph.defaults.callbacks.beforeNodeMorphed = old =>
-      !(old instanceof Element && old.hasAttribute('data-logs-ready'));
-  }
+  Idiomorph.defaults.callbacks.beforeNodeMorphed = old =>
+    !(old instanceof Element && old.hasAttribute('data-logs-ready'));
 
   document.addEventListener('DOMContentLoaded', () => scan(document));
   // htmx swaps in a tab body after the page has loaded.

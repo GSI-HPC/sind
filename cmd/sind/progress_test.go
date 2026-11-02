@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -107,8 +108,8 @@ func (c *displays) shown() string {
 // (asMCPServer).
 func onTerminals(t *testing.T, pipe func(io.Writer) bool, terminals ...io.Writer) {
 	t.Helper()
-	t.Setenv(envProgress, "")
-	t.Setenv(envProgressLog, "")
+	t.Setenv(envvar.Progress, "")
+	t.Setenv(envvar.ProgressLog, "")
 	savedTerminal, savedPipe, savedSize, savedForeground := onTerminal, intoPipe, terminalSize, inForeground
 	onTerminal = func(w io.Writer) bool { return slices.Contains(terminals, w) }
 	intoPipe = func(w io.Writer) bool { return pipe != nil && pipe(w) }
@@ -202,7 +203,7 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 				onTerminals(t, tc.pipe)
 			}
 			t.Setenv("TERM", tc.term)
-			t.Setenv(envProgress, tc.env)
+			t.Setenv(envvar.Progress, tc.env)
 			ctx := context.Background()
 			var w *progresstest.Watcher
 			if tc.watched {
@@ -253,7 +254,7 @@ func TestEveryCommandChecksTheProgressFlag(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			onTerminals(t, nil)
-			t.Setenv(envProgress, tc.env)
+			t.Setenv(envvar.Progress, tc.env)
 			calls := 0
 			ctx := withClient(t.Context(), docker.NewClient(&mock.Executor{OnCall: func([]string, string) mock.Result {
 				calls++
@@ -295,9 +296,9 @@ func TestTheVariableFailsNoCommand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := fakeDisplays(t)
 			var quiet bytes.Buffer
-			t.Setenv(envProgress, "")
+			t.Setenv(envvar.Progress, "")
 			quietErr := executeOn(context.Background(), io.Discard, &quiet, "--progress=none", "create", "worker", "--count", "0")
-			t.Setenv(envProgress, tc.env)
+			t.Setenv(envvar.Progress, tc.env)
 			var stderr bytes.Buffer
 			err := executeOn(context.Background(), io.Discard, &stderr, "create", "worker", "--count", "0")
 
@@ -347,7 +348,7 @@ func TestProgressLeavesStderrAloneWithoutADisplay(t *testing.T) {
 		assert.Equal(t, want, got)
 	})
 	t.Run("the variable asks for a tree", func(t *testing.T) {
-		t.Setenv(envProgress, "tty")
+		t.Setenv(envvar.Progress, "tty")
 		code, got := stderrOf(t)
 		assert.Equal(t, wantCode, code)
 		assert.Equal(t, want, got)
@@ -682,7 +683,7 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 		}
 	})
 	t.Run("from the variable", func(t *testing.T) {
-		t.Setenv(envProgressLog, shared)
+		t.Setenv(envvar.ProgressLog, shared)
 		var stderr bytes.Buffer
 		err := executeOn(powerCutFails(t.Context(), t, nil), io.Discard, &stderr, "power", "cut", "worker-0")
 		require.ErrorContains(t, err, "listing containers")
@@ -709,9 +710,9 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 // SIND_PROGRESS_LOG the server inherited. With the variable unset, they
 // write the default activity log like any command.
 func TestMCPTools_NoProgress(t *testing.T) {
-	t.Setenv(envProgress, "plain")
-	t.Setenv(envProgressLog, "/dev/stderr")
-	t.Setenv(envLogTimestamps, "") // the server sets it, in this process
+	t.Setenv(envvar.Progress, "plain")
+	t.Setenv(envvar.ProgressLog, "/dev/stderr")
+	t.Setenv(envvar.LogTimestamps, "") // the server sets it, in this process
 	for name, tool := range exportMCPTools(t) {
 		flags := tool.InputSchema.Properties.Flags.Properties
 		assert.NotContains(t, flags, "progress", name)
@@ -721,8 +722,8 @@ func TestMCPTools_NoProgress(t *testing.T) {
 	var got string
 	logSet := true
 	server := &cobra.Command{Use: "start", RunE: func(*cobra.Command, []string) error {
-		got = os.Getenv(envProgress)
-		_, logSet = os.LookupEnv(envProgressLog)
+		got = os.Getenv(envvar.Progress)
+		_, logSet = os.LookupEnv(envvar.ProgressLog)
 		return nil
 	}}
 	asMCPServer(server)
@@ -918,6 +919,31 @@ func TestCommandTargets(t *testing.T) {
 		c.SetIn(tc.stdin)
 		assert.Equal(t, tc.want, createClusterTarget(&config)(c, tc.args), tc.name)
 	}
+}
+
+// SIND_CLUSTER names the target of a command whose arguments name no
+// cluster, and that of create cluster before its configuration. An invalid
+// one names none, as the command fails on it.
+func TestCommandTargets_ClusterFromEnv(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "dev")
+	cmd := &cobra.Command{}
+	assert.Equal(t, "prod", clusterTarget(cmd, []string{"prod"}))
+	assert.Equal(t, "dev", clusterTarget(cmd, nil))
+	assert.Equal(t, "dev,prod", nodesTarget(cmd, []string{"worker-0", "worker-0.prod"}))
+	assert.Equal(t, "dev", deleteClusterTarget(newDeleteClusterCommand(), nil))
+
+	named := filepath.Join(t.TempDir(), "named.yaml")
+	require.NoError(t, os.WriteFile(named, []byte("kind: Cluster\nname: from-file\n"), 0o600))
+	for _, config := range []string{named, configStdin, ""} {
+		assert.Equal(t, "dev", createClusterTarget(&config)(cmd, nil), config)
+	}
+	assert.Equal(t, "prod", createClusterTarget(&named)(cmd, []string{"prod"}))
+
+	t.Setenv("SIND_CLUSTER", "Dev")
+	assert.Equal(t, "prod", clusterTarget(cmd, []string{"prod"}))
+	assert.Empty(t, clusterTarget(cmd, nil))
+	assert.Empty(t, nodesTarget(cmd, []string{"worker-0"}))
+	assert.Empty(t, createClusterTarget(&named)(cmd, nil))
 }
 
 // A command that learns its target as it runs ends its span with it; one

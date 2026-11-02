@@ -16,12 +16,13 @@ Commands that accept node arguments use DNS-style names:
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `default` if omitted:
+The cluster suffix defaults to `SIND_CLUSTER`, else `default`, if omitted:
 
 ```bash
 sind ssh controller          # → controller.default
 sind ssh worker-0            # → worker-0.default
 sind ssh worker-0.dev        # → worker-0.dev
+SIND_CLUSTER=dev sind ssh worker-0  # → worker-0.dev
 ```
 
 sind splits a name at its last `.`: what follows is the cluster, which must be a valid cluster name.

@@ -70,7 +70,7 @@ func find(t *testing.T, s store.Span, name string) store.Span {
 	t.Helper()
 	var out store.Span
 	found := false
-	walk(s, func(c store.Span) {
+	Walk(s, func(c store.Span) {
 		if c.Name == name && !found {
 			out, found = c, true
 		}
@@ -133,15 +133,13 @@ func splitLines(b []byte) [][]byte {
 
 func bytesContains(b []byte, s string) bool { return bytes.Contains(b, []byte(s)) }
 
-// goldenOfModule returns the golden log of the go-clikit module the
-// tests build with, or skips the test when the module cache is not there.
-func goldenOfModule(t *testing.T) []byte {
+// golden returns the run of the golden log of the go-clikit module that
+// the tests build with, read from the module cache.
+func golden(t *testing.T) store.Run {
 	t.Helper()
 	const module = "github.com/GSI-HPC/go-clikit"
 	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		t.Skip("no build info")
-	}
+	require.True(t, ok, "build info")
 	version := ""
 	for _, d := range info.Deps {
 		if d.Path == module {
@@ -166,10 +164,11 @@ func goldenOfModule(t *testing.T) []byte {
 		escaped.WriteRune(r)
 	}
 	b, err := os.ReadFile(filepath.Join(cache, escaped.String()+"@"+version, "progress", "testdata", "log-v1.jsonl"))
-	if err != nil {
-		t.Skipf("the module's golden log is not in the module cache: %v", err)
-	}
-	return b
+	require.NoError(t, err, "the golden log of the module")
+	r := NewReducer(50)
+	feed(r, b)
+	require.Len(t, r.Runs(), 1)
+	return r.Runs()[0]
 }
 
 func appendTo(t *testing.T, path string, b []byte) {
@@ -191,7 +190,3 @@ func logLines(run, title string) []byte {
 	b.WriteString("\n")
 	return b.Bytes()
 }
-
-// TestTailByteByByte writes each recorded log one byte at a time, polling
-// after each, and holds that no line is lost, cut or read twice: the runs
-// are those of the log read at once.

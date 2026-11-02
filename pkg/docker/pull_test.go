@@ -35,22 +35,30 @@ Status: Downloaded newer image for busybox:latest
 docker.io/library/busybox:latest
 `
 
-// work returns the unit, amount and size the end of the only target of the
-// events carries, and the sizes its updates gave, in order.
-func work(t *testing.T, w *progresstest.Watcher) (end progress.Event, sizes []int64) {
+// work returns the end of the only target of the events, the sizes its
+// updates gave, each where it changed, and the messages they gave, each
+// where it changed.
+func work(t *testing.T, w *progresstest.Watcher) (end progress.Event, sizes []int64, messages []string) {
 	t.Helper()
+	sized := false
 	for _, e := range w.Events() {
 		if e.Kind != progress.KindTarget {
 			continue
 		}
 		switch e.Type {
 		case progress.TypeUpdate:
-			sizes = append(sizes, e.Size)
+			if !sized || e.Size != sizes[len(sizes)-1] {
+				sizes = append(sizes, e.Size)
+			}
+			sized = true
+			if len(messages) == 0 || e.Message != messages[len(messages)-1] {
+				messages = append(messages, e.Message)
+			}
 		case progress.TypeEnd:
 			end = e
 		}
 	}
-	return end, sizes
+	return end, sizes, messages
 }
 
 // pullUnder pulls img:1 under the running target "img:1" of a watched Bus
@@ -80,7 +88,7 @@ func TestPullImage_CountsLayers(t *testing.T) {
 	w, err := pullUnder(t, mock.Result{Stdout: pullOutput}, false)
 
 	require.NoError(t, err)
-	end, sizes := work(t, w)
+	end, sizes, _ := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{3}, sizes, "the layers told of when the first is complete")
 	assert.Equal(t, progress.UnitItems, end.Unit)
@@ -91,7 +99,7 @@ func TestPullImage_CountsLayers(t *testing.T) {
 
 // A pull that finds the image there writes no layer. On a pipe it is one
 // item, done; on a terminal, it works in bytes from the start and
-// downloaded nothing, of a size not known.
+// downloaded nothing, of a size not known, and says it is up to date.
 func TestPullImage_UpToDate(t *testing.T) {
 	const upToDate = `Using default tag: latest
 latest: Pulling from library/busybox
@@ -101,7 +109,7 @@ docker.io/library/busybox:latest
 `
 	w, err := pullUnder(t, mock.Result{Stdout: upToDate}, false)
 	require.NoError(t, err)
-	end, sizes := work(t, w)
+	end, sizes, _ := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{1}, sizes)
 	assert.Equal(t, progress.UnitItems, end.Unit)
@@ -110,9 +118,10 @@ docker.io/library/busybox:latest
 
 	w, err = pullUnder(t, mock.Result{Stdout: upToDate}, true)
 	require.NoError(t, err)
-	end, sizes = work(t, w)
+	end, sizes, messages := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{0}, sizes)
+	assert.Equal(t, []string{"", PullUpToDate}, messages, "a terminal was opened, then nothing was downloaded")
 	assert.Equal(t, progress.UnitBytes, end.Unit)
 	assert.Zero(t, end.Amount)
 	assert.Zero(t, end.Size)
@@ -136,7 +145,7 @@ func TestPullImage_Fails(t *testing.T) {
 	}, false)
 
 	require.Error(t, err)
-	end, sizes := work(t, w)
+	end, sizes, _ := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{2, 3}, sizes)
 	assert.EqualValues(t, 2, end.Amount, "the layers of the lines of stdout and stderr that are complete")
@@ -204,6 +213,32 @@ func tty(lines ...string) string {
 	return b.String()
 }
 
+// Once docker has downloaded every layer it told of, the message says that
+// it extracts them, until they are all done; on a pipe in layers too.
+func TestPullImage_Extracting(t *testing.T) {
+	w, err := pullUnder(t, mock.Result{Stdout: tty(
+		"a3ed95caeb02: Pulling fs layer",
+		"b4f1e0d2c9a1: Pulling fs layer",
+		"a3ed95caeb02: Downloading  1MB/10MB",
+		"b4f1e0d2c9a1: Downloading  1MB/10MB",
+		"a3ed95caeb02: Download complete",
+		"b4f1e0d2c9a1: Verifying Checksum",
+		"a3ed95caeb02: Extracting  5MB/10MB",
+		"a3ed95caeb02: Pull complete",
+		"b4f1e0d2c9a1: Pull complete",
+	)}, true)
+	require.NoError(t, err)
+	_, _, messages := work(t, w)
+	w.Finish()
+	assert.Equal(t, []string{"", PullEstimated, "", PullExtracting, ""}, messages)
+
+	w, err = pullUnder(t, mock.Result{Stdout: pullOutput}, false)
+	require.NoError(t, err)
+	_, _, messages = work(t, w)
+	w.Finish()
+	assert.Equal(t, []string{"", PullExtracting, ""}, messages)
+}
+
 // Where docker writes the bytes of the layers, on a terminal, a pull counts
 // bytes: the amount those downloaded, the size that of the layers to
 // download, those the daemon has left out, with the size of the layers
@@ -246,8 +281,9 @@ func TestPullImage_CountsBytes(t *testing.T) {
 			shares = append(shares, float64(e.Amount)/float64(size))
 		}
 	}
-	end, sizes := work(t, w)
+	end, sizes, messages := work(t, w)
 	w.Finish()
+	assert.Equal(t, []string{"", PullEstimated, ""}, messages, "the size of the waiting layers is a guess")
 	assert.Equal(t, []int64{0, 30_000_000, 60_000_000, 75_000_000, 100_000_000}, sizes,
 		"not known, guessed, held down, guessed, known")
 	assert.IsNonDecreasing(t, shares)
@@ -272,7 +308,7 @@ func TestPullImage_SmallLayerFirstOnATerminal(t *testing.T) {
 	)}, true)
 
 	require.NoError(t, err)
-	end, sizes := work(t, w)
+	end, sizes, _ := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{0, 10_000_000}, sizes)
 	assert.Equal(t, progress.UnitBytes, end.Unit)
@@ -284,7 +320,7 @@ func TestPullImage_SmallLayerFirstOnATerminal(t *testing.T) {
 func TestPullImage_BytesOnAPipe(t *testing.T) {
 	w, err := pullUnder(t, mock.Result{Stdout: "b4f1e0d2c9a1: Downloading  1MB/10MB\nb4f1e0d2c9a1: Pull complete\n"}, false)
 	require.NoError(t, err)
-	end, sizes := work(t, w)
+	end, sizes, _ := work(t, w)
 	w.Finish()
 	assert.Equal(t, []int64{10_000_000}, sizes)
 	assert.Equal(t, progress.UnitBytes, end.Unit)

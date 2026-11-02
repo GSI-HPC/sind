@@ -53,9 +53,12 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 // then writes its standard output to a terminal (cmdexec.WithTerminal),
 // where it tells the bytes of each layer it downloads, and the work is in
 // bytes; where no terminal can be opened, it is in layers. A pull on a
-// terminal that downloads nothing ends in layers too. A pull that
-// finds the image there already, and writes no layer, ends with one item
-// of one done. A pull that fails leaves the work where it was.
+// terminal that downloads nothing ends with a size of 0 and the message
+// PullUpToDate. A pull in layers that finds the image there already, and
+// writes no layer, ends with one item of one done. The target's message
+// also says when the size holds a guess (PullEstimated) and when docker
+// extracts (PullExtracting). A pull that fails leaves the work where it
+// was.
 func (c *Client) PullImage(ctx context.Context, image string) error {
 	target := progress.SpanFrom(ctx)
 	if target == nil {

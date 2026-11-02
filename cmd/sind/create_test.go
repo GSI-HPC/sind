@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -221,13 +222,79 @@ func TestCreate_WaitFlag(t *testing.T) {
 			require.NoError(t, err)
 			flag := c.Flags().Lookup("wait")
 			require.NotNil(t, flag)
-			assert.Equal(t, "5m0s", flag.DefValue)
+			assert.Equal(t, "0s", flag.DefValue, "the help shows no default of its own")
+			assert.Contains(t, flag.Usage, "(default: SIND_WAIT, else 5m0s)")
 
 			// A negative limit is a usage error, reported before sind acts.
 			_, _, err = executeCommand("create", sub, "--wait", "-1s")
 			require.EqualError(t, err, "--wait must not be negative, got -1s")
 			assert.True(t, cobratree.IsUsage(err))
 		})
+	}
+}
+
+// TestWaitAndPullFlags covers SIND_WAIT and SIND_PULL, the --wait and the
+// --pull of create cluster and create worker when the command line has
+// none: a value they cannot use is an error that names the variable, and
+// no usage error, and sind checks them only then.
+func TestWaitAndPullFlags(t *testing.T) {
+	for _, sub := range []string{"cluster", "worker"} {
+		for _, tc := range []struct {
+			wait, pull string
+			args       []string
+			wantWait   time.Duration
+			wantPull   bool
+			wantErr    string
+		}{
+			{"", "", nil, 5 * time.Minute, false, ""},
+			{"10m", "true", nil, 10 * time.Minute, true, ""},
+			{"0", "0", nil, 0, false, ""},
+			{"10m", "true", []string{"--wait", "1m", "--pull=false"}, time.Minute, false, ""},
+			{"5", "yes", []string{"--wait", "1m", "--pull"}, time.Minute, true, ""},
+			{"5", "", nil, 0, false, `invalid SIND_WAIT value "5": want a duration with a unit, such as 90s, 5m or 1h30m`},
+			{"-1m", "", nil, 0, false, "SIND_WAIT must not be negative, got -1m"},
+			{"", "yes", nil, 0, false, `invalid SIND_PULL value "yes": want true or false`},
+		} {
+			t.Setenv("SIND_WAIT", tc.wait)
+			t.Setenv("SIND_PULL", tc.pull)
+			c, _, err := NewRootCommand().Find([]string{"create", sub})
+			require.NoError(t, err)
+			require.NoError(t, c.ParseFlags(tc.args))
+			name := fmt.Sprintf("create %s %v, SIND_WAIT=%s SIND_PULL=%s", sub, tc.args, tc.wait, tc.pull)
+
+			wait, waitErr := waitFlag(c)
+			pull, pullErr := pullFlag(c)
+
+			if err := errors.Join(waitErr, pullErr); tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr, name)
+				assert.False(t, cobratree.IsUsage(err), name)
+				continue
+			}
+			require.NoError(t, errors.Join(waitErr, pullErr), name)
+			assert.Equal(t, tc.wantWait, wait, name)
+			assert.Equal(t, tc.wantPull, pull, name)
+		}
+	}
+}
+
+// TestCreate_InvalidWaitAndPullFromEnv checks that the create commands
+// refuse an invalid SIND_WAIT or SIND_PULL before they call docker.
+func TestCreate_InvalidWaitAndPullFromEnv(t *testing.T) {
+	for _, tc := range []struct {
+		name, value string
+		args        []string
+	}{
+		{"SIND_WAIT", "5", []string{"create", "cluster"}},
+		{"SIND_WAIT", "5", []string{"create", "worker"}},
+		{"SIND_PULL", "yes", []string{"create", "cluster"}},
+		{"SIND_PULL", "yes", []string{"create", "worker", "--image", "sind-node:25.11"}},
+	} {
+		t.Setenv(tc.name, tc.value)
+		var m mock.Executor
+		_, _, err := executeWithMock(&m, tc.args...)
+		require.ErrorContains(t, err, "invalid "+tc.name+" value", "%v", tc.args)
+		assert.Empty(t, m.Calls, "%v", tc.args)
+		t.Setenv(tc.name, "")
 	}
 }
 

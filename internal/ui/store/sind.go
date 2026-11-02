@@ -17,9 +17,7 @@ import (
 )
 
 // Topics of the sind data. The names use "/" as separator, so a fragment
-// can depend on a prefix with Topic.Under: every topic of one realm's
-// clusters is under ClustersTopic(realm), every status of a realm under
-// StatusPrefix(realm).
+// can depend on a prefix such as "status/".
 const (
 	// TopicRealms changes when the list of realms changes.
 	TopicRealms Topic = "realms"
@@ -55,15 +53,6 @@ func StatusTopic(realm, cluster string) Topic {
 	return Topic("status/" + realm + "/" + cluster)
 }
 
-// StatusPrefix is the prefix of the status topics of a realm.
-func StatusPrefix(realm string) Topic { return Topic("status/" + realm) }
-
-// Under reports whether t is prefix or a topic below it: "status/a/b" is
-// under "status/a" and under "status", but "statuses" is not.
-func (t Topic) Under(prefix Topic) bool {
-	return t == prefix || (len(t) > len(prefix) && t[:len(prefix)] == prefix && t[len(prefix)] == '/')
-}
-
 // StatusKey names a cluster.
 type StatusKey struct {
 	Realm   string
@@ -82,8 +71,22 @@ type Mesh struct {
 	// External are the containers outside sind on the mesh network,
 	// sorted.
 	External []string
+	// Connectable are the containers outside sind that are not on the
+	// mesh network, running or not, sorted by name: those that sind
+	// connect container can attach.
+	Connectable []Outside
 	// Err says in one line why the mesh could not be read.
 	Err string
+}
+
+// Outside is a container that sind did not make, as docker ps lists it.
+type Outside struct {
+	Name, Image string
+	// State is Docker's word for it, such as running or exited, and
+	// Status what docker ps says of it for people, such as "Up 2 hours".
+	State, Status string
+	// Networks are those that it is on.
+	Networks []string
 }
 
 // Slurm is what Slurm says about a cluster, read next to its status.
@@ -120,9 +123,6 @@ type DockerState struct {
 	MemTotal int64
 	NCPU     int
 }
-
-// Reachable reports whether Docker answered the last time.
-func (d DockerState) Reachable() bool { return d.Checked && d.Err == "" }
 
 // change changes the snapshot with fn under the lock. When fn returns
 // true, the subscribers of each of ts are notified.
@@ -189,7 +189,17 @@ func (s *Store) SetClusters(realm string, clusters []cluster.Summary) {
 func (s *Store) SetNodes(realm string, nodes []cluster.NodeSummary) {
 	nodes = slices.SortedStableFunc(slices.Values(nodes), compareNodes)
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Nodes, realm, nodes, len(nodes) == 0)
+		old := sn.Nodes[realm]
+		if !setEntry(&sn.Nodes, realm, nodes, len(nodes) == 0) {
+			return false
+		}
+		record(sn, s.clock(), nodeChanges(realm, old, nodes))
+		forget(sn, realm, "", func(k NodeKey) bool {
+			return slices.ContainsFunc(nodes, func(n cluster.NodeSummary) bool {
+				return n.Container == string(cluster.ContainerName(realm, k.Cluster, k.Node))
+			})
+		})
+		return true
 	}, NodesTopic(realm))
 }
 
@@ -241,6 +251,13 @@ func (s *Store) SetMesh(realm string, m Mesh) {
 	m.Records = slices.Clone(m.Records)
 	m.External = slices.Clone(m.External)
 	slices.Sort(m.External)
+	m.Connectable = slices.Clone(m.Connectable)
+	for i := range m.Connectable {
+		m.Connectable[i].Networks = slices.Clone(m.Connectable[i].Networks)
+	}
+	if len(m.Connectable) == 0 {
+		m.Connectable = nil
+	}
 	if len(m.Records) == 0 {
 		m.Records = nil
 	}
@@ -257,7 +274,14 @@ func (s *Store) SetMesh(realm string, m Mesh) {
 func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 	k := StatusKey{realm, name}
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Statuses, k, st, st == nil)
+		old := sn.Statuses[k]
+		if !setEntry(&sn.Statuses, k, st, st == nil) {
+			return false
+		}
+		if old != nil && st != nil {
+			record(sn, s.clock(), statusChanges(realm, name, old, st))
+		}
+		return true
 	}, k.Topic())
 }
 
@@ -267,7 +291,14 @@ func (s *Store) SetStatus(realm, name string, st *cluster.Status) {
 func (s *Store) SetSlurm(realm, name string, sl *Slurm) {
 	k := StatusKey{realm, name}
 	s.change(func(sn *Snapshot) bool {
-		return setEntry(&sn.Slurms, k, sl, sl == nil)
+		old := sn.Slurms[k]
+		if !setEntry(&sn.Slurms, k, sl, sl == nil) {
+			return false
+		}
+		if old != nil && sl != nil {
+			record(sn, s.clock(), slurmChanges(realm, name, old, sl))
+		}
+		return true
 	}, k.Topic())
 }
 
@@ -281,22 +312,14 @@ func keepEntries[V any](m *map[StatusKey]V, keep []StatusKey) {
 	*m = next
 }
 
-// KeepStatuses drops the status, and what Slurm says, of every cluster
-// that is not in keep, as the cluster is gone and no page shows it. It
-// notifies nothing: no page shows a dropped status.
+// KeepStatuses drops the status, what Slurm says and the faults of the
+// nodes of every cluster that is not in keep, as the cluster is gone and no
+// page shows it. It notifies nothing: no page shows a dropped status.
 func (s *Store) KeepStatuses(keep ...StatusKey) {
 	s.change(func(sn *Snapshot) bool {
 		keepEntries(&sn.Statuses, keep)
 		keepEntries(&sn.Slurms, keep)
-		return false
-	})
-}
-
-// KeepSlurms drops what Slurm says of every cluster that is not in keep,
-// as the pages that showed it are closed. It notifies nothing.
-func (s *Store) KeepSlurms(keep ...StatusKey) {
-	s.change(func(sn *Snapshot) bool {
-		keepEntries(&sn.Slurms, keep)
+		keepEntries(&sn.Faults, keep)
 		return false
 	})
 }
@@ -355,10 +378,6 @@ func (sn Snapshot) Realm(name string) (cluster.RealmSummary, bool) {
 	return sn.Realms[i], true
 }
 
-// ClustersOf returns the clusters of the realm, sorted by name. The slice
-// belongs to the snapshot and must not be changed.
-func (sn Snapshot) ClustersOf(realm string) []cluster.Summary { return sn.Clusters[realm] }
-
 // Cluster returns the cluster named name of the realm.
 func (sn Snapshot) Cluster(realm, name string) (cluster.Summary, bool) {
 	i := slices.IndexFunc(sn.Clusters[realm], func(c cluster.Summary) bool { return c.Name == name })
@@ -367,10 +386,6 @@ func (sn Snapshot) Cluster(realm, name string) (cluster.Summary, bool) {
 	}
 	return sn.Clusters[realm][i], true
 }
-
-// NodesOf returns the nodes of the realm in the order SetNodes keeps. The
-// slice belongs to the snapshot and must not be changed.
-func (sn Snapshot) NodesOf(realm string) []cluster.NodeSummary { return sn.Nodes[realm] }
 
 // ClusterNodes returns the nodes of one cluster, in the order SetNodes
 // keeps. The slice is a copy.
@@ -384,18 +399,6 @@ func (sn Snapshot) ClusterNodes(realm, name string) []cluster.NodeSummary {
 	return out
 }
 
-// NetworksOf returns the networks of the realm, sorted by name.
-func (sn Snapshot) NetworksOf(realm string) []cluster.NetworkSummary { return sn.Networks[realm] }
-
-// VolumesOf returns the volumes of the realm, sorted by name.
-func (sn Snapshot) VolumesOf(realm string) []cluster.VolumeSummary { return sn.Volumes[realm] }
-
-// MeshOf returns the mesh of the realm, false when none is stored.
-func (sn Snapshot) MeshOf(realm string) (Mesh, bool) {
-	m, ok := sn.Meshes[realm]
-	return m, ok
-}
-
 // Status returns the status of a cluster, nil when none is stored.
 func (sn Snapshot) Status(realm, name string) *cluster.Status {
 	return sn.Statuses[StatusKey{realm, name}]
@@ -405,9 +408,3 @@ func (sn Snapshot) Status(realm, name string) *cluster.Status {
 func (sn Snapshot) Slurm(realm, name string) *Slurm {
 	return sn.Slurms[StatusKey{realm, name}]
 }
-
-// Lock returns the holder of the realm lock, nil when it is free.
-func (sn Snapshot) Lock(realm string) *state.LockHolder { return sn.Locks[realm] }
-
-// MonitoringOf returns the monitoring stack of the realm, nil without one.
-func (sn Snapshot) MonitoringOf(realm string) *cluster.Monitoring { return sn.Monitorings[realm] }

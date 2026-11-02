@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ import (
 func activityState(t *testing.T) string {
 	t.Helper()
 	onTerminals(t, nil)
-	require.NoError(t, os.Unsetenv(envProgressLog)) // t.Setenv restores it
+	require.NoError(t, os.Unsetenv(envvar.ProgressLog)) // t.Setenv restores it
 	home := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", home)
 	return filepath.Join(home, "sind", "activity.jsonl")
@@ -41,10 +42,10 @@ func runCut(t *testing.T, args ...string) string {
 // second command appends to it. It changes nothing on stderr.
 func TestTheDefaultActivityLog(t *testing.T) {
 	log := activityState(t)
-	t.Setenv(envProgressLog, "")
+	t.Setenv(envvar.ProgressLog, "")
 	baseline := runCut(t)
 
-	require.NoError(t, os.Unsetenv(envProgressLog))
+	require.NoError(t, os.Unsetenv(envvar.ProgressLog))
 	stderr := runCut(t)
 
 	assert.Equal(t, withoutTimestamps(baseline), withoutTimestamps(stderr), "the log changes nothing on stderr")
@@ -107,7 +108,7 @@ func TestTheDefaultActivityLogIsOverridden(t *testing.T) {
 			dir := t.TempDir()
 			expand := func(s string) string { return string(bytes.ReplaceAll([]byte(s), []byte("{dir}"), []byte(dir))) }
 			if tc.env != nil {
-				t.Setenv(envProgressLog, expand(*tc.env))
+				t.Setenv(envvar.ProgressLog, expand(*tc.env))
 			}
 			var args []string
 			for _, a := range tc.args {
@@ -133,9 +134,9 @@ func ptr(s string) *string { return &s }
 // others can read, and a log that cannot be moved aside.
 func TestTheDefaultActivityLogFailsNothing(t *testing.T) {
 	log := activityState(t)
-	t.Setenv(envProgressLog, "")
+	t.Setenv(envvar.ProgressLog, "")
 	baseline := withoutTimestamps(runCut(t))
-	require.NoError(t, os.Unsetenv(envProgressLog))
+	require.NoError(t, os.Unsetenv(envvar.ProgressLog))
 
 	for name, setup := range map[string]func(t *testing.T){
 		"no state directory": func(t *testing.T) {

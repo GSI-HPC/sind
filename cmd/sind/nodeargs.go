@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-nodeset"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/cobra"
@@ -39,21 +40,21 @@ func optionalCluster(cmd *cobra.Command, args []string) error {
 // defaultClusterHelp is the line of the Long of a command that names the
 // optional cluster argument arg.
 func defaultClusterHelp(arg string) string {
-	return arg + ` defaults to "` + config.DefaultClusterName + `".`
+	return arg + " defaults to " + envvar.Cluster + `, else "` + config.DefaultClusterName + `".`
 }
 
 // nodesHelp describes the NODES argument of the commands that take node
 // sets, power and delete worker.
 const nodesHelp = `NODES is one or more node arguments: a node (worker-0), a node of a cluster
 (worker-0.dev) or a node set (worker-[0-3], worker-[0-3].dev). The cluster
-defaults to "default". Quote a node set from the shell, which would
-otherwise expand worker-[0-3] to the files in the working directory that
-match it.`
+defaults to ` + envvar.Cluster + `, else "default". Quote a node set from the
+shell, which would otherwise expand worker-[0-3] to the files in the
+working directory that match it.`
 
 // nodeHelp describes the NODE argument of the commands that act on one
 // node, ssh, logs and get node.
 const nodeHelp = `NODE is a node (worker-0) or a node of a cluster (worker-0.dev). The
-cluster defaults to "default".`
+cluster defaults to ` + envvar.Cluster + `, else "default".`
 
 // nodesExample returns the Example of a command that takes node sets: a
 // quoted node set, and node, a node of another cluster.
@@ -62,12 +63,13 @@ func nodesExample(command, node string) string {
 }
 
 // clusterArg returns the cluster named by the argument of a command that
-// optionalCluster checks, the default cluster without one.
-func clusterArg(args []string) string {
+// optionalCluster checks; without one, the cluster SIND_CLUSTER names, else
+// the default cluster (cluster.ResolveCluster).
+func clusterArg(args []string) (string, error) {
 	if len(args) > 0 {
-		return args[0]
+		return args[0], nil
 	}
-	return config.DefaultClusterName
+	return cluster.ResolveCluster("")
 }
 
 // nodeTarget is a resolved node with its short name and cluster.
@@ -90,12 +92,13 @@ func (noGroups) All(string) (string, error)             { return "", errNoGroups
 // "worker-[0-3].dev!worker-2.dev", and resolves the cluster of each node it
 // names. Whitespace is a union, as a comma is, so the arguments of a command
 // may be joined with a space. Each name is split at its last "." into
-// <shortName>.<cluster>, the cluster defaulting to "default". The targets
-// come in go-nodeset's order: by the name with its numbers left out, then
-// by number. An expression that names no node is an error, and so is one
-// that names nodes of two clusters whose names differ only in zero padding
-// (see paddingClash), and one that is not NODE[.CLUSTER], such as an FQDN
-// (see parseNodeName).
+// <shortName>.<cluster>, the cluster defaulting to SIND_CLUSTER, else
+// "default" (withDefaultCluster). The targets come in go-nodeset's order: by
+// the name with its numbers left out, then by number. An expression that
+// names no node is a usage error, and so is one that names nodes of two
+// clusters whose names differ only in zero padding (see paddingClash), and
+// one that is not NODE[.CLUSTER], such as an FQDN (see parseNodeName). An
+// invalid SIND_CLUSTER is an error, but no usage error.
 func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	set, err := nodeset.ParseWith(expr, noGroups{})
 	if err != nil {
@@ -104,20 +107,37 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	if first, second, found := paddingClash(expr); found {
 		return nil, argsErrorf("expanding nodes: %s and %s differ only in zero padding, so a node set takes them for one node, "+
 			"but they are in two clusters, %s and %s; name the nodes of each cluster in a command of its own",
-			first, second, clusterOf(first), clusterOf(second))
+			first, second, clusterSuffix(first), clusterSuffix(second))
 	}
 	names := set.Expand()
 	if len(names) == 0 {
 		return nil, argsErrorf("expanding nodes: %q names no node", expr)
 	}
 
-	targets := make([]nodeTarget, 0, len(names))
-	for _, name := range names {
-		t, err := parseNodeName(name, typedTerm(expr, name))
-		if err != nil {
+	targets := make([]nodeTarget, len(names))
+	for i, name := range names {
+		if targets[i], err = parseNodeName(name, typedTerm(expr, name)); err != nil {
 			return nil, err
 		}
-		targets = append(targets, t)
+	}
+	return withDefaultCluster(targets)
+}
+
+// withDefaultCluster gives the targets of the names without a cluster the
+// cluster that SIND_CLUSTER names, else the default cluster
+// (cluster.ResolveCluster), which it resolves only for them.
+func withDefaultCluster(targets []nodeTarget) ([]nodeTarget, error) {
+	if !slices.ContainsFunc(targets, func(t nodeTarget) bool { return t.Cluster == "" }) {
+		return targets, nil
+	}
+	name, err := cluster.ResolveCluster("")
+	if err != nil {
+		return nil, err
+	}
+	for i := range targets {
+		if targets[i].Cluster == "" {
+			targets[i].Cluster = name
+		}
 	}
 	return targets, nil
 }
@@ -148,17 +168,19 @@ func typedTerm(expr, name string) string {
 	return name
 }
 
-// parseNodeName splits one node name into <shortName>.<cluster>, the cluster
-// defaulting to "default", and checks both parts. A name with more dots is
-// not NODE[.CLUSTER]: the FQDN that get nodes prints is NODE.CLUSTER.REALM.sind,
-// which the node commands do not take, as they act in the realm of --realm.
-// The errors quote typed, the term of the node argument that named name.
+// parseNodeName splits one node name into <shortName>.<cluster>, and checks
+// both parts; the cluster of a name without one is "", for
+// withDefaultCluster. A name with more dots is not NODE[.CLUSTER]: the FQDN
+// that get nodes prints is NODE.CLUSTER.REALM.sind, which the node commands
+// do not take, as they act in the realm of --realm. The errors quote typed,
+// the term of the node argument that named name.
 func parseNodeName(name, typed string) (nodeTarget, error) {
-	t := nodeTarget{ShortName: name, Cluster: clusterOf(name)}
-	if i := strings.LastIndex(name, "."); i >= 0 {
-		t.ShortName = name[:i]
+	t := nodeTarget{ShortName: name}
+	dot := strings.LastIndex(name, ".")
+	if dot >= 0 {
+		t.ShortName, t.Cluster = name[:dot], name[dot+1:]
 	}
-	if t.ShortName == "" || t.Cluster == "" {
+	if t.ShortName == "" || dot >= 0 && t.Cluster == "" {
 		return nodeTarget{}, argsErrorf("invalid node name %q", typed)
 	}
 	if strings.Contains(t.ShortName, ".") {
@@ -174,19 +196,21 @@ func parseNodeName(name, typed string) (nodeTarget, error) {
 		// The short name of a name with a cluster, or of a node set.
 		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, config.CheckName("short", t.ShortName))
 	}
-	if err := config.CheckName("cluster", t.Cluster); err != nil {
-		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, err)
+	if t.Cluster != "" {
+		if err := config.CheckName("cluster", t.Cluster); err != nil {
+			return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, err)
+		}
 	}
 	return t, nil
 }
 
-// clusterOf returns the cluster of a node name: what follows its last ".",
-// "default" for a name without one.
-func clusterOf(name string) string {
+// clusterSuffix returns the cluster that a node name names: what follows its
+// last ".", "" for a name without one.
+func clusterSuffix(name string) string {
 	if i := strings.LastIndex(name, "."); i >= 0 {
 		return name[i+1:]
 	}
-	return config.DefaultClusterName
+	return ""
 }
 
 // paddingClash finds two names in expr that go-nodeset takes for one node,
@@ -203,7 +227,7 @@ func clusterOf(name string) string {
 func paddingClash(expr string) (first, second string, found bool) {
 	terms := nodeTerms(expr)
 	if !slices.ContainsFunc(terms, func(term string) bool {
-		return strings.ContainsAny(clusterOf(term), "0123456789")
+		return strings.ContainsAny(clusterSuffix(term), "0123456789")
 	}) {
 		return "", "", false
 	}
@@ -220,7 +244,7 @@ func paddingClash(expr string) (first, second string, found bool) {
 			switch {
 			case !ok:
 				_ = seen.Add(name) // a name Expand returned parses
-			case clusterOf(prev) != clusterOf(name):
+			case clusterSuffix(prev) != clusterSuffix(name):
 				return prev, name, true
 			}
 		}

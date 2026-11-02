@@ -36,7 +36,7 @@ import (
 var Epoch = time.Date(2026, time.October, 21, 9, 15, 0, 0, time.UTC)
 
 const (
-	// driftEvery is how often a service of the demo flips.
+	// driftEvery is how often the demo checks whether a service fails again.
 	driftEvery = 20 * time.Second
 	// checkTime is how long the host checks take.
 	checkTime = 1200 * time.Millisecond
@@ -61,6 +61,8 @@ type Demo struct {
 // New returns a demo that writes to st. A still demo stands at Epoch.
 func New(st *store.Store, still bool) *Demo {
 	d := &Demo{st: st, world: Seeded(), still: still, doctor: make(chan struct{}, 1), driftEvery: driftEvery, checkTime: checkTime}
+	d.world.now = d.Now
+	st.SetClock(d.Now)
 	var clk clock = liveClock{speed: Speed}
 	if still {
 		clk = &manualClock{t: Epoch}
@@ -125,7 +127,7 @@ func (d *Demo) InspectContainer(ctx context.Context, name docker.ContainerName) 
 
 // Exec returns the executor that answers the log streams.
 func (d *Demo) Exec() cmdexec.Executor {
-	e := &Exec{Now: d.Now}
+	e := &Exec{Now: d.Now, Failed: d.world.FailedSince, Stopped: d.world.StoppedAt, Facts: d.world.FactsOf}
 	if !d.still {
 		e.Every = 800 * time.Millisecond
 	}
@@ -158,7 +160,9 @@ func (d *Demo) Setup() {
 }
 
 // startMidRun shows the create cluster nightly of the realm ci half way: its
-// run, its task, the lock it holds and the nodes it has made.
+// run, its task, the lock it holds and the nodes it has made, as the run
+// has them: the controller ready, the workers started and waiting for
+// munge.
 func (d *Demo) startMidRun(now time.Time) {
 	d.sim.Feed(midRun(now))
 	d.st.AddTask(store.Task{
@@ -169,13 +173,17 @@ func (d *Demo) startMidRun(now time.Time) {
 	d.st.SetLock("ci", &state.LockHolder{Command: "sind --realm ci create cluster", Host: "demo", PID: 4242, Since: now.Add(-midRunAge)})
 	for _, n := range nodeSet("nightly", 0, 0, 0) {
 		d.world.apply("ci", opCreate, n)
+		op := opStart
+		if n.role == "controller" {
+			op = opReady
+		}
+		d.world.apply("ci", op, n)
 	}
-	d.world.apply("ci", opStart, node{name: "controller", cluster: "nightly", role: "controller"})
 	d.world.Publish(d.st)
 }
 
 // Run moves the demo until ctx ends: the host checks when asked, and, but
-// for a still demo, a service that flips now and then.
+// for a still demo, a service that fails again a while after its fix.
 func (d *Demo) Run(ctx context.Context) {
 	var drift <-chan time.Time
 	if !d.still {

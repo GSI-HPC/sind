@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,11 +42,11 @@ func TestParseEvent(t *testing.T) {
 		ok   bool
 	}{
 		{"container start", line("container", "start", map[string]string{"sind.realm": "sind", "sind.cluster": "dev"}),
-			Event{Kind: KindContainer, Realm: "sind", Cluster: "dev"}, true},
+			Event{Kind: KindChange, Realm: "sind", Cluster: "dev"}, true},
 		{"mesh container", line("container", "die", map[string]string{"sind.realm": "sind"}),
-			Event{Kind: KindContainer, Realm: "sind"}, true},
+			Event{Kind: KindChange, Realm: "sind"}, true},
 		{"cluster network", line("network", "connect", map[string]string{"sind.realm": "sind", "sind.cluster": "dev", "name": "sind-dev-net"}),
-			Event{Kind: KindNetwork, Realm: "sind", Cluster: "dev"}, true},
+			Event{Kind: KindChange, Realm: "sind", Cluster: "dev"}, true},
 		{"lock", line("network", "create", map[string]string{"sind.realm": "ci", "name": "ci-lock", "sind.cluster": "x"}),
 			Event{Kind: KindLock, Realm: "ci"}, true},
 		{"exec", line("container", "exec_create: sh", map[string]string{"sind.realm": "sind"}), Event{}, false},
@@ -64,7 +66,7 @@ func TestParseEvent(t *testing.T) {
 type eventsFixture struct {
 	pipes *mock.Pipes
 	exec  *mock.Executor
-	sub   *Sub
+	sub   *sse.Subscription[Event]
 	ev    *Events
 	// starts counts the attempts to start the stream.
 	starts atomic.Int32
@@ -74,9 +76,9 @@ func newEventsFixture(t *testing.T) *eventsFixture {
 	t.Helper()
 	pipes := &mock.Pipes{}
 	exec := &mock.Executor{OnStart: pipes.OnStart}
-	bus := NewBus()
+	bus := &Bus{}
 	f := &eventsFixture{pipes: pipes, exec: exec, sub: bus.Subscribe(), ev: &Events{
-		Exec: exec, Bus: bus, Log: quietLog(),
+		Exec: exec, Bus: bus,
 		Debounce: 20 * time.Millisecond, BackoffMin: 10 * time.Millisecond, BackoffMax: 40 * time.Millisecond,
 		Stable: time.Hour,
 	}}
@@ -98,8 +100,8 @@ func (f *eventsFixture) handle(fn func([]string) mock.StreamResult) {
 func (f *eventsFixture) take(t *testing.T) []Event {
 	t.Helper()
 	select {
-	case <-f.sub.C():
-		return f.sub.Drain()
+	case <-f.sub.Changed():
+		return f.sub.Take()
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "no events")
 		return nil
@@ -123,7 +125,7 @@ func TestEventsDebouncesAndPublishes(t *testing.T) {
 		got = append(got, f.take(t)...)
 	}
 	assert.ElementsMatch(t, []Event{
-		{Kind: KindContainer, Realm: "sind", Cluster: "dev"},
+		{Kind: KindChange, Realm: "sind", Cluster: "dev"},
 		{Kind: KindLock, Realm: "sind"},
 	}, got)
 	require.Len(t, f.exec.Calls, 1)
@@ -222,7 +224,7 @@ func TestEventsEndsWhileThePublisherIsBlocked(t *testing.T) {
 
 func TestEventsDefaults(t *testing.T) {
 	assert.NotNil(t, logOr(nil))
-	assert.NotNil(t, logOr(quietLog()))
+	assert.NotNil(t, logOr(slog.Default()))
 }
 
 func TestReadEventsStopsWithContext(t *testing.T) {

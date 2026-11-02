@@ -63,7 +63,7 @@ func (p *perRealm) realmNames(sn store.Snapshot) []string {
 func (p *perRealm) run(ctx context.Context) {
 	sub := p.bus.Subscribe()
 	defer sub.Close()
-	changes := p.store.Subscribe()
+	changes := p.store.Notifier().Subscribe()
 	defer changes.Close()
 	tick := time.NewTicker(p.every())
 	defer tick.Stop()
@@ -125,9 +125,9 @@ func (p *perRealm) run(ctx context.Context) {
 			}
 			// A realm that is gone is new again when it comes back.
 			maps.DeleteFunc(seen, func(r string, _ bool) bool { return !listed[r] })
-		case <-sub.C():
+		case <-sub.Changed():
 			resync := false
-			for _, ev := range sub.Drain() {
+			for _, ev := range sub.Take() {
 				switch {
 				case ev.Realm == "":
 					resync = true

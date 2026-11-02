@@ -3,7 +3,9 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -87,16 +89,11 @@ func runOrigin(run store.Run) time.Time {
 		}
 	}
 	first := time.Time{}
-	var scan func(s store.Span)
-	scan = func(s store.Span) {
-		for _, c := range s.Children {
-			if !c.Started.IsZero() && (first.IsZero() || c.Started.Before(first)) {
-				first = c.Started
-			}
-			scan(c)
+	activity.Walk(run.Root, func(c store.Span) {
+		if !c.Started.IsZero() && (first.IsZero() || c.Started.Before(first)) {
+			first = c.Started
 		}
-	}
-	scan(run.Root)
+	})
 	return first
 }
 
@@ -119,14 +116,11 @@ func runElapsed(run store.Run, now time.Time) time.Duration {
 	return max(runEnd(run, now).Sub(origin), 0)
 }
 
-// runTicks reports whether the clock of a run goes on by itself: while the
-// run runs and is not suspended.
-func runTicks(run store.Run) bool { return !run.Done() && !run.Suspended }
-
 // runSince returns the unix time in milliseconds that run.js counts the
-// clock of a run from, 0 for a clock that stands still.
+// clock of a run from, 0 for a clock that stands still: once the run ended
+// or while it is suspended.
 func runSince(run store.Run) int64 {
-	if !runTicks(run) {
+	if run.Done() || run.Suspended {
 		return 0
 	}
 	origin := runOrigin(run)
@@ -141,17 +135,7 @@ func runSince(run store.Run) int64 {
 func runSpanClass(s store.Span, runDone bool) string {
 	switch {
 	case s.Done() || s.State == activity.StateEnded:
-		switch s.Status {
-		case store.StatusOK:
-			return runOK
-		case store.StatusFailed:
-			return runFailed
-		case store.StatusCanceled:
-			return runCanceled
-		case store.StatusSkipped:
-			return runSkipped
-		}
-		return runEnded
+		return runEndClass(s.Status)
 	case runDone && s.State == activity.StateQueued:
 		return runSkipped
 	case runDone:
@@ -162,20 +146,27 @@ func runSpanClass(s store.Span, runDone bool) string {
 	return runRunning
 }
 
-// runStatusClass returns the class of a run: how its command span stands.
+// runEndClass returns the class of a span that ended with status: the
+// status, whose words the classes share, or ended for one the log does not
+// name.
+func runEndClass(status string) string {
+	switch status {
+	case store.StatusOK, store.StatusFailed, store.StatusCanceled, store.StatusSkipped:
+		return status
+	}
+	return runEnded
+}
+
+// runStatusClass returns the class of a run: how its command span stands,
+// ended for a command that the log says was skipped.
 func runStatusClass(run store.Run) string {
 	if !run.Done() {
 		return runRunning
 	}
-	switch run.Status {
-	case store.StatusOK:
-		return runOK
-	case store.StatusFailed:
-		return runFailed
-	case store.StatusCanceled:
-		return runCanceled
+	if run.Status == store.StatusSkipped {
+		return runEnded
 	}
-	return runEnded
+	return runEndClass(run.Status)
 }
 
 // runPill returns the label and the pill class of a run's state. A task
@@ -193,7 +184,7 @@ func runPill(run store.Run, task *store.Task) (label, class string) {
 	case c == runFailed:
 		return "failed", "bad"
 	case c == runCanceled:
-		return "canceled", "warn"
+		return "stopped", "warn"
 	case run.Unfinished && run.Status == "":
 		return "no end recorded", "warn"
 	}
@@ -201,6 +192,11 @@ func runPill(run store.Run, task *store.Task) (label, class string) {
 		return run.Status, ""
 	}
 	return "ended", ""
+}
+
+// runPillClass maps the class of a span to the class of a pill.
+func runPillClass(class string) string {
+	return map[string]string{runOK: "ok", runFailed: "bad", runCanceled: "warn", runRunning: "run"}[class]
 }
 
 // runTaskOf returns the newest task that started a command of the trace.
@@ -266,6 +262,8 @@ type runStop struct {
 	CSRF string
 	// Small makes the button small, as in the dock.
 	Small bool
+	// Label is the text of the button; empty for "Stop…".
+	Label string
 }
 
 // newRunStop returns the Stop button of the task t, whose run may be nil,
@@ -326,10 +324,24 @@ func runSourceChip(source string) string {
 	return ""
 }
 
-// runTitle is the title of a run that task t started, with the cluster the
-// task works on, which the log of an older sind does not name.
+// runCommandOf is the command of a run as the log names it, which tells
+// the runs of one command from others: "create worker legacy" for every
+// create worker of legacy, whatever nodes each one made. A run whose log
+// gives no command has its title.
+func runCommandOf(r store.Run) string { return cmp.Or(r.Command, r.Title) }
+
+// runTitle is the title of a run that task t started, with the nodes or
+// the cluster the task works on, which the log may not name: "power reboot
+// worker-4.dev" from the command words of the task when the run's title
+// starts them or are the title, else the title and the cluster, unless
+// the title names the nodes of the cluster already, as that of a node
+// command on the default cluster does: "power reboot worker-4".
 func runTitle(run store.Run, t *store.Task) string {
-	if run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) {
+	if words, _ := taskWords(t.Argv); run.Title != "" && (strings.Join(words, " ") == run.Title || strings.HasPrefix(strings.Join(words, " "), run.Title+" ")) {
+		return strings.Join(words, " ")
+	}
+	named := run.Root.Node == t.Cluster && run.Command != "" && run.Title != run.Command
+	if named || run.Title == "" || t.Cluster == "" || strings.HasSuffix(run.Title, " "+t.Cluster) || slices.ContainsFunc(strings.Fields(run.Title), func(w string) bool { return strings.HasSuffix(w, "."+t.Cluster) }) {
 		return run.Title
 	}
 	return run.Title + " " + t.Cluster
@@ -440,6 +452,14 @@ func runStepCounts(s store.Span) (done, total int) {
 	return c.Done(), max(s.Total, c.Total)
 }
 
+// runRevealed returns the run with the hidden spans that the terminal
+// shows by now taken out of hiding (activity.Reveal), such as the step
+// "mesh" while docker pulls the images of the mesh.
+func runRevealed(run store.Run, now time.Time) store.Run {
+	run.Root = activity.Reveal(run.Root, now)
+	return run
+}
+
 // runSegs returns the segments of a run: one for each visible step, in the
 // order they started. A run without steps has one segment for the command.
 func runSegs(run store.Run) runBar {
@@ -488,8 +508,8 @@ func runPartial(s store.Span) float64 {
 }
 
 // runDetail says what a span that goes on is doing now: its message, or the
-// visible span below it that goes on with its message, or how far its
-// transfer is.
+// visible span below it that goes on with its message, as "waits for
+// munge" for a wait, or how far its transfer is.
 func runDetail(s store.Span) string {
 	if s.Message != "" {
 		return s.Message
@@ -498,11 +518,15 @@ func runDetail(s store.Span) string {
 		if c.Done() || c.State == activity.StateQueued {
 			continue
 		}
-		if c.Kind == activity.KindBatch {
+		switch c.Kind {
+		case activity.KindBatch:
 			if d := runDetail(c); d != "" {
 				return d
 			}
 			continue
+		case activity.KindWait:
+			// As the pages of a cluster say it (pgPhaseText).
+			return "waits for " + pgOr(c.Message, c.Name)
 		}
 		return strings.TrimSpace(c.Name + " " + c.Message)
 	}
@@ -580,6 +604,8 @@ func runLine(run store.Run, task *store.Task, now time.Time) string {
 			return "ended in " + elapsed
 		case run.Status == store.StatusOK:
 			return "done in " + elapsed
+		case run.Status == store.StatusCanceled:
+			return "stopped after " + elapsed
 		}
 		return run.Status + " in " + elapsed
 	}

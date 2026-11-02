@@ -4,8 +4,10 @@ package ui
 
 import (
 	"slices"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
 func init() { pgRegister(defaultRegistry) }
@@ -13,30 +15,22 @@ func init() { pgRegister(defaultRegistry) }
 // pgRegister adds the main pages of sind ui to r: their pages, fragments,
 // routes, and the counts of the rail.
 func pgRegister(r *Registry) {
-	for _, f := range pgOverviewFragments() {
-		r.AddFragment(f)
-	}
-	for _, f := range append(pgClustersFragments(), pgNodesFragments()...) {
-		r.AddFragment(f)
-	}
-	for _, f := range pgClusterFragments() {
-		r.AddFragment(f)
-	}
-	for _, f := range pgNodeFragments() {
+	for _, f := range slices.Concat(pgOverviewFragments(), pgPageFragments(pgClustersPage, pgListTopics), pgPageFragments(pgNodesPage, pgListTopics), pgClusterFragments(), pgNodeFragments()) {
 		r.AddFragment(f)
 	}
 	// The list pages read the realm cookie, which a Page cannot see, so
 	// they are routes, as the Overview is; the pages of one cluster or node
 	// are pages.
-	r.AddRoute(pgListRoute(pgClustersPage))
-	r.AddRoute(pgListRoute(pgNodesPage))
+	r.AddRoute(pgRealmRoute(pgClustersPage, true, false))
+	r.AddRoute(pgRealmRoute(pgNodesPage, true, false))
 	r.AddPage(pgClusterPage)
 	r.AddRoute(pgClusterByNameRoute())
 	r.AddPage(pgNodePage)
+	r.AddRoute(Route{Pattern: "POST /needs/runs/{id}/dismiss", Handle: pgDismissRun})
 	pgNavCounts(r)
 }
 
-// pgClustersPage is the Clusters page. It is served by pgListRoute, which
+// pgClustersPage is the Clusters page. It is served by pgRealmRoute, which
 // builds its handler from this value, so the registry holds no page of it.
 // Its head, its chips and its table are fragments; the filter field is not,
 // so that a live update never changes it while the user types.
@@ -56,31 +50,21 @@ var pgNodesPage = Page{
 // pgListTopics are what the list pages depend on.
 var pgListTopics = []string{"realms", "clusters/", "nodes/", "status/", "monitoring/", "docker", "run"}
 
-// pgListFragments returns the fragments of a list page, which all show
-// what load returns.
-func pgListFragments(prefix string, load func(v *View) (any, error)) []Fragment {
+// pgPageFragments returns the fragments of a page, which all read its
+// Params, show what it loads and depend on the topics of the prefixes.
+func pgPageFragments(p Page, prefixes []string) []Fragment {
 	var out []Fragment
-	for _, part := range []string{"head", "chips", "table"} {
-		out = append(out, Fragment{
-			Name: prefix + "-" + part, Params: pgListKeys, Prefixes: pgListTopics,
-			Load: func(v *View) (err error) { v.Data, err = load(v); return },
-		})
+	for _, name := range p.Fragments {
+		out = append(out, Fragment{Name: name, Params: p.Params, Prefixes: prefixes, Load: p.Load})
 	}
 	return out
-}
-
-func pgClustersFragments() []Fragment {
-	return pgListFragments("pg-clusters", func(v *View) (any, error) { return pgLoadClusters(v) })
-}
-
-func pgNodesFragments() []Fragment {
-	return pgListFragments("pg-nodes", func(v *View) (any, error) { return pgLoadNodes(v) })
 }
 
 // pgList is what a list page shows besides its rows.
 type pgList struct {
 	pgListQuery
-	Realms []pgRealmRow
+	// Realms are the names of every realm.
+	Realms []string
 	Chips  []pgChip
 	Cols   []pgCol
 	// Total counts the rows of the realm, Shown those that the filters
@@ -92,6 +76,38 @@ type pgList struct {
 type pgFilterView struct {
 	List               pgList
 	Placeholder, Label string
+}
+
+// pgListScope is what a list holds, for the head of its page: "2 clusters
+// in realm ci.", "5 clusters in 2 realms.", "1 cluster." with one realm.
+type pgListScope struct {
+	// Count is "2 clusters", Realm the realm of the list, and Realms
+	// "2 realms" when the list shows more than one.
+	Count, Realm, Realms string
+}
+
+// Scope returns what the list holds, counting its rows as one or many.
+func (l pgList) Scope(one, many string) pgListScope {
+	sc := pgListScope{Count: pgPlural(l.Total, one, many), Realm: l.Realm}
+	if l.Realm == "" && len(l.Realms) > 1 {
+		sc.Realms = pgPlural(len(l.Realms), "realm", "realms")
+	}
+	return sc
+}
+
+// Commands returns the commands that list in a terminal what the list
+// holds, as "sind --realm ci get clusters": the one of its realm, or one
+// for each realm, as sind get works on one realm.
+func (l pgList) Commands(what string) []string {
+	realms := l.Realms
+	if l.Realm != "" || len(realms) == 0 {
+		realms = []string{l.Realm}
+	}
+	out := make([]string, len(realms))
+	for i, r := range realms {
+		out[i] = pgSind(r) + " get " + what
+	}
+	return out
 }
 
 // Filter returns the view of the list's filter field.
@@ -109,14 +125,17 @@ type pgNoneView struct {
 // None returns the view of the list's row for no match.
 func (l pgList) None(noun string) pgNoneView { return pgNoneView{pgList: l, Noun: noun} }
 
-// ClearURL returns the address of the list without its filters.
-func (l pgList) ClearURL() string { return l.URL("q", "", "state", "") }
-
 // pgClusterList is what the Clusters page shows.
 type pgClusterList struct {
 	pgList
 	Clusters []pgClusterRow
 	Actions  []pgAction
+}
+
+// AnyLife reports whether a command creates or deletes a node of a
+// cluster of the list, whose tile the legend then explains.
+func (d *pgClusterList) AnyLife() bool {
+	return slices.ContainsFunc(d.Clusters, func(r pgClusterRow) bool { return r.AnyLife() })
 }
 
 // pgNodeList is what the Nodes page shows.
@@ -125,19 +144,89 @@ type pgNodeList struct {
 	Nodes []pgNodeRow
 }
 
-// pgRealmRows returns the realms with their counts, the one named realm lit.
-func pgRealmRows(sn store.Snapshot, realm string) []pgRealmRow {
+// pgRealmRows returns the realms with their counts.
+func pgRealmRows(sn store.Snapshot, now time.Time) []pgRealmRow {
 	var rows []pgRealmRow
 	for _, r := range pgRealmNames(sn, "") {
 		row := pgRealmRow{
-			Name: r, Clusters: len(sn.ClustersOf(r)), Nodes: len(sn.NodesOf(r)), Problems: pgProblemNodes(sn, r),
-			Locked: sn.Lock(r) != nil, On: r == realm,
-			Delete: pgDialogAction("Delete realm…", "sm danger", "delete-realm", "realm", r),
+			Name: r, Clusters: len(sn.Clusters[r]), Nodes: len(sn.Nodes[r]),
+			Locked: sn.Locks[r] != nil, MeshErr: sn.Meshes[r].Err,
 		}
-		row.Delete.Name = "Delete realm " + r + "…"
+		for _, c := range sn.Clusters[r] {
+			if l := pgWorkOf(sn, r, c.Name, now).Life; l != nil {
+				row.Lives = append(row.Lives, pgPill{l.Kind + " " + c.Name, "run"})
+			}
+		}
+		row.Look, row.LookClass = pgLook(pgSnapNodes(sn, r, now))
+		row.Menu = pgMenu{ID: "realm", Label: "Actions for realm " + r, Icon: "⋯", Groups: []pgMenuGroup{
+			{Label: "Mesh", Items: []pgMenuItem{{Label: "Connect a container…", Hint: "Let a container of yours reach the nodes by name.", URL: pgDialog("connect", "realm", r)}}},
+			{Label: "Can lose data", Danger: true, Items: []pgMenuItem{{Label: "Delete realm…", Hint: pgRealmDeleteHint(sn, r), URL: pgDialog("delete-realm", "realm", r)}}},
+		}}
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// pgDataKinds returns the kinds of the volumes of the cluster that hold
+// the data of its users, which a delete of it removes: "data", "home",
+// both or none.
+func pgDataKinds(sn store.Snapshot, realm, name string) []string {
+	var kinds []string
+	for _, t := range []cluster.VolumeType{cluster.VolumeData, cluster.VolumeHome} {
+		vol := string(cluster.VolumeName(realm, name, t))
+		if slices.ContainsFunc(sn.Volumes[realm], func(v cluster.VolumeSummary) bool { return v.Name == vol }) {
+			kinds = append(kinds, string(t))
+		}
+	}
+	return kinds
+}
+
+// pgDataVolumes names n volumes of the kinds: "data volume", "data and
+// home volumes".
+func pgDataVolumes(kinds []string, n int) string {
+	if n == 1 {
+		return pgJoin(kinds) + " volume"
+	}
+	return pgJoin(kinds) + " volumes"
+}
+
+// pgRealmDeleteHint is the hint of Delete realm… in the menu of a realm:
+// its clusters go, and with them the files on their data and home
+// volumes, if any; host directories stay.
+func pgRealmDeleteHint(sn store.Snapshot, realm string) string {
+	var kinds []string
+	n := 0
+	for _, c := range sn.Clusters[realm] {
+		k := pgDataKinds(sn, realm, c.Name)
+		n += len(k)
+		for _, kind := range k {
+			if !slices.Contains(kinds, kind) {
+				kinds = append(kinds, kind)
+			}
+		}
+	}
+	if n == 0 {
+		return "Every cluster of it goes, and its mesh."
+	}
+	slices.Sort(kinds)
+	return "Every cluster of it goes, with the files on their " + pgDataVolumes(kinds, n) + "."
+}
+
+// pgClusterRowOf builds the row of a cluster in a list: the Clusters list
+// or the fleet table of the Overview. Its label names the realm too when
+// the list shows every realm, and a command of sind ui that creates the
+// cluster has its Stop button, with the CSRF token of the page.
+func pgClusterRowOf(sn store.Snapshot, c pgCluster, allRealms bool, csrf string) pgClusterRow {
+	row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name, DataKinds: pgDataKinds(sn, c.Realm, c.Name)}
+	if allRealms {
+		row.Label = c.Name + " (" + c.Realm + ")"
+	}
+	if l := c.Life; l != nil && l.Kind == pgCreating && l.Stop != nil {
+		stop := *l.Stop
+		stop.CSRF, stop.Small, stop.Label = csrf, true, ""
+		row.Stop = &stop
+	}
+	return row
 }
 
 func pgLoadClusters(v *View) (*pgClusterList, error) {
@@ -146,19 +235,16 @@ func pgLoadClusters(v *View) (*pgClusterList, error) {
 		return nil, err
 	}
 	all := pgClustersOf(v.Snap, q.Realm, v.Now)
-	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
+	d := &pgClusterList{pgList: pgList{pgListQuery: q, Realms: pgRealmNames(v.Snap, ""), Cols: pgCols(q, pgClusterCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgClusterChips, func(key string) int {
-		return len(slices.DeleteFunc(slices.Clone(all), func(c pgCluster) bool { return !pgClusterIn(c, key) }))
+		return pgCount(all, func(c pgCluster) bool { return pgClusterIn(c, key) })
 	})
 	words := q.words()
 	for _, c := range all {
 		if !pgClusterIn(c, q.State) {
 			continue
 		}
-		row := pgClusterRow{pgCluster: c, Text: pgClusterText(c), Label: c.Name}
-		if q.Realm == "" {
-			row.Label = c.Name + " (" + c.Realm + ")"
-		}
+		row := pgClusterRowOf(v.Snap, c, q.Realm == "", v.CSRF)
 		row.Hidden = !pgMatch(row.Text, words)
 		if !row.Hidden {
 			d.Shown++
@@ -180,9 +266,9 @@ func pgLoadNodes(v *View) (*pgNodeList, error) {
 	for _, c := range pgClustersOf(v.Snap, q.Realm, v.Now) {
 		all = append(all, c.Nodes...)
 	}
-	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmRows(v.Snap, q.Realm), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
+	d := &pgNodeList{pgList: pgList{pgListQuery: q, Realms: pgRealmNames(v.Snap, ""), Cols: pgCols(q, pgNodeCols), Total: len(all)}}
 	d.Chips = pgChips(q, pgNodeChips, func(key string) int {
-		return len(slices.DeleteFunc(slices.Clone(all), func(n pgNode) bool { return !pgNodeIn(n, key) }))
+		return pgCount(all, func(n pgNode) bool { return pgNodeIn(n, key) })
 	})
 	words := q.words()
 	for _, n := range all {

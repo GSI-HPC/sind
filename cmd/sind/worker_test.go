@@ -114,6 +114,40 @@ func TestCreateWorkerOptions_Lists(t *testing.T) {
 	assert.NotNil(t, opts.SecurityOpt)
 }
 
+func TestCreateWorkerOptions_PullFromEnv(t *testing.T) {
+	// SIND_PULL pulls the --image; without one there is nothing to pull,
+	// so a SIND_PULL set for create cluster neither pulls nor fails.
+	tests := []struct {
+		env     string
+		args    []string
+		want    bool
+		wantErr string
+	}{
+		{"true", []string{"--image", "sind-node:25.11"}, true, ""},
+		{"true", nil, false, ""},
+		{"yes", nil, false, ""},
+		{"false", []string{"--image", "sind-node:25.11", "--pull"}, true, ""},
+		{"yes", []string{"--image", "sind-node:25.11"}, false, `invalid SIND_PULL value "yes": want true or false`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env+" "+strings.Join(tt.args, " "), func(t *testing.T) {
+			t.Setenv("SIND_PULL", tt.env)
+			c, _, err := NewRootCommand().Find([]string{"create", "worker"})
+			require.NoError(t, err)
+			require.NoError(t, c.Flags().Parse(tt.args))
+
+			opts, err := createWorkerOptions(c, "dev")
+
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, opts.Pull)
+		})
+	}
+}
+
 func TestCreateWorker_FlagHelpNamesDefaults(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"create", "worker"})

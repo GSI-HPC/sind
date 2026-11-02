@@ -41,7 +41,7 @@ const forever = 1 << 62
 // one, until the test ends.
 func notices(t *testing.T, st *store.Store) <-chan store.Topic {
 	t.Helper()
-	sub := st.Subscribe()
+	sub := st.Notifier().Subscribe()
 	out := make(chan store.Topic, 64)
 	done := make(chan struct{})
 	t.Cleanup(func() { sub.Close(); close(done) })

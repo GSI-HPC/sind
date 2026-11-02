@@ -11,11 +11,9 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/require"
 )
-
-// moreNow is the time of the fixture's doctor report.
-var moreNow = time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 
 // moreNodes returns the nodes of a cluster of the realm: one controller
 // and workers, of which the worker at index down is stopped (-1: none).
@@ -60,19 +58,19 @@ func moreFixture(t *testing.T, st *store.Store) {
 	st.SetMonitoring("sind", &cluster.Monitoring{
 		Realm: "sind",
 		Services: []cluster.MonitoringService{
-			{Name: "grafana", Container: "sind-grafana", Image: "grafana/grafana:13.2.3", IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true},
-			{Name: "prometheus", Container: "sind-prometheus", Image: "prom/prometheus:v3.15.0", URL: "http://prometheus.sind.sind:9090", State: "running"},
-			{Name: "loki", Container: "sind-loki", Image: "grafana/loki:3.7.8", URL: "http://loki.sind.sind:3100", State: "running", Checked: true},
-			{Name: "alloy", Container: "sind-alloy", Image: "grafana/alloy:v1.20.1", URL: "http://172.18.0.9:12345", State: "running", Ready: true, Checked: true},
+			{Name: "grafana", Interface: observability.InterfaceWebUI, Container: "sind-grafana", Image: "grafana/grafana:13.2.3", IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true},
+			{Name: "prometheus", Interface: observability.InterfaceBoth, Container: "sind-prometheus", Image: "prom/prometheus:v3.15.0", URL: "http://prometheus.sind.sind:9090", State: "running"},
+			{Name: "loki", Interface: observability.InterfaceAPI, Container: "sind-loki", Image: "grafana/loki:3.7.8", URL: "http://loki.sind.sind:3100", State: "running", Checked: true},
+			{Name: "alloy", Interface: observability.InterfaceWebUI, Container: "sind-alloy", Image: "grafana/alloy:v1.20.1", URL: "http://172.18.0.9:12345", State: "running", Ready: true, Checked: true},
 		},
 		Clusters: []cluster.MonitoredCluster{{Name: "dev", Nodes: 4, SlurmVersion: "26.05.1"}},
 	})
 	st.SetClusters("ci", []cluster.Summary{{Name: "pr-145", SlurmVersion: "26.05.1", State: cluster.StateRunning, NodeCount: 3}})
 	st.SetNodes("ci", moreNodes("ci", "pr-145", 2, -1))
-	st.SetDoctor(&store.DoctorReport{Time: moreNow.Add(-3 * time.Minute), Checks: []store.DoctorCheck{
+	st.SetDoctor(&store.DoctorReport{Time: pgNow.Add(-3 * time.Minute), Checks: []store.DoctorCheck{
 		{Name: "Docker Engine", Status: "ok", Detail: "Docker Engine 28.5.1"},
 		{Name: "cgroup v2", Status: "ok", Detail: "cgroup2 with nsdelegate"},
-		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_instances is 128; 9 nodes and more can run out", Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
+		{Name: "inotify", Status: "warning", Detail: "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)", Remediation: "Raise the limit now:\n\n  sudo sysctl fs.inotify.max_user_instances=1024"},
 		{Name: "DNS policy", Status: "failed", Detail: "not authorized (optional)", Remediation: "sudo resolvectl dns docker0 127.0.0.1"},
 		{Name: "Odd", Status: "strange"},
 	}})
@@ -87,12 +85,12 @@ func moreTestServer(t *testing.T, fixture, withDoctor bool) (*testServer, *int) 
 	cfg.Registry, cfg.FS = defaultRegistry.snapshot(), webFS()
 	calls := new(int)
 	if withDoctor {
-		cfg.Env.Put(moreDoctorKey, func() { *calls++ })
+		cfg.Env.Put(ColDoctorKey, func() { *calls++ })
 	}
 	moreEnv.Store(cfg.Env)
 	t.Cleanup(func() { moreEnv.Store(nil) })
 	ts := newTestServerFrom(t, cfg, st)
-	ts.srv.now = func() time.Time { return moreNow }
+	ts.srv.now = func() time.Time { return pgNow }
 	if fixture {
 		moreFixture(t, st)
 	}

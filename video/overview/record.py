@@ -352,9 +352,9 @@ def main():
     os.makedirs(os.path.expanduser("~/.ssh"), mode=0o700, exist_ok=True)
 
     env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor", LANG="C.UTF-8", LC_ALL="C.UTF-8")
-    env.pop("SIND_PROGRESS", None)
     env.pop("NO_COLOR", None)
-    env.pop("SIND_REALM", None)
+    for name in [n for n in env if n.startswith("SIND_")]:
+        del env[name]
     mise_env = dict(env, PATH=os.path.expanduser("~/.local/share/mise/shims") + ":" + env["PATH"])
 
     result = {"cols": COLS, "rows": ROWS, "shots": []}

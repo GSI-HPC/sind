@@ -5,7 +5,6 @@ package ui
 import (
 	"bytes"
 	"context"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -98,6 +97,13 @@ func TestSecurityHeaders(t *testing.T) {
 	assert.NotContains(t, contentSecurityPolicy, "http")
 }
 
+func TestPageShellStill(t *testing.T) {
+	cfg, st := testConfig(t)
+	cfg.Still = true
+	ts := newTestServerFrom(t, cfg, st).login()
+	assert.Regexp(t, `<body data-now="\d+" data-still hx-headers=`, ts.get("/demo/x").Body.String())
+}
+
 func TestPageShell(t *testing.T) {
 	cfg, st := testConfig(t)
 	cfg.FS = overlay(t, fstest.MapFS{
@@ -113,7 +119,8 @@ func TestPageShell(t *testing.T) {
 	a := ts.srv.assets
 
 	assert.Contains(t, body, "<title>Demo · sind ui</title>")
-	assert.Contains(t, body, `<meta name="csrf-token" content="`+ts.csrf+`">`)
+	assert.Regexp(t, `<body data-now="\d+" hx-headers='\{"X-Sind-CSRF":"`+ts.csrf+`"\}'>`, body)
+	assert.NotContains(t, body, "data-still", "a server with a running clock")
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("app.css")+`">`)
 	assert.Contains(t, body, `<link rel="stylesheet" href="`+a.URL("css/demo.css")+`">`)
 	assert.Less(t, strings.Index(body, a.URL("app.css")), strings.Index(body, a.URL("css/demo.css")), "extra styles follow app.css")
@@ -133,7 +140,7 @@ func TestPageShell(t *testing.T) {
 	events, err := url.Parse(strings.ReplaceAll(m[1], "&amp;", "&"))
 	require.NoError(t, err)
 	assert.Equal(t, "/events", events.Path)
-	assert.Equal(t, []string{"count", "one-run", "rail", "tasks"}, events.Query()["f"])
+	assert.Equal(t, []string{"count", "one-run", "rail", "tasks", "tasks-menu"}, events.Query()["f"])
 	assert.Equal(t, "x", events.Query().Get("id"))
 	assert.Equal(t, "clusters", events.Query().Get("nav"))
 	assert.NotContains(t, events.Query(), "other", "a key no fragment declares")
@@ -151,7 +158,7 @@ func TestPageShell(t *testing.T) {
 	assert.Contains(t, body, `<input type="hidden" name="csrf" value="`+ts.csrf+`">`)
 	assert.Contains(t, body, `id="tasks"`)
 	assert.Contains(t, body, `data-theme-toggle`)
-	assert.Contains(t, body, `id="realm-sel"`)
+	assert.NotContains(t, body, `id="realm-sel"`, "the rail holds the realm switcher")
 
 	// Nothing inline: the Content-Security-Policy would block it.
 	assert.NotRegexp(t, `<script[^>]*>[^<]`, body)
@@ -163,10 +170,10 @@ func TestPageShell(t *testing.T) {
 
 func TestRailCountsAndLitEntry(t *testing.T) {
 	cfg, st := testConfig(t)
-	cfg.Registry.SetNavCount("clusters", func(store.Snapshot) NavCount {
+	cfg.Registry.SetNavCount("clusters", func(store.Snapshot, string, time.Time) NavCount {
 		return NavCount{Text: "2", Class: "bad"}
 	})
-	cfg.Registry.SetNavCount("nodes", func(store.Snapshot) NavCount { return NavCount{Text: "5"} })
+	cfg.Registry.SetNavCount("nodes", func(store.Snapshot, string, time.Time) NavCount { return NavCount{Text: "5"} })
 	ts := newTestServerFrom(t, cfg, st).login()
 	body := ts.get("/demo/x").Body.String()
 	assert.Contains(t, body, `Clusters<span class="n bad">2</span>`)
@@ -181,7 +188,7 @@ func TestNotFound(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code, target)
 		assert.Contains(t, w.Body.String(), "<h1>Not found</h1>", target)
 		assert.Contains(t, w.Body.String(), "<title>Not found · sind ui</title>", target)
-		assert.Contains(t, w.Body.String(), `sse-connect="/events?f=rail&amp;f=tasks"`, target)
+		assert.Contains(t, w.Body.String(), `sse-connect="/events?f=rail&amp;f=tasks&amp;f=tasks-menu"`, target)
 	}
 	// A POST to an unknown path is refused at the door, then not found.
 	assert.Equal(t, http.StatusNotFound, ts.post("/nope", "").Code)
@@ -255,12 +262,6 @@ func TestRouteView(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAccessors(t *testing.T) {
-	ts := newTestServer(t)
-	assert.Same(t, ts.srv.env, ts.srv.Env())
-	assert.Same(t, ts.st, ts.srv.Store())
-}
-
 func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 	good := fstest.MapFS{"templates/test.tmpl": {Data: []byte(testTemplates)}}
 	for name, tc := range map[string]struct {
@@ -275,7 +276,7 @@ func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 		}, `template "page-notfound" is missing`},
 		"no rail": {func(cfg *serverConfig, _ fstest.MapFS) {
 			cfg.Registry = NewRegistry()
-			cfg.Registry.AddFragment(tasksFragment())
+			registerDock(cfg.Registry)
 		}, "the shell fragment rail is not registered"},
 		"no tasks": {func(cfg *serverConfig, _ fstest.MapFS) {
 			cfg.Registry = NewRegistry()
@@ -291,13 +292,6 @@ func TestNewServerChecksWhatIsRegistered(t *testing.T) {
 			e["templates/more.tmpl"] = &fstest.MapFile{Data: []byte(`{{define "page-more"}}{{end}}`)}
 			cfg.Registry.AddPage(Page{Name: "more", Pattern: "GET /more", Fragments: []string{"ghost"}})
 		}, "page more names the unknown fragment ghost"},
-		"bad pattern": {func(cfg *serverConfig, e fstest.MapFS) {
-			e["templates/more.tmpl"] = &fstest.MapFile{Data: []byte(`{{define "page-more"}}{{end}}`)}
-			cfg.Registry.AddPage(Page{Name: "more", Pattern: "GET /more/{"})
-		}, "route:"},
-		"conflicting routes": {func(cfg *serverConfig, _ fstest.MapFS) {
-			cfg.Registry.AddRoute(Route{Pattern: "GET /demo/{id}"})
-		}, "route:"},
 		"template syntax": {func(_ *serverConfig, e fstest.MapFS) {
 			e["templates/broken.tmpl"] = &fstest.MapFile{Data: []byte(`{{define "x"}}{{end`)}
 		}, "templates:"},
@@ -349,20 +343,11 @@ func TestFragmentHTMLUnknown(t *testing.T) {
 	assert.ErrorContains(t, err, `unknown fragment "nope"`)
 }
 
-func TestRegisteredTemplateFunctions(t *testing.T) {
-	cfg, st := testConfig(t)
-	cfg.Registry.AddFuncs(template.FuncMap{"shout": strings.ToUpper})
-	cfg.Registry.AddPage(Page{Name: "fn", Pattern: "GET /fn", Title: "Fn"})
-	cfg.FS = overlay(t, fstest.MapFS{"templates/test.tmpl": {Data: []byte(testTemplates + `{{define "page-fn"}}{{shout "loud"}}{{end}}`)}})
-	ts := newTestServerFrom(t, cfg, st).login()
-	assert.Contains(t, ts.get("/fn").Body.String(), "LOUD")
-}
-
 func TestNotFoundThatCannotRender(t *testing.T) {
 	cfg, st := testConfig(t)
 	cfg.Registry = NewRegistry()
-	cfg.Registry.AddFragment(Fragment{Name: "rail", Shell: true, Load: func(*View) error { return assert.AnError }})
-	cfg.Registry.AddFragment(tasksFragment())
+	cfg.Registry.AddFragment(Fragment{Name: "rail", Load: func(*View) error { return assert.AnError }})
+	registerDock(cfg.Registry)
 	ts := newTestServerFrom(t, cfg, st).login()
 	assert.Equal(t, http.StatusInternalServerError, ts.get("/nope").Code)
 }

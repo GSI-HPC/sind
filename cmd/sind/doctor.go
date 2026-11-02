@@ -22,7 +22,7 @@ func newDoctorCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringP("output", "o", "human", "output format (human|json)")
+	cmd.Flags().StringP("output", "o", "", outputUsage)
 	registerOutputCompletion(cmd)
 
 	return cmd

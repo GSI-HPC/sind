@@ -72,7 +72,7 @@ func (e *Events) Run(ctx context.Context) {
 	wait := minWait
 	for restart := false; ; restart = true {
 		if restart {
-			e.Bus.Publish(Event{})
+			e.Bus.Notify(Event{})
 		}
 		began := time.Now()
 		err := e.stream(ctx)
@@ -125,7 +125,7 @@ func (e *Events) stream(ctx context.Context) error {
 	pending := map[Event]struct{}{}
 	flush := func() {
 		for _, ev := range slices.SortedFunc(maps.Keys(pending), compareEvents) {
-			e.Bus.Publish(ev)
+			e.Bus.Notify(ev)
 		}
 		clear(pending)
 	}
@@ -189,12 +189,10 @@ func parseEvent(line []byte) (Event, bool) {
 	if realm == "" || !stateActions[de.Action] {
 		return Event{}, false
 	}
-	ev := Event{Realm: realm, Cluster: attrs[cluster.LabelCluster]}
+	ev := Event{Kind: KindChange, Realm: realm, Cluster: attrs[cluster.LabelCluster]}
 	switch de.Type {
 	case "container":
-		ev.Kind = KindContainer
 	case "network":
-		ev.Kind = KindNetwork
 		if attrs["name"] == string(state.LockNetworkName(realm)) {
 			ev.Kind, ev.Cluster = KindLock, ""
 		}

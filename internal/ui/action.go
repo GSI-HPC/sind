@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/fsutil"
@@ -110,7 +112,7 @@ func actService() Service {
 			r := run.New(run.Config{
 				Exec: env.Exec, Store: env.Store, Binary: exe, ActivityLog: logPath, Environ: actEnviron,
 				Refresh: func(realm string) {
-					if refresh, ok := env.Get("collect.refresh").(func(string)); ok {
+					if refresh, ok := env.Get(ColRefreshKey).(func(string)); ok {
 						refresh(realm)
 					}
 				},
@@ -118,7 +120,7 @@ func actService() Service {
 			client := docker.NewClient(env.Exec)
 			env.Put(actKey{}, &actState{
 				starter: r, home: home, configDir: filepath.Join(stateDir, "ui", "configs"), writeFile: actSaveFile,
-				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(client), workers: newActWorkers(client.InspectContainer),
+				stat: os.Stat, mkdirAll: actMkdirAll, images: actDockerImages(client), workers: newActWorkers(client.InspectContainer, client.InspectContainers),
 			})
 			return nil
 		},
@@ -140,7 +142,13 @@ func init() {
 // actRoutes are the routes of the dialogs, the actions and the tasks they
 // start.
 func actRoutes() []Route {
-	return []Route{
+	var pages []Route
+	for _, id := range slices.Sorted(maps.Keys(actPages)) {
+		if p := actPages[id]; p != "" {
+			pages = append(pages, Route{Pattern: "GET " + p, Handle: actPageRoute(id)}, Route{Pattern: "POST " + p, Handle: actPageRoute(id)})
+		}
+	}
+	return append(pages, []Route{
 		{Pattern: "GET /dialogs/{action}", Handle: actDialogRoute},
 		{Pattern: "POST /dialogs/{action}", Handle: actDialogRoute},
 		{Pattern: "POST /actions/{action}/preview", Handle: actPreviewRoute},
@@ -148,12 +156,12 @@ func actRoutes() []Route {
 		{Pattern: "POST /actions/{action}/check", Handle: actCheckRoute},
 		{Pattern: "POST /tasks/{id}/cancel", Handle: actCancelRoute},
 		{Pattern: "POST /tasks/{id}/retry", Handle: actRetryRoute},
-	}
+	}...)
 }
 
 // actStateOf returns the state that Setup made, or fails the request.
 func actStateOf(s *Server, w http.ResponseWriter, r *http.Request) (*actState, bool) {
-	st, ok := s.Env().Get(actKey{}).(*actState)
+	st, ok := s.env.Get(actKey{}).(*actState)
 	if !ok {
 		s.Fail(w, r, errors.New("the runner of the actions is not set up"))
 	}
@@ -177,7 +185,7 @@ func actCancelRoute(s *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if _, ok := s.Store().Snapshot().Task(id); !ok {
+	if _, ok := s.env.Store.Snapshot().Task(id); !ok {
 		s.Fail(w, r, fmt.Errorf("task %s: %w", id, ErrNotFound))
 		return
 	}

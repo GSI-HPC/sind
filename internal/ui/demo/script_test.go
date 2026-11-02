@@ -103,10 +103,6 @@ func playRecorded(t *testing.T, cancelAfter time.Duration, work func(ctx context
 	return reduceLog(t, log), fx.ops
 }
 
-func create(s createSpec) func(context.Context, play) error {
-	return func(ctx context.Context, p play) error { return p.create(ctx, s) }
-}
-
 func TestCreate_OK(t *testing.T) {
 	nodes := nodeSet("dev", 14*time.Second, 19*time.Second)
 	r, ops := playRecorded(t, 0, create(createSpec{image: "img:1", mesh: true, nodes: nodes}))

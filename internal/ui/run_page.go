@@ -3,9 +3,11 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,36 +16,48 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() { registerRun(defaultRegistry) }
 
 // runFragments are the live parts of the run page, in the order the page
-// places them. Each depends on the one run that the page shows.
-var runFragments = []string{
-	"run-head", "run-summary", "run-failed", "run-timeline", "run-nodes", "run-more", "run-facts",
-}
+// places them. Each depends on the one run that the page shows. The
+// summary and the timeline are no fragments: gantt.js draws them from the
+// data of run-summary (runGantt).
+var runFragments = []string{"run-head", "run-outcome", "run-command", "run-summary", "run-facts"}
+
+// runOutcomePrefixes are the topics that the outcome of a run depends on
+// beside the run and the Doctor report: the clusters, their nodes and their
+// status, which its checks of a cluster that a create made read.
+var runOutcomePrefixes = []string{"clusters/", "nodes/", "status/"}
 
 // registerRun adds the progress display to r: the run page, the Activity
 // page, the page of a task whose run the log does not hold yet, and the
-// routes of the task dock. The dock itself is the shell fragment "tasks".
+// routes of the task dock. The dock itself is the shell fragments "tasks"
+// and "tasks-menu".
 func registerRun(r *Registry) {
 	loads := map[string]func(rc runCtx) any{
-		"run-head":     func(rc runCtx) any { return runHeadOf(rc) },
-		"run-summary":  func(rc runCtx) any { return runSummaryOf(rc) },
-		"run-failed":   func(rc runCtx) any { return runFailedOf(rc) },
-		"run-timeline": func(rc runCtx) any { return runTimelineOf(rc) },
-		"run-nodes":    func(rc runCtx) any { return runNodesOf(rc) },
-		"run-more":     func(rc runCtx) any { return runMoreOf(rc) },
-		"run-facts":    func(rc runCtx) any { return runFactsOf(rc) },
+		"run-head":    func(rc runCtx) any { return runHeadOf(rc) },
+		"run-outcome": func(rc runCtx) any { return runOutcomeOf(rc) },
+		"run-command": func(rc runCtx) any { return runHeadOf(rc) },
+		"run-summary": func(rc runCtx) any { return runSummaryOf(rc) },
+		"run-facts":   func(rc runCtx) any { return runFactsOf(rc) },
 	}
 	for _, name := range runFragments {
 		build := loads[name]
+		var prefixes []string
+		var topics []store.Topic
+		if name == "run-outcome" {
+			prefixes, topics = runOutcomePrefixes, []store.Topic{store.TopicDoctor}
+		}
 		r.AddFragment(Fragment{
-			Name:   name,
-			Params: []string{"id"},
-			Watch:  func(p Params) []store.Topic { return []store.Topic{store.RunTopic(p.Get("id"))} },
+			Name:     name,
+			Topics:   topics,
+			Params:   []string{"id"},
+			Prefixes: prefixes,
+			Watch:    func(p Params) []store.Topic { return []store.Topic{store.RunTopic(p.Get("id"))} },
 			Load: func(v *View) error {
 				rc := newRunCtx(v)
 				v.Data = nil
@@ -84,8 +98,6 @@ type runCtx struct {
 func newRunCtx(v *View) runCtx {
 	rc := runCtx{Snap: v.Snap, Now: v.Now, CSRF: v.CSRF}
 	rc.Run, rc.Found = v.Snap.Run(v.Params.Get("id"))
-	// A hidden step that takes long shows, as it does in a terminal.
-	rc.Run.Root = activity.Reveal(rc.Run.Root, v.Now)
 	if t, ok := runTaskOf(v.Snap, rc.Run.Trace); rc.Found && ok {
 		// The page names the run as the dock and Activity do, with the
 		// flags that tell it from other runs of the command.
@@ -95,11 +107,12 @@ func newRunCtx(v *View) runCtx {
 	return rc
 }
 
-// runPageLoad checks the run exists and tells the task dock not to draw it.
+// runPageLoad checks the run exists and tells the strip of the task dock not
+// to show it.
 func runPageLoad(v *View) error {
 	id := v.Params.Get("id")
-	run, ok := v.Snap.Run(id)
-	if !ok {
+	rc := newRunCtx(v)
+	if !rc.Found {
 		m := &Miss{
 			What: fmt.Sprintf("The activity log holds no run %s.", id),
 			Hint: "Activity lists the runs that the log holds. sind keeps the log and one older copy.",
@@ -110,47 +123,53 @@ func runPageLoad(v *View) error {
 		m.Links = append(m.Links, MissLink{Label: "Activity", URL: "/activity"}, missOverview)
 		return m
 	}
-	v.Title = run.Title
-	if t, ok := runTaskOf(v.Snap, run.Trace); ok {
-		v.Title = taskTitle(t, &run)
-	}
-	if v.Title == "" {
-		v.Title = "Run " + id
-	}
+	v.Title = cmp.Or(rc.Run.Title, "Run "+id)
 	v.Params.Set("run", id)
 	return nil
 }
 
-// runWhen writes a time of day, with the date for a time before today.
+// runWhen writes when something happened: "today 09:14" for a time of
+// today, with the date for a time before today.
 func runWhen(t, now time.Time) string {
 	if t.IsZero() {
 		return "–"
 	}
-	t, now = t.Local(), now.Local()
-	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return t.Format("15:04:05")
+	if runSameDay(t, now) {
+		return "today " + t.Local().Format("15:04")
 	}
-	return t.Format("Jan 2 15:04")
+	return t.Local().Format("Jan 2 15:04")
+}
+
+// runSameDay reports whether t is on the day of now, in local time.
+func runSameDay(t, now time.Time) bool {
+	t, now = t.Local(), now.Local()
+	return t.Year() == now.Year() && t.YearDay() == now.YearDay()
+}
+
+// runClock writes a time of day to the second, with the date for a time
+// before today, for the rows of a list of what happened to a node.
+func runClock(t, now time.Time) string {
+	w := runWhen(t, now)
+	if strings.HasPrefix(w, "today ") {
+		return t.Local().Format("15:04:05")
+	}
+	return w
 }
 
 // runHead is the head of the run page.
 type runHead struct {
 	// Gone is set when the log no longer holds the run.
 	Gone      bool
-	ID        string
 	Title     string
 	Pill      string
 	PillClass string
-	// Terminal is set for a run that this sind ui did not start, which
-	// it cannot stop; NoStop says why, while the run goes on.
-	Terminal bool
-	NoStop   string
-	Origin   string
-	Program  string
-	Started  string
-	Exit     string
-	Trace    string
-	TraceTip string
+	// NoStop says why sind ui cannot stop a run that goes on and that it
+	// did not start.
+	NoStop  string
+	Origin  string
+	Program string
+	Started string
+	Exit    string
 	// Back leads to what the run's task worked on: its cluster, the list
 	// of clusters once the cluster is gone, or the mesh.
 	Back *runLink
@@ -159,6 +178,12 @@ type runHead struct {
 	// says that the log keeps no flags.
 	Command *pgCmd
 	CmdNote string
+	// CopyNote, for a run without a task, is what Copy with a note copies:
+	// a comment that the log keeps no flags, and the command.
+	CopyNote string
+	// Fold folds the command and the config into one line, once the run
+	// ended ok: its outcome comes first then.
+	Fold bool
 	// Realm is the realm the run worked on, when sind ui knows it.
 	Realm string
 	// Config is the file that the task saved and ran with.
@@ -167,36 +192,37 @@ type runHead struct {
 	// without a dialog; Edit opens the dialog filled in with its form.
 	RetryID string
 	Edit    *runLink
-	CSRF    string
-	// Running is set while the run goes on.
-	Running bool
+	// RetryPrimary makes Try again the button to press, unless Edit is.
+	RetryPrimary bool
+	CSRF         string
 	// TaskID is the task to stop; empty when sind ui cannot stop the run.
 	// Stop is its button, nil while it is being stopped.
 	TaskID    string
 	Stop      *runStop
 	Canceling bool
-	Suspended bool
+	// Waits says that the run waits for the lock of its realm; Holder
+	// leads to the run that holds it, and HolderText names the holder as
+	// the log does when sind ui has no run of it.
+	Waits      bool
+	Holder     *runLink
+	HolderText string
 }
 
 // runHeadOf builds the head of the run page.
 func runHeadOf(rc runCtx) *runHead {
 	run := rc.Run
 	h := &runHead{
-		ID: run.ID, Title: run.Title, Terminal: rc.Task == nil, Origin: runSourceText(runSource(rc.Snap, run)),
-		Started: runWhen(run.Start, rc.Now), Trace: run.Trace, TraceTip: run.Trace,
-		Running: !run.Done(), Suspended: run.Suspended,
+		Title: run.Title, Origin: runSourceText(runSource(rc.Snap, run)),
+		Started: runWhen(run.Start, rc.Now),
 	}
 	h.Pill, h.PillClass = runPill(run, rc.Task)
-	if len(h.Trace) > 8 {
-		h.Trace = h.Trace[:8]
-	}
 	if run.Program != "" {
 		h.Program = strings.TrimSpace(run.Program + " " + run.Version)
 	}
 	if run.Root.Exit != nil {
 		h.Exit = "exit " + strconv.Itoa(*run.Root.Exit)
 	}
-	if h.Terminal && h.Running {
+	if rc.Task == nil && !run.Done() {
 		switch runSource(rc.Snap, run) {
 		case runFromUI:
 			h.NoStop = "Another sind ui started this run, so this one cannot stop it. Stop it there."
@@ -208,7 +234,7 @@ func runHeadOf(rc runCtx) *runHead {
 	}
 	if t := rc.Task; t != nil {
 		h.CSRF = rc.CSRF
-		if h.Running {
+		if !run.Done() {
 			h.TaskID, h.Canceling = t.ID, t.Canceling
 			h.Stop = newRunStop(*t, &rc.Run, run.Title, rc.CSRF, false)
 		}
@@ -221,10 +247,29 @@ func runHeadOf(rc runCtx) *runHead {
 		}
 		if run.Done() {
 			h.RetryID, h.Edit = runRetry(*t, runStatusClass(run))
+			if h.Edit != nil && t.Action == "create-cluster" && runTimedOut(run) {
+				// Nodes ran out of the wait: a longer one is what to try.
+				kv, word := runRetryWait(run)
+				h.Edit = &runLink{Label: "Try again with a " + word + " wait…", Href: h.Edit.Href + "&" + strings.TrimPrefix(pgQueryURL("", kv...), "?"), Primary: true}
+			}
 		}
 		h.Realm = t.Realm
 	} else {
 		runHeadNoTask(rc, h)
+	}
+	h.RetryPrimary = h.RetryID != "" && (h.Edit == nil || !h.Edit.Primary)
+	if runWaitsForLock(run) {
+		h.Waits = true
+		h.Holder, h.HolderText = runLockHolder(rc)
+	}
+	if run.Done() && runStatusClass(run) == runOK {
+		// What the command worked on is the way on.
+		h.Fold = h.Command != nil
+	}
+	if h.Back != nil && run.Done() && !h.RetryPrimary && (h.Edit == nil || !h.Edit.Primary) {
+		// The head has one button to press: what the command worked on,
+		// when no Try again is.
+		h.Back.Primary = true
 	}
 	return h
 }
@@ -233,7 +278,7 @@ func runHeadOf(rc runCtx) *runHead {
 // terminal or one whose task sind ui no longer keeps: the command that its
 // title names, with the realm when only one realm has its cluster; once it
 // failed or was stopped, the dialog that does it again where there is one,
-// filled in from the title; and the way to its cluster.
+// filled in from its log; and the way to its cluster.
 func runHeadNoTask(rc runCtx, h *runHead) {
 	run := rc.Run
 	e := runEntryOf(rc.Snap, run)
@@ -241,8 +286,16 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 	if run.Title == "" {
 		return
 	}
-	h.Command = &pgCmd{Label: "Command", Text: strings.Join(sindArgvOf(e.realm, strings.Fields(run.Title)...), " ")}
-	h.CmdNote = "The event log names the command and what it worked on, not its flags."
+	h.Command = &pgCmd{Label: "What the event log names", Text: action.Quote(sindArgvOf(e.realm, runLogWords(run)...))}
+	h.CmdNote = "Its flags and config are not in the log."
+	if runSource(rc.Snap, run) == runFromUI {
+		h.CmdNote = "sind ui no longer keeps its form, and the log has no flags or config."
+	}
+	add := "add the ones it had."
+	if run.Root.Name == "create cluster" {
+		add = "add them, such as --config FILE."
+	}
+	h.CopyNote = "# The event log keeps no flags of this command; " + add + "\n" + h.Command.Text
 	if e.cluster != "" {
 		h.Back = &runLink{Label: "Open Clusters", Href: "/clusters"}
 		if e.realm != "" {
@@ -256,16 +309,106 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 	words := strings.Fields(run.Title)
 	switch strings.Join(words[:min(2, len(words))], " ") {
 	case "create cluster":
-		wait := ""
-		if runTimedOut(run) {
-			wait = "10m"
+		// New cluster rebuilt from the log of the run (actRetry).
+		label := "Try again…"
+		switch {
+		case class == runFailed && runTimedOut(run):
+			// Nodes ran out of the wait: the dialog sets a longer one.
+			_, word := runRetryWait(run)
+			label = "Try again with a " + word + " wait…"
+		case e.cluster != "":
+			label = "Try " + e.cluster + " again…"
 		}
-		h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-cluster", "realm", e.realm, "name", e.cluster, "wait", wait)}
+		h.Edit = &runLink{Label: label, Href: pgDialog("create-cluster", "from", run.ID, "realm", e.realm, "name", e.cluster), Primary: true}
 	case "create worker":
 		if e.realm != "" {
-			h.Edit = &runLink{Label: "Edit and try again…", Href: pgDialog("create-worker", "realm", e.realm, "cluster", e.cluster)}
+			// Add workers, for as many workers as the run made.
+			label, count := "Add a worker again…", ""
+			if n := len(activity.NodeNames(run.Root)); n > 1 {
+				label, count = "Add workers again…", strconv.Itoa(n)
+			}
+			h.Edit = &runLink{Label: label, Href: pgDialog("create-worker", "realm", e.realm, "cluster", e.cluster, "count", count)}
 		}
 	}
+}
+
+// runLogWords are the words of the command of a run without a task, as
+// sind takes them, from what the log names: the nodes of a power command
+// or a delete worker, as its title names them, and for a create worker
+// the cluster with --count for the workers it made.
+func runLogWords(run store.Run) []string {
+	words := strings.Fields(cmp.Or(run.Command, run.Title))
+	name := run.Root.Name
+	switch {
+	case name == "create worker":
+		if n := len(activity.NodeNames(run.Root)); n > 1 {
+			words = append(words, "--count", strconv.Itoa(n))
+		}
+	case (strings.HasPrefix(name, "power ") || name == "delete worker") && run.Command != "":
+		words = strings.Fields(run.Title)
+	}
+	return words
+}
+
+// runLockHolder finds what holds the lock that the run waits for: the
+// oldest run that goes on in the same realm, does not wait itself and can
+// be the command that the log of the wait names (runNamedBy), or else what
+// the log names. A run from a terminal that was killed never ends in the
+// log; the name in the log keeps the page from linking it.
+func runLockHolder(rc runCtx) (*runLink, string) {
+	msg := ""
+	for _, s := range activity.VisibleChildren(rc.Run.Root) {
+		if s.Kind == activity.KindWait && s.Name == runLockWait {
+			msg = s.Message
+			break
+		}
+	}
+	line, _, _ := strings.Cut(msg, " (pid ")
+	realm := runEntryOf(rc.Snap, rc.Run).realm
+	var holder *store.Run
+	for i, r := range rc.Snap.Runs {
+		if r.ID == rc.Run.ID || r.Done() || runWaitsForLock(r) || realm == "" || runEntryOf(rc.Snap, r).realm != realm || msg != "" && !runNamedBy(r, line) {
+			continue
+		}
+		if holder == nil || r.Start.Before(holder.Start) {
+			holder = &rc.Snap.Runs[i]
+		}
+	}
+	if holder != nil {
+		return &runLink{Label: runEntryOf(rc.Snap, *holder).title, Href: "/runs/" + holder.ID}, ""
+	}
+	return nil, msg
+}
+
+// runNamedBy reports whether a command line, as the lock names its
+// holder ("sind create cluster dev"), can be the command of the run: it
+// has the run's command words, and its words after them name the run's
+// cluster or nodes of it, or are values of flags, as the path of
+// --config.
+func runNamedBy(r store.Run, line string) bool {
+	words, name := strings.Fields(line), strings.Fields(r.Root.Name)
+	i := -1
+	for j := 0; j+len(name) <= len(words); j++ {
+		if slices.Equal(words[j:j+len(name)], name) {
+			i = j
+			break
+		}
+	}
+	if i < 0 || len(name) == 0 {
+		return false
+	}
+	rest := words[i+len(name):]
+	for j, w := range rest {
+		switch {
+		case strings.HasPrefix(w, "-"):
+		case w == r.Root.Node || strings.HasSuffix(w, "."+r.Root.Node), r.Root.Node == config.DefaultClusterName && !strings.Contains(w, "."):
+			return true
+		case j == 0 || !strings.HasPrefix(rest[j-1], "-") || strings.Contains(rest[j-1], "="):
+			// An argument that is no value of a flag names another cluster.
+			return false
+		}
+	}
+	return true
 }
 
 // sindArgvOf is the command line of sind in realm, which names a realm
@@ -291,15 +434,24 @@ func runTimedOut(run store.Run) bool {
 	return false
 }
 
-// runLink is a link of the run page.
-type runLink struct{ Label, Href string }
+// runLink is a link of the run page; Primary makes it the button to
+// press.
+type runLink struct {
+	Label, Href string
+	Primary     bool
+}
+
+// Dialog reports whether the link opens a dialog, which goes into the
+// layer of the page, not a page, as New cluster is.
+func (l runLink) Dialog() bool { return strings.HasPrefix(l.Href, "/dialogs/") }
 
 // runBack leads from the run of a task to what it worked on: its cluster
 // while it exists, the list of clusters once it is gone, and the mesh for
 // a command of the realm. Nil for a task of none of them.
 func runBack(snap store.Snapshot, t store.Task) *runLink {
+	_, exists := snap.Cluster(t.Realm, t.Cluster)
 	switch {
-	case t.Cluster != "" && runHasCluster(snap, t.Realm, t.Cluster):
+	case t.Cluster != "" && exists:
 		return &runLink{Label: "Open " + t.Cluster, Href: "/clusters/" + t.Realm + "/" + t.Cluster}
 	case t.Cluster != "":
 		return &runLink{Label: "Open Clusters", Href: "/clusters"}
@@ -329,39 +481,15 @@ func runRetry(t store.Task, class string) (string, *runLink) {
 	return t.ID, &runLink{Label: "Edit and try again…", Href: actEditHref(t)}
 }
 
-// runHasCluster reports whether the snapshot holds the cluster.
-func runHasCluster(snap store.Snapshot, realm, name string) bool {
-	for _, c := range snap.Clusters[realm] {
-		if c.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// runCount is a number of the summary.
-type runCount struct {
-	Label string
-	Class string
-	N     int
-}
-
-// runSummary is the panel with the clock, the bar and the counts.
+// runSummary is what the run page draws its summary and its timeline from,
+// and what it puts in the browser tab and announces.
 type runSummary struct {
-	// Title names the run, for the name of its bar.
-	Title   string
-	Elapsed string
-	Since   int64
-	Segs    runBar
-	Line    string
-	Counts  []runCount
-	// NoTargets is set for a run without targets, which has nothing to count.
-	NoTargets bool
-	Hints     []string
+	// Data is the run as gantt.js reads it (runGantt).
+	Data string
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
 	// SayKey, SayState and Say are what run.js announces when the state
-	// of the run changes, as for a card of the dock; SaySince is when the
+	// of the run changes, as for a command of the dock; SaySince is when the
 	// run started, in milliseconds since 1970, so that a page opened just
 	// after the start announces it.
 	SayKey   string
@@ -370,76 +498,25 @@ type runSummary struct {
 	SaySince int64
 }
 
-// runSummaryOf builds the summary.
+// runSummaryOf builds the summary. What the page says of hidden spans,
+// such as the tab's title and what failed, follows the terminal, which
+// shows a hidden step that takes long (activity.Reveal); gantt.js does the
+// same as it draws.
 func runSummaryOf(rc runCtx) *runSummary {
-	run := rc.Run
-	s := &runSummary{
-		Title: run.Title, Elapsed: runDur(runElapsed(run, rc.Now)), Since: runSince(run),
-		Segs: runSegs(run), Line: runLine(run, rc.Task, rc.Now),
-	}
+	s := &runSummary{Data: runGanttOf(rc).JSON()}
+	run := runRevealed(rc.Run, rc.Now)
 	canceling := false
 	s.SayKey = "r:" + run.ID
 	if t := rc.Task; t != nil {
 		canceling, s.SayKey = t.Canceling, "t:"+t.ID
 	}
 	s.SayState = runSayState(runStatusClass(run), canceling)
-	s.Say = runSay(run.Title, s.SayState, s.Elapsed, runFailure(run))
+	s.Say = runSay(run.Title, s.SayState, runDur(runElapsed(run, rc.Now)), runFailure(run))
 	if origin := runOrigin(run); !origin.IsZero() {
 		s.SaySince = origin.UnixMilli()
 	}
-	c := activity.CountTargets(run.Root)
-	s.NoTargets = c.Total == 0
-	s.Counts = []runCount{
-		{"ok", "ok", c.OK}, {"running", "run", c.Running}, {"queued", "", c.Queued},
-		{"failed", "bad", c.Failed}, {"canceled", "warn", c.Canceled},
-	}
-	if c.Skipped > 0 {
-		s.Counts = append(s.Counts, runCount{"skipped", "", c.Skipped})
-	}
-	if !run.Done() {
-		s.Hints = runWaitHints(run, rc.Now)
-	}
 	s.DocTitle = runDocTitle(run)
 	return s
-}
-
-// runWaitHints says what the run waits for: the lock or other waits of the
-// command, and how much of their limit the waits of the targets have used.
-func runWaitHints(run store.Run, now time.Time) []string {
-	var hints []string
-	for _, w := range activity.VisibleChildren(run.Root) {
-		if w.Kind == activity.KindWait && !w.Done() {
-			hint := "Waiting for " + w.Name
-			if w.Message != "" {
-				hint += ": " + w.Message
-			}
-			hints = append(hints, hint+".")
-		}
-	}
-	n, worst := 0, 0.0
-	var limit time.Duration
-	runVisit(run.Root, func(w store.Span, _ string) {
-		if w.Kind != activity.KindWait || w.Done() || w.Parent == run.Root.ID {
-			return
-		}
-		used, ok := activity.WaitUsed(w, now)
-		if !ok {
-			return
-		}
-		if n == 0 || used > worst {
-			worst, limit = used, w.Timeout
-		}
-		n++
-	})
-	if n > 0 {
-		noun := "waits"
-		if n == 1 {
-			noun = "wait"
-		}
-		hints = append(hints, fmt.Sprintf("%d %s for a node to become ready. The slowest has used %d %% of its limit (%s).",
-			n, noun, runPct(worst, 1), runDur(limit)))
-	}
-	return hints
 }
 
 // runDocTitle is the title of the browser tab: the step that goes on while
@@ -468,22 +545,24 @@ type runFailGroup struct {
 	Err   string
 }
 
-// runFailPanel is the panel that says why a run failed or stopped.
+// runFailPanel says what failed in a run, or what was going on when it
+// was stopped, for its outcome.
 type runFailPanel struct {
-	Title string
 	// Class is the callout class of the groups: bad or warn.
 	Class  string
 	Groups []runFailGroup
 	// CmdErr is the error of the command, when no target gave one.
 	CmdErr string
-	Notes  []string
-	// Doctor adds a hint to look at the host.
-	Doctor bool
+	// Says say in plain words what the nodes that ran out of time waited
+	// for (runTimeoutSays).
+	Says  []runPlain
+	Notes []string
 }
 
-// runFailedOf builds the panel; nil for a run that has not failed.
+// runFailedOf builds the panel; nil for a run that has not failed or been
+// stopped.
 func runFailedOf(rc runCtx) *runFailPanel {
-	run := rc.Run
+	run := runRevealed(rc.Run, rc.Now)
 	failures := activity.FailedTargets(run.Root)
 	failed := run.Done() && run.Status == store.StatusFailed
 	canceled := run.Done() && run.Status == store.StatusCanceled
@@ -491,57 +570,44 @@ func runFailedOf(rc runCtx) *runFailPanel {
 		return nil
 	}
 	if failures == nil && canceled {
-		return runStopped(run)
+		return runStopped(rc, run)
 	}
-	p := &runFailPanel{Title: "What failed", Class: "bad"}
+	p := &runFailPanel{Class: "bad"}
 	for _, f := range failures {
 		g := runFailGroup{Nodes: runFoldNodes(f.Nodes), Class: f.Class, Err: f.Err}
 		if len(f.Nodes) == 1 {
 			g.Err = strings.ReplaceAll(g.Err, "{}", f.Nodes[0])
 		}
 		p.Groups = append(p.Groups, g)
-		p.Doctor = p.Doctor || f.Class == "timeout"
 	}
 	if failures == nil {
 		p.CmdErr = run.Err
 	}
 	if canceled {
-		p.Title, p.Class = "Stopped", "warn"
+		p.Class = "warn"
 	}
-	if note := runRollbackNote(run); note != "" {
-		p.Notes = append(p.Notes, note)
-	}
+	p.Notes = runRollbackNotes(run)
 	return p
 }
 
-// runStopped builds the panel of a run that was stopped without a failure.
-func runStopped(run store.Run) *runFailPanel {
-	stopped, never := 0, 0
-	runVisit(run.Root, func(t store.Span, _ string) {
-		switch {
-		case t.Kind != activity.KindTarget:
-		case t.Started.IsZero():
-			never++
-		case t.Done() && t.Status == store.StatusOK:
-		default:
-			stopped++
-		}
-	})
-	p := &runFailPanel{Title: "Stopped", Class: "warn"}
-	p.Notes = append(p.Notes, fmt.Sprintf("The run was interrupted. %s stopped while they ran, and %s never started.",
-		runPlural(stopped, "target"), runPlural(never, "target")))
-	if note := runRollbackNote(run); note != "" {
-		p.Notes = append(p.Notes, note)
+// runRollbackNotes says what became of the rollback of a run where it may
+// have left something behind; the line beside the outcome says when it
+// went well (runRollbackWord).
+func runRollbackNotes(run store.Run) []string {
+	if note := runRollbackNote(run); note != "" && !strings.HasSuffix(note, "Nothing is left behind.") {
+		return []string{note}
 	}
-	return p
+	return nil
 }
 
-// runPlural writes a count and its noun: "1 target", "3 targets".
-func runPlural(n int, noun string) string {
-	if n == 1 {
-		return "1 " + noun
+// runStopped builds the panel of a run that was stopped without a
+// failure: what the nodes did at that time, and what sind undid.
+func runStopped(rc runCtx, run store.Run) *runFailPanel {
+	p := &runFailPanel{Class: "warn"}
+	for _, line := range append(runStoppedDoing(run), runStoppedUndo(rc)...) {
+		p.Says = append(p.Says, runPlain{Text: line})
 	}
-	return fmt.Sprintf("%d %ss", n, noun)
+	return p
 }
 
 // runRollbackNote says what became of the rollback step of a run, or is
@@ -570,9 +636,10 @@ func runRollbackNote(run store.Run) string {
 
 var runNameRE = regexp.MustCompile(`^(.*?)([1-9][0-9]*|0)$`)
 
-// runFoldNodes writes a set of node names the short way, as the terminal
-// does: worker-[2,5] for worker-2 and worker-5, worker-[0-3] for four in a
-// row. Names without a number at the end stay as they are.
+// runFoldNodes writes a set of node names the short way, as node sets do:
+// worker-[2,5] for worker-2 and worker-5, worker-[0-3] for four in a row
+// and worker-[0-1] for two. Names without a number at the end stay as they
+// are.
 func runFoldNodes(names []string) string {
 	type group struct {
 		prefix string
@@ -616,12 +683,9 @@ func runFoldNodes(names []string) string {
 			for j+1 < len(g.nums) && g.nums[j+1] <= g.nums[j]+1 {
 				j++
 			}
-			switch {
-			case g.nums[j]-g.nums[i] >= 2:
+			if g.nums[j] > g.nums[i] {
 				parts = append(parts, fmt.Sprintf("%d-%d", g.nums[i], g.nums[j]))
-			case j > i && g.nums[j] > g.nums[i]:
-				parts = append(parts, strconv.Itoa(g.nums[i]), strconv.Itoa(g.nums[j]))
-			default:
+			} else {
 				parts = append(parts, strconv.Itoa(g.nums[i]))
 			}
 			i = j + 1

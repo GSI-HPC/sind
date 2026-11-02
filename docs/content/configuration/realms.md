@@ -38,7 +38,7 @@ Realm is determined by the following precedence (highest first):
 {{< /cli >}}
 {{< ui >}}
 
-The realm switch in the top bar selects the realm that the pages show, or all realms. A dialog acts in the realm of its cluster and says so. **New cluster** and **Connect a container** have a **Realm** field instead, filled in with the realm of the page: type another realm there, or in New cluster a new name, which makes a new realm. Connect needs a realm with a cluster, as the container joins its mesh, and warns of one that it does not see. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci delete realm`.
+The realm switcher at the head of the **Realm** group of the rail selects the realm that Clusters, Nodes, Mesh and DNS, Monitoring and Topology show, or all realms; Overview and Activity show every realm. A command for the terminal on these pages has `--realm` when the realm is not `sind`, and a **Copy** button. A dialog acts in the realm of its cluster and says so. **New cluster** has a **Realm** list instead, which opens on the realm of the rail, or `sind` under all realms. It lists each realm with its clusters, and **New realm…**, which shows a field for the name of a new realm. The plan warns that the cluster makes a new realm, and names a realm of a close name, so that a typo does not make one unnoticed. **Connect a container** connects to the realm in its title, and has a button for each realm to switch it, as the container joins the mesh of a realm with a cluster. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci delete realm`.
 
 {{< /ui >}}
 {{< /ways >}}
@@ -53,7 +53,7 @@ sind --realm ci-42 delete cluster dev
 
 When a command does not find a cluster in its realm, the error names the clusters the realm does hold and the other realms that hold a cluster of that name, for example `cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`. `sind get cluster`, `get nodes`, `get node`, `get auth-key`, `enter`, `exec`, `ssh`, `logs`, `power`, `create worker` and `delete worker` all report it this way, and exit `1`.
 
-A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source. An invalid `--realm` fails every command with exit status 2, even one that does not use a realm such as `sind version`; `SIND_REALM` is only checked when it is the realm in effect.
+A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source. An invalid `--realm` fails every command with exit status 2, even one that does not use a realm such as `sind version`; `SIND_REALM` is only checked when it is the realm in effect. [Environment Variables]({{< relref "/usage/environment" >}}) lists the other `SIND_*` variables.
 
 ## Resource naming
 

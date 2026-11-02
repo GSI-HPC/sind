@@ -33,7 +33,7 @@ sind connect container $(kind get nodes --name bridge)
 {{< /cli >}}
 {{< ui >}}
 
-In `sind ui`, press **Connect a container…** on the Overview or on **Mesh and DNS**. Type the name of a kind node, such as `bridge-control-plane`, and press **Connect**. Do this for each node that `kind get nodes --name bridge` lists.
+In `sind ui`, press **Connect a container…** on the Overview or on **Mesh and DNS**. Pick a kind node, such as `bridge-control-plane`, from the list of containers, or pick **Another name…** and type it, and press **Connect bridge-control-plane**. Do this for each node that `kind get nodes --name bridge` lists.
 
 {{< uishot "dialog-connect" >}}
 

@@ -18,7 +18,7 @@ cmd/sind/          CLI commands (cobra)
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
-  ├── output.go    -o/--output handling (human, json)
+  ├── output.go    -o/--output handling (human, json; SIND_OUTPUT)
   ├── progress.go  Progress of create, delete, connect, disconnect and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
@@ -33,6 +33,8 @@ internal/mock/     Test doubles for cmdexec.Executor
   └── recording.go mock.RecordingExecutor, RecordedCall
 
 internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
+
+internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI, pkg/cluster and sind ui read them through it
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
@@ -86,6 +88,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
+  ├── clustername.go Cluster resolution (ResolveCluster: argument > SIND_CLUSTER > config > default)
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
@@ -130,6 +133,7 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 
 ```
 cmd/sind → pkg/cluster → pkg/cmdexec
+                       → internal/envvar
                        → internal/natsort
                        → pkg/config  → internal/hostname
                        → pkg/docker  → pkg/cmdexec

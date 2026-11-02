@@ -25,10 +25,10 @@ sind create cluster --config cluster.yaml
 {{< ui >}}
 
 1. Press **New cluster…**.
-2. Tick **api**.
+2. Open **More nodes** below the nodes and tick **api**.
 3. Press **Create**.
 
-{{< uishot "dialog-create-cluster" >}}
+{{< uishot "new-cluster" >}}
 
 {{< /ui >}}
 {{< /ways >}}

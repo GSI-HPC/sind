@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,14 +18,12 @@ import (
 // activity/testdata/file (all lines for n < 0) to runs, newest first.
 func runFixture(t *testing.T, file string, n int) []store.Run {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("activity", "testdata", file))
-	require.NoError(t, err)
 	red := activity.NewReducer(10)
-	for i, line := range bytes.Split(bytes.TrimSpace(data), []byte("\n")) {
+	for i, line := range strings.Split(runReadFixture(t, file), "\n") {
 		if n >= 0 && i >= n {
 			break
 		}
-		red.Take(line)
+		red.Take([]byte(line))
 	}
 	return red.Runs()
 }
@@ -48,7 +45,7 @@ func runTestServerAt(t *testing.T, clock func() time.Time) *testServer {
 	cfg, st := testConfig(t)
 	reg := NewRegistry()
 	reg.AddFragment(railFragment())
-	reg.AddFragment(tasksFragment())
+	registerDock(reg)
 	registerRun(reg)
 	cfg.Registry = reg
 	cfg.Now = clock

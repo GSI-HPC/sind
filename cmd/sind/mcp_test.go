@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -265,7 +266,7 @@ func TestMCPEffects_NameTools(t *testing.T) {
 func TestMCPServer_VersionAndTools(t *testing.T) {
 	setVersion(t, "v1.2.3", "")
 	// The server sets it for its tool calls, in this process.
-	t.Setenv(envLogTimestamps, "")
+	t.Setenv(envvar.LogTimestamps, "")
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	cfg := mcpConfig()
 	cfg.Transport = serverTransport
@@ -424,7 +425,7 @@ func startMCPStream(t *testing.T, args ...string) (string, *syncBuffer, func() e
 	t.Helper()
 	setVersion(t, "v1.2.3", "")
 	// The server sets it for its tool calls, in this process.
-	t.Setenv(envLogTimestamps, "")
+	t.Setenv(envvar.LogTimestamps, "")
 	root := NewRootCommand()
 	root.SetArgs(append([]string{"mcp", "stream", "--port", "0"}, args...))
 	stderr := &syncBuffer{}
@@ -493,7 +494,7 @@ func postInitialize(t *testing.T, url, authorization string) int {
 func TestMCPStream_RequiresToken(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
-	t.Setenv(mcpTokenEnv, "")
+	t.Setenv(envvar.MCPToken, "")
 	url, stderr, stop := startMCPStream(t)
 
 	tokenPath := filepath.Join(stateHome, "sind", "mcp-token")
@@ -596,11 +597,11 @@ func TestRefuseFlagArgs_RunsToCompletion(t *testing.T) {
 func TestMCPStream_TokenFromEnv(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
-	t.Setenv(mcpTokenEnv, "s3cret-token-0123456789")
+	t.Setenv(envvar.MCPToken, "s3cret-token-0123456789")
 	url, stderr, stop := startMCPStream(t)
 	defer func() { assert.NoError(t, stop()) }()
 
-	assert.Contains(t, stderr.String(), "Bearer token from "+mcpTokenEnv+"\n")
+	assert.Contains(t, stderr.String(), "Bearer token from "+envvar.MCPToken+"\n")
 	assert.NoFileExists(t, filepath.Join(stateHome, "sind", "mcp-token"))
 	assert.Equal(t, http.StatusUnauthorized, postInitialize(t, url, ""))
 	assert.Equal(t, http.StatusOK, postInitialize(t, url, "Bearer s3cret-token-0123456789"))
@@ -608,7 +609,7 @@ func TestMCPStream_TokenFromEnv(t *testing.T) {
 
 func TestMCPStream_ListenError(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(mcpTokenEnv, "s3cret-token-0123456789")
+	t.Setenv(envvar.MCPToken, "s3cret-token-0123456789")
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = ln.Close() }()
@@ -624,7 +625,7 @@ func TestMCPStream_ListenError(t *testing.T) {
 func TestMCPStream_ListenErrorKeepsToken(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
-	t.Setenv(mcpTokenEnv, "")
+	t.Setenv(envvar.MCPToken, "")
 	tokenPath := filepath.Join(stateHome, "sind", mcpTokenFile)
 	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0o700))
 	require.NoError(t, os.WriteFile(tokenPath, []byte("running-stream-token\n"), 0o600))
@@ -643,7 +644,7 @@ func TestMCPStream_ListenErrorKeepsToken(t *testing.T) {
 // TestMCPStream_TokenError checks that a token that cannot be made fails
 // the stream after it has its port, and frees the port.
 func TestMCPStream_TokenError(t *testing.T) {
-	t.Setenv(mcpTokenEnv, "bad token with spaces")
+	t.Setenv(envvar.MCPToken, "bad token with spaces")
 	_, _, err := executeCommand("mcp", "stream", "--port", "0")
 	require.ErrorContains(t, err, "a token is printable ASCII without spaces")
 }
@@ -651,20 +652,20 @@ func TestMCPStream_TokenError(t *testing.T) {
 func TestMCPStreamToken(t *testing.T) {
 	t.Run("invalid env", func(t *testing.T) {
 		for _, token := range []string{"two words, long enough", "tab\there-and-more-chars", "nl-and-more-characters\n", "ümlaut-and-more-characters"} {
-			t.Setenv(mcpTokenEnv, token)
+			t.Setenv(envvar.MCPToken, token)
 			_, _, err := mcpStreamToken()
-			require.EqualError(t, err, mcpTokenEnv+": a token is printable ASCII without spaces", token)
+			require.EqualError(t, err, envvar.MCPToken+": a token is printable ASCII without spaces", token)
 		}
 	})
 	t.Run("too short", func(t *testing.T) {
-		t.Setenv(mcpTokenEnv, "a")
+		t.Setenv(envvar.MCPToken, "a")
 		_, _, err := mcpStreamToken()
 		require.ErrorContains(t, err, "a token has at least 16 characters")
 	})
 	t.Run("new at every start", func(t *testing.T) {
 		stateHome := t.TempDir()
 		t.Setenv("XDG_STATE_HOME", stateHome)
-		t.Setenv(mcpTokenEnv, "")
+		t.Setenv(envvar.MCPToken, "")
 		path := filepath.Join(stateHome, "sind", "mcp-token")
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 		require.NoError(t, os.WriteFile(path, []byte("old\n"), 0o644))
@@ -687,7 +688,7 @@ func TestMCPStreamToken(t *testing.T) {
 		assert.Len(t, entries, 1, "no temporary file is left")
 	})
 	t.Run("no state directory", func(t *testing.T) {
-		t.Setenv(mcpTokenEnv, "")
+		t.Setenv(envvar.MCPToken, "")
 		t.Setenv("XDG_STATE_HOME", "")
 		t.Setenv("HOME", "")
 		_, _, err := mcpStreamToken()
@@ -696,14 +697,14 @@ func TestMCPStreamToken(t *testing.T) {
 	t.Run("state directory cannot be created", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "file")
 		require.NoError(t, os.WriteFile(file, nil, 0o600))
-		t.Setenv(mcpTokenEnv, "")
+		t.Setenv(envvar.MCPToken, "")
 		t.Setenv("XDG_STATE_HOME", file)
 		_, _, err := mcpStreamToken()
 		require.ErrorContains(t, err, "creating state directory")
 	})
 	t.Run("token file cannot be narrowed", func(t *testing.T) {
 		stateHome := t.TempDir()
-		t.Setenv(mcpTokenEnv, "")
+		t.Setenv(envvar.MCPToken, "")
 		t.Setenv("XDG_STATE_HOME", stateHome)
 		// A link to itself makes chmod fail with an error other than a missing file.
 		dir := filepath.Join(stateHome, "sind")
@@ -714,7 +715,7 @@ func TestMCPStreamToken(t *testing.T) {
 	})
 	t.Run("token file cannot be written", func(t *testing.T) {
 		stateHome := t.TempDir()
-		t.Setenv(mcpTokenEnv, "")
+		t.Setenv(envvar.MCPToken, "")
 		t.Setenv("XDG_STATE_HOME", stateHome)
 		// A directory where the token file goes makes the rename fail.
 		blocker := filepath.Join(stateHome, "sind", "mcp-token")
@@ -735,7 +736,7 @@ func TestMCPStreamToken(t *testing.T) {
 func TestAsMCPServer_Realm(t *testing.T) {
 	t.Setenv("SIND_REALM", "env")
 	// The server sets it for its tool calls, in this process.
-	t.Setenv(envLogTimestamps, "")
+	t.Setenv(envvar.LogTimestamps, "")
 	root := &cobra.Command{Use: "sind"}
 	root.PersistentFlags().String("realm", "", "")
 	var got string
@@ -758,10 +759,10 @@ func TestAsMCPServer_Realm(t *testing.T) {
 // TestAsMCPServer_NoTimestamps checks that the error lines of a server's
 // tool calls carry no time stamp.
 func TestAsMCPServer_NoTimestamps(t *testing.T) {
-	t.Setenv(envLogTimestamps, "")
+	t.Setenv(envvar.LogTimestamps, "")
 	var got string
 	server := &cobra.Command{Use: "start", RunE: func(*cobra.Command, []string) error {
-		got = os.Getenv(envLogTimestamps)
+		got = os.Getenv(envvar.LogTimestamps)
 		return nil
 	}}
 	asMCPServer(server)

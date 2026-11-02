@@ -46,9 +46,7 @@ type errorPage struct {
 	Status int
 	// Address is the path and query that failed, cut to maxAddressLen.
 	Address string
-	What    string
-	Hint    string
-	Links   []MissLink
+	*Miss
 }
 
 // NotFound reports whether the page is the Not found page.

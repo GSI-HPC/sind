@@ -186,6 +186,10 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 			`--env SIND_REALM: invalid realm name "Bad_Realm"`,
 		},
 		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_CLUSTER=Dev"},
+			`--env SIND_CLUSTER: invalid cluster name "Dev"`,
+		},
+		{
 			[]string{"mcp", "cursor", "enable", "--config-path", path, "--log-level", "bogus"},
 			`invalid --log-level value "bogus": want debug, info, warn or error`,
 		},

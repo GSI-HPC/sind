@@ -33,8 +33,8 @@ func (ts *testServer) part(target string) *httptest.ResponseRecorder {
 }
 
 // TestHelpCoversTheUI checks that every page that the default registry
-// holds has a help entry, and that every word and action that the templates
-// mark exists in the help texts.
+// holds has a help entry, and that every word that the templates mark exists
+// in the help texts.
 func TestHelpCoversTheUI(t *testing.T) {
 	h := help.Default()
 	for _, p := range defaultRegistry.snapshot().pages {
@@ -47,7 +47,6 @@ func TestHelpCoversTheUI(t *testing.T) {
 	}
 
 	wordRE := regexp.MustCompile(`data-word="([^"{}]+)"`)
-	actionRE := regexp.MustCompile(`data-help="([^"{}]+)"`)
 	err := fs.WalkDir(webFS(), "templates", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -59,10 +58,6 @@ func TestHelpCoversTheUI(t *testing.T) {
 		for _, m := range wordRE.FindAllStringSubmatch(string(data), -1) {
 			_, ok := h.Word(m[1])
 			assert.True(t, ok, "%s marks the word %q, which has no help", p, m[1])
-		}
-		for _, m := range actionRE.FindAllStringSubmatch(string(data), -1) {
-			_, ok := h.Action(m[1])
-			assert.True(t, ok, "%s marks the action %q, which has no help", p, m[1])
 		}
 		return nil
 	})
@@ -91,7 +86,7 @@ func TestHelpPane(t *testing.T) {
 		"/help?topic=%2F":                      {"<h2>Overview</h2>"},
 		"/help?topic=%2Fclusters%2Fsind%2Fdev": {"<h2>Cluster</h2>", `data-help-topic="word/node-roles"`, `data-help-topic="howto/job-output"`, `data-help-topic="howto/clean-up"`},
 		"/help?topic=%2Fno%2Fsuch%2Fpage":      {"<h2>Overview</h2>"},
-		"/help?topic=word/realm":               {`data-crumb="Word"`, "<h2>Realm</h2>", "sind get realms", `data-help-copy="sind get realms"`, "sind help realm", "gsi-hpc.github.io/sind/configuration/realms/?via=ui", `rel="noopener noreferrer"`, `data-help-topic="words">All words`},
+		"/help?topic=word/realm":               {`data-crumb="Word"`, "<h2>Realm</h2>", "sind get realms", `data-shell-copy="sind get realms"`, "sind help realm", "gsi-hpc.github.io/sind/configuration/realms/?via=ui", `rel="noopener noreferrer"`, `data-help-topic="words">All words`},
 		"/help?topic=word/lock":                {"<h2>Realm lock</h2>"},
 		"/help?topic=word/slurmd":              {"<h2>slurmd</h2>", "sind logs worker-0 slurmd"},
 		"/help?topic=action/power":             {`data-crumb="Action"`, "<h2>Power</h2>", "sind power reboot NODES", "To undo: use the opposite verb."},
@@ -129,8 +124,8 @@ func TestHelpTopicsOfTheUI(t *testing.T) {
 	} {
 		assert.Contains(t, body, s)
 	}
-	for _, c := range helpChords {
-		assert.Contains(t, body, "Go to "+c.Label)
+	for _, it := range navItems {
+		assert.Contains(t, body, "Go to "+it.Label)
 	}
 
 	w = ts.part("/help?topic=words")
@@ -168,23 +163,10 @@ func TestHelpChordsMatchTheScript(t *testing.T) {
 		got[string(p[1])] = string(p[2])
 	}
 	want := map[string]string{}
-	for _, c := range helpChords {
-		want[c.Key] = c.Path
+	for _, it := range navItems {
+		want[it.Chord] = it.Href
 	}
 	assert.Equal(t, want, got)
-	for _, it := range navItems {
-		assert.Contains(t, got, firstChordKey(it.Href), "rail entry %s has no g key", it.Label)
-	}
-}
-
-// firstChordKey returns the key of the chord that goes to path.
-func firstChordKey(path string) string {
-	for _, c := range helpChords {
-		if c.Path == path {
-			return c.Key
-		}
-	}
-	return "none"
 }
 
 func TestHelpPage(t *testing.T) {
@@ -231,10 +213,8 @@ func TestHelpPaneEscapesTheQuery(t *testing.T) {
 func TestHelpCard(t *testing.T) {
 	ts := helpServer(t)
 	for target, want := range map[string][]string{
-		"/help?topic=word/mesh&card=1":             {`<span class="k">Word</span>`, "<b>Mesh</b>", "$ sind get mesh", `<span class="faint more kbd-only k1-on"><kbd>?</kbd> for more</span>`},
-		"/help?topic=word/lock&card=1":             {"<b>Realm lock</b>"},
-		"/help?topic=action/delete-cluster&card=1": {`<span class="k bad">Action · Cannot be undone</span>`, "$ sind delete cluster NAME"},
-		"/help?topic=action/create-worker&card=1":  {`<span class="k">Action · Delete the workers</span>`},
+		"/help?topic=word/mesh&card=1": {`<span class="k">Word</span>`, "<b>Mesh</b>", "$ sind get mesh", `<span class="faint more kbd-only k1-on"><kbd>?</kbd> for more</span>`},
+		"/help?topic=word/lock&card=1": {"<b>Realm lock</b>"},
 	} {
 		w := ts.part(target)
 		require.Equal(t, http.StatusOK, w.Code, target)
@@ -252,7 +232,7 @@ func TestHelpNotFound(t *testing.T) {
 	for _, target := range []string{
 		"/help?topic=word/nope", "/help?topic=action/nope", "/help?topic=howto/nope",
 		"/help?topic=page/overview", "/help?topic=nonsense",
-		"/help?topic=howto/slow-create&card=1", "/help?topic=%2F&card=1", "/help?topic=keys&card=1",
+		"/help?topic=howto/slow-create&card=1", "/help?topic=action/power&card=1", "/help?topic=%2F&card=1", "/help?topic=keys&card=1",
 	} {
 		w := ts.part(target)
 		assert.Equal(t, http.StatusNotFound, w.Code, target)

@@ -3,15 +3,16 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() {
-	RegisterFragment(Fragment{
+	defaultRegistry.AddFragment(Fragment{
 		Name:     "more-mesh",
 		Topics:   []store.Topic{store.TopicRealms, store.TopicDocker},
 		Prefixes: []string{"mesh/", "networks/", "nodes/"},
@@ -19,10 +20,10 @@ func init() {
 		Load:     moreMeshLoad,
 	})
 	// A list page reads the realm cookie, which only a route can see.
-	RegisterRoute(pgListRoute(Page{
+	defaultRegistry.AddRoute(pgRealmRoute(Page{
 		Name: "more-mesh", Pattern: "GET /mesh", Title: "Mesh and DNS", Nav: "mesh",
 		Params: []string{"realm"}, Fragments: []string{"more-mesh"},
-	}))
+	}, true, false))
 }
 
 // moreMeshData is what the Mesh and DNS page shows.
@@ -50,6 +51,9 @@ type moreMeshRealm struct {
 	Subnet   string
 	Records  []moreDNSRecord
 	External []moreExternal
+	// Outsides are the containers that sind did not make and that run,
+	// which can join the realm.
+	Outsides []pgOutside
 	// ConnectURL and DeleteURL open the dialogs of the realm.
 	ConnectURL, DeleteURL string
 }
@@ -67,9 +71,8 @@ type moreDNSRecord struct {
 // moreDNSRecords adds the node pages to the records of a realm.
 func moreDNSRecords(sn store.Snapshot, realm string, records []mesh.DNSRecord) []moreDNSRecord {
 	pages := map[string]string{}
-	for _, n := range sn.NodesOf(realm) {
-		short := strings.TrimPrefix(n.Container, cluster.ContainerPrefix(realm, n.Cluster))
-		pages[n.FQDN] = "/nodes/" + realm + "/" + n.Cluster + "/" + short
+	for _, n := range sn.Nodes[realm] {
+		pages[n.FQDN] = pgNodeURL(realm, n.Cluster, pgShort(realm, n.Cluster, n.Container))
 	}
 	out := make([]moreDNSRecord, len(records))
 	for i, r := range records {
@@ -84,6 +87,85 @@ type moreExternal struct {
 	DisconnectURL string
 }
 
+// moreDNSShown is how many DNS records of a realm the page shows before
+// Show all.
+const moreDNSShown = 10
+
+// Cut reports whether the page hides the record at i until the user asks
+// for all.
+func (r moreMeshRealm) Cut(i int) bool { return i >= moreDNSShown }
+
+// CutAny reports whether the page hides any record until Show all.
+func (r moreMeshRealm) CutAny() bool { return r.Cut(len(r.Records) - 1) }
+
+// ConnectCommand is the command that connects a container of any name to
+// the realm.
+func (r moreMeshRealm) ConnectCommand() string {
+	if r.Name == mesh.DefaultRealm {
+		return "sind connect container NAME"
+	}
+	return "sind --realm " + r.Name + " connect container NAME"
+}
+
+// pgOutside is a container that sind did not make, and that can join a
+// realm: the Connect dialog offers it, and the Mesh and DNS page while no
+// container is connected.
+type pgOutside struct {
+	Name, Image string
+	// Networks names its networks, as "network bridge"; Up is how long it
+	// runs, as "up 2 hours".
+	Networks, Up string
+	// State is Docker's word for its state; Off says that it does not
+	// run, so that it cannot be picked.
+	State string
+	Off   bool
+	// Also names the other realms that have it, as "also in realm sind".
+	Also string
+	// ConnectURL opens the Connect dialog for it.
+	ConnectURL string
+}
+
+// pgOutsides returns the containers that sind did not make and that are
+// not on the mesh of the realm, those that run first, each by name. It
+// leaves out the containers of sind's other realms, such as their
+// monitoring stacks, which the docker ps of the realm does not tell apart.
+func pgOutsides(sn store.Snapshot, realm string) []pgOutside {
+	var on, off []pgOutside
+	for _, c := range sn.Meshes[realm].Connectable {
+		if _, ok := action.SindContainer(sn, c.Name); ok {
+			continue
+		}
+		o := pgOutside{Name: c.Name, Image: c.Image, State: c.State, Off: c.State != "running", Up: strings.ToLower(c.Status),
+			ConnectURL: pgDialog("connect", "realm", realm, "container", c.Name)}
+		switch len(c.Networks) {
+		case 0:
+		case 1:
+			o.Networks = "network " + c.Networks[0]
+		default:
+			o.Networks = "networks " + strings.Join(c.Networks, ", ")
+		}
+		var also []string
+		for _, r := range pgRealmNames(sn, "") {
+			if r != realm && slices.Contains(sn.Meshes[r].External, c.Name) {
+				also = append(also, r)
+			}
+		}
+		switch len(also) {
+		case 0:
+		case 1:
+			o.Also = "also in realm " + also[0]
+		default:
+			o.Also = "also in realms " + pgJoin(also)
+		}
+		if o.Off {
+			off = append(off, o)
+		} else {
+			on = append(on, o)
+		}
+	}
+	return append(on, off...)
+}
+
 // moreMeshLoad fills the data of the Mesh and DNS page from the snapshot.
 func moreMeshLoad(v *View) error {
 	realms := moreRealms(v)
@@ -96,21 +178,26 @@ func moreMeshLoad(v *View) error {
 	for _, name := range realms {
 		r := moreMeshRealm{
 			Name:       name,
-			ConnectURL: moreDialogURL("connect", "realm", name),
-			DeleteURL:  moreDialogURL("delete-realm", "realm", name),
+			ConnectURL: pgDialog("connect", "realm", name),
+			DeleteURL:  pgDialog("delete-realm", "realm", name),
 		}
-		if m, ok := v.Snap.MeshOf(name); ok {
+		if m, ok := v.Snap.Meshes[name]; ok {
 			r.Err, r.Records = m.Err, moreDNSRecords(v.Snap, name, m.Records)
 			if m.Info != nil {
 				r.Has, r.Info = true, *m.Info
-				for _, n := range v.Snap.NetworksOf(name) {
+				for _, n := range v.Snap.Networks[name] {
 					if n.Name == m.Info.Network {
 						r.Subnet = n.Subnet
 					}
 				}
 			}
 			for _, e := range m.External {
-				r.External = append(r.External, moreExternal{e, moreDialogURL("disconnect", "realm", name, "nodes", e)})
+				r.External = append(r.External, moreExternal{e, pgDialog("disconnect", "realm", name, "container", e)})
+			}
+		}
+		for _, o := range pgOutsides(v.Snap, name) {
+			if !o.Off {
+				r.Outsides = append(r.Outsides, o)
 			}
 		}
 		d.Realms = append(d.Realms, r)

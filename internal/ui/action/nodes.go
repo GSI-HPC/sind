@@ -20,13 +20,13 @@ func ShortName(n cluster.NodeSummary) string {
 	return short
 }
 
-// nodeNames returns the node names of the form's field "nodes", which may
+// NodeNames returns the node names of the form's field "nodes", which may
 // repeat and may hold several names separated by commas or spaces, without
 // duplicates, in the order given.
-func nodeNames(f Form) []string {
+func NodeNames(f Form) []string {
 	var names []string
 	for _, v := range f["nodes"] {
-		for _, n := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' }) {
+		for _, n := range splitList(v) {
 			if !slices.Contains(names, n) {
 				names = append(names, n)
 			}
@@ -39,7 +39,7 @@ func nodeNames(f Form) []string {
 // names, which must all exist and, where workersFor says what the command
 // does to them, such as "deleted", be workers.
 func pickNodes(f Form, c Context, realm, clusterName, workersFor string) ([]cluster.NodeSummary, error) {
-	names := nodeNames(f)
+	names := NodeNames(f)
 	if len(names) == 0 {
 		return nil, &Missing{Field: "nodes", Text: "pick at least one node of " + clusterName}
 	}
@@ -61,15 +61,29 @@ func pickNodes(f Form, c Context, realm, clusterName, workersFor string) ([]clus
 
 // nodeWords returns the node arguments for the short names of nodes of the
 // cluster, as sind takes them: one folded set such as worker-[0-3].dev, or,
-// should folding not give back exactly these nodes, the plain names.
+// should folding not give back exactly these nodes, the plain names. The
+// nodes of the default cluster go without it, as one types them.
 func nodeWords(clusterName string, shorts []string) []string {
+	if clusterName == config.DefaultClusterName {
+		return foldNodes(shorts)
+	}
+	return namedNodeWords(clusterName, shorts)
+}
+
+// namedNodeWords is nodeWords with the cluster in the arguments, the
+// default one too, for a command whose copy must act on these nodes in a
+// shell with SIND_CLUSTER: delete worker.
+func namedNodeWords(clusterName string, shorts []string) []string {
 	names := make([]string, len(shorts))
 	for i, s := range shorts {
-		names[i] = s
-		if clusterName != config.DefaultClusterName {
-			names[i] = s + "." + clusterName
-		}
+		names[i] = s + "." + clusterName
 	}
+	return foldNodes(names)
+}
+
+// foldNodes returns node names as one folded set, or the names themselves
+// should folding not give back exactly these nodes.
+func foldNodes(names []string) []string {
 	if set, err := nodeset.Parse(strings.Join(names, ",")); err == nil {
 		folded := set.String()
 		back, err := nodeset.Parse(folded)
@@ -79,6 +93,13 @@ func nodeWords(clusterName string, shorts []string) []string {
 		}
 	}
 	return names
+}
+
+// NodeSet folds the short names of nodes into one node set as sind takes
+// them, such as worker-[0-2], or joins them with commas where they do not
+// fold.
+func NodeSet(shorts []string) string {
+	return strings.Join(nodeWords(config.DefaultClusterName, shorts), ",")
 }
 
 // nextWorkers returns the short names that new workers of a cluster with the

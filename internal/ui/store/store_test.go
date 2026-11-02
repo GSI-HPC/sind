@@ -13,7 +13,7 @@ import (
 
 func TestRuns(t *testing.T) {
 	s := New()
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 
 	s.SetRuns([]Run{{ID: "b", Trace: "t2"}, {ID: "a", Trace: "t1"}}, "b")
@@ -62,6 +62,18 @@ func TestTasks(t *testing.T) {
 	assert.Len(t, s.Snapshot().Tasks, 2)
 }
 
+func TestDismissRun(t *testing.T) {
+	s := New()
+	sub := s.Notifier().Subscribe()
+	defer sub.Close()
+	s.DismissRun("a")
+	before := s.Snapshot()
+	s.DismissRun("b")
+	assert.Equal(t, []Topic{TopicNeeds}, sub.Take())
+	assert.Equal(t, map[string]bool{"a": true, "b": true}, s.Snapshot().Dismissed)
+	assert.Equal(t, map[string]bool{"a": true}, before.Dismissed, "a published snapshot never changes")
+}
+
 func TestEndedTasksAreCapped(t *testing.T) {
 	s := New()
 	end := time.Now()
@@ -70,7 +82,7 @@ func TestEndedTasksAreCapped(t *testing.T) {
 		s.AddTask(Task{ID: fmt.Sprint(i), Trace: fmt.Sprint("tr", i), Status: TaskRunning})
 	}
 	s.SetRuns([]Run{{ID: "r0", Trace: "tr0", End: &end}, {ID: "r1", Trace: "tr1", End: &end}, {ID: "nt", End: &end}})
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 	for i := range MaxEndedTasks {
 		s.UpdateTask(fmt.Sprint(i), func(t *Task) { t.End, t.Status = &end, TaskOK })
@@ -93,7 +105,7 @@ func TestEndedTasksAreCapped(t *testing.T) {
 
 func TestSlowSubscriberLosesNoTopic(t *testing.T) {
 	s := New()
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	for range 20 {
 		s.AddTask(Task{})
 	}
@@ -132,7 +144,7 @@ func TestRunsEndWithTheirTask(t *testing.T) {
 		{ID: "c", Trace: "tr3", Start: start, End: &start, Status: StatusOK},
 		{ID: "d", Start: start},
 	})
-	sub := s.Subscribe()
+	sub := s.Notifier().Subscribe()
 	defer sub.Close()
 
 	// The task of a ends, killed: its run, which the log never ended, ends.

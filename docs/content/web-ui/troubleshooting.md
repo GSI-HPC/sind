@@ -61,4 +61,4 @@ The activity log has no end for this run, and its last event is more than an hou
 
 ## A command waits for the realm lock
 
-The Overview says that a command holds the lock of the realm, and it names that command. Your command goes on when the other one ends. Open **Activity** to see the runs. If the other command hangs, stop it: press **Stop** if the UI started it, or press Ctrl-C in its terminal. See [Realms]({{< relref "/configuration/realms" >}}) for the lock.
+**Running now** on the Overview shows the command that holds the lock of the realm, and that yours waits for it. Your command goes on when the other one ends. Open **Activity** to see the runs; the page of the run that waits links the run that holds the lock. When no command holds the lock but the realm stays locked, for example after a command was killed, **Needs you** shows a **Lock** row that names the command that took it and those that wait for it. If the other command hangs, stop it: press **Stop** if the UI started it, or press Ctrl-C in its terminal. See [Realms]({{< relref "/configuration/realms" >}}) for the lock.

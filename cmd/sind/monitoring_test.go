@@ -96,11 +96,13 @@ func TestGetCluster_Monitored(t *testing.T) {
 func TestGetMonitoring(t *testing.T) {
 	stdout, _, err := executeWithMock(&mock.Executor{OnCall: monitoredOnCall(t)}, "get", "monitoring")
 	require.NoError(t, err)
-	assert.Equal(t, `SERVICE     CONTAINER        ADDRESS                           STATUS
-grafana     sind-grafana     http://grafana.sind.sind:3000     running
-prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
-loki        sind-loki        http://loki.sind.sind:3100        running
-alloy       sind-alloy       -                                 exited
+	assert.Equal(t, `SERVICE     CONTAINER        ADDRESS                           TYPE          STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     web UI        running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  web UI + API  running
+loki        sind-loki        http://loki.sind.sind:3100        API           running
+alloy       sind-alloy       -                                 web UI        exited
+
+loki serves an API only, no web UI. To see its data, open Grafana and use Explore.
 
 CLUSTERS
 NAME  NODES  SLURM
@@ -113,7 +115,7 @@ dev   2      26.05.5
 	require.NoError(t, json.Unmarshal([]byte(stdout), &m))
 	assert.Equal(t, "sind", m.Realm)
 	assert.Equal(t, cluster.MonitoringService{
-		Name: observability.ServiceGrafana, Container: "sind-grafana", Image: "img-sind-grafana",
+		Name: observability.ServiceGrafana, Container: "sind-grafana", Image: "img-sind-grafana", Interface: observability.InterfaceWebUI,
 		IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, []cluster.MonitoredCluster{{Name: "dev", Nodes: 2, SlurmVersion: "26.05.5"}}, m.Clusters)

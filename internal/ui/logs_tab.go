@@ -4,7 +4,6 @@ package ui
 
 import (
 	"fmt"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,6 +53,23 @@ type LogsTabView struct {
 	Sind, Suffix string
 	// Keep is how many lines the tab keeps.
 	Keep int
+	// Fixed is set on the Logs tab of a node page, whose node is that of
+	// the page: the tab has no picker of the node. Ended is what the tab
+	// says in place of Follow once the log of a node that does not run
+	// ended, empty for one that runs.
+	Fixed bool
+	Ended string
+}
+
+// NodeLogsTab returns what the Logs tab of the view's node page shows:
+// LogsTab, with the node of the page.
+func (v *View) NodeLogsTab() *LogsTabView {
+	d := v.LogsTab()
+	d.Fixed = true
+	if nv, ok := v.Data.(*pgNodeView); ok {
+		d.Ended = nv.LogsEnded()
+	}
+	return d
 }
 
 // logsNodeOption is a node of the node picker.
@@ -132,22 +148,18 @@ func (v *View) LogsTab() *LogsTabView {
 	return d
 }
 
-// Command returns the command of the terminal that shows the same log.
+// Command returns the command of the terminal that shows the same log:
+// the container output of the node, the journal of one unit, or the whole
+// journal, which only a command on the node shows. logs.js writes the same.
 func (d *LogsTabView) Command() string {
-	return logsCommand(d.Sind, d.Node+d.Suffix, d.Source, d.Unit, d.Count)
-}
-
-// logsCommand returns the sind command that follows a log: the container
-// output of the node arg, the journal of one unit, or the whole journal,
-// which only a command on the node shows. logs.js writes the same.
-func logsCommand(sind, arg, source, unit string, lines int) string {
+	arg := d.Node + d.Suffix
 	switch {
-	case source != string(logsJournal):
-		return fmt.Sprintf("%s logs %s -f -n %d", sind, arg, lines)
-	case unit != "":
-		return fmt.Sprintf("%s logs %s %s -f -n %d", sind, arg, unit, lines)
+	case d.Source != string(logsJournal):
+		return fmt.Sprintf("%s logs %s -f -n %d", d.Sind, arg, d.Count)
+	case d.Unit != "":
+		return fmt.Sprintf("%s logs %s %s -f -n %d", d.Sind, arg, d.Unit, d.Count)
 	}
-	return fmt.Sprintf("%s ssh %s -- journalctl -f -n %d", sind, arg, lines)
+	return fmt.Sprintf("%s ssh %s -- journalctl -f -n %d", d.Sind, arg, d.Count)
 }
 
 // logsThousands writes n with a comma between the thousands: 5,000.
@@ -157,18 +169,6 @@ func logsThousands(n int) string {
 		s = s[:i] + "," + s[i:]
 	}
 	return s
-}
-
-// pgLogsURL returns the address of the Logs tab of a cluster that shows the
-// log of one node: the journal of unit, or the output of its container
-// for no unit.
-func pgLogsURL(realm, name, short, unit string) string {
-	q := url.Values{"tab": {"logs"}, "node": {short}}
-	if unit != "" {
-		q.Set("source", string(logsJournal))
-		q.Set("unit", unit)
-	}
-	return "/clusters/" + url.PathEscape(realm) + "/" + url.PathEscape(name) + "?" + q.Encode()
 }
 
 // KeepText is Keep for a sentence: 10,000.

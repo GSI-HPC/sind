@@ -26,8 +26,8 @@ var pgNow = time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 func pgRegistry() *Registry {
 	r := NewRegistry()
 	r.AddFragment(railFragment())
-	r.AddFragment(tasksFragment())
-	r.AddRoute(pgRealmRoute(overviewPage, false))
+	registerDock(r)
+	r.AddRoute(pgRealmRoute(overviewPage, false, false))
 	pgRegister(r)
 	return r
 }

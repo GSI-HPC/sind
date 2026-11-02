@@ -16,7 +16,7 @@ type SlurmFile struct {
 	section           func(s *config.Slurm) *config.Section
 }
 
-// SlurmFiles are the Slurm config files of the New cluster dialog, in
+// SlurmFiles are the Slurm config files of the New cluster page, in
 // order.
 var SlurmFiles = []SlurmFile{
 	{"main", "slurm.conf", "SelectType=select/cons_tres", func(s *config.Slurm) *config.Section { return &s.Main }},
@@ -35,10 +35,6 @@ func SlurmFields() []string {
 	}
 	return fields
 }
-
-// IdentityModes are the values of the field "identity", the first the
-// default, which the config leaves out.
-var IdentityModes = []config.IdentityMode{config.IdentityLocal, config.IdentityNSSSlurm, config.IdentityClientIDs}
 
 // clusterSlurm reads the lines of the Slurm config files, the identity
 // mode and CVMFS into the config. sind checks the lines; the dialog only

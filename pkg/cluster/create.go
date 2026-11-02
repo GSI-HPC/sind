@@ -96,11 +96,13 @@ func missingImages(ctx context.Context, client *docker.Client, images []string) 
 // imagePull is the image pull of a Create: the steps that run an image wait
 // for it, the others run alongside. pulled says whether the step "pull
 // images" ran, which err is the error of when it failed; an err without it
-// is that of the inspection of the images.
+// is that of the inspection of the images. waiting is the progress wait
+// "images" of the steps that wait for it.
 type imagePull struct {
-	done   chan struct{}
-	err    error
-	pulled bool
+	done    chan struct{}
+	err     error
+	pulled  bool
+	waiting *progress.Span
 }
 
 // startPull pulls images in g: all of them with all (--pull), else those
@@ -109,14 +111,19 @@ type imagePull struct {
 // one of the client's docker call slots for as long as it pulls, and so
 // keep the readiness probes of nodes that have started from running.
 // Without images the pull is done at once.
-func startPull(ctx context.Context, g *errgroup.Group, client *docker.Client, images []string, all bool) *imagePull {
+//
+// The steps that run an image wait under the span of waitCtx, the hidden
+// step "preflight", which shows the wait "images" from the start of the
+// pull to its end, so that a display shows what holds the step up.
+func startPull(ctx, waitCtx context.Context, g *errgroup.Group, client *docker.Client, images []string, all bool) *imagePull {
 	p := &imagePull{done: make(chan struct{})}
 	if len(images) == 0 {
 		close(p.done)
 		return p
 	}
+	_, p.waiting = progress.Start(waitCtx, progress.KindWait, "images")
 	g.Go(func() error {
-		defer close(p.done)
+		defer p.end()
 		if !all {
 			images, p.err = missingImages(ctx, client, images)
 		}
@@ -127,6 +134,18 @@ func startPull(ctx context.Context, g *errgroup.Group, client *docker.Client, im
 		return p.err
 	})
 	return p
+}
+
+// end ends the wait "images" with the pull, and marks the pull done: the
+// wait ends ok, or stopped by a pull that failed, which the step "pull
+// images" or the preflight shows.
+func (p *imagePull) end() {
+	if p.err != nil {
+		p.waiting.End(stopped{p.err})
+	} else {
+		p.waiting.End(nil)
+	}
+	close(p.done)
 }
 
 // wait blocks until the pull is done, and returns its error, or until ctx
@@ -318,11 +337,12 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	if cfg.Monitoring {
 		images = append(images, observability.Images()...)
 	}
-	pull := startPull(pullCtx, prepGroup, client, images, cfg.Pull)
 	// The checks and the resources are the hidden progress step
 	// "preflight", which a display shows only once it has run for a
-	// second; the pull is a step of its own beside it.
+	// second; the pull is a step of its own beside it, which the preflight
+	// waits for.
 	prepCtx, preflight := progress.Start(pullCtx, progress.KindStep, "preflight", progress.Flagged(progress.FlagHidden))
+	pull := startPull(pullCtx, prepCtx, prepGroup, client, images, cfg.Pull)
 
 	// Branch A: preflight → createResources, which connects the SSH relay
 	// to the cluster network. Serialised because createResources only makes

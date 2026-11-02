@@ -4,14 +4,14 @@
 # the action uses.
 - id: create-cluster
   title: New cluster
-  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. The dialog writes the config, which Edit YAML lets you change as a whole; Start from YAML takes a config that you paste or open from a file.
+  summary: Creates the containers, networks and volumes of a cluster and waits until Slurm is ready. If a node is not ready in time, sind removes everything again. Its page starts from a set of nodes or from a cluster you have, and its plan shows what the nodes take of the host and the warnings of the Doctor that they reach. sind ui writes the config, which Edit YAML lets you change as a whole; Start from YAML takes a config that you paste or open from a file.
   command: sind create cluster --config FILE
   undo: Delete the cluster
   doc: usage/cluster-lifecycle#create-a-cluster
   words: [cluster, node-roles, managed, data, identity, wait, rollback]
 - id: create-worker
   title: Add workers
-  summary: Adds worker nodes to a running cluster and tells slurmctld.
+  summary: Adds worker nodes to a running cluster, in the partition all, and reconfigures slurmctld. Opened without a cluster, as from the Overview or the jump box while there are several, the dialog asks for the cluster first; one that a command creates or deletes now is off. It sets the memory limits of the new workers and of the nodes that run against the memory of the Docker host, and holds the button while they come to more, until you tick Add anyway.
   command: sind create worker CLUSTER --count N
   undo: Delete the workers
   doc: usage/worker-management#add-workers
@@ -42,11 +42,18 @@
   words: [worker, nodeset]
 - id: power
   title: Power
-  summary: Drains or resumes workers in Slurm with scontrol, or starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. The dialog groups the actions, selects the one of the button that opened it, and warns before it stops the controller in control, the standby controller of a pair, the db node or the last running workers.
+  summary: Drains or resumes workers in Slurm with scontrol, or starts, shuts down, reboots, freezes or cuts node containers, at most 8 at a time. Opened for an action and nodes, the dialog is a short confirmation that names them, with Change nodes for the picker; opened without, it picks no action for you. The picker shows the Slurm state and the issues of each node, ticks the nodes of a node set or a quick pick, and turns off the actions that fit no ticked node. It warns before it stops the controller in control, the standby controller of a pair, the db node or the last running workers.
   command: sind power reboot NODES
   undo: Use the opposite verb
   doc: usage/power-control#commands
   words: [nodeset, drain]
+- id: restart-service
+  title: Restart a service
+  summary: Restarts one systemd unit of a running node, such as a slurmd that failed, with systemctl restart through sind ssh. The container and its other processes go on, so it is the first fix to try for one failed service; Reboot is the next. It does not run while sshd is down, as sind ssh needs it.
+  command: sind ssh NODE -- systemctl restart UNIT
+  undo: Nothing to undo
+  doc: usage/power-control#restart-a-service
+  words: [managed]
 - id: connect
   title: Connect a container
   summary: Attaches a container that sind did not make to the networks of the realm.

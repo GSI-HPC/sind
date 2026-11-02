@@ -21,6 +21,7 @@ func TestBuildCreateCluster_Sizes(t *testing.T) {
 		{"medium", valid("size", "m"), "defaults:\n  cpus: 2\n  memory: 1g\n  tmpSize: 512m\nstorage:"},
 		{"large", valid("size", "l"), "defaults:\n  cpus: 4\n  memory: 4g\n  tmpSize: 1g\nstorage:"},
 		{"custom", valid("size", "x", "cpus", "3", "memory", "1.5g", "tmp", "50%"), "defaults:\n  cpus: 3\n  memory: 1.5g\n  tmpSize: 50%\nstorage:"},
+		{"memory as people write it", valid("size", "x", "memory", "2 GB"), "defaults:\n  cpus: 1\n  memory: 2g\nstorage:"},
 		{"custom empty", valid("size", "x"), "defaults:\n  cpus: 1\nstorage:"},
 		{"link with a size of its own", valid("tmp", "2g"), "defaults:\n  cpus: 1\n  tmpSize: 2g\nstorage:"},
 		{"custom ignored", valid("size", "m", "cpus", "7"), "defaults:\n  cpus: 2\n"},
@@ -95,11 +96,11 @@ func TestBuildCreateCluster_NodeProblems(t *testing.T) {
 		defaultsKept bool
 	}{
 		{"size", valid("size", "xl"), "size", "pick Small, Medium, Large or Custom", true},
-		{"tmp", valid("size", "x", "tmp", "lots"), "tmp", `invalid /tmp size "lots"`, true},
+		{"tmp", valid("size", "x", "tmp", "lots"), "tmp", "write a whole number with a unit", true},
 		{"image", valid("controller-image", "a b"), "controller-image", "use no spaces", true},
 		{"cpus", valid("db", "on", "db-cpus", "0"), "db-cpus", "write a number from 1 to 1024, or nothing", true},
-		{"memory", valid("w0-memory", "1x"), "w0-memory", `invalid memory "1x"`, true},
-		{"tmp of a node", valid("w0-tmp", "1x"), "w0-tmp", `invalid /tmp size "1x"`, true},
+		{"memory", valid("w0-memory", "1x"), "w0-memory", "write a size such as 2g or 512m", true},
+		{"tmp of a node", valid("w0-tmp", "1x"), "w0-tmp", "write a whole number with a unit", true},
 		{"unmanaged", valid("api", "on", "api-unmanaged", "maybe"), "api-unmanaged", "tick the box", true},
 		{"capAdd", valid("w0-capAdd", "FLY"), "w0-capAdd", "FLY", true},
 		{"devices", valid("w0-devices", "dev/fuse"), "w0-devices", "dev/fuse", true},

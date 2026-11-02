@@ -59,7 +59,7 @@ var logsUnitRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,127}$`)
 var logsANSIRE = regexp.MustCompile(`\x1b(\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)?|[@-Z\\-_])`)
 
 func init() {
-	RegisterRoute(logsRoute)
+	defaultRegistry.AddRoute(logsRoute)
 }
 
 // logsRoute is the stream.
@@ -104,15 +104,7 @@ func logsCheck(s *Server, r *http.Request) (logsReq, error) {
 	}
 	q := logsReq{realm: v.Params.Get("realm"), cluster: v.Params.Get("cluster"),
 		node: v.Params.Get("node"), unit: v.Params.Get("unit"), tail: logsLineCounts[0]}
-	prefix := cluster.ContainerPrefix(q.realm, q.cluster)
-	found := false
-	for _, n := range v.Snap.Nodes[q.realm] {
-		if n.Cluster == q.cluster && n.Container == prefix+q.node && q.node != "" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if q.node == "" || !pgHasNode(v.Snap, q.realm, q.cluster, q.node) {
 		return logsReq{}, fmt.Errorf("node %s of %s: %w", q.node, q.cluster, ErrNotFound)
 	}
 	switch logsSource(v.Params.Get("source")) {

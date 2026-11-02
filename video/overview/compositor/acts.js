@@ -220,7 +220,7 @@
       lead: 0.1,
       beats: {
         overview: { cap: ["overview", "Overview: all realms, clusters and nodes. Live."] },
-        dialog: { cap: ["dialog", "New cluster: a form, a plan and the exact command."], say: "name" },
+        dialog: { cap: ["dialog", "New cluster: a start, a plan and the exact command."], say: "name" },
         api: follow(1.3, { say: "api" }), workers: follow(1.3, { say: "workers3" }),
         slurmconf: follow(1.25, { say: "slurmconf" }), yaml: follow(1.25, { say: "yaml" }), create: { say: "createbtn" },
         run: { cap: ["run", "Each step and each node, as it happens."], len: 9 },

@@ -119,6 +119,30 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 	}
 }
 
+// TestParseNodeArgs_ClusterFromEnv covers SIND_CLUSTER: the cluster of the
+// names that name none, which sind checks only for them, after the names.
+func TestParseNodeArgs_ClusterFromEnv(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "dev")
+	targets, err := parseNodeArgs("worker-0 controller.prod")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"controller.prod", "worker-0.dev"}, targetNames(targets))
+
+	// worker-0 is worker-0.dev, so a command acts on it once.
+	targets, err = parseNodeArgs("worker-0,worker-0.dev")
+	require.NoError(t, err)
+	assert.Equal(t, []clusterNodes{{Cluster: "dev", ShortNames: []string{"worker-0"}}}, groupByCluster(targets))
+
+	t.Setenv("SIND_CLUSTER", "Dev")
+	targets, err = parseNodeArgs("worker-0.prod")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"worker-0.prod"}, targetNames(targets))
+	_, err = parseNodeArgs("worker-0.prod,worker-1")
+	require.EqualError(t, err, `SIND_CLUSTER: invalid cluster name "Dev": it has uppercase letters`)
+	assert.False(t, cobratree.IsUsage(err), "the variable is not the command line")
+	_, err = parseNodeArgs("worker-1,Worker-2")
+	assert.True(t, cobratree.IsUsage(err), "a name that is not valid comes first")
+}
+
 // TestParseNodeArgs_QuotesTheTypedTerm verifies that the errors about a
 // node name quote the term of the argument that named it, as typed, rather
 // than the name it expanded to.
@@ -212,18 +236,24 @@ func TestGroupByCluster_Empty(t *testing.T) {
 // optional cluster says what leaving it out means, and that the commands
 // that take node sets describe them alike.
 func TestNodeArgumentHelp(t *testing.T) {
-	for _, path := range []string{"create cluster", "create worker", "delete cluster", "get cluster", "get auth-key", "enter", "exec"} {
+	for _, path := range []string{"create worker", "delete cluster", "get cluster", "get auth-key", "enter", "exec"} {
 		t.Run(path, func(t *testing.T) {
 			stdout, _, err := executeCommand(append(strings.Fields(path), "--help")...)
 			require.NoError(t, err)
-			assert.Contains(t, stdout, `defaults to "default".`)
+			assert.Contains(t, stdout, `defaults to SIND_CLUSTER, else "default".`)
 		})
 	}
+	t.Run("create cluster", func(t *testing.T) {
+		stdout, _, err := executeCommand("create", "cluster", "--help")
+		require.NoError(t, err)
+		assert.Contains(t, stdout, `NAME defaults to SIND_CLUSTER, else the name in the configuration, else "default".`)
+	})
 	for _, path := range []string{"power on", "delete worker"} {
 		t.Run(path, func(t *testing.T) {
 			stdout, _, err := executeCommand(append(strings.Fields(path), "--help")...)
 			require.NoError(t, err)
 			assert.Contains(t, stdout, "NODES is one or more node arguments")
+			assert.Contains(t, stdout, `defaults to SIND_CLUSTER, else "default".`)
 			assert.Contains(t, stdout, "sind "+path+" 'worker-[0-3]'")
 		})
 	}

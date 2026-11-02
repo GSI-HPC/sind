@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -155,6 +156,7 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
     target worker-0 role=worker: ok
       wait ready: ok
   step preflight [hidden]: ok
+    wait images [hidden]: ok
   step slurm total=2 [fold]: ok
     target controller role=controller: ok
       wait ready: ok
@@ -163,9 +165,10 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
 `, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""))
 	// Each node's wait has the whole --wait limit; the waits for Slurm
 	// have what is left of it once the nodes are ready, in whole seconds.
+	// The wait for the images has none.
 	var bounds []time.Duration
 	for _, e := range w.Events() {
-		if e.Kind == progress.KindWait && e.Type == progress.TypeStart {
+		if e.Kind == progress.KindWait && e.Type == progress.TypeStart && e.Name != "images" {
 			bounds = append(bounds, e.Timeout)
 		}
 	}
@@ -173,6 +176,35 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
 	assert.Equal(t, []time.Duration{5 * time.Minute, 5 * time.Minute}, bounds[:2])
 	for _, b := range bounds[2:] {
 		assert.True(t, b > 4*time.Minute && b <= 5*time.Minute && b%time.Second == 0, "%s", b)
+	}
+}
+
+// create cluster names its cluster after NAME, else SIND_CLUSTER, else the
+// config.
+func TestCreateCluster_ClusterFromEnv(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SIND_REALM", "")
+	path := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("kind: Cluster\nname: from-file\nnodes: [controller, worker]\n"), 0o644))
+	for _, tc := range []struct {
+		env  string
+		args []string
+		want string
+	}{
+		{"dev", nil, "dev"},
+		{"dev", []string{"prod"}, "prod"},
+		{"", nil, "from-file"},
+	} {
+		t.Setenv("SIND_CLUSTER", tc.env)
+		m := &mock.Executor{OnCall: createDaemon(t)}
+		client := docker.NewClient(m)
+		ctx := withMeshMgr(withClient(context.Background(), client), mesh.NewManager(client, mesh.DefaultRealm))
+		args := append(append([]string{"create", "cluster"}, tc.args...), "--config", path, "--data", "volume")
+
+		require.NoError(t, executeOn(ctx, io.Discard, io.Discard, args...), "%v", args)
+		assert.True(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+			return slices.Contains(c.Args, "sind-"+tc.want+"-controller")
+		}), "SIND_CLUSTER=%s %v creates %s", tc.env, args, tc.want)
 	}
 }
 

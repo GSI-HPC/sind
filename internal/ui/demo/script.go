@@ -31,21 +31,29 @@ type node struct {
 	// ready is when the node's probes pass, counted from the start of the
 	// wait; zero for a node that never gets ready within the limit.
 	ready time.Duration
+	// reason is why Slurm drains the node, for opDrain; unit is the
+	// service that opRestart restarts.
+	reason, unit string
+	// cpus and memoryMB are the size of the node when it is made; 0 for
+	// the size of its cluster.
+	cpus, memoryMB int
 }
 
 // Effects of a script on the world, for emit.
 const (
-	opCreate   = "create"   // the container exists, stopped
-	opStart    = "start"    // it runs, its services are not up yet
-	opReady    = "ready"    // its services are up
-	opStop     = "stop"     // it is stopped
-	opPause    = "pause"    // its processes are frozen
-	opUnpause  = "unpause"  // they run again
-	opRemove   = "remove"   // the container is gone
-	opConnect  = "connect"  // an outside container joins the mesh network
-	opDisconn  = "disconn"  // it leaves
-	opMonitor  = "monitor"  // the realm's monitoring stack exists
-	opEmptyAll = "emptyall" // the realm has nothing left
+	opCreate  = "create"  // the container exists, stopped
+	opStart   = "start"   // it runs, its services are not up yet
+	opReady   = "ready"   // its services are up
+	opStop    = "stop"    // it is stopped
+	opPause   = "pause"   // its processes are frozen
+	opUnpause = "unpause" // they run again
+	opRemove  = "remove"  // the container is gone
+	opConnect = "connect" // an outside container joins the mesh network
+	opDisconn = "disconn" // it leaves
+	opMonitor = "monitor" // the realm's monitoring stack exists
+	opDrain   = "drain"   // Slurm starts no new job on it
+	opResume  = "resume"  // Slurm schedules on it again
+	opRestart = "restart" // one of its services comes up again
 )
 
 // play is what a script plays with: a clock, and a function that tells the
@@ -118,7 +126,9 @@ func (p play) preflight(ctx context.Context) (context.Context, *progress.Span) {
 }
 
 // pull plays the step pull images, whose target counts the bytes of the
-// image as sind does, next to the preflight. A fail ends the pull with it.
+// image as sind does, with its docker call, and says when docker extracts
+// it, next to the preflight, which waits for it. A fail ends the pull with
+// it.
 func (p play) pull(ctx context.Context, image string, fail error) error {
 	const (
 		ticks = 8
@@ -126,13 +136,17 @@ func (p play) pull(ctx context.Context, image string, fail error) error {
 	)
 	pctx, pull := progress.Start(ctx, progress.KindStep, "pull images",
 		progress.Flagged(progress.FlagFold|progress.FlagShowLines), progress.Total(1))
-	_, img := progress.Start(pctx, progress.KindTarget, image,
+	ictx, img := progress.Start(pctx, progress.KindTarget, image,
 		progress.Queued(), progress.Node(image))
 	p.pause(ctx, 80*time.Millisecond)
 	img.Run()
-	_, preflight := p.preflight(ctx)
+	prep, preflight := p.preflight(ctx)
+	_, wait := progress.Start(prep, progress.KindWait, "images")
+	_, call := progress.Start(ictx, progress.KindCall, "docker pull", progress.Flagged(progress.FlagHidden))
 	if fail != nil {
 		p.pause(ctx, 700*time.Millisecond)
+		call.End(fail, progress.Exit(1))
+		wait.End(context.Canceled)
 		preflight.End(nil)
 		img.End(fail)
 		pull.End(fail)
@@ -143,6 +157,11 @@ func (p play) pull(ctx context.Context, image string, fail error) error {
 		p.pause(ctx, 900*time.Millisecond)
 		img.SetAmount(size * int64(i+1) / ticks)
 	}
+	img.Update(progress.Message("extracting"))
+	p.pause(ctx, 700*time.Millisecond)
+	call.End(nil)
+	img.Update(progress.Message(""))
+	wait.End(nil)
 	preflight.End(nil)
 	p.pause(ctx, 300*time.Millisecond)
 	img.End(nil)
@@ -297,20 +316,9 @@ func (p play) each(ctx context.Context, name string, nodes []node, work func(ctx
 func (p play) slurm(ctx context.Context, nodes []node) error {
 	return p.each(ctx, "slurm", nodes, func(ctx context.Context, i int) {
 		p.call(ctx, "docker exec", 400*time.Millisecond, nil)
-		unit := "slurmd"
-		switch nodes[i].role {
-		case "controller", "controller-backup":
-			unit = "slurmctld"
-		case "db":
-			unit = "slurmdbd"
-		case "api":
-			unit = "slurmrestd"
-		case "submitter":
-			unit = "sackd"
-		}
 		_, wait := progress.Start(ctx, progress.KindWait, "ready", progress.Timeout(272*time.Second))
 		p.pause(ctx, 1500*time.Millisecond)
-		wait.Update(progress.Message(unit))
+		wait.Update(progress.Message(daemonOf(nodes[i].role)))
 		p.pause(ctx, 2500*time.Millisecond)
 		wait.End(nil)
 	})
@@ -334,6 +342,11 @@ type createSpec struct {
 	// mesh registers the cluster at the mesh, as create cluster does.
 	mesh  bool
 	nodes []node
+}
+
+// create returns the work of a run that plays create.
+func create(s createSpec) func(context.Context, play) error {
+	return func(ctx context.Context, p play) error { return p.create(ctx, s) }
 }
 
 // create plays create cluster and create worker.

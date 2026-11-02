@@ -47,8 +47,6 @@ type Sind struct {
 	host *docker.DaemonInfo
 }
 
-func (s *Sind) logger() *slog.Logger { return logOr(s.Log) }
-
 // logOr returns l, or a logger that discards.
 func logOr(l *slog.Logger) *slog.Logger {
 	if l != nil {
@@ -87,9 +85,9 @@ func (s *Sind) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 			all = true
-		case <-sub.C():
+		case <-sub.Changed():
 			timer.Stop()
-			for _, ev := range sub.Drain() {
+			for _, ev := range sub.Take() {
 				switch {
 				case ev.Realm == "":
 					all = true
@@ -196,7 +194,7 @@ func (s *Sind) readRealm(ctx context.Context, realm string) {
 // ok reports that err is nil, and logs what failed otherwise.
 func (s *Sind) ok(ctx context.Context, realm, what string, err error) bool {
 	if err != nil && ctx.Err() == nil {
-		s.logger().Debug("reading "+what, "realm", realm, "err", err)
+		logOr(s.Log).Debug("reading "+what, "realm", realm, "err", err)
 	}
 	return err == nil
 }
@@ -204,8 +202,9 @@ func (s *Sind) ok(ctx context.Context, realm, what string, err error) bool {
 // noMesh is what mesh.Manager.GetInfo says for a realm without mesh.
 const noMesh = "no mesh found for realm"
 
-// readMesh reads the mesh of a realm: its infrastructure, DNS records and
-// the containers outside sind that are on its network. A realm without
+// readMesh reads the mesh of a realm: its infrastructure, DNS records,
+// the containers outside sind that are on its network and those that can
+// join it. A realm without
 // mesh has the zero Mesh; a mesh that cannot be read fully has Err.
 func readMesh(ctx context.Context, client *docker.Client, realm string) (store.Mesh, bool) {
 	mgr := mesh.NewHostManager(client, realm)
@@ -227,6 +226,17 @@ func readMesh(ctx context.Context, client *docker.Client, realm string) (store.M
 	}
 	for _, name := range external {
 		m.External = append(m.External, string(name))
+	}
+	others, err := cluster.Connectable(ctx, client, mgr)
+	if err != nil {
+		errs = append(errs, doctor.ErrorLine(err))
+	}
+	for _, e := range others {
+		o := store.Outside{Name: string(e.Name), Image: e.Image, State: string(e.State), Status: e.Status}
+		for _, n := range e.Networks {
+			o.Networks = append(o.Networks, string(n))
+		}
+		m.Connectable = append(m.Connectable, o)
 	}
 	m.Err = strings.Join(errs, "; ")
 	return m, ctx.Err() == nil

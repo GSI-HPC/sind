@@ -8,7 +8,7 @@ opens it in the pane, and on the help page the browser follows it. */}}
 
 {{define "help-chips"}}{{range .}}<a class="btn sm" href="/help?topic=word/{{.ID}}" data-help-topic="word/{{.ID}}">{{.Title}}</a>{{end}}{{end}}
 
-{{define "help-cmd"}}<div class="cmd"><code>{{.}}</code><button type="button" data-help-copy="{{.}}">Copy</button></div>{{end}}
+{{define "help-cmd"}}<div class="cmd"><code>{{.}}</code><button type="button" data-shell-copy="{{.}}">Copy</button></div>{{end}}
 
 {{define "help-more"}}{{if .Doc}}<p class="hint"><a href="{{.Doc}}" target="_blank" rel="noopener noreferrer">More in the sind docs ↗</a></p>{{end}}{{end}}
 
@@ -56,16 +56,15 @@ key has the class k1, which the setting for single-key shortcuts marks. */}}
 {{end}}
 </div>{{end}}
 
-{{define "help-card"}}{{with .Data}}{{if eq .Kind "word"}}<span class="k">Word</span><b>{{.Word.Title}}</b><span>{{.Word.Summary}}</span>{{if .Word.Command}}<span class="mono muted">$ {{.Word.Command}}</span>{{end}}
-{{else}}<span class="k{{if .Action.Irreversible}} bad{{end}}">Action · {{.Action.Undo}}</span><b>{{.Action.Title}}</b><span>{{.Action.Summary}}</span><span class="mono muted">$ {{.Action.Command}}</span>
-{{end}}<span class="faint more kbd-only k1-on"><kbd>?</kbd> for more</span>{{end}}{{end}}
+{{define "help-card"}}{{with .Data}}<span class="k">Word</span><b>{{.Word.Title}}</b><span>{{.Word.Summary}}</span>{{if .Word.Command}}<span class="mono muted">$ {{.Word.Command}}</span>{{end}}
+<span class="faint more kbd-only k1-on"><kbd>?</kbd> for more</span>{{end}}{{end}}
 
 {{/* page-help is the help page: the entry of the address, or the index,
-with a search that works without script. .Data is a *helpPageData. */}}
+with a search that works without script. .Data is the *helpData of the entry. */}}
 {{define "page-help"}}{{with .Data}}
-{{if ne .Entry.Kind "index"}}<div class="crumbs"><a href="/help">Help</a> / {{.Entry.Crumb}}</div>{{end}}
+{{if ne .Kind "index"}}<div class="crumbs"><a href="/help">Help</a> / {{.Crumb}}</div>{{end}}
 <div class="head"><div class="t"><h1>Help</h1>
   <div class="sub"><span>The texts of the help pane, which the ? button at the top opens beside any page.</span></div></div></div>
 <form class="helpsearch" action="/help" method="get" role="search"><input type="search" name="q" value="{{.Query}}" aria-label="Search help" placeholder="Search help: realm, sbatch, clean up…" autocomplete="off" spellcheck="false"><button type="submit" class="btn">Search</button></form>
-<article class="panel helpdoc">{{template "help-entry" .Entry}}</article>
+<article class="panel helpdoc">{{template "help-entry" .}}</article>
 {{end}}{{end}}
