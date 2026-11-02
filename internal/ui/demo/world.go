@@ -634,7 +634,7 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 			url = fmt.Sprintf("http://%s:%d", ip, port)
 		}
 		return cluster.MonitoringService{
-			Name: observability.Service(name), Container: observability.ContainerName(r.name, observability.Service(name)), Image: image, IP: ip, URL: url,
+			Name: observability.Service(name), Container: observability.ContainerName(r.name, observability.Service(name)), Image: image, Interface: observability.Service(name).Interface(), IP: ip, URL: url,
 			State: "running", Ready: true, Checked: true,
 		}
 	}

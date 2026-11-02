@@ -57,8 +57,24 @@ const (
 	AlloyPort      = "12345"
 )
 
+// Interface says what a service's HTTP port serves to a browser or a
+// client.
+type Interface string
+
+// The interfaces of the services. Loki serves no page: a browser that
+// opens its address gets an error, and its logs are read through Grafana.
+const (
+	InterfaceWebUI Interface = "web UI"
+	InterfaceBoth  Interface = "web UI + API"
+	InterfaceAPI   Interface = "API"
+)
+
+// HasWebUI reports whether the port serves a web UI.
+func (i Interface) HasWebUI() bool { return i == InterfaceWebUI || i == InterfaceBoth }
+
 // serviceSpec is what sets a service's container apart.
 type serviceSpec struct {
+	iface Interface // what its port serves
 	image string
 	port  string // the port it listens on, on the mesh network
 	// pinnedOffset is how far below the mesh DNS address the service's
@@ -73,14 +89,17 @@ type serviceSpec struct {
 
 // specs are the services' specs.
 var specs = map[Service]serviceSpec{
-	ServiceGrafana:    {image: GrafanaImage, port: GrafanaPort, pinnedOffset: 1, memoryLimit: "1g", dataDir: "/var/lib/grafana", readyPath: "/api/health"},
-	ServicePrometheus: {image: PrometheusImage, port: PrometheusPort, pinnedOffset: 2, memoryLimit: "1g", dataDir: "/prometheus", readyPath: "/-/ready", args: prometheusArgs},
-	ServiceLoki:       {image: LokiImage, port: LokiPort, pinnedOffset: 3, memoryLimit: "1g", dataDir: "/loki", readyPath: "/ready", args: lokiArgs},
-	ServiceAlloy:      {image: AlloyImage, port: AlloyPort, memoryLimit: "512m", dataDir: "/var/lib/alloy/data", readyPath: "/-/ready", args: alloyArgs},
+	ServiceGrafana:    {iface: InterfaceWebUI, image: GrafanaImage, port: GrafanaPort, pinnedOffset: 1, memoryLimit: "1g", dataDir: "/var/lib/grafana", readyPath: "/api/health"},
+	ServicePrometheus: {iface: InterfaceBoth, image: PrometheusImage, port: PrometheusPort, pinnedOffset: 2, memoryLimit: "1g", dataDir: "/prometheus", readyPath: "/-/ready", args: prometheusArgs},
+	ServiceLoki:       {iface: InterfaceAPI, image: LokiImage, port: LokiPort, pinnedOffset: 3, memoryLimit: "1g", dataDir: "/loki", readyPath: "/ready", args: lokiArgs},
+	ServiceAlloy:      {iface: InterfaceWebUI, image: AlloyImage, port: AlloyPort, memoryLimit: "512m", dataDir: "/var/lib/alloy/data", readyPath: "/-/ready", args: alloyArgs},
 }
 
 // Port returns the port a service listens on.
 func (s Service) Port() string { return specs[s].port }
+
+// Interface returns what the port of a service serves.
+func (s Service) Interface() Interface { return specs[s].iface }
 
 // Image returns the image a service runs.
 func (s Service) Image() string { return specs[s].image }

@@ -385,12 +385,19 @@ func runGetCoreDNSConfig(cmd *cobra.Command, _ []string) error {
 func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, cluster.GetMonitoring, func(cmd *cobra.Command, m *cluster.Monitoring, realm string) error {
 		out := cmd.OutOrStdout()
-		t := newTable("SERVICE", "CONTAINER", "ADDRESS", "STATUS")
+		t := newTable("SERVICE", "CONTAINER", "ADDRESS", "TYPE", "STATUS")
+		var apiOnly []string
 		for _, s := range m.Services {
-			t.Add(string(s.Name), cell(s.Container), cell(s.URL), formatServiceState(s))
+			t.Add(string(s.Name), cell(s.Container), cell(s.URL), cell(s.Interface), formatServiceState(s))
+			if s.Interface == observability.InterfaceAPI {
+				apiOnly = append(apiOnly, string(s.Name))
+			}
 		}
 		if err := writeTable(out, t); err != nil {
 			return err
+		}
+		if len(apiOnly) > 0 {
+			_, _ = fmt.Fprintf(out, "\n%s serves an API only, no web UI. To see its data, open Grafana and use Explore.\n", strings.Join(apiOnly, ", "))
 		}
 
 		_, _ = fmt.Fprintln(out)

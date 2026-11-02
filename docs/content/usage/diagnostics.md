@@ -613,7 +613,7 @@ sind get monitoring
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows the clusters that the stack collects, with their key numbers from Prometheus, and Grafana, Prometheus, Loki and Alloy with their addresses and states.
+Open **Monitoring**. It shows the clusters that the stack collects, with their key numbers from Prometheus, and Grafana, Prometheus, Loki and Alloy with their addresses, what each serves and their states. Loki has no web UI, so its row links to Grafana's Explore.
 
 {{< uishot "monitoring" >}}
 
@@ -623,11 +623,13 @@ Open **Monitoring**. It shows the clusters that the stack collects, with their k
 Shows the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}): each service's container, address and state, and the clusters it collects, with their number of monitored nodes and their Slurm version.
 
 ```
-SERVICE     CONTAINER        ADDRESS                           STATUS
-grafana     sind-grafana     http://grafana.sind.sind:3000     running
-prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
-loki        sind-loki        http://loki.sind.sind:3100        running
-alloy       sind-alloy       http://172.18.0.9:12345           running
+SERVICE     CONTAINER        ADDRESS                           TYPE          STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     web UI        running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  web UI + API  running
+loki        sind-loki        http://loki.sind.sind:3100        API           running
+alloy       sind-alloy       http://172.18.0.9:12345           web UI        running
+
+loki serves an API only, no web UI. To see its data, open Grafana and use Explore.
 
 CLUSTERS
 NAME     NODES  SLURM
@@ -635,13 +637,13 @@ default  3      26.05.5
 dev      5      26.05.5
 ```
 
-`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
+`TYPE` says what the port serves: a web UI, an API, or both. Loki serves an API only, so a browser that opens its address shows no page; read its logs in Grafana, under Explore. `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, `interface` (`web UI`, `web UI + API` or `API`), address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
 
 ```json
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
   "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",

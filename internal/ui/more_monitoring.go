@@ -90,6 +90,10 @@ type moreMonService struct {
 	Pill, Text string
 	// Open is set when the service has a page to open in a new tab.
 	Open bool
+	// Explore is the address of Grafana's Explore page, set for a service
+	// that serves no web UI, where its data can be seen; empty while
+	// Grafana does not run.
+	Explore string
 	// Addr is the service's address with its port, for a browser that
 	// does not resolve the URL's name; empty when the URL has the address.
 	Addr string
@@ -188,6 +192,13 @@ func moreServiceAddr(s cluster.MonitoringService) string {
 	return s.IP + ":" + s.Name.Port()
 }
 
+// moreServiceOpens reports whether a browser can open a service's URL: it
+// runs and its URL is an http one.
+func moreServiceOpens(s cluster.MonitoringService) bool {
+	return s.State == docker.StateRunning &&
+		(strings.HasPrefix(s.URL, "http://") || strings.HasPrefix(s.URL, "https://"))
+}
+
 // moreMonClusterOf returns a monitored cluster with the count of its node
 // containers and of its Slurm nodes that take jobs.
 func moreMonClusterOf(sn store.Snapshot, realm string, c cluster.MonitoredCluster) moreMonCluster {
@@ -224,11 +235,19 @@ func moreMonitoringLoad(v *View) error {
 		for _, c := range m.Clusters {
 			r.Clusters = append(r.Clusters, moreMonClusterOf(v.Snap, name, c))
 		}
+		explore := ""
+		for _, s := range m.Services {
+			if s.Name == observability.ServiceGrafana && moreServiceOpens(s) {
+				explore = s.URL + "/explore"
+			}
+		}
 		for _, s := range m.Services {
 			ms := moreMonService{MonitoringService: s, Addr: moreServiceAddr(s)}
 			ms.Pill, ms.Text = moreServiceState(s)
-			ms.Open = s.State == docker.StateRunning && s.Name != observability.ServiceAlloy &&
-				(strings.HasPrefix(s.URL, "http://") || strings.HasPrefix(s.URL, "https://"))
+			ms.Open = s.Name != observability.ServiceAlloy && s.Interface.HasWebUI() && moreServiceOpens(s)
+			if !s.Interface.HasWebUI() {
+				ms.Explore = explore
+			}
 			if s.Name == observability.ServiceGrafana && ms.Addr != "" && d.Forward == "" {
 				d.Forward = ms.Addr
 			}

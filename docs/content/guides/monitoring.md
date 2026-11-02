@@ -73,7 +73,7 @@ http://grafana.sind.sind:3000
 {{< /cli >}}
 {{< ui >}}
 
-Open **Monitoring**. It shows the address of Grafana, Prometheus and Loki. Press **Open** next to one to open it.
+Open **Monitoring**. It shows the address of Grafana, Prometheus and Loki, and what each serves. Press **Open** next to Grafana or Prometheus to open its web UI. Loki serves an API only and has no web UI: **Explore in Grafana** opens Grafana, where you can see its logs.
 
 {{< uishot "monitoring" >}}
 
@@ -127,7 +127,7 @@ The node panels link to the Logs dashboard for the same node. The dashboards ref
 {cluster="dev", unit="slurmctld.service", level="err"}
 ```
 
-Prometheus and Loki answer on the mesh too, at `prometheus.<realm>.sind:9090` and `loki.<realm>.sind:3100`, without authentication:
+Prometheus and Loki answer on the mesh too. Prometheus has a web UI and an API; Loki has an API only, so a browser shows no page at its address and its logs are read in Grafana's Explore. Their addresses are `prometheus.<realm>.sind:9090` and `loki.<realm>.sind:3100`, without authentication:
 
 ```bash
 curl -s 'http://prometheus.sind.sind:9090/api/v1/query?query=slurm_nodes_idle'
@@ -153,11 +153,13 @@ Open **Monitoring**. It shows the clusters that the stack collects, with their S
 {{< /ways >}}
 
 ```text
-SERVICE     CONTAINER        ADDRESS                           STATUS
-grafana     sind-grafana     http://grafana.sind.sind:3000     running
-prometheus  sind-prometheus  http://prometheus.sind.sind:9090  running
-loki        sind-loki        http://loki.sind.sind:3100        running
-alloy       sind-alloy       http://172.18.0.9:12345           running
+SERVICE     CONTAINER        ADDRESS                           TYPE          STATUS
+grafana     sind-grafana     http://grafana.sind.sind:3000     web UI        running
+prometheus  sind-prometheus  http://prometheus.sind.sind:9090  web UI + API  running
+loki        sind-loki        http://loki.sind.sind:3100        API           running
+alloy       sind-alloy       http://172.18.0.9:12345           web UI        running
+
+loki serves an API only, no web UI. To see its data, open Grafana and use Explore.
 
 CLUSTERS
 NAME     NODES  SLURM
@@ -165,7 +167,7 @@ default  3      26.05.5
 dev      5      26.05.5
 ```
 
-`STATUS` is the container's state, `not ready` while it runs but does not answer its readiness check, `unchecked` while it runs but Grafana, which runs the checks, does not, or `missing`. Without a stack, the command fails with `no monitoring stack in realm "sind"`. `sind get cluster` lists the stack's containers under `MESH SERVICES` and the journal mount under `MOUNTS` (see [Diagnostics]({{< relref "/usage/diagnostics#monitoring-stack" >}})).
+`TYPE` says what the port serves: `web UI`, `API`, or both. Only Grafana and Prometheus (and Alloy's debug page) show a page in a browser; Loki has an API only. `STATUS` is the container's state, `not ready` while it runs but does not answer its readiness check, `unchecked` while it runs but Grafana, which runs the checks, does not, or `missing`. Without a stack, the command fails with `no monitoring stack in realm "sind"`. `sind get cluster` lists the stack's containers under `MESH SERVICES` and the journal mount under `MOUNTS` (see [Diagnostics]({{< relref "/usage/diagnostics#monitoring-stack" >}})).
 
 ## Journals
 

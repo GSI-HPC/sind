@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -170,7 +171,9 @@ func TestMoreMonitoringPage(t *testing.T) {
 	} {
 		assert.Contains(t, body, want)
 	}
-	assert.Equal(t, 3, strings.Count(body, "Open ↗"), "alloy has no page to open")
+	assert.Equal(t, 2, strings.Count(body, "Open ↗"), "loki and alloy have no page to open")
+	assert.Contains(t, body, `href="http://grafana.sind.sind:3000/explore" target="_blank" rel="noopener noreferrer" aria-label="Explore loki in Grafana, in a new tab">Explore in Grafana ↗`, "loki's data is in Grafana")
+	assert.Contains(t, body, "No page. See its data in Grafana Explore.")
 	assert.NotContains(t, body, "no monitoring stack")
 	for _, want := range []string{
 		`aria-label="Open grafana in a new tab"`,
@@ -260,7 +263,7 @@ func TestMoreMonitoringHostDNS(t *testing.T) {
 
 	// Without an address of Grafana there is no ssh example.
 	m := *ts.st.Snapshot().Monitorings["sind"]
-	m.Services = []cluster.MonitoringService{{Name: "grafana", URL: "http://grafana.sind.sind:3000", State: "running"}}
+	m.Services = []cluster.MonitoringService{{Name: "grafana", Interface: observability.InterfaceWebUI, URL: "http://grafana.sind.sind:3000", State: "running"}}
 	ts.st.SetMonitoring("sind", &m)
 	ts.st.SetDoctor(nil)
 	body = pgBody(t, ts, "/monitoring", http.StatusOK)

@@ -32,3 +32,13 @@ func TestNames(t *testing.T) {
 	assert.Equal(t, "c1/worker-0", JournalSubpath("c1", "worker-0"))
 	assert.Equal(t, "prometheus.dev.sind", DNSName("dev", ServicePrometheus))
 }
+
+func TestServiceInterface(t *testing.T) {
+	assert.Equal(t, InterfaceWebUI, ServiceGrafana.Interface())
+	assert.Equal(t, InterfaceBoth, ServicePrometheus.Interface())
+	assert.Equal(t, InterfaceAPI, ServiceLoki.Interface())
+	assert.Equal(t, InterfaceWebUI, ServiceAlloy.Interface())
+	assert.True(t, InterfaceWebUI.HasWebUI())
+	assert.True(t, InterfaceBoth.HasWebUI())
+	assert.False(t, InterfaceAPI.HasWebUI())
+}
