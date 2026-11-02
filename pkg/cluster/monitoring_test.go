@@ -752,7 +752,7 @@ func TestGetMonitoring(t *testing.T) {
 	assert.Equal(t, "sind", m.Realm)
 	require.Len(t, m.Services, 4)
 	assert.Equal(t, MonitoringService{
-		Name: observability.ServiceGrafana, Container: "sind-grafana", IP: f.containers["sind-grafana"].ip,
+		Name: observability.ServiceGrafana, Container: "sind-grafana", Interface: observability.InterfaceWebUI, IP: f.containers["sind-grafana"].ip,
 		URL: "http://grafana.sind.sind:3000", State: docker.StateRunning, Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")
