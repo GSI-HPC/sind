@@ -635,7 +635,7 @@ dev      5      26.05.5
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4", "interface": "web UI",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.0", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
   "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
@@ -1519,10 +1519,10 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
-| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.4` |
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.0` |
 | Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
 | Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
-| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.2` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.3` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
