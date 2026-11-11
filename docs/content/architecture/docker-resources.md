@@ -49,7 +49,7 @@ A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has
 | Type | Name pattern | Example | Image |
 |------|-------------|---------|-------|
 | Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.0` |
-| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.16.0` |
 | Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
 | Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.3` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |

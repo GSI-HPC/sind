@@ -23,7 +23,7 @@ import (
 // which sind runs there to reach the others.
 const (
 	AlloyImage      = "grafana/alloy:v1.21.3"
-	PrometheusImage = "prom/prometheus:v3.15.1"
+	PrometheusImage = "prom/prometheus:v3.16.0"
 	LokiImage       = "grafana/loki:3.7.9"
 	GrafanaImage    = "grafana/grafana:13.3.0"
 )
