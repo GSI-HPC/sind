@@ -496,7 +496,7 @@ Example output:
 $ sind get clusters
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
 default  5 (1/1/0/1/2)      26.05.6  running
-dev      4 (0/1/1/0/2)      25.11.8  running
+dev      4 (0/1/1/0/2)      25.11.9  running
 ```
 
 NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **A**pi / **W**orker; the JSON output has `submitters`, `controllers`, `dbs`, `apis` and `workers`. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
@@ -529,7 +529,7 @@ sind-dev-worker-10       dev      worker      worker-10.dev.sind.sind       172.
 ```
 $ sind get cluster dev
 CLUSTER  SLURM    STATUS (R/S/P/T)
-dev      25.11.8  running (4/0/0/4)
+dev      25.11.9  running (4/0/0/4)
 
 NETWORKS
 NAME          DRIVER  SUBNET         GATEWAY     STATUS
@@ -1666,7 +1666,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers, db and api nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
-| `sind.slurm.version` | `25.11.8` | Slurm version; empty for an unmanaged cluster |
+| `sind.slurm.version` | `25.11.9` | Slurm version; empty for an unmanaged cluster |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path; empty with the data volume |
 | `sind.data.mountpath` | `/shared` | Data mount point, `/data` by default |
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); empty without `storage.cvmfs` |
@@ -2028,7 +2028,7 @@ Slurm 26.05 and later serve HTTP on slurmctld's and slurmd's RPC ports, telling 
 | Check | Passes when | Otherwise |
 |-------|-------------|-----------|
 | Daemon | the image has the daemon | `has no slurmd` |
-| Version | `slurm X.Y.Z` with X.Y at least 26.05; 26.05 pre-releases count | `image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.8 is older than 26.05, which monitoring needs` |
+| Version | `slurm X.Y.Z` with X.Y at least 26.05; 26.05 pre-releases count | `image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.9 is older than 26.05, which monitoring needs` |
 | Plugin directory | `PluginDir` is set, `ldd` finds `libslurmfull`, or a usual directory exists | `cannot find Slurm's plugin directory; set PluginDir in slurm.main` |
 | HTTP parser, URL parser, TLS, HTTP authentication, data parser | a plugin of each type whose libraries resolve | `Slurm has no HTTP parser plugin in /usr/lib64/slurm; build it with --with-llhttp-parser`, or `Slurm's <plugin> in <dir> cannot load: a library it needs is missing` |
 | OpenMetrics (controllers' image only) | `metrics_openmetrics.so`, loadable | the same forms |
@@ -2102,7 +2102,7 @@ sind provides a generic multi-role image that works for all node types, built fo
 ```
 ghcr.io/gsi-hpc/sind-node:latest                # newest release line
 ghcr.io/gsi-hpc/sind-node:<YY>.<MM>             # newest patch release of a line, e.g. 25.11
-ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.8
+ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.9
 ghcr.io/gsi-hpc/sind-node:vX.Y.Z                # newest release line at sind release vX.Y.Z
 ghcr.io/gsi-hpc/sind-node:vX.Y.Z-<YY>.<MM>      # a release line at sind release vX.Y.Z
 ```

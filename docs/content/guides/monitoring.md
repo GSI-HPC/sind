@@ -50,7 +50,7 @@ The first monitored cluster of a realm creates the stack, and the next ones join
 - **Slurm 26.05 or later**, with the HTTP parser plugin: slurmctld serves its metrics, and slurmctld and slurmd their health endpoints, over HTTP on their RPC ports. The default image and the `26.05` images have it. A cluster on `sind-node:25.11` fails before any node exists:
 
   ```
-  image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.8 is older than 26.05, which monitoring needs
+  image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.9 is older than 26.05, which monitoring needs
   ```
 
   Custom images need a few more things; see [Building Images]({{< relref "/container-images/building-images#with-monitoring" >}}).

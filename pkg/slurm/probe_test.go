@@ -134,7 +134,7 @@ func TestMonitoringProblems(t *testing.T) {
 		{"pre-release", ImageInfo{Version: "26.05.0-0rc1", PluginDirs: []string{"/p"}, Plugins: all}, ctld, nil},
 		{"later line", ImageInfo{Version: "27.11.0", PluginDirs: []string{"/p"}, Plugins: all}, ctld, nil},
 		{"later major", ImageInfo{Version: "27.02.0", PluginDirs: []string{"/p"}, Plugins: all}, ctld, nil},
-		{"25.11", ImageInfo{Version: "25.11.8"}, ctld, []string{"Slurm 25.11.8 is older than 26.05, which monitoring needs"}},
+		{"25.11", ImageInfo{Version: "25.11.9"}, ctld, []string{"Slurm 25.11.9 is older than 26.05, which monitoring needs"}},
 		{"unparsable version", ImageInfo{Version: "x"}, ctld, []string{"Slurm x is older than 26.05, which monitoring needs"}},
 		{"one number", ImageInfo{Version: "26"}, ctld, []string{"Slurm 26 is older than 26.05, which monitoring needs"}},
 		{"minor not a number", ImageInfo{Version: "26.x.1"}, ctld, []string{"Slurm 26.x.1 is older than 26.05, which monitoring needs"}},
@@ -181,6 +181,6 @@ func TestVersionAtLeast(t *testing.T) {
 	assert.True(t, VersionAtLeast("26.05.4", "26.05"))
 	assert.True(t, VersionAtLeast("26.05.0-0rc1", "26.05"), "a pre-release counts as its line")
 	assert.True(t, VersionAtLeast("27.11.0", "26.05"))
-	assert.False(t, VersionAtLeast("25.11.8", "26.05"))
+	assert.False(t, VersionAtLeast("25.11.9", "26.05"))
 	assert.False(t, VersionAtLeast("", "26.05"))
 }

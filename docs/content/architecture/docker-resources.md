@@ -142,7 +142,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers, db and api nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
-| `sind.slurm.version` | `25.11.8` | Slurm version, empty for an unmanaged cluster |
+| `sind.slurm.version` | `25.11.9` | Slurm version, empty for an unmanaged cluster |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path, empty with the data volume |
 | `sind.data.mountpath` | `/shared` | Data mount point (`storage.dataStorage.mountPath`, `/data` by default) |
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS, with `storage.cvmfs`: `volume` (plugin) or `hostPath` (host `/cvmfs`); empty without it |

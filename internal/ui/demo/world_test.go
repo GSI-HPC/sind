@@ -57,7 +57,7 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, 1, dev.APIs)
 	assert.Equal(t, 1, dev.Submitters)
 	assert.Equal(t, 6, dev.Workers)
-	assert.Equal(t, "25.11.8", byName["legacy"].SlurmVersion)
+	assert.Equal(t, "25.11.9", byName["legacy"].SlurmVersion)
 
 	require.NotNil(t, sn.Monitorings["sind"])
 	// dev's six workers are Slurm's nodes; worker-4's slurmd is down, and

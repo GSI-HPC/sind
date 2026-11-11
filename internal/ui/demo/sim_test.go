@@ -112,14 +112,14 @@ func TestSim_CreateCluster(t *testing.T) {
 
 func TestSim_CreateCluster_HostPathAndOldSlurm(t *testing.T) {
 	s, st := newSim(t)
-	cfg := "kind: Cluster\nname: hp\ndefaults:\n  image: ghcr.io/gsi-hpc/sind-node:25.11.8\nnodes:\n  - controller\n  - worker\n"
+	cfg := "kind: Cluster\nname: hp\ndefaults:\n  image: ghcr.io/gsi-hpc/sind-node:25.11.9\nnodes:\n  - controller\n  - worker\n"
 	require.NoError(t, s.SaveFile("/c/hp.yaml", []byte(cfg)))
 	task := s.startWait(t, st, "create", "cluster", "--config", "/c/hp.yaml", "--data", "/scratch/hp")
 	assert.Equal(t, store.TaskOK, task.Status)
 	sn := st.Snapshot()
 	c, ok := sn.Cluster("sind", "hp")
 	require.True(t, ok)
-	assert.Equal(t, "25.11.8", c.SlurmVersion)
+	assert.Equal(t, "25.11.9", c.SlurmVersion)
 	assert.Equal(t, 2, c.NodeCount, "a worker group without a count is one worker")
 	assert.Equal(t, "hostPath", string(sn.Status("sind", "hp").Mounts[2].Type))
 	assert.Equal(t, "/scratch/hp", sn.Status("sind", "hp").Mounts[2].Source)

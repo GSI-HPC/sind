@@ -1073,7 +1073,7 @@ func TestGetNode_ControllerPair(t *testing.T) {
 }
 
 func TestFormatSlurmVersion(t *testing.T) {
-	assert.Equal(t, "25.11.8", formatSlurmVersion("25.11.8"))
+	assert.Equal(t, "25.11.9", formatSlurmVersion("25.11.9"))
 	assert.Equal(t, "-", formatSlurmVersion(""))
 }
 

@@ -102,7 +102,7 @@ func NewWorld() *World {
 // The Slurm versions of the images of the demo clusters.
 const (
 	slurmNew = "26.05.4"
-	slurmOld = "25.11.8"
+	slurmOld = "25.11.9"
 )
 
 // services returns the services a node of the role runs once it is ready.

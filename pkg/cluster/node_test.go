@@ -589,7 +589,7 @@ func TestNodeRunConfigs_WithDB(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "25.11.8", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "25.11.9", "")
 
 	require.Len(t, configs, 3)
 	db := configs[1]
@@ -598,7 +598,7 @@ func TestNodeRunConfigs_WithDB(t *testing.T) {
 	assert.Equal(t, "img:1", db.Image)
 	assert.Equal(t, 2, db.CPUs)
 	assert.Equal(t, "1g", db.Memory)
-	assert.Equal(t, "25.11.8", db.SlurmVersion)
+	assert.Equal(t, "25.11.9", db.SlurmVersion)
 	assert.Equal(t, 1, db.ContainerNumber)
 	assert.True(t, db.Managed, "db of a managed cluster")
 	assert.False(t, db.SharedState)
@@ -669,7 +669,7 @@ func TestNodeRunConfigs_UnmanagedDBInManagedCluster(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "25.11.8", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "25.11.9", "")
 
 	require.Len(t, configs, 4)
 	assert.True(t, configs[0].Managed, "controller")

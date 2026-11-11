@@ -266,7 +266,7 @@ func (i *ImageInfo) MariaDBWarning() string {
 	return "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file"
 }
 
-// VersionAtLeast reports whether a Slurm version (25.11.8, 26.05.0-0rc1) is
+// VersionAtLeast reports whether a Slurm version (25.11.9, 26.05.0-0rc1) is
 // of the release line oldest (major.minor) or a later one. Pre-releases
 // of a line count as the line.
 func VersionAtLeast(version, oldest string) bool {
