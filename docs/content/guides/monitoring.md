@@ -163,8 +163,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.5
-dev      5      26.05.5
+default  3      26.05.6
+dev      5      26.05.6
 ```
 
 `TYPE` says what the port serves: `web UI`, `API`, or both. Only Grafana and Prometheus (and Alloy's debug page) show a page in a browser; Loki has an API only. `STATUS` is the container's state, `not ready` while it runs but does not answer its readiness check, `unchecked` while it runs but Grafana, which runs the checks, does not, or `missing`. Without a stack, the command fails with `no monitoring stack in realm "sind"`. `sind get cluster` lists the stack's containers under `MESH SERVICES` and the journal mount under `MOUNTS` (see [Diagnostics]({{< relref "/usage/diagnostics#monitoring-stack" >}})).

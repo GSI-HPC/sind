@@ -76,7 +76,7 @@ func newStackFake(t *testing.T) *stackFake {
 		containers: map[string]*stackContainer{},
 		volumes:    map[string]bool{},
 		dnsIP:      "172.30.255.254",
-		version:    "26.05.5",
+		version:    "26.05.6",
 		logError:   "--skip-log-error",
 		fail:       map[string]mock.Result{},
 	}
@@ -709,7 +709,7 @@ func TestProbeMonitoringImages(t *testing.T) {
 		meshMgr, warnings := stackMesh(client)
 		version, err := probeMonitoringImages(t.Context(), client, meshMgr, cfg)
 		require.NoError(t, err)
-		assert.Equal(t, "26.05.5", version)
+		assert.Equal(t, "26.05.6", version)
 		assert.Len(t, m.Calls, 2)
 		require.Len(t, *warnings, 1)
 		assert.Contains(t, (*warnings)[0], "image db:1: ")
@@ -744,7 +744,7 @@ func TestGetMonitoring(t *testing.T) {
 	f.withStack()
 	f.containers["sind-alloy"].state = docker.StateExited
 	ctl := monitoredNode("prod", "controller", "controller")
-	ctl.Labels[LabelSlurmVersion] = "26.05.5"
+	ctl.Labels[LabelSlurmVersion] = "26.05.6"
 	f.nodes = []docker.ContainerListEntry{monitoredNode("prod", "worker-0", "worker"), ctl, monitoredNode("dev", "controller", "controller")}
 
 	m, err := GetMonitoring(t.Context(), client, "sind")
@@ -756,7 +756,7 @@ func TestGetMonitoring(t *testing.T) {
 		URL: "http://grafana.sind.sind:3000", State: docker.StateRunning, Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")
-	assert.Equal(t, []MonitoredCluster{{Name: "dev", Nodes: 1}, {Name: "prod", Nodes: 2, SlurmVersion: "26.05.5"}}, m.Clusters,
+	assert.Equal(t, []MonitoredCluster{{Name: "dev", Nodes: 1}, {Name: "prod", Nodes: 2, SlurmVersion: "26.05.6"}}, m.Clusters,
 		"an answer that is no JSON leaves the Slurm numbers out")
 	assert.True(t, f.called(`exec sind-grafana curl -fsS --max-time 5 -G --data-urlencode query=max by (cluster, __name__) `+
 		`({__name__=~"slurm_jobs_pending|slurm_jobs_running|slurm_nodes|slurm_nodes_down|slurm_nodes_drain", realm="sind"}) `+

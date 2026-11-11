@@ -86,7 +86,7 @@ The rest of this section shows the same with `sind get`.
 
 ```
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
-default  2 (0/1/0/0/1)      26.05.5  running
+default  2 (0/1/0/0/1)      26.05.6  running
 ```
 
 View individual nodes:

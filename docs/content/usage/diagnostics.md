@@ -633,8 +633,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.5
-dev      5      26.05.5
+default  3      26.05.6
+dev      5      26.05.6
 ```
 
 `TYPE` says what the port serves: a web UI, an API, or both. Loki serves an API only, so a browser that opens its address shows no page; read its logs in Grafana, under Explore. `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, `interface` (`web UI`, `web UI + API` or `API`), address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
@@ -646,7 +646,7 @@ dev      5      26.05.5
     {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.0", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.6",
                 "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```

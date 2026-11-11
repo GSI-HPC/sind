@@ -118,7 +118,7 @@ Open **Clusters** in the rail. Each row is a cluster, with its state, its nodes 
 
 ```
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
-default  5 (1/1/0/1/2)      26.05.5  running
+default  5 (1/1/0/1/2)      26.05.6  running
 dev      4 (0/1/1/0/2)      25.11.8  running
 ```
 
