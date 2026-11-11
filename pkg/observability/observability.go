@@ -25,7 +25,7 @@ const (
 	AlloyImage      = "grafana/alloy:v1.21.3"
 	PrometheusImage = "prom/prometheus:v3.16.0"
 	LokiImage       = "grafana/loki:3.7.9"
-	GrafanaImage    = "grafana/grafana:13.3.0"
+	GrafanaImage    = "grafana/grafana:13.3.1"
 )
 
 // Images returns the stack's images, in the order of its services.
