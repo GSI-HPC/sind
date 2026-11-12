@@ -158,10 +158,22 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The Ubuntu 26.04 runner image allows 128 inotify instances per user.
+      # The test clusters that run in parallel take more: systemd in the
+      # next node container then fails to start, and the container exits
+      # with code 255 (docs/content/troubleshooting/container-exit-255.md).
+      - name: Raise the inotify instance limit
+        run: sudo sysctl -w fs.inotify.max_user_instances=8192
+
       # The integration tests skip when the host lacks sind's prerequisites;
       # fail here instead so a runner change cannot turn this job green.
+      # inotify is only a warning for sind, but the tests need it to pass.
       - name: Check prerequisites
-        run: go run ./cmd/sind doctor
+        run: |
+          go run ./cmd/sind doctor
+          go run ./cmd/sind doctor -o json |
+            jq -e '.[] | select(.name == "inotify") | .status == "ok"' >/dev/null ||
+            { echo "::error::sind doctor: the inotify check does not pass"; exit 1; }
 
       # The builder's BuildKit image comes from Docker Hub by default; take it
       # from Google's mirror for the same reason as the tests' images below.
