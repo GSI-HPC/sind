@@ -62,20 +62,19 @@ sind uses a minimal set of dependencies:
 | Dependency | Purpose |
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
-| `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
 | `go.yaml.in/yaml/v3` | YAML configuration parsing (YAML 1.2) |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
-| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the progress display |
+| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the log lines |
 | `github.com/muesli/termenv` | The colour profiles lipgloss reports |
-| `github.com/GSI-HPC/go-clikit` | Progress spans and their displays, the pools of the power commands and `delete cluster --all`, and escaping of the text sind prints from docker and containers |
-| `github.com/mattn/go-isatty` | TTY detection for interactive commands |
-| `github.com/njayp/ophis` | MCP server framework |
+| `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log, and TTY detection; the pools of the power commands and `delete cluster --all`; escaping of the text sind prints from docker and containers; the strict command tree and the usage errors that exit 2; the output of `get` and `doctor`; whole-file writes; the server of `sind ui` and its reading of the activity log; MCP progress notifications |
+| `github.com/creack/pty` | The pseudo-terminal of `docker pull`, which writes its byte counts only to a terminal (`cmdexec.WithTerminal`) |
+| `github.com/njayp/ophis` | MCP server framework, and the flag filter of the MCP tools |
 | `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/crypto` | The OpenSSH encoding of the SSH relay's ed25519 keypair (`ssh`) |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
-| `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
+| `golang.org/x/sys` | Advisory file locking (flock) of the realm lock and of the activity log's rotation, and the check whether a lock holder still runs (kill) |
 | `github.com/GSI-HPC/go-nodeset` | Node arguments: ClusterShell node set expressions |
 | `github.com/stretchr/testify` | Test assertions (test only) |
 
