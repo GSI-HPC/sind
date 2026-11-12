@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -227,9 +228,13 @@ func (m *Manager) editKnownHosts(ctx context.Context, hostnames, add []string) e
 // (docker.Client.ReplaceFile): a write cut short, even by a Ctrl+C that
 // reaches the docker CLI directly, leaves the old file, not a truncated one
 // without the host keys of every cluster in the realm. The write ignores
-// the cancellation of ctx, so that the file keeps up with the mesh DNS.
+// the cancellation and the deadline of ctx, so that the file keeps up with
+// the mesh DNS, but ends with the rollback that ctx runs under
+// (internal/detach).
 func (m *Manager) writeKnownHosts(ctx context.Context, content string) error {
-	return m.Docker.ReplaceFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
+	ctx, cancel := detach.Context(ctx)
+	defer cancel()
+	return m.Docker.ReplaceFile(ctx, m.SSHContainerName(), knownHostsPath, content)
 }
 
 // generateKeypair creates a new ed25519 keypair and returns the private key

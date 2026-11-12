@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/go-clikit/localweb/session"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -97,8 +96,11 @@ func TestPostFormIsCappedAndChecked(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "dev", w.Body.String(), "the handler finds the form parsed")
 
-	w = ts.post("/changes", "name="+strings.Repeat("a", session.DefaultMaxBody+1))
+	name := strings.Repeat("a", maxBody-len("name="))
+	assert.Equal(t, http.StatusOK, ts.post("/changes", "name="+name).Code, "a body of maxBody bytes")
+	w = ts.post("/changes", "name="+name+"a")
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	assert.Equal(t, "The form is larger than 4096 KiB.\n", w.Body.String())
 
 	w = ts.post("/changes?x=%zz", "name=dev")
 	assert.Equal(t, http.StatusBadRequest, w.Code)

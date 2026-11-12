@@ -29,9 +29,9 @@ sind create cluster --config ha.yaml
 {{< /cli >}}
 {{< ui >}}
 
-1. Press **New cluster…**.
+1. Press **New cluster…** and set the name to `dev`.
 2. Open **More nodes** below the nodes and tick **backup**.
-3. Press **Create**.
+3. Press **Create dev**.
 
 {{< uishot "new-cluster" >}}
 

@@ -33,7 +33,8 @@ image-updates.sh ──► rows? ──no──► report "up to date", stop
 | Alloy, Prometheus, Loki, Grafana | `<Name>Image`, `pkg/observability/observability.go` | major version |
 
 Not checked: the Rocky Linux base image (a floating major tag, rebuilt weekly by the
-image workflow), Go modules and GitHub Actions (Dependabot).
+image workflow), the root Go module and the GitHub Actions (Dependabot), and the other
+versions that `steward` says to bump by hand.
 
 ## Steps
 

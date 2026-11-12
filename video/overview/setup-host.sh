@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 #
 # Prepare an Ubuntu GitHub runner to record the overview video (record.py):
-# sind from this checkout, mise, host DNS for *.sind, and the Docker Hub
-# images of the scenario. Run it from the repository root.
+# sind from this checkout, mise, host DNS for *.sind, a raised inotify
+# instance limit, and the images of the scenario. Run it from the repository
+# root.
 set -euo pipefail
 
 bin="$HOME/.local/bin"
@@ -37,6 +38,11 @@ polkit.addRule(function(action, subject) {
 });
 RULES
 sudo systemctl restart polkit
+
+# The Ubuntu 26.04 runner image allows 128 inotify instances per user,
+# which the recorded clusters can use up: their node containers then exit
+# with code 255.
+sudo sysctl -w fs.inotify.max_user_instances=8192
 
 # Docker Hub rate-limits anonymous pulls per IP, which runners share: pull
 # the Docker Hub images of the scenario (the mesh's CoreDNS, the monitoring

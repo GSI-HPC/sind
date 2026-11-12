@@ -158,7 +158,7 @@ without changing episode scripts.
 While developing an episode, render it locally (a laptop or a Claude Code
 cloud session); the docs workflow renders the published version.
 
-Requirements: Node.js 22+, Python 3.10 to 3.13, FFmpeg with libx264, and Hugo
+Requirements: Node.js 22.12+, Python 3.10 to 3.13, FFmpeg with libx264, and Hugo
 0.156 or newer for the docs preview. HyperFrames downloads its own Chrome. If
 any of these get in the way, see [Pitfalls](#pitfalls).
 
@@ -221,6 +221,9 @@ voice metadata loads from a local script.
 - The docs workflow renders the episodes and the docs site serves them; no
   rendered files are committed. Move to YouTube only if GitHub Pages turns out
   too small.
+- `package.json` raises undici, which HyperFrames pins at 7.25.0, to 7.30.2
+  or later (`overrides`), for the security fixes of undici since. Drop the
+  override once HyperFrames pins such a version.
 
 ## Videos in the docs
 
@@ -239,9 +242,11 @@ example a local `hugo server`), the shortcode renders nothing, so writing docs
 never needs the video toolchain.
 
 **Deployment.** `.github/workflows/docs.yml` builds `main` (at `/`) and `next`
-(at `/next/`) together on every push to either branch that touches `docs/` or
-`video/`, and deploys one Pages artifact. No `gh-pages` branch and no deploy
-history; pages removed from the docs disappear from the site.
+(at `/next/`) together on every push to either branch that touches `docs/`,
+`video/`, `internal/ui/`, `internal/help/`, `tools/screenshots/` or the
+workflow, and when run by hand, and deploys one Pages artifact. No `gh-pages`
+branch and no deploy history; pages removed from the docs disappear from the
+site.
 
 **Rendering in CI.** Before Hugo runs, the workflow calls `episode.mjs ci` for
 each branch. Every episode has a hash over its own files and everything shared
@@ -260,24 +265,6 @@ per minute; the 45-second pilot is 2.7 MB. Ten 3-minute guides are about
 **Fallback.** If Pages turns out too small, upload release episodes to
 YouTube and point the shortcode at a privacy-enhanced embed. Note that every
 re-render gets a new YouTube video ID.
-
-### One-time switch from the gh-pages branch
-
-Do this in one sitting, right after merging the workflow into `next`:
-
-1. Merge the PR into `next` while Pages still serves `gh-pages`. Its first
-   **Deploy docs** run builds both versions; its deploy job most likely fails
-   because Pages does not accept Actions deployments yet. The live site is
-   unaffected.
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-3. **Settings → Environments → `github-pages`**: if deployments are limited to
-   selected branches, allow `next` as well as `main`.
-4. Re-run the failed deploy job; the build artifact is reused.
-5. Check `/sind/` and `/sind/next/`, then delete the `gh-pages` branch.
-6. Until the next release, `main` still carries the old peaceiris workflow. If
-   docs change on `main` before then, it pushes a new `gh-pages` branch that
-   Pages ignores; delete it again, and run **Deploy docs** on `next` to update
-   the release docs.
 
 ## Pitfalls
 
@@ -362,10 +349,9 @@ Roadblocks met while building this pipeline, and their fixes.
 
 - The old `gh-pages` deploy kept every build, so videos would have piled up in
   its history; hence the artifact deploy. It needs the Pages source "GitHub
-  Actions" and `next` allowed in the `github-pages` environment (see the
-  one-time switch above).
-- Until the next release, `main` still carries the old peaceiris workflow; a
-  docs push to `main` recreates `gh-pages`.
+  Actions" (Settings → Pages → Build and deployment) and `next` allowed in the
+  `github-pages` environment (Settings → Environments), if that limits its
+  deployments to selected branches.
 - The Actions cache evicts entries unused for 7 days; the next run then renders
   every episode again.
 - GitHub-hosted runners have no FFmpeg and a PEP 668 Python; the workflow

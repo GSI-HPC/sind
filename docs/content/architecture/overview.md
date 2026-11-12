@@ -34,7 +34,7 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Creating and deleting clusters and workers acquire a per-realm lock to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. The lock is a file lock (flock) in the user's state directory, which orders that user's commands, and a configuration-only network `<realm>-lock` on the Docker daemon, which orders every client of the daemon: other users, CI jobs that share its socket. A lock that a killed command left on the same host is taken over; one from another host or container is removed by hand. Different realms operate independently — see [Realms]({{< relref "/configuration/realms#advisory-locking" >}}).
+Creating and deleting clusters and workers, deleting a realm, and connecting and disconnecting containers acquire a per-realm lock to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. The lock is a file lock (flock) in the user's state directory, which orders that user's commands, and a configuration-only network `<realm>-lock` on the Docker daemon, which orders every client of the daemon: other users, CI jobs that share its socket. A lock that a killed command left on the same host is taken over; one from another host or container is removed by hand. Different realms operate independently — see [Realms]({{< relref "/configuration/realms#advisory-locking" >}}).
 
 ## Creation flow
 
@@ -44,28 +44,31 @@ Creating and deleting clusters and workers acquire a per-realm lock to serialize
 ├ DetectCVMFS (storage.cvmfs only) ────────────────────┼→ setupNodes
 └ CheckNsdelegate ─────────────────────────────────────┘
                            │
-  registerNodes ║ enableSlurm → createSlurmAccounts ║ createHomes
+  registerNodes ║ enableSlurm → createSlurmAccounts ║ createHomes ║ ensureMonitoring
+                           │
+                   registerStackDNS (monitoring only)
                            │
                        *Cluster
 ```
 
-- `createResources` creates the cluster network and connects the SSH relay to it, the config volume and its Slurm configuration (managed clusters only; with a managed api node also `jwt_hs256.key`), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
-- `resolveInfra` starts the mesh DNS and SSH relay if they are stopped, and looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
+- `createResources` creates the cluster network and connects the SSH relay and the realm's [external containers]({{< relref "/architecture/networking#external-containers" >}}) to it, the config volume and its Slurm configuration (managed clusters only; with a managed api node also `jwt_hs256.key`), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume, with `users` the home volume and, on a monitored cluster, the realm's journal volume `<realm>-journal`, if it does not exist yet, with an empty directory `<cluster>/<node>` for each node, all in parallel.
+- `resolveInfra` starts the mesh DNS and SSH relay if they are stopped, and looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created. On a monitored cluster the Slurm version comes from the check of the images for the endpoints that the monitoring stack uses, which fails the creation, before any node exists, for an image that cannot serve them.
 - `DetectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
 - `CheckNsdelegate` reads `/proc/self/mounts` in a throwaway container of the controller's image, also while the resources are created, and fails the creation, before any node container exists, when the cgroup2 mount lacks `nsdelegate`. `nsdelegate` is an option of the whole cgroup2 hierarchy, which the kernel lists in every cgroup2 mount, so the container shows the option of the kernel the Docker daemon runs on.
-- Each distinct node image the daemon does not have, or with `--pull` each one, is pulled once, concurrently, before the helper containers, the version check, the CVMFS check, the nsdelegate check and the nodes run it; none of these containers is created with `--pull always`, and no node's `docker create` pulls. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, get their images the same way: each is pulled, when the daemon does not have it or with `--pull`, in the row of its part of the mesh step, before its `docker create`.
+- Each distinct node image the daemon does not have, or with `--pull` each one, is pulled once, concurrently, before the helper containers, the version check, the CVMFS check, the nsdelegate check and the nodes run it; none of these containers is created with `--pull always`, and no node's `docker create` pulls. On a monitored cluster the monitoring stack's images are pulled with the node images. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, get their images the same way: each is pulled, when the daemon does not have it or with `--pull`, in the row of its part of the mesh step, before its `docker create`.
 - The helper containers that write the Slurm configuration and the munge key copy each file in with its final mode, then hand the secrets to their owner with `chown`; `docker rm -f` stops them.
 - `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the check for slurmrestd and its systemd drop-in on a managed api node, the cluster users and groups where the identity mode puts them, SSH and host keys. The setup is one `docker exec` per node, a script that stops at its first failing step; the error names the step and shows what it wrote.
-- `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, slurmrestd on a managed api node, and `sackd` on the submitter with identity `clientIds`.
+- `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, slurmrestd on a managed api node, and `sackd` on the submitter with identity `clientIds`. On a monitored cluster it then waits until slurmctld serves the HTTP endpoints that the monitoring stack uses.
 - `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
-- If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it.
+- `ensureMonitoring` (`monitoring` only) creates, starts or upgrades the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}), waits until it is ready and adds the new nodes to it. When the concurrent steps are done, `registerStackDNS` adds the stack's names to the mesh DNS.
+- If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it, and a monitoring stack it created only if no other cluster of the realm is monitored.
 
-The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerNodes`), `slurm` (`enableSlurm`, a target for each managed node), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`) and, after a failure, `rollback`.
+The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerNodes`), `slurm` (`enableSlurm`, a target for each managed node with a Slurm daemon), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`), `monitoring` (`ensureMonitoring`) and, after a failure, `rollback`.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 
-Mesh registration (batch DNS ║ known_hosts), Slurm enablement and the home directories run concurrently after all nodes are ready. Slurm resolves the nodes' short hostnames on the cluster network, which the nodes join with gateway priority ahead of the mesh (see [Networking]({{< relref "/architecture/networking#cluster-network" >}})), so it does not wait for the mesh DNS records.
+Mesh registration (batch DNS ║ known_hosts), Slurm enablement, the home directories and, on a monitored cluster, the monitoring stack run concurrently after all nodes are ready. Slurm resolves the nodes' short hostnames on the cluster network, which the nodes join with gateway priority ahead of the mesh (see [Networking]({{< relref "/architecture/networking#cluster-network" >}})), so it does not wait for the mesh DNS records.
 
 ## Readiness probes
 
@@ -85,6 +88,7 @@ Each round runs a node's checks in order and stops at the first that fails. A ch
 | sshd listening | Port 22 accepting connections |
 | munge ready | munge service active (not with identity `clientIds`, which masks munge) |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host); while it does not, a failed slurmctld unit ends the wait |
+| slurmctld HTTP | `GET /metrics/nodes` on port 6817 answers 2xx on `controller`, `GET /livez` on `controller-backup`, whose standby slurmctld redirects the metrics ([monitored]({{< relref "/guides/monitoring" >}}) clusters only, after slurmctld ready) |
 | slurmd ready | slurmd service active (managed workers only) |
 | sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
 | slurmrestd ready | slurmrestd service active and port 6820 accepting connections (managed api node) |

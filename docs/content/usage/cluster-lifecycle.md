@@ -20,7 +20,7 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--moni
 1. Press **New cluster…** on the Overview or on the Clusters page. The New cluster page opens.
 2. Pick a start: **Quick test**, **With job history**, **Like a site**, or **Copy a cluster** for the nodes of a cluster you have. **Start from YAML…** takes a config that you paste or open from a file.
 3. Set the name and the realm, and change the nodes, **Your files** or **More options** as you need. The plan at the right shows the nodes, what they take of this host, the command and the config as you type.
-4. Press **Create** when the status at the bottom of the plan says `Ready`.
+4. Press **Create NAME** when the status at the top of the plan says `Ready`.
 
 {{< uishot "new-cluster" >}}
 
@@ -118,8 +118,8 @@ Open **Clusters** in the rail. Each row is a cluster, with its state, its nodes 
 
 ```
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
-default  5 (1/1/0/1/2)      26.05.5  running
-dev      4 (0/1/1/0/2)      25.11.8  running
+default  5 (1/1/0/1/2)      26.05.6  running
+dev      4 (0/1/1/0/2)      25.11.9  running
 ```
 
 The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **A**pi / **W**orker. `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters.
@@ -212,4 +212,4 @@ Press **Connect a container…** on **Mesh and DNS**, which shows the realm that
 {{< /ui >}}
 {{< /ways >}}
 
-`sind connect container` attaches containers that sind did not make, such as [kind nodes]({{< relref "/guides/kind" >}}), to the realm's mesh network and every cluster network, so that they resolve the realm's names through its DNS server and reach its nodes. Clusters created later are connected to them too, while the realm has a cluster: sind counts every container on the mesh that is not its own as connected. `sind disconnect container` detaches them from every network of the realm. Deleting a cluster or the realm detaches them as well, and never removes them. Both commands fail for a container that does not exist or that sind made. Deleting the realm's last cluster takes the mesh with it, so a cluster created after that is not connected to them: `sind delete cluster` then names them in a `Warning:` on stderr, and `sind connect container` attaches them again.
+`sind connect container` attaches containers that sind did not make, such as [kind nodes]({{< relref "/guides/kind" >}}), to the realm's mesh network and every cluster network, so that they can reach its DNS server and its nodes. To resolve the realm's names, a container must send its queries for `<realm>.sind` to that DNS server, as the [kind guide]({{< relref "/guides/kind" >}}) does with `sind get coredns-config`. Clusters created later are connected to them too, while the realm has a cluster: sind counts every container on the mesh that is not its own as connected. `sind disconnect container` detaches them from every network of the realm. Deleting a cluster or the realm detaches them as well, and never removes them. Both commands fail for a container that does not exist or that sind made. Deleting the realm's last cluster takes the mesh with it, so a cluster created after that is not connected to them: `sind delete cluster` then names them in a `Warning:` on stderr, and `sind connect container` attaches them again.

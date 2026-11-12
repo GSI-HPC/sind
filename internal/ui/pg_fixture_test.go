@@ -90,7 +90,7 @@ func pgFillStore(st *store.Store) {
 	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}, {Name: "ci", Clusters: 1}})
 	st.SetClusters("sind", []cluster.Summary{
 		{Name: "dev", SlurmVersion: "26.05.4", State: cluster.StateMixed, NodeCount: 9},
-		{Name: "hpc", SlurmVersion: "25.11.8", State: cluster.StateRunning, NodeCount: 4},
+		{Name: "hpc", SlurmVersion: "25.11.9", State: cluster.StateRunning, NodeCount: 4},
 	})
 	st.SetClusters("ci", []cluster.Summary{{Name: "default", SlurmVersion: "26.05.4", State: cluster.StatePaused, NodeCount: 2}})
 	dev := pgNodes("sind", "dev", map[config.Role]int{config.RoleController: 2, config.RoleDB: 1, config.RoleAPI: 1, config.RoleSubmitter: 1, config.RoleWorker: 4},
@@ -113,7 +113,7 @@ func pgFillStore(st *store.Store) {
 	st.SetLock("sind", &state.LockHolder{Command: "sind create worker dev", Host: "zeta", PID: 4242, Since: pgNow.Add(-time.Minute)})
 	st.SetDoctor(&store.DoctorReport{Time: pgNow, Checks: []store.DoctorCheck{
 		{Name: "Docker daemon", Status: "ok"},
-		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_watches is 8192"},
+		{Name: "inotify", Status: "warning", Detail: "max_user_instances 128 (10 or more nodes on this host need 1024; optional)"},
 		{Name: "cgroupv2", Status: "failed", Detail: "no nsdelegate"},
 	}})
 	end := func(d time.Duration) *time.Time { t := pgNow.Add(-d); return &t }

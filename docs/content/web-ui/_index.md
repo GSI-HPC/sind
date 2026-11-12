@@ -11,7 +11,7 @@ aliases:
 The UI runs the same sind commands as your terminal. It does not replace them. Long commands show their progress live, step by step and node by node.
 
 {{< callout type="info" >}}
-The UI has no terminal and no Slurm page in this version. To open a shell on a node, copy the command from the Connect tab of a cluster and run it in your own terminal.
+The UI has no terminal in this version, and it does not list or submit jobs. To open a shell on a node, copy the command from the Connect tab of a cluster and run it in your own terminal.
 {{< /callout >}}
 
 The pages of the docs that tell you how to do a task show the steps for the CLI or for the web UI. Select **Web UI** at the top of such a page, or on one of its tabs, to see the steps for the UI on all pages. Your browser keeps the choice. The help pane of `sind ui` opens the docs with the steps for the UI.

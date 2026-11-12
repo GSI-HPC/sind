@@ -128,6 +128,22 @@ func TestDashboards_Home(t *testing.T) {
 	assert.True(t, strings.HasSuffix(homeDashboard, "/slurm-cluster.json"))
 }
 
+func TestDashboards_Processes(t *testing.T) {
+	// cAdvisor counts only the processes directly in a cgroup, and a
+	// node's own cgroup holds none: the panel sums all of its cgroups.
+	var d grafanaDashboard
+	require.NoError(t, json.Unmarshal(Dashboards()["nodes.json"], &d))
+	var exprs []string
+	for _, p := range d.Panels {
+		if p.Title == "Processes" {
+			for _, q := range p.Targets {
+				exprs = append(exprs, q.Expr)
+			}
+		}
+	}
+	assert.Equal(t, []string{`sum by (node) (container_processes{realm="$realm", cluster="$cluster", node=~"$node"})`}, exprs)
+}
+
 func TestDashboards_LinksToLogs(t *testing.T) {
 	var d grafanaDashboard
 	require.NoError(t, json.Unmarshal(Dashboards()["nodes.json"], &d))

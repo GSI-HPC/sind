@@ -246,8 +246,8 @@ func TestDelete_ReportsTheMonitoringStack(t *testing.T) {
 	assert.Contains(t, tree, "  step monitoring: ok\n")
 }
 
-// The workers that WorkerRemove removes leave Slurm and the mesh together,
-// the steps "slurm" and "mesh deregistration", and then go, as the step
+// The workers that WorkerRemove removes leave Slurm, the step "slurm", then
+// the mesh, the step "mesh deregistration", and then go, as the step
 // "nodes" with a target for each; a monitored cluster's stack is last.
 func TestWorkerRemove_ReportsItsSteps(t *testing.T) {
 	nodesConf := "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
@@ -273,15 +273,12 @@ func TestWorkerRemove_ReportsItsSteps(t *testing.T) {
     target worker-1 role=worker: ok
   step slurm: ok
 `, testutil.WithoutCalls(w.Events()))
-	order := stepOrder(w.Events())
-	assert.Equal(t, "nodes", order[len(order)-2])
-	assert.Equal(t, "monitoring", order[len(order)-1])
-	assert.ElementsMatch(t, []string{"slurm", "mesh deregistration"}, order[:2])
+	assert.Equal(t, []string{"slurm", "mesh deregistration", "nodes", "monitoring"}, stepOrder(w.Events()))
 }
 
 // A worker that cannot be removed fails its target and the step, which
 // ends the command; a failed reconfigure fails the step "slurm", and the
-// workers stay.
+// workers stay, in the mesh too.
 func TestWorkerRemove_ReportsFailures(t *testing.T) {
 	nodesConf := "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
 		"NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n"
@@ -298,8 +295,7 @@ step nodes total=2 [fold]: failed (target): removing container sind-dev-worker-1
 step slurm: ok
 `},
 		{"reconfigure", func(args []string) bool { return args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" },
-			`step mesh deregistration: ok
-step slurm: failed (target): reconfiguring slurmctld: boom
+			`step slurm: failed (target): reconfiguring slurmctld: boom
 `},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

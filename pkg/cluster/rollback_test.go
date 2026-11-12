@@ -12,6 +12,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -192,4 +193,23 @@ func TestStartRollback_FailsAfterAnInterrupt(t *testing.T) {
 	assert.Equal(t, `step rollback: failed (target): removing cluster resources: docker rm: exit status 1
 step rollback: failed (timeout): removing the mesh: context deadline exceeded
 `, w.Finish())
+}
+
+// The writes that must not be cut short ignore the cancellation and the
+// deadline of their caller, but under a rollback they end with it, after
+// RollbackTimeout.
+func TestStartRollback_BoundsDetachedWrites(t *testing.T) {
+	before := time.Now()
+	rctx, end := startRollback(t.Context())
+	defer end(nil)
+	step, cancel := context.WithCancel(rctx)
+	cancel()
+
+	wctx, wcancel := detach.Context(step)
+	defer wcancel()
+
+	require.NoError(t, wctx.Err(), "an interrupt does not cut the write short")
+	deadline, ok := wctx.Deadline()
+	require.True(t, ok, "the rollback's deadline bounds the write")
+	assert.WithinRange(t, deadline, before.Add(RollbackTimeout), time.Now().Add(RollbackTimeout))
 }

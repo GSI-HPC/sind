@@ -218,6 +218,24 @@
     leave(to);
   });
 
+  // A form that sind ui refuses, as larger than it takes (413) or with a
+  // value longer than its field takes (400), gets no preview: the preview
+  // says why instead, in sind ui's words, and the button is off until the
+  // next preview.
+  document.addEventListener('htmx:responseError', ev => {
+    const det = ev.detail || {};
+    const xhr = det.xhr;
+    const preview = det.target;
+    if (!xhr || (xhr.status !== 400 && xhr.status !== 413) || !(preview instanceof Element) || preview.id !== 'act-preview') return;
+    const why = document.createElement('div');
+    why.className = 'callout bad';
+    why.textContent = xhr.responseText.trim();
+    preview.replaceChildren(why);
+    const ok = document.getElementById('act-ok');
+    if (ok) ok.disabled = true;
+    document.dispatchEvent(new CustomEvent('sind:say', { detail: why.textContent }));
+  });
+
   // close closes the dialog. One with changes asks first, unless force.
   function close(force) {
     const d = dialog();

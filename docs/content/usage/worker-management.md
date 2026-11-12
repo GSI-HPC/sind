@@ -52,6 +52,8 @@ The dialog sets no other flag. For the other flags, copy the command from the **
 | `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`); `--device=` for none |
 | `--security-opt` | the newest worker's, else none | Security option (repeatable); `--security-opt=` for none |
 
+New workers take the indices after the highest one in the cluster: with `worker-0` to `worker-5`, `--count 3` adds `worker-6` to `worker-8`. A gap left by a deleted worker is not filled.
+
 ### Defaults from the newest worker
 
 New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list. Give one empty to add workers without any, e.g. `sind create worker --device=` on a cluster whose workers have `/dev/fuse`. An empty `--image`, `--memory` or `--tmp-size` is a usage error, so that an unset variable in `--image "$IMAGE"` does not quietly add workers like the newest one.
@@ -67,7 +69,7 @@ A cluster without workers gets the controller's image and 1 CPU, `512m` memory a
 
 Without `--image`, new workers run the image the newest worker (or the controller) runs, by its ID: the tag it was created from may since point to another image, even another Slurm release. `--pull` therefore needs `--image`.
 
-With `--image`, sind pulls the image once if the daemon does not have it (with `--pull` in any case), runs `slurmctld -V` in it, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.8`.
+With `--image`, sind pulls the image once if the daemon does not have it (with `--pull` in any case), runs `slurmctld -V` in it, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.9`.
 
 Before it creates a worker container, sind checks that the Docker host still mounts cgroup2 with `nsdelegate`, in a throwaway container of the controller's image, as [`sind create cluster`]({{< relref "/usage/cluster-lifecycle#preflight-checks" >}}) does, and fails with the commands that enable it otherwise.
 
@@ -132,7 +134,7 @@ sind delete worker NODES
 
 {{< uishot "dialog-delete-worker" >}}
 
-The page of a worker has a **Delete worker…** button too.
+On the page of a worker, the **⋯** menu has **Delete worker…** too.
 
 {{< /ui >}}
 {{< /ways >}}

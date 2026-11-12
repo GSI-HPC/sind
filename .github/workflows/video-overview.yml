@@ -1,15 +1,18 @@
 name: Overview video
 
 # Records the overview video (video/overview) on a runner with Docker and
-# renders it, so a pull request that changes it can be reviewed from its
-# artifacts: the video, its poster and chapters, and the recordings, which
-# the compositor can render again locally.
+# renders it, so a pull request that changes it, its voice or its npm
+# packages (Dependabot) can be reviewed from its artifacts: the video, its
+# poster and chapters, and the recordings, which the compositor can render
+# again locally.
 
 on:
   pull_request:
     paths:
       - video/overview/**
       - video/voice/**
+      - video/package.json
+      - video/package-lock.json
       - .github/workflows/video-overview.yml
   workflow_dispatch:
 
@@ -33,6 +36,12 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+
+      # The voice tools (video/voice/requirements.txt) do not install on
+      # the Python of the Ubuntu 26.04 runner image.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
 
       - name: Set up the recording host
         run: video/overview/setup-host.sh

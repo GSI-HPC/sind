@@ -11,7 +11,9 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -1027,20 +1029,32 @@ func TestEditDNSRecords_Errors(t *testing.T) {
 	}
 }
 
-// TestAddDNSRecords_Cancelled covers Ctrl+C during a DNS update: the write
-// and the reload still run, so CoreDNS loads the Corefile it was given.
-func TestAddDNSRecords_Cancelled(t *testing.T) {
-	f, c, _ := newFakeDocker(t)
-	f.withMesh(DefaultRealm, docker.StateRunning)
-	mgr := NewManager(c, DefaultRealm)
-	ctx, cancel := context.WithCancel(t.Context())
+// TestWriteDNSEntries_Cancelled covers Ctrl+C or a deadline, such as the
+// --wait limit, during a DNS update: the write and the reload still run,
+// so CoreDNS loads the Corefile it was given.
+func TestWriteDNSEntries_Cancelled(t *testing.T) {
+	f := newFake(t).withMesh(DefaultRealm, docker.StateRunning)
+	mgr := NewManager(docker.NewClient(ctxExecutor{&mock.Executor{OnCall: f.onCall}}), DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	cancel()
 
-	// The mock ignores the context, so this checks that the write and
-	// the reload do not depend on it.
 	err := mgr.writeDNSEntries(ctx, []string{"172.18.0.2 controller.dev.sind.sind"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"USR1"}, f.containers["sind-dns"].signals)
+}
+
+// TestWriteDNSEntries_RollbackDeadline covers a DNS update of a rollback
+// whose deadline has passed: the write ends, so a hung Docker daemon cannot
+// hold the rollback past RollbackTimeout of pkg/cluster.
+func TestWriteDNSEntries_RollbackDeadline(t *testing.T) {
+	f := newFake(t).withMesh(DefaultRealm, docker.StateRunning)
+	mgr := NewManager(docker.NewClient(ctxExecutor{&mock.Executor{OnCall: f.onCall}}), DefaultRealm)
+	ctx, cancel := context.WithDeadline(context.WithoutCancel(t.Context()), time.Now().Add(-time.Second))
+	defer cancel()
+
+	err := mgr.writeDNSEntries(detach.Rollback(ctx), []string{"172.18.0.2 controller.dev.sind.sind"})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Empty(t, f.containers["sind-dns"].signals)
 }
 
 // TestRemoveDNSRecords_DNSStopped covers issue #52 and its follow-up:

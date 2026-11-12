@@ -169,6 +169,28 @@ func TestGetNodes_ClusterNotFound(t *testing.T) {
 	}
 }
 
+// TestGetNodes_ClusterWithoutNodes checks that a cluster whose network is
+// left without containers, as after a create that was killed, lists no
+// nodes and says so on stderr, as get nodes does for the realm.
+func TestGetNodes_ClusterWithoutNodes(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{Stdout: `[{"Id":"n1","Name":"ci-dev-net","Driver":"bridge"}]`}
+		}
+		return mock.Result{}
+	}}
+
+	stdout, stderr, err := executeWithMock(m, "--realm", "ci", "get", "nodes", "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(stdout, "\n"), "only the header")
+	assert.Equal(t, "No nodes found in cluster \"dev\" in realm \"ci\".\n", stderr)
+
+	_, stderr, err = executeWithMock(m, "--realm", "ci", "get", "nodes", "dev", "-o", "json")
+	require.NoError(t, err)
+	assert.Empty(t, stderr)
+}
+
 func TestGetNodes_AllClusters(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
@@ -1073,7 +1095,7 @@ func TestGetNode_ControllerPair(t *testing.T) {
 }
 
 func TestFormatSlurmVersion(t *testing.T) {
-	assert.Equal(t, "25.11.8", formatSlurmVersion("25.11.8"))
+	assert.Equal(t, "25.11.9", formatSlurmVersion("25.11.9"))
 	assert.Equal(t, "-", formatSlurmVersion(""))
 }
 

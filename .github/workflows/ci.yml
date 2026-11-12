@@ -32,7 +32,20 @@ jobs:
 
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: v2.15.0
+
+  # markdownlint-cli2 on docs/content, at the version that the Makefile
+  # pins and with the rules of .markdownlint.json, on the runner's Node.
+  lint-docs:
+    name: Docs Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint the docs
+        run: make lint-docs
 
   unit-test:
     name: Unit Test
@@ -84,6 +97,12 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      # tools/screenshots is a module of its own, which ./... leaves out.
+      # Its tests check the shot list that the docs use.
+      - name: Screenshot tool tests
+        working-directory: tools/screenshots
+        run: go vet ./... && go test ./...
+
   unit-test-coverage:
     name: Unit Test Coverage
     needs: unit-test
@@ -98,7 +117,7 @@ jobs:
           name: coverage
 
       - name: Check coverage thresholds
-        uses: vladopajic/go-test-coverage@239670d50ed072bfce8b9ab1765227a53429d664 # v2.20.1
+        uses: vladopajic/go-test-coverage@6890500b00a7e5862e54662c04ea9fa7c799ce1e # v2.23.0
         with:
           config: .testcoverage.yml
 
@@ -117,7 +136,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   image-targets:
     name: Image Targets
@@ -140,7 +159,7 @@ jobs:
   integration-test-image:
     name: Integration Test (${{ matrix.target }}, ${{ matrix.platforms }})
     needs: image-targets
-    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       # dorny/test-reporter publishes the results as a check run.
@@ -158,10 +177,25 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The Ubuntu 26.04 runner image allows 128 inotify instances per user.
+      # The test clusters that run in parallel take more: systemd in the
+      # next node container then fails to start, and the container exits
+      # with code 255 (docs/content/troubleshooting/container-exit-255.md).
+      # It prints the runner's limit first, as the docs cite it.
+      - name: Raise the inotify instance limit
+        run: |
+          sysctl fs.inotify.max_user_instances
+          sudo sysctl -w fs.inotify.max_user_instances=8192
+
       # The integration tests skip when the host lacks sind's prerequisites;
       # fail here instead so a runner change cannot turn this job green.
+      # inotify is only a warning for sind, but the tests need it to pass.
       - name: Check prerequisites
-        run: go run ./cmd/sind doctor
+        run: |
+          go run ./cmd/sind doctor
+          go run ./cmd/sind doctor -o json |
+            jq -e '.[] | select(.name == "inotify") | .status == "ok"' >/dev/null ||
+            { echo "::error::sind doctor: the inotify check does not pass"; exit 1; }
 
       # The builder's BuildKit image comes from Docker Hub by default; take it
       # from Google's mirror for the same reason as the tests' images below.
@@ -216,6 +250,11 @@ jobs:
             docker tag "mirror.gcr.io/$path" "$image"
           done
 
+      # The CVMFS guide (docs/content/guides/cvmfs.md) cites the hard limit
+      # on open files in a container on GitHub's runners.
+      - name: Show the open files limit of a container
+        run: docker run --rm busybox:latest sh -c 'echo "soft $(ulimit -Sn), hard $(ulimit -Hn)"'
+
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.13.0
 
@@ -264,5 +303,5 @@ jobs:
       # publishing, so a broken config fails here instead of at release.
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.18.2
+          version: v2.20.1
           args: release --snapshot --clean

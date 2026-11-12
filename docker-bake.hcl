@@ -19,12 +19,12 @@ variable "IMAGE_NAME" {
 variable "SLURM_RELEASES" {
   default = [
     {
-      version = "26.05.5"
-      sha256  = "4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68"
+      version = "26.05.6"
+      sha256  = "386a0d624fa7c730cf4dfa9171bf6dc66b6816b5683242c5271879999a54a9a7"
     },
     {
-      version = "25.11.8"
-      sha256  = "34ace13f81011add6094569d13bfc4006ad8868201c2236e2905443c7e526393"
+      version = "25.11.9"
+      sha256  = "d238138c6c029045f3764b75f142171266992d07f47970e089fae386b1031cdb"
     },
   ]
 }
@@ -48,7 +48,7 @@ variable "REFRESH_PACKAGES" {
   default = false
 }
 
-# Release line of a Slurm version, e.g. "25.11" for "25.11.8".
+# Release line of a Slurm version, e.g. "25.11" for "25.11.9".
 function "release_line" {
   params = [version]
   result = regex("^[0-9]+\\.[0-9]+", version)

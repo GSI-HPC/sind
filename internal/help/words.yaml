@@ -33,7 +33,7 @@
   see: [worker, slurmctld]
 - id: worker
   title: Worker
-  summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster has at least one worker.
+  summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster starts with at least one worker.
   command: sind create worker --count 2
   doc: usage/worker-management
   see: [managed, slurmd, job]
@@ -45,7 +45,7 @@
   see: [node-roles]
 - id: managed
   title: Managed node
-  summary: A node that sind sets up for Slurm. sind writes the config, the munge key and starts the daemons. An unmanaged node gets only the container.
+  summary: A node that sind sets up for Slurm. sind writes the config, the munge key and starts the daemons. An unmanaged node still gets SSH, munge and the users, but sind adds it to no Slurm config and starts no Slurm daemon on it.
   command: sind create worker --unmanaged
   doc: configuration/node-definitions#managed-vs-unmanaged-workers
   see: [worker, munge]
@@ -148,7 +148,7 @@
   see: [realm]
 - id: identity
   title: Identity mode
-  summary: How the nodes know the users of a cluster. With local, every node has the users. With nssSlurm or clientIds, the nodes ask slurmctld.
+  summary: How the nodes know the users of a cluster. With local, every node has the users. With nssSlurm, every node but the managed workers has them. With clientIds, only the login node has them, and their tokens tell Slurm who they are. On a managed worker without the users, Slurm hands each job its user and groups.
   doc: guides/users
   see: [slurmctld]
 - id: rollback
@@ -159,7 +159,7 @@
 - id: activity-log
   title: Activity log
   summary: The file in which sind writes the steps of each command that changes something. sind ui reads it to show runs, also those that you started in a terminal.
-  command: sind create cluster --progress-log ''
+  command: sind create cluster
   doc: usage/progress#the-activity-log
   see: [run, trace]
 - id: run
@@ -186,7 +186,7 @@
   see: [needs-you]
 - id: external
   title: External container
-  summary: A container that sind did not make, such as a kind node. Connect it to a realm and it resolves the names of the realm and reaches its nodes.
+  summary: A container that sind did not make, such as a kind node. Connect it to a realm and it reaches the realm's DNS server and its nodes.
   command: sind connect container NAME
   doc: architecture/networking#external-containers
   see: [mesh]

@@ -39,7 +39,7 @@ func newFakeImages() (*fakeImages, *actImages, *time.Time) {
 	f := &fakeImages{images: map[string]docker.Image{
 		"labelled:1": {ID: "sha256:1", Labels: docker.Labels{"sind.slurm.version": "26.05.4"}},
 		"own:dev":    {ID: "sha256:2"},
-	}, release: "25.11.8"}
+	}, release: "25.11.9"}
 	a := newActImages(f.inspect, f.discover)
 	now := time.Unix(1000, 0)
 	a.now = func() time.Time { return now }
@@ -71,7 +71,7 @@ func TestActImages_Check(t *testing.T) {
 
 	a.facts(ctx, "own:dev")
 	require.NoError(t, a.check(ctx, "own:dev"))
-	assert.Equal(t, action.ImageFacts{Local: true, Version: "25.11.8", Checked: true}, a.facts(ctx, "own:dev"), "the check counts at once")
+	assert.Equal(t, action.ImageFacts{Local: true, Version: "25.11.9", Checked: true}, a.facts(ctx, "own:dev"), "the check counts at once")
 
 	f.images["own:dev"] = docker.Image{ID: "sha256:3"}
 	f.inspects = 0
@@ -131,7 +131,7 @@ func TestActCheck(t *testing.T) {
 
 	w := f.post("/actions/create-cluster/check", actForm("name", "hpc", "image", "own:dev", "check", "own:dev"))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), `<span>Image <span class="mono tok">own:dev</span> has Slurm 25.11.8, as a check found.</span>`)
+	assert.Contains(t, w.Body.String(), `<span>Image <span class="mono tok">own:dev</span> has Slurm 25.11.9, as a check found.</span>`)
 	assert.NotContains(t, w.Body.String(), "Check image</button>")
 
 	fake.checkErr = errors.New("no slurmctld")

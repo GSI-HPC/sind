@@ -42,11 +42,12 @@ var (
 	ErrNoMonitoring = errors.New("no monitoring stack")
 )
 
-// rollbackTimeout bounds the rollback of a failed Create or WorkerAdd. The
+// RollbackTimeout bounds the rollback of a failed Create or WorkerAdd, and
+// the removal of a mesh that sind create cluster could not finish. The
 // rollback runs on a context that ignores the caller's cancellation (an
 // interrupted create still cleans up), so without a bound a hung Docker
 // daemon would hold it forever; what is left then is reported.
-const rollbackTimeout = 5 * time.Minute
+const RollbackTimeout = 5 * time.Minute
 
 // sentinelError is an error with its own message that wraps a sentinel.
 type sentinelError struct {

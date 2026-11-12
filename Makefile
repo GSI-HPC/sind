@@ -37,7 +37,7 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 lint-docs: ## Lint documentation markdown files
-	npx markdownlint-cli2 "docs/content/**/*.md"
+	npx markdownlint-cli2@0.24.0 "docs/content/**/*.md"
 
 docs-shots: build ## Take the sind ui screenshots of the docs into docs/static/ui-shots (needs Chromium)
 	cd tools/screenshots && go run . -sind ../../$(BINARY) -out ../../docs/static/ui-shots
@@ -57,7 +57,7 @@ check-coverage: ## Check coverage thresholds (requires go-test-coverage)
 	go-test-coverage --config .testcoverage.yml
 
 image: ## Build the node images (one per Slurm release line) for the host platform via docker buildx bake
-	docker buildx bake --set '*.platform=local'
+	docker buildx bake --allow=network.host --set '*.platform=local'
 
 clean: ## Remove build artifacts
 	rm -f sind-* coverage.out coverage.html

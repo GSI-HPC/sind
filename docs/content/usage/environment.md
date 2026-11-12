@@ -4,7 +4,7 @@ title: "Environment Variables"
 description: "The SIND_* variables that stand in for flags, and the other variables sind reads"
 toc: true
 webui: none
-webuiNote: "sind ui runs its commands without the `SIND_*` variables that stand in for a flag or an argument, so that a run does what its command says. The variables on this page are for the CLI."
+webuiNote: "sind ui runs its commands without your values of the `SIND_*` variables that stand in for a flag or an argument, so that a run does what its command says. The variables on this page are for the CLI."
 ---
 
 A `SIND_*` variable stands in for a flag, or for an argument, that the command line does not give. Set it once, in a shell profile or for a CI job, and every command that follows uses it:
@@ -119,7 +119,7 @@ A variable is not part of the command line, so a value that sind cannot use is n
 
 ## sind ui and the MCP server
 
-`sind ui` runs the commands of its dialogs without the variables that stand in for a flag or an argument, whatever its own environment holds, so that a run does what the command it shows says. The commands it shows leave out what you would not type: the realm `sind`, the cluster `default`, a `--wait` of `5m` and a `--pull` that is off. In a shell with `SIND_REALM`, `SIND_CLUSTER`, `SIND_WAIT` or `SIND_PULL`, a copy of one takes their values instead. Some always name the realm or the cluster: **Copy script** of New cluster names the realm and the cluster, Delete realm the realm, Delete cluster and Delete clusters each cluster, and Delete workers the cluster of the workers, `default` too.
+`sind ui` runs the commands of its dialogs without the values its own environment gives the variables that stand in for a flag or an argument, so that a run does what the command it shows says. It sets two of them itself: `SIND_PROGRESS` to `none`, and `SIND_PROGRESS_LOG` to the [activity log]({{< relref "/usage/progress#the-activity-log" >}}), which it reads to show the run. The commands it shows leave out what you would not type: the realm `sind`, the cluster `default`, a `--wait` of `5m` and a `--pull` that is off. In a shell with `SIND_REALM`, `SIND_CLUSTER`, `SIND_WAIT` or `SIND_PULL`, a copy of one takes their values instead. Some always name the realm or the cluster: **Copy script** of New cluster names the realm and the cluster, Delete realm the realm, Delete cluster and Delete clusters each cluster, and Delete workers the cluster of the workers, `default` too.
 
 The [MCP server]({{< relref "/guides/mcp" >}}) runs its tool calls in its own environment, with these changes: `--realm` of `sind mcp start` or `sind mcp stream`, when given, sets `SIND_REALM`; `SIND_PROGRESS` is `none`, `SIND_PROGRESS_LOG` is not set, and `SIND_LOG_TIMESTAMPS` is `false`. A call that leaves out a flag or the cluster takes the variable of that environment, as a command does: `sind_create_cluster` without `wait` waits as long as `SIND_WAIT` says. An editor starts the server with the environment of its entry, not that of your shell: `sind mcp <editor> enable` writes the realm into the entry.
 
@@ -132,6 +132,7 @@ sind also reads these variables, which other programs define:
 | `DOCKER_HOST`, `DOCKER_CONTEXT` | The daemon that the docker CLI, which sind runs, reaches. sind supports only a daemon on this machine (see [Docker host]({{< relref "/usage/diagnostics#docker-host" >}})). |
 | `XDG_STATE_HOME` | The state directory, `$XDG_STATE_HOME/sind/`, else `~/.local/state/sind/`: SSH files, realm locks, the activity log |
 | `XDG_RUNTIME_DIR` | Where `sind ui` records the running UI (see [Troubleshooting]({{< relref "/web-ui/troubleshooting" >}})) |
+| `XDG_CONFIG_HOME` | Where `sind mcp claude` and `sind mcp vscode` find the editor's settings, `$XDG_CONFIG_HOME/Claude/claude_desktop_config.json` and `$XDG_CONFIG_HOME/Code/User/mcp.json`, else under `~/.config/` (see [MCP]({{< relref "/guides/mcp#quick-setup" >}})) |
 | `NO_COLOR`, `TERM`, `COLORTERM` | The colours of the progress display and of log lines: `NO_COLOR` turns them off, and `TERM=dumb` writes plain text (see [Progress Display]({{< relref "/usage/progress" >}})) |
 | `LC_ALL`, `LC_CTYPE`, `LANG` | A UTF-8 locale draws the progress tree with Unicode marks, else ASCII |
 | `TRACEPARENT`, `TRACESTATE` | The W3C trace that the event log continues |

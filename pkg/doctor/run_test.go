@@ -5,6 +5,7 @@ package doctor
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -177,6 +178,29 @@ func TestRun_DNSPolicy(t *testing.T) {
 			Detail: "not available: the Docker daemon does not run on this machine (optional)"}, last)
 		assert.Len(t, sys.Calls, 1, "polkit is not asked")
 	})
+	// Without a docker CLI and DOCKER_HOST, sind cannot tell where the
+	// daemon runs: the checks that read this machine do not count it as
+	// here, and the DNS policy check says it did not check.
+	t.Run("daemon not located", func(t *testing.T) {
+		var m mock.Executor
+		noCLI := &exec.Error{Name: "docker", Err: exec.ErrNotFound}
+		m.AddResult("", "", noCLI) // docker info
+		m.AddResult("", "", noCLI) // docker context inspect
+		sys := &mock.Executor{}
+		sys.AddResult("", "", nil) // systemctl is-active
+		deps := hermeticDeps(t, &m, sys, validCgroupMounts)
+		t.Setenv("DOCKER_HOST", "")
+		require.NoError(t, afero.WriteFile(deps.Fs, "/proc/sys/fs/inotify/max_user_instances", []byte("128\n"), 0o644))
+		checks := Run(context.Background(), deps)
+		assert.Equal(t, []clidoctor.Check{
+			{Name: "Docker Engine", Status: clidoctor.StatusFailed, Detail: "not reachable: docker CLI not found in PATH",
+				Remediation: dockerInstallRemediation},
+			{Name: "cgroupv2", Status: clidoctor.StatusWarning, Detail: "nsdelegate not checked: Docker is not reachable"},
+			{Name: "DNS policy", Status: clidoctor.StatusWarning,
+				Detail: "not checked: sind cannot tell where the Docker daemon runs (optional)"},
+		}, checks, "no inotify check")
+		assert.Len(t, sys.Calls, 1, "polkit is not asked")
+	})
 }
 
 // TestRun_DaemonMode checks that a daemon in rootless mode or with
@@ -236,7 +260,7 @@ func TestRun_Inotify(t *testing.T) {
 	checks := run(t, "128\n", "")
 	require.Len(t, checks, 5)
 	assert.Equal(t, clidoctor.Check{Name: "inotify", Status: clidoctor.StatusWarning,
-		Detail:      "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)",
+		Detail:      "max_user_instances 128 (10 or more nodes on this host need 1024; optional)",
 		Remediation: inotifyRemediation}, checks[4])
 
 	checks = run(t, "8192\n", "unix:///run/docker.sock")

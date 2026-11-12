@@ -200,6 +200,15 @@ func writeChecks(w *alloyWriter, targets []Target) {
 // under either cgroup driver.
 const cgroupBelowNode = `/(?:system\.slice/docker-[0-9a-f]+\.scope|docker/[0-9a-f]+)(/.*)?`
 
+// cadvisorDisabledMetrics are the metric kinds cAdvisor leaves out:
+// Alloy's default list without process, which counts the processes in
+// each cgroup (container_processes). The list replaces Alloy's default,
+// and a kind that cAdvisor does not know stops the component.
+var cadvisorDisabledMetrics = []string{
+	"advtcp", "cpu_topology", "cpuset", "hugetlb", "memory_numa",
+	"referenced_memory", "resctrl", "sched", "tcp", "udp",
+}
+
 // writeCadvisor writes the cAdvisor exporter on the targets' cgroups, its
 // scrape and the relabeling of its series, none without a target. Series
 // of cgroups that are no node's (the root cgroup) are dropped.
@@ -218,6 +227,11 @@ func writeCadvisor(w *alloyWriter, driver string, targets []Target) {
 	w.indent--
 	w.line("]")
 	w.line("store_container_labels = false")
+	kinds := make([]string, 0, len(cadvisorDisabledMetrics))
+	for _, k := range cadvisorDisabledMetrics {
+		kinds = append(kinds, q(k))
+	}
+	w.line("disabled_metrics = [%s]", strings.Join(kinds, ", "))
 	w.close()
 
 	w.line("")
@@ -292,7 +306,10 @@ func writeJournals(w *alloyWriter, realm string, targets []Target) {
 
 	// The unit is the entry's systemd unit, or, for what PID 1 logs about
 	// a unit ("Started", "Failed with result"), that unit, as journalctl
-	// -u and so sind logs show them.
+	// -u and so sind logs show them. The level is the priority by
+	// journalctl's name, which the Slurm and MariaDB levels below use too:
+	// Alloy's keyword names priority 3 "error", so the last rule makes it
+	// "err".
 	w.line("")
 	w.open(`loki.relabel "journal"`)
 	w.line("forward_to = []")
@@ -307,10 +324,16 @@ func writeJournals(w *alloyWriter, realm string, targets []Target) {
 		w.line("target_label  = %s", q(r.target))
 		w.close()
 	}
+	w.open("rule")
+	w.line(`source_labels = ["__journal_priority"]`)
+	w.line(`regex         = "3"`)
+	w.line(`target_label  = "level"`)
+	w.line(`replacement   = "err"`)
+	w.close()
 	w.close()
 
-	// Slurm prefixes a line's level, "fatal:" mapping to crit, "error:" to err and
-	// "debug2:" to debug, as journal priority keywords name them; info
+	// Slurm prefixes a line's level, "fatal:" mapping to crit, "error:" to
+	// err and "debug2:" to debug, as journalctl names the priorities; info
 	// and verbose lines have none. MariaDB brackets it. Each match takes
 	// only the lines with a level, so that the others keep the level of
 	// their journal priority.

@@ -216,8 +216,8 @@ func TestNodeRunConfigs_APIUsers(t *testing.T) {
 
 // Labels of sind-node images from before and since identity modes.
 const (
-	oldSindNodeLabels     = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.8"}`
-	currentSindNodeLabels = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.8","sind.libjwt.version":"1.18.3"}`
+	oldSindNodeLabels     = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.9"}`
+	currentSindNodeLabels = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.9","sind.libjwt.version":"1.18.3"}`
 )
 
 func TestOfficialImageRepo(t *testing.T) {
@@ -235,8 +235,8 @@ func TestCheckIdentityImage(t *testing.T) {
 		{"current sind-node", "img:1", mock.Result{Stdout: currentSindNodeLabels}, ""},
 		{"other image", "img:1", mock.Result{Stdout: `{"org.opencontainers.image.title":"site-node"}`}, ""},
 		{"no labels", "img:1", mock.Result{Stdout: "null\n"}, ""},
-		{"old official tag", "ghcr.io/gsi-hpc/sind-node:25.11.8", mock.Result{Stdout: oldSindNodeLabels},
-			"image ghcr.io/gsi-hpc/sind-node:25.11.8 is a sind-node image from before identity modes, without the nss_slurm and auth/slurm that identity nssSlurm needs; pull a current one with --pull"},
+		{"old official tag", "ghcr.io/gsi-hpc/sind-node:25.11.9", mock.Result{Stdout: oldSindNodeLabels},
+			"image ghcr.io/gsi-hpc/sind-node:25.11.9 is a sind-node image from before identity modes, without the nss_slurm and auth/slurm that identity nssSlurm needs; pull a current one with --pull"},
 		{"old official digest", "ghcr.io/gsi-hpc/sind-node@sha256:abc", mock.Result{Stdout: oldSindNodeLabels},
 			"image ghcr.io/gsi-hpc/sind-node@sha256:abc is a sind-node image from before identity modes, without the nss_slurm and auth/slurm that identity nssSlurm needs; pull a current one with --pull"},
 		{"old local build", "sind-node:dev", mock.Result{Stdout: oldSindNodeLabels},

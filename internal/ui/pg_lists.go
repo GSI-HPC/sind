@@ -159,7 +159,7 @@ func pgRealmRows(sn store.Snapshot, now time.Time) []pgRealmRow {
 		}
 		row.Look, row.LookClass = pgLook(pgSnapNodes(sn, r, now))
 		row.Menu = pgMenu{ID: "realm", Label: "Actions for realm " + r, Icon: "⋯", Groups: []pgMenuGroup{
-			{Label: "Mesh", Items: []pgMenuItem{{Label: "Connect a container…", Hint: "Let a container of yours reach the nodes by name.", URL: pgDialog("connect", "realm", r)}}},
+			{Label: "Mesh", Items: []pgMenuItem{{Label: "Connect a container…", Hint: "Let a container of yours reach the nodes.", URL: pgDialog("connect", "realm", r)}}},
 			{Label: "Can lose data", Danger: true, Items: []pgMenuItem{{Label: "Delete realm…", Hint: pgRealmDeleteHint(sn, r), URL: pgDialog("delete-realm", "realm", r)}}},
 		}}
 		rows = append(rows, row)

@@ -99,10 +99,12 @@ func NewWorld() *World {
 	return &World{nextNet: 18, published: map[string]bool{}}
 }
 
-// The Slurm versions of the images of the demo clusters.
+// The Slurm versions of the images of the demo clusters: the releases
+// that docker-bake.hcl builds the official images of, newest line first.
+// The docs take their screenshots from the demo.
 const (
-	slurmNew = "26.05.4"
-	slurmOld = "25.11.8"
+	slurmNew = "26.05.6"
+	slurmOld = "25.11.9"
 )
 
 // services returns the services a node of the role runs once it is ready.
@@ -583,7 +585,7 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 	st.SetMesh(r.name, store.Mesh{
 		Info: &mesh.Info{
 			Network: string(m.NetworkName()), DNSContainer: string(m.DNSContainerName()), DNSIP: fmt.Sprintf("172.%d.255.254", r.net),
-			DNSZone: r.name + ".sind", DNSImage: "coredns/coredns:1.12.1",
+			DNSZone: r.name + ".sind", DNSImage: mesh.DNSImage,
 			SSHContainer: string(m.SSHContainerName()), SSHVolume: string(m.SSHVolumeName()), SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
 		},
 		Records:     records,
@@ -626,7 +628,8 @@ func slurmCountsOf(c *clusterState) *cluster.SlurmCounts {
 
 // monitoringOf returns the monitoring stack of the realm.
 func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitoring {
-	svc := func(name, image string, host, port int, dns bool) cluster.MonitoringService {
+	svc := func(name string, host, port int, dns bool) cluster.MonitoringService {
+		s := observability.Service(name)
 		ip := fmt.Sprintf("172.%d.255.%d", r.net, host)
 		url := fmt.Sprintf("http://%s.%s.sind:%d", name, r.name, port)
 		if !dns {
@@ -634,17 +637,17 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 			url = fmt.Sprintf("http://%s:%d", ip, port)
 		}
 		return cluster.MonitoringService{
-			Name: observability.Service(name), Container: observability.ContainerName(r.name, observability.Service(name)), Image: image, Interface: observability.Service(name).Interface(), IP: ip, URL: url,
+			Name: s, Container: observability.ContainerName(r.name, s), Image: s.Image(), Interface: s.Interface(), IP: ip, URL: url,
 			State: "running", Ready: true, Checked: true,
 		}
 	}
 	return &cluster.Monitoring{
 		Realm: r.name,
 		Services: []cluster.MonitoringService{
-			svc("grafana", "grafana/grafana:13.2.3", 253, 3000, true),
-			svc("prometheus", "prom/prometheus:v3.15.0", 252, 9090, true),
-			svc("loki", "grafana/loki:3.7.8", 251, 3100, true),
-			svc("alloy", "grafana/alloy:v1.20.1", 0, 12345, false),
+			svc("grafana", 253, 3000, true),
+			svc("prometheus", 252, 9090, true),
+			svc("loki", 251, 3100, true),
+			svc("alloy", 0, 12345, false),
 		},
 		Clusters: watched,
 	}

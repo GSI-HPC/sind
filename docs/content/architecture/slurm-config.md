@@ -84,6 +84,12 @@ AuthAltTypes=auth/jwt
 AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key
 ```
 
+On a [monitored]({{< relref "/guides/monitoring" >}}) cluster it also contains this parameter, unless the `main` section sets it, in which case it must be `metrics/openmetrics` (validation checks it):
+
+```
+MetricsType=metrics/openmetrics
+```
+
 sind does not modify `slurm.conf` after initial creation.
 
 ## slurmdbd.conf
@@ -175,12 +181,14 @@ While it creates the cluster network and volumes, sind discovers the Slurm versi
 
 ```bash
 docker run --rm <controller image> slurmctld -V
-# Output: "slurm 26.05.5"
+# Output: "slurm 26.05.6"
 ```
 
 The version is stored as the `sind.slurm.version` label on each node container and shown in the `SLURM` column of `sind get clusters` and `sind get cluster`. It does not change the generated configuration. Workers added with `sind create worker` copy the controller's label. Without `--image` they run an image the cluster already runs; with `--image`, sind discovers that image's version and refuses managed workers whose version differs from the cluster's. At cluster creation, nodes with a different `image` carry the controller's version too: `sind create cluster` does not compare versions across images.
 
 sind skips the discovery for unmanaged clusters, where the Slurm you provision may differ from the one in the image. Their `SLURM` column shows `-`.
+
+When it creates a [monitored]({{< relref "/guides/monitoring" >}}) cluster, sind runs no `slurmctld -V`: the container that checks the controller's image for the endpoints that the monitoring stack uses reports its version too.
 
 ## Post-creation customization
 

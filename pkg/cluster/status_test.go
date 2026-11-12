@@ -597,9 +597,9 @@ func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 	t.Helper()
 	ips := map[string]string{"sind-dev-controller": "172.18.0.2", "sind-dev-worker-0": "172.18.0.3", "sind-dev-worker-1": "172.18.0.4"}
 	return statusOnCall(t, []testutil.PsEntry{
-		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.8"},
-		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8"},
-		{ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8"},
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.9"},
+		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.9"},
+		{ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.9"},
 	}, func(name string) (string, string) { return "running", ips[name] })
 }
 
@@ -636,7 +636,7 @@ func TestGetStatus_Full(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "dev", status.Name)
-	assert.Equal(t, "25.11.8", status.SlurmVersion)
+	assert.Equal(t, "25.11.9", status.SlurmVersion)
 	assert.Equal(t, StateRunning, status.State)
 
 	// Nodes sorted: controller, worker-0, worker-1.

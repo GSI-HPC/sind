@@ -869,7 +869,7 @@ func TestBuildConnect_ChecksTheContainer(t *testing.T) {
 	cmd, err := run("my-app")
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns)
-	assert.Equal(t, []string{"`my-app` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` and the other 2 nodes by name."}, cmd.Notes)
+	assert.Equal(t, []string{"`my-app` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` and the other 2 nodes."}, cmd.Notes)
 
 	cmd, err = run("pg")
 	require.NoError(t, err)
@@ -901,20 +901,36 @@ func TestBuildConnect_ChecksTheContainer(t *testing.T) {
 	cmd, err = run("nosuch")
 	require.NoError(t, err)
 	assert.Empty(t, cmd.Warns)
-	assert.Equal(t, []string{"`nosuch` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind` by name."}, cmd.Notes)
+	assert.Equal(t, []string{"`nosuch` joins `ci-mesh` and the network of ci1. It can then reach `controller.ci1.ci.sind`."}, cmd.Notes)
 
 	x := []store.Outside{{Name: "x", State: "running"}}
 	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
 	st.SetClusters("ci", []cluster.Summary{{Name: "b"}, {Name: "a"}, {Name: "c"}})
 	cmd, _ = run("x")
-	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach the nodes of realm ci by name."}, cmd.Notes)
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach the nodes of realm ci."}, cmd.Notes)
 	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{{Hostname: "a.ci1.ci.sind"}, {Hostname: "b.ci1.ci.sind"}}})
 	cmd, _ = run("x")
-	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node by name."}, cmd.Notes)
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node."}, cmd.Notes)
+	// The names of the monitoring stack are no nodes.
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{
+		{Hostname: "a.ci1.ci.sind"}, {Hostname: "grafana.ci.sind"}, {Hostname: "loki.ci.sind"}, {Hostname: "prometheus.ci.sind"}, {Hostname: "z.ci1.ci.sind"},
+	}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{
+		{Hostname: "grafana.ci.sind"}, {Hostname: "zeta.ci1.ci.sind"},
+	}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `zeta.ci1.ci.sind`."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{
+		{Hostname: "grafana.ci.sind"}, {Hostname: "prometheus.ci.sind"},
+	}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach the nodes of realm ci."}, cmd.Notes)
 	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
 	st.SetClusters("ci", nil)
 	cmd, _ = run("x")
-	assert.Equal(t, []string{"`x` joins `ci-mesh`. It can then reach the nodes of realm ci by name."}, cmd.Notes)
+	assert.Equal(t, []string{"`x` joins `ci-mesh`. It can then reach the nodes of realm ci."}, cmd.Notes)
 }
 
 func TestJoinWords(t *testing.T) {

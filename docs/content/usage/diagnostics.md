@@ -41,7 +41,7 @@ Checks system prerequisites and reports pass/fail for each:
 | Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
 | Docker host | no | the daemon runs on this machine, not in Docker Desktop's VM or on another host |
 | cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and the Docker host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |
-| inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
+| inotify | no | `fs.inotify.max_user_instances` of at least 1024, which 10 or more nodes on the host need, in one cluster or in several (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})) |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
 The results go to stdout, so they can be piped or filtered, with `✓` for a passed check, `✗` for a failed one and `!` for a warning; only the error line naming the failed checks, as the output prints them, goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The fixes follow the list of checks, each one once, in the order of the checks that need it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
@@ -49,6 +49,7 @@ The results go to stdout, so they can be piped or filtered, with `✓` for a pas
 ```
 ✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
+✓ inotify: max_user_instances 8192 (>= 1024)
 
 Add your user to the docker group, then log in again (or run newgrp docker):
 
@@ -62,7 +63,7 @@ $ sind get cluster
 12:00:00.000 ERRO Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix
 ```
 
-A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The Docker host, inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or the daemon does not run on this machine. The DNS policy check only appears when systemd-resolved is running; when the daemon does not run on this machine it reports host resolution as not available, since the mesh bridge that the host resolver would use is on the daemon's host. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The Docker host, inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or the daemon does not run on this machine. The DNS policy check only appears when systemd-resolved is running; when the daemon does not run on this machine it reports host resolution as not available, since the mesh bridge that the host resolver would use is on the daemon's host. Without a `docker` CLI and `DOCKER_HOST`, sind cannot tell where the daemon runs: the inotify check is left out too, and the cgroupv2 and DNS policy checks are warnings that say they did not check. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
@@ -105,7 +106,7 @@ It does not fail `sind doctor`: the detection can be wrong both ways, as a socke
 
 ### Machine-readable output
 
-`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `Docker host`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass or the cgroupv2 check could not read `nsdelegate`) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
+`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `Docker host`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass, or when the cgroupv2 check would read `nsdelegate` in a throwaway container and Docker is not reachable or lacks the default node image) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
 
 ```bash
 sind doctor -o json
@@ -151,7 +152,7 @@ sind version
 Prints the version and, for a release build, the commit it was built from:
 
 ```
-sind 0.12.0 (0a57d68)
+sind 0.16.1 (0a57d68)
 ```
 
 `sind --version` prints the same line.
@@ -163,7 +164,7 @@ sind version --json
 ```
 
 ```json
-{"version":"0.12.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
+{"version":"0.16.1","commit":"0a57d68","goVersion":"go1.27.4","platform":"linux/amd64"}
 ```
 
 | Field | Description |
@@ -173,11 +174,11 @@ sind version --json
 | `goVersion` | the Go toolchain that built the binary |
 | `platform` | operating system and architecture, `linux/amd64` or `linux/arm64` |
 
-A development build reports the output of `git describe`, such as `0.12.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
+A development build reports the output of `git describe`, such as `0.16.1-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
 
 ## Verbose logging
 
-By default, sind logs only errors. Besides them it shows only command output and, on a terminal, the [progress]({{< relref "/usage/progress" >}}) of `create`, `delete` and `power`. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
+By default, sind logs only errors. Besides them it shows only command output and, on a terminal, the [progress]({{< relref "/usage/progress" >}}) of `create`, `delete`, `connect`, `disconnect` and `power`. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
 
 ```bash
 sind -v  create cluster          # info: phase summaries
@@ -194,7 +195,7 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 
 [`SIND_VERBOSE`]({{< relref "/usage/environment" >}}) gives the number of `-v` when the command line has none: `export SIND_VERBOSE=2` logs every command as `-vv` does.
 
-Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete` and `power` go above their progress display, never into it.
+Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete`, `connect`, `disconnect` and `power` go above their progress display, never into it.
 
 ```bash
 # Capture logs while piping output
@@ -213,11 +214,11 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:28.438 INFO ensuring mesh infrastructure realm=sind
 00:13:28.826 INFO creating cluster name=dev nodes=3
 00:13:28.921 DEBU preflight check passed
-00:13:29.382 INFO resolved infrastructure slurm=25.11.8
+00:13:29.382 INFO resolved infrastructure slurm=25.11.9
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
-00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd,munge
+00:13:30.623 DEBU starting readiness probes (event-driven) node=sind-dev-controller probes=container,systemd,sshd,munge
 00:13:31.252 DEBU all probes passed node=sind-dev-controller
 00:13:31.474 INFO nodes ready count=3
 00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
@@ -262,7 +263,7 @@ Displays detailed health information:
 
 ```
 CLUSTER  SLURM    STATUS (R/S/P/T)
-dev      25.11.8  running (4/0/0/4)
+dev      25.11.9  running (4/0/0/4)
 
 NETWORKS
 NAME          DRIVER  SUBNET         GATEWAY     STATUS
@@ -633,8 +634,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.5
-dev      5      26.05.5
+default  3      26.05.6
+dev      5      26.05.6
 ```
 
 `TYPE` says what the port serves: a web UI, an API, or both. Loki serves an API only, so a browser that opens its address shows no page; read its logs in Grafana, under Explore. `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, `interface` (`web UI`, `web UI + API` or `API`), address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
@@ -643,10 +644,10 @@ dev      5      26.05.5
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4", "interface": "web UI",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.1", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.6",
                 "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```

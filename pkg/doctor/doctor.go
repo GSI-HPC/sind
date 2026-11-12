@@ -47,7 +47,12 @@ func DockerUnreachable(err error) (detail, remediation string) {
 	switch {
 	case strings.Contains(lower, "permission denied"):
 		remediation = dockerPermissionRemediation
-	case strings.Contains(lower, "cannot connect to the docker daemon"):
+	// Docker 29 says "failed to connect to the docker API at …; check if
+	// the path is correct and if the daemon is running" when the socket
+	// does not exist, and keeps "Cannot connect to the Docker daemon at …"
+	// for a refused connection, which Docker 28 says for both.
+	case strings.Contains(lower, "cannot connect to the docker daemon"),
+		strings.Contains(lower, "if the daemon is running"):
 		remediation = dockerStartRemediation
 	}
 	return "not reachable: " + msg, remediation
@@ -87,10 +92,10 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
-// MinInotifyInstances is the fs.inotify.max_user_instances that clusters
-// of 10 or more nodes need. The systemd and journald of every node take
-// inotify instances of the host's root user, and the kernel's default of
-// 128 runs out first.
+// MinInotifyInstances is the fs.inotify.max_user_instances that 10 or
+// more nodes on the host need, in one cluster or in several. The systemd
+// and journald of every node take inotify instances of the host's root
+// user, and the kernel's default of 128 runs out first.
 const MinInotifyInstances = 1024
 
 // InotifyNodes is the number of nodes on the host from which the kernel's

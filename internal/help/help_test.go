@@ -318,10 +318,14 @@ func TestText(t *testing.T) {
 }
 
 func TestIndex(t *testing.T) {
-	idx := Default().Index()
-	for _, s := range []string{"How to:", "Words:", "Actions of sind ui:", "slow-create", "realm", "delete-realm"} {
+	idx := Default().Index(nil)
+	for _, s := range []string{"How to:", "Words:", "Actions of sind ui:", "slow-create", "realm", "delete-realm", "\n  power "} {
 		assert.Contains(t, idx, s)
 	}
+
+	idx = Default().Index(func(id string) bool { return id == "power" })
+	assert.NotContains(t, idx, "\n  power ", "a topic it skips")
+	assert.Contains(t, idx, "\n  delete-realm ")
 }
 
 func TestWrap(t *testing.T) {

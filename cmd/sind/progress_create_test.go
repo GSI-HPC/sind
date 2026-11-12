@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
@@ -274,4 +276,68 @@ func TestCreateCluster_MeshRollbackIsAStep(t *testing.T) {
 			assert.True(t, strings.HasSuffix(tree, "\n  "+tc.rollback+"\n"), tree)
 		})
 	}
+}
+
+// deadlineExecutor hands every call to Executor, and records the state of
+// the context of the docker call that call names.
+type deadlineExecutor struct {
+	mock.Executor
+	call string
+
+	mu       sync.Mutex
+	seen     bool
+	done     error
+	deadline time.Time
+	bounded  bool
+}
+
+func (e *deadlineExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
+	if strings.Join(args, " ") == e.call {
+		e.mu.Lock()
+		e.seen, e.done = true, ctx.Err()
+		e.deadline, e.bounded = ctx.Deadline()
+		e.mu.Unlock()
+	}
+	return e.Executor.Run(ctx, name, args...)
+}
+
+// The removal of a mesh that create cluster could not finish runs on after
+// an interrupt, as cluster.Create's rollback does, and like it for at most
+// cluster.RollbackTimeout, so that a daemon that hangs cannot hold it
+// forever.
+func TestCreateCluster_MeshRollbackIsBounded(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SIND_REALM", "")
+	path := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("kind: Cluster\nnodes: [controller, worker]\n"), 0o644))
+	exit1 := testutil.ExitCode1(t)
+	daemon := createDaemon(t)
+	ctx, interrupt := context.WithCancel(context.Background())
+	defer interrupt()
+	e := &deadlineExecutor{call: "rm -f -v sind-dns"}
+	e.OnCall = func(args []string, stdin string) mock.Result {
+		switch strings.Join(args, " ") {
+		// There is no mesh, and the new network cannot be inspected,
+		// when the command is interrupted.
+		case "network inspect sind-mesh --format {{json .Labels}}":
+			return mock.Result{Stderr: testutil.NoSuchNetwork("sind-mesh"), Err: exit1}
+		case "network inspect sind-mesh":
+			interrupt()
+			return mock.Result{Stderr: testutil.NoSuchNetwork("sind-mesh"), Err: exit1}
+		}
+		return daemon(args, stdin)
+	}
+	client := docker.NewClient(e)
+	ctx = withMeshMgr(withClient(ctx, client), mesh.NewManager(client, mesh.DefaultRealm))
+	start := time.Now()
+
+	err := executeOn(ctx, io.Discard, io.Discard, "create", "cluster", "--config", path, "--data", "volume")
+
+	require.ErrorContains(t, err, "setting up mesh")
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	require.True(t, e.seen, "the mesh is removed")
+	require.NoError(t, e.done, "the removal runs on after the interrupt")
+	require.True(t, e.bounded, "the removal has a deadline")
+	assert.WithinDuration(t, start.Add(cluster.RollbackTimeout), e.deadline, time.Minute)
 }

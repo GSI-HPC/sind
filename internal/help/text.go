@@ -50,13 +50,18 @@ func (h *Help) Text(id string) (string, bool) {
 	return strings.TrimRight(b.String(), "\n") + "\n", true
 }
 
-// Index returns the list of topics that sind help can print.
-func (h *Help) Index() string {
+// Index returns the list of topics that sind help can print: every topic
+// but those for which skip, unless nil, reports true. sind help prints the
+// help of a command for a topic of the command's name, so it skips those.
+func (h *Help) Index(skip func(id string) bool) string {
 	var b strings.Builder
 	b.WriteString("Topics of sind help. Run sind help TOPIC to read one.\n")
 	section := func(title string, rows [][2]string) {
 		fmt.Fprintf(&b, "\n%s:\n", title)
 		for _, r := range rows {
+			if skip != nil && skip(r[0]) {
+				continue
+			}
 			fmt.Fprintf(&b, "  %-16s %s\n", r[0], r[1])
 		}
 	}

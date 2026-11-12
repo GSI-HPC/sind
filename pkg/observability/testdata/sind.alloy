@@ -108,6 +108,7 @@ prometheus.exporter.cadvisor "nodes" {
     "/system.slice/docker-dddd.scope", // sind-dev-worker-1
   ]
   store_container_labels = false
+  disabled_metrics = ["advtcp", "cpu_topology", "cpuset", "hugetlb", "memory_numa", "referenced_memory", "resctrl", "sched", "tcp", "udp"]
 }
 
 prometheus.scrape "cgroups" {
@@ -285,6 +286,12 @@ loki.relabel "journal" {
     source_labels = ["__journal_priority_keyword"]
     regex         = "(.+)"
     target_label  = "level"
+  }
+  rule {
+    source_labels = ["__journal_priority"]
+    regex         = "3"
+    target_label  = "level"
+    replacement   = "err"
   }
 }
 

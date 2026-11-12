@@ -103,7 +103,7 @@ func TestDiscoverVersionLifecycle(t *testing.T) {
 	image := "ghcr.io/gsi-hpc/sind-node:latest"
 
 	if !rec.IsIntegration() {
-		rec.AddResult("slurm 25.11.8\n", "", nil)
+		rec.AddResult("slurm 25.11.9\n", "", nil)
 	}
 
 	// The image may carry any supported Slurm release line.

@@ -1,5 +1,5 @@
 {{ define "main" }}
-<div class="sind-home">
+<main id="content" class="sind-home">
   <section class="sind-hero">
     <img class="sind-hero__logo" src="{{ "images/sind-icon-only.svg" | relURL }}" alt="" width="72" height="72">
     <h1>Slurm clusters,<br><span class="sind-grad">one command away.</span></h1>
@@ -78,7 +78,7 @@ worker-0
     </div>
   </section>
   {{ end }}
-</div>
+</main>
 <script>
   document.querySelectorAll("[data-sind-tabs]").forEach(function (box) {
     var tabs = box.querySelectorAll("[role=tab]"), panels = box.querySelectorAll("[role=tabpanel]");

@@ -34,9 +34,13 @@ pointer moves and the clicks. Its New cluster beat opens the page at
 opens Edit YAML under Show YAML in the plan.
 
 The host needs Docker, host DNS for `*.sind` (systemd-resolved and a polkit
-rule), mise, jq, Chrome and node with `video/node_modules`. `setup-host.sh`
-prepares an Ubuntu GitHub runner: sind from the checkout, mise, the polkit
-rule for the runner's user, and the Docker Hub images from mirror.gcr.io.
+rule), an `fs.inotify.max_user_instances` of at least 1024 (the scenario's
+clusters use up the default of 128 on many distributions, and their nodes then
+exit with code 255), mise, jq, Chrome and node with `video/node_modules`.
+`setup-host.sh` prepares an Ubuntu GitHub runner: sind from the checkout,
+mise, the polkit rule for the runner's user, `fs.inotify.max_user_instances`
+raised to 8192, the Docker Hub images of the scenario from mirror.gcr.io and
+`ghcr.io/gsi-hpc/sind-node:latest`, and it then runs `sind doctor`.
 
 ## Rendering
 
@@ -70,7 +74,8 @@ node video/overview/compositor/render.mjs --rec RECORDINGS --out /tmp/stills --s
   checkout into its `docs/static/videos` and `docs/data/videos`, where the
   landing page (`docs/layouts/_partials/overview-video.html`) finds it. The
   render is cached by the git trees of `video/overview` and `video/voice`,
-  so it is made again only when they change. Never commit rendered files.
+  so it is made again when they change, and when the Actions cache has
+  evicted it (7 days unused). Never commit rendered files.
 
 When the CLI or the web UI changes what a shot shows, such as a renamed
 command or a moved button, update the shot in `record.py` or the tour in

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -41,7 +42,7 @@ func takeShots(ctx context.Context, o options, l Shots, base string) error {
 	defer cancel()
 
 	// The first visit swaps the token for the cookie that all tabs share.
-	if err := chromedp.Run(bctx, chromedp.Navigate(base)); err != nil {
+	if err := chromedp.Do(bctx, chromedp.Navigate(base)); err != nil {
 		return fmt.Errorf("opening sind ui in %s: %w", o.Chromium, err)
 	}
 	root, err := rootURL(base)
@@ -97,97 +98,110 @@ func take(parent context.Context, root string, s Shot, size Size, theme string, 
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	var png []byte
-	tasks := chromedp.Tasks{
-		emulation.SetDeviceMetricsOverride(int64(size.Width), int64(size.Height), 1, false),
+	steps := []chromedp.Action[chromedp.Void]{
+		setWindow(size.Width, size.Height),
 		freezeClock(epoch),
-		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{
-			{Name: "prefers-color-scheme", Value: theme},
-			{Name: "prefers-reduced-motion", Value: "reduce"},
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			_, err := cdp.Call(ctx, t, emulation.SetEmulatedMedia, emulation.SetEmulatedMediaParams{Features: []*emulation.MediaFeature{
+				{Name: "prefers-color-scheme", Value: theme},
+				{Name: "prefers-reduced-motion", Value: "reduce"},
+			}})
+			return err
 		}),
 		chromedp.Navigate(root + s.Path),
-		chromedp.WaitVisible("main", chromedp.ByQuery),
+		chromedp.WaitVisible(chromedp.CSS("main")),
 		quiet(),
 	}
 	for _, st := range s.Steps {
-		tasks = append(tasks, step(st), quiet())
+		steps = append(steps, step(st), quiet())
 	}
 	if s.Hide != "" {
-		tasks = append(tasks, hide(s.Hide))
+		steps = append(steps, hide(s.Hide))
 	}
 	if s.Fit {
-		tasks = append(tasks, shorten(size), quiet())
+		steps = append(steps, shorten(size), quiet())
 	}
 	// Nothing is left focused or hovered, so that no ring or tooltip shows.
-	tasks = append(tasks,
-		chromedp.Evaluate(`document.activeElement && document.activeElement.blur()`, nil),
-		chromedp.MouseEvent("mouseMoved", 0, 0),
+	steps = append(steps,
+		chromedp.Evaluate[chromedp.Void](`document.activeElement && document.activeElement.blur()`),
+		chromedp.MouseEvent(chromedp.MouseMoved, 0, 0),
 	)
+	shot := chromedp.CaptureScreenshot()
 	if s.Crop != "" {
-		tasks = append(tasks, fit(s.Crop, size), quiet(), chromedp.Screenshot(s.Crop, &png, chromedp.ByQuery, chromedp.NodeVisible))
-	} else {
-		tasks = append(tasks, chromedp.CaptureScreenshot(&png))
+		steps = append(steps, fit(s.Crop, size), quiet())
+		shot = chromedp.Screenshot(chromedp.CSS(s.Crop), chromedp.NodeVisible)
 	}
-	if err := chromedp.Run(ctx, tasks); err != nil {
+	if err := chromedp.Do(ctx, steps...); err != nil {
 		return nil, err
 	}
-	return png, nil
+	return chromedp.Run(ctx, shot)
+}
+
+// setWindow sets the size of the window, at a device scale factor of 1.
+func setWindow(width, height int) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		_, err := cdp.Call(ctx, t, emulation.SetDeviceMetricsOverride, emulation.SetDeviceMetricsOverrideParams{
+			Width: int64(width), Height: int64(height), DeviceScaleFactor: 1,
+		})
+		return err
+	})
 }
 
 // freezeClock makes Date.now of the page the epoch of the still demo, which
 // the clocks of the run page count from: the server's pages stand at the
 // epoch, and the browser's clock must too, or a run that goes on would show
 // how long ago, by the real time, it started.
-func freezeClock(epoch time.Time) chromedp.Action {
+func freezeClock(epoch time.Time) chromedp.Action[chromedp.Void] {
 	js := fmt.Sprintf(`(() => { const t = %d; Date.now = () => t; })()`, epoch.UnixMilli())
-	return chromedp.ActionFunc(func(ctx context.Context) error {
-		_, err := page.AddScriptToEvaluateOnNewDocument(js).Do(ctx)
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		_, err := cdp.Call(ctx, t, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: js})
 		return err
 	})
 }
 
 // step returns the action of a step.
-func step(st Step) chromedp.Action {
+func step(st Step) chromedp.Action[chromedp.Void] {
 	switch {
 	case st.Click != "":
-		return chromedp.Tasks{chromedp.WaitVisible(st.Click, chromedp.ByQuery), chromedp.Click(st.Click, chromedp.ByQuery)}
+		return chromedp.Steps(chromedp.WaitVisible(chromedp.CSS(st.Click)), chromedp.Click(chromedp.CSS(st.Click)))
 	case st.Dialog != "":
 		// The dialog's button asks for the same address.
 		q, _ := json.Marshal("/dialogs/" + st.Dialog)
-		return chromedp.Tasks{
-			chromedp.Evaluate(fmt.Sprintf(`htmx.ajax('GET', %s, {target: '#layer', swap: 'innerHTML'})`, q), nil, awaitPromise),
-			chromedp.WaitVisible(`#layer [role=dialog]`, chromedp.ByQuery),
-		}
+		return chromedp.Steps(
+			chromedp.Evaluate[chromedp.Void](fmt.Sprintf(`htmx.ajax('GET', %s, {target: '#layer', swap: 'innerHTML'})`, q), chromedp.EvalAwaitPromise),
+			chromedp.WaitVisible(chromedp.CSS(`#layer [role=dialog]`)),
+		)
 	case st.Wait != "":
-		return chromedp.WaitVisible(st.Wait, chromedp.ByQuery)
+		return chromedp.WaitVisible(chromedp.CSS(st.Wait))
 	default:
-		return chromedp.Tasks{chromedp.WaitVisible(st.Into, chromedp.ByQuery), chromedp.SendKeys(st.Into, st.Type, chromedp.ByQuery)}
+		return chromedp.Steps(chromedp.WaitVisible(chromedp.CSS(st.Into)), chromedp.SendKeys(chromedp.CSS(st.Into), st.Type))
 	}
 }
 
 // quiet waits until the page has loaded its fonts and htmx has no request
 // in flight, then a moment more. It first lets a request start that htmx
 // delays, such as the preview of a dialog after a keystroke.
-func quiet() chromedp.Action {
+func quiet() chromedp.Action[chromedp.Void] {
 	const js = `document.fonts.ready.then(() => new Promise(r => setTimeout(r, 200))).then(() => new Promise(resolve => {
 		const tick = () => document.querySelector('.htmx-request') ? setTimeout(tick, 50) : resolve(true);
 		tick();
 	}))`
-	return chromedp.Tasks{chromedp.Evaluate(js, nil, awaitPromise), chromedp.Sleep(settle)}
+	return chromedp.Steps(chromedp.Evaluate[chromedp.Void](js, chromedp.EvalAwaitPromise), chromedp.Sleep(settle))
 }
 
 // fit makes the window tall enough for the element, which a dialog taller
 // than the window is not otherwise.
-func fit(selector string, size Size) chromedp.Action {
-	return chromedp.ActionFunc(func(ctx context.Context) error {
-		var bottom float64
+func fit(selector string, size Size) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
 		js := fmt.Sprintf(`(() => { const r = document.querySelector(%q).getBoundingClientRect(); return r.top + r.height; })()`, selector)
-		if err := chromedp.Evaluate(js, &bottom).Do(ctx); err != nil {
+		bottom, err := chromedp.Evaluate[float64](js)(ctx, t)
+		if err != nil {
 			return err
 		}
 		// The dialog sits as far from the bottom as from the top.
-		height := max(int64(size.Height), int64(math.Ceil(bottom))+int64(size.Height)/10)
-		return emulation.SetDeviceMetricsOverride(int64(size.Width), height, 1, false).Do(ctx)
+		height := max(size.Height, int(math.Ceil(bottom))+size.Height/10)
+		_, err = setWindow(size.Width, height)(ctx, t)
+		return err
 	})
 }
 
@@ -196,20 +210,21 @@ func fit(selector string, size Size) chromedp.Action {
 const minHeight = 560
 
 // shorten makes the window as tall as the page, if that is less than size.
-func shorten(size Size) chromedp.Action {
-	return chromedp.ActionFunc(func(ctx context.Context) error {
-		var bottom float64
+func shorten(size Size) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
 		const js = `(() => { const m = document.querySelector('main'); return m.getBoundingClientRect().top + m.scrollHeight; })()`
-		if err := chromedp.Evaluate(js, &bottom).Do(ctx); err != nil {
+		bottom, err := chromedp.Evaluate[float64](js)(ctx, t)
+		if err != nil {
 			return err
 		}
-		height := min(int64(size.Height), max(minHeight, int64(math.Ceil(bottom))+24))
-		return emulation.SetDeviceMetricsOverride(int64(size.Width), height, 1, false).Do(ctx)
+		height := min(size.Height, max(minHeight, int(math.Ceil(bottom))+24))
+		_, err = setWindow(size.Width, height)(ctx, t)
+		return err
 	})
 }
 
 // hide hides the elements that match the selector, keeping their space.
-func hide(selector string) chromedp.Action {
+func hide(selector string) chromedp.Action[chromedp.Void] {
 	js := fmt.Sprintf(`document.querySelectorAll(%q).forEach(e => e.style.visibility = 'hidden')`, selector)
-	return chromedp.Evaluate(js, nil)
+	return chromedp.Evaluate[chromedp.Void](js)
 }

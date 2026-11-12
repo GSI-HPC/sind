@@ -88,7 +88,10 @@ func buildConnect(f Form, c Context) (Command, error) {
 }
 
 // connectReach says what a container that joins the realm then reaches:
-// its mesh network and the networks of its clusters, and a node by name.
+// its mesh network and the networks of its clusters, and so the nodes. It
+// names a node by its record in the realm's DNS, a name that the container
+// resolves only once it asks that DNS server, and counts only the records
+// of nodes, not those of the monitoring stack.
 func connectReach(sn store.Snapshot, realm, name string, m store.Mesh) string {
 	var clusters []string
 	for _, cl := range sn.Clusters[realm] {
@@ -103,16 +106,31 @@ func connectReach(sn store.Snapshot, realm, name string, m store.Mesh) string {
 	default:
 		text += " and the networks of " + JoinWords(clusters)
 	}
-	switch n := len(m.Records); n {
+	nodes := connectNodes(realm, m)
+	switch n := len(nodes); n {
 	case 0:
-		return text + ". It can then reach the nodes of realm " + realm + " by name."
+		return text + ". It can then reach the nodes of realm " + realm + "."
 	case 1:
-		return text + ". It can then reach `" + m.Records[0].Hostname + "` by name."
+		return text + ". It can then reach `" + nodes[0] + "`."
 	case 2:
-		return text + ". It can then reach `" + m.Records[0].Hostname + "` and the other node by name."
+		return text + ". It can then reach `" + nodes[0] + "` and the other node."
 	default:
-		return fmt.Sprintf("%s. It can then reach `%s` and the other %d nodes by name.", text, m.Records[0].Hostname, n-1)
+		return fmt.Sprintf("%s. It can then reach `%s` and the other %d nodes.", text, nodes[0], n-1)
 	}
+}
+
+// connectNodes returns the names of the nodes among the DNS records of the
+// realm's mesh, <node>.<cluster>.<realm>.sind, in their order. It leaves out
+// the names of the monitoring stack, <service>.<realm>.sind.
+func connectNodes(realm string, m store.Mesh) []string {
+	suffix := "." + realm + "." + cluster.DNSSuffix
+	var nodes []string
+	for _, r := range m.Records {
+		if rest, ok := strings.CutSuffix(r.Hostname, suffix); ok && strings.Contains(rest, ".") {
+			nodes = append(nodes, r.Hostname)
+		}
+	}
+	return nodes
 }
 
 // JoinWords joins words as a sentence does: "a", "a and b", "a, b and c".

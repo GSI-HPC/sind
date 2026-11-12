@@ -98,7 +98,7 @@ func TestPgOverview(t *testing.T) {
 	assert.Contains(t, body, `<td class="c-ready"><span class="pill">not checked yet</span><span class="pg-fsub">sind ui has not probed it yet</span></td>`)
 	assert.Contains(t, body, `<td class="c-issues"><div class="pg-fis"><a class="mono" href="/nodes/sind/dev/worker-3">worker-3</a> stopped</div><div class="pg-fis"><span class="mono">create worker dev</span> runs now</div></td>`)
 	assert.Contains(t, body, `<td class="c-issues"><span class="faint pg-fnil">–</span></td>`)
-	assert.Contains(t, body, `<td class="c-slurm"><span class="mono">25.11.8</span> <span class="chip brand">monitoring</span></td>`)
+	assert.Contains(t, body, `<td class="c-slurm"><span class="mono">25.11.9</span> <span class="chip brand">monitoring</span></td>`)
 	assert.Contains(t, body, `class="pg-nm pg-nm-controller pg-nm-running"`)
 	assert.Contains(t, body, `class="pg-nm pg-nm-controller-backup pg-nm-running"`)
 	assert.Contains(t, body, `class="pg-nm pg-nm-worker pg-nm-stopped"`)

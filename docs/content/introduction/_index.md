@@ -16,7 +16,7 @@ Setting up a multi-node Slurm cluster for development or testing traditionally r
 
 - **Instant clusters** — go from zero to a working Slurm cluster in seconds, not hours
 - **Reproducible environments** — every team member gets the same setup, every CI run starts clean
-- **No infrastructure needed** — just Docker on your laptop or CI runner
+- **No infrastructure needed** — just Docker Engine on a Linux laptop, workstation or CI runner
 
 ## Features
 
@@ -30,7 +30,7 @@ Unlike typical Docker containers that run a single application process, sind nod
 
 ### Designed for CI/CD
 
-sind runs on standard GitHub Actions runners with the runner's Docker daemon — no sudo, no privileged containers, no custom runner images. The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.
+sind runs on standard GitHub Actions runners with the runner's Docker daemon — no privileged containers, no custom runner images. The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.
 
 ### Multiple Slurm versions
 
@@ -70,7 +70,7 @@ Shutdown, reboot, freeze, and power-cycle individual nodes to simulate real-worl
 
 ### Minimal dependencies
 
-sind needs nothing but Docker and a container image. Install a single binary and you're ready to go. sind is also usable as a Go library for embedding cluster management into your own tooling.
+sind needs nothing but Docker Engine on a Linux host and a container image. Install a single binary and you're ready to go. sind is also usable as a Go library for embedding cluster management into your own tooling.
 
 ### AI-ready via MCP
 

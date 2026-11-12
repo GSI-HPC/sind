@@ -13,7 +13,7 @@ import (
 // Images of the tests and what sind ui knows of them.
 const (
 	imgNew    = "ghcr.io/gsi-hpc/sind-node:26.05.4"
-	imgOld    = "ghcr.io/gsi-hpc/sind-node:25.11.8"
+	imgOld    = "ghcr.io/gsi-hpc/sind-node:25.11.9"
 	imgLatest = "ghcr.io/gsi-hpc/sind-node:latest"
 	imgOwn    = "own:dev"
 	imgAway   = "ghcr.io/gsi-hpc/sind-node:27.05"
@@ -23,8 +23,8 @@ const (
 
 var testFacts = map[string]ImageFacts{
 	imgNew:    {Local: true, Version: "26.05.4"},
-	imgOld:    {Local: true, Version: "25.11.8"},
-	imgLatest: {Local: true, Version: "25.11.8"},
+	imgOld:    {Local: true, Version: "25.11.9"},
+	imgLatest: {Local: true, Version: "25.11.9"},
 	imgOwn:    {Local: true, Version: "26.05.1", Checked: true},
 	imgBroken: {Err: "permission denied"},
 	imgNext:   {Local: true, Version: "26.11.1"},
@@ -68,11 +68,11 @@ func TestBuildCreateCluster_MonitoringNeedsTheRelease(t *testing.T) {
 	}{
 		{"new", valid("monitoring", "on", "image", imgNew), "", "", false},
 		{"old", valid("monitoring", "on", "image", imgOld),
-			imgOld + " has Slurm 25.11.8, and monitoring needs 26.05 or later; pick a newer image, or clear Monitoring", "", false},
+			imgOld + " has Slurm 25.11.9, and monitoring needs 26.05 or later; pick a newer image, or clear Monitoring", "", false},
 		{"old but pulled", valid("monitoring", "on", "image", imgLatest, "pull", "on"),
-			"", "The copy of " + imgLatest + " here has Slurm 25.11.8, older than 26.05, which monitoring needs. Create pulls the image first, so this can change.", false},
-		{"old, fixed tag pulled", valid("monitoring", "on", "image", imgOld, "pull", "on"), imgOld + " has Slurm 25.11.8", "", false},
-		{"old worker", valid("monitoring", "on", "image", imgNew, "w0-image", imgOld), imgOld + " has Slurm 25.11.8", "", false},
+			"", "The copy of " + imgLatest + " here has Slurm 25.11.9, older than 26.05, which monitoring needs. Create pulls the image first, so this can change.", false},
+		{"old, fixed tag pulled", valid("monitoring", "on", "image", imgOld, "pull", "on"), imgOld + " has Slurm 25.11.9", "", false},
+		{"old worker", valid("monitoring", "on", "image", imgNew, "w0-image", imgOld), imgOld + " has Slurm 25.11.9", "", false},
 		{"old unmanaged worker", valid("monitoring", "on", "image", imgNew, "w0-image", imgOld, "w0-unmanaged", "on"), "", "", false},
 		{"old db", valid("monitoring", "on", "image", imgNew, "db", "on", "db-image", imgOld), "", "", false},
 		{"unknown", valid("monitoring", "on", "image", imgAway), "", "", true},
@@ -107,7 +107,7 @@ func TestBuildCreateCluster_MonitoringNeedsTheRelease(t *testing.T) {
 
 func TestBuildCreateCluster_APIAndWorkerReleases(t *testing.T) {
 	cmd := buildWithImages(t, valid("image", imgNew, "api", "on", "api-image", imgOld))
-	assert.Equal(t, []string{"The api node's image " + imgOld + " has Slurm 25.11.8. sind-node images have slurmrestd from Slurm 26.05; an image of your own needs it installed."}, cmd.Warns)
+	assert.Equal(t, []string{"The api node's image " + imgOld + " has Slurm 25.11.9. sind-node images have slurmrestd from Slurm 26.05; an image of your own needs it installed."}, cmd.Warns)
 	assert.Empty(t, cmd.Problems, "sind checks for slurmrestd, not the release")
 
 	cmd = buildWithImages(t, valid("image", imgNew, "api", "on", "api-image", imgAway))

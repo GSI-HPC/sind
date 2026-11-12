@@ -260,7 +260,7 @@ var actSpecs = map[string]actSpec{
 		OK: "Connect", Fields: actFields("container"),
 		Title: func(d *actDialog) string { return "Connect a container to realm " + d.Realm },
 		Lead: func(d *actDialog) string {
-			return "The container joins the mesh and the cluster networks of realm " + d.Realm + ". It then reaches the nodes by name."
+			return "The container joins the mesh and the cluster networks of realm " + d.Realm + ". It then reaches the nodes and the DNS server that knows their names."
 		},
 		Defaults: func(d *actDialog) {
 			// A name that the list does not offer, as a run to try again

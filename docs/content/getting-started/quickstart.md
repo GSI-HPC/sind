@@ -34,7 +34,8 @@ sind create cluster
    ```
 
 2. Press **New cluster…**. The New cluster page proposes a free name, such as `hpc`, and starts from **Quick test**: a controller and two workers. Set the name to `default` and set **workers** to 1.
-3. Press **Create** when the status at the bottom of the plan says `Ready`.
+3. Under **Your files**, press **Change…** and set **Directory** to the full path of your `sind-demo` directory, such as `~/sind-demo`, where the steps below write the job script. Otherwise the nodes mount `~/sind/default` at `/data`.
+4. Press **Create default** when the status at the top of the plan says `Ready`.
 
 {{< uishot "new-cluster" >}}
 
@@ -61,7 +62,16 @@ sind will:
 4. Start all node containers
 5. Wait for all nodes to become ready
 
-On a terminal, sind shows its progress while it works and leaves a line for each step it finished; where standard error is not a terminal, it prints nothing on success. See [Progress Display]({{< relref "/usage/progress" >}}).
+On a terminal, sind shows its progress while it works and leaves a line for each step it finished; where standard error is not a terminal, it prints nothing on success. See [Progress Display]({{< relref "/usage/progress" >}}). On a host that had neither the mesh nor the node image, the first cluster ends like this:
+
+```text
+$ sind create cluster
+✓ mesh  12s  4 ok  426 MiB at 35.5 MiB/s
+✓ preflight  1.4s
+✓ nodes  5.8s  2 ok
+✓ mesh registration  0.3s
+✓ slurm  4.6s  2 ok
+```
 
 ## Check cluster status
 
@@ -86,7 +96,7 @@ The rest of this section shows the same with `sind get`.
 
 ```
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
-default  2 (0/1/0/0/1)      26.05.5  running
+default  2 (0/1/0/0/1)      26.05.6  running
 ```
 
 View individual nodes:
