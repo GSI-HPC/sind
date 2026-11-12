@@ -4,7 +4,7 @@ title: "Node Arguments"
 description: "DNS-style node naming and node set expressions"
 toc: true
 webui: none
-webuiNote: "The web UI selects nodes with checkboxes, and shows the selection as a node set, such as `worker-[2-4]`. The node sets on this page are for the CLI."
+webuiNote: "The web UI selects nodes with checkboxes, and shows the selection as a node set, such as `worker-[2-4]`. Its jump box takes the node sets of this page, such as `reboot worker-[0-3].dev`. The node set field of the Power dialog takes ranges and lists, such as `worker-[0-3]`."
 ---
 
 ## Format

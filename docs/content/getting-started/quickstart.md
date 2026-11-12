@@ -34,7 +34,8 @@ sind create cluster
    ```
 
 2. Press **New cluster…**. The New cluster page proposes a free name, such as `hpc`, and starts from **Quick test**: a controller and two workers. Set the name to `default` and set **workers** to 1.
-3. Press **Create** when the status at the bottom of the plan says `Ready`.
+3. Under **Your files**, press **Change…** and set **Directory** to the full path of your `sind-demo` directory, such as `~/sind-demo`, where the steps below write the job script. Otherwise the nodes mount `~/sind/default` at `/data`.
+4. Press **Create default** when the status at the top of the plan says `Ready`.
 
 {{< uishot "new-cluster" >}}
 

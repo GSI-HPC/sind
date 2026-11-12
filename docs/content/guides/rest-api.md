@@ -24,9 +24,9 @@ sind create cluster --config cluster.yaml
 {{< /cli >}}
 {{< ui >}}
 
-1. Press **New cluster…**.
+1. Press **New cluster…**, set the name to `default` and tick **db**.
 2. Open **More nodes** below the nodes and tick **api**.
-3. Press **Create**.
+3. Press **Create default**.
 
 {{< uishot "new-cluster" >}}
 
