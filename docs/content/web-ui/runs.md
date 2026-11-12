@@ -86,4 +86,4 @@ Press **Stop it** to stop the command, or **Keep running** (or Escape) to go bac
 
 {{< uishot "run-canceled" "A run that was stopped. The page says what worker-2 was doing and that sind removed it again." >}}
 
-**Stop** sends SIGINT only, never SIGKILL. If you stop the UI while a command runs, sind ui interrupts the command and waits up to 60 seconds for the rollback. Only after that does it kill the command. A command that runs from a terminal is not stopped by the UI at all.
+**Stop…** sends SIGINT only, never SIGKILL. If you stop the UI while a command runs, sind ui interrupts the command and waits up to 60 seconds for the rollback. Only after that does it kill the command. A command that runs from a terminal is not stopped by the UI at all.

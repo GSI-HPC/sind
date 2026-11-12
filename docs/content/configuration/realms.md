@@ -92,7 +92,7 @@ Warning: waiting for another sind command in realm "sind" to finish: sind create
 {{< /cli >}}
 {{< ui >}}
 
-A dialog that changes a realm while another command holds its lock names that command. The Overview names it too. Your command waits until the other one ends, and its run page shows the wait as `realm lock`. To stop the other command, press **Stop** on its run if sind ui started it, or Ctrl-C in its terminal.
+A dialog that changes a realm while another command holds its lock names that command. The Overview names it too. Your command waits until the other one ends, and its run page shows the wait as `realm lock`. To stop the other command, press **Stop…** on its run if sind ui started it, or Ctrl-C in its terminal.
 
 {{< /ui >}}
 {{< /ways >}}

@@ -111,7 +111,7 @@
   steps:
     - Read which command holds the lock. The run shows it as a wait.
     - Let that command end. The waiting command then goes on.
-    - If it hangs, stop that command with Ctrl-C in its terminal, or cancel its run here.
+    - If it hangs, stop that command with Ctrl-C in its terminal, or press Stop… on its run here.
   commands: []
   doc: configuration/realms
   words: [lock, realm, rollback]
