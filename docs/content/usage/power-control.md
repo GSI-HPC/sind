@@ -18,7 +18,7 @@ sind power <action> NODES
 {{< ui >}}
 
 1. Open the cluster, then the **Nodes** tab, and select the nodes. Or open the page of one node and its **Power** menu, which greys out the actions that do not fit the node and says why.
-2. Press the action in the bar at the bottom of the page, such as **Reboot 3 nodes…**. The bar says how many nodes you selected and their node set, offers only the actions that fit them, and names in each button the nodes it acts on. When an action fits only some of them, a line names the nodes it skips, such as `Drain skips controller.` Shut down, Freeze and Unfreeze are under **More**. To start one node that does not run, press **Start…** in its row.
+2. Press the action in the bar at the bottom of the page, such as **Reboot 3 nodes…**. The bar says how many nodes you selected and their node set, offers only the actions that fit them, and names in each button the nodes it acts on. When an action fits only some of them, a line names the nodes it skips, such as `Drain and Delete skip controller.` Shut down, Freeze and Unfreeze are under **More**. To start one node that does not run, press **Start…** in its row.
 3. The dialog confirms the action in short: its title names the action and the nodes, such as **Reboot worker-4.dev**, and it lists the nodes with their Slurm state and issues, and what keeps running. Read the warnings: the dialog says when the nodes include the controller in control, the standby controller of a pair, the db node or every running worker of the cluster.
 4. Press the button, which names the action and the nodes, such as **Reboot 3 workers**.
 

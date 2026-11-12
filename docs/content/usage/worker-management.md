@@ -134,7 +134,7 @@ sind delete worker NODES
 
 {{< uishot "dialog-delete-worker" >}}
 
-The page of a worker has a **Delete worker…** button too.
+On the page of a worker, the **⋯** menu has **Delete worker…** too.
 
 {{< /ui >}}
 {{< /ways >}}
