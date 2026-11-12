@@ -80,6 +80,9 @@ CI runs for every pull request and every push to `main` and `next`.
   theme, a Hugo module in `docs/go.mod`, because its `go mod tidy` drops the
   requirement: bump it by hand with `hugo mod get github.com/imfing/hextra@<version>` in
   `docs/`, as the markdownlint-cli2 version that `make lint-docs` runs (`Makefile`).
+- A bump of hyperframes, by Dependabot or by hand, checks the undici override of
+  `video/package.json` (`video/README.md`, Decisions): drop it once hyperframes pins
+  undici 7.30.1 or later.
 - A bump of go-clikit or go-nodeset, by Dependabot or by hand, also updates their
   version where `DESIGN.md` and `docs/content/` name it, as in the links to their docs.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or

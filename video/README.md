@@ -221,6 +221,9 @@ voice metadata loads from a local script.
 - The docs workflow renders the episodes and the docs site serves them; no
   rendered files are committed. Move to YouTube only if GitHub Pages turns out
   too small.
+- `package.json` raises undici, which HyperFrames pins at 7.25.0, to 7.30.2
+  or later (`overrides`), for the security fixes of undici since. Drop the
+  override once HyperFrames pins such a version.
 
 ## Videos in the docs
 
