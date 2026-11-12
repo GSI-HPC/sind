@@ -48,8 +48,8 @@ A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has
 
 | Type | Name pattern | Example | Image |
 |------|-------------|---------|-------|
-| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.0` |
-| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.1` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.16.0` |
 | Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
 | Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.3` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
@@ -142,7 +142,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers, db and api nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
-| `sind.slurm.version` | `25.11.8` | Slurm version, empty for an unmanaged cluster |
+| `sind.slurm.version` | `25.11.9` | Slurm version, empty for an unmanaged cluster |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path, empty with the data volume |
 | `sind.data.mountpath` | `/shared` | Data mount point (`storage.dataStorage.mountPath`, `/data` by default) |
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS, with `storage.cvmfs`: `volume` (plugin) or `hostPath` (host `/cvmfs`); empty without it |

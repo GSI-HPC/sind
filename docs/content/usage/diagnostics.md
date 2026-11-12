@@ -213,7 +213,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:28.438 INFO ensuring mesh infrastructure realm=sind
 00:13:28.826 INFO creating cluster name=dev nodes=3
 00:13:28.921 DEBU preflight check passed
-00:13:29.382 INFO resolved infrastructure slurm=25.11.8
+00:13:29.382 INFO resolved infrastructure slurm=25.11.9
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
@@ -262,7 +262,7 @@ Displays detailed health information:
 
 ```
 CLUSTER  SLURM    STATUS (R/S/P/T)
-dev      25.11.8  running (4/0/0/4)
+dev      25.11.9  running (4/0/0/4)
 
 NETWORKS
 NAME          DRIVER  SUBNET         GATEWAY     STATUS
@@ -633,8 +633,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.5
-dev      5      26.05.5
+default  3      26.05.6
+dev      5      26.05.6
 ```
 
 `TYPE` says what the port serves: a web UI, an API, or both. Loki serves an API only, so a browser that opens its address shows no page; read its logs in Grafana, under Explore. `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, `interface` (`web UI`, `web UI + API` or `API`), address (`ip`) readiness (`ready`) and whether it was checked (`checked`), and each cluster's key numbers from Prometheus under `slurm`: Slurm's nodes, those down and those draining, and the running and pending jobs. `slurm` is left out while Prometheus has no numbers of the cluster, such as just after the create:
@@ -643,10 +643,10 @@ dev      5      26.05.5
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.0", "interface": "web UI",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.1", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.6",
                 "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```

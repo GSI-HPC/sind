@@ -50,7 +50,7 @@ The first monitored cluster of a realm creates the stack, and the next ones join
 - **Slurm 26.05 or later**, with the HTTP parser plugin: slurmctld serves its metrics, and slurmctld and slurmd their health endpoints, over HTTP on their RPC ports. The default image and the `26.05` images have it. A cluster on `sind-node:25.11` fails before any node exists:
 
   ```
-  image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.8 is older than 26.05, which monitoring needs
+  image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.9 is older than 26.05, which monitoring needs
   ```
 
   Custom images need a few more things; see [Building Images]({{< relref "/container-images/building-images#with-monitoring" >}}).
@@ -163,8 +163,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.5
-dev      5      26.05.5
+default  3      26.05.6
+dev      5      26.05.6
 ```
 
 `TYPE` says what the port serves: `web UI`, `API`, or both. Only Grafana and Prometheus (and Alloy's debug page) show a page in a browser; Loki has an API only. `STATUS` is the container's state, `not ready` while it runs but does not answer its readiness check, `unchecked` while it runs but Grafana, which runs the checks, does not, or `missing`. Without a stack, the command fails with `no monitoring stack in realm "sind"`. `sind get cluster` lists the stack's containers under `MESH SERVICES` and the journal mount under `MOUNTS` (see [Diagnostics]({{< relref "/usage/diagnostics#monitoring-stack" >}})).

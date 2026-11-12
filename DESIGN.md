@@ -495,8 +495,8 @@ Example output:
 ```
 $ sind get clusters
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
-default  5 (1/1/0/1/2)      26.05.5  running
-dev      4 (0/1/1/0/2)      25.11.8  running
+default  5 (1/1/0/1/2)      26.05.6  running
+dev      4 (0/1/1/0/2)      25.11.9  running
 ```
 
 NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **A**pi / **W**orker; the JSON output has `submitters`, `controllers`, `dbs`, `apis` and `workers`. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
@@ -529,7 +529,7 @@ sind-dev-worker-10       dev      worker      worker-10.dev.sind.sind       172.
 ```
 $ sind get cluster dev
 CLUSTER  SLURM    STATUS (R/S/P/T)
-dev      25.11.8  running (4/0/0/4)
+dev      25.11.9  running (4/0/0/4)
 
 NETWORKS
 NAME          DRIVER  SUBNET         GATEWAY     STATUS
@@ -625,8 +625,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.5
-dev      5      26.05.5
+default  3      26.05.6
+dev      5      26.05.6
 ```
 
 `TYPE` says what the port serves: `web UI` (Grafana, Alloy), `web UI + API` (Prometheus) or `API` (Loki). A browser that opens an API-only address gets an error page, so the hint below the table points to Grafana's Explore for the data. The JSON output has it as `interface`. `ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. The JSON output adds each cluster's key numbers under `slurm`, as slurmctld reports them to Prometheus: its nodes, those down and those draining (a node can be both), and its running and pending jobs (`cluster.SlurmCounts`). sind reads them with one instant query through Grafana's `curl` (`observability.Manager.Query`), the highest value of each cluster, as only the controller in control answers the scrape; `slurm` is left out while Grafana or Prometheus does not run, the query fails, or Prometheus has no numbers of the cluster yet. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
@@ -635,10 +635,10 @@ dev      5      26.05.5
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.0", "interface": "web UI",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.1", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5",
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.6",
                 "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```
@@ -1519,8 +1519,8 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
-| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.0` |
-| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.1` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.16.0` |
 | Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
 | Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.3` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
@@ -1666,7 +1666,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers, db and api nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
-| `sind.slurm.version` | `25.11.8` | Slurm version; empty for an unmanaged cluster |
+| `sind.slurm.version` | `25.11.9` | Slurm version; empty for an unmanaged cluster |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path; empty with the data volume |
 | `sind.data.mountpath` | `/shared` | Data mount point, `/data` by default |
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); empty without `storage.cvmfs` |
@@ -2028,7 +2028,7 @@ Slurm 26.05 and later serve HTTP on slurmctld's and slurmd's RPC ports, telling 
 | Check | Passes when | Otherwise |
 |-------|-------------|-----------|
 | Daemon | the image has the daemon | `has no slurmd` |
-| Version | `slurm X.Y.Z` with X.Y at least 26.05; 26.05 pre-releases count | `image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.8 is older than 26.05, which monitoring needs` |
+| Version | `slurm X.Y.Z` with X.Y at least 26.05; 26.05 pre-releases count | `image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.9 is older than 26.05, which monitoring needs` |
 | Plugin directory | `PluginDir` is set, `ldd` finds `libslurmfull`, or a usual directory exists | `cannot find Slurm's plugin directory; set PluginDir in slurm.main` |
 | HTTP parser, URL parser, TLS, HTTP authentication, data parser | a plugin of each type whose libraries resolve | `Slurm has no HTTP parser plugin in /usr/lib64/slurm; build it with --with-llhttp-parser`, or `Slurm's <plugin> in <dir> cannot load: a library it needs is missing` |
 | OpenMetrics (controllers' image only) | `metrics_openmetrics.so`, loadable | the same forms |
@@ -2102,7 +2102,7 @@ sind provides a generic multi-role image that works for all node types, built fo
 ```
 ghcr.io/gsi-hpc/sind-node:latest                # newest release line
 ghcr.io/gsi-hpc/sind-node:<YY>.<MM>             # newest patch release of a line, e.g. 25.11
-ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.8
+ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.9
 ghcr.io/gsi-hpc/sind-node:vX.Y.Z                # newest release line at sind release vX.Y.Z
 ghcr.io/gsi-hpc/sind-node:vX.Y.Z-<YY>.<MM>      # a release line at sind release vX.Y.Z
 ```
@@ -2283,7 +2283,7 @@ While it creates the cluster network and volumes, sind runs an ephemeral contain
 
 ```bash
 docker run --rm <controller image> slurmctld -V
-# Output: "slurm 26.05.5"
+# Output: "slurm 26.05.6"
 ```
 
 The version must have the form `X.Y.Z`, optionally with a pre-release suffix such as `-0rc1` (`[0-9A-Za-z.]`); any other output, such as a version followed by a terminal control sequence from an untrusted image, fails the create.
@@ -2291,7 +2291,7 @@ The version must have the form `X.Y.Z`, optionally with a pre-release suffix suc
 The discovered version is stored as a label on each node container:
 
 ```
---label sind.slurm.version=26.05.5
+--label sind.slurm.version=26.05.6
 ```
 
 Workers added with `sind create worker` copy the controller's label. Without `--image` they run an image the cluster already runs, by ID. With `--image`, sind discovers the image's version the same way and refuses managed workers whose version differs from the label. At cluster creation, nodes whose `image` differs from the controller's carry the controller's version too: `sind create cluster` does not discover versions per image or compare them.

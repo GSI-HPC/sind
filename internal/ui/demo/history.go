@@ -23,7 +23,7 @@ func nodeSet(cluster string, controller time.Duration, workers ...time.Duration)
 func history(now time.Time) [][]byte {
 	const (
 		node26 = "ghcr.io/gsi-hpc/sind-node:26.05.4"
-		node25 = "ghcr.io/gsi-hpc/sind-node:25.11.8"
+		node25 = "ghcr.io/gsi-hpc/sind-node:25.11.9"
 	)
 	devNodes := nodeSet("dev", 14*time.Second, 19*time.Second, 22*time.Second, 25*time.Second, 28*time.Second, 31*time.Second, 34*time.Second)
 	devNodes = append(devNodes,
