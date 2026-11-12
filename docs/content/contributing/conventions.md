@@ -106,5 +106,5 @@ The docs are a Hugo site in `docs/`. A page that tells how to do a task shows it
 - Target the `next` branch; `main` only moves at release
 - One logical change per PR
 - Include tests for new functionality
-- Ensure `make lint`, `make test` and `make check-coverage` pass, and `make lint-docs` when you change `docs/content/` (CI does not lint the docs)
+- Ensure `make lint`, `make test` and `make check-coverage` pass, and `make lint-docs` when you change `docs/content/`
 - Follow the commit message conventions above

@@ -21,8 +21,8 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 4. If `pkg/` or `internal/` changed: `make check-coverage`. Every file there must stay
    at 100%. Install the tool with
    `go install github.com/vladopajic/go-test-coverage/v2@latest`.
-5. If `docs/content/` changed: `make lint-docs`. CI does not lint the docs, so this is
-   their only check.
+5. If `docs/content/` changed: `make lint-docs`, which the Docs Lint job of CI runs
+   too.
 6. If the CLI surface, output format, config schema or labels changed: `DESIGN.md` and
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,
@@ -43,6 +43,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Job | Runs |
 |-----|------|
 | Lint | golangci-lint |
+| Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
 | Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |

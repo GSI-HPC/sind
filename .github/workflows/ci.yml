@@ -34,6 +34,19 @@ jobs:
         with:
           version: v2.15.0
 
+  # markdownlint-cli2 on docs/content, at the version that the Makefile
+  # pins and with the rules of .markdownlint.json, on the runner's Node.
+  lint-docs:
+    name: Docs Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint the docs
+        run: make lint-docs
+
   unit-test:
     name: Unit Test
     runs-on: ubuntu-latest
