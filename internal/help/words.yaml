@@ -45,7 +45,7 @@
   see: [node-roles]
 - id: managed
   title: Managed node
-  summary: A node that sind sets up for Slurm. sind writes the config, the munge key and starts the daemons. An unmanaged node gets only the container.
+  summary: A node that sind sets up for Slurm. sind writes the config, the munge key and starts the daemons. An unmanaged node still gets SSH, munge and the users, but sind adds it to no Slurm config and starts no Slurm daemon on it.
   command: sind create worker --unmanaged
   doc: configuration/node-definitions#managed-vs-unmanaged-workers
   see: [worker, munge]
@@ -148,7 +148,7 @@
   see: [realm]
 - id: identity
   title: Identity mode
-  summary: How the nodes know the users of a cluster. With local, every node has the users. With nssSlurm or clientIds, the nodes ask slurmctld.
+  summary: How the nodes know the users of a cluster. With local, every node has the users. With nssSlurm, every node but the managed workers has them. With clientIds, only the login node has them, and their tokens tell Slurm who they are. On a managed worker without the users, Slurm hands each job its user and groups.
   doc: guides/users
   see: [slurmctld]
 - id: rollback
