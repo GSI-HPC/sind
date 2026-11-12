@@ -129,7 +129,10 @@ pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing
                    discovery and image probe (ProbeImage), sinfo parsing, munge key, slurm.key
                    and jwt_hs256.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
-pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold; Holder reads who holds it
+pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock
+                   network on the daemon) that library callers of Create, Delete, DeleteAll,
+                   WorkerAdd, WorkerRemove, Connect, Disconnect, PowerOn, PowerReboot and
+                   PowerCycle hold; Holder reads who holds it
 ```
 
 ## Dependency flow

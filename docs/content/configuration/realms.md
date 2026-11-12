@@ -109,7 +109,7 @@ Warning: the realm lock is still held by sind create cluster dev (pid 4242 on bu
 
 Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs. Clients that share a realm are safe from each other, but not isolated: `sind delete cluster --all` deletes the other client's clusters too, and cluster names must differ. Give independent jobs a realm each.
 
-Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves. They pass their Docker client as `LockOptions.Client`; without it, only the file lock is taken, which does not serialize other clients of the daemon.
+Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.Connect`, `cluster.Disconnect`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves. They pass their Docker client as `LockOptions.Client`; without it, only the file lock is taken, which does not serialize other clients of the daemon.
 
 ## Example
 
