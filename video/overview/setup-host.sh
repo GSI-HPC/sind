@@ -38,6 +38,11 @@ polkit.addRule(function(action, subject) {
 RULES
 sudo systemctl restart polkit
 
+# The Ubuntu 26.04 runner image allows 128 inotify instances per user,
+# which the recorded clusters can use up: their node containers then exit
+# with code 255.
+sudo sysctl -w fs.inotify.max_user_instances=8192
+
 # Docker Hub rate-limits anonymous pulls per IP, which runners share: pull
 # the Docker Hub images of the scenario (the mesh's CoreDNS, the monitoring
 # stack and alpine for the connect shot) from Google's mirror, and tag them
