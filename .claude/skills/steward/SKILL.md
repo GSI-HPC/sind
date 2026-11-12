@@ -58,10 +58,11 @@ CI runs for every pull request and every push to `main` and `next`.
   to connect) is an upstream outage, not this PR's fault. Confirm it by the error naming
   the URL, re-run the job once, and report it if it fails again.
 - Integration Test pulls the Docker Hub images the tests run (the mesh's CoreDNS, which
-  it reads from `pkg/mesh`'s `DNSImage`, and `busybox:latest`) from `mirror.gcr.io` and
-  tags them with their Docker Hub names, so the tests never pull them from Docker Hub.
-  A `toomanyrequests` or an `auth.docker.io` timeout from Docker Hub means the job pulls
-  another Docker Hub image: take it from `mirror.gcr.io` too.
+  it reads from `pkg/mesh`'s `DNSImage`, the monitoring stack's four, which it reads from
+  the `<Name>Image` lines of `pkg/observability`, and `busybox:latest`) from
+  `mirror.gcr.io` and tags them with their Docker Hub names, so the tests never pull them
+  from Docker Hub. A `toomanyrequests` or an `auth.docker.io` timeout from Docker Hub
+  means the job pulls another Docker Hub image: take it from `mirror.gcr.io` too.
 - A Vulnerability Check failure on a new advisory in a dependency or the Go toolchain
   that this PR does not touch is fixed by bumping that module (`go get <module>@<fixed>`,
   `go mod tidy`) or the toolchain in `go.mod`, in its own commit.
@@ -74,6 +75,11 @@ CI runs for every pull request and every push to `main` and `next`.
   versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo, which it
   does not: bump those by hand. The Hextra docs theme is a Hugo
   module in `docs/go.mod`: `hugo mod get github.com/imfing/hextra@<version>` in `docs/`.
+  Dependabot updates only the Go module at the root, so the Go module of
+  `tools/screenshots`, the npm packages of `video/` (`package.json`, `package-lock.json`)
+  and the pins of `video/voice/requirements.txt` are bumped by hand too.
+- A bump of go-clikit or go-nodeset, by Dependabot or by hand, also updates their
+  version where `DESIGN.md` and `docs/content/` name it, as in the links to their docs.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or
   loosen tests or coverage thresholds.
 
