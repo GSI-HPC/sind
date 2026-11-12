@@ -62,7 +62,16 @@ sind will:
 4. Start all node containers
 5. Wait for all nodes to become ready
 
-On a terminal, sind shows its progress while it works and leaves a line for each step it finished; where standard error is not a terminal, it prints nothing on success. See [Progress Display]({{< relref "/usage/progress" >}}).
+On a terminal, sind shows its progress while it works and leaves a line for each step it finished; where standard error is not a terminal, it prints nothing on success. See [Progress Display]({{< relref "/usage/progress" >}}). On a host that had neither the mesh nor the node image, the first cluster ends like this:
+
+```text
+$ sind create cluster
+✓ mesh  12s  4 ok  426 MiB at 35.5 MiB/s
+✓ preflight  1.4s
+✓ nodes  5.8s  2 ok
+✓ mesh registration  0.3s
+✓ slurm  4.6s  2 ok
+```
 
 ## Check cluster status
 
