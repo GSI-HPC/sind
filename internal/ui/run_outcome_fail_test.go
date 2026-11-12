@@ -170,7 +170,7 @@ func TestRunPageOfAFailureWithDoctorChecks(t *testing.T) {
 	body := ts.get("/runs/r-failed").Body.String()
 	for _, want := range []string{
 		`<div class="rout-doc"><b>Doctor: 1 failed, 1 warning</b>`,
-		`<span class="pg-ck warn" aria-hidden="true">!</span><div><b>inotify</b> <span class="muted">max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)</span></div>`,
+		`<span class="pg-ck warn" aria-hidden="true">!</span><div><b>inotify</b> <span class="muted">max_user_instances 128 (10 or more nodes on this host need 1024; optional)</span></div>`,
 		`<span class="pg-ck bad" aria-hidden="true">✗</span><div><b>cgroupv2</b>`,
 		`<a class="btn" href="/doctor">Fix the host in Doctor</a>`,
 	} {

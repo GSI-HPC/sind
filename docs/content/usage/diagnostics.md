@@ -41,7 +41,7 @@ Checks system prerequisites and reports pass/fail for each:
 | Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
 | Docker host | no | the daemon runs on this machine, not in Docker Desktop's VM or on another host |
 | cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and the Docker host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |
-| inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
+| inotify | no | `fs.inotify.max_user_instances` of at least 1024, which 10 or more nodes on the host need, in one cluster or in several (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})) |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
 The results go to stdout, so they can be piped or filtered, with `✓` for a passed check, `✗` for a failed one and `!` for a warning; only the error line naming the failed checks, as the output prints them, goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The fixes follow the list of checks, each one once, in the order of the checks that need it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:

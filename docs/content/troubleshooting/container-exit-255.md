@@ -17,7 +17,7 @@ or:
 node worker-5: container sind-dev-worker-5 died: exitCode=255
 ```
 
-This typically happens when creating clusters with many nodes (8+). Some containers start successfully while others crash within the first second.
+This typically happens when the host runs 10 or more nodes, in one cluster or in several. Some containers start successfully while others crash within the first second.
 
 ## Cause
 

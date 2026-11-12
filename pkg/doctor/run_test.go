@@ -260,7 +260,7 @@ func TestRun_Inotify(t *testing.T) {
 	checks := run(t, "128\n", "")
 	require.Len(t, checks, 5)
 	assert.Equal(t, clidoctor.Check{Name: "inotify", Status: clidoctor.StatusWarning,
-		Detail:      "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)",
+		Detail:      "max_user_instances 128 (10 or more nodes on this host need 1024; optional)",
 		Remediation: inotifyRemediation}, checks[4])
 
 	checks = run(t, "8192\n", "unix:///run/docker.sock")

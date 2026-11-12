@@ -76,15 +76,14 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 
 	checks = append(checks, cgroupCheck(ctx, client, fs, info, local))
 
-	// Advisory: enough inotify instances for large clusters. The limit is
-	// the Docker host's, so the check is left out unless the daemon runs
-	// here.
+	// Advisory: enough inotify instances for many nodes. The limit is the
+	// Docker host's, so the check is left out unless the daemon runs here.
 	if n, ok := InotifyInstances(fs); ok && local {
 		inotify := clidoctor.Check{Name: "inotify", Status: clidoctor.StatusOK,
 			Detail: fmt.Sprintf("max_user_instances %d (>= %d)", n, MinInotifyInstances)}
 		if n < MinInotifyInstances {
 			inotify = clidoctor.Check{Name: "inotify", Status: clidoctor.StatusWarning,
-				Detail:      fmt.Sprintf("max_user_instances %d (clusters of %d or more nodes need %d; optional)", n, InotifyNodes, MinInotifyInstances),
+				Detail:      fmt.Sprintf("max_user_instances %d (%d or more nodes on this host need %d; optional)", n, InotifyNodes, MinInotifyInstances),
 				Remediation: inotifyRemediation}
 		}
 		checks = append(checks, inotify)

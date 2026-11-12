@@ -92,10 +92,10 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
-// MinInotifyInstances is the fs.inotify.max_user_instances that clusters
-// of 10 or more nodes need. The systemd and journald of every node take
-// inotify instances of the host's root user, and the kernel's default of
-// 128 runs out first.
+// MinInotifyInstances is the fs.inotify.max_user_instances that 10 or
+// more nodes on the host need, in one cluster or in several. The systemd
+// and journald of every node take inotify instances of the host's root
+// user, and the kernel's default of 128 runs out first.
 const MinInotifyInstances = 1024
 
 // InotifyNodes is the number of nodes on the host from which the kernel's
