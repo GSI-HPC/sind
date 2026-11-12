@@ -43,7 +43,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Job | Runs |
 |-----|------|
 | Lint | golangci-lint |
-| Unit Test | `make test` under firejail, writing the coverage profile |
+| Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
 | Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |

@@ -84,6 +84,12 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      # tools/screenshots is a module of its own, which ./... leaves out.
+      # Its tests check the shot list that the docs use.
+      - name: Screenshot tool tests
+        working-directory: tools/screenshots
+        run: go vet ./... && go test ./...
+
   unit-test-coverage:
     name: Unit Test Coverage
     needs: unit-test
