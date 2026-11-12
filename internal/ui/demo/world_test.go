@@ -3,6 +3,8 @@
 package demo
 
 import (
+	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
@@ -57,7 +61,8 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, 1, dev.APIs)
 	assert.Equal(t, 1, dev.Submitters)
 	assert.Equal(t, 6, dev.Workers)
-	assert.Equal(t, "25.11.9", byName["legacy"].SlurmVersion)
+	assert.Equal(t, slurmNew, dev.SlurmVersion)
+	assert.Equal(t, slurmOld, byName["legacy"].SlurmVersion)
 
 	require.NotNil(t, sn.Monitorings["sind"])
 	// dev's six workers are Slurm's nodes; worker-4's slurmd is down, and
@@ -80,6 +85,8 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, store.Outside{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "sind-mesh"}}, ciOut[1],
 		"a container on the mesh of another realm is on its network")
 	assert.Equal(t, "sind-mesh", m.Info.Network)
+	assert.Equal(t, mesh.DNSImage, m.Info.DNSImage)
+	assert.Equal(t, imageNew, m.Info.SSHImage)
 	assert.Len(t, m.Records, 11+2+3)
 	ci := sn.Meshes["ci"]
 	assert.Equal(t, "ci-mesh", ci.Info.Network)
@@ -179,6 +186,24 @@ func TestWorld_Monitoring(t *testing.T) {
 	assert.Len(t, m.Services, 4)
 	assert.Equal(t, "http://grafana.ci.sind:3000", m.Services[0].URL)
 	assert.Equal(t, "http://172.22.0.9:12345", m.Services[3].URL, "alloy has no DNS name")
+	var images []string
+	for _, s := range m.Services {
+		images = append(images, s.Image)
+	}
+	assert.Equal(t, observability.Images(), images, "the images that sind pins")
+}
+
+// The demo has the Slurm releases of the official images, as the docs take
+// their screenshots from it: a bump in docker-bake.hcl changes slurmNew or
+// slurmOld too.
+func TestSlurmReleases(t *testing.T) {
+	bake, err := os.ReadFile("../../../docker-bake.hcl")
+	require.NoError(t, err)
+	var releases []string
+	for _, m := range regexp.MustCompile(`(?m)^\s*version\s*=\s*"([^"]+)"`).FindAllSubmatch(bake, -1) {
+		releases = append(releases, string(m[1]))
+	}
+	assert.Equal(t, []string{slurmNew, slurmOld}, releases, "the SLURM_RELEASES of docker-bake.hcl")
 }
 
 func TestWorld_Connect(t *testing.T) {

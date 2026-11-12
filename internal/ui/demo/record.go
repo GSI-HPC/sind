@@ -16,8 +16,10 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
-// version is the sind the runs of the demo say they were made by.
-const version = "v0.11.0"
+// version is the sind the runs of the demo say they were made by, a
+// release with sind ui, written as sind writes it into an event log:
+// without the v.
+const version = "0.16.0"
 
 // traceID returns the trace the n-th run of the demo belongs to.
 func traceID(n int) progress.TraceContext {

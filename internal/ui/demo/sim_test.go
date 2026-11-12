@@ -63,7 +63,7 @@ const nightly = `kind: Cluster
 name: nightly
 realm: ci
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:26.05.4
+  image: ` + imageNew + `
 users:
   - alice
 monitoring: true

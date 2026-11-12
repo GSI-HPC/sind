@@ -202,7 +202,7 @@ var messages = map[string][]string{
 		"slurmd: warning: Note very large processing time from _rpc_launch_tasks: usec=1204871",
 	},
 	"slurmdbd": {
-		"slurmdbd: slurmdbd version 26.05.4 started",
+		"slurmdbd: slurmdbd version " + slurmNew + " started",
 		"slurmdbd: Accounting storage MYSQL plugin loaded",
 		"slurmdbd: DBD_STEP_COMPLETE: JobId=%d",
 	},
@@ -276,7 +276,7 @@ const failureSpan = 6 * time.Second
 // systemd says that it did: slurmd cannot reach slurmctld.
 var failures = map[string][]string{
 	"slurmd": {
-		"slurmd version 26.05.4 started",
+		"slurmd version " + slurmNew + " started",
 		"error: Unable to register: Unable to contact slurm controller (connect failure)",
 		"fatal: Unable to register with slurm controller, retry limit reached",
 	},
