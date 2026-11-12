@@ -14,7 +14,6 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
-	"golang.org/x/sync/errgroup"
 )
 
 // WorkerRemove removes worker nodes from a cluster.
@@ -25,19 +24,20 @@ import (
 // For managed nodes (those present in sind-nodes.conf), the flow is:
 //  1. Read sind-nodes.conf through the controller, which has to run
 //  2. Update sind-nodes.conf to remove the node definitions and
-//     reconfigure slurmctld, while DNS + known_hosts are deregistered
-//  3. Stop + remove containers
-//  4. On a monitored cluster, sync the monitoring stack and remove the
+//     reconfigure slurmctld
+//  3. Deregister DNS + known_hosts
+//  4. Stop + remove containers
+//  5. On a monitored cluster, sync the monitoring stack and remove the
 //     workers' journal directories (see forgetMonitoredNodes)
 //
-// For unmanaged nodes, and every node of an unmanaged cluster, step 1 and
-// the Slurm part of step 2 are skipped: the Slurm configuration of an
-// unmanaged cluster is the user's, even if it contains a sind-nodes.conf.
-// So is a configuration without sind-nodes.conf.
+// For unmanaged nodes, and every node of an unmanaged cluster, steps 1 and
+// 2 are skipped: the Slurm configuration of an unmanaged cluster is the
+// user's, even if it contains a sind-nodes.conf. So is a configuration
+// without sind-nodes.conf.
 //
 // The steps it reports are "slurm" (the update of sind-nodes.conf and the
-// reconfigure), "mesh deregistration" and, once these are done, "nodes"
-// with a target for each worker, and "monitoring" on a monitored cluster.
+// reconfigure), then "mesh deregistration", "nodes" with a target for each
+// worker, and "monitoring" on a monitored cluster.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -97,22 +97,19 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		}
 	}
 
-	// Update Slurm and deregister DNS + known_hosts concurrently, both
-	// before the containers go. The group has no shared context, so a
-	// failed reconfigure does not cancel a CoreDNS restart halfway.
+	// Update Slurm, then deregister DNS + known_hosts, both before the
+	// containers go. A failed update keeps the workers, and with them their
+	// DNS records and known_hosts entries, so that they stay reachable.
 	// DeregisterMesh logs its failures; worker removal continues.
-	var g errgroup.Group
 	if updateConf {
-		g.Go(func() (err error) {
-			sctx, end := startStep(ctx, "slurm")
-			defer func() { end(err) }()
-			return removeNodesConf(sctx, client, controller.Name, nodesConf, shortNames)
-		})
+		sctx, end := startStep(ctx, "slurm")
+		err = removeNodesConf(sctx, client, controller.Name, nodesConf, shortNames)
+		end(err)
+		if err != nil {
+			return err
+		}
 	}
 	DeregisterMesh(ctx, meshMgr, clusterName, targets)
-	if err := g.Wait(); err != nil {
-		return err
-	}
 
 	// Which of the workers the monitoring stack collects is told by their
 	// containers, so before they go.
