@@ -159,7 +159,7 @@
 - id: activity-log
   title: Activity log
   summary: The file in which sind writes the steps of each command that changes something. sind ui reads it to show runs, also those that you started in a terminal.
-  command: sind create cluster --progress-log ''
+  command: sind create cluster
   doc: usage/progress#the-activity-log
   see: [run, trace]
 - id: run
