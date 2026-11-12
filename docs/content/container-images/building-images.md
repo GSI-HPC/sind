@@ -85,8 +85,9 @@ Custom images must provide the following:
 ### All roles
 
 - **systemd** as init at `/sbin/init`, and `/bin/sh`: sind starts each node with a short `/bin/sh` entrypoint that sets up the cgroup controllers and execs `/sbin/init`, so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
+- `bash` with its `/dev/tcp` redirection: sind's readiness checks run it on every node (the sshd check reads sshd's banner from `/dev/tcp/localhost/22`), and `sind enter` opens a `bash -l` login shell
 - `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly (see [Container settings](#container-settings))
-- **sshd** service (enabled) — sind injects authorized_keys at runtime. The image contains no SSH host keys: each container generates its ed25519 host key on its first boot (see [SSH setup](#ssh-setup))
+- **sshd** service (enabled) and `ssh-keyscan` — sind injects authorized_keys at runtime and reads the node's host key with `ssh-keyscan`. On RHEL-family images, `ssh-keyscan` is in `openssh-clients`, which `openssh-server` does not pull in. The image contains no SSH host keys: each container generates its ed25519 host key on its first boot (see [SSH setup](#ssh-setup))
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
@@ -97,9 +98,9 @@ Custom images must provide the following:
 
 | Role | Additional requirements |
 |------|------------------------|
-| controller | slurmctld installed, **not enabled** |
+| controller | slurmctld installed, **not enabled**; `/var/spool/slurmctld`, the `StateSaveLocation` sind sets, owned by the `slurm` user: slurmctld runs as `slurm` and cannot create it, and with a [backup controller]({{< relref "/configuration/node-definitions#backup-controller" >}}) the shared state volume takes its owner from it |
 | db | mariadb-server (MariaDB 10.4 or later, whose `unix_socket` authentication sind uses for slurmdbd's `slurm` account) with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd runs as the OS user `slurm`; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user, which can write `/var/log/slurm` |
-| worker | slurmd installed, **not enabled** |
+| worker | slurmd installed, **not enabled**; Slurm's `cgroup/v2` plugin (`cgroup_v2.so`, which Slurm builds only when it finds the dbus-1 development files and the kernel's `linux/bpf.h`): the generated `cgroup.conf` sets `CgroupPlugin=autodetect`, which loads it on the cgroup v2 hosts sind requires, and without the plugin slurmd does not start |
 | api | slurmrestd with its systemd unit, installed, **not enabled**: Slurm built with an HTTP parser (llhttp from Slurm 26.05 on) and `--with-jwt`; the unit runs slurmrestd as a user other than root and SlurmUser (Slurm's unit: `slurmrestd`) and listens on port 6820. sind checks for slurmrestd and the unit before it starts it, and adds a drop-in to the unit that sets `SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files`, as the container denies slurmrestd's `unshare` |
 | submitter | Slurm client tools only |
 
@@ -129,7 +130,7 @@ On every node, journald must write a persistent journal to `/var/log/journal` (t
 
 ### Container settings
 
-The image must use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal) and declare the shared volumes. sind replaces the entrypoint of node containers, so `CMD` only matters when the image runs outside sind:
+The image must use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal). The official image also declares the shared volumes, which sind does not need. sind replaces the entrypoint of node containers, so `CMD` only matters when the image runs outside sind:
 
 ```dockerfile
 VOLUME ["/etc/slurm", "/etc/munge", "/data"]
@@ -170,7 +171,7 @@ Root must be able to read `/etc/shadow` as its owner, without `CAP_DAC_OVERRIDE`
 RUN chmod 0400 /etc/shadow /etc/gshadow
 ```
 
-On login, sshd's PAM account check (`pam_unix`) runs `unix_chkpwd` to read root's shadow entry. On nodes with `securityOpt: [apparmor=unconfined]`, AppArmor attaches the host's `unix-chkpwd` profile (shipped by Ubuntu 24.04, for example, including GitHub's `ubuntu-latest` runners) to that binary. The profile denies `CAP_DAC_OVERRIDE`, so with mode `0000` the check fails and `sind ssh` into those nodes ends with `Connection closed`. Nodes on Docker's default AppArmor profile are not affected.
+On login, sshd's PAM account check (`pam_unix`) runs `unix_chkpwd` to read root's shadow entry. On nodes with `securityOpt: [apparmor=unconfined]`, AppArmor attaches the host's `unix-chkpwd` profile (shipped by Ubuntu 24.04, for example, including GitHub's `ubuntu-24.04` runners) to that binary. The profile denies `CAP_DAC_OVERRIDE`, so with mode `0000` the check fails and `sind ssh` into those nodes ends with `Connection closed`. Nodes on Docker's default AppArmor profile are not affected.
 
 ### Masked systemd units
 

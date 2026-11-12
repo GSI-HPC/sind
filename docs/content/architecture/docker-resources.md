@@ -40,7 +40,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 
-The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client and `bash` it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
+The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
 
 ## Monitoring stack
 

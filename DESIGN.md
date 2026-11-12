@@ -1509,7 +1509,7 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
-The mesh images do not follow `defaults.image`: the relay needs the `ssh` client and `bash` of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
+The mesh images do not follow `defaults.image`: the relay needs the `ssh` client of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
 
 ### Monitoring Stack
 
@@ -2129,8 +2129,10 @@ Custom images must provide:
 
 **All roles:**
 - systemd as init at `/sbin/init`, and `/bin/sh`: sind starts each node with its own `/bin/sh` entrypoint, which execs `/sbin/init` (see Container Startup), so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
+- `bash` with its `/dev/tcp` redirection, which the readiness checks run on every node (see Readiness Checks) and `sind enter` opens (`bash -l`)
 - `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly
 - sshd service (enabled, sind injects authorized_keys at runtime), with no host keys in the image: each container generates its ed25519 host key on first boot (on RHEL-family images `sshd-keygen@.service` does), so nodes do not share the key sind pins
+- `ssh-keyscan`, which sind runs on every node to read the host key it pins (on RHEL-family images in `openssh-clients`, which `openssh-server` does not pull in)
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (e.g. `0400 root:root`; Rocky's default `0000` is not). On nodes with `apparmor=unconfined`, the host's `unix-chkpwd` AppArmor profile (e.g. Ubuntu 24.04) denies that capability, and sshd's `pam_unix` account check would refuse root
 - munge service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
@@ -2141,9 +2143,9 @@ Custom images must provide:
 
 | Role | Additional Requirements |
 |------|------------------------|
-| controller | slurmctld (installed, not enabled) |
+| controller | slurmctld (installed, not enabled) and `/var/spool/slurmctld` (`StateSaveLocation`) owned by `slurm`: slurmctld runs as SlurmUser and cannot create it, and a backup pair's state volume is seeded from it |
 | db | mariadb-server (MariaDB 10.4 or later, for the built-in `unix_socket` authentication) with the `mysql` client, root access to MariaDB over its local socket without a password, slurmdbd (installed, not enabled) with a unit that creates `/run/slurmdbd` for the `slurm` user, and `/var/log/slurm` writable by it |
-| worker | slurmd (installed, not enabled) |
+| worker | slurmd (installed, not enabled) and Slurm's `cgroup/v2` plugin (`cgroup_v2.so`, built only when configure finds the dbus-1 development files and `linux/bpf.h`): slurmd loads it at start through `CgroupPlugin=autodetect` and exits without it |
 | api | slurmrestd (Slurm built with an HTTP parser, llhttp from 26.05 on, and `--with-jwt`) with its systemd unit, installed but not enabled, running it as a user other than root and SlurmUser (Slurm's unit: `slurmrestd`) and listening on port 6820; sind adds a drop-in that sets `SLURMRESTD_SECURITY` (see API Node) |
 | submitter | Slurm client tools only |
 
