@@ -67,9 +67,11 @@ func findBridgeInterface(networkID string) (string, error) {
 // configureDNS sets up systemd-resolved to route queries for the realm's DNS
 // zone to the mesh DNS container via the mesh bridge interface.
 //
-// For the default realm, search domains are added for short-name resolution:
-//   - <realm>.sind (enables "controller.default" → FQDN)
-//   - default.<realm>.sind (enables bare "controller" → FQDN for default cluster)
+// In every realm it sets two domains on the link:
+//   - ~<realm>.sind, a routing domain: queries for *.<realm>.sind go to the
+//     mesh DNS, and the link does not become a default route
+//   - default.<realm>.sind, a search domain: a bare "controller" resolves to
+//     the default cluster's controller
 func (m *Manager) configureDNS(ctx context.Context, iface, dnsIP string) error {
 	if _, _, err := m.Exec.Run(ctx, "resolvectl", "dns", iface, dnsIP); err != nil {
 		return fmt.Errorf("setting DNS server on %s: %w", iface, err)
