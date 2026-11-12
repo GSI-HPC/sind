@@ -9,7 +9,7 @@ webuiNote: "A CI job runs sind without a browser. The steps on this page are for
 
 ## GitHub Action
 
-The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs on standard GitHub-hosted Ubuntu runners, x64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`), with the runner's Docker daemon — no privileged containers or custom runner images required.
+The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs on standard GitHub-hosted Ubuntu runners, x64 (`ubuntu-latest`) and ARM64 (`ubuntu-26.04-arm`), with the runner's Docker daemon — no privileged containers or custom runner images required.
 
 sind itself needs no sudo, but the runner must allow enough inotify instances. The Ubuntu 26.04 image, which `ubuntu-latest` runs, allows 128 per user. About 10 nodes on the runner, in one cluster or in several, use them up, and the next node containers exit with code 255 (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})). sind-action v2.3.0 and later (the `v2` tag) raise `fs.inotify.max_user_instances` to 8192 with the runner's passwordless `sudo` before they create the clusters. On a runner without passwordless `sudo`, the action only warns, so raise the limit on that host yourself. Without sind-action, or with an older release of it, run `sudo sysctl -w fs.inotify.max_user_instances=8192` first.
 

@@ -159,7 +159,7 @@ jobs:
   integration-test-image:
     name: Integration Test (${{ matrix.target }}, ${{ matrix.platforms }})
     needs: image-targets
-    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       # dorny/test-reporter publishes the results as a check run.

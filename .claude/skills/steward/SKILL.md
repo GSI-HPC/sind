@@ -48,7 +48,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
 | Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |
-| Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-24.04-arm` for linux/arm64): raises `fs.inotify.max_user_instances`, `sind doctor` (its inotify check must pass too), builds that node image with `docker buildx bake` (BuildKit from `mirror.gcr.io`), pulls the Docker Hub images the tests run from `mirror.gcr.io`, then `make test-integration` |
+| Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-26.04-arm` for linux/arm64): raises `fs.inotify.max_user_instances`, `sind doctor` (its inotify check must pass too), builds that node image with `docker buildx bake` (BuildKit from `mirror.gcr.io`), pulls the Docker Hub images the tests run from `mirror.gcr.io`, then `make test-integration` |
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
 | Build | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
 
