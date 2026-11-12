@@ -5,6 +5,14 @@ description: "Prerequisites and installation instructions"
 toc: true
 ---
 
+## Prerequisites
+
+- Linux on x86-64 or ARM64, with the unified cgroup v2 hierarchy at `/sys/fs/cgroup`, mounted with `nsdelegate`.
+- Docker Engine 28.0 or later on that host, rootful and without `userns-remap`, with a Docker CLI of the same release.
+- For 10 or more nodes on the host, in one cluster or in several: `fs.inotify.max_user_instances` of at least 1024. The kernel's default is 128, and raising it takes root (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})).
+
+`sind doctor` checks the Docker Engine, the daemon, cgroup v2 with `nsdelegate` and the inotify limit (see [Verify](#verify)).
+
 ## Install
 
 {{< tabs >}}
@@ -68,13 +76,13 @@ go install github.com/GSI-HPC/sind/cmd/sind@latest
 
 ## Verify
 
-Check that sind is installed and your system meets all prerequisites:
+Check that sind is installed and your system meets the prerequisites:
 
 ```bash
 sind doctor
 ```
 
-This verifies Docker Engine version, Docker daemon mode, where the daemon runs and cgroup configuration, and prints fix instructions if anything is missing.
+This checks the Docker Engine version, the daemon's mode, where the daemon runs, the cgroup configuration, the inotify limit and, when systemd-resolved runs, the polkit rule for host DNS, and prints fix instructions if anything is missing. The Docker host, inotify and DNS policy checks only warn.
 
 sind runs on the Docker host itself. Docker Desktop, whose daemon runs in a VM, and a daemon on another host, through `DOCKER_HOST` or a `docker context`, are not supported; `sind doctor` warns about them (see [Docker host]({{< relref "/usage/diagnostics#docker-host" >}})).
 

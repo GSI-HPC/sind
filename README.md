@@ -32,7 +32,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 - **Connect outside containers** — attach containers such as [kind nodes](https://gsi-hpc.github.io/sind/guides/kind/) to a realm's mesh and cluster networks
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
 - **Power cycle simulation** — shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios
-- **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library
+- **Minimal dependencies** — just Docker Engine on a Linux host and a sind container image; usable as both a CLI tool and a Go library
 - **AI-ready via MCP** — built-in [MCP](https://modelcontextprotocol.io/) server lets AI assistants manage your Slurm clusters
 
 ## Quick start
