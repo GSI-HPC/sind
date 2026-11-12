@@ -2265,7 +2265,7 @@ sind delivers a working starter configuration. The `slurm` config key allows ext
 
 Users may:
 - Use `slurm.main`, `slurm.cgroup`, etc. to extend config at creation time
-- Edit config files directly after creation (sind does not modify them after creation)
+- Edit config files directly after creation (sind changes none of them afterwards except `sind-nodes.conf`, which `sind create worker` and `sind delete worker` rewrite)
 - Add additional include files for custom configuration
 - Replace the entire configuration (but `sind create worker` will then fail for managed nodes)
 
