@@ -37,6 +37,12 @@ const (
 	// changes something. app.js adds it to the requests of htmx. A form
 	// that a browser sends without script carries it in the field csrf.
 	csrfHeader = "X-Sind-CSRF"
+	// maxBody caps the body of a request that changes something. The
+	// largest form is New cluster's, whose YAML and lines of each Slurm
+	// config file may have actMaxText each. act.js posts its draft as one
+	// field, so that the form is encoded twice and a byte of a value takes
+	// up to five: 4 MiB holds that, with room for the other fields.
+	maxBody = 4 << 20
 )
 
 // openHint is what a refusal adds for the user. It never says what the token
@@ -116,7 +122,7 @@ func newServer(ctx context.Context, c serverConfig) (*Server, error) {
 		keepAlive: sse.DefaultKeepAlive,
 	}
 	if s.sessions, err = session.New(session.Options{
-		Token: c.Token, CookiePrefix: cookiePrefix, CSRFHeader: csrfHeader, Refuse: s.refuse,
+		Token: c.Token, CookiePrefix: cookiePrefix, CSRFHeader: csrfHeader, MaxBody: maxBody, Refuse: s.refuse,
 	}); err != nil {
 		return nil, err
 	}
