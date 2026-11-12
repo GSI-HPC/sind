@@ -37,7 +37,7 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 lint-docs: ## Lint documentation markdown files
-	npx markdownlint-cli2 "docs/content/**/*.md"
+	npx markdownlint-cli2@0.24.0 "docs/content/**/*.md"
 
 docs-shots: build ## Take the sind ui screenshots of the docs into docs/static/ui-shots (needs Chromium)
 	cd tools/screenshots && go run . -sind ../../$(BINARY) -out ../../docs/static/ui-shots

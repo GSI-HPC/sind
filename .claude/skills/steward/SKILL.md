@@ -77,7 +77,8 @@ CI runs for every pull request and every push to `main` and `next`.
   module in `docs/go.mod`: `hugo mod get github.com/imfing/hextra@<version>` in `docs/`.
   Dependabot updates only the Go module at the root, so the Go module of
   `tools/screenshots`, the npm packages of `video/` (`package.json`, `package-lock.json`)
-  and the pins of `video/voice/requirements.txt` are bumped by hand too.
+  and the pins of `video/voice/requirements.txt` are bumped by hand too, as is the
+  markdownlint-cli2 version that `make lint-docs` runs (`Makefile`).
 - A bump of go-clikit or go-nodeset, by Dependabot or by hand, also updates their
   version where `DESIGN.md` and `docs/content/` name it, as in the links to their docs.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or
