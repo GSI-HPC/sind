@@ -553,7 +553,7 @@ worker-0.dev    worker      172.19.0.3  running  munge ✓ slurmd ✓ sshd ✓
 worker-1.dev    worker      172.19.0.4  running  munge ✓ slurmd ✗ sshd ✓
 ```
 
-`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
+`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), or while its container runs when Grafana, which runs the checks, does not, and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
 
 ```
 MESH SERVICES
@@ -575,7 +575,7 @@ MOUNT             SOURCE                   TYPE      STATUS
 
 A monitored cluster lists the journal mount under `MOUNTS`: the realm's journal volume, and the cluster's directory in it, where each node mounts its own (`subpath` in the JSON output, `dev`). `docker inspect`'s top-level `Mounts` hide a volume's subpath, so sind reads it from the nodes' `HostConfig.Mounts`.
 
-The data row (`/data`, or the configured mount point) shows what Docker mounts there on the nodes, as `docker inspect` reports it: the bind-mounted host directory or the volume. Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
+The data row (`/data`, or the configured mount point) shows what Docker mounts there on the nodes, as `docker inspect` reports it: the bind-mounted host directory or the volume. Clusters with a backup controller add `/var/spool/slurmctld`, the state volume `<realm>-<cluster>-state`, to `MOUNTS`. Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
 `SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, mariadb and slurmdbd on a db node, or slurmrestd on an api node, where sind manages Slurm. Unmanaged nodes (unmanaged workers, db and api nodes, and every node of an unmanaged cluster) list only munge and sshd. With identity `clientIds` no node lists munge, and the submitter lists sackd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
@@ -591,7 +591,7 @@ worker-0.dev           worker      -        172.19.0.4  running  munge ✓ slurm
 
 The `STATUS` of a node, in `sind get cluster`, `sind get node` and `sind get nodes`, and its JSON `status`, map its container's state (`containerStateToState`): `running`, `stopped` (exited, dead or created), `paused`, or `unknown` for another state, such as `restarting`, which the header counts under `S`. The cluster's state in the header and in `sind get clusters` uses the same words, plus `mixed` and `empty`.
 
-`sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN (`NODE.CLUSTER.REALM.sind`) is rejected — use the bare short name or the `NODE.CLUSTER` form:
+`sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (the cluster defaults to `SIND_CLUSTER`, else "default"). Passing a full DNS FQDN (`NODE.CLUSTER.REALM.sind`) is rejected — use the bare short name or the `NODE.CLUSTER` form:
 
 ```
 $ sind get node controller.dev

@@ -178,7 +178,7 @@ A development build reports the output of `git describe`, such as `0.16.1-3-gabc
 
 ## Verbose logging
 
-By default, sind logs only errors. Besides them it shows only command output and, on a terminal, the [progress]({{< relref "/usage/progress" >}}) of `create`, `delete` and `power`. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
+By default, sind logs only errors. Besides them it shows only command output and, on a terminal, the [progress]({{< relref "/usage/progress" >}}) of `create`, `delete`, `connect`, `disconnect` and `power`. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
 
 ```bash
 sind -v  create cluster          # info: phase summaries
@@ -195,7 +195,7 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 
 [`SIND_VERBOSE`]({{< relref "/usage/environment" >}}) gives the number of `-v` when the command line has none: `export SIND_VERBOSE=2` logs every command as `-vv` does.
 
-Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete` and `power` go above their progress display, never into it.
+Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete`, `connect`, `disconnect` and `power` go above their progress display, never into it.
 
 ```bash
 # Capture logs while piping output
@@ -218,7 +218,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
-00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd,munge
+00:13:30.623 DEBU starting readiness probes (event-driven) node=sind-dev-controller probes=container,systemd,sshd,munge
 00:13:31.252 DEBU all probes passed node=sind-dev-controller
 00:13:31.474 INFO nodes ready count=3
 00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
