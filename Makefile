@@ -57,7 +57,7 @@ check-coverage: ## Check coverage thresholds (requires go-test-coverage)
 	go-test-coverage --config .testcoverage.yml
 
 image: ## Build the node images (one per Slurm release line) for the host platform via docker buildx bake
-	docker buildx bake --set '*.platform=local'
+	docker buildx bake --allow=network.host --set '*.platform=local'
 
 clean: ## Remove build artifacts
 	rm -f sind-* coverage.out coverage.html

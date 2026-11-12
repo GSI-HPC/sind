@@ -68,11 +68,13 @@ sind enables the appropriate Slurm services based on node role once every node i
 Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root. `SLURM_RELEASES` in `docker-bake.hcl` lists the Slurm release and tarball checksum of each image, and each entry becomes a bake target named `slurm-<YY>-<MM>`:
 
 ```bash
-make image                                                # all release lines
-docker buildx bake --set '*.platform=local' slurm-25-11   # a single release line
+make image                                                                     # all release lines
+docker buildx bake --allow=network.host --set '*.platform=local' slurm-25-11   # a single release line
 ```
 
 Both build for the host platform only. Without `--set '*.platform=local'`, bake builds every platform in `docker-bake.hcl`, which needs a builder that supports multi-platform builds, and compiles the whole stack under QEMU emulation for the other architecture, which takes hours. CI builds each platform on a native runner instead.
+
+The targets use the host network (`network = "host"` in `docker-bake.hcl`), which bake grants only with `--allow=network.host`. Without the flag, bake prompts for it in a terminal and fails elsewhere, as in a script. `make image` passes it.
 
 The Dockerfile has no default Slurm version. To build it without bake, pass `--build-arg SLURM_VERSION=<version>` and `--build-arg SLURM_SHA256=<checksum>`.
 

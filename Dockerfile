@@ -31,7 +31,7 @@
 #   /data       — user-facing shared data directory
 #
 # Build (one image per Slurm release line in docker-bake.hcl):
-#   docker buildx bake
+#   docker buildx bake --allow=network.host --set '*.platform=local'
 
 # ==============================================================================
 # Stage: builder-base — Rocky 10 with common build toolchain
