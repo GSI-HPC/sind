@@ -103,7 +103,7 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 
 ### Host path storage
 
-With `dataStorage.type: hostPath`, or by default through `sind create cluster --data .` when the config sets no `dataStorage`, the data volume is replaced with a bind mount:
+With `dataStorage.type: hostPath`, or a `hostPath` without `type`, the data volume is replaced with a bind mount. If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory:
 
 ```
 --mount type=bind,source=/path/on/host,target=/data

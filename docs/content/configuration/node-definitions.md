@@ -68,6 +68,8 @@ By default, workers are **managed**: sind starts slurmd and adds the node to `si
 
 ```yaml
 nodes:
+  - role: controller
+
   - role: worker
     count: 3              # 3 managed workers
 
@@ -139,7 +141,7 @@ nodes:
 
 - The container is `<realm>-<cluster>-api`, reachable as `api` inside the cluster. `count` and `backupController` are not valid on it. It needs a Slurm 26.05 image: the 25.11 images have no slurmrestd, and sind fails the create with the image's name.
 - slurmrestd cannot unshare namespaces in a container, which it does by default at startup: sind adds the systemd drop-in `/etc/systemd/system/slurmrestd.service.d/sind.conf`, which sets `SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files`.
-- slurmrestd listens on port 6820: `http://api.<cluster>.<realm>.sind:6820`, e.g. `http://api.default.sind.sind:6820/slurm/v0.0.45/ping/`, from the host or any container on the cluster network. sind publishes no host port.
+- slurmrestd listens on port 6820: `http://api.<cluster>.<realm>.sind:6820`, e.g. `http://api.default.sind.sind:6820/slurm/v0.0.45/ping/`, from any container on the cluster network, and from the host when sind could point systemd-resolved at the realm's DNS (see [Host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}})); otherwise use the node's address from `sind get node api -o json`. sind publishes no host port.
 - sind writes `jwt_hs256.key` (owned by `slurm`, mode `0600`) to `/etc/slurm` and adds `AuthAltTypes=auth/jwt` and `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key` to `slurm.conf`, and to `slurmdbd.conf` with a db node, each unless the `main` (or `slurmdbd`) section sets it. With identity `clientIds`, `AuthAltParameters` also lists `use_jwt_client_ids`.
 - Each request needs a token: `sind exec dev -- scontrol token username=root` prints one for root. See [REST API]({{< relref "/guides/rest-api" >}}) for tokens, users and identity modes.
 - `sind get cluster` and `sind get node` report `slurmrestd` for the api node.
