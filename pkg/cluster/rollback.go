@@ -11,11 +11,11 @@ import (
 // startRollback starts the rollback of a failed Create or WorkerAdd, as the
 // progress step "rollback", so that a display shows what runs while the
 // command undoes its work. It returns the context the rollback runs under,
-// which ignores the cancellation of ctx and which rollbackTimeout bounds,
+// which ignores the cancellation of ctx and which RollbackTimeout bounds,
 // and the function that ends the step with the rollback's own error: what
 // the rollback could not undo, which the command's error carries already.
 func startRollback(ctx context.Context) (context.Context, func(error)) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), RollbackTimeout)
 	ctx, step := progress.Start(ctx, progress.KindStep, "rollback")
 	return ctx, func(err error) {
 		if err != nil {
@@ -37,5 +37,5 @@ func (e rollbackFailure) Unwrap() error { return e.error }
 
 // ProgressClass is the class of the rollback's error without a fallback:
 // the target's, unless the error says otherwise, as one that ran out of
-// rollbackTimeout says it timed out.
+// RollbackTimeout says it timed out.
 func (e rollbackFailure) ProgressClass() progress.Class { return progress.Classify(e.error, nil) }
