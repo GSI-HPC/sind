@@ -181,8 +181,11 @@ jobs:
       # The test clusters that run in parallel take more: systemd in the
       # next node container then fails to start, and the container exits
       # with code 255 (docs/content/troubleshooting/container-exit-255.md).
+      # It prints the runner's limit first, as the docs cite it.
       - name: Raise the inotify instance limit
-        run: sudo sysctl -w fs.inotify.max_user_instances=8192
+        run: |
+          sysctl fs.inotify.max_user_instances
+          sudo sysctl -w fs.inotify.max_user_instances=8192
 
       # The integration tests skip when the host lacks sind's prerequisites;
       # fail here instead so a runner change cannot turn this job green.
@@ -246,6 +249,11 @@ jobs:
             docker pull "mirror.gcr.io/$path"
             docker tag "mirror.gcr.io/$path" "$image"
           done
+
+      # The CVMFS guide (docs/content/guides/cvmfs.md) cites the hard limit
+      # on open files in a container on GitHub's runners.
+      - name: Show the open files limit of a container
+        run: docker run --rm busybox:latest sh -c 'echo "soft $(ulimit -Sn), hard $(ulimit -Hn)"'
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.13.0
