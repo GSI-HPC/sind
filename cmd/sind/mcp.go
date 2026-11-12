@@ -29,7 +29,8 @@ const mcpStreamHost = "127.0.0.1"
 
 // mcpExcluded lists the commands, by path below the root, that are not
 // offered as MCP tools although they could run: interactive ones, which
-// have no terminal under MCP, and ones that print a secret.
+// have no terminal under MCP, ones that run until interrupted, and ones
+// that print a secret.
 var mcpExcluded = map[string]bool{
 	"enter":               true, // interactive shell
 	"ssh":                 true, // interactive shell or remote command without a terminal

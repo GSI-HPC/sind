@@ -206,7 +206,7 @@ The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `
 
 5. **Implement the operation** in `pkg/cluster/` (not in `cmd/sind/`)
 6. **Show its progress** if it changes clusters and asks nothing: wrap `RunE` with `withProgress(...)`, and have the operation report its work as progress spans (see [Progress spans](#progress-spans))
-7. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
+7. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive, runs until interrupted or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
 8. **Write tests** for both the CLI layer and the cluster operation
 
 The CLI layer should be thin — argument parsing, flag handling, and output formatting. Business logic belongs in `pkg/cluster/`.
