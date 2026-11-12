@@ -140,6 +140,7 @@ func (c *Cluster) validateDataMountPath() error {
 		{"/home", "the users' home directories", len(c.Users) > 0},
 		{"/cvmfs", "CVMFS", c.Storage.CVMFS},
 		{"/var/spool/slurmctld", "the controllers' shared state", c.HasBackupController()},
+		{"/var/log/journal", "their journal", c.Monitoring},
 	} {
 		if m.used && mountPath == m.path {
 			return fmt.Errorf("storage.dataStorage.mountPath %s is where the nodes mount %s", c.Storage.DataStorage.MountPath, m.what)
