@@ -36,8 +36,8 @@ When a step is done, the tree leaves one line for it above itself, such as `✓ 
 - A command that fails, or that you interrupt, also leaves a summary line, as it does under `--progress counter` and `plain`, then the error line:
 
   ```text
-  sind: ✗ create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
-  12:00:00.000 ERRO cluster "dev" not ready within 12s: ...
+  sind: ✗ create cluster: failed in 38s: 7 ok, 1 failed, 2 canceled, 1.2 GiB at 32.3 MiB/s
+  12:00:34.839 ERRO cluster "dev" not ready within 12s: ...
   ```
 
 The tree draws nothing in the first second, so a command done by then leaves nothing on the terminal, as before. A step that ends at once leaves no line, and `mesh` and `preflight`, which sind usually finishes quickly, show only once they have run for a second, and leave a line only when they took that long or failed. Each docker command shows under the step or node it runs for once it has taken a second, such as `worker-1  12.0s  docker exec`.
@@ -62,8 +62,8 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-l
 
 | Step | Targets | What it does |
 |------|---------|--------------|
-| `mesh` | `network`, `dns`, `volume`, `relay` | sets up the realm's [mesh]({{< relref "/architecture/networking" >}}); a part in place is skipped, and the rows of `dns` and `relay` show the last line of the pull of their image. A mesh in place leaves no line |
-| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote and, in the event log, the bytes downloaded of the image's size (see [Image pulls](#image-pulls)). No step when nothing is pulled |
+| `mesh` | `network`, `dns`, `volume`, `relay` | sets up the realm's [mesh]({{< relref "/architecture/networking" >}}); a part in place is skipped, and the rows of `dns` and `relay` show the last line and the bytes of the pull of their image. A mesh in place leaves no line |
+| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote and the bytes downloaded of the image's size (see [Image pulls](#image-pulls)). No step when nothing is pulled |
 | `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
 | `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
 | `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
@@ -79,14 +79,14 @@ A creation on a host that had neither the mesh nor the images, while the nodes b
 
 ```text
 $ sind create cluster --config dev.yaml
-✓ mesh  12s  4 ok
-✓ pull images  9.4s  2 ok
+✓ mesh  12s  4 ok  426 MiB at 35.5 MiB/s
+✓ pull images  9.4s  2 ok  812 MiB at 86.4 MiB/s
 ✓ preflight  10s
-create cluster · 0:25.3
+create cluster · 0:25.5
   nodes  0/6 · 6 running
     ▸ controller  2.4s/5m  ready munge
     ▸ db  2.4s/5m  ready sshd
-    ▸ worker-0  2.1s  setup
+    ▸ worker-0  2.8s  setup
     ▸ worker-1  2.4s/5m  ready systemd
     ▸ worker-2  2.4s/5m  ready systemd
     ▸ worker-3  2.4s/5m  ready sshd
@@ -96,8 +96,8 @@ and once it is done:
 
 ```text
 $ sind create cluster --config dev.yaml
-✓ mesh  12s  4 ok
-✓ pull images  9.4s  2 ok
+✓ mesh  12s  4 ok  426 MiB at 35.5 MiB/s
+✓ pull images  9.4s  2 ok  812 MiB at 86.4 MiB/s
 ✓ preflight  10s
 ✓ nodes  6.3s  6 ok
 ✓ mesh registration  0.4s
@@ -105,17 +105,20 @@ $ sind create cluster --config dev.yaml
 ✓ accounts  1.7s
 ```
 
-The same creation with `--wait 12s`, where `worker-2` does not become ready in time and the two nodes still booting are stopped. A failure row writes the node's own name as `{}`, so that nodes that failed the same way share one row:
+The same creation with `--wait 12s`, where `worker-2` does not become ready in time and the two nodes still booting are stopped. A failure row writes the node's own name as `{}`, so that nodes that failed the same way share one row. The rollback removes the nodes, the network and the volumes in steps of its own. The summary line counts each node, image and volume once, by the worst way it ended:
 
 ```text
 $ sind create cluster --config dev.yaml --wait 12s
-✓ mesh  12s  4 ok
-✓ pull images  9.4s  2 ok
+✓ mesh  12s  4 ok  426 MiB at 35.5 MiB/s
+✓ pull images  9.4s  2 ok  812 MiB at 86.4 MiB/s
 ✓ preflight  10s
 ✗ nodes  12s  3 ok, 1 failed, 2 canceled
   ✗ worker-2  timeout: node {}: timed out; last probe error: probe munge: munge not ready: activating
+✓ rollback › nodes  0.9s  6 ok
+✓ rollback › network  0.3s
+✓ rollback › volumes  0.2s  2 ok
 ✓ rollback  3.1s
-sind: ✗ create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
+sind: ✗ create cluster: failed in 38s: 7 ok, 1 failed, 2 canceled, 1.2 GiB at 32.3 MiB/s
 12:00:34.839 ERRO cluster "dev" not ready within 12s: node worker-2: timed out; last probe error: probe munge: munge not ready: activating
 ```
 
@@ -195,7 +198,7 @@ sind: SIND_PROGRESS is "plian"; it takes one of auto, tty, counter, plain, none;
 ```text
 $ sind create cluster --config dev.yaml --progress plain 2>&1 | tee create.log
 [0:12] create cluster › pull images: start, 2 targets
-[0:21] create cluster › pull images: done in 9.4s: 2 ok
+[0:21] create cluster › pull images: done in 9.4s: 2 ok, 812 MiB at 86.4 MiB/s
 [0:22] create cluster › nodes: start, 6 targets
 [0:23] create cluster › nodes › worker-0 › ready: waiting 5m0s
 [0:23] create cluster › nodes › controller › ready: waiting 5m0s
@@ -215,7 +218,7 @@ The waits `ready` say how much of the `--wait` limit they have left. The parts o
 
 ## Image pulls
 
-sind runs `docker pull` with its standard output on a pseudo-terminal of 100 columns, as docker writes the bytes each layer has downloaded only to a terminal. sind turns what docker draws there into plain lines, such as `2fbc8ae9b1d6: Downloading  12.3MB/45.6MB 3s`, which the row of the image shows, and counts the bytes: the target of an image reports, as work in `bytes`, the bytes downloaded out of the size of the layers to download, those the daemon has already (`Already exists`) left out. docker tells the size of a layer only once it starts to download it, a few layers at a time, so the size of the layers that still wait is guessed from the mean of those known; when a guess turns out short, the size is held down until the bytes catch up, so that the share done never goes back. The display draws the bytes with their rate, and the event log holds them as `amount`, `size` and `unit` on the target (`advance` events, at most four a second), never the text of a line. Where sind cannot open a pseudo-terminal, docker writes only a line for each change of a layer (`Pulling fs layer`, `Download complete`, `Pull complete`, `Already exists`), and the pull is counted in `items`: the layers that are done out of those docker has told of, from the first layer that is complete. A pull that finds the image there and so writes no layer is one item, done. Lines that sind does not know are ignored. Only `pull images` counts the work of a pull: the pulls that the `docker create` of the mesh's containers makes show their last line alone.
+sind runs `docker pull` with its standard output on a pseudo-terminal of 100 columns, as docker writes the bytes each layer has downloaded only to a terminal. sind turns what docker draws there into plain lines, such as `2fbc8ae9b1d6: Downloading  12.3MB/45.6MB 3s`, which the row of the image shows, and counts the bytes: the target of an image reports, as work in `bytes`, the bytes downloaded out of the size of the layers to download, those the daemon has already (`Already exists`) left out. docker tells the size of a layer only once it starts to download it, a few layers at a time, so the size of the layers that still wait is guessed from the mean of those known; when a guess turns out short, the size is held down until the bytes catch up, so that the share done never goes back. The display draws the bytes with their rate, and the event log holds them as `amount`, `size` and `unit` on the target (`advance` events, at most four a second), never the text of a line. Where sind cannot open a pseudo-terminal, docker writes only a line for each change of a layer (`Pulling fs layer`, `Download complete`, `Pull complete`, `Already exists`), and the pull is counted in `items`: the layers that are done out of those docker has told of, from the first layer that is complete. A pull that finds the image there and so writes no layer is one item, done. Lines that sind does not know are ignored. The mesh counts the pulls of its images the same way, in the rows of `dns` and `relay`: sind pulls the image of the DNS container and of the relay with `docker pull` before their `docker create`, when the daemon does not have it or with `--pull`.
 
 ## Event log
 
