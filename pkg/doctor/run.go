@@ -63,7 +63,9 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 	}
 
 	// Where the daemon runs: the checks below that read this machine
-	// describe the Docker host only when the daemon runs here.
+	// describe the Docker host only when the daemon runs here, not when it
+	// runs elsewhere or LocateDaemon cannot tell, as without a docker CLI
+	// and DOCKER_HOST.
 	log := sindlog.From(ctx)
 	loc, locErr := LocateDaemon(ctx, client, fs, info)
 	local := locErr == nil && loc.Local()
@@ -75,7 +77,8 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 	checks = append(checks, cgroupCheck(ctx, client, fs, info, local))
 
 	// Advisory: enough inotify instances for large clusters. The limit is
-	// the Docker host's, so the check is left out for a daemon elsewhere.
+	// the Docker host's, so the check is left out unless the daemon runs
+	// here.
 	if n, ok := InotifyInstances(fs); ok && local {
 		inotify := clidoctor.Check{Name: "inotify", Status: clidoctor.StatusOK,
 			Detail: fmt.Sprintf("max_user_instances %d (>= %d)", n, MinInotifyInstances)}
@@ -92,6 +95,9 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 	// its own host.
 	if mgr.ResolvedActive(ctx) {
 		switch {
+		case locErr != nil:
+			checks = append(checks, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning,
+				Detail: "not checked: sind cannot tell where the Docker daemon runs (optional)"})
 		case !local:
 			checks = append(checks, clidoctor.Check{Name: "DNS policy", Status: clidoctor.StatusWarning,
 				Detail: "not available: the Docker daemon does not run on this machine (optional)"})
