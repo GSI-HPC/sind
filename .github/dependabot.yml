@@ -1,13 +1,30 @@
 version: 2
 updates:
+  # The Hextra theme in docs/go.mod is left out: Dependabot runs
+  # `go mod tidy`, which drops the requirement of a Hugo module, as no Go
+  # code imports it. Bump it by hand (.claude/skills/steward).
   - package-ecosystem: gomod
-    directory: /
+    directories:
+      - /
+      - /tools/screenshots
     target-branch: next
     schedule:
       interval: weekly
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: next
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /video
+    target-branch: next
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: /video/voice
     target-branch: next
     schedule:
       interval: weekly

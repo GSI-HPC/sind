@@ -73,12 +73,12 @@ CI runs for every pull request and every push to `main` and `next`.
   `docker-bake.hcl`.
 - The workflows pin every action to a commit SHA, which Dependabot updates, and the
   versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo, which it
-  does not: bump those by hand. The Hextra docs theme is a Hugo
-  module in `docs/go.mod`: `hugo mod get github.com/imfing/hextra@<version>` in `docs/`.
-  Dependabot updates only the Go module at the root, so the Go module of
-  `tools/screenshots`, the npm packages of `video/` (`package.json`, `package-lock.json`)
-  and the pins of `video/voice/requirements.txt` are bumped by hand too, as is the
-  markdownlint-cli2 version that `make lint-docs` runs (`Makefile`).
+  does not: bump those by hand. Dependabot also updates the Go modules at the root and
+  in `tools/screenshots`, the npm packages of `video/` and the pins of
+  `video/voice/requirements.txt`, all against `next`. It leaves out the Hextra docs
+  theme, a Hugo module in `docs/go.mod`, because its `go mod tidy` drops the
+  requirement: bump it by hand with `hugo mod get github.com/imfing/hextra@<version>` in
+  `docs/`, as the markdownlint-cli2 version that `make lint-docs` runs (`Makefile`).
 - A bump of go-clikit or go-nodeset, by Dependabot or by hand, also updates their
   version where `DESIGN.md` and `docs/content/` name it, as in the links to their docs.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or
