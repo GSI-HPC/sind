@@ -16,10 +16,10 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 ## Supported Versions
 
 - Slurm 26.05 and 25.11 (one node image per release line)
-- OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
+- OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.22)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 - llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
-- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.20, Prometheus 3.15, Loki 3.7 and Grafana 13.2, pinned in `pkg/observability`
+- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.21, Prometheus 3.16, Loki 3.7 and Grafana 13.3, pinned in `pkg/observability`
 
 ## Overview
 
