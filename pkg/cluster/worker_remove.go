@@ -155,7 +155,7 @@ func removeNodesConf(ctx context.Context, client *docker.Client, controllerName 
 	if err == nil {
 		return nil
 	}
-	if rerr := client.ReplaceFile(context.WithoutCancel(ctx), controllerName, slurm.NodesConfPath, currentConf); rerr != nil {
+	if rerr := replaceNodesConf(ctx, client, controllerName, currentConf); rerr != nil {
 		return errors.Join(err, fmt.Errorf("restoring sind-nodes.conf: %w", rerr))
 	}
 	return err

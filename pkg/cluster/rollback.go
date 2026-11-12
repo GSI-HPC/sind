@@ -6,16 +6,19 @@ import (
 	"context"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/detach"
 )
 
 // startRollback starts the rollback of a failed Create or WorkerAdd, as the
 // progress step "rollback", so that a display shows what runs while the
 // command undoes its work. It returns the context the rollback runs under,
 // which ignores the cancellation of ctx and which RollbackTimeout bounds,
-// and the function that ends the step with the rollback's own error: what
-// the rollback could not undo, which the command's error carries already.
+// the writes that must not be cut short included (internal/detach), and
+// the function that ends the step with the rollback's own error: what the
+// rollback could not undo, which the command's error carries already.
 func startRollback(ctx context.Context) (context.Context, func(error)) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), RollbackTimeout)
+	ctx = detach.Rollback(ctx)
 	ctx, step := progress.Start(ctx, progress.KindStep, "rollback")
 	return ctx, func(err error) {
 		if err != nil {

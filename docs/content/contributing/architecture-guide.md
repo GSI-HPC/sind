@@ -40,6 +40,8 @@ internal/hostname/ DNS label check behind config.CheckName (cluster and realm na
 
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
+internal/detach/   The context of a write that must not be cut short (mesh DNS, known_hosts, sind-nodes.conf): it ignores the caller's cancellation and deadline, but ends with the rollback it runs under
+
 internal/help/     The help texts (words, the actions of sind ui, its pages, how-tos) in embedded YAML: what sind help TOPIC prints and sind ui shows as hint cards, in its help pane and in its jump box; Load checks them
 
 internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fragments, routes, services)
@@ -139,6 +141,7 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 
 ```
 cmd/sind → pkg/cluster → pkg/cmdexec
+                       → internal/detach
                        → internal/envvar
                        → internal/natsort
                        → pkg/config  → internal/hostname
@@ -154,6 +157,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                      → pkg/cmdexec
                                      → pkg/config
                                      → pkg/log
+                                     → internal/detach
                                      → internal/natsort
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
