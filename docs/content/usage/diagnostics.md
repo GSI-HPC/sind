@@ -49,6 +49,7 @@ The results go to stdout, so they can be piped or filtered, with `✓` for a pas
 ```
 ✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
+✓ inotify: max_user_instances 8192 (>= 1024)
 
 Add your user to the docker group, then log in again (or run newgrp docker):
 
@@ -105,7 +106,7 @@ It does not fail `sind doctor`: the detection can be wrong both ways, as a socke
 
 ### Machine-readable output
 
-`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `Docker host`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass or the cgroupv2 check could not read `nsdelegate`) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
+`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `Docker host`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass, or when the cgroupv2 check would read `nsdelegate` in a throwaway container and Docker is not reachable or lacks the default node image) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
 
 ```bash
 sind doctor -o json
