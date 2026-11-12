@@ -911,6 +911,22 @@ func TestBuildConnect_ChecksTheContainer(t *testing.T) {
 	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{{Hostname: "a.ci1.ci.sind"}, {Hostname: "b.ci1.ci.sind"}}})
 	cmd, _ = run("x")
 	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node."}, cmd.Notes)
+	// The names of the monitoring stack are no nodes.
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{
+		{Hostname: "a.ci1.ci.sind"}, {Hostname: "grafana.ci.sind"}, {Hostname: "loki.ci.sind"}, {Hostname: "prometheus.ci.sind"}, {Hostname: "z.ci1.ci.sind"},
+	}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `a.ci1.ci.sind` and the other node."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{
+		{Hostname: "grafana.ci.sind"}, {Hostname: "zeta.ci1.ci.sind"},
+	}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach `zeta.ci1.ci.sind`."}, cmd.Notes)
+	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x, Records: []mesh.DNSRecord{
+		{Hostname: "grafana.ci.sind"}, {Hostname: "prometheus.ci.sind"},
+	}})
+	cmd, _ = run("x")
+	assert.Equal(t, []string{"`x` joins `ci-mesh` and the networks of a, b and c. It can then reach the nodes of realm ci."}, cmd.Notes)
 	st.SetMesh("ci", store.Mesh{Info: &mesh.Info{Network: "ci-mesh"}, Connectable: x})
 	st.SetClusters("ci", nil)
 	cmd, _ = run("x")
