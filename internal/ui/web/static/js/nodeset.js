@@ -36,8 +36,9 @@
   // fold writes node names as one node set: controller,worker-[4-5].
   function fold(names) { return parts(names).join(','); }
 
-  // expand reads a node set as the CLI takes it, such as
-  // controller,worker-[0-3,5]: the names, or null where it is not one.
+  // expand reads a node set of names, ranges and lists, such as
+  // controller,worker-[0-3,5]: the names, or null where it is not one. It
+  // knows no step, set operator or cluster, which the CLI takes too.
   function expand(text) {
     const items = [];
     let depth = 0, cur = '';
