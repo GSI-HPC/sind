@@ -21,7 +21,8 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 4. If `pkg/` or `internal/` changed: `make check-coverage`. Every file there must stay
    at 100%. Install the tool with
    `go install github.com/vladopajic/go-test-coverage/v2@latest`.
-5. If `docs/content/` changed: `make lint-docs`.
+5. If `docs/content/` changed: `make lint-docs`. CI does not lint the docs, so this is
+   their only check.
 6. If the CLI surface, output format, config schema or labels changed: `DESIGN.md` and
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,

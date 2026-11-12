@@ -8,9 +8,10 @@ toc: true
 ## Prerequisites
 
 - **Go 1.26+**
-- **Docker Engine 28.0+**
+- **Docker Engine 28.0+**, a rootful daemon without `userns-remap`
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 - **firejail**, which sandboxes `make test`
+- **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
 
 ## Clone and build
 
@@ -43,6 +44,7 @@ All common tasks are available via `make`:
 | `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
 | `make lint` | Run golangci-lint |
 | `make lint-docs` | Lint documentation markdown files |
+| `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
 | `make clean` | Remove build artifacts and coverage files |
 | `make help` | Show all available targets |
