@@ -71,7 +71,7 @@
       link: web-ui
     - icon: link
       title: Connect outside containers
-      text: Attach containers such as kind nodes to a realm's mesh and cluster networks, so they resolve and reach the nodes by name.
+      text: Attach containers such as kind nodes to a realm's mesh and cluster networks, so they reach its nodes and, with a forward of the realm's zone, resolve them by name.
       link: guides/kind
     - icon: box
       title: Minimal dependencies

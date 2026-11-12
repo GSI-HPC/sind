@@ -186,7 +186,7 @@
   see: [needs-you]
 - id: external
   title: External container
-  summary: A container that sind did not make, such as a kind node. Connect it to a realm and it resolves the names of the realm and reaches its nodes.
+  summary: A container that sind did not make, such as a kind node. Connect it to a realm and it reaches the realm's DNS server and its nodes.
   command: sind connect container NAME
   doc: architecture/networking#external-containers
   see: [mesh]

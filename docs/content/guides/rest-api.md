@@ -45,7 +45,7 @@ slurmrestd listens on port 6820 of the api node:
 http://api.<cluster>.<realm>.sind:6820
 ```
 
-The name resolves on the host when sind could point systemd-resolved at the realm's DNS (see [Host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}})), and in containers that join the cluster network, `<realm>-<cluster>-net`. Otherwise, use the node's address:
+The name resolves on the host when sind could point systemd-resolved at the realm's DNS (see [Host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}})), and on the nodes of its cluster. Otherwise, use the node's address:
 
 ```bash
 API=http://$(sind get node api -o json | jq -r .ip):6820

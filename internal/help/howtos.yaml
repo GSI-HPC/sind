@@ -95,13 +95,14 @@
   words: [submitter, nodeset]
 - id: connect-container
   title: Reach a cluster from another container
-  summary: Let a container that sind did not make, such as a kind node, resolve and reach the nodes of a realm.
+  summary: Let a container that sind did not make, such as a kind node, reach the nodes of a realm and its DNS server.
   steps:
     - Open Mesh and DNS.
     - Press Connect a container and name the container.
-    - Use the node names from inside that container.
+    - Send the container's queries for the realm's zone to sind's DNS server (sind get coredns-config), then use the node names.
   commands:
     - sind connect container NAME
+    - sind get coredns-config
   doc: guides/kind
   words: [external, mesh]
 - id: realm-busy
