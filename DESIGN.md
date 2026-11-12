@@ -2400,7 +2400,7 @@ Locks are per-realm. Operations in different realms run concurrently without con
 
 ### Cluster Lifecycle Commands
 
-Planned commands for suspending and resuming clusters without destroying them:
+Commands that suspend and resume a whole cluster, without destroying it and without naming its nodes, are planned. The power commands do this today for the nodes they are given (see Power Control): `sind power shutdown` stops their containers (`docker stop`) and keeps their volumes and networks, and `sind power on` starts a stopped mesh DNS and SSH relay, starts the nodes, points their mesh DNS records at their new addresses and starts a stopped monitoring stack. A cluster whose nodes are all stopped shows as `stopped` in `sind get clusters`. The cluster commands would do the same for every node of the cluster:
 
 ```bash
 sind stop cluster [NAME]               # stop all containers, preserve volumes
