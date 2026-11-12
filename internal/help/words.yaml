@@ -33,7 +33,7 @@
   see: [worker, slurmctld]
 - id: worker
   title: Worker
-  summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster has at least one worker.
+  summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster starts with at least one worker.
   command: sind create worker --count 2
   doc: usage/worker-management
   see: [managed, slurmd, job]

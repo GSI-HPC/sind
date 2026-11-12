@@ -699,6 +699,8 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--device PATH` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`); `--device=` for none |
 | `--security-opt OPT` | the newest worker's, else none | Security option (repeatable); `--security-opt=` for none |
 
+New workers take the indices after the highest one in the cluster, managed or not (`nextWorkerIndexFromContainers`): with `worker-0` to `worker-5`, `--count 3` adds `worker-6` to `worker-8`. A gap left by a deleted worker is not filled.
+
 New workers take the shape of the cluster's newest worker, the one with the highest index among those managed like the new ones (or among all workers if none is): sind reads its image ID, CPU and memory limits, `/tmp` size, capabilities, devices and security options from `docker inspect`, so a bare `sind create worker` adds nodes like the ones the cluster has, whatever its `defaults` were. Two things are left out because sind decides them for each new worker: the security options every node gets, and the `SYS_NICE` capability where sind added it by itself, on a managed worker of a cluster whose `slurm.conf` enables `task/affinity` (unless the worker's `capDrop` lists `SYS_NICE` or `ALL`; see slurm.conf under Generated Configuration). A `SYS_NICE` from `capAdd` or `--cap-add` is inherited elsewhere, e.g. with the default `TaskPlugin=task/cgroup` or from an unmanaged worker; an unmanaged new worker modelled on a managed one keeps that worker's `SYS_NICE` either way, as sind reads `slurm.conf` for managed workers only. A seccomp profile is not inherited either, as docker reports its content rather than its file (pass it again with `--security-opt`); sind says so in a `Warning:` line. A cluster without workers gets the controller's image and 1 CPU, 512m and 256m. Each flag that is given replaces the inherited value; a repeatable flag replaces the whole inherited list, and given only empty (`--device=`, or `--device ""`) it replaces the list with none. The library tells the two apart by nil: in `cluster.WorkerAddOptions`, a nil `CapAdd`, `CapDrop`, `Devices` or `SecurityOpt` inherits the newest worker's list, and an empty one asks for none. What sind decides for each new worker itself stays either way: its security options, and `SYS_NICE` for `task/affinity`. The cluster-wide settings, the data and CVMFS mounts, the users and the identity mode, come from the controller's labels as `docker inspect` reports them, a map (`docker ps` joins all labels with commas, which cuts a path with a comma short); a `sind.data.hostpath` that is not an absolute path is refused rather than bind-mounted.
 
 Without `--image`, the workers run the newest worker's (or controller's) image by its ID, not by the tag it was created from, which may have moved to another image since; `--pull` therefore needs `--image`. With `--image`, sind pulls the image once when the daemon does not have it, or with `--pull`, then runs `slurmctld -V` in it and refuses one whose Slurm version is not the cluster's (`sind.slurm.version`), as slurmd must not be newer than slurmctld; unmanaged workers and clusters without a recorded version skip this check.
@@ -766,7 +768,7 @@ A power command runs its Docker calls for the nodes of a cluster in parallel (at
 
 The Docker calls of a cluster's nodes run on go-clikit's `fanout.Map` (`forEachContainer`), which a display shows as a step named by what the calls do, `stopping` (shutdown, reboot), `killing` (cut, cycle), `starting` (on, reboot, cycle), `pausing` (freeze) or `unpausing` (unfreeze), with a target for each node, named as a node argument names it (`worker-0` in the default cluster, `worker-0.dev` in another, so that a command that spans clusters tells their nodes apart, in its rows as in its summary), and with its role. Its `Summarize` (`joinFailures`) words each failure as before, `<verb> <container>: <error>`, joined in the order of the nodes, so that the error text and `errors.Is` stay as they were. Once the command is interrupted it starts no further node, and those left out fail with `context canceled`. A panic in the work for one node fails that node, `sind panicked; this is a bug, please report it: ...`, with a line that names the node and the stack on stderr, above a display (the Bus's panic log, or the writer `cluster.WithPanicLog` puts in the context, the command's stderr), and the other nodes finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
-`on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Since they rewrite the realm's Corefile, they take the realm lock.
+`on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Last, they start the realm's monitoring stack if it is stopped and wait until it is ready (see Host Reboot and Docker Daemon Restart); a stack that does not get ready fails the command, although the nodes are up. Since they rewrite the realm's Corefile, they take the realm lock.
 
 Freeze/unfreeze uses Docker's cgroup freezer to suspend all processes. The container remains "running" but is completely unresponsive, simulating a hung or unreachable node.
 
@@ -1802,7 +1804,7 @@ The `sind-ssh-config` volume contains:
 | File | Description |
 |------|-------------|
 | `id_ed25519` | Private key (generated on first cluster creation) |
-| `id_ed25519.pub` | Public key (injected into node images) |
+| `id_ed25519.pub` | Public key (injected into nodes) |
 | `known_hosts` | Host keys of all nodes (updated dynamically) |
 
 #### Lifecycle
@@ -2088,11 +2090,11 @@ On an unmanaged cluster sind does not know which controller is in control; `ente
 
 ### sind enter
 
-Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Unlike `sind ssh`, it runs `bash -l` through `docker exec` rather than the SSH relay, in `/data`, or as `--user` in its home directory (see Enter and Exec).
+Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Unlike `sind ssh`, it runs `bash -l` through `docker exec` rather than the SSH relay, in the data mount point (`/data` by default), or as `--user` in its home directory (see Enter and Exec).
 
 ### sind exec
 
-Runs a command on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay, with a pseudo-terminal when stdin and stdout are terminals (see Enter and Exec).
+Runs a command on the same target as `sind enter`, through `docker exec` in the data mount point (`/data` by default) rather than the SSH relay, with a pseudo-terminal when stdin and stdout are terminals (see Enter and Exec).
 
 ## Container Images
 

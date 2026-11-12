@@ -114,7 +114,7 @@ sind ssh worker-0 -- false; echo $?    # 1
 
 ## Data mount
 
-By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` set `/data` as the working directory, so files from the host are immediately accessible.
+By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` start in the data mount point, `/data` unless the cluster config sets another `mountPath`, so files from the host are immediately accessible.
 
 Use the `--data` flag to change this behavior:
 
@@ -135,7 +135,7 @@ sind create cluster --data volume
 ```
 
 {{< callout type="info" >}}
-`sind ssh` connects via SSH and starts in the user's home directory, not `/data`. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in `/data` directly. With `--user`, they start in the user's home directory instead.
+`sind ssh` connects via SSH and starts in the user's home directory, not in the data mount. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in it directly. With `--user`, they start in the user's home directory instead.
 {{< /callout >}}
 
 ## Command routing

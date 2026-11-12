@@ -76,7 +76,7 @@ sind power unfreeze worker-0
 
 ## Power on
 
-`on`, `reboot` and `cycle` first start the realm's mesh DNS and SSH relay if they are stopped, then start the nodes, and then point the nodes' DNS records (`<node>.<cluster>.<realm>.sind`, used by `sind ssh` and the host) at their addresses: Docker can give a node another address each time it starts. These three commands take the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}).
+`on`, `reboot` and `cycle` first start the realm's mesh DNS and SSH relay if they are stopped, then start the nodes, and then point the nodes' DNS records (`<node>.<cluster>.<realm>.sind`, used by `sind ssh` and the host) at their addresses: Docker can give a node another address each time it starts. Last, they start the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}) if it is stopped and wait until it is ready; if it does not get ready, the command fails, although the nodes are up. These three commands take the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}).
 
 After a host reboot or a Docker daemon restart, the mesh and all nodes are stopped; `sind power on` brings them back (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})):
 
