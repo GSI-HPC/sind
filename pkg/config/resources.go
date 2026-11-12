@@ -71,7 +71,7 @@ func CheckMemory(field, s string) error {
 
 // tmpSizePattern matches the size option of a tmpfs mount as the kernel
 // reads it: a number of bytes with an optional unit k, m, g, t, p or e
-// (powers of 1024, either case), or a percentage of the memory.
+// (powers of 1024, either case), or a percentage of the host's RAM.
 var tmpSizePattern = regexp.MustCompile(`^\d+([kKmMgGtTpPeE%])?$`)
 
 // CheckTmpSize reports whether s is a valid size of a node's /tmp tmpfs,

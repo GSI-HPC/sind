@@ -1217,7 +1217,7 @@ Validation rules:
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
 | `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:vX.Y.Z` (the sind release; `latest` for other builds) | Container image |
-| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp, in the kernel's tmpfs syntax: a whole number with an optional `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the memory; files there count against `memory` |
+| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp, in the kernel's tmpfs syntax: a whole number with an optional `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the host's RAM (not of `memory`); files there count against `memory` |
 | `cpus` | global + per-node | `1` | CPU limit; a managed worker's Slurm `CPUs` |
 | `memory` | global + per-node | `512m` | Memory limit, without swap, in Docker's size syntax (`512m`, `2g`, `2gb`, `1.5GiB`, plain bytes); a managed worker's Slurm `RealMemory`, in MiB; `/dev/shm` gets half of it |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
