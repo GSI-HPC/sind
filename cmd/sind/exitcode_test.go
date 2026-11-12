@@ -38,7 +38,6 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		want string
 	}{
 		{[]string{"--bogus", "get", "clusters"}, "unknown flag: --bogus"},
-		{[]string{"--verbose=x", "version"}, `invalid argument "x" for "-v, --verbose" flag`},
 		{[]string{"get", "clusters", "--bogus"}, "unknown flag: --bogus"},
 		{[]string{"get", "clusters", "-o"}, "flag needs an argument"},
 		{[]string{"get", "clusters", "---o"}, "bad flag syntax: ---o"},
@@ -79,7 +78,11 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml"`},
 		{[]string{"get", "auth-key", "--type", "kerberos"}, `invalid --type value "kerberos": want munge, slurm or jwt`},
 		{[]string{"get", "cluster", "--progress", "tree"}, `invalid --progress value "tree": want auto, tty, counter, plain or none`},
-		// pflag's parser errors read as the other invalid values do.
+		// pflag's parser errors read as the other invalid values do, also
+		// those of the flags of a parent that cobra traverses.
+		{[]string{"--verbose=x", "version"}, `invalid --verbose value "x": want a whole number`},
+		{[]string{"-v=x", "get", "clusters"}, `invalid --verbose value "x": want a whole number`},
+		{[]string{"create", "--help=x", "cluster"}, `invalid --help value "x": want true or false`},
 		{[]string{"create", "worker", "--count", "x"}, `invalid --count value "x": want a whole number`},
 		{[]string{"create", "cluster", "--wait", "5"}, `invalid --wait value "5": want a duration with a unit, such as 90s, 5m or 1h30m`},
 		{[]string{"create", "worker", "--pull=maybe"}, `invalid --pull value "maybe": want true or false`},
@@ -126,6 +129,7 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 
 			assert.Equal(t, exitUsage, code, stderr.String())
 			assert.Contains(t, stderr.String(), tc.want)
+			assert.NotContains(t, stderr.String(), "strconv.", "Go's parser error")
 		})
 	}
 }
