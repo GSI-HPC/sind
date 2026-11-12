@@ -117,7 +117,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   image-targets:
     name: Image Targets
