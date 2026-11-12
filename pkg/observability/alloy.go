@@ -292,7 +292,10 @@ func writeJournals(w *alloyWriter, realm string, targets []Target) {
 
 	// The unit is the entry's systemd unit, or, for what PID 1 logs about
 	// a unit ("Started", "Failed with result"), that unit, as journalctl
-	// -u and so sind logs show them.
+	// -u and so sind logs show them. The level is the priority by
+	// journalctl's name, which the Slurm and MariaDB levels below use too:
+	// Alloy's keyword names priority 3 "error", so the last rule makes it
+	// "err".
 	w.line("")
 	w.open(`loki.relabel "journal"`)
 	w.line("forward_to = []")
@@ -307,10 +310,16 @@ func writeJournals(w *alloyWriter, realm string, targets []Target) {
 		w.line("target_label  = %s", q(r.target))
 		w.close()
 	}
+	w.open("rule")
+	w.line(`source_labels = ["__journal_priority"]`)
+	w.line(`regex         = "3"`)
+	w.line(`target_label  = "level"`)
+	w.line(`replacement   = "err"`)
+	w.close()
 	w.close()
 
-	// Slurm prefixes a line's level, "fatal:" mapping to crit, "error:" to err and
-	// "debug2:" to debug, as journal priority keywords name them; info
+	// Slurm prefixes a line's level, "fatal:" mapping to crit, "error:" to
+	// err and "debug2:" to debug, as journalctl names the priorities; info
 	// and verbose lines have none. MariaDB brackets it. Each match takes
 	// only the lines with a level, so that the others keep the level of
 	// their journal priority.

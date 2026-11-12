@@ -286,6 +286,12 @@ loki.relabel "journal" {
     regex         = "(.+)"
     target_label  = "level"
   }
+  rule {
+    source_labels = ["__journal_priority"]
+    regex         = "3"
+    target_label  = "level"
+    replacement   = "err"
+  }
 }
 
 loki.process "levels" {
