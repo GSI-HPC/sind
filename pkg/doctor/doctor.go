@@ -47,7 +47,12 @@ func DockerUnreachable(err error) (detail, remediation string) {
 	switch {
 	case strings.Contains(lower, "permission denied"):
 		remediation = dockerPermissionRemediation
-	case strings.Contains(lower, "cannot connect to the docker daemon"):
+	// Docker 29 says "failed to connect to the docker API at …; check if
+	// the path is correct and if the daemon is running" when the socket
+	// does not exist, and keeps "Cannot connect to the Docker daemon at …"
+	// for a refused connection, which Docker 28 says for both.
+	case strings.Contains(lower, "cannot connect to the docker daemon"),
+		strings.Contains(lower, "if the daemon is running"):
 		remediation = dockerStartRemediation
 	}
 	return "not reachable: " + msg, remediation

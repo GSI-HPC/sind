@@ -323,7 +323,7 @@ func (e *UnreachableError) Unwrap() error { return e.Err }
 // unreachable matches, lowercased, the lines of docker CLI errors that say
 // it could not reach the daemon: one that does not run or listen where the
 // CLI looks ("Cannot connect to the Docker daemon at …", or "failed to
-// connect to the docker API at …" from Docker 28.2), one that refuses the
+// connect to the docker API at …" from Docker 29.0), one that refuses the
 // user ("permission denied while trying to connect to the Docker daemon
 // socket", or "… the docker API"), and an endpoint the CLI cannot dial
 // ("error during connect: …").
