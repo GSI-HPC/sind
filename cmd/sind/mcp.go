@@ -29,7 +29,8 @@ const mcpStreamHost = "127.0.0.1"
 
 // mcpExcluded lists the commands, by path below the root, that are not
 // offered as MCP tools although they could run: interactive ones, which
-// have no terminal under MCP, and ones that print a secret.
+// have no terminal under MCP, ones that run until interrupted, and ones
+// that print a secret.
 var mcpExcluded = map[string]bool{
 	"enter":               true, // interactive shell
 	"ssh":                 true, // interactive shell or remote command without a terminal
@@ -296,7 +297,7 @@ func mcpToolArgs(tool string, in ophis.ToolInput) []string {
 			}
 		case map[string]any:
 			for _, key := range slices.Sorted(maps.Keys(value)) {
-				args = append(args, "--"+name, fmt.Sprintf("%s=%v", key, value[key]))
+				args = append(args, "--"+name, key+"="+mcpValue(value[key]))
 			}
 		default:
 			args = append(args, mcpFlagArgs(name, value)...)
@@ -316,8 +317,19 @@ func mcpFlagArgs(name string, value any) []string {
 		}
 		return nil
 	default:
-		return []string{"--" + name, fmt.Sprint(v)}
+		return []string{"--" + name, mcpValue(v)}
 	}
+}
+
+// mcpValue returns value as the text of a flag value. A JSON number comes
+// as a float64, which fmt writes with an exponent from a million on
+// (1e+06), a value that no whole-number flag takes; it is written without
+// one.
+func mcpValue(value any) string {
+	if f, ok := value.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprint(value)
 }
 
 // failedAsError wraps a tool run so that a command that exits non-zero

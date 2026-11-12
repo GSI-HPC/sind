@@ -32,9 +32,9 @@ sind create cluster --config unmanaged.yaml
 {{< /cli >}}
 {{< ui >}}
 
-1. Press **New cluster…**.
+1. Press **New cluster…**, set the name to `dev` and tick **submitter**.
 2. Press **defaults** next to the controller. Open **More: managed, capabilities, devices** and tick **Unmanaged**.
-3. Press **Create**.
+3. Press **Create dev**.
 
 {{< /ui >}}
 {{< /ways >}}

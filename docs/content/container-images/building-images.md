@@ -3,6 +3,8 @@ weight: 510
 title: "Building Images"
 description: "Official images and custom image requirements"
 toc: true
+webui: none
+webuiNote: "The web UI does not build images. The steps on this page are for the CLI."
 ---
 
 ## Official images
@@ -20,10 +22,10 @@ sind publishes a multi-role node image for each supported Slurm release line to 
 
 Each sind release also publishes the images it was released with:
 
-- `vX.Y.Z` (e.g. `v0.16.0`) is the newest release line's image of sind vX.Y.Z. The release binaries of vX.Y.Z use it when `defaults.image` is not specified, so upgrading sind also brings the node image it was released with, and a pinned sind version keeps its Slurm version.
-- `vX.Y.Z-<YY>.<MM>` (e.g. `v0.16.0-25.11`) is the image of each supported release line at sind vX.Y.Z.
+- `vX.Y.Z` (e.g. `v0.16.1`) is the newest release line's image of sind vX.Y.Z. The release binaries of vX.Y.Z use it when `defaults.image` is not specified, so upgrading sind also brings the node image it was released with, and a pinned sind version keeps its Slurm version.
+- `vX.Y.Z-<YY>.<MM>` (e.g. `v0.16.1-25.11`) is the image of each supported release line at sind vX.Y.Z.
 
-Every tag is a multi-platform image for linux/amd64 and linux/arm64; Docker pulls the variant that matches the host. The images of all release lines share their layers up to Slurm, so pulling a second release line downloads little more than its Slurm.
+Every tag is a multi-platform image for linux/amd64 and linux/arm64, except `25.11.4`, which is for linux/amd64 only; Docker pulls the variant that matches the host. The images of all release lines share their layers up to Slurm, so pulling a second release line downloads little more than its Slurm.
 
 The images are rebuilt when the image build changes, so the tags above pick up image fixes. They are also rebuilt every week with the current Rocky Linux packages, together with the tags of the newest sind release, so they pick up security updates. Tags of superseded patch releases, of older sind releases and of release lines that are no longer supported stay available but are not updated.
 
@@ -41,7 +43,7 @@ defaults:
   image: ghcr.io/gsi-hpc/sind-node:25.11@sha256:<digest>
 ```
 
-Each published image carries a build provenance attestation. Check that sind's image workflow built an image with the [GitHub CLI](https://cli.github.com/):
+Each published image except `25.11.4` carries a build provenance attestation. Check that sind's image workflow built an image with the [GitHub CLI](https://cli.github.com/) 2.102.0 or later:
 
 ```bash
 gh attestation verify oci://ghcr.io/gsi-hpc/sind-node:25.11 --repo GSI-HPC/sind \
@@ -68,11 +70,13 @@ sind enables the appropriate Slurm services based on node role once every node i
 Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root. `SLURM_RELEASES` in `docker-bake.hcl` lists the Slurm release and tarball checksum of each image, and each entry becomes a bake target named `slurm-<YY>-<MM>`:
 
 ```bash
-make image                                                # all release lines
-docker buildx bake --set '*.platform=local' slurm-25-11   # a single release line
+make image                                                                     # all release lines
+docker buildx bake --allow=network.host --set '*.platform=local' slurm-25-11   # a single release line
 ```
 
 Both build for the host platform only. Without `--set '*.platform=local'`, bake builds every platform in `docker-bake.hcl`, which needs a builder that supports multi-platform builds, and compiles the whole stack under QEMU emulation for the other architecture, which takes hours. CI builds each platform on a native runner instead.
+
+The targets use the host network (`network = "host"` in `docker-bake.hcl`), which bake grants only with `--allow=network.host`. Without the flag, bake prompts for it in a terminal and fails elsewhere, as in a script. `make image` passes it.
 
 The Dockerfile has no default Slurm version. To build it without bake, pass `--build-arg SLURM_VERSION=<version>` and `--build-arg SLURM_SHA256=<checksum>`.
 
@@ -83,8 +87,9 @@ Custom images must provide the following:
 ### All roles
 
 - **systemd** as init at `/sbin/init`, and `/bin/sh`: sind starts each node with a short `/bin/sh` entrypoint that sets up the cgroup controllers and execs `/sbin/init`, so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
+- `bash` with its `/dev/tcp` redirection: sind's readiness checks run it on every node (the sshd check reads sshd's banner from `/dev/tcp/localhost/22`), and `sind enter` opens a `bash -l` login shell
 - `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly (see [Container settings](#container-settings))
-- **sshd** service (enabled) — sind injects authorized_keys at runtime. The image contains no SSH host keys: each container generates its ed25519 host key on its first boot (see [SSH setup](#ssh-setup))
+- **sshd** service (enabled) and `ssh-keyscan` — sind injects authorized_keys at runtime and reads the node's host key with `ssh-keyscan`. On RHEL-family images, `ssh-keyscan` is in `openssh-clients`, which `openssh-server` does not pull in. The image contains no SSH host keys: each container generates its ed25519 host key on its first boot (see [SSH setup](#ssh-setup))
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
@@ -95,9 +100,9 @@ Custom images must provide the following:
 
 | Role | Additional requirements |
 |------|------------------------|
-| controller | slurmctld installed, **not enabled** |
+| controller | slurmctld installed, **not enabled**; `/var/spool/slurmctld`, the `StateSaveLocation` sind sets, owned by the `slurm` user: slurmctld runs as `slurm` and cannot create it, and with a [backup controller]({{< relref "/configuration/node-definitions#backup-controller" >}}) the shared state volume takes its owner from it |
 | db | mariadb-server (MariaDB 10.4 or later, whose `unix_socket` authentication sind uses for slurmdbd's `slurm` account) with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd runs as the OS user `slurm`; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user, which can write `/var/log/slurm` |
-| worker | slurmd installed, **not enabled** |
+| worker | slurmd installed, **not enabled**; Slurm's `cgroup/v2` plugin (`cgroup_v2.so`, which Slurm builds only when it finds the dbus-1 development files and the kernel's `linux/bpf.h`): the generated `cgroup.conf` sets `CgroupPlugin=autodetect`, which loads it on the cgroup v2 hosts sind requires, and without the plugin slurmd does not start |
 | api | slurmrestd with its systemd unit, installed, **not enabled**: Slurm built with an HTTP parser (llhttp from Slurm 26.05 on) and `--with-jwt`; the unit runs slurmrestd as a user other than root and SlurmUser (Slurm's unit: `slurmrestd`) and listens on port 6820. sind checks for slurmrestd and the unit before it starts it, and adds a drop-in to the unit that sets `SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files`, as the container denies slurmrestd's `unshare` |
 | submitter | Slurm client tools only |
 
@@ -120,14 +125,14 @@ With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), on
 A [monitored]({{< relref "/guides/monitoring" >}}) cluster needs more from the images of its controllers and managed workers, which `sind create cluster` and `sind create worker` check in a throwaway container before they create any node:
 
 - Slurm 26.05 or later, whose slurmctld and slurmd serve HTTP on their ports
-- In Slurm's plugin directory (`PluginDir` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}), or else the directory of the `libslurmfull` the daemon links), with all their libraries installed: an HTTP parser plugin (`http_parser_*.so`, which Slurm builds only with `--with-llhttp-parser` or `--with-libhttp-parser`), a URL parser (`url_parser_*.so`), a TLS plugin (`tls_*.so`), an HTTP authentication plugin (`http_auth_*.so`) and a data parser (`data_parser_*.so`); on the controllers also the OpenMetrics plugin, `metrics_openmetrics.so`. Slurm builds all but the HTTP parser by default
-- `/bin/sh`, `ldd`, `awk` and `grep`, which the check runs
+- In Slurm's plugin directory (`PluginDir` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}), or else the directory of the `libslurmfull` the daemon links), with all their libraries installed: an HTTP parser plugin (`http_parser_*.so`, which Slurm builds only when its configure finds llhttp 9 or later or libhttp_parser; `--with-llhttp-parser` makes a missing llhttp an error), a URL parser (`url_parser_*.so`), a TLS plugin (`tls_*.so`), an HTTP authentication plugin (`http_auth_*.so`) and a data parser (`data_parser_*.so`); on the controllers also the OpenMetrics plugin, `metrics_openmetrics.so`. Slurm builds all but the HTTP parser by default
+- `/bin/sh`, `ldd`, `awk`, `grep` and `head`, which the check runs, and on a managed db node's image also `tail`
 
 On every node, journald must write a persistent journal to `/var/log/journal` (the default `Storage=auto`, or `persistent`), and the Slurm daemons must log to the journal, through stderr or syslog as Slurm's own units do, not only to a file. sind caps the journal at 64 MB with a drop-in that sorts after the image's own. On a managed db node, MariaDB's error log must go to the journal too: an image whose `my.cnf` sets `log-error` needs `skip-log-error` after it, as the official images have (Debian-family packages leave it unset). Otherwise `sind create cluster` warns that MariaDB's messages are not collected.
 
 ### Container settings
 
-The image must use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal) and declare the shared volumes. sind replaces the entrypoint of node containers, so `CMD` only matters when the image runs outside sind:
+The image must use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal). The official image also declares the shared volumes, which sind does not need. sind replaces the entrypoint of node containers, so `CMD` only matters when the image runs outside sind:
 
 ```dockerfile
 VOLUME ["/etc/slurm", "/etc/munge", "/data"]
@@ -168,7 +173,7 @@ Root must be able to read `/etc/shadow` as its owner, without `CAP_DAC_OVERRIDE`
 RUN chmod 0400 /etc/shadow /etc/gshadow
 ```
 
-On login, sshd's PAM account check (`pam_unix`) runs `unix_chkpwd` to read root's shadow entry. On nodes with `securityOpt: [apparmor=unconfined]`, AppArmor attaches the host's `unix-chkpwd` profile (shipped by Ubuntu 24.04, for example, including GitHub's `ubuntu-latest` runners) to that binary. The profile denies `CAP_DAC_OVERRIDE`, so with mode `0000` the check fails and `sind ssh` into those nodes ends with `Connection closed`. Nodes on Docker's default AppArmor profile are not affected.
+On login, sshd's PAM account check (`pam_unix`) runs `unix_chkpwd` to read root's shadow entry. On nodes with `securityOpt: [apparmor=unconfined]`, AppArmor attaches the host's `unix-chkpwd` profile (shipped by Ubuntu 24.04, for example, including GitHub's `ubuntu-24.04` runners) to that binary. The profile denies `CAP_DAC_OVERRIDE`, so with mode `0000` the check fails and `sind ssh` into those nodes ends with `Connection closed`. Nodes on Docker's default AppArmor profile are not affected.
 
 ### Masked systemd units
 

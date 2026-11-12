@@ -31,6 +31,11 @@ jobs:
     permissions:
       contents: read
       issues: write
+    # shell: bash adds pipefail. Without it, the check step takes the
+    # status of tee, and a failed check passes.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,7 +56,7 @@ jobs:
             exit 0
           fi
 
-          # Title: "Image updates: slurm 26.05.5, ompi 5.0.11, pmix 7.0.0 (new line)"
+          # Title: "Image updates: <component> <latest>, ..., <component> <latest> (new line)"
           summary=$(awk -F'\t' '{ printf "%s%s %s%s", sep, $2, $4, ($1 == "new-line" ? " (new line)" : ""); sep = ", " }' "$updates")
           title="Image updates: $summary"
 

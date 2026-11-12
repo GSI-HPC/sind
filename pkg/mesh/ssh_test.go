@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -173,6 +175,40 @@ func TestEditKnownHosts_Errors(t *testing.T) {
 		var m mock.Executor
 		require.NoError(t, edit(NewManager(docker.NewClient(&m), DefaultRealm)))
 		assert.Empty(t, m.Calls, "no docker calls for nothing to edit")
+	}
+}
+
+// TestWriteKnownHosts_Detached covers the write of known_hosts under Ctrl+C
+// or a deadline, which it ignores, and under a rollback whose deadline has
+// passed, where it ends.
+func TestWriteKnownHosts_Detached(t *testing.T) {
+	cancelled, cancel := context.WithTimeout(t.Context(), time.Hour)
+	cancel()
+	expired, cancelExpired := context.WithDeadline(context.WithoutCancel(t.Context()), time.Now().Add(-time.Second))
+	defer cancelExpired()
+
+	for _, tc := range []struct {
+		name  string
+		ctx   context.Context
+		err   error
+		calls int
+	}{
+		{"cancelled", cancelled, nil, 1},
+		{"rollback expired", detach.Rollback(expired), context.DeadlineExceeded, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &mock.Executor{}
+			m.AddResult("", "", nil)
+			mgr := NewManager(docker.NewClient(ctxExecutor{m}), DefaultRealm)
+
+			err := mgr.writeKnownHosts(tc.ctx, "h k\n")
+			if tc.err == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tc.err)
+			}
+			assert.Len(t, m.Calls, tc.calls)
+		})
 	}
 }
 

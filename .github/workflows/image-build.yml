@@ -72,7 +72,7 @@ jobs:
   build:
     name: build (${{ matrix.platform }})
     needs: targets
-    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write

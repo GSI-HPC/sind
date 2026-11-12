@@ -324,6 +324,9 @@ func TestValidate_DataMountPath(t *testing.T) {
 		{name: "state without a backup controller", mountPath: "/var/spool/slurmctld"},
 		{name: "state", mountPath: "/var/spool/slurmctld", cluster: func(c *Cluster) { c.Nodes[0].BackupController = true },
 			wantErr: "is where the nodes mount the controllers' shared state"},
+		{name: "journal without monitoring", mountPath: "/var/log/journal"},
+		{name: "journal", mountPath: "/var/log/journal/", cluster: func(c *Cluster) { c.Monitoring = true },
+			wantErr: "storage.dataStorage.mountPath /var/log/journal/ is where the nodes mount their journal"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

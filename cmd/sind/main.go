@@ -58,6 +58,11 @@ func interruptContext() (context.Context, context.CancelFunc) {
 // Docker that cannot be reached (docker.UnreachableError) is reported by
 // its own message alone, the same for every command.
 //
+// cobratree.FlagError words the error of a flag value that pflag cannot
+// parse, also for a flag of a parent that cobra traverses
+// (TraverseChildren), whose errors cobra returns without the root's
+// FlagErrorFunc.
+//
 // The error is written to stderr escaped: it can quote what docker or a
 // container wrote, and the logger quotes attribute values but not the
 // message, so a control sequence in it would otherwise reach the terminal.
@@ -79,6 +84,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
 	}
+	err = cobratree.FlagError(cmd, err)
 	if child, ok := errors.AsType[*childExitError](err); ok {
 		if ctx.Err() != nil {
 			return exitInterrupted

@@ -247,7 +247,7 @@ func runFailOutcome(rc runCtx, p *runFailPanel) *runOutcome {
 		o.WhyTitle = "Why this often happens"
 		o.Why = []string{
 			"The host is busy or short of memory, so the nodes start slowly. A longer wait gives them the time.",
-			"The host lacks something that the nodes need, such as cgroup v2 or enough inotify watches. Doctor checks the host.",
+			"The host lacks something that the nodes need, such as cgroup v2 or enough inotify instances. Doctor checks the host.",
 		}
 	}
 	if stopped {

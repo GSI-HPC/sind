@@ -273,7 +273,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// cleanup runs only after createResources starts; the mesh goes too
 	// when this invocation created it and no other cluster uses it.
 	// WithoutCancel keeps the cleanup running when the parent context is
-	// cancelled (e.g. Ctrl+C), and rollbackTimeout bounds it. Its failures
+	// cancelled (e.g. Ctrl+C), and RollbackTimeout bounds it. Its failures
 	// are joined to the error. It is the progress step "rollback".
 	resourcesCreated := false
 	stackCreated := false

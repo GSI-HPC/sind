@@ -46,8 +46,10 @@ const (
 )
 
 // CommandLine lists the variables that stand in for a flag or an argument.
-// sind ui runs its commands without them, so that a run does what its
-// command line says.
+// sind ui runs its commands without the values its own environment gives
+// them, so that a run does what its command line says, and sets two of
+// them itself: SIND_PROGRESS to none and SIND_PROGRESS_LOG to the activity
+// log that it reads.
 var CommandLine = []string{Realm, Cluster, Output, Verbose, Wait, Pull, Progress, ProgressLog}
 
 // All lists every variable that sind reads.

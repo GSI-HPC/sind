@@ -40,7 +40,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 
-The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client and `bash` it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
+The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
 
 ## Monitoring stack
 
@@ -55,7 +55,7 @@ A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
-The stack runs on the mesh network only. Grafana, Prometheus and Loki have fixed addresses just below the DNS container's and the DNS names `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind`; Alloy has neither. Prometheus and Loki are capped at 1 GB of memory, Grafana and Alloy at 512 MB. Alloy runs as root in the host's cgroup namespace, with the host's `/sys/fs/cgroup` mounted read-only and the journal volume at `/var/log/sind`, so that it reads the nodes' cgroups and journals; it needs no Docker socket.
+The stack runs on the mesh network only. Grafana, Prometheus and Loki have fixed addresses just below the DNS container's and the DNS names `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind`; Alloy has neither. Grafana, Prometheus and Loki are capped at 1 GB of memory, Alloy at 512 MB. Alloy runs as root in the host's cgroup namespace, with the host's `/sys/fs/cgroup` mounted read-only and the journal volume at `/var/log/sind`, so that it reads the nodes' cgroups and journals; it needs no Docker socket.
 
 The images do not follow `defaults.image`. sind pins each of them and pulls them with the node images when a monitored `sind create cluster` creates the stack. An existing stack keeps its containers and images until the realm's last cluster is deleted, or until a newer sind replaces the containers, keeping the volumes, because their images, configuration or dashboards changed. Deleting the realm's last cluster removes the stack's containers, then the mesh, then the stack's volumes and the journal volume.
 
@@ -65,7 +65,7 @@ The images do not follow `defaults.image`. sind pins each of them and pulls them
 |------|-------------|---------|-------|
 | Configuration-only network | `<realm>-lock` | `sind-lock` | — |
 
-While a sind command creates or deletes clusters or workers, or powers nodes on, it holds the realm's lock on the Docker daemon: this network, which it creates when it takes the lock and removes when it releases it (see [Advisory locking]({{< relref "/configuration/realms#advisory-locking" >}})). Docker refuses a second network of the same name, so only one command at a time holds it. A configuration-only network (`docker network create --config-only`) has the driver `null`: it takes no subnet from the address pools, has no bridge device, and no container joins it.
+While a sind command creates or deletes clusters or workers, connects or disconnects containers, or powers nodes on, it holds the realm's lock on the Docker daemon: this network, which it creates when it takes the lock and removes when it releases it (see [Advisory locking]({{< relref "/configuration/realms#advisory-locking" >}})). Docker refuses a second network of the same name, so only one command at a time holds it. A configuration-only network (`docker network create --config-only`) has the driver `null`: it takes no subnet from the address pools, has no bridge device, and no container joins it.
 
 Besides `sind.realm`, its labels name the command that holds it (`sind.lock.command`, `sind.lock.host`, `sind.lock.pid`), let sind tell whether a holder on the same host still runs (`sind.lock.boot-id`, `sind.lock.pid-ns`), and mark one acquisition (`sind.lock.token`). `sind get networks` does not list it.
 
@@ -103,7 +103,7 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 
 ### Host path storage
 
-With `dataStorage.type: hostPath`, or by default through `sind create cluster --data .` when the config sets no `dataStorage`, the data volume is replaced with a bind mount:
+With `dataStorage.type: hostPath`, or a `hostPath` without `type`, the data volume is replaced with a bind mount. If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory:
 
 ```
 --mount type=bind,source=/path/on/host,target=/data

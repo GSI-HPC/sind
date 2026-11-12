@@ -139,6 +139,9 @@ func missingContainer(ctx context.Context, client *docker.Client, names []docker
 // for a realm without mesh, and for a container that does not exist or is
 // sind's own.
 //
+// The caller holds the realm lock (state.LockRealm) until Connect returns,
+// so that a cluster create does not add a network meanwhile.
+//
 // The attaching is the progress step "connecting", with a target for each
 // container, named by it and announced queued before the first runs; one
 // that joins every network already is skipped as "connected". The first
@@ -174,6 +177,9 @@ func Connect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 // Disconnect detaches containers outside sind from every network of the
 // realm they join. A container that joins none is left as it is. It fails
 // for a container that does not exist or is sind's own.
+//
+// The caller holds the realm lock (state.LockRealm) until Disconnect
+// returns, so that a cluster create does not add a network meanwhile.
 //
 // The detaching is the progress step "disconnecting", reported as the step
 // of Connect is, with a container that joins no network skipped as "not

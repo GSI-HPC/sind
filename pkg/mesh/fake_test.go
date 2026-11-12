@@ -5,6 +5,7 @@ package mesh
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -76,6 +77,26 @@ func newFakeDocker(t *testing.T) (*fakeDocker, *docker.Client, *mock.Executor) {
 	f := newFake(t)
 	m := &mock.Executor{OnCall: f.onCall}
 	return f, docker.NewClient(m), m
+}
+
+// ctxExecutor fails a call whose context is done, as os/exec does, and
+// hands the others to Executor.
+type ctxExecutor struct {
+	*mock.Executor
+}
+
+func (e ctxExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", "", err
+	}
+	return e.Executor.Run(ctx, name, args...)
+}
+
+func (e ctxExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", "", err
+	}
+	return e.Executor.RunWithStdin(ctx, stdin, name, args...)
 }
 
 // withMesh adds a complete mesh for realm, as earlier sind versions created

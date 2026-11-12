@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -582,17 +583,27 @@ func revertNodesConf(ctx context.Context, client *docker.Client, controllerName 
 // writeNodesConfAndReconfigure writes sind-nodes.conf to the controller
 // and triggers slurmctld to reload. sind-nodes.conf defines every managed
 // worker, so the write replaces the file in one step (see
-// docker.Client.ReplaceFile), and it ignores the cancellation of ctx, as
-// the --wait deadline or Ctrl+C would otherwise kill the docker CLI
-// halfway.
+// docker.Client.ReplaceFile), and it ignores the cancellation and the
+// deadline of ctx, as the --wait deadline or Ctrl+C would otherwise kill
+// the docker CLI halfway, but ends with the rollback that ctx runs under
+// (internal/detach).
 func writeNodesConfAndReconfigure(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, content string) error {
-	if err := client.ReplaceFile(context.WithoutCancel(ctx), controllerName, slurm.NodesConfPath, content); err != nil {
+	if err := replaceNodesConf(ctx, client, controllerName, content); err != nil {
 		return fmt.Errorf("updating sind-nodes.conf: %w", err)
 	}
 	if _, err := client.Exec(ctx, controllerName, "scontrol", "reconfigure"); err != nil {
 		return fmt.Errorf("reconfiguring slurmctld: %w", err)
 	}
 	return nil
+}
+
+// replaceNodesConf replaces sind-nodes.conf on the controller with content,
+// on the context that internal/detach gives a write that must not be cut
+// short.
+func replaceNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, content string) error {
+	ctx, cancel := detach.Context(ctx)
+	defer cancel()
+	return client.ReplaceFile(ctx, controllerName, slurm.NodesConfPath, content)
 }
 
 // workerIndex returns the index of a worker container, the N of

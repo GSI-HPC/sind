@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/ui"
@@ -37,8 +38,14 @@ picker changes the interval of the running UI.
 of running them: it needs no Docker, starts no process and writes nothing.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if o.Port < 0 || o.Port > 65535 {
+				return cobratree.InvalidValue("port", strconv.Itoa(o.Port), "a port from 0 to 65535")
+			}
 			if err := collect.CheckInterval(o.MonitoringInterval); err != nil {
 				return cobratree.InvalidValue("monitoring-interval", o.MonitoringInterval.String(), "a duration from 5s to 1h")
+			}
+			if o.Still && !o.Demo {
+				return cobratree.Usagef("--still needs --demo")
 			}
 			o.NoOpen = !open
 			o.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")

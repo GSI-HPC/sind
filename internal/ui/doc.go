@@ -43,10 +43,10 @@
 //     POST actions, helpers that answer with one fragment. A route is a
 //     function of the *Server and the request. A request that changes
 //     something has passed the Origin and CSRF checks and has its form
-//     parsed (at most 64 KiB) when the route runs; use Server.View for its
-//     Params, Server.Write and Server.Fragment to answer, Server.Fail for an
-//     error, and the template block "csrf-field" in a form that a browser
-//     sends without script.
+//     parsed (at most maxBody, 4 MiB) when the route runs; use Server.View
+//     for its Params, Server.Write and Server.Fragment to answer,
+//     Server.Fail for an error, and the template block "csrf-field" in a
+//     form that a browser sends without script.
 //  5. Background work, registered with AddService: collectors that write
 //     the store, runners. A Service has a Setup, which runs before the server
 //     is built and hands what routes need to the other parts through Env.Put,

@@ -13,8 +13,11 @@
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
-    "gsap": "^3.15.0",
-    "hyperframes": "0.8.115",
-    "puppeteer-core": "^25.16.0"
+    "gsap": "^3.15.1",
+    "hyperframes": "0.9.38",
+    "puppeteer-core": "^25.17.0"
+  },
+  "overrides": {
+    "undici": "^7.30.2"
   }
 }

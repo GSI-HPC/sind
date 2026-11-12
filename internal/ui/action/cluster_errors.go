@@ -77,7 +77,7 @@ func memorySize(s string) (string, error) {
 // it is.
 func tmpSize(s string) (string, error) {
 	if config.CheckTmpSize("", s) != nil {
-		return "", errors.New("write a whole number with a unit, such as 256m or 1g, or a share of the memory, such as 10%")
+		return "", errors.New("write a whole number with a unit, such as 256m or 1g, or a share of the host's memory, such as 10%")
 	}
 	return s, nil
 }

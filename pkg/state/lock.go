@@ -76,14 +76,18 @@ func (o *LockOptions) withDefaults() LockOptions {
 // failed or not.
 //
 // cluster.Create, cluster.Delete, cluster.DeleteAll, cluster.WorkerAdd,
-// cluster.WorkerRemove, cluster.PowerOn, cluster.PowerReboot and
-// cluster.PowerCycle change state that all clusters of a realm share: the mesh, its DNS
-// records and known_hosts, and a cluster's Slurm node list. They take no
-// lock themselves. A caller holds the realm lock from before
-// mesh.Manager.EnsureMesh until the call returns, as every sind command
-// that changes a realm does; concurrent calls in one realm otherwise lose
-// each other's DNS records, host keys and node definitions, or remove each
-// other's resources.
+// cluster.WorkerRemove, cluster.Connect, cluster.Disconnect,
+// cluster.PowerOn, cluster.PowerReboot and cluster.PowerCycle change state
+// that all clusters of a realm share: the mesh, its DNS records and
+// known_hosts, the networks that its external containers join, and a
+// cluster's Slurm node list. They take no lock themselves. A caller holds
+// the realm lock from before mesh.Manager.EnsureMesh until the call
+// returns, as every sind command that changes a realm does; concurrent
+// calls in one realm otherwise lose each other's DNS records, host keys
+// and node definitions, or remove each other's resources, and a
+// cluster.Create can leave a container that cluster.Connect attaches
+// meanwhile off its new cluster network, or put one that
+// cluster.Disconnect detaches on it.
 //
 // The lock has two parts. The first is a flock(2) on the file "lock" in
 // the realm's state directory. It serializes the callers that share that

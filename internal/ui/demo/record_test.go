@@ -21,6 +21,7 @@ func TestRecord_Repeats(t *testing.T) {
 	assert.Contains(t, string(first), `"run":"`+runID(3)+`"`)
 	assert.Contains(t, string(first), `"trace":"`+traceHex(traceID(3))+`"`)
 	assert.Contains(t, string(first), `"span":"0000000000000001"`)
+	assert.Contains(t, string(first), `"program":"sind","version":"0.16.0"`, "as sind writes it, without the v")
 }
 
 func TestIDs(t *testing.T) {

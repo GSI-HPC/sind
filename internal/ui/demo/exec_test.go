@@ -148,8 +148,8 @@ func TestLogLine(t *testing.T) {
 		return logLine(journal, short, daemon, messagesOf(daemon, Facts{}), i, at)
 	}
 	pid := strconv.Itoa(pidOf("slurmdbd"))
-	assert.Equal(t, "Oct  2 09:05:07 db slurmdbd["+pid+"]: slurmdbd version 26.05.4 started", line(true, "db", "slurmdbd", 0))
-	assert.Equal(t, "[09:05:07] slurmdbd: slurmdbd version 26.05.4 started", line(false, "db", "slurmdbd", 0))
+	assert.Equal(t, "Oct  2 09:05:07 db slurmdbd["+pid+"]: slurmdbd version "+slurmNew+" started", line(true, "db", "slurmdbd", 0))
+	assert.Equal(t, "[09:05:07] slurmdbd: slurmdbd version "+slurmNew+" started", line(false, "db", "slurmdbd", 0))
 	assert.Contains(t, line(true, "w", "slurmd", 0), "launch task StepId=4000.0")
 	assert.Contains(t, line(true, "w", "chronyd", 1), "chronyd["+strconv.Itoa(pidOf("chronyd"))+"]: reloading configuration", "a unit with no texts of its own")
 	for _, daemon := range []string{"slurmctld", "slurmd", "slurmdbd", "slurmrestd", "sackd"} {

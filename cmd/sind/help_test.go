@@ -3,6 +3,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -49,6 +50,47 @@ func TestHelpTopicCommandsAndUnknown(t *testing.T) {
 	stdout, _, err = executeCommand("help")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "Available Commands:")
+}
+
+// TestHelpTopicsListsWhatHelpPrints checks that every topic that sind help
+// topics lists prints its own text, and that the list leaves out exactly
+// the topics named like a command, such as the action power, for which
+// sind help prints the command's help.
+func TestHelpTopicsListsWhatHelpPrints(t *testing.T) {
+	index, _, err := executeCommand("help", "topics")
+	require.NoError(t, err)
+	h := help.Default()
+	var listed []string
+	for _, line := range strings.Split(index, "\n") {
+		if !strings.HasPrefix(line, "  ") {
+			continue
+		}
+		id := strings.Fields(line)[0]
+		listed = append(listed, id)
+		want, ok := h.Text(id)
+		require.True(t, ok, id)
+		stdout, _, err := executeCommand("help", id)
+		require.NoError(t, err, id)
+		assert.Equal(t, want, stdout, id)
+	}
+
+	root := NewRootCommand()
+	var ids []string
+	for _, w := range h.Words() {
+		ids = append(ids, w.ID)
+	}
+	for _, a := range h.Actions() {
+		ids = append(ids, a.ID)
+	}
+	for _, howto := range h.Howtos() {
+		ids = append(ids, howto.ID)
+	}
+	for _, id := range ids {
+		found, rest, _ := root.Find([]string{id})
+		command := found != root && len(rest) == 0
+		assert.Equal(t, !command, slices.Contains(listed, id), "%s is listed unless it names a command", id)
+	}
+	assert.NotContains(t, listed, "power")
 }
 
 // shellWords splits a command line at spaces, honouring single quotes.

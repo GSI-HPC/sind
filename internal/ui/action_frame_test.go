@@ -139,6 +139,28 @@ func TestActDraftOf(t *testing.T) {
 	assert.False(t, ok, "no draft")
 }
 
+// The largest form of New cluster passes the cap of the body: the YAML and
+// the lines of every Slurm config file at their limit, of a character that
+// URL encoding makes three bytes, and its draft, which encodes it again.
+func TestActPage_TakesTheLargestForm(t *testing.T) {
+	f := newActFixture(t)
+	text := strings.Repeat("\n", actMaxText)
+	kv := []string{"realm", "sind", "name", "big", "yaml_on", "1", "yaml", text}
+	for _, field := range action.SlurmFields() {
+		kv = append(kv, field, text)
+	}
+
+	form := actForm(kv...)
+	require.Greater(t, len(form), 1<<20)
+	assert.Equal(t, http.StatusOK, f.post("/actions/create-cluster/preview", form).Code)
+
+	draft := draftOf(kv...)
+	require.Greater(t, len(draft), 2<<20)
+	w := f.postHTMX("/clusters/new", draft)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "data-act-restored", "the draft fills the form in")
+}
+
 // postFrom is postHTMX from the page at path, which htmx names in the
 // header HX-Current-URL.
 func (ts *testServer) postFrom(path, target, form string) *httptest.ResponseRecorder {

@@ -500,7 +500,7 @@ func TestActConnect_PicksAContainer(t *testing.T) {
 
 	body := f.get("/dialogs/connect?realm=sind&container=my-app").Body.String()
 	assert.Contains(t, body, "<h2 id=\"act-title\">Connect a container to realm sind</h2>")
-	assert.Contains(t, body, "The container joins the mesh and the cluster networks of realm sind. It then reaches the nodes by name.")
+	assert.Contains(t, body, "The container joins the mesh and the cluster networks of realm sind. It then reaches the nodes and the DNS server that knows their names.")
 	// The realms to switch to open the dialog again, with the container
 	// picked so far.
 	assert.Contains(t, body, `<button type="button" hx-get="/dialogs/connect?realm=ci" hx-include=".act-olist input[name=container], #act-container" hx-target="#layer" hx-swap="innerHTML" aria-pressed="false">ci</button>`)
@@ -526,7 +526,7 @@ func TestActConnect_PicksAContainer(t *testing.T) {
 	assert.Contains(t, body, `name="other" value="later-app"`)
 
 	body = f.post("/actions/connect/preview", actForm("realm", "sind", "container", "my-app")).Body.String()
-	assert.Contains(t, body, `<div class="callout"><span class="mono">my-app</span> joins <span class="mono">sind-mesh</span> and the networks of default and dev. It can then reach <span class="mono">controller.dev.sind.sind</span> and the other node by name.</div>`)
+	assert.Contains(t, body, `<div class="callout"><span class="mono">my-app</span> joins <span class="mono">sind-mesh</span> and the networks of default and dev. It can then reach <span class="mono">controller.dev.sind.sind</span> and the other node.</div>`)
 	assert.Contains(t, body, `><span class="act-okl">Connect my-app</span><kbd`)
 }
 

@@ -93,14 +93,15 @@ var (
 //
 // The span is started under the Bus the command's context brought, as a
 // test's; that Bus is the test's to close. Without one, cliprogress gives
-// the command a Bus of its own when --progress has a display drawn or
-// --progress-log an event log written, and none otherwise, so that
-// standard error is then what it would be without progress, byte for
-// byte. The Bus is closed, the display taken off the terminal, the streams put back, the
-// event log written out and, for a command that failed or was
-// interrupted, the summary written, before the decorated function
-// returns, and so before run prints the command's error: cobra does not
-// run PersistentPostRunE for a command that failed.
+// the command a Bus of its own when --progress has a display drawn or an
+// event log is written (--progress-log, SIND_PROGRESS_LOG or the default
+// activity log), and none otherwise, so that standard error is then what
+// it would be without progress, byte for byte. The Bus is closed, the
+// display taken off the terminal, the streams put back, the event log
+// written out and, for a command that failed or was interrupted, the
+// summary written, before the decorated function returns, and so before
+// run prints the command's error: cobra does not run PersistentPostRunE
+// for a command that failed.
 //
 // A command that failed once it had been interrupted ends canceled,
 // whatever its error says, as run tells it.

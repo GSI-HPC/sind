@@ -220,12 +220,17 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 	getNodes := func(ctx context.Context, client *docker.Client, realm string) ([]*cluster.NodeSummary, error) {
 		return cluster.GetNodes(ctx, client, realm, name)
 	}
-	return runGet(cmd, getNodes, func(cmd *cobra.Command, nodes []*cluster.NodeSummary, _ string) error {
+	return runGet(cmd, getNodes, func(cmd *cobra.Command, nodes []*cluster.NodeSummary, realm string) error {
 		t := newTable("CONTAINER", "ROLE", "FQDN", "IP", "STATUS")
 		for _, n := range nodes {
 			t.Add(cell(n.Container), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 		}
-		return writeTable(cmd.OutOrStdout(), t)
+		if err := writeTable(cmd.OutOrStdout(), t); err != nil {
+			return err
+		}
+		// A cluster lists no nodes when only its network is left.
+		noteNone(cmd, len(nodes), "nodes", fmt.Sprintf("cluster %q in %s", name, inRealm(realm)))
+		return nil
 	})
 }
 

@@ -11,23 +11,26 @@ import (
 
 // addHelpTopics makes sind help TOPIC print the words, how-tos and actions
 // of sind ui from package help, the texts that sind ui shows, and sind help
-// topics list them. A word that names a command is left to the command's
-// own help. It runs after cobratree.Strict, whose help command it extends.
+// topics list them. A topic named like a command is left to the command's
+// own help, and sind help topics leaves it out. It runs after
+// cobratree.Strict, whose help command it extends.
 func addHelpTopics(root *cobra.Command) {
 	h := help.Default()
 	helpCmd, _, _ := root.Find([]string{"help"})
 
+	// isCommand reports whether args name a command in full.
+	isCommand := func(args []string) bool {
+		found, rest, _ := root.Find(args)
+		return found != root && len(rest) == 0
+	}
 	// topic returns the text for args when they name a topic that is no
 	// command.
 	topic := func(args []string) (string, bool) {
-		if len(args) != 1 {
-			return "", false
-		}
-		if found, rest, _ := root.Find(args); found != root && len(rest) == 0 {
+		if len(args) != 1 || isCommand(args) {
 			return "", false
 		}
 		if args[0] == "topics" {
-			return h.Index(), true
+			return h.Index(func(id string) bool { return isCommand([]string{id}) }), true
 		}
 		return h.Text(args[0])
 	}

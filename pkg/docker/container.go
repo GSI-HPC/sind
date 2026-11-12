@@ -361,7 +361,7 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 	args := append([]string{"exec", string(container)}, command...)
 	stdout, stderr, err := c.run(ctx, args...)
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && !execFailed(stderr) {
+	if errors.As(err, &exitErr) && !errors.Is(err, ErrUnreachable) && !execFailed(stderr) {
 		return stdout, nil
 	}
 	return stdout, err
@@ -370,13 +370,11 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 // execFailed reports whether a non-zero exit of docker exec, given its
 // stderr, is docker's own failure rather than the inner command's: the
 // docker CLI exits 1 too when the daemon refuses the exec (the container is
-// missing, stopped or paused) or cannot be reached, and says so on stderr,
-// where the inner command has written nothing by then.
+// missing, stopped or paused), and says so on stderr, where the inner
+// command has written nothing by then. A daemon that cannot be reached is
+// ErrUnreachable already (classifyUnreachable).
 func execFailed(stderr string) bool {
-	msg := strings.TrimSpace(stderr)
-	return strings.HasPrefix(msg, "Error response from daemon:") ||
-		strings.HasPrefix(msg, "Cannot connect to the Docker daemon") ||
-		strings.HasPrefix(msg, "error during connect:")
+	return strings.HasPrefix(strings.TrimSpace(stderr), "Error response from daemon:")
 }
 
 // ExecWithStdin runs a command inside a container, piping stdin to it.

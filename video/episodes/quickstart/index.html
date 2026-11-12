@@ -52,7 +52,17 @@
       say: [{ id: "create", mood: "happy" }, { id: "check", mood: "smug", cues: { Now: "neutral", running: "joy" } }],
       steps: [
         { cmd: "sind create cluster", at: "create:Run" },
-        { ff: "⏩ ~40 s later", after: 0.5, hold: 1.8 },
+        { ff: "⏩ ~25 s later", after: 0.5, hold: 1.8 },
+        {
+          out: [
+            "✓ mesh  12s  4 ok  426 MiB at 35.5 MiB/s",
+            "✓ preflight  1.4s",
+            "✓ nodes  5.8s  2 ok",
+            "✓ mesh registration  0.3s",
+            "✓ slurm  4.6s  2 ok",
+          ].join("\n"),
+          at: "check:Each",
+        },
         { prompt: true, after: 0.9 },
         { cmd: "sind get clusters", at: "check:Now" },
         { out: "NAME      NODES (S/C/D/A/W)   SLURM     STATUS\ndefault   2 (0/1/0/0/1)       26.05.6   running", at: "check:shows" },

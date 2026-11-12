@@ -32,9 +32,12 @@ var errSacctmgrTimeout = errors.New("sacctmgr timed out")
 // to add users. The commands then run in one docker exec, which
 // sacctmgrTimeout bounds.
 //
-// The Linux users exist on the controller by then (setupNodes), so
-// slurmctld resolves the uids of the new associations right away instead
-// of an hour later. sacctmgr -i does not stop for a user it cannot find.
+// With identity local or nssSlurm, and with clientIds when the controllers
+// get the users, the Linux users exist on the controller by then
+// (setupNodes), so slurmctld resolves the uids of the new associations
+// right away instead of an hour later. With clientIds and no users on the
+// controllers, slurmctld sets each uid from the user's token at their first
+// request instead. sacctmgr -i does not stop for a user it cannot find.
 func createSlurmAccounts(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, interval time.Duration, watcher *monitor.Watcher) error {
 	controller := ContainerName(realm, cfg.Name, string(config.RoleController))
 	registered := probe.Probe{Name: "registration", Check: probe.ClusterRegistered(cfg.Name)}

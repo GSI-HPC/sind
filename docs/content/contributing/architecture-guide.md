@@ -40,6 +40,10 @@ internal/hostname/ DNS label check behind config.CheckName (cluster and realm na
 
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
+internal/detach/   The context of a write that must not be cut short (mesh DNS, known_hosts, sind-nodes.conf): it ignores the caller's cancellation and deadline, but ends with the rollback it runs under
+
+internal/help/     The help texts (words, the actions of sind ui, its pages, how-tos) in embedded YAML: what sind help TOPIC prints and sind ui shows as hint cards, in its help pane and in its jump box; Load checks them
+
 internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fragments, routes, services)
   ├── server.go    The handler: go-clikit's localweb checks and sessions (headers, Host, same origin, token, CSRF) in front of the pages; ui.go: the listener of 127.0.0.1, localweb.Serve, and the single instance and the browser through localweb/launch
   ├── sse.go       Live updates: renders the fragments of a page for go-clikit's localweb/sse
@@ -83,6 +87,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── get.go       Listing clusters, nodes (GetNode, GetAllNodes), networks, volumes; GetSSHConfig
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
+  ├── slurminfo.go What Slurm says about a cluster, for sind ui (GetSlurmInfo: sinfo's nodes and partitions, slurm.conf and sind-nodes.conf)
   ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
@@ -114,8 +119,8 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, where the daemon runs, cgroupv2 and the
-                   nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
+pkg/doctor/        Host prerequisite checks (Docker version, the daemon's mode, where the daemon runs,
+                   cgroupv2 and the nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
@@ -123,16 +128,20 @@ pkg/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafan
                    configuration, Alloy config generation, dashboards
 pkg/probe/         Node readiness probes
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
-                   discovery, munge key, slurm.key and jwt_hs256.key generation, sacctmgr
-                   account commands
+                   discovery and image probe (ProbeImage), sinfo parsing, munge key, slurm.key
+                   and jwt_hs256.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
-pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold; Holder reads who holds it
+pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock
+                   network on the daemon) that library callers of Create, Delete, DeleteAll,
+                   WorkerAdd, WorkerRemove, Connect, Disconnect, PowerOn, PowerReboot and
+                   PowerCycle hold; Holder reads who holds it
 ```
 
 ## Dependency flow
 
 ```
 cmd/sind → pkg/cluster → pkg/cmdexec
+                       → internal/detach
                        → internal/envvar
                        → internal/natsort
                        → pkg/config  → internal/hostname
@@ -148,6 +157,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                      → pkg/cmdexec
                                      → pkg/config
                                      → pkg/log
+                                     → internal/detach
                                      → internal/natsort
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
@@ -175,7 +185,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
          → github.com/GSI-HPC/go-nodeset
 ```
 
-`cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
+`cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh` and `pkg/ssh` directly, and `internal/envvar`, `internal/help`, `internal/mcpconfig`, `internal/ui` (`sind ui`) and `internal/ui/collect` (the bounds of its `--monitoring-interval`).
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks (`doctor.Run`) directly from `cmd/sind` (no cluster orchestration; `cmd/sind/doctor.go` only writes the result with go-clikit's `doctor` package, whose `Check` is the type of the checks); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), writes files whole (editor configurations, the MCP stream's token, the configs of `sind ui`) with its `fsutil` package, and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
@@ -200,7 +210,7 @@ The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `
 
 5. **Implement the operation** in `pkg/cluster/` (not in `cmd/sind/`)
 6. **Show its progress** if it changes clusters and asks nothing: wrap `RunE` with `withProgress(...)`, and have the operation report its work as progress spans (see [Progress spans](#progress-spans))
-7. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
+7. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive, runs until interrupted or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
 8. **Write tests** for both the CLI layer and the cluster operation
 
 The CLI layer should be thin — argument parsing, flag handling, and output formatting. Business logic belongs in `pkg/cluster/`.
@@ -216,7 +226,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 
 ### Executor abstraction
 
-All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable, with one exception (see below):
+All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable, with two exceptions (see below):
 
 ```go
 type Executor interface {
@@ -228,7 +238,9 @@ type Executor interface {
 
 `pkg/docker` uses an executor for Docker CLI calls. `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl, pkcheck). The CLI wraps the mesh executor in a `LoggingExecutor` to emit TRACE-level logs for system commands.
 
-The exception is `dockerExec` in `cmd/sind/ssh.go`, used by `ssh`, `enter`, `exec` and `logs`. It runs `docker` through `os/exec` with the terminal's stdin, stdout and stderr attached, because `Executor` only captures output, and unlike the calls through `docker.Client` it logs no TRACE line. Its unit tests cannot use `mock.Executor`: they put the test binary first on `PATH` as a fake `docker`, controlled by the `SIND_TEST_DOCKER_*` variables in `cmd/sind/main_test.go`.
+One is `dockerExec` in `cmd/sind/ssh.go`, used by `ssh`, `enter`, `exec` and `logs`. It runs `docker` through `os/exec` with the terminal's stdin, stdout and stderr attached, because `Executor` only captures output, and unlike the calls through `docker.Client` it logs no TRACE line. Its unit tests cannot use `mock.Executor`: they put the test binary first on `PATH` as a fake `docker`, controlled by the `SIND_TEST_DOCKER_*` variables in `cmd/sind/main_test.go`.
+
+The other is the browser that `sind ui --open` opens: go-clikit's `localweb/launch` starts the desktop's opener (`xdg-open`, `open`) with `launch.Detached`, in a session of its own and bound to no context, so that stopping `sind ui` does not take the browser with it. Its unit tests replace it through the `start` field of `internal/ui`'s `Options`.
 
 ### Context-based dependency injection
 

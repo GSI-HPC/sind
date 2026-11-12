@@ -55,7 +55,7 @@
   items:
     - icon: ci
       title: Designed for CI/CD
-      text: Runs on standard GitHub Actions runners with the runner's Docker daemon, no sudo or privileged containers. sind-action sets up clusters in a single step.
+      text: Runs on standard GitHub Actions runners with the runner's Docker daemon, no privileged containers. sind-action sets up clusters in a single step.
       link: guides/ci-cd
     - icon: spark
       title: AI-ready via MCP
@@ -71,9 +71,9 @@
       link: web-ui
     - icon: link
       title: Connect outside containers
-      text: Attach containers such as kind nodes to a realm's mesh and cluster networks, so they resolve and reach the nodes by name.
+      text: Attach containers such as kind nodes to a realm's mesh and cluster networks, so they reach its nodes and, with a forward of the realm's zone, resolve them by name.
       link: guides/kind
     - icon: box
       title: Minimal dependencies
-      text: Just Docker and a sind container image. Usable as both a CLI tool and a Go library.
+      text: Just Docker Engine on a Linux host and a sind container image. Usable as both a CLI tool and a Go library.
       link: getting-started/installation

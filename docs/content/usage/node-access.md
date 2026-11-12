@@ -114,7 +114,7 @@ sind ssh worker-0 -- false; echo $?    # 1
 
 ## Data mount
 
-By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` set `/data` as the working directory, so files from the host are immediately accessible.
+By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` start in the data mount point, `/data` unless the cluster config sets another `mountPath`, so files from the host are immediately accessible.
 
 Use the `--data` flag to change this behavior:
 
@@ -135,7 +135,7 @@ sind create cluster --data volume
 ```
 
 {{< callout type="info" >}}
-`sind ssh` connects via SSH and starts in the user's home directory, not `/data`. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in `/data` directly. With `--user`, they start in the user's home directory instead.
+`sind ssh` connects via SSH and starts in the user's home directory, not in the data mount. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in it directly. With `--user`, they start in the user's home directory instead.
 {{< /callout >}}
 
 ## Command routing
@@ -157,7 +157,7 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 | `ssh_config` | SSH config snippet, with a `Host` block for each node of the realm |
 | `id_ed25519` | Private key |
 | `known_hosts` | Host keys |
-| `lock` | Advisory lock that serializes your commands that create and delete clusters and workers, and `sind power on`, `reboot` and `cycle`, in the realm; the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}) on the Docker daemon serializes them with other users' |
+| `lock` | Advisory lock that serializes your commands that create and delete clusters and workers, `sind connect container` and `disconnect container`, and `sind power on`, `reboot` and `cycle`, in the realm; the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}) on the Docker daemon serializes them with other users' |
 
 The SSH files are updated on every create/delete operation, also on a delete that fails partway, and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file. Only your own sind commands update them: in a realm that you share with another user of the Docker daemon, that user's creates and deletes do not reach your files.
 

@@ -113,7 +113,7 @@ func pgFillStore(st *store.Store) {
 	st.SetLock("sind", &state.LockHolder{Command: "sind create worker dev", Host: "zeta", PID: 4242, Since: pgNow.Add(-time.Minute)})
 	st.SetDoctor(&store.DoctorReport{Time: pgNow, Checks: []store.DoctorCheck{
 		{Name: "Docker daemon", Status: "ok"},
-		{Name: "inotify", Status: "warning", Detail: "fs.inotify.max_user_watches is 8192"},
+		{Name: "inotify", Status: "warning", Detail: "max_user_instances 128 (10 or more nodes on this host need 1024; optional)"},
 		{Name: "cgroupv2", Status: "failed", Detail: "no nsdelegate"},
 	}})
 	end := func(d time.Duration) *time.Time { t := pgNow.Add(-d); return &t }

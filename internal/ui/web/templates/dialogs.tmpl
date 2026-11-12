@@ -266,7 +266,7 @@ ticked node. */}}
 {{if .Nodes}}<div class="act-ph2"><label class="lbl" for="act-nodeset">Nodes of {{.Cluster}}</label>
   <span class="act-picks" role="group" aria-label="Tick"><span class="faint">Tick:</span>{{range .Picks}}<button type="button" class="btn sm act-qp" data-act-pick="{{.Nodes}}"{{if not .N}} disabled{{end}}>{{.Label}} <span class="act-qn{{if and .N .Class}} {{.Class}}{{end}}">{{.N}}</span></button>{{end}}</span></div>
 <input type="text" id="act-nodeset" value="{{.PickedSet}}" placeholder="such as worker-[0-3]" autocapitalize="off" autocomplete="off" spellcheck="false" aria-describedby="act-nodeset-err act-nodeset-hint" data-act-nodeset>
-<span class="err" id="act-nodeset-err" role="status"></span><span class="hint" id="act-nodeset-hint">A node set as the CLI takes it. The ticks follow it, and it follows the ticks.</span>
+<span class="err" id="act-nodeset-err" role="status"></span><span class="hint" id="act-nodeset-hint">Names, ranges and lists, such as worker-[0-3] or controller,worker-1. The ticks follow it, and it follows the ticks.</span>
 {{template "act-ntable" .}}
 {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}
 </div></div>

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -839,11 +840,13 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 // with a stopped relay (see StartMesh), as every node and the relay resolve
 // through it.
 //
-// The write and the reload ignore the cancellation of ctx, so that Ctrl+C
-// cannot leave the DNS container stopped or with a Corefile it has not
-// loaded.
+// The write and the reload ignore the cancellation and the deadline of
+// ctx, so that Ctrl+C cannot leave the DNS container stopped or with a
+// Corefile it has not loaded, but end with the rollback that ctx runs
+// under (internal/detach).
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
-	ctx = context.WithoutCancel(ctx)
+	ctx, cancel := detach.Context(ctx)
+	defer cancel()
 	name := m.DNSContainerName()
 	err := m.Docker.CopyToContainer(ctx, name, "/", dnsFiles(m.Realm, entries))
 	if err != nil {

@@ -9,8 +9,8 @@ description: Bump Slurm or another source-built component (UCX, PMIx, PRRTE, Ope
 drives them into one PR; this skill is the procedure for each one.
 
 `Dockerfile` builds these from source, each pinned by version and sha256, or for
-libjwt, which publishes no release tarballs for 1.x, by version and git commit. Slurm's
-version and checksum are build args without defaults; `SLURM_RELEASES` in
+libjwt, which published no release tarball for 1.18.4, by version and git commit.
+Slurm's version and checksum are build args without defaults; `SLURM_RELEASES` in
 `docker-bake.hcl` sets them for each image, one entry per supported release line,
 newest line first. The first entry is also tagged `latest`, the default image of
 builds from source, and at each sind release `vX.Y.Z`, the release binaries' default.
@@ -44,9 +44,13 @@ create. The monitoring integration test, `TestMonitoring` in
 `pkg/cluster/monitoring_integration_test.go`, is the real check (CI, as it needs Docker);
 `.github/workflows/ci.yml` reads the four `<Name>Image = "<image>"` lines with `sed`
 to pull the images from Google's mirror, so keep that form.
-Update the tag in `DESIGN.md` (Supported Versions and the Monitoring Stack table),
+Update the tag in `DESIGN.md` (the Monitoring Stack table),
 `docs/content/architecture/docker-resources.md` and the offline preload list in
-`docs/content/getting-started/installation.md`.
+`docs/content/getting-started/installation.md`, and Grafana's also in the
+`sind get monitoring -o json` samples of `DESIGN.md` and
+`docs/content/usage/diagnostics.md`. When the major or minor version changes, also
+update the series under "Supported Versions" in `DESIGN.md`, which a grep for the old
+tag does not find.
 
 sind discovers the Slurm version from the image at runtime (`slurmctld -V` in an
 ephemeral container, see `pkg/slurm/version.go`), so a bump needs no Go code changes,
@@ -95,13 +99,18 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
      `docs/content/container-images/building-images.md`. The Dockerfile needs no change.
    - Other components: both `ARG <NAME>_VERSION=` lines in `Dockerfile` (the builder
      stage and the final stage that sets the image labels) and the component's
-     `ADD --checksum=sha256:` line. `docker-bake.hcl` does not list them.
+     `ADD --checksum=sha256:` line. `docker-bake.hcl` does not list them. When the
+     major or minor version changes, also update the component's series under
+     "Supported Versions" in `DESIGN.md`, which a grep for the old full version does
+     not find.
    - every other occurrence of the old version: `grep -rn '<old>' --exclude-dir=.git .`
-     For Slurm these are `DESIGN.md`, `docs/content/architecture/{docker-resources,slurm-config}.md`,
-     `docs/content/usage/{cluster-lifecycle,diagnostics}.md`,
-     `docs/content/getting-started/quickstart.md` (the newest release line),
-     `docs/content/usage/worker-management.md`, `pkg/slurm/version_test.go`,
-     `pkg/cluster/{identity,node,status,worker}_test.go` and `cmd/sind/get_test.go`.
+     The grep is the list. For Slurm it finds `DESIGN.md`, pages under `docs/content/`,
+     the terminal output of the quickstart episode (`video/episodes/quickstart/index.html`;
+     then `npm run episode -- check quickstart` in `video/`), the web UI's demo
+     (`internal/ui/demo/`) and tests in `cmd/sind`, `pkg/cluster`, `pkg/slurm` and
+     `internal/ui`. For Slurm, grep for the release line too (e.g.
+     `grep -rnE '26\.05\.[0-9]+' --exclude-dir=.git .`): it finds a version that an
+     earlier bump left behind, which the grep for the old version misses.
    - `docker buildx bake --print` shows the resulting targets, build args and tags.
 5. **Check:** `go mod download && make test` and `make lint-docs`.
 6. **Commit:** `build(image): bump slurm to X.Y.Z` with bullets for the version, the

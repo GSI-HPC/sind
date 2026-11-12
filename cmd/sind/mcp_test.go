@@ -838,7 +838,7 @@ func TestMCPToolArgs(t *testing.T) {
 			"dry-run": false,
 			"image":   nil,
 			"device":  []any{"/dev/a", "/dev/b"},
-			"label":   map[string]any{"b": "2", "a": float64(1)},
+			"label":   map[string]any{"b": "2", "a": float64(1), "c": float64(1234567)},
 		},
 		Args: []string{"dev"},
 	}
@@ -846,12 +846,17 @@ func TestMCPToolArgs(t *testing.T) {
 		"create", "worker",
 		"--count", "2",
 		"--device", "/dev/a", "--device", "/dev/b",
-		"--label", "a=1", "--label", "b=2",
+		"--label", "a=1", "--label", "b=2", "--label", "c=1234567",
 		"--pull",
 		"--wait", "5m",
 		"dev",
 	}, mcpToolArgs("sind_create_worker", in))
 	assert.Equal(t, []string{"get", "ssh-config"}, mcpToolArgs("sind_get_ssh-config", ophis.ToolInput{}))
+
+	// A JSON number comes as a float64: a whole one of a million or more
+	// is written without an exponent, as a whole-number flag takes it.
+	in = ophis.ToolInput{Flags: map[string]any{"tail": float64(1000000)}, Args: []string{"worker-0"}}
+	assert.Equal(t, []string{"logs", "--tail", "1000000", "worker-0"}, mcpToolArgs("sind_logs", in))
 }
 
 func TestInProcessGroup(t *testing.T) {

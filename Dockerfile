@@ -31,7 +31,7 @@
 #   /data       — user-facing shared data directory
 #
 # Build (one image per Slurm release line in docker-bake.hcl):
-#   docker buildx bake
+#   docker buildx bake --allow=network.host --set '*.platform=local'
 
 # ==============================================================================
 # Stage: builder-base — Rocky 10 with common build toolchain
@@ -128,8 +128,8 @@ RUN tar xf prrte.tar.bz2 && \
 # Stage: libjwt-builder — compile libjwt 1.x from source
 # ==============================================================================
 # Slurm's auth/slurm plugin (and with it cred/slurm and sackd's purpose) is
-# only built with libjwt, through its 1.x API. libjwt publishes no release
-# tarball for 1.18, so the tag is cloned and pinned by its commit.
+# only built with libjwt, through its 1.x API. libjwt published no release
+# tarball for 1.18.4, so the tag is cloned and pinned by its commit.
 FROM builder-base AS libjwt-builder
 
 ARG LIBJWT_VERSION=1.18.4

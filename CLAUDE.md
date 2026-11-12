@@ -43,8 +43,10 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
 - Cloud sessions have no Docker daemon and may lack firejail
   (`apt-get install -y firejail`); integration tests then only run in CI.
 - If golangci-lint fails with "the Go language version ... used to build golangci-lint
-  is lower than the targeted Go version", rebuild it with the toolchain from `go.mod`:
-  `GOTOOLCHAIN=go$(go list -m -f '{{.GoVersion}}') go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`.
+  is lower than the targeted Go version", rebuild the version that the Lint job of
+  `.github/workflows/ci.yml` pins with the toolchain that `go.mod` selects (its
+  `toolchain` line), from the repository root:
+  `GOTOOLCHAIN=$(go env GOVERSION) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@<version>`.
 
 ## Code conventions
 
@@ -108,10 +110,12 @@ same PR.
 ## sind-action
 
 [GSI-HPC/sind-action](https://github.com/GSI-HPC/sind-action) drives this CLI in CI:
-the release assets `sind-linux-amd64`/`sind-linux-arm64` and the `releases/latest`
-redirect, `sind version --json` (its `version` field), the root `-v` flag,
-`sind doctor`, `sind create cluster [NAME] --config [--pull[=false]] [--wait]`,
+the release assets `sind-linux-amd64`/`sind-linux-arm64` and `checksums.txt` (one
+sha256 line per asset), their build provenance attestation (made by the attest step of
+`.github/workflows/release.yml` itself, at the release tag, on a GitHub-hosted runner),
+the `releases/latest` redirect, `sind version --json` (its `version` field), the root
+`-v` flag, `sind doctor`, `sind create cluster [NAME] --config [--pull[=false]] [--wait]`,
 `sind get cluster` (`sind status` before v0.9.0), `sind delete cluster --all`, and
-`SIND_REALM`. Removing or renaming any of these needs a matching sind-action change.
-sind-action sets `SIND_VERBOSITY` for the whole job, and `SIND_VERSION` and
+`SIND_REALM`. Removing, renaming or moving any of these needs a matching sind-action
+change. sind-action sets `SIND_VERBOSITY` for the whole job, and `SIND_VERSION` and
 `SIND_VERIFY` for its install step: no `SIND_*` variable of sind may take these names.

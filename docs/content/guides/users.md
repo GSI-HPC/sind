@@ -52,10 +52,10 @@ users:
 {{< /cli >}}
 {{< ui >}}
 
-1. Press **New cluster…**, pick **With job history** for the db node and the submitter, and set **workers** to 3.
-2. Under **More options**, open **Users, identity, monitoring**. Press **+ Add group**, **+ Add account** and **+ Add user**, and fill in their rows. **+ Add limit** adds a limit to an account, and **More: groups, coordinator, admin level** of a user sets its groups, coordinator and admin level.
+1. Press **New cluster…**, pick **With job history** for the db node and the submitter, set the name to `default` and **workers** to 3.
+2. Under **More options**, set **Node sizes** to **Medium**, 2 CPUs each, and open **Users, identity, monitoring**. Press **+ Add group**, **+ Add account** and **+ Add user**, and fill in their rows. **+ Add limit** adds a limit to an account, and **More: groups, coordinator, admin level** of a user sets its groups, coordinator and admin level.
 3. Open **Slurm config** and add `AccountingStorageEnforce=associations,limits` to `main`.
-4. Press **Create**.
+4. Press **Create default**.
 
 **Identity** in the same section sets the identity mode.
 

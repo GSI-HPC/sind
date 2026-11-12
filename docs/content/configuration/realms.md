@@ -38,7 +38,7 @@ Realm is determined by the following precedence (highest first):
 {{< /cli >}}
 {{< ui >}}
 
-The realm switcher at the head of the **Realm** group of the rail selects the realm that Clusters, Nodes, Mesh and DNS, Monitoring and Topology show, or all realms; Overview and Activity show every realm. A command for the terminal on these pages has `--realm` when the realm is not `sind`, and a **Copy** button. A dialog acts in the realm of its cluster and says so. **New cluster** has a **Realm** list instead, which opens on the realm of the rail, or `sind` under all realms. It lists each realm with its clusters, and **New realm…**, which shows a field for the name of a new realm. The plan warns that the cluster makes a new realm, and names a realm of a close name, so that a typo does not make one unnoticed. **Connect a container** connects to the realm in its title, and has a button for each realm to switch it, as the container joins the mesh of a realm with a cluster. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci delete realm`.
+The realm switcher at the head of the **Realm** group of the rail selects the realm that Clusters, Nodes, Mesh and DNS, Monitoring and Topology show, or all realms; Overview and Activity show every realm. A command for the terminal on these pages has `--realm` when the realm is not `sind`, and a **Copy** button. A dialog acts in the realm of its cluster and says so. **New cluster** has a **Realm** list instead, which opens on the realm of the rail, or `sind` under all realms. It lists each realm with its clusters, and **New realm…**, which shows a field for the name of a new realm. The plan warns that the cluster makes a new realm, and names a realm of a close name, so that a typo does not make one unnoticed. **Connect a container** connects to the realm in its title, and has a button for each realm to switch it, as the container joins the mesh of a realm with a cluster. Its command has `--realm` when the realm is not `sind`, such as `sind --realm ci connect container bridge-control-plane`.
 
 {{< /ui >}}
 {{< /ways >}}
@@ -92,7 +92,7 @@ Warning: waiting for another sind command in realm "sind" to finish: sind create
 {{< /cli >}}
 {{< ui >}}
 
-A dialog that changes a realm while another command holds its lock names that command. The Overview names it too. Your command waits until the other one ends, and its run page shows the wait as `realm lock`. To stop the other command, press **Stop** on its run if sind ui started it, or Ctrl-C in its terminal.
+A dialog that changes a realm while another command holds its lock names that command. The Overview names it too. Your command waits until the other one ends, and its run page shows the wait as `realm lock`. To stop the other command, press **Stop…** on its run if sind ui started it, or Ctrl-C in its terminal.
 
 {{< /ui >}}
 {{< /ways >}}
@@ -109,7 +109,7 @@ Warning: the realm lock is still held by sind create cluster dev (pid 4242 on bu
 
 Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs. Clients that share a realm are safe from each other, but not isolated: `sind delete cluster --all` deletes the other client's clusters too, and cluster names must differ. Give independent jobs a realm each.
 
-Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves. They pass their Docker client as `LockOptions.Client`; without it, only the file lock is taken, which does not serialize other clients of the daemon.
+Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.Connect`, `cluster.Disconnect`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves. They pass their Docker client as `LockOptions.Client`; without it, only the file lock is taken, which does not serialize other clients of the daemon.
 
 ## Example
 

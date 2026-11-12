@@ -34,7 +34,7 @@ This is equivalent to the fully expanded form:
 kind: Cluster
 name: default
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:v0.16.0  # the image of your sind release
+  image: ghcr.io/gsi-hpc/sind-node:v0.16.1  # the image of your sind release
   cpus: 1
   memory: 512m
   tmpSize: 256m
@@ -130,7 +130,7 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `image` | the image of the sind release, e.g. `ghcr.io/gsi-hpc/sind-node:v0.16.0` ([details]({{< relref "/container-images/building-images#official-images" >}})) | Container image |
+| `image` | the image of the sind release, e.g. `ghcr.io/gsi-hpc/sind-node:v0.16.1` ([details]({{< relref "/container-images/building-images#official-images" >}})) | Container image |
 | `cpus` | `1` | CPU limit per container; a managed worker's Slurm `CPUs` |
 | `memory` | `"512m"` | Memory limit per container, without swap, in Docker's size syntax (see below); a managed worker's Slurm `RealMemory`; `/dev/shm` gets half of it |
 | `tmpSize` | `"256m"` | tmpfs size for `/tmp`; files there count against `memory` |
@@ -141,7 +141,7 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 
 Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node values. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are merged with per-node values.
 
-`memory` takes Docker's size syntax: a number, optionally with a fraction, and an optional unit `b`, `k`, `m`, `g`, `t` or `p`, in either case, the last five optionally followed by `b` or `ib`. All units are powers of 1024 and a number without a unit counts bytes, so `512m`, `2g`, `2GB`, `2GiB`, `1.5g` and `1073741824` are valid. It must be at least `6m`, Docker's minimum. A managed worker's Slurm `RealMemory` is its `memory` in MiB, rounded down, with no reserve for the node's daemons or its `/tmp`, a tmpfs that counts against the limit; jobs that do not ask for memory get a share per CPU (see [`DefMemPerCPU`]({{< relref "/architecture/slurm-config#slurmconf" >}})). `tmpSize` is passed to the kernel as the tmpfs size: a whole number with an optional unit `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the memory, such as `50%`. `cpus` must not be negative; `0` means the default.
+`memory` takes Docker's size syntax: a number, optionally with a fraction, and an optional unit `b`, `k`, `m`, `g`, `t` or `p`, in either case, the last five optionally followed by `b` or `ib`. All units are powers of 1024 and a number without a unit counts bytes, so `512m`, `2g`, `2GB`, `2GiB`, `1.5g` and `1073741824` are valid. It must be at least `6m`, Docker's minimum. A managed worker's Slurm `RealMemory` is its `memory` in MiB, rounded down, with no reserve for the node's daemons or its `/tmp`, a tmpfs that counts against the limit; jobs that do not ask for memory get a share per CPU (see [`DefMemPerCPU`]({{< relref "/architecture/slurm-config#slurmconf" >}})). `tmpSize` is passed to the kernel as the tmpfs size: a whole number with an optional unit `k`, `m`, `g`, `t`, `p` or `e`, or a percentage, such as `10%`. The kernel takes a percentage of the Docker host's RAM, not of the node's `memory`. `cpus` must not be negative; `0` means the default.
 
 `memory` covers everything in a node: the jobs, the node's own services (systemd, munge, sshd, the Slurm daemon; also mariadb and slurmdbd on a db node) and files in `/tmp`, `/run` and `/dev/shm`. Slurm is told the whole limit (`RealMemory`), so raise `memory` for jobs that need much memory or `/tmp`.
 
@@ -362,7 +362,7 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
 - `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`
-- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute, contain no comma and not be a path where the nodes already mount something: `/etc/slurm`, `/etc/munge` (except with identity `clientIds`), `/tmp`, `/run`, `/run/lock`, `/home` with `users`, `/cvmfs` with `storage.cvmfs`, or `/var/spool/slurmctld` with `backupController`
+- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute, contain no comma and not be a path where the nodes already mount something: `/etc/slurm`, `/etc/munge` (except with identity `clientIds`), `/tmp`, `/run`, `/run/lock`, `/home` with `users`, `/cvmfs` with `storage.cvmfs`, `/var/spool/slurmctld` with `backupController`, or `/var/log/journal` with `monitoring`
 - User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`, and `groups` must not repeat an entry or the primary `group`
 - `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`; an identity parameter that `slurm.main` sets must keep sind's value (see [Identity section](#identity-section))
 - `monitoring` requires a managed controller; with it, the `main` section must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers`, and with `PrivateData` it must set `MetricsParameters=ignore_private_data`, so that the monitoring stack can read slurmctld's metrics without a token

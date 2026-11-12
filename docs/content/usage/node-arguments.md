@@ -4,7 +4,7 @@ title: "Node Arguments"
 description: "DNS-style node naming and node set expressions"
 toc: true
 webui: none
-webuiNote: "The web UI selects nodes with checkboxes, and shows the selection as a node set, such as `worker-[2-4]`. The node sets on this page are for the CLI."
+webuiNote: "The web UI selects nodes with checkboxes, and shows the selection as a node set, such as `worker-[2-4]`. Its jump box takes the node sets of this page, such as `reboot worker-[0-3].dev`. The node set field of the Power dialog takes ranges and lists, such as `worker-[0-3]`."
 ---
 
 ## Format
@@ -29,7 +29,7 @@ sind splits a name at its last `.`: what follows is the cluster, which must be a
 
 ## Node sets
 
-A node argument is a node set expression in the syntax of [ClusterShell](https://clustershell.readthedocs.io/en/latest/tools/nodeset.html), which Slurm and pdsh users know too. sind parses it with [go-nodeset](https://github.com/GSI-HPC/go-nodeset); its [language reference](https://github.com/GSI-HPC/go-nodeset/blob/v1.0.0/doc/language.md) has the full rules.
+A node argument is a node set expression in the syntax of [ClusterShell](https://clustershell.readthedocs.io/en/latest/tools/nodeset.html), which Slurm and pdsh users know too. sind parses it with [go-nodeset](https://github.com/GSI-HPC/go-nodeset); its [language reference](https://github.com/GSI-HPC/go-nodeset/blob/v1.1.0/doc/language.md) has the full rules.
 
 | Expression | Nodes |
 |------------|-------|
@@ -90,7 +90,7 @@ sind acts on the nodes in the order go-nodeset lists them:
 
 sind rejects these before it acts on any node, with exit status 2:
 
-- a malformed expression, such as `worker-[`, `worker-[3-1]` or `worker-[1-010]` (bounds padded to different widths)
+- a malformed expression, such as `worker-[`, `worker-[3-1]`, `worker-[1-]` (a range without its last bound) or `worker-[1-010]` (bounds padded to different widths)
 - a group, such as `@compute`: sind has no node groups
 - an expression that names no node, such as `worker-[0-1]!worker-[0-1]`
 - an expression that names more than 1,048,576 (2^20) nodes, refused before the names are allocated

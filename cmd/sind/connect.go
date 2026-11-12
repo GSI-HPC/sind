@@ -20,11 +20,14 @@ func newConnectCommand() *cobra.Command {
 		Use:   "container CONTAINER...",
 		Short: "Attach containers outside sind to the realm's networks",
 		Long: `Attach containers outside sind, such as kind nodes, to the realm's mesh
-network and every cluster network, so that they resolve the realm's names
-and reach its nodes. Clusters created later are connected to them too,
-while the realm has a cluster. Deleting a cluster or the realm detaches
-them, and deleting the realm's last cluster takes the realm's mesh, so that
-a cluster created after it is not connected to them.`,
+network and every cluster network, so that they can reach the realm's DNS
+server and its nodes. To resolve the realm's names, a container must send
+its queries for the realm's zone to that server, as the CoreDNS server
+block of sind get coredns-config does. Clusters created later are
+connected to them too, while the realm has a cluster. Deleting a cluster
+or the realm detaches them, and deleting the realm's last cluster takes
+the realm's mesh, so that a cluster created after it is not connected to
+them.`,
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeContainers(cluster.ConnectableContainers),
 		RunE: withProgressOn(containersTarget, func(cmd *cobra.Command, args []string) error {
