@@ -88,7 +88,9 @@ func buildConnect(f Form, c Context) (Command, error) {
 }
 
 // connectReach says what a container that joins the realm then reaches:
-// its mesh network and the networks of its clusters, and a node by name.
+// its mesh network and the networks of its clusters, and so the nodes. It
+// names a node by its record in the realm's DNS, a name that the container
+// resolves only once it asks that DNS server.
 func connectReach(sn store.Snapshot, realm, name string, m store.Mesh) string {
 	var clusters []string
 	for _, cl := range sn.Clusters[realm] {
@@ -105,13 +107,13 @@ func connectReach(sn store.Snapshot, realm, name string, m store.Mesh) string {
 	}
 	switch n := len(m.Records); n {
 	case 0:
-		return text + ". It can then reach the nodes of realm " + realm + " by name."
+		return text + ". It can then reach the nodes of realm " + realm + "."
 	case 1:
-		return text + ". It can then reach `" + m.Records[0].Hostname + "` by name."
+		return text + ". It can then reach `" + m.Records[0].Hostname + "`."
 	case 2:
-		return text + ". It can then reach `" + m.Records[0].Hostname + "` and the other node by name."
+		return text + ". It can then reach `" + m.Records[0].Hostname + "` and the other node."
 	default:
-		return fmt.Sprintf("%s. It can then reach `%s` and the other %d nodes by name.", text, m.Records[0].Hostname, n-1)
+		return fmt.Sprintf("%s. It can then reach `%s` and the other %d nodes.", text, m.Records[0].Hostname, n-1)
 	}
 }
 

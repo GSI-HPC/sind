@@ -51,11 +51,11 @@
       {{range .External}}<tr><td class="mono"><b>{{.Name}}</b></td><td><span class="pill ok">connected</span></td>
         <td class="act"><a class="btn sm" href="{{.DisconnectURL}}" hx-get="{{.DisconnectURL}}" hx-target="#layer" hx-swap="innerHTML">Disconnect…</a></td></tr>
       {{end}}</tbody></table></div>
-      {{else if .Outsides}}<div class="pb stack more-outs"><p class="muted">A container on the mesh reaches the nodes by name. These containers run, and can connect to realm {{.Name}}:</p>
+      {{else if .Outsides}}<div class="pb stack more-outs"><p class="muted">A connected container reaches the nodes and the DNS server. These containers run, and can connect to realm {{.Name}}:</p>
         <div class="more-olist">{{range .Outsides}}<div class="more-orow"><span class="more-on"><b class="mono">{{.Name}}</b><small>{{.Image}}{{with .Up}} · {{.}}{{end}}{{with .Also}} · {{.}}{{end}}</small></span>
           <a class="btn sm" href="{{.ConnectURL}}" hx-get="{{.ConnectURL}}" hx-target="#layer" hx-swap="innerHTML" aria-label="Connect {{.Name}} to realm {{$r.Name}}…">Connect…</a></div>{{end}}</div>
         <p class="hint">Or connect one by name: <span class="pg-cli"><code class="mono">{{.ConnectCommand}}</code>{{template "pg-copy" .ConnectCommand}}</span></p></div>
-      {{else}}<div class="empty">No other containers. Connect one, such as a kind node, to reach the clusters by name.</div>{{end}}</section>
+      {{else}}<div class="empty">No other containers. Connect one, such as a kind node, to reach the clusters from it.</div>{{end}}</section>
   </div>
 </div>
 {{end}}
