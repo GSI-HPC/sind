@@ -693,6 +693,9 @@ func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
 		"Error response from daemon: No such container: sind-dev-controller\n",
 		"Error response from daemon: container 0123abcd is paused, unpause the container before exec\n",
 		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+		"failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory\n",
+		"permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: connect: permission denied\n",
+		"permission denied while trying to connect to the docker API at unix:///var/run/docker.sock\n",
 		"error during connect: Get \"http://docker.example:2375/v1.47/containers/x/json\": dial tcp: connection refused\n",
 	} {
 		t.Run(stderr, func(t *testing.T) {
