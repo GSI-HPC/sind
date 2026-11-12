@@ -64,7 +64,7 @@ Creating and deleting clusters and workers, deleting a realm, and connecting and
 - `ensureMonitoring` (`monitoring` only) creates, starts or upgrades the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}), waits until it is ready and adds the new nodes to it. When the concurrent steps are done, `registerStackDNS` adds the stack's names to the mesh DNS.
 - If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it, and a monitoring stack it created only if no other cluster of the realm is monitored.
 
-The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerNodes`), `slurm` (`enableSlurm`, a target for each managed node), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`), `monitoring` (`ensureMonitoring`) and, after a failure, `rollback`.
+The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerNodes`), `slurm` (`enableSlurm`, a target for each managed node with a Slurm daemon), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`), `monitoring` (`ensureMonitoring`) and, after a failure, `rollback`.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 

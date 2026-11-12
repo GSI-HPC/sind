@@ -5,7 +5,7 @@ description: "What create, delete, connect, disconnect and power show while they
 toc: true
 ---
 
-`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker`, `connect container`, `disconnect container` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `doctor`, `version`, `mcp`, `completion`) never do.
+`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker`, `connect container`, `disconnect container` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `doctor`, `version`, `mcp`, `ui`, `help`, `completion`) never do.
 
 By default sind shows it only on a terminal. Where standard error is not a terminal, in a pipe, a file or a CI log, these commands print nothing on success, as they did before, and their standard error holds exactly what it did: errors, `Warning:` lines and the `-v` logs.
 
@@ -67,7 +67,7 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-l
 | `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
 | `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
 | `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
-| `slurm` | one per managed node | starts the Slurm daemons, the db node's first, and waits until each is `ready` |
+| `slurm` | one per managed node that runs a Slurm daemon (a submitter only with identity `clientIds`) | starts the Slurm daemons, the db node's first, and waits until each is `ready` |
 | `accounts` | | with `accounts`: waits until slurmdbd knows the cluster, then creates the Slurm accounts |
 | `home directories` | | with `users`: creates the home directories |
 | `monitoring` | | with `monitoring`: creates or starts the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}), waits until it is ready and adds the new nodes to it |
@@ -193,7 +193,7 @@ sind: SIND_PROGRESS is "plian"; it takes one of auto, tty, counter, plain, none;
 
 ## Plain lines
 
-`--progress plain` writes a line when a step starts and when it ends, when a wait with a limit starts, when a wait or a target fails, and every ten seconds for each step under way that counts its targets. Each line starts with the time since the command started and names what it tells of by its path from the command. Plain lines have no escape codes and need no terminal, so they suit a CI log or a file. `mesh` and `preflight`, which the tree shows only after a second, get no line, and neither do the docker commands or the lines docker writes. The same creation as above, trimmed to two nodes of each step:
+`--progress plain` writes a line when a step starts and when it ends, when a wait with a limit starts, when a wait or a target fails, and every ten seconds for each step under way that counts its targets. Each line starts with the time since the command started and names what it tells of by its path from the command. Plain lines need no terminal, and off a terminal they have no escape codes, so they suit a CI log or a file. `mesh` and `preflight`, which the tree shows only after a second, get no line, and neither do the docker commands or the lines docker writes. The same creation as above, trimmed to two nodes of each step:
 
 ```text
 $ sind create cluster --config dev.yaml --progress plain 2>&1 | tee create.log
@@ -236,7 +236,7 @@ Without `--progress-log` and `SIND_PROGRESS_LOG`, sind appends the events to `ac
 
 - sind creates the directory for you alone (mode `0700`) and the file readable and writable by you alone (mode `0600`). The same rules for an existing file hold: it must be yours, have no other name and be readable and writable by nobody else.
 - Before a command appends, sind moves a log larger than 8 MiB to `activity.jsonl.1`, replacing the copy that was there, so the two files together stay under about 16 MiB. Commands that run at once rotate it once.
-- A log that sind cannot use, such as one in a read-only home directory, is left out without a word, and never fails the command; the debug log (`-vv`) says why.
+- A log that sind cannot use, such as one in a read-only home directory, is left out without a word, and never fails the command; when sind cannot make its state directory, the debug log (`-vv`) says why.
 - `--progress-log ""`, or `SIND_PROGRESS_LOG=` with an empty value, turns it off; a file named by either replaces it.
 
 When sind is started with a W3C trace context in `TRACEPARENT` (and `TRACESTATE`), the log continues that trace. While sind shows progress or writes a log, it removes both variables from the environment of the programs it runs, such as docker; otherwise they inherit them.
