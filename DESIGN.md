@@ -133,7 +133,7 @@ On a monitored cluster, the stack's mesh DNS names (`grafana.<realm>.sind`, `pro
 ### Design Goals
 
 - Familiar UX for kind users
-- No root/admin privileges (sudo) or privileged containers required; the Docker daemon itself must be rootful (see Prerequisites)
+- sind itself needs no root/admin privileges (sudo) and starts no privileged containers; the Docker daemon must be rootful, and 10 or more nodes on one host need a higher `fs.inotify.max_user_instances`, which takes root to set (see Prerequisites)
 - SELinux compatible: clusters work on hosts whose Docker daemon labels containers, without host
   policy changes (the nodes then run unconfined, see Mount Options)
 - Support for both static and dynamic Slurm node configurations

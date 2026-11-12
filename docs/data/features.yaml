@@ -55,7 +55,7 @@
   items:
     - icon: ci
       title: Designed for CI/CD
-      text: Runs on standard GitHub Actions runners with the runner's Docker daemon, no sudo or privileged containers. sind-action sets up clusters in a single step.
+      text: Runs on standard GitHub Actions runners with the runner's Docker daemon, no privileged containers. sind-action sets up clusters in a single step.
       link: guides/ci-cd
     - icon: spark
       title: AI-ready via MCP

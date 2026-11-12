@@ -9,7 +9,9 @@ webuiNote: "A CI job runs sind without a browser. The steps on this page are for
 
 ## GitHub Action
 
-The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs on standard GitHub-hosted Ubuntu runners, x64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`), with the runner's Docker daemon — no sudo, privileged containers or custom runner images required.
+The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs on standard GitHub-hosted Ubuntu runners, x64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`), with the runner's Docker daemon — no privileged containers or custom runner images required.
+
+sind itself needs no sudo, but the runner must allow enough inotify instances. The Ubuntu 26.04 image, which `ubuntu-latest` runs, allows 128 per user. About 10 nodes on the runner, in one cluster or in several, use them up, and the next node containers exit with code 255 (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})). sind-action v2.3.0 and later (the `v2` tag) raise `fs.inotify.max_user_instances` to 8192 with the runner's passwordless `sudo` before they create the clusters. On a runner without passwordless `sudo`, the action only warns, so raise the limit on that host yourself. Without sind-action, or with an older release of it, run `sudo sysctl -w fs.inotify.max_user_instances=8192` first.
 
 See the [sind-action documentation](https://github.com/GSI-HPC/sind-action#readme) for inputs, outputs, cluster definitions, and examples including parallel job isolation via realms.
 
@@ -23,6 +25,7 @@ curl -fsSL -o sind-linux-amd64 \
 gh attestation verify sind-linux-amd64 --repo GSI-HPC/sind \
   --signer-workflow GSI-HPC/sind/.github/workflows/release.yml
 install -m 755 sind-linux-amd64 ./sind
+# 10 or more nodes on this host: sudo sysctl -w fs.inotify.max_user_instances=8192
 ./sind doctor
 ./sind create cluster --config cluster.yml
 ```
@@ -30,6 +33,8 @@ install -m 755 sind-linux-amd64 ./sind
 On 64-bit ARM, download `sind-linux-arm64` instead. `gh attestation verify` needs the [GitHub CLI](https://cli.github.com/) and a token in `GH_TOKEN`; see [Installation]({{< relref "/getting-started/installation" >}}) for the checksum alternative.
 
 sind requires Docker Engine 28.0+, running rootful and without `userns-remap`, and a Linux host with cgroupv2 and `nsdelegate`. Most modern CI runners meet these requirements out of the box. Rootless Docker and `userns-remap` do not work: Docker refuses the writable cgroups of sind's nodes there, which `sind doctor` and `sind create cluster` report before anything is pulled. A host without `nsdelegate` fails `sind doctor`, and `sind create cluster` before it creates a node.
+
+10 or more nodes on the Docker host, counted over all its clusters and jobs, also need `fs.inotify.max_user_instances` of at least 1024 (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})). The kernel's default is 128. Raising the limit takes root on the Docker host: run `sudo sysctl -w fs.inotify.max_user_instances=8192` before `sind create cluster`, or set it in `/etc/sysctl.d/` on a self-hosted runner. An unprivileged job container cannot change it. `sind doctor` only warns below 1024 and exits 0. A job on the Docker host can fail there instead with `./sind doctor -o json | jq -e '.[] | select(.name == "inotify") | .status == "ok"'`.
 
 sind runs on the Docker host. A job whose `DOCKER_HOST` points at a daemon elsewhere, such as a Docker-in-Docker service, gets a `Docker host` warning from `sind doctor`, which does not fail it; `--data` paths then name directories on that daemon's host.
 
