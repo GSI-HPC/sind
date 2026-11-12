@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 #
 # Prepare an Ubuntu GitHub runner to record the overview video (record.py):
-# sind from this checkout, mise, host DNS for *.sind, and the Docker Hub
-# images of the scenario. Run it from the repository root.
+# sind from this checkout, mise, host DNS for *.sind, a raised inotify
+# instance limit, and the images of the scenario. Run it from the repository
+# root.
 set -euo pipefail
 
 bin="$HOME/.local/bin"

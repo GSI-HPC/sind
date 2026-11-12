@@ -134,7 +134,8 @@ jobs:
       # The overview video (video/overview) is recorded from real runs of
       # each checkout's sind on this runner, narrated by Sindy, then
       # rendered. A render is kept by the git trees of its video/overview
-      # and video/voice, so it is made again only when they change.
+      # and video/voice, so it is made again when they change, or when the
+      # Actions cache has evicted it (7 days unused).
       - name: Record and render the overview video
         env:
           GITHUB_TOKEN: ${{ github.token }}
