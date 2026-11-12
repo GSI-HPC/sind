@@ -8,7 +8,7 @@ toc: true
 ## Port in use
 
 ```
-sind ui: port 8080 is in use; pick another with --port, or leave it out
+12:00:00.000 ERRO port 8080 is in use; pick another with --port, or leave it out
 ```
 
 Another program listens on that port. Run `sind ui --port 8081`, or leave `--port` out so that sind takes a free port.
@@ -37,7 +37,7 @@ The page **Open sind ui from its address** says that this browser is not signed 
 
 A banner at the top says **Connection lost** and the time of the data on the page. The page dims, and its buttons wait. The UI tries to connect again by itself, and the banner goes away when it is back. **Retry** tries at once.
 
-If `sind ui` stopped, start it again. A new `sind ui` does not know the old tab, so the banner then says **sind ui restarted**: press **Sign in again**, and open the URL that the new `sind ui` printed.
+If `sind ui` stopped, start it again, and open the URL that it prints. The old tab does not come back. When the new `sind ui` listens on the same port, as with `--port`, the banner says **sind ui restarted**: press **Sign in again**, and open the new URL.
 
 ## A page says Not found
 
@@ -46,10 +46,10 @@ The page names the address and says what is missing: a realm, a cluster, a node,
 ## Opened by another host name
 
 ```
-sind ui answers only to 127.0.0.1:41873
+This server answers to its loopback address only.
 ```
 
-The browser sent another host name, so the UI refused the request. Open the URL that sind printed, with `127.0.0.1` and the same port. A URL with `localhost` does not work: a browser can send it to `::1`, where sind ui does not listen.
+The browser sent another host name, such as `localhost`, so the UI refused the request. Open the URL that sind printed, with `127.0.0.1` and the same port.
 
 ## The browser does not open
 

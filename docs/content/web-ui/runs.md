@@ -23,11 +23,11 @@ A screen reader hears once when a command starts, ends or fails; the clock and t
 
 {{< uishot "task-list" >}}
 
-The browser tab title shows the step that is running, such as `▸ nodes 3/8 · sind ui`. You can see the progress in another tab.
-
 ## The run page
 
 The title of a run is its command and what it worked on, such as `create cluster dev`. A power command, `create worker` and `delete worker` name their nodes once the event log has them, as sind takes them: `power reboot worker-[0-1].dev`, `create worker worker-2.legacy`.
+
+The browser tab of a run page shows the step that is running, such as `▸ nodes 3/8 · sind ui`, so you can follow the run while you work in another tab. Once the run ends, the tab shows how it ended, such as `✓ create cluster dev · sind ui`.
 
 The run page starts with what came of the run, once there is something to say:
 
