@@ -1,6 +1,8 @@
 ---
 weight: 100
 title: "Container exits with code 255"
+webui: none
+webuiNote: "The [Doctor page](../../web-ui/pages/#doctor) of the web UI shows the inotify limit and the commands that raise it. The steps on this page run in a shell on the Docker host."
 ---
 
 ## Symptom

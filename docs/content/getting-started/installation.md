@@ -3,6 +3,8 @@ weight: 110
 title: "Installation"
 description: "Prerequisites and installation instructions"
 toc: true
+webui: none
+webuiNote: "sind ui is a command of sind: install sind first. Its [Doctor page](../../web-ui/pages/#doctor) shows the checks of `sind doctor`. The steps on this page are for the CLI."
 ---
 
 ## Prerequisites

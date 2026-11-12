@@ -3,6 +3,8 @@ weight: 510
 title: "Building Images"
 description: "Official images and custom image requirements"
 toc: true
+webui: none
+webuiNote: "The web UI does not build images. The steps on this page are for the CLI."
 ---
 
 ## Official images
