@@ -43,7 +43,7 @@ sind mcp cursor disable
 
 ## Manual configuration
 
-If you prefer to configure the MCP server manually, add the following to your editor's MCP config:
+If you prefer to configure the MCP server manually, add the following to the MCP config of Claude Desktop or Cursor:
 
 ```json
 {
@@ -55,6 +55,22 @@ If you prefer to configure the MCP server manually, add the following to your ed
   }
 }
 ```
+
+VS Code's `mcp.json`, the file that `sind mcp vscode enable` writes, keeps its servers under `servers`, each with a `type`:
+
+```json
+{
+  "servers": {
+    "sind": {
+      "type": "stdio",
+      "command": "sind",
+      "args": ["mcp", "start"]
+    }
+  }
+}
+```
+
+VS Code calls this format deprecated, and forwards its servers to Copilot. Copilot's own files, `~/.copilot/mcp-config.json` and `.mcp.json` at the root of the workspace, take the `mcpServers` form with `"type": "stdio"` and `"tools": ["*"]` in the entry, which makes all of sind's tools available.
 
 ## Available tools
 
