@@ -28,7 +28,7 @@ gh attestation verify sind-linux-amd64 --repo GSI-HPC/sind \
   --signer-workflow GSI-HPC/sind/.github/workflows/release.yml
 ```
 
-Each release publishes a build provenance attestation for its binaries, and the [GitHub CLI](https://cli.github.com/) checks with it that sind's release workflow built the download. `gh attestation verify` needs a signed-in `gh` (`gh auth login`, or `GH_TOKEN` in the environment); without one, use the checksum route below. `--signer-workflow` matters: with `--repo` alone, any workflow of the repository would pass. Without the GitHub CLI, compare the download with the release's `checksums.txt`. That only detects a corrupted download, as the checksums come from the same release:
+Each release publishes a build provenance attestation for its binaries, and the [GitHub CLI](https://cli.github.com/) checks with it that sind's release workflow built the download. `gh attestation verify` needs a signed-in `gh` (`gh auth login`, or `GH_TOKEN` in the environment); without one, use the checksum route below. `--signer-workflow` matters: with `--repo` alone, any workflow of the repository would pass. Use gh 2.102.0 or later. Older releases match `--signer-workflow` only as a prefix, and 2.92.0 and earlier send your token to TUF mirror hosts. Without the GitHub CLI, compare the download with the release's `checksums.txt`. That only detects a corrupted download, as the checksums come from the same release:
 
 ```bash
 curl -fLO https://github.com/GSI-HPC/sind/releases/latest/download/checksums.txt

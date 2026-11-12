@@ -30,7 +30,7 @@ install -m 755 sind-linux-amd64 ./sind
 ./sind create cluster --config cluster.yml
 ```
 
-On 64-bit ARM, download `sind-linux-arm64` instead. `gh attestation verify` needs the [GitHub CLI](https://cli.github.com/) and a token in `GH_TOKEN`; see [Installation]({{< relref "/getting-started/installation" >}}) for the checksum alternative.
+On 64-bit ARM, download `sind-linux-arm64` instead. `gh attestation verify` needs the [GitHub CLI](https://cli.github.com/) 2.102.0 or later and a token in `GH_TOKEN`; see [Installation]({{< relref "/getting-started/installation" >}}) for the checksum alternative.
 
 sind requires Docker Engine 28.0+, running rootful and without `userns-remap`, and a Linux host with cgroupv2 and `nsdelegate`. Most modern CI runners meet these requirements out of the box. Rootless Docker and `userns-remap` do not work: Docker refuses the writable cgroups of sind's nodes there, which `sind doctor` and `sind create cluster` report before anything is pulled. A host without `nsdelegate` fails `sind doctor`, and `sind create cluster` before it creates a node.
 

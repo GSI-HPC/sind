@@ -41,7 +41,7 @@ defaults:
   image: ghcr.io/gsi-hpc/sind-node:25.11@sha256:<digest>
 ```
 
-Each published image except `25.11.4` carries a build provenance attestation. Check that sind's image workflow built an image with the [GitHub CLI](https://cli.github.com/):
+Each published image except `25.11.4` carries a build provenance attestation. Check that sind's image workflow built an image with the [GitHub CLI](https://cli.github.com/) 2.102.0 or later:
 
 ```bash
 gh attestation verify oci://ghcr.io/gsi-hpc/sind-node:25.11 --repo GSI-HPC/sind \
