@@ -54,6 +54,8 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"mcp", "stream", "--port", "-5"}, `invalid --port value "-5": want a port from 0 to 65535`},
 		{[]string{"mcp", "stream", "--log-level", "bogus"}, `invalid --log-level value "bogus": want debug, info, warn or error`},
 		{[]string{"mcp", "start", "--log-level", "bogus"}, `invalid --log-level value "bogus"`},
+		{[]string{"ui", "--port", "70000"}, `invalid --port value "70000": want a port from 0 to 65535`},
+		{[]string{"ui", "--still"}, "--still needs --demo"},
 		{[]string{"get", "cluster", "a", "b"}, "accepts at most 1 arg(s), received 2"},
 		{[]string{"get", "clusters", "extra"}, "accepts no arguments, received 1 (usage: sind get clusters)"},
 		{[]string{"get", "ssh-config", "extra"}, "accepts no arguments, received 1 (usage: sind get ssh-config)"},

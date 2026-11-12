@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,6 +81,38 @@ func TestUICommand_Demo(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, got.Demo)
 	assert.False(t, got.Still)
+}
+
+// A --port outside 0 to 65535 and --still without --demo are usage errors,
+// found before sind ui runs, so also when another sind ui runs, whose URL
+// sind ui would only print.
+func TestUICommand_UsageErrors(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"ui", "--port", "65536"}, `invalid --port value "65536": want a port from 0 to 65535`},
+		{[]string{"ui", "--port", "-1", "--demo"}, `invalid --port value "-1": want a port from 0 to 65535`},
+		{[]string{"ui", "--still"}, "--still needs --demo"},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			saved := runUI
+			t.Cleanup(func() { runUI = saved })
+			runUI = func(context.Context, ui.Options) error {
+				t.Error("sind ui ran")
+				return nil
+			}
+
+			_, _, err := executeCommand(tc.args...)
+
+			require.EqualError(t, err, tc.want)
+			assert.True(t, cobratree.IsUsage(err))
+		})
+	}
+	got := fakeUI(t, nil)
+	_, _, err := executeCommand("ui", "--port", "65535")
+	require.NoError(t, err)
+	assert.Equal(t, 65535, got.Port)
 }
 
 func TestUICommand_Error(t *testing.T) {
