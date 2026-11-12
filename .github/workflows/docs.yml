@@ -131,6 +131,13 @@ jobs:
           key: ${{ steps.keys.outputs.overview }}
           restore-keys: video-overview-
 
+      # The Ubuntu 26.04 runner image allows 128 inotify instances per user,
+      # which the recorded clusters can use up: their node containers then
+      # exit with code 255. Each checkout's setup-host.sh raises the limit,
+      # but main's only from v0.16.1 on, and main is recorded first.
+      - name: Raise the inotify instance limit
+        run: sudo sysctl -w fs.inotify.max_user_instances=8192
+
       # The overview video (video/overview) is recorded from real runs of
       # each checkout's sind on this runner, narrated by Sindy, then
       # rendered. A render is kept by the git trees of its video/overview
