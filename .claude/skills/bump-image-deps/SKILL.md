@@ -9,8 +9,8 @@ description: Bump Slurm or another source-built component (UCX, PMIx, PRRTE, Ope
 drives them into one PR; this skill is the procedure for each one.
 
 `Dockerfile` builds these from source, each pinned by version and sha256, or for
-libjwt, which publishes no release tarballs for 1.x, by version and git commit. Slurm's
-version and checksum are build args without defaults; `SLURM_RELEASES` in
+libjwt, which published no release tarball for 1.18.4, by version and git commit.
+Slurm's version and checksum are build args without defaults; `SLURM_RELEASES` in
 `docker-bake.hcl` sets them for each image, one entry per supported release line,
 newest line first. The first entry is also tagged `latest`, the default image of
 builds from source, and at each sind release `vX.Y.Z`, the release binaries' default.
