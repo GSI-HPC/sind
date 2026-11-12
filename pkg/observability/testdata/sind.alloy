@@ -108,6 +108,7 @@ prometheus.exporter.cadvisor "nodes" {
     "/system.slice/docker-dddd.scope", // sind-dev-worker-1
   ]
   store_container_labels = false
+  disabled_metrics = ["advtcp", "cpu_topology", "cpuset", "hugetlb", "memory_numa", "referenced_memory", "resctrl", "sched", "tcp", "udp"]
 }
 
 prometheus.scrape "cgroups" {

@@ -200,6 +200,15 @@ func writeChecks(w *alloyWriter, targets []Target) {
 // under either cgroup driver.
 const cgroupBelowNode = `/(?:system\.slice/docker-[0-9a-f]+\.scope|docker/[0-9a-f]+)(/.*)?`
 
+// cadvisorDisabledMetrics are the metric kinds cAdvisor leaves out:
+// Alloy's default list without process, which counts the processes in
+// each cgroup (container_processes). The list replaces Alloy's default,
+// and a kind that cAdvisor does not know stops the component.
+var cadvisorDisabledMetrics = []string{
+	"advtcp", "cpu_topology", "cpuset", "hugetlb", "memory_numa",
+	"referenced_memory", "resctrl", "sched", "tcp", "udp",
+}
+
 // writeCadvisor writes the cAdvisor exporter on the targets' cgroups, its
 // scrape and the relabeling of its series, none without a target. Series
 // of cgroups that are no node's (the root cgroup) are dropped.
@@ -218,6 +227,11 @@ func writeCadvisor(w *alloyWriter, driver string, targets []Target) {
 	w.indent--
 	w.line("]")
 	w.line("store_container_labels = false")
+	kinds := make([]string, 0, len(cadvisorDisabledMetrics))
+	for _, k := range cadvisorDisabledMetrics {
+		kinds = append(kinds, q(k))
+	}
+	w.line("disabled_metrics = [%s]", strings.Join(kinds, ", "))
 	w.close()
 
 	w.line("")

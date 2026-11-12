@@ -410,7 +410,10 @@ func nodesDashboard() dashboard {
 		panels: []panel{
 			row("Containers"),
 			cpu, mem,
-			series("Processes", "short", 12, pq(`sum by (node) (`+sel("container_processes", nodeCgroup)+`)`, "{{node}}")),
+			// cAdvisor counts only the processes directly in a cgroup, and
+			// the node's own cgroup holds none: PID 1 is in init.scope. So
+			// the panel sums all of the node's cgroups.
+			series("Processes", "short", 12, pq(`sum by (node) (`+sel("container_processes", selNodes)+`)`, "{{node}}")),
 			series("Disk I/O", "Bps", 12,
 				pq(`sum by (node) (`+rate(sel("container_fs_reads_bytes_total", nodeCgroup))+`)`, "{{node}} read"),
 				pq(`sum by (node) (`+rate(sel("container_fs_writes_bytes_total", nodeCgroup))+`)`, "{{node}} write")),

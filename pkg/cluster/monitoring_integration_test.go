@@ -125,6 +125,15 @@ func TestMonitoring(t *testing.T) {
 		}
 		return services["slurmctld"] && services["slurmd"] && services["slurmdbd"]
 	}, 2*time.Minute, 2*time.Second, "slurmctld, slurmd and slurmdbd not all probed")
+	// cAdvisor counts each cgroup's processes, and the Processes panel of
+	// the Nodes dashboard sums them over each node's cgroups.
+	assert.Eventually(t, func() bool {
+		nodes := map[string]bool{}
+		for _, r := range prom(`sum by (node) (container_processes{cluster="` + name + `"}) > 0`).Data.Result {
+			nodes[r.Metric["node"]] = true
+		}
+		return nodes["controller"] && nodes["db"] && nodes["worker-0"]
+	}, 2*time.Minute, 2*time.Second, "no process counts of the nodes in Prometheus")
 
 	// Loki has the daemons' journals, each node's with its own node label.
 	loki := func(query string) promResult {
