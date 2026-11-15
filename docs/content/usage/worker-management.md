@@ -46,7 +46,7 @@ The dialog sets no other flag. For the other flags, copy the command from the **
 | `--tmp-size` | the newest worker's, else `256m` | `/tmp` tmpfs size, part of `--memory` |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | `SIND_PULL`, else `false` | Pull the `--image` once before creating containers; needs `--image`, and without one sind does not read `SIND_PULL` |
-| `--wait` | `SIND_WAIT`, else `5m` | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit |
+| `--wait` | `SIND_WAIT`, else `5m` | How long to wait for the new workers to become ready and to register with slurmctld, counted from when their containers have started; `0` for no limit |
 | `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`); `--cap-add=` for none |
 | `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable); `--cap-drop=` for none |
 | `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`); `--device=` for none |
@@ -113,7 +113,7 @@ If a step fails, or you interrupt the command, sind removes the new containers a
 
 On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), every new worker is unmanaged, with or without `--unmanaged`.
 
-If a new worker is not ready within `--wait`, or its munge or slurmd unit fails, `sind create worker` fails with exit status 1, names the worker and the check that failed, and removes the workers it created, as `sind create cluster` does (see [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})).
+When `sind create worker` exits with status 0, slurmctld has the registration of each new managed worker, so jobs can run on it at once. If a new worker is not ready or not registered within `--wait`, its munge or slurmd unit fails, or slurmctld rejects its registration, `sind create worker` fails with exit status 1, names the worker and the check that failed, and removes the workers it created, as `sind create cluster` does (see [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})).
 
 ## Remove workers
 

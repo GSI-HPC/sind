@@ -67,7 +67,7 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-l
 | `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
 | `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
 | `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
-| `slurm` | one per managed node that runs a Slurm daemon (a submitter only with identity `clientIds`) | starts the Slurm daemons, the db node's first, and waits until each is `ready` |
+| `slurm` | one per managed node that runs a Slurm daemon (a submitter only with identity `clientIds`) | starts the Slurm daemons, the db node's first, and waits until each is `ready`; then waits (`ready`, below the targets) until slurmctld has the registration of each worker |
 | `accounts` | | with `accounts`: waits until slurmdbd knows the cluster, then creates the Slurm accounts |
 | `home directories` | | with `users`: creates the home directories |
 | `monitoring` | | with `monitoring`: creates or starts the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}), waits until it is ready and adds the new nodes to it |

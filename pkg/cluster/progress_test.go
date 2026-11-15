@@ -272,6 +272,7 @@ step slurm total=3 [fold]: ok
     wait ready: ok
   target worker-0 role=worker: ok
     wait ready: ok
+  wait ready: ok
 `, testutil.WithoutCalls(w.Events()))
 }
 
@@ -293,7 +294,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-1", Role: config.RoleWorker},
 	}
 
-	err := enableSlurm(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", configs, time.Millisecond, nil)
+	err := enableSlurm(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", "sind-dev-controller", configs, time.Millisecond, nil)
 
 	require.Error(t, err)
 	w.Finish()
@@ -325,6 +326,7 @@ step nodes total=2 [fold]: ok
 step slurm total=2 [fold]: ok
   target worker-[1-2] role=worker: ok
     wait ready: ok
+  wait ready: ok
 `, testutil.WithoutCalls(w.Events()))
 }
 

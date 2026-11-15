@@ -355,6 +355,10 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol":
 			return mock.Result{}
 
+		// sinfo: the new workers' registration
+		case isSinfo(args) && args[1] == "sind-dev-controller":
+			return sinfoIdle(args)
+
 		// CreateContainer
 		case args[0] == "create":
 			return mock.Result{Stdout: "new-cid\n"}
