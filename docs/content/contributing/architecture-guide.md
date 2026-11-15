@@ -86,6 +86,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── delete.go    Cluster deletion; DeleteAll's pool of clusters (fanout.Map)
   ├── get.go       Listing clusters, nodes (GetNode, GetAllNodes), networks, volumes; GetSSHConfig
   ├── status.go    Health status collection
+  ├── slurmstate.go What slurmctld says about the managed workers, for get cluster and get node (AddSlurmStates)
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── slurminfo.go What Slurm says about a cluster, for sind ui (GetSlurmInfo: sinfo's nodes and partitions, slurm.conf and sind-nodes.conf)
   ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound

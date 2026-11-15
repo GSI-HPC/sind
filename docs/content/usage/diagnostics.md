@@ -282,11 +282,11 @@ MOUNT       SOURCE              TYPE      STATUS
 /data       /home/user/project  hostPath  ✓
 
 NODES
-NAME            ROLE        IP          STATUS   SERVICES
-controller.dev  controller  172.19.0.2  running  munge ✓ slurmctld ✓ sshd ✓
-db.dev          db          172.19.0.5  running  mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev    worker      172.19.0.3  running  munge ✓ slurmd ✓ sshd ✓
-worker-1.dev    worker      172.19.0.4  running  munge ✓ slurmd ✗ sshd ✓
+NAME            ROLE        IP          STATUS   SLURM  SERVICES
+controller.dev  controller  172.19.0.2  running  -      munge ✓ slurmctld ✓ sshd ✓
+db.dev          db          172.19.0.5  running  -      mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev    worker      172.19.0.3  running  idle   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev    worker      172.19.0.4  running  down*  munge ✓ slurmd ✗ sshd ✓
 ```
 
 `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters. The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -335,6 +335,23 @@ MOUNT             SOURCE                   TYPE      STATUS
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
+The `SLURM` column of the `NODES` table shows what slurmctld says about each worker where sind manages Slurm: the node state that `sinfo` shows, such as `idle`, `allocated`, `drained` or `down*`. A `*` means that slurmctld gets no answer from the node. Other nodes show `-`, and so do the workers when no controller runs or slurmctld does not answer within 10 seconds. With `-o json`, each such worker's `health` has a `slurm` object:
+
+```json
+"slurm": {
+  "state": "idle",
+  "registered": true
+}
+```
+
+`registered` is `true` when slurmctld has the registration of the node's slurmd and gets answers from it. A drained node has registered too; `reason` then says why it is drained. A script can wait for a worker with it:
+
+```bash
+until sind get node worker-0.dev -o json | jq -e '.slurm.registered' >/dev/null; do sleep 2; done
+```
+
+`sind create cluster`, `sind create worker` and, with `--wait`, the power commands that start nodes already wait for this (see [What happens during creation]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}}) and [Power Control]({{< relref "/usage/power-control" >}})).
+
 A managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) lists `slurmrestd`. Nodes where sind does not manage Slurm (unmanaged workers, db and api nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. With [identity `clientIds`]({{< relref "/guides/users#clientids" >}}), no node lists `munge`, as auth/slurm replaces it, and the submitter lists `sackd`; `MOUNTS` has no `/etc/munge`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
 
 The data row shows what Docker mounts at the nodes' data mount point: the bind-mounted host directory (type `hostPath`) or the volume. With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
@@ -375,7 +392,12 @@ slurmctld  ✓
 sshd       ✓
 ```
 
-Controllers of a backup pair get the same `HA` column as in `sind get cluster`.
+Controllers of a backup pair get the same `HA` column as in `sind get cluster`. A worker where sind manages Slurm gets the same `SLURM` column, and the same `slurm` object with `-o json`:
+
+```
+CONTAINER          ROLE    FQDN                    IP          STATUS   SLURM
+sind-dev-worker-0  worker  worker-0.dev.sind.sind  172.19.0.3  running  idle
+```
 
 ## Logs
 

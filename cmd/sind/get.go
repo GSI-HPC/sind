@@ -16,6 +16,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
@@ -180,14 +181,20 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	}
 	return runGet(cmd, getNode, func(cmd *cobra.Command, n *cluster.NodeDetail, _ string) error {
 		out := cmd.OutOrStdout()
-		var t *cliout.Table
+		header := []string{"CONTAINER", "ROLE"}
+		row := []string{n.Container, cell(n.Role)}
 		if n.HA != nil {
-			t = newTable("CONTAINER", "ROLE", "HA", "FQDN", "IP", "STATUS")
-			t.Add(n.Container, cell(n.Role), formatHA(n.HA), n.FQDN, cell(n.IP), cell(n.Status))
-		} else {
-			t = newTable("CONTAINER", "ROLE", "FQDN", "IP", "STATUS")
-			t.Add(n.Container, cell(n.Role), n.FQDN, cell(n.IP), cell(n.Status))
+			header = append(header, "HA")
+			row = append(row, formatHA(n.HA))
 		}
+		header = append(header, "FQDN", "IP", "STATUS")
+		row = append(row, n.FQDN, cell(n.IP), cell(n.Status))
+		if managedWorker(n.Role, n.Managed) {
+			header = append(header, "SLURM")
+			row = append(row, formatSlurmState(n.Slurm))
+		}
+		t := newTable(header...)
+		t.Add(row...)
 		if err := writeTable(out, t); err != nil {
 			return err
 		}
@@ -453,7 +460,12 @@ func newGetClusterCommand() *cobra.Command {
 
 func runGetCluster(cmd *cobra.Command, name string) error {
 	getStatus := func(ctx context.Context, client *docker.Client, realm string) (*cluster.Status, error) {
-		return cluster.GetStatus(ctx, client, realm, name)
+		status, err := cluster.GetStatus(ctx, client, realm, name)
+		if err != nil {
+			return nil, err
+		}
+		cluster.AddSlurmStates(ctx, client, realm, status)
+		return status, nil
 	}
 	return runGet(cmd, getStatus, printStatus)
 }
@@ -515,20 +527,44 @@ func printStatus(cmd *cobra.Command, status *cluster.Status, realm string) error
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "NODES")
 	withHA := slices.ContainsFunc(status.Nodes, func(n *cluster.NodeStatus) bool { return n.Health.HA != nil })
+	withSlurm := slices.ContainsFunc(status.Nodes, func(n *cluster.NodeStatus) bool { return managedWorker(n.Role, n.Managed) })
+	header := []string{"NAME", "ROLE"}
 	if withHA {
-		t = newTable("NAME", "ROLE", "HA", "IP", "STATUS", "SERVICES")
-	} else {
-		t = newTable("NAME", "ROLE", "IP", "STATUS", "SERVICES")
+		header = append(header, "HA")
 	}
+	header = append(header, "IP", "STATUS")
+	if withSlurm {
+		header = append(header, "SLURM")
+	}
+	t = newTable(append(header, "SERVICES")...)
 	for _, n := range status.Nodes {
 		h := n.Health
+		row := []string{cell(n.Name), cell(n.Role)}
 		if withHA {
-			t.Add(cell(n.Name), cell(n.Role), formatHA(h.HA), cell(h.IP), cell(h.State), formatServices(h.Services))
-			continue
+			row = append(row, formatHA(h.HA))
 		}
-		t.Add(cell(n.Name), cell(n.Role), cell(h.IP), cell(h.State), formatServices(h.Services))
+		row = append(row, cell(h.IP), cell(h.State))
+		if withSlurm {
+			row = append(row, formatSlurmState(h.Slurm))
+		}
+		t.Add(append(row, formatServices(h.Services))...)
 	}
 	return writeTable(out, t)
+}
+
+// managedWorker reports whether a node of the role is a worker on which
+// sind manages slurmd: the nodes that have a Slurm state.
+func managedWorker(role config.Role, managed bool) bool {
+	return role == config.RoleWorker && managed
+}
+
+// formatSlurmState renders what slurmctld says about a worker: sinfo's
+// long state, such as idle or down*, or "-" when sind does not know it.
+func formatSlurmState(s *cluster.SlurmNodeState) string {
+	if s == nil {
+		return "-"
+	}
+	return cell(s.State)
 }
 
 // formatHA renders a controller's pair position, marking the controller in

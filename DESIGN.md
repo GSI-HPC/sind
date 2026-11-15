@@ -550,11 +550,11 @@ MOUNT       SOURCE              TYPE      STATUS
 /data       /home/user/project  hostPath  ✓
 
 NODES
-NAME            ROLE        IP          STATUS   SERVICES
-controller.dev  controller  172.19.0.2  running  munge ✓ slurmctld ✓ sshd ✓
-db.dev          db          172.19.0.5  running  mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev    worker      172.19.0.3  running  munge ✓ slurmd ✓ sshd ✓
-worker-1.dev    worker      172.19.0.4  running  munge ✓ slurmd ✗ sshd ✓
+NAME            ROLE        IP          STATUS   SLURM  SERVICES
+controller.dev  controller  172.19.0.2  running  -      munge ✓ slurmctld ✓ sshd ✓
+db.dev          db          172.19.0.5  running  -      mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev    worker      172.19.0.3  running  idle   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev    worker      172.19.0.4  running  down*  munge ✓ slurmd ✗ sshd ✓
 ```
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), or while its container runs when Grafana, which runs the checks, does not, and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
@@ -581,16 +581,18 @@ A monitored cluster lists the journal mount under `MOUNTS`: the realm's journal 
 
 The data row (`/data`, or the configured mount point) shows what Docker mounts there on the nodes, as `docker inspect` reports it: the bind-mounted host directory or the volume. Clusters with a backup controller add `/var/spool/slurmctld`, the state volume `<realm>-<cluster>-state`, to `MOUNTS`. Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
+`SLURM` shows what slurmctld says about each managed worker: sinfo's long state, such as `idle`, `allocated`, `drained`, or `down*`, whose `*` means that the node does not answer (`cluster.AddSlurmStates`: one `sinfo --nodes=<workers>` on the controller in control, the primary while it runs, else the backup, within 10 seconds). Other nodes, and workers whose state sind could not read, as while no controller runs or slurmctld does not answer, show `-`. The column is there when the cluster has a managed worker. The JSON output adds `"slurm": {"state": "drained", "reason": "maintenance", "registered": true}` to each managed worker's `health`, where `registered` says whether slurmctld has the registration of the node's slurmd and gets answers from it (the check workers registered, see Readiness Checks), and leaves it out where the column shows `-`. `cluster.GetStatus` leaves the states out, so that a slurmctld that is slow to answer does not hold up the status that sind ui reads every few seconds; sind ui reads sinfo on its own (`cluster.GetSlurmInfo`).
+
 `SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, mariadb and slurmdbd on a db node, or slurmrestd on an api node, where sind manages Slurm. Unmanaged nodes (unmanaged workers, db and api nodes, and every node of an unmanaged cluster) list only munge and sshd. With identity `clientIds` no node lists munge, and the submitter lists sackd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
 Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Other nodes show `-`. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
 
 ```
 NODES
-NAME                   ROLE        HA       IP          STATUS   SERVICES
-controller.dev         controller  primary  172.19.0.2  running  munge ✓ slurmctld ✗ sshd ✓
-controller-backup.dev  controller  backup*  172.19.0.3  running  munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev           worker      -        172.19.0.4  running  munge ✓ slurmd ✓ sshd ✓
+NAME                   ROLE        HA       IP          STATUS   SLURM  SERVICES
+controller.dev         controller  primary  172.19.0.2  running  -      munge ✓ slurmctld ✗ sshd ✓
+controller-backup.dev  controller  backup*  172.19.0.3  running  -      munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev           worker      -        172.19.0.4  running  idle   munge ✓ slurmd ✓ sshd ✓
 ```
 
 The `STATUS` of a node, in `sind get cluster`, `sind get node` and `sind get nodes`, and its JSON `status`, map its container's state (`containerStateToState`): `running`, `stopped` (exited, dead or created), `paused`, or `unknown` for another state, such as `restarting`, which the header counts under `S`. The cluster's state in the header and in `sind get clusters` uses the same words, plus `mixed` and `empty`.
@@ -609,7 +611,19 @@ slurmctld  ✓
 sshd       ✓
 ```
 
-A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`primary` or `backup`, with `*` on the controller in control), as in `sind get cluster`.
+A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`primary` or `backup`, with `*` on the controller in control), as in `sind get cluster`. A managed worker gets a `SLURM` column after `STATUS`, and its JSON output a `slurm` object, as in `sind get cluster`:
+
+```
+$ sind get node worker-0.dev
+CONTAINER          ROLE    FQDN                    IP          STATUS   SLURM
+sind-dev-worker-0  worker  worker-0.dev.sind.sind  172.19.0.3  running  idle
+
+SERVICES
+NAME    STATUS
+munge   ✓
+slurmd  ✓
+sshd    ✓
+```
 
 ### Monitoring Stack
 
