@@ -162,11 +162,17 @@ var mcpExcludedFlags = []string{
 // that value, which a client that fills in the defaults of a schema would
 // send: logs --tail 0 shows no line, and logs without it every line; the
 // create commands without --wait and --pull take SIND_WAIT and SIND_PULL
-// from the server's environment, and --wait 0 waits without a limit.
+// from the server's environment, and --wait 0 waits without a limit; so
+// do the power commands that start nodes, which without --wait and
+// SIND_WAIT do not wait.
 var mcpNoDefault = map[string][]string{
 	"logs":           {"tail"},
 	"create cluster": {"wait", "pull"},
 	"create worker":  {"wait", "pull"},
+	"power on":       {"wait"},
+	"power reboot":   {"wait"},
+	"power cycle":    {"wait"},
+	"power unfreeze": {"wait"},
 }
 
 // mcpFlagUsage replaces, by command path below the root and flag name, the

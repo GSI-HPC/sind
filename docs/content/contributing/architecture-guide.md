@@ -91,6 +91,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
+  ├── wait.go      WaitNodes: the --wait of the power commands that start nodes
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
   ├── clustername.go Cluster resolution (ResolveCluster: argument > SIND_CLUSTER > config > default)

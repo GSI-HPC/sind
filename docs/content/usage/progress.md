@@ -122,7 +122,7 @@ sind: ✗ create cluster: failed in 38s: 7 ok, 1 failed, 2 canceled, 1.2 GiB at 
 12:00:34.839 ERRO cluster "dev" not ready within 12s: node worker-2: timed out; last probe error: probe munge: munge not ready: activating
 ```
 
-The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
+The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. With `--wait`, `on`, `reboot`, `cycle` and `unfreeze` then show `readiness`, with a target for each node that waits until it is `ready`, and after them the wait for the workers' registration with slurmctld. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
 
 ```text
 $ sind power reboot 'worker-[0-23]'

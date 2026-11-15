@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -41,21 +43,23 @@ func newPowerCommand() *cobra.Command {
 		short      string
 		fn         powerFunc
 		locked     bool
+		// waits: the command starts nodes, and takes --wait.
+		waits bool
 	}{
 		// off is the verb users guess first; without an alias cobra
 		// suggests the opposite action, "on". The docker verbs that the
 		// help names get a suggestion.
-		{"shutdown NODES", []string{"off"}, []string{"stop"}, "Gracefully shut down nodes (docker stop; alias: off)", withRealm(cluster.PowerShutdown), false},
-		{"cut NODES", nil, []string{"kill"}, "Hard power off nodes (docker kill)", withRealm(cluster.PowerCut), false},
-		{"on NODES", nil, []string{"start"}, "Power on nodes (docker start)", cluster.PowerOn, true},
-		{"reboot NODES", nil, []string{"restart"}, "Gracefully reboot nodes (shutdown, then on)", cluster.PowerReboot, true},
-		{"cycle NODES", nil, nil, "Hard power cycle nodes (cut, then on)", cluster.PowerCycle, true},
-		{"freeze NODES", nil, []string{"pause"}, "Simulate unresponsive nodes (docker pause)", withRealm(cluster.PowerFreeze), false},
-		{"unfreeze NODES", nil, []string{"unpause", "resume"}, "Resume frozen nodes (docker unpause)", withRealm(cluster.PowerUnfreeze), false},
+		{"shutdown NODES", []string{"off"}, []string{"stop"}, "Gracefully shut down nodes (docker stop; alias: off)", withRealm(cluster.PowerShutdown), false, false},
+		{"cut NODES", nil, []string{"kill"}, "Hard power off nodes (docker kill)", withRealm(cluster.PowerCut), false, false},
+		{"on NODES", nil, []string{"start"}, "Power on nodes (docker start)", cluster.PowerOn, true, true},
+		{"reboot NODES", nil, []string{"restart"}, "Gracefully reboot nodes (shutdown, then on)", cluster.PowerReboot, true, true},
+		{"cycle NODES", nil, nil, "Hard power cycle nodes (cut, then on)", cluster.PowerCycle, true, true},
+		{"freeze NODES", nil, []string{"pause"}, "Simulate unresponsive nodes (docker pause)", withRealm(cluster.PowerFreeze), false, false},
+		{"unfreeze NODES", nil, []string{"unpause", "resume"}, "Resume frozen nodes (docker unpause)", withRealm(cluster.PowerUnfreeze), false, true},
 	}
 	for _, c := range cmds {
 		fn, locked := c.fn, c.locked
-		cmd.AddCommand(&cobra.Command{
+		sub := &cobra.Command{
 			Use:               c.use,
 			Aliases:           c.aliases,
 			SuggestFor:        c.suggestFor,
@@ -67,7 +71,13 @@ func newPowerCommand() *cobra.Command {
 			RunE: withProgressOn(nodesTarget, func(cmd *cobra.Command, args []string) error {
 				return runPower(cmd, strings.Join(args, " "), fn, locked)
 			}),
-		})
+		}
+		if c.waits {
+			sub.Flags().Duration("wait", 0,
+				"how long to wait for the nodes and Slurm to become ready, as create cluster waits (0: no limit) "+
+					"(default: "+envvar.Wait+", else no wait: the command returns once the containers run)")
+		}
+		cmd.AddCommand(sub)
 	}
 
 	return cmd
@@ -77,6 +87,13 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc, locked bool) er
 	targets, err := parseNodeArgs(nodeSpec)
 	if err != nil {
 		return err
+	}
+	var wait time.Duration
+	var waits bool
+	if cmd.Flags().Lookup("wait") != nil {
+		if wait, waits, err = waitSetting(cmd); err != nil {
+			return err
+		}
 	}
 
 	ctx := cmd.Context()
@@ -99,7 +116,11 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc, locked bool) er
 	// action.
 	var errs []error
 	for _, g := range groupByCluster(targets) {
-		errs = append(errs, fn(ctx, client, meshMgr, g.Cluster, g.ShortNames))
+		err := fn(ctx, client, meshMgr, g.Cluster, g.ShortNames)
+		if err == nil && waits {
+			err = cluster.WaitNodes(ctx, client, realm, g.Cluster, g.ShortNames, wait, cluster.DefaultReadinessInterval)
+		}
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

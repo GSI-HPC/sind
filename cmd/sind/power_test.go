@@ -4,8 +4,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -73,6 +79,95 @@ func TestPower_RequiresArgs(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+// TestPower_WaitFlag checks that the commands that start nodes take
+// --wait, and the others do not.
+func TestPower_WaitFlag(t *testing.T) {
+	for sub, want := range map[string]bool{
+		"on": true, "reboot": true, "cycle": true, "unfreeze": true,
+		"shutdown": false, "cut": false, "freeze": false,
+	} {
+		c, _, err := NewRootCommand().Find([]string{"power", sub})
+		require.NoError(t, err)
+		assert.Equal(t, want, c.Flags().Lookup("wait") != nil, sub)
+	}
+}
+
+// unfreezeOnCall answers power unfreeze of worker-0 in cluster dev, and
+// the calls of its wait: the node is ready, and slurmctld lists it in
+// state.
+func unfreezeOnCall(t *testing.T, state string) func([]string, string) mock.Result {
+	return func(args []string, _ string) mock.Result {
+		joined := strings.Join(args, " ")
+		switch {
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+				testutil.PsEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+			)}
+		case args[0] == "unpause":
+			return mock.Result{}
+		case args[0] == "inspect":
+			return mock.Result{Stdout: `[{"Id":"id","Name":"/` + args[1] + `","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`}
+		case strings.Contains(joined, "is-system-running"):
+			return mock.Result{Stdout: "running\n"}
+		case strings.Contains(joined, "/dev/tcp"):
+			return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+		case args[0] == "exec" && args[2] == "systemctl":
+			return mock.Result{Stdout: "active\n"}
+		case args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "sinfo":
+			return mock.Result{Stdout: "worker-0|" + state + "|0/2/0/2|2048|all*|none\n"}
+		}
+		t.Errorf("unexpected call: %v", args)
+		return mock.Result{Err: errors.New("unexpected call")}
+	}
+}
+
+// sinfoCalls counts the sinfo calls of m: the waits for registration.
+func sinfoCalls(m *mock.Executor) int {
+	n := 0
+	for _, c := range m.Calls {
+		if len(c.Args) > 2 && c.Args[0] == "exec" && c.Args[2] == "sinfo" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestPower_Wait(t *testing.T) {
+	t.Setenv("SIND_WAIT", "")
+	m := &mock.Executor{OnCall: unfreezeOnCall(t, "idle")}
+	_, _, err := executeWithMock(m, "power", "unfreeze", "worker-0.dev", "--wait", "1m")
+	require.NoError(t, err)
+	assert.Equal(t, 1, sinfoCalls(m), "the wait asks slurmctld")
+
+	m = &mock.Executor{OnCall: unfreezeOnCall(t, "idle")}
+	_, _, err = executeWithMock(m, "power", "unfreeze", "worker-0.dev")
+	require.NoError(t, err)
+	assert.Zero(t, sinfoCalls(m), "no wait without --wait")
+}
+
+func TestPower_WaitFromEnv(t *testing.T) {
+	t.Setenv("SIND_WAIT", "100ms")
+	m := &mock.Executor{OnCall: unfreezeOnCall(t, "idle*")}
+	_, _, err := executeWithMock(m, "power", "unfreeze", "worker-0.dev")
+	require.ErrorIs(t, err, cluster.ErrNotReady)
+	assert.ErrorContains(t, err, `nodes of cluster "dev" not ready within 100ms`)
+}
+
+func TestPower_WaitInvalid(t *testing.T) {
+	t.Setenv("SIND_WAIT", "")
+	var m mock.Executor
+	_, _, err := executeWithMock(&m, "power", "unfreeze", "worker-0.dev", "--wait=-1s")
+	require.EqualError(t, err, "--wait must not be negative, got -1s")
+	assert.True(t, cobratree.IsUsage(err))
+	assert.Empty(t, m.Calls)
+
+	t.Setenv("SIND_WAIT", "soon")
+	_, _, err = executeWithMock(&m, "power", "unfreeze", "worker-0.dev")
+	require.EqualError(t, err, `invalid SIND_WAIT value "soon": want a duration with a unit, such as 90s, 5m or 1h30m`)
+	assert.Empty(t, m.Calls)
 }
 
 // --- Integration ---
