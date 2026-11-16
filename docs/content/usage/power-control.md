@@ -12,6 +12,7 @@ toc: true
 
 ```bash
 sind power <action> NODES
+sind power on|reboot|cycle|unfreeze NODES [--wait DURATION]
 ```
 
 {{< /cli >}}
@@ -72,7 +73,22 @@ sind power freeze worker-0
 
 # Resume a frozen node
 sind power unfreeze worker-0
+
+# Reboot workers and return once they run jobs again, within 5 minutes
+sind power reboot 'worker-[0-3]' --wait 5m
 ```
+
+## Wait for the nodes
+
+`on`, `reboot`, `cycle` and `unfreeze` return once Docker has started or resumed the containers. The nodes then still boot, and slurmd still has to register with slurmctld. With `--wait DURATION`, the command waits for the nodes as [`sind create cluster`]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}}) does: systemd, sshd, munge and the node's Slurm daemon on each node, then until slurmctld has the registration of each worker where sind manages Slurm. `--wait 0` waits without a limit. Without `--wait`, the command takes `SIND_WAIT`, and does not wait when it is not set (see [Environment Variables]({{< relref "/usage/environment#wait-and-pull" >}})).
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--wait` | `SIND_WAIT`, else no wait | How long to wait for the nodes and Slurm to become ready; `0` for no limit |
+
+If a node is not ready within the limit, the command fails with exit status 1 and names the node and the last check that failed. A unit that fails, or a worker whose registration slurmctld rejects, fails the command at once. A worker cannot register while no controller runs: start the controller first, or in the same command. sind does not wait for a cluster whose power action failed.
+
+slurmctld learns that a worker went away only when the worker does not answer its pings (see [Node failure detection](#node-failure-detection)). After a stop shorter than that, slurmctld can still list the worker as registered from before, and the wait passes once the worker's slurmd runs again.
 
 ## Power on
 

@@ -147,3 +147,26 @@ func TestStatus_NodeCounts(t *testing.T) {
 	assert.Equal(t, 2, stopped)
 	assert.Equal(t, 1, paused)
 }
+
+// GetNode of a managed worker adds what slurmctld says about it.
+func TestGetNode_Worker(t *testing.T) {
+	inspect := `[{"Id":"abc","Name":"/sind-dev-worker-0","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"worker","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.3"}}}}]`
+	client := docker.NewClient(&mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "inspect":
+			return mock.Result{Stdout: inspect}
+		case args[0] == "ps":
+			return slurmStateContainers("running")
+		case args[2] == "systemctl" && args[3] == "is-active":
+			return mock.Result{Stdout: strings.Repeat("active\n", len(args[4:]))}
+		case args[1] == "sind-dev-controller" && args[2] == "sinfo":
+			return mock.Result{Stdout: "worker-0|allocated|2/0/0/2|2048|all*|none\n"}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+	}})
+
+	node, err := GetNode(t.Context(), client, mesh.DefaultRealm, "dev", "worker-0")
+
+	require.NoError(t, err)
+	assert.Equal(t, &SlurmNodeState{State: "allocated", Registered: true}, node.Slurm)
+}

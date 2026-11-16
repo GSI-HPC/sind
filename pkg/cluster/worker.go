@@ -352,7 +352,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			if err := updateNodesConf(readyCtx, client, controllerName, nodesConf, slurmConf, nodeConfigs); err != nil {
 				return err
 			}
-			return enableSlurm(readyCtx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval, watcher)
+			return enableSlurm(readyCtx, client, realm, opts.ClusterName, controllerName, nodeConfigs, readinessInterval, watcher)
 		})
 	}
 	if err := g.Wait(); err != nil {

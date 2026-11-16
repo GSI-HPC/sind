@@ -454,7 +454,8 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	})
 	if cfg.Managed() {
 		g.Go(func() error {
-			if err := enableSlurm(gctx, client, realm, cfg.Name, nodeConfigs, readinessInterval, watcher); err != nil {
+			controller := ContainerName(realm, cfg.Name, string(config.RoleController))
+			if err := enableSlurm(gctx, client, realm, cfg.Name, controller, nodeConfigs, readinessInterval, watcher); err != nil {
 				return err
 			}
 			log.InfoContext(gctx, "slurm services enabled")
@@ -820,14 +821,25 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	│ wait slurmctld     │ │ wait slurmd          │ │ wait slurmrestd     │
 //	└─────────┬──────────┘ └──────────┬───────────┘ └──────────┬──────────┘
 //	          └───────────────────────┼────────────────────────┘
+//	              ┌───────────────────────┴────────────────────────┐
+//	              │ controller: wait until slurmctld has the       │
+//	              │ registration of every managed worker           │
+//	              └────────────────────────────────────────────────┘
+//
+// slurmd tells systemd it is ready before it registers with slurmctld, so
+// the last wait runs on controller, the node that runs scontrol for the
+// cluster, until slurmctld lists each managed worker as registered (see
+// probe.WorkersRegistered): one sinfo for all of them in each round.
 //
 // The services are the progress step "slurm", with a target for each node
-// it enables one on, all announced before the db node starts.
-func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) (err error) {
+// it enables one on, all announced before the db node starts; the wait for
+// the workers' registration is the step's wait "ready" after the targets.
+func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, controller docker.ContainerName, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) (err error) {
 	log := sindlog.From(ctx)
 
 	var dbNodes, nodes []RunConfig
 	var services []probe.Service
+	var workers []string
 	for _, nc := range nodeConfigs {
 		if !nc.Managed {
 			continue
@@ -839,6 +851,9 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		if service, ok := nodeSlurmService(nc); ok {
 			nodes = append(nodes, nc)
 			services = append(services, service)
+		}
+		if nc.Role == config.RoleWorker {
+			workers = append(workers, nc.ShortName)
 		}
 	}
 
@@ -893,7 +908,24 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 			return nil
 		})
 	}
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	return waitRegistered(ctx, client, controller, workers, interval)
+}
+
+// waitRegistered waits until slurmctld has the registration of each of
+// workers, by their short names, as sinfo on controller tells (see
+// probe.WorkersRegistered). Without workers it does nothing.
+func waitRegistered(ctx context.Context, client *docker.Client, controller docker.ContainerName, workers []string, interval time.Duration) error {
+	if len(workers) == 0 {
+		return nil
+	}
+	registered := probe.Probe{Name: "registered", Check: probe.WorkersRegistered(workers)}
+	if err := probe.UntilReady(ctx, client, controller, []probe.Probe{registered}, interval); err != nil {
+		return fmt.Errorf("workers' registration with slurmctld: %w", err)
+	}
+	return nil
 }
 
 // slurmctldHTTPProbe returns the check that a monitored cluster's slurmctld

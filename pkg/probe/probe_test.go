@@ -333,6 +333,49 @@ func TestClusterRegistered_Error(t *testing.T) {
 	require.EqualError(t, err, "listing clusters: exit status 1")
 }
 
+func TestWorkersRegistered(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("worker-0|idle|0/2/0/2|1024|all*|none\nworker-1|drained|0/0/2/2|1024|all*|maintenance\n", "", nil)
+	c := docker.NewClient(&m)
+
+	require.NoError(t, WorkersRegistered([]string{"worker-0", "worker-1"})(t.Context(), c, testContainer))
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "sinfo", "--noheader", "--Node", "--format=%N|%T|%C|%m|%P|%E", "--nodes=worker-0,worker-1"}, m.Calls[0].Args)
+}
+
+func TestWorkersRegistered_NotYet(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("worker-0|unknown*|0/0/2/2|1024|all*|none\nworker-1|down*|0/0/2/2|1024|all*|Not responding\nworker-2|idle|0/2/0/2|1024|all*|none\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := WorkersRegistered([]string{"worker-0", "worker-1", "worker-2", "worker-3"})(t.Context(), c, testContainer)
+	require.EqualError(t, err, "not registered with slurmctld: worker-0 (unknown*), worker-1 (down*: Not responding), worker-3 (not listed)")
+	var te *TerminalError
+	assert.NotErrorAs(t, err, &te)
+}
+
+func TestWorkersRegistered_Invalid(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("worker-0|unknown*|0/0/2/2|1024|all*|none\nworker-1|inval|0/0/2/2|1024|all*|Low RealMemory\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := WorkersRegistered([]string{"worker-0", "worker-1"})(t.Context(), c, testContainer)
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.EqualError(t, err, "slurmctld rejected the registration of worker-1 (inval: Low RealMemory)")
+}
+
+func TestWorkersRegistered_Errors(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	m.AddResult("worker-0|idle\n", "", nil)
+	c := docker.NewClient(&m)
+	check := WorkersRegistered([]string{"worker-0"})
+
+	require.EqualError(t, check(t.Context(), c, testContainer), "sinfo: exit status 1")
+	require.ErrorContains(t, check(t.Context(), c, testContainer), "want 6 fields")
+}
+
 func TestUnitJournal(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("line 1\nline 2\n", "", nil)

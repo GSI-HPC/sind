@@ -58,3 +58,25 @@ func TestNodeStateTakesJobs(t *testing.T) {
 		assert.False(t, NodeStateTakesJobs(s), s)
 	}
 }
+
+func TestSinfoNodesCommandFor(t *testing.T) {
+	assert.Equal(t, []string{"sinfo", "--noheader", "--Node", "--format=%N|%T|%C|%m|%P|%E", "--nodes=worker-0,worker-1"},
+		SinfoNodesCommandFor([]string{"worker-0", "worker-1"}))
+	assert.Len(t, SinfoNodesCommand, 4, "SinfoNodesCommand stays as it is")
+}
+
+func TestNodeStateRegistered(t *testing.T) {
+	for _, s := range []string{"idle", "allocated", "mixed", "completing", "drained", "draining", "maint", "reserved"} {
+		assert.True(t, NodeStateRegistered(s), s)
+	}
+	for _, s := range []string{"unknown", "unknown*", "future", "down", "down*", "idle*", "drained*", "inval"} {
+		assert.False(t, NodeStateRegistered(s), s)
+	}
+}
+
+func TestNodeStateInvalid(t *testing.T) {
+	assert.True(t, NodeStateInvalid("inval"))
+	assert.True(t, NodeStateInvalid("inval*"))
+	assert.False(t, NodeStateInvalid("idle"))
+	assert.False(t, NodeStateInvalid("down*"))
+}

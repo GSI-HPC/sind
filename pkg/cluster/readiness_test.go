@@ -6,11 +6,13 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -167,4 +169,68 @@ func TestWorkerAdd_WaitLimit(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotReady)
 	assert.Contains(t, err.Error(), "workers of cluster \"dev\" not ready within 200ms: node worker-1: timed out; last probe error")
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker should be removed")
+}
+
+// A worker whose slurmd runs but does not register with slurmctld keeps
+// the create from passing until the wait limit ends it.
+func TestCreate_WaitLimitRegistration(t *testing.T) {
+	cfg := createCfg()
+	cfg.Wait = 500 * time.Millisecond
+	m, _, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Stdout: "worker-0|unknown*|0/0/2/2|2048|all*|none\n"}, isSinfo(args)
+	})
+
+	require.ErrorIs(t, err, ErrNotReady)
+	assert.Contains(t, err.Error(), `cluster "dev" not ready within 500ms: workers' registration with slurmctld: timed out; last probe error: probe registered: not registered with slurmctld: worker-0 (unknown*)`)
+	for _, c := range m.Calls {
+		if isSinfo(c.Args) {
+			assert.Equal(t, []string{"exec", "sind-dev-controller", "sinfo", "--noheader", "--Node", "--format=%N|%T|%C|%m|%P|%E", "--nodes=worker-0"}, c.Args)
+		}
+	}
+}
+
+// A worker that registers after a few rounds lets the create pass.
+func TestCreate_WaitsForRegistration(t *testing.T) {
+	var rounds atomic.Int32
+	_, _, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+		if !isSinfo(args) || rounds.Add(1) > 2 {
+			return mock.Result{}, false
+		}
+		return mock.Result{Stdout: "worker-0|unknown|0/0/2/2|2048|all*|none\n"}, true
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), rounds.Load())
+}
+
+// slurmctld rejecting a worker's registration ends the wait at once.
+func TestWorkerAdd_RegistrationRejected(t *testing.T) {
+	onCall := workerAddOnCall(t)
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
+		if isSinfo(args) {
+			return mock.Result{Stdout: "worker-1|inval|0/0/2/2|2048|all*|Low RealMemory (reported:1024 < 100.00% of configured:2048)\n"}
+		}
+		return onCall(args, stdin)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1})
+
+	require.ErrorContains(t, err, "workers' registration with slurmctld: probe registered: slurmctld rejected the registration of worker-1 (inval: Low RealMemory (reported:1024 < 100.00% of configured:2048))")
+	assert.NotErrorIs(t, err, ErrNotReady)
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker should be removed")
+}
+
+// Unmanaged workers have no slurmd that sind starts: no sinfo runs.
+func TestEnableSlurm_UnmanagedWorkersNotWaitedFor(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		require.False(t, isSinfo(args), "no registration wait")
+		if len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+		}
+		return mock.Result{Stdout: "active\n"}
+	}
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker},
+	}
+	require.NoError(t, enableSlurm(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", "sind-dev-controller", configs, time.Millisecond, nil))
 }

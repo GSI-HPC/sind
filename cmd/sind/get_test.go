@@ -927,7 +927,7 @@ func TestGetNode_Output(t *testing.T) {
 func TestGetNode_Stopped(t *testing.T) {
 	inspect := `[{"Id":"id","Name":"/sind-dev-worker-0","State":{"Status":"exited"},"Config":{"Labels":{"sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`
 	for _, tc := range []struct{ format, want string }{
-		{"human", "sind-dev-worker-0  worker  worker-0.dev.sind.sind  -   stopped\n"},
+		{"human", "sind-dev-worker-0  worker  worker-0.dev.sind.sind  -   stopped  -\n"},
 		{"json", `"status": "stopped"`},
 	} {
 		t.Run(tc.format, func(t *testing.T) {
@@ -1024,6 +1024,8 @@ func pairOnCall(t *testing.T) func([]string, string) mock.Result {
 			return mock.Result{Stdout: b.String()}
 		case args[0] == "exec" && args[2] == "scontrol":
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}
+		case args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "sinfo":
+			return mock.Result{Stdout: "worker-0|idle|0/2/0/2|2048|all*|none\n"}
 		case args[0] == "network":
 			return mock.Result{Stdout: "[{}]\n"}
 		case args[0] == "volume" && args[1] == "ls":
@@ -1055,11 +1057,13 @@ func TestGetCluster_ControllerPair(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{"NAME", "ROLE", "HA", "IP", "STATUS", "SERVICES"}, strings.Fields(header))
+	assert.Equal(t, []string{"NAME", "ROLE", "HA", "IP", "STATUS", "SLURM", "SERVICES"}, strings.Fields(header))
 	assert.Equal(t, "primary", rows["controller.dev"][2])
 	assert.Equal(t, "backup*", rows["controller-backup.dev"][2])
 	assert.Equal(t, "-", rows["worker-0.dev"][2], "workers have no HA position")
 	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][3])
+	assert.Equal(t, "idle", rows["worker-0.dev"][5], "what slurmctld says about the worker")
+	assert.Equal(t, "-", rows["controller.dev"][5], "controllers have no Slurm state")
 }
 
 func TestGetCluster_UnknownSlurmVersion(t *testing.T) {
@@ -1236,4 +1240,29 @@ func TestGetEmptyListings_SaySoOnStderr(t *testing.T) {
 			assert.Empty(t, stderr)
 		})
 	}
+}
+
+// get node and get cluster show what slurmctld says about a managed
+// worker, in both formats.
+func TestGet_SlurmState(t *testing.T) {
+	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "worker-0.dev")
+	require.NoError(t, err)
+	lines := strings.Split(stdout, "\n")
+	assert.Equal(t, []string{"CONTAINER", "ROLE", "FQDN", "IP", "STATUS", "SLURM"}, strings.Fields(lines[0]))
+	assert.Equal(t, "idle", strings.Fields(lines[1])[5])
+
+	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "worker-0.dev", "-o", "json")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"slurm": {
+    "state": "idle",
+    "registered": true
+  }`)
+
+	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "controller.dev")
+	require.NoError(t, err)
+	assert.NotContains(t, stdout, "SLURM", "controllers have no Slurm state")
+
+	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev", "-o", "json")
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(stdout, `"registered": true`), "the worker's, and no other node's")
 }

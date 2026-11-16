@@ -116,6 +116,8 @@ func createDaemon(t *testing.T) func(args []string, stdin string) mock.Result {
 			return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey-" + args[1] + "\n"}
 		case args[0] == "exec" && args[2] == "scontrol":
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+		case args[0] == "exec" && args[2] == "sinfo":
+			return mock.Result{Stdout: "worker-0|idle|0/1/0/1|1024|all*|none\n"}
 		case args[0] == "exec" && args[2] == "systemctl" && args[3] == "is-active":
 			return mock.Result{Stdout: "active\n"}
 		case args[0] == "exec":
@@ -164,17 +166,19 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
       wait ready: ok
     target worker-0 role=worker: ok
       wait ready: ok
+    wait ready: ok
 `, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""))
-	// Each node's wait has the whole --wait limit; the waits for Slurm
-	// have what is left of it once the nodes are ready, in whole seconds.
-	// The wait for the images has none.
+	// Each node's wait has the whole --wait limit; the waits for Slurm,
+	// the workers' registration among them, have what is left of it once
+	// the nodes are ready, in whole seconds. The wait for the images has
+	// none.
 	var bounds []time.Duration
 	for _, e := range w.Events() {
 		if e.Kind == progress.KindWait && e.Type == progress.TypeStart && e.Name != "images" {
 			bounds = append(bounds, e.Timeout)
 		}
 	}
-	require.Len(t, bounds, 4)
+	require.Len(t, bounds, 5)
 	assert.Equal(t, []time.Duration{5 * time.Minute, 5 * time.Minute}, bounds[:2])
 	for _, b := range bounds[2:] {
 		assert.True(t, b > 4*time.Minute && b <= 5*time.Minute && b%time.Second == 0, "%s", b)

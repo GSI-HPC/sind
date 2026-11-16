@@ -44,7 +44,7 @@ $ sind --help
 | `SIND_CLUSTER` | the cluster argument, `NAME` or `CLUSTER`, and the cluster of a node argument that names none | `default`; for `sind create cluster` the `name` of the config file, else `default` | [The cluster](#the-cluster) |
 | `SIND_OUTPUT` | `-o`, `--output` of `sind get` and `sind doctor` | `human` | [Output](#output) |
 | `SIND_VERBOSE` | `-v`, as a number: `2` is `-vv` | `0`: errors only | [Verbose logging]({{< relref "/usage/diagnostics#verbose-logging" >}}) |
-| `SIND_WAIT` | `--wait` of `sind create cluster` and `sind create worker` | `5m` | [Wait and pull](#wait-and-pull) |
+| `SIND_WAIT` | `--wait` of `sind create cluster` and `sind create worker`, and of `sind power on`, `reboot`, `cycle` and `unfreeze` | `5m` for `create`; no wait for `power` | [Wait and pull](#wait-and-pull) |
 | `SIND_PULL` | `--pull` of `sind create cluster`, and of `sind create worker` with `--image` | `false` | [Wait and pull](#wait-and-pull) |
 | `SIND_PROGRESS` | `--progress` | `auto` | [Progress Display]({{< relref "/usage/progress" >}}) |
 | `SIND_PROGRESS_LOG` | `--progress-log` | the [activity log]({{< relref "/usage/progress#the-activity-log" >}}) | [Progress Display]({{< relref "/usage/progress#event-log" >}}) |
@@ -89,7 +89,7 @@ sind create worker                     # runs the image of the newest worker: no
 sind create worker --image "$IMAGE"    # pulls $IMAGE
 ```
 
-`SIND_WAIT` takes what `--wait` takes: a duration with a unit, such as `90s` or `15m`, or `0` for no limit (see [What happens during creation]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})). `SIND_PULL` takes what `--pull=VALUE` takes, such as `true` or `false`. Without `--image`, `sind create worker` runs the image of the cluster's newest worker, which it does not pull, so it does not read `SIND_PULL` (see [Image and Slurm version]({{< relref "/usage/worker-management#image-and-slurm-version" >}})).
+`SIND_WAIT` takes what `--wait` takes: a duration with a unit, such as `90s` or `15m`, or `0` for no limit (see [What happens during creation]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})). The power commands that start nodes wait only with `--wait` or `SIND_WAIT`, so with `SIND_WAIT` set they wait too (see [Power Control]({{< relref "/usage/power-control" >}})). `SIND_PULL` takes what `--pull=VALUE` takes, such as `true` or `false`. Without `--image`, `sind create worker` runs the image of the cluster's newest worker, which it does not pull, so it does not read `SIND_PULL` (see [Image and Slurm version]({{< relref "/usage/worker-management#image-and-slurm-version" >}})).
 
 ## Values sind cannot use
 
