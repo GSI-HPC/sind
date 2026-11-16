@@ -22,7 +22,7 @@ import (
 // at start. The standard image is also the only one of the four with curl,
 // which sind runs there to reach the others.
 const (
-	AlloyImage      = "grafana/alloy:v1.21.3"
+	AlloyImage      = "grafana/alloy:v1.22.0"
 	PrometheusImage = "prom/prometheus:v3.16.0"
 	LokiImage       = "grafana/loki:3.7.9"
 	GrafanaImage    = "grafana/grafana:13.3.1"
