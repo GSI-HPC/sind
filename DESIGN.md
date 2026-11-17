@@ -19,7 +19,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.22)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 - llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
-- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.21, Prometheus 3.16, Loki 3.7 and Grafana 13.3, pinned in `pkg/observability`
+- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.22, Prometheus 3.16, Loki 3.7 and Grafana 13.3, pinned in `pkg/observability`
 
 ## Overview
 
@@ -1544,8 +1544,8 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 |------|-------------|---------|-------|
 | Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.1` |
 | Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.16.0` |
-| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
-| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.3` |
+| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.10` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.22.0` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 

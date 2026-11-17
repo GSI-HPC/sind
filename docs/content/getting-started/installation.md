@@ -92,10 +92,10 @@ sind needs a rootful Docker daemon. Rootless Docker and a daemon with `userns-re
 
 ## Container image
 
-sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is the official image published with your sind release, for sind v0.16.1 for example:
+sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is the official image published with your sind release, for sind v0.17.0 for example:
 
 ```
-ghcr.io/gsi-hpc/sind-node:v0.16.1
+ghcr.io/gsi-hpc/sind-node:v0.17.0
 ```
 
 It carries the newest Slurm release line that release supports and is published for linux/amd64 and linux/arm64. sind built from source (`go install`, `make build`) defaults to `ghcr.io/gsi-hpc/sind-node:latest` instead, the newest supported release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images]({{< relref "/container-images/building-images#official-images" >}}) for the available tags.
@@ -106,6 +106,6 @@ sind pulls the image when it creates your first cluster, and after a sind upgrad
 sind create cluster --pull
 ```
 
-Besides the node image, each realm's mesh runs `coredns/coredns:1.15.0` (DNS) from Docker Hub, and its SSH relay runs sind's default node image whatever `defaults.image` says. A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also runs `grafana/grafana:13.3.1`, `prom/prometheus:v3.16.0`, `grafana/loki:3.7.9` and `grafana/alloy:v1.21.3` from Docker Hub. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.
+Besides the node image, each realm's mesh runs `coredns/coredns:1.15.0` (DNS) from Docker Hub, and its SSH relay runs sind's default node image whatever `defaults.image` says. A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also runs `grafana/grafana:13.3.1`, `prom/prometheus:v3.16.0`, `grafana/loki:3.7.10` and `grafana/alloy:v1.22.0` from Docker Hub. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.
 
 See [Container Images](../../container-images/building-images/) for details on building custom images.

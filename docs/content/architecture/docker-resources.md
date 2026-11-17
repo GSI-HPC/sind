@@ -50,8 +50,8 @@ A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has
 |------|-------------|---------|-------|
 | Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.1` |
 | Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.16.0` |
-| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
-| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.3` |
+| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.10` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.22.0` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
