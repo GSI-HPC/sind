@@ -5,7 +5,7 @@ description: "Where sind sits among the other ways to run a Slurm cluster for de
 toc: true
 ---
 
-sind is one of many ways to get a Slurm cluster without a machine room. The projects on this page solve neighbouring problems with different trade-offs, and several of them work well together with sind. This page says what each approach is good at, where sind differs, and how to choose.
+sind is one of many ways to get a Slurm cluster without a server room. The projects on this page solve neighbouring problems with different trade-offs, and several of them work well together with sind. This page says what each approach is good at, where sind differs, and how to choose.
 
 ## The landscape
 
