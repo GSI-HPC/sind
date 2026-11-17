@@ -24,7 +24,9 @@ const (
 	Output = "SIND_OUTPUT"
 	// Verbose stands in for -v: a number, 2 for -vv.
 	Verbose = "SIND_VERBOSE"
-	// Wait stands in for the --wait of create cluster and create worker.
+	// Wait stands in for the --wait of create cluster and create worker,
+	// and of the power commands that start nodes: on, reboot, cycle and
+	// unfreeze.
 	Wait = "SIND_WAIT"
 	// Pull stands in for the --pull of create cluster and create worker.
 	Pull = "SIND_PULL"

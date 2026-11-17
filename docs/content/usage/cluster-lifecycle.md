@@ -74,10 +74,13 @@ EOF
 3. Munge key and Slurm configuration are generated
 4. All node containers start in parallel
 5. sind waits for each node to become ready (systemd, sshd, Slurm daemons)
+6. sind waits until slurmctld has the registration of each worker
+
+When `sind create cluster` exits with status 0, every worker where sind manages Slurm has registered with slurmctld, so jobs can run on it at once. slurmd says that it is ready before it registers, so sind asks slurmctld with `sinfo` on the controller. `sind get cluster` shows the state slurmctld has of each worker (see [Cluster status]({{< relref "/usage/diagnostics#cluster-status" >}})).
 
 On a terminal, sind shows these steps as it goes, and leaves a line for each one it finished (see [Progress Display]({{< relref "/usage/progress#what-the-commands-show" >}})).
 
-`--wait` limits how long sind waits for the nodes, the Slurm daemons and, with `accounts`, for slurmdbd to register the cluster. Each node's limit counts from when its container has started, so pulling the image does not count against it: sind pulls the images it does not have, once each, before it creates the first node. A container that exits, or a munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit that fails, ends the wait at once with the tail of the unit's journal.
+`--wait` limits how long sind waits for the nodes, the Slurm daemons, the registration of the workers and, with `accounts`, for slurmdbd to register the cluster. Each node's limit counts from when its container has started, so pulling the image does not count against it: sind pulls the images it does not have, once each, before it creates the first node. A container that exits, or a munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit that fails, ends the wait at once with the tail of the unit's journal. So does a worker whose registration slurmctld rejects (state `inval`, for example because the node reports less memory than its definition), with the reason slurmctld gives.
 
 If a node is not ready within `--wait`, or a check fails for good, the command fails with exit status 1 and names the node and the last check that failed, for example:
 

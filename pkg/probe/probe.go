@@ -15,6 +15,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/monitor"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Service identifies a per-node readiness check. The string value is the
@@ -539,6 +540,58 @@ func ClusterRegistered(clusterName string) Func {
 		}
 		return fmt.Errorf("cluster %s not registered with slurmdbd yet", clusterName)
 	}
+}
+
+// WorkersRegistered returns a check, run on a node that runs or reaches
+// slurmctld (the controller), that passes once slurmctld has the
+// registration of each of workers, by their Slurm node names, and gets
+// answers from them (slurm.NodeStateRegistered). slurmd tells systemd it
+// is ready before it registers, so an active slurmd unit does not show
+// this. A worker whose registration slurmctld rejected (inval) is a
+// TerminalError with the reason slurmctld gives, as it stays so.
+func WorkersRegistered(workers []string) Func {
+	return func(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+		out, err := client.Exec(ctx, name, slurm.SinfoNodesCommandFor(workers)...)
+		if err != nil {
+			return fmt.Errorf("sinfo: %w", err)
+		}
+		nodes, err := slurm.ParseSinfoNodes(out)
+		if err != nil {
+			return err
+		}
+		byName := make(map[string]slurm.NodeInfo, len(nodes))
+		for _, n := range nodes {
+			byName[n.Name] = n
+		}
+		var invalid, waiting []string
+		for _, w := range workers {
+			n, ok := byName[w]
+			switch {
+			case !ok:
+				waiting = append(waiting, w+" (not listed)")
+			case slurm.NodeStateInvalid(n.State):
+				invalid = append(invalid, nodeStateText(n))
+			case !slurm.NodeStateRegistered(n.State):
+				waiting = append(waiting, nodeStateText(n))
+			}
+		}
+		if len(invalid) > 0 {
+			return &TerminalError{Msg: "slurmctld rejected the registration of " + strings.Join(invalid, ", ")}
+		}
+		if len(waiting) > 0 {
+			return fmt.Errorf("not registered with slurmctld: %s", strings.Join(waiting, ", "))
+		}
+		return nil
+	}
+}
+
+// nodeStateText writes a node as "worker-0 (down*: Not responding)": its
+// name, its state and the reason slurmctld gives, if any.
+func nodeStateText(n slurm.NodeInfo) string {
+	if n.Reason == "" {
+		return n.Name + " (" + n.State + ")"
+	}
+	return n.Name + " (" + n.State + ": " + n.Reason + ")"
 }
 
 // SlurmrestdPort is the TCP port slurmrestd listens on: SLURMRESTD_LISTEN

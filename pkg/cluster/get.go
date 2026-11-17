@@ -113,9 +113,14 @@ type NodeDetail struct {
 	Status    State         `json:"status"`
 	Services  ServiceHealth `json:"services"`
 	HA        *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
+	// Slurm is what slurmctld says about a managed worker, from a sinfo
+	// on the controller in control; nil for other nodes, and when it is
+	// not known, such as while no controller runs.
+	Slurm *SlurmNodeState `json:"slurm,omitempty"`
 }
 
-// GetNode returns the identity and health of one node, for 'sind get node'.
+// GetNode returns the identity and health of one node, for 'sind get node',
+// with what slurmctld says about a managed worker (NodeDetail.Slurm).
 // A node that does not exist fails with what CheckNode reports for a
 // cluster without containers in the realm (ErrClusterNotFound), and
 // otherwise with a "not found" error naming the node and its cluster.
@@ -137,7 +142,7 @@ func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, sho
 	if err != nil {
 		return nil, err
 	}
-	return &NodeDetail{
+	detail := &NodeDetail{
 		Container: string(containerName),
 		Cluster:   clusterName,
 		Role:      role,
@@ -147,7 +152,11 @@ func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, sho
 		Status:    health.State,
 		Services:  health.Services,
 		HA:        health.HA,
-	}, nil
+	}
+	if role == config.RoleWorker && detail.Managed {
+		detail.Slurm = nodeSlurmState(ctx, client, realm, clusterName, shortName)
+	}
+	return detail, nil
 }
 
 // GetAllNodes lists all nodes across all clusters in the realm.

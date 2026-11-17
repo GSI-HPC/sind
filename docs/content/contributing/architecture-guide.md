@@ -86,11 +86,13 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── delete.go    Cluster deletion; DeleteAll's pool of clusters (fanout.Map)
   ├── get.go       Listing clusters, nodes (GetNode, GetAllNodes), networks, volumes; GetSSHConfig
   ├── status.go    Health status collection
+  ├── slurmstate.go What slurmctld says about the managed workers, for get cluster and get node (AddSlurmStates)
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── slurminfo.go What Slurm says about a cluster, for sind ui (GetSlurmInfo: sinfo's nodes and partitions, slurm.conf and sind-nodes.conf)
   ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
+  ├── wait.go      WaitNodes: the --wait of the power commands that start nodes
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
   ├── clustername.go Cluster resolution (ResolveCluster: argument > SIND_CLUSTER > config > default)

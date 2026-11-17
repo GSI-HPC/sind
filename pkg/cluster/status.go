@@ -35,6 +35,9 @@ type NodeHealth struct {
 	IP       string        `json:"ip"`           // container IP address
 	Services ServiceHealth `json:"services"`     // all readiness-checked services (munge unless identity clientIds, sshd, and on managed nodes the role's slurmctld/slurmd, mariadb and slurmdbd, slurmrestd, or sackd)
 	HA       *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
+	// Slurm is what slurmctld says about a managed worker (see
+	// AddSlurmStates); nil for other nodes, and when it is not known.
+	Slurm *SlurmNodeState `json:"slurm,omitempty"`
 }
 
 // GetNodeHealth checks the health of a single node container, from its

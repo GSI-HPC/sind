@@ -15,6 +15,13 @@ import (
 // The reason comes last, as it is free text that may hold the separator.
 var SinfoNodesCommand = []string{"sinfo", "--noheader", "--Node", "--format=%N|%T|%C|%m|%P|%E"}
 
+// SinfoNodesCommandFor is SinfoNodesCommand for the named nodes only. sinfo
+// lists a node only when it is in a partition: sind puts every managed
+// worker in the partition PartitionAll.
+func SinfoNodesCommandFor(nodes []string) []string {
+	return append(slices.Clone(SinfoNodesCommand), "--nodes="+strings.Join(nodes, ","))
+}
+
 // SinfoPartitionsCommand lists each partition on one line: its name (with
 // a "*" for the default one), availability, time limit, number of nodes and
 // node list.
@@ -130,4 +137,32 @@ func NodeStateTakesJobs(state string) bool {
 		}
 	}
 	return true
+}
+
+// NodeStateRegistered reports whether slurmctld has the registration of the
+// slurmd of a node in the state, as sinfo writes it, and gets answers from
+// it: not when slurmctld has not heard from the slurmd yet (unknown,
+// future), marks the node down or as not answering ("*"), or rejected its
+// registration (inval). A drained node has registered: a drain is an
+// administrator's choice, which a registration keeps. slurmctld returns a
+// down node to service when its slurmd registers with a valid
+// configuration (ReturnToService=2, which sind sets).
+func NodeStateRegistered(state string) bool {
+	if strings.HasSuffix(state, "*") {
+		return false
+	}
+	for _, s := range []string{"down", "inval", "unk", "future"} {
+		if strings.HasPrefix(state, s) {
+			return false
+		}
+	}
+	return true
+}
+
+// NodeStateInvalid reports whether slurmctld rejected the registration of
+// the slurmd of a node in the state, as sinfo writes it: the slurmd
+// reported less than the node's definition has, such as fewer CPUs or less
+// memory. Waiting does not change it.
+func NodeStateInvalid(state string) bool {
+	return strings.HasPrefix(state, "inval")
 }

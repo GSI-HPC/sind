@@ -67,7 +67,7 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-l
 | `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
 | `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
 | `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
-| `slurm` | one per managed node that runs a Slurm daemon (a submitter only with identity `clientIds`) | starts the Slurm daemons, the db node's first, and waits until each is `ready` |
+| `slurm` | one per managed node that runs a Slurm daemon (a submitter only with identity `clientIds`) | starts the Slurm daemons, the db node's first, and waits until each is `ready`; then waits (`ready`, below the targets) until slurmctld has the registration of each worker |
 | `accounts` | | with `accounts`: waits until slurmdbd knows the cluster, then creates the Slurm accounts |
 | `home directories` | | with `users`: creates the home directories |
 | `monitoring` | | with `monitoring`: creates or starts the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}), waits until it is ready and adds the new nodes to it |
@@ -122,7 +122,7 @@ sind: ✗ create cluster: failed in 38s: 7 ok, 1 failed, 2 canceled, 1.2 GiB at 
 12:00:34.839 ERRO cluster "dev" not ready within 12s: node worker-2: timed out; last probe error: probe munge: munge not ready: activating
 ```
 
-The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
+The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. With `--wait`, `on`, `reboot`, `cycle` and `unfreeze` then show `readiness`, with a target for each node that waits until it is `ready`, and after them the wait for the workers' registration with slurmctld. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
 
 ```text
 $ sind power reboot 'worker-[0-23]'

@@ -174,6 +174,8 @@ func happyOnCall(t *testing.T, override func(args []string, stdin string) (mock.
 					return mock.Result{}
 				case cmd == "scontrol":
 					return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+				case cmd == "sinfo":
+					return sinfoIdle(args)
 				case cmd == "systemctl" && len(args) > 3 && args[3] == "is-active":
 					return mock.Result{Stdout: "active\n"}
 				}
@@ -186,6 +188,26 @@ func happyOnCall(t *testing.T, override func(args []string, stdin string) (mock.
 		assert.Failf(t, "unexpected docker call", "%v", args)
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
+}
+
+// sinfoIdle answers the sinfo of probe.WorkersRegistered, with which
+// enableSlurm waits for the workers' registration: each node its --nodes
+// names, idle in the partition all.
+func sinfoIdle(args []string) mock.Result {
+	var out strings.Builder
+	for _, arg := range args {
+		if nodes, ok := strings.CutPrefix(arg, "--nodes="); ok {
+			for node := range strings.SplitSeq(nodes, ",") {
+				out.WriteString(node + "|idle|0/2/0/2|2048|all*|none\n")
+			}
+		}
+	}
+	return mock.Result{Stdout: out.String()}
+}
+
+// isSinfo reports whether args are those of a sinfo on a node.
+func isSinfo(args []string) bool {
+	return len(args) > 2 && args[0] == "exec" && args[2] == "sinfo"
 }
 
 // isImageExists reports whether args are those of docker.Client.ImageExists,
@@ -1108,7 +1130,7 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld: ")
@@ -1133,7 +1155,7 @@ func TestEnableSlurm_HTTPProbeTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld HTTP: ")
@@ -1145,6 +1167,9 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 		if len(args) > 3 && args[2] == "systemctl" && args[3] == "is-active" {
 			return mock.Result{Stdout: "active\n"}
 		}
+		if isSinfo(args) {
+			return sinfoIdle(args)
+		}
 		return mock.Result{}
 	}
 
@@ -1155,7 +1180,7 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
 	}
 
-	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 	require.NoError(t, err)
 
 	// The db node's four calls (mariadb, SQL, slurmdbd, slurmdbd probe) come
@@ -1195,7 +1220,7 @@ func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
 	}
 
 	// No deadline: a failed slurmdbd unit must end the wait on its own.
-	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
 	require.ErrorContains(t, err, "slurmdbd failed:\nslurmdbd: fatal: example")
 	for _, call := range m.Calls {
@@ -1212,7 +1237,7 @@ func TestEnableSlurm_DBEnableError(t *testing.T) {
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 	}
 
-	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
 	require.ErrorContains(t, err, "enabling mariadb on db")
 	require.Len(t, m.Calls, 2, "enable, then the journal; the controller is untouched")
@@ -1233,7 +1258,7 @@ func TestEnableSlurm_UnmanagedDBSkipped(t *testing.T) {
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB},
 	}
 
-	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
 	require.NoError(t, err)
 	require.NotEmpty(t, m.Calls)

@@ -37,29 +37,39 @@ func addWaitFlag(cmd *cobra.Command) {
 }
 
 // waitFlag returns the wait limit of a create command: --wait, else
-// SIND_WAIT, else defaultWait. A negative --wait is a usage error; a
-// SIND_WAIT that is no duration, or a negative one, is an error that names
-// the variable.
+// SIND_WAIT, else defaultWait (see waitSetting).
 func waitFlag(cmd *cobra.Command) (time.Duration, error) {
+	wait, ok, err := waitSetting(cmd)
+	if err != nil || ok {
+		return wait, err
+	}
+	return defaultWait, nil
+}
+
+// waitSetting returns the wait limit of a command with --wait, --wait,
+// else SIND_WAIT, and whether either sets one. A negative --wait is a
+// usage error; a SIND_WAIT that is no duration, or a negative one, is an
+// error that names the variable.
+func waitSetting(cmd *cobra.Command) (time.Duration, bool, error) {
 	if cmd.Flags().Changed("wait") {
 		wait, _ := cmd.Flags().GetDuration("wait")
 		if wait < 0 {
-			return 0, cobratree.Usagef("--wait must not be negative, got %s", wait)
+			return 0, false, cobratree.Usagef("--wait must not be negative, got %s", wait)
 		}
-		return wait, nil
+		return wait, true, nil
 	}
 	env, ok := envvar.Lookup(envvar.Wait)
 	if !ok {
-		return defaultWait, nil
+		return 0, false, nil
 	}
 	wait, err := time.ParseDuration(env)
 	switch {
 	case err != nil:
-		return 0, invalidEnvValue(envvar.Wait, env, "a duration with a unit, such as 90s, 5m or 1h30m")
+		return 0, false, invalidEnvValue(envvar.Wait, env, "a duration with a unit, such as 90s, 5m or 1h30m")
 	case wait < 0:
-		return 0, fmt.Errorf("%s must not be negative, got %s", envvar.Wait, env)
+		return 0, false, fmt.Errorf("%s must not be negative, got %s", envvar.Wait, env)
 	}
-	return wait, nil
+	return wait, true, nil
 }
 
 // addPullFlag adds --pull to a create command, with usage, which it ends
