@@ -16,7 +16,7 @@
 
 ---
 
-Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** offers a familiar CLI experience for quickly spinning up and tearing down Slurm clusters.
+Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** offers a familiar CLI experience for quickly spinning up and tearing down Slurm clusters. [Related tools](https://gsi-hpc.github.io/sind/introduction/related-tools/) describes how sind compares to other ways to run a Slurm cluster for development and tests, such as Docker Compose setups, virtual machines and Slurm on Kubernetes.
 
 ## Features
 

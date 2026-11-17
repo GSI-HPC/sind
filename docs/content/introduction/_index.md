@@ -12,7 +12,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offer
 
 ## Why sind?
 
-Setting up a multi-node Slurm cluster for development or testing traditionally requires dedicated machines, VMs, or complex provisioning. Tools like Vagrant and Docker Compose can get you there, but they demand significant configuration effort and maintenance. sind complements these approaches by trading some flexibility for ease of use and speed — a single command creates a fully working cluster.
+Setting up a multi-node Slurm cluster for development or testing traditionally requires dedicated machines, VMs, or complex provisioning. Tools like Vagrant and Docker Compose can get you there, but they demand significant configuration effort and maintenance. sind complements these approaches by trading some flexibility for ease of use and speed — a single command creates a fully working cluster. [Related Tools]({{< relref "related-tools" >}}) describes these and other approaches, and when each of them fits best.
 
 - **Instant clusters** — go from zero to a working Slurm cluster in seconds, not hours
 - **Reproducible environments** — every team member gets the same setup, every CI run starts clean
