@@ -126,7 +126,8 @@ func TestDiscoverVersion(t *testing.T) {
 	assert.Equal(t, "25.11.0", version)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"run", "--rm", image, "slurmctld", "-V"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"run", "--rm", "--entrypoint", "slurmctld", image, "-V"}, m.Calls[0].Args,
+		"slurmctld is the entrypoint, which a custom image cannot wrap")
 }
 
 func TestDiscoverVersion_RunError(t *testing.T) {

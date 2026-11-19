@@ -2162,7 +2162,7 @@ The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UC
 Custom images must provide:
 
 **All roles:**
-- systemd as init at `/sbin/init`, and `/bin/sh`: sind starts each node with its own `/bin/sh` entrypoint, which execs `/sbin/init` (see Container Startup), so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
+- systemd as init at `/sbin/init`, and `/bin/sh`: sind starts each node with its own `/bin/sh` entrypoint, which execs `/sbin/init` (see Container Startup), so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper and probe containers set their own entrypoint too (`sleep`, `slurmctld`, `/bin/sh`, `cat`, `true`), so an image may set any `ENTRYPOINT`
 - `bash` with its `/dev/tcp` redirection, which the readiness checks run on every node (see Readiness Checks) and `sind enter` opens (`bash -l`)
 - `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly
 - sshd service (enabled, sind injects authorized_keys at runtime), with no host keys in the image: each container generates its ed25519 host key on first boot (on RHEL-family images `sshd-keygen@.service` does), so nodes do not share the key sind pins
@@ -2316,7 +2316,7 @@ sind skips the discovery for unmanaged clusters: the Slurm the user provisions m
 While it creates the cluster network and volumes, sind runs an ephemeral container of the controller's image:
 
 ```bash
-docker run --rm <controller image> slurmctld -V
+docker run --rm --entrypoint slurmctld <controller image> -V
 # Output: "slurm 26.05.6"
 ```
 

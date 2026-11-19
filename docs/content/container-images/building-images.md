@@ -86,7 +86,7 @@ Custom images must provide the following:
 
 ### All roles
 
-- **systemd** as init at `/sbin/init`, and `/bin/sh`: sind starts each node with a short `/bin/sh` entrypoint that sets up the cgroup controllers and execs `/sbin/init`, so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
+- **systemd** as init at `/sbin/init`, and `/bin/sh`: sind starts each node with a short `/bin/sh` entrypoint that sets up the cgroup controllers and execs `/sbin/init`, so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers set their own entrypoint too, so the image may set any `ENTRYPOINT`
 - `bash` with its `/dev/tcp` redirection: sind's readiness checks run it on every node (the sshd check reads sshd's banner from `/dev/tcp/localhost/22`), and `sind enter` opens a `bash -l` login shell
 - `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly (see [Container settings](#container-settings))
 - **sshd** service (enabled) and `ssh-keyscan` — sind injects authorized_keys at runtime and reads the node's host key with `ssh-keyscan`. On RHEL-family images, `ssh-keyscan` is in `openssh-clients`, which `openssh-server` does not pull in. The image contains no SSH host keys: each container generates its ed25519 host key on its first boot (see [SSH setup](#ssh-setup))

@@ -130,7 +130,7 @@ func TestActDockerImages(t *testing.T) {
 
 	assert.Equal(t, action.ImageFacts{Local: true}, a.facts(t.Context(), "own:dev"))
 	require.NoError(t, a.check(t.Context(), "own:dev"))
-	assert.Equal(t, []string{"run", "--rm", "own:dev", "slurmctld", "-V"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"run", "--rm", "--entrypoint", "slurmctld", "own:dev", "-V"}, m.Calls[1].Args)
 	assert.Equal(t, action.ImageFacts{Local: true, Version: "26.05.4", Checked: true}, a.facts(t.Context(), "own:dev"))
 }
 

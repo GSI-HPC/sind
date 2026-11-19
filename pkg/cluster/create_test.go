@@ -504,7 +504,7 @@ func TestCreate_CVMFS(t *testing.T) {
 			mounted := map[string]bool{}
 			for _, c := range m.Calls {
 				a := c.Args
-				if a[0] == "run" && slices.Contains(a, "--entrypoint") && !isNsdelegateProbe(a) {
+				if isCVMFSProbe(a) {
 					probed = true
 				}
 				if a[0] == "create" && slices.Contains(a, "--hostname") {
@@ -517,6 +517,13 @@ func TestCreate_CVMFS(t *testing.T) {
 			assert.Equal(t, map[string]bool{"sind-dev-controller": true, "sind-dev-worker-0": true}, mounted)
 		})
 	}
+}
+
+// isCVMFSProbe reports whether args are the docker run of DetectCVMFS's
+// probe of the host's /cvmfs.
+func isCVMFSProbe(args []string) bool {
+	i := slices.Index(args, "--entrypoint")
+	return args[0] == "run" && i >= 0 && args[i+1] == "true"
 }
 
 // assertNoNodeCreated fails for a docker create of a node container in m.
@@ -536,7 +543,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
-		if args[0] == "run" && slices.Contains(args, "--entrypoint") && !isNsdelegateProbe(args) {
+		if isCVMFSProbe(args) {
 			return mock.Result{Stderr: "bind source path does not exist: /cvmfs", Err: fmt.Errorf("exit status 125")}, true
 		}
 		return mock.Result{}, false
@@ -576,7 +583,7 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
-		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint") && !isNsdelegateProbe(c.Args), "no CVMFS probe: %v", c.Args)
+		assert.False(t, isCVMFSProbe(c.Args), "no CVMFS probe: %v", c.Args)
 		assert.Empty(t, testutil.ArgValues(c.Args, "--mount"))
 	}
 }

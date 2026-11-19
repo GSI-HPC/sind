@@ -13,9 +13,10 @@ import (
 )
 
 // DiscoverVersion runs slurmctld -V in an ephemeral container and returns
-// the Slurm version string (e.g. "25.11.0").
+// the Slurm version string (e.g. "25.11.0"). slurmctld is the container's
+// entrypoint, as a custom image may set one that would wrap the command.
 func DiscoverVersion(ctx context.Context, dc *docker.Client, image string) (string, error) {
-	stdout, err := dc.RunEphemeral(ctx, image, "slurmctld", "-V")
+	stdout, err := dc.RunEphemeralWith(ctx, []string{"--entrypoint", "slurmctld"}, image, "-V")
 	if err != nil {
 		return "", fmt.Errorf("running slurmctld -V: %w", err)
 	}

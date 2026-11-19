@@ -194,6 +194,8 @@ func TestWriteClusterConfig(t *testing.T) {
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-config-helper")
 	assert.Contains(t, m.Calls[0].Args, LabelRealm+"=sind")
 	assert.Contains(t, m.Calls[0].Args, LabelCluster+"=dev")
+	// Its own entrypoint, so that docker create takes an image without one.
+	assert.Equal(t, []string{"--entrypoint", "true", "busybox:latest"}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
 
 	// CopyToContainer writes to /etc/slurm
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
@@ -384,7 +386,8 @@ func TestWriteClusterConfig_WithDB(t *testing.T) {
 
 	assert.Equal(t, "run", m.Calls[0].Args[0])
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-config:/etc/slurm")
-	assert.Equal(t, []string{"busybox:latest", "sleep", "30"}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
+	assert.Equal(t, []string{"--entrypoint", "sleep", "busybox:latest", "30"}, m.Calls[0].Args[len(m.Calls[0].Args)-4:],
+		"sleep is the entrypoint, which a custom image cannot wrap")
 
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
 	cpStdin := m.Calls[1].Stdin
@@ -508,6 +511,8 @@ func TestWriteMungeKey(t *testing.T) {
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-munge:/etc/munge")
 	assert.Contains(t, m.Calls[0].Args, LabelRealm+"=sind")
 	assert.Contains(t, m.Calls[0].Args, LabelCluster+"=dev")
+	assert.Equal(t, []string{"--entrypoint", "sleep", "busybox:latest", "30"}, m.Calls[0].Args[len(m.Calls[0].Args)-4:],
+		"sleep is the entrypoint, which a custom image cannot wrap")
 
 	// CopyToContainer with mode 0400, so that the key is never readable by
 	// others, then chown

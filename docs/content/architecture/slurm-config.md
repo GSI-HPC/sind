@@ -180,7 +180,7 @@ See [Cluster Configuration]({{< relref "/configuration/cluster-config" >}}) for 
 While it creates the cluster network and volumes, sind discovers the Slurm version of the controller's image by running an ephemeral container:
 
 ```bash
-docker run --rm <controller image> slurmctld -V
+docker run --rm --entrypoint slurmctld <controller image> -V
 # Output: "slurm 26.05.6"
 ```
 
