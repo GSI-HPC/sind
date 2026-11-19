@@ -154,6 +154,15 @@ func TestAction_Target(t *testing.T) {
 	r, c = create.Target(form("realm", "ci", "name", "hpc"))
 	assert.Equal(t, "ci", r)
 	assert.Equal(t, "hpc", c)
+	for yaml, want := range map[string]string{
+		"kind: Cluster\nname: lab\n": "lab",
+		"{kind: Cluster, name: lab}": "lab",
+		"kind: Cluster\n":            "default",
+		"kind: [":                    "ignored",
+	} {
+		_, c = create.Target(yamlForm(yaml))
+		assert.Equal(t, want, c, "in YAML mode the cluster of the YAML: %q", yaml)
+	}
 	realm, _ := Lookup("delete-realm")
 	r, c = realm.Target(form("realm", "ci"))
 	assert.Equal(t, "ci", r)

@@ -4,6 +4,7 @@ package action
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -25,7 +26,19 @@ import (
 )
 
 func init() {
-	register(Action{ID: "create-cluster", Build: buildCreateCluster, Cluster: func(f Form) string { return strings.TrimSpace(f.Get("name")) }})
+	register(Action{ID: "create-cluster", Build: buildCreateCluster, Cluster: newClusterName})
+}
+
+// newClusterName is the cluster of the New cluster page: in YAML mode the
+// name in the YAML, which the command creates, else the field "name". The
+// field follows the YAML in the browser only for the lines it reads.
+func newClusterName(f Form) string {
+	if f.Get("yaml_on") != "" {
+		if cfg, err := parseConfig([]byte(f.Get("yaml"))); err == nil {
+			return cmp.Or(cfg.Name, config.DefaultClusterName)
+		}
+	}
+	return strings.TrimSpace(f.Get("name"))
 }
 
 // Waits are the values of the field "wait" of the New cluster page that
