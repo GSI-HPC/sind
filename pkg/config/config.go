@@ -57,19 +57,27 @@ type Node struct {
 	SecurityOpt      []string `yaml:"securityOpt,omitempty"`
 }
 
-// UnmarshalYAML supports three YAML forms, which checkSyntax has checked:
+// UnmarshalYAML supports three YAML forms:
 //   - bare string: "controller"
 //   - shorthand map: "worker: 3"  (role: count)
 //   - full object: "role: worker\n  count: 3\n  cpus: 4"
+//
+// Parse has checked the form with checkSyntax, whose errors say more; a
+// caller that decodes a Cluster itself gets an error for any other form.
 func (n *Node) UnmarshalYAML(v *yaml.Node) error {
 	type alias Node // prevents infinite recursion
 	switch {
 	case v.Kind == yaml.ScalarNode:
 		n.Role = Role(v.Value)
+	case v.Kind != yaml.MappingNode:
+		return fmt.Errorf("line %d: a node is a role, an object or \"ROLE: COUNT\", not %s", v.Line, describe(v))
 	case hasKey(v, "role"):
 		return v.Decode((*alias)(n))
 	default:
 		pairs := pairsOf(v)
+		if len(pairs) != 2 {
+			return fmt.Errorf(`line %d: a node object needs "role: NAME"; the shorthand "NAME: COUNT" takes no other keys`, v.Line)
+		}
 		n.Role = Role(pairs[0].Value)
 		return pairs[1].Decode(&n.Count)
 	}

@@ -163,6 +163,21 @@ nodes:
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
 
+func TestNode_UnmarshalYAMLWithoutParse(t *testing.T) {
+	// A caller that decodes a Cluster itself skips checkSyntax.
+	for _, tc := range []struct{ input, want string }{
+		{"nodes: [{}]\n", `line 1: a node object needs "role: NAME"`},
+		{"nodes: [{worker: 1, cpus: 2}]\n", `line 1: a node object needs "role: NAME"`},
+		{"nodes: [[worker]]\n", `line 1: a node is a role, an object or "ROLE: COUNT", not a list`},
+	} {
+		var c Cluster
+		assert.ErrorContains(t, yaml.Unmarshal([]byte(tc.input), &c), tc.want, tc.input)
+	}
+	var c Cluster
+	require.NoError(t, yaml.Unmarshal([]byte("nodes: [controller, {worker: 2}, {role: db}]\n"), &c))
+	assert.Equal(t, []Node{{Role: RoleController}, {Role: RoleWorker, Count: 2}, {Role: RoleDB}}, c.Nodes)
+}
+
 func TestParse_NodesMixed(t *testing.T) {
 	input := `kind: Cluster
 nodes:
