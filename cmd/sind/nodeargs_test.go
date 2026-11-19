@@ -162,6 +162,20 @@ func TestParseNodeArgs_QuotesTheTypedTerm(t *testing.T) {
 	assert.Equal(t, "worker-9", typedTerm("worker-[0-1]", "worker-9"), "a name no term names")
 }
 
+// TestParseNodeArgs_LinearInTheNames verifies that parsing a node set
+// allocates in proportion to the names it expands to: the term a name was
+// typed in is looked up only for an error, as finding it expands the terms
+// once more for each name.
+func TestParseNodeArgs_LinearInTheNames(t *testing.T) {
+	const n = 1000
+	allocs := testing.AllocsPerRun(1, func() {
+		targets, err := parseNodeArgs("worker-[0-999].dev")
+		require.NoError(t, err)
+		require.Len(t, targets, n)
+	})
+	assert.Less(t, allocs, float64(10*n))
+}
+
 // TestParseOneNode verifies that the commands that act on one node accept
 // a node set of one node, and refuse others alike.
 func TestParseOneNode(t *testing.T) {

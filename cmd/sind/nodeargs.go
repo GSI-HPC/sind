@@ -116,7 +116,10 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 
 	targets := make([]nodeTarget, len(names))
 	for i, name := range names {
-		if targets[i], err = parseNodeName(name, typedTerm(expr, name)); err != nil {
+		// The typed term is looked up only for an error: finding it
+		// expands the terms of expr again.
+		typed := func() string { return typedTerm(expr, name) }
+		if targets[i], err = parseNodeName(name, typed); err != nil {
 			return nil, err
 		}
 	}
@@ -172,33 +175,34 @@ func typedTerm(expr, name string) string {
 // both parts; the cluster of a name without one is "", for
 // withDefaultCluster. A name with more dots is not NODE[.CLUSTER]: the FQDN
 // that get nodes prints is NODE.CLUSTER.REALM.sind, which the node commands
-// do not take, as they act in the realm of --realm. The errors quote typed,
-// the term of the node argument that named name.
-func parseNodeName(name, typed string) (nodeTarget, error) {
+// do not take, as they act in the realm of --realm. The errors quote what
+// typed returns, the term of the node argument that named name.
+func parseNodeName(name string, typed func() string) (nodeTarget, error) {
 	t := nodeTarget{ShortName: name}
 	dot := strings.LastIndex(name, ".")
 	if dot >= 0 {
 		t.ShortName, t.Cluster = name[:dot], name[dot+1:]
 	}
 	if t.ShortName == "" || dot >= 0 && t.Cluster == "" {
-		return nodeTarget{}, argsErrorf("invalid node name %q", typed)
+		return nodeTarget{}, argsErrorf("invalid node name %q", typed())
 	}
 	if strings.Contains(t.ShortName, ".") {
 		if strings.HasSuffix(name, "."+cluster.DNSSuffix) {
-			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", typed)
+			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", typed())
 		}
-		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", typed)
+		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", typed())
 	}
 	if err := config.CheckName("node", t.ShortName); err != nil {
-		if t.ShortName == typed {
+		term := typed()
+		if t.ShortName == term {
 			return nodeTarget{}, argsError(err)
 		}
 		// The short name of a name with a cluster, or of a node set.
-		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, config.CheckName("short", t.ShortName))
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", term, config.CheckName("short", t.ShortName))
 	}
 	if t.Cluster != "" {
 		if err := config.CheckName("cluster", t.Cluster); err != nil {
-			return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, err)
+			return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed(), err)
 		}
 	}
 	return t, nil
