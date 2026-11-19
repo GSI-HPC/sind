@@ -95,9 +95,10 @@ func TestValidate_Resources(t *testing.T) {
 		{"defaults cpus", func(c *Cluster) { c.Defaults.CPUs = -1 }, "defaults.cpus must not be negative, got -1"},
 		{"defaults memory", func(c *Cluster) { c.Defaults.Memory = "2x" }, `invalid defaults.memory "2x"`},
 		{"defaults tmpSize", func(c *Cluster) { c.Defaults.TmpSize = "1.5g" }, `invalid defaults.tmpSize "1.5g"`},
-		{"node cpus", func(c *Cluster) { c.Nodes[1].CPUs = -2 }, "worker cpus must not be negative, got -2"},
-		{"node memory", func(c *Cluster) { c.Nodes[1].Memory = "1g2" }, `invalid worker memory "1g2"`},
-		{"node tmpSize", func(c *Cluster) { c.Nodes[0].TmpSize = "1g,exec" }, `invalid controller tmpSize "1g,exec"`},
+		{"node cpus", func(c *Cluster) { c.Nodes[1].CPUs = -2 }, "nodes[1].cpus must not be negative, got -2"},
+		{"node memory", func(c *Cluster) { c.Nodes[1].Memory = "1g2" }, `invalid nodes[1].memory "1g2"`},
+		{"node tmpSize", func(c *Cluster) { c.Nodes[0].TmpSize = "1g,exec" }, `invalid nodes[0].tmpSize "1g,exec"`},
+		{"second worker group", func(c *Cluster) { c.Nodes = append(c.Nodes, Node{Role: RoleWorker, CPUs: -1}) }, "nodes[2].cpus must not be negative, got -1"},
 	} {
 		c := valid()
 		tt.change(c)

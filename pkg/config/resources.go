@@ -95,7 +95,8 @@ func CheckCPUs(field string, n int) error {
 }
 
 // validateResources checks the resource limits of the defaults and of
-// every node.
+// every node. An error names the field by its key path, as checkSyntax
+// does, such as nodes[2].cpus: a role can have several node groups.
 func (c *Cluster) validateResources() error {
 	type limits struct {
 		prefix       string
@@ -103,8 +104,8 @@ func (c *Cluster) validateResources() error {
 		memory, size string
 	}
 	all := []limits{{"defaults.", c.Defaults.CPUs, c.Defaults.Memory, c.Defaults.TmpSize}}
-	for _, n := range c.Nodes {
-		all = append(all, limits{string(n.Role) + " ", n.CPUs, n.Memory, n.TmpSize})
+	for i, n := range c.Nodes {
+		all = append(all, limits{fmt.Sprintf("nodes[%d].", i), n.CPUs, n.Memory, n.TmpSize})
 	}
 	for _, l := range all {
 		if err := cmp.Or(
