@@ -78,7 +78,9 @@ the label from the maintainer, and its commits are marked `!` with `BREAKING CHA
   failure; look at the run of the PR's head commit.
 - The image workflows (`image.yml`, `image-build.yml`) publish to GHCR and never run for
   a PR: check a change to them with `actionlint`, and `docker buildx bake --print` for
-  `docker-bake.hcl`.
+  `docker-bake.hcl`. Their `test` jobs run four integration tests on each image before
+  it gets its tags, selected by name (`TESTS` in `image-build.yml`): a PR that renames
+  or removes one of them changes that list too.
 - The workflows pin every action to a commit SHA, which Dependabot updates, and the
   versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo, which it
   does not: bump those by hand. Dependabot also updates the Go modules at the root and

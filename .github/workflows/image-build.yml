@@ -1,8 +1,8 @@
 name: Image build
 
 # Builds the sind-node images of one commit, each platform on a native
-# runner, and publishes them under the tags docker-bake.hcl sets. Called by
-# the image workflow (image.yml).
+# runner, tests each of them, and publishes them under the tags
+# docker-bake.hcl sets. Called by the image workflow (image.yml).
 on:
   workflow_call:
     inputs:
@@ -38,6 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.targets.outputs.matrix }}
+      builds: ${{ steps.builds.outputs.matrix }}
       platforms: ${{ steps.platforms.outputs.platforms }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -113,7 +114,8 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # Push untagged; the merge jobs tag the multi-platform images.
+      # Push untagged; the merge jobs tag the multi-platform images, once
+      # the test jobs have passed them.
       - name: Build and push by digest
         id: bake
         uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
@@ -149,9 +151,111 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Each image that the build pushed, on a native runner, before the merge
+  # job gives it tags: a weekly rebuild takes new Rocky Linux packages into
+  # the runtime stage, which no pull request tested. The tests are those of
+  # the commit that is built, so a release's images run the tests of that
+  # release: a cluster through the CLI as the quickstart guide has it, a
+  # cluster through the library, an MPI job, and accounting, which needs
+  # the image's MariaDB. An image that fails them stays untagged.
+  test:
+    name: test (${{ matrix.target }}, ${{ matrix.platforms }})
+    needs: [targets, build]
+    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.builds) }}
+    env:
+      TESTS: ^(TestQuickstart|TestMPI|TestClusterCreateDeleteLifecycle|TestDBNodeAccounting)$
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digests-${{ runner.arch }}
+          path: ${{ runner.temp }}/digests
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The tests run the image under the name SIND_TEST_IMAGE gives them;
+      # the mesh's SSH relay runs sind's default node image, which is
+      # sind-node:latest for the test binaries. Both names are local tags of
+      # the digest under test, so nothing pulls the published latest.
+      - name: Pull the image under test
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          digests=("$RUNNER_TEMP/digests/$TARGET"/*)
+          if [[ ${#digests[@]} -ne 1 || ! -f "${digests[0]}" ]]; then
+            echo "::error::expected one digest of $TARGET for $RUNNER_ARCH, found: ${digests[*]}"
+            exit 1
+          fi
+          image="$IMAGE@sha256:$(basename "${digests[0]}")"
+          docker pull "$image"
+          docker tag "$image" local/sind-node:ci
+          docker tag "$image" "$IMAGE:latest"
+
+      # As for the integration tests of CI (ci.yml).
+      - name: Raise the inotify instance limit
+        run: sudo sysctl -w fs.inotify.max_user_instances=8192
+
+      # Docker Hub rate-limits anonymous pulls per IP, which the runners
+      # share: take the Docker Hub images the tests run from Google's
+      # mirror, as CI does. A commit from before tools/images names the
+      # mesh's CoreDNS in a constant.
+      - name: Pull the tests' Docker Hub images from mirror.gcr.io
+        run: |
+          if [[ -d tools/images ]]; then
+            images=$(go run ./tools/images)
+          else
+            images=$(sed -n 's/^const DNSImage = "\(.*\)"$/\1/p' pkg/mesh/mesh.go)
+          fi
+          # shellcheck disable=SC2086 # one word per image
+          for image in $images busybox:latest; do
+            case "$image" in
+              */*) path=$image ;;
+              *) path=library/$image ;;
+            esac
+            docker pull "mirror.gcr.io/$path"
+            docker tag "mirror.gcr.io/$path" "$image"
+          done
+
+      # go test passes when -run selects no test, and a test of a commit
+      # from before SIND_TEST_REQUIRE_DOCKER skips when it reaches no
+      # daemon: fail in both cases, so that neither lets an untested image
+      # through. shell: bash adds pipefail, for the status of go test.
+      - name: Test the image
+        shell: bash
+        env:
+          SIND_TEST_IMAGE: local/sind-node:ci
+          SIND_TEST_REQUIRE_DOCKER: "1"
+        run: |
+          go test -race -tags integration -run "$TESTS" -v ./cmd/sind ./pkg/cluster | tee "$RUNNER_TEMP/tests.log"
+          passed=$(grep -c '^--- PASS: ' "$RUNNER_TEMP/tests.log" || true)
+          if [[ "$passed" -ne 4 ]]; then
+            echo "::error::expected 4 tests to match $TESTS and pass, found $passed"
+            exit 1
+          fi
+
   merge:
     name: merge (${{ matrix.target }})
-    needs: [targets, build]
+    needs: [targets, build, test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
