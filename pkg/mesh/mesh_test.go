@@ -323,8 +323,10 @@ func TestEnsureMesh_AllExist(t *testing.T) {
 	assert.False(t, mgr.Created())
 	assert.Empty(t, *got)
 
-	// One inspect per resource, nothing else.
-	assert.Len(t, m.Calls, 4)
+	// One inspect per resource and the read of the public key, nothing
+	// else.
+	assert.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"cp sind-ssh:/root/.ssh/id_ed25519.pub -"}, calls(m, "cp"))
 	assert.Empty(t, calls(m, "start"))
 	assert.Empty(t, calls(m, "create"))
 }
@@ -435,6 +437,30 @@ func TestEnsureMesh_ExistingVolumeKeepsKeys(t *testing.T) {
 	require.Len(t, calls(m, "create --name sind-ssh"), 1)
 	assert.Empty(t, calls(m, "cp - sind-ssh"))
 	assert.Equal(t, docker.StateRunning, f.containers["sind-ssh"].state)
+}
+
+// TestEnsureMesh_KeylessVolumeRepaired covers an EnsureMesh that fails
+// after it created the SSH volume, in a realm whose mesh network exists, as
+// a killed create leaves it: the error leaves the volume, as the mesh is
+// not this call's, and the next EnsureMesh writes the keys into it.
+func TestEnsureMesh_KeylessVolumeRepaired(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.addNetwork("sind-mesh")
+	f.fail["pull "+SSHImage()] = failure()
+	mgr := NewManager(c, DefaultRealm)
+
+	require.ErrorContains(t, mgr.EnsureMesh(t.Context()), "pulling "+SSHImage())
+	assert.False(t, mgr.Created())
+	require.Contains(t, f.volumes, "sind-ssh-config")
+	assert.NotContains(t, f.containers, "sind-ssh")
+
+	delete(f.fail, "pull "+SSHImage())
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+
+	require.Len(t, calls(m, "cp - sind-ssh:/root/.ssh"), 1)
+	key, err := mgr.GetSSHPublicKey(t.Context())
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(key, "ssh-ed25519 "), "public key %q", key)
 }
 
 // TestEnsureMesh_ForeignSSHVolume checks that the relay never mounts a

@@ -359,5 +359,18 @@ func IsAlreadyExists(err error) bool {
 	return ok && exitErr.ExitCode() == 1 && strings.Contains(strings.ToLower(exitErr.Stderr), "already exists")
 }
 
+// IsFileNotFound reports whether err is docker cp's error for a path that
+// a container does not have: "Could not find the file /x in container y"
+// from the daemon, or "No such container:path: y:/x" from a docker CLI
+// before v25, which IsNotFound counts as a missing container too.
+func IsFileNotFound(err error) bool {
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	if !ok || exitErr.ExitCode() != 1 {
+		return false
+	}
+	msg := strings.ToLower(exitErr.Stderr)
+	return strings.Contains(msg, "could not find the file") || strings.Contains(msg, "no such container:path")
+}
+
 // notFound matches docker's messages for a missing resource, lowercased.
 var notFound = regexp.MustCompile(`no such (container|image|object|volume|network)|\bnetwork \S+ not found\b`)

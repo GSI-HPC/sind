@@ -5,6 +5,7 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"testing"
@@ -93,7 +94,8 @@ func TestEnsureSSH_KeysIntoExistingRelay(t *testing.T) {
 }
 
 func TestEnsureSSH_Creates(t *testing.T) {
-	_, c, m := newFakeDocker(t)
+	f, c, m := newFakeDocker(t)
+	f.volFiles["sind-ssh-config"] = map[string]string{PublicKeyPath: "ssh-ed25519 AAAA\n"}
 	mgr := NewManager(c, DefaultRealm)
 
 	changed, err := mgr.ensureSSH(t.Context(), "10.0.0.2", false)
@@ -104,8 +106,64 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	assert.Equal(t, []string{"create", "--name", string(SSHContainerName), "--network", string(NetworkName), "--dns", "10.0.0.2",
 		"-v", string(SSHVolumeName) + ":/root/.ssh"}, create[:9])
 	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, create[len(create)-3:])
-	assert.Empty(t, calls(m, "cp"), "no keys without writeKeys")
+	assert.Empty(t, calls(m, "cp -"), "no keys without writeKeys")
 	assert.Equal(t, []string{"start sind-ssh"}, calls(m, "start"))
+}
+
+// TestEnsureSSH_KeylessVolume covers an SSH volume that an earlier
+// EnsureMesh created but did not write the keys into: the relay, new or
+// one started before without them, gets a new keypair before it starts.
+func TestEnsureSSH_KeylessVolume(t *testing.T) {
+	for name, key := range map[string]map[string]string{
+		"no key":    {},
+		"empty key": {PublicKeyPath: ""},
+	} {
+		for _, relay := range []docker.ContainerState{"", docker.StateCreated, docker.StateRunning} {
+			t.Run(name+"/"+string(relay), func(t *testing.T) {
+				files := maps.Clone(key)
+				f, c, m := newFakeDocker(t)
+				f.withMesh(DefaultRealm, docker.StateRunning)
+				f.volFiles["sind-ssh-config"] = files
+				switch relay {
+				case "":
+					f.stop("sind-ssh", docker.StateExited)
+					delete(f.containers, "sind-ssh")
+				default:
+					f.containers["sind-ssh"].files = files
+					if relay == docker.StateCreated {
+						f.stop("sind-ssh", docker.StateCreated)
+					}
+				}
+				mgr := NewManager(c, DefaultRealm)
+
+				changed, err := mgr.ensureSSH(t.Context(), "10.0.0.2", false)
+
+				require.NoError(t, err)
+				assert.True(t, changed)
+				ssh := f.containers["sind-ssh"]
+				assert.True(t, strings.HasPrefix(ssh.files[PublicKeyPath], "ssh-ed25519 "), "public key %q", ssh.files[PublicKeyPath])
+				assert.Contains(t, ssh.files[privateKeyPath], "OPENSSH PRIVATE KEY")
+				assert.Equal(t, docker.StateRunning, ssh.state)
+				if relay != docker.StateRunning {
+					assert.Less(t, indexOf(t, m, "cp - sind-ssh:/root/.ssh"), indexOf(t, m, "start sind-ssh"), "keys before start")
+				}
+			})
+		}
+	}
+}
+
+// TestEnsureSSH_KeyCheckError covers a read of the public key that fails
+// for another reason than a missing file: no keys are written.
+func TestEnsureSSH_KeyCheckError(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	f.fail["cp sind-ssh:"+PublicKeyPath] = failure()
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.ensureSSH(t.Context(), "10.0.0.2", false)
+
+	require.ErrorContains(t, err, "checking SSH keys: connection refused")
+	assert.Empty(t, calls(m, "cp -"))
 }
 
 func TestSSHImage_DefaultNodeImage(t *testing.T) {

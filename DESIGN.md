@@ -45,7 +45,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 1. Create `sind-mesh` network (if not exists)
 2. Create and start the `sind-dns` container (if not exists), or start it (if stopped), in parallel with step 3
 3. Create the `sind-ssh-config` volume (if not exists)
-4. Create the `sind-ssh` container (if not exists), copy a new keypair into a new volume through it, and start it (or start it, if stopped), after `sind-dns`, whose address it resolves through
+4. Create the `sind-ssh` container (if not exists), copy a new keypair into a new volume through it, and start it (or start it, if stopped), after `sind-dns`, whose address it resolves through. An existing volume without the public key, as a killed or failed create leaves one between the volume and the keys, gets a new keypair too: no node can hold a key that never existed
 
 A mesh that exists but is stopped, as after a host reboot, is started, the DNS container first (see Host Reboot and Docker Daemon Restart).
 
@@ -1835,6 +1835,7 @@ The `sind-ssh-config` volume contains:
 | Event | Result |
 |-------|--------|
 | First cluster created | Creates `sind-ssh-config` volume and `sind-ssh` container, copies a new keypair into the volume through the container, starts it |
+| Cluster created | Copies a new keypair into a `sind-ssh-config` volume that has no public key, as an interrupted first create leaves it |
 | Node created | Collects sshd host key, appends to `known_hosts` |
 | Node deleted | Removes entry from `known_hosts` |
 | Last cluster deleted | Removes `sind-ssh` container and `sind-ssh-config` volume |

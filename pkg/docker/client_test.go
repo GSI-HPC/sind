@@ -98,6 +98,25 @@ func TestIfExists(t *testing.T) {
 	assert.Equal(t, 1, n)
 }
 
+func TestIsFileNotFound(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: Could not find the file /Corefile in container sind-dns\n",
+		"Error: No such container:path: sind-dns:/Corefile\n",
+	} {
+		err := exitError(t, 1, stderr)
+		assert.True(t, IsFileNotFound(err), stderr)
+		assert.True(t, IsFileNotFound(fmt.Errorf("cp: %w", err)), stderr)
+	}
+	for name, err := range map[string]error{
+		"nil":               nil,
+		"plain error":       fmt.Errorf("could not find the file"),
+		"missing container": exitError(t, 1, "Error response from daemon: No such container: sind-dns\n"),
+		"other exit code":   exitError(t, 2, "Error response from daemon: Could not find the file /x in container y\n"),
+	} {
+		assert.False(t, IsFileNotFound(err), name)
+	}
+}
+
 func TestIsAlreadyExists(t *testing.T) {
 	err := exitError(t, 1, "Error response from daemon: network with name sind-lock already exists\n")
 	assert.True(t, IsAlreadyExists(err))

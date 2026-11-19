@@ -194,7 +194,7 @@ The `sind-ssh-config` volume contains:
 | Event | Result |
 |-------|--------|
 | First cluster created | Generates Ed25519 keypair, starts `sind-ssh` |
-| Cluster created | Connects `sind-ssh` to cluster network |
+| Cluster created | Connects `sind-ssh` to cluster network; generates a keypair for a volume that has no public key, as an interrupted first create leaves it |
 | Node created | Public key injected, host key collected and added to `known_hosts` |
 | Node deleted | Entry removed from `known_hosts` |
 | Cluster deleted | Disconnects `sind-ssh`, and any other container still attached, from the cluster network |

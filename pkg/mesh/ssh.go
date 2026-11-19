@@ -3,6 +3,7 @@
 package mesh
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -31,7 +32,8 @@ func SSHImage() string {
 }
 
 // ensureSSHVolume creates the SSH config volume if it does not exist yet,
-// and reports whether it did. ensureSSH writes the keys into a new volume.
+// and reports whether it did. ensureSSH writes the keys into a new volume,
+// and into an existing one that lacks them.
 //
 // An existing volume of that name must be the realm's SSH volume: realm
 // a-x's <realm>-ssh-config is also the config volume of cluster x-ssh in
@@ -76,14 +78,15 @@ func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
 // writeKeys generates an ed25519 keypair and writes it, with an empty
 // known_hosts, into the volume through the relay: id_ed25519 (private key),
 // id_ed25519.pub (public key) and known_hosts. A new relay gets them before
-// it starts.
+// it starts. Without writeKeys, a volume that lacks the public key gets them
+// too (see lacksKeys).
 func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (bool, error) {
 	name := m.SSHContainerName()
 	info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 	if err != nil {
 		return false, fmt.Errorf("checking SSH container: %w", err)
 	}
-	changed := info == nil || writeKeys || info.Status != docker.StateRunning
+	changed := info == nil || info.Status != docker.StateRunning
 
 	if info == nil {
 		sshArgs := []string{
@@ -103,7 +106,13 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (
 		info = &docker.ContainerInfo{Name: name, Status: docker.StateCreated}
 	}
 
+	if !writeKeys {
+		if writeKeys, err = m.lacksKeys(ctx); err != nil {
+			return false, err
+		}
+	}
 	if writeKeys {
+		changed = true
 		if err := m.writeSSHKeys(ctx); err != nil {
 			return false, err
 		}
@@ -114,6 +123,27 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (
 	}
 	m.WarnStaleDNS(ctx, dnsIP, info)
 	return changed, nil
+}
+
+// lacksKeys reports whether the SSH volume lacks the realm's public key, or
+// holds an empty one, which it reads through the relay container, running
+// or not. An EnsureMesh that was killed, or failed, after it created the
+// volume and before it wrote the keys leaves such a volume, which the next
+// EnsureMesh finds as an existing one. No node can hold a key that never
+// existed, so a new keypair is safe then.
+func (m *Manager) lacksKeys(ctx context.Context) (bool, error) {
+	key, err := m.Docker.CopyFromContainer(ctx, m.SSHContainerName(), PublicKeyPath)
+	if docker.IsFileNotFound(err) {
+		err, key = nil, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("checking SSH keys: %w", err)
+	}
+	if len(bytes.TrimSpace(key)) > 0 {
+		return false, nil
+	}
+	sindlog.From(ctx).InfoContext(ctx, "SSH volume has no keypair, writing a new one", "volume", string(m.SSHVolumeName()))
+	return true, nil
 }
 
 // writeSSHKeys generates the realm's keypair and copies it, with an empty

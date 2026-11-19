@@ -82,6 +82,8 @@ func createDaemon(t *testing.T) func(args []string, stdin string) mock.Result {
 			return mock.Result{Stdout: "ssh-ed25519 AAAA-realm-key\n"}
 		case args[0] == "cp" && len(args) == 3 && args[1] == "sind-dns:/Corefile" && args[2] == "-":
 			return mock.Result{Stdout: testutil.TarArchive("Corefile", corefile)}
+		case joined == "cp sind-ssh:/root/.ssh/id_ed25519.pub -":
+			return mock.Result{Stdout: testutil.TarArchive("id_ed25519.pub", "ssh-ed25519 AAAA-realm-key\n")}
 
 		// The cluster's resources are not there, its images are.
 		case args[0] == "image" && args[1] == "inspect":
