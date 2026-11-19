@@ -112,6 +112,15 @@ sind ssh worker-0 -- false; echo $?    # 1
 
 `ssh` exits `255` when it cannot connect. A command line that sind rejects, such as `sind exec` without `--`, exits `2`. See [Exit Status]({{< relref "/usage/exit-status" >}}).
 
+## Interrupted sessions
+
+`sind ssh`, `sind enter` and `sind exec` run through `docker exec`, and Docker has no way to stop what `docker exec` started: Ctrl-C, `timeout` or a closed terminal ends the local `docker` process only. The command runs on in the node, and for `sind ssh` so does the `ssh` in the relay container, until it ends. A command that reads its standard input gets its end and can stop then; any other one runs to its end. Bound a long command in the node itself:
+
+```bash
+sind exec -- timeout 60 srun hostname
+sind ssh worker-0 -- timeout 60 ./long-job
+```
+
 ## Data mount
 
 By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` start in the data mount point, `/data` unless the cluster config sets another `mountPath`, so files from the host are immediately accessible.
