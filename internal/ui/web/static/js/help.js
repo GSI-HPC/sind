@@ -519,8 +519,7 @@
   // closes the box, as an entry that copies has nothing else to open.
   function copyJump(text, done) {
     const say = msg => document.dispatchEvent(new CustomEvent('sind:toast', { detail: msg }));
-    const p = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
-    p.then(() => say('Copied ' + text), () => say('Select the text and press Ctrl+C to copy'));
+    window.sindCopy.text(text).then(ok => say(ok ? 'Copied ' + text : 'Select the text and press Ctrl+C to copy'));
     if (done) closeJump();
   }
 

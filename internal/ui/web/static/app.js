@@ -71,6 +71,42 @@
     return e;
   }
 
+  // Copy. copyText puts text on the clipboard and resolves to whether it
+  // did. When the browser has no clipboard API or refuses it, as on a page
+  // that is not served from this machine, it copies the way browsers did
+  // before the API. selectText selects what an element shows, for the
+  // reader to copy with Ctrl+C when both failed. Every copy button of the
+  // pages uses them, as window.sindCopy.
+  function oldCopy(text) {
+    const back = document.activeElement;
+    const area = el('textarea', 'copy-clip');
+    area.value = text;
+    area.readOnly = true;
+    area.tabIndex = -1;
+    area.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    area.remove();
+    if (back instanceof HTMLElement) back.focus();
+    return ok;
+  }
+  function copyText(text) {
+    if (!navigator.clipboard) return Promise.resolve(oldCopy(text));
+    return navigator.clipboard.writeText(text).then(() => true, () => oldCopy(text));
+  }
+  function selectText(e) {
+    if (!e) return;
+    if (e instanceof HTMLTextAreaElement) { e.focus(); e.select(); e.scrollTop = 0; return; }
+    const range = document.createRange();
+    range.selectNodeContents(e);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  window.sindCopy = Object.freeze({ text: copyText, select: selectText });
+
   // The connection. A stream that drops for a moment and comes back shows
   // only in the indicator; one that stays away for longer dims the page,
   // holds its actions and fills the banner #conn, which says how old the
@@ -405,8 +441,7 @@
       if (t.closest('[data-conn-retry]')) { probe(true); return; }
       const copy = t.closest('[data-shell-copy]');
       if (copy) {
-        const done = navigator.clipboard ? navigator.clipboard.writeText(copy.dataset.shellCopy) : Promise.reject(new Error('no clipboard'));
-        done.then(() => toast('Copied'), () => toast('Select the text and press Ctrl+C to copy'));
+        copyText(copy.dataset.shellCopy).then(ok => toast(ok ? 'Copied' : 'Select the text and press Ctrl+C to copy'));
         return;
       }
       // A table cell that holds only a checkbox is the checkbox's target

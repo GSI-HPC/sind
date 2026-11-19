@@ -24,48 +24,15 @@
     btn.moreTimer = setTimeout(() => { btn.textContent = label; btn.classList.remove('more-copied'); }, 1500);
   }
 
-  // select selects what el holds, for the reader to copy with Ctrl+C.
-  function select(el) {
-    if (el instanceof HTMLTextAreaElement) { el.focus(); el.select(); el.scrollTop = 0; return; }
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  // oldCopy copies text the way browsers did before the clipboard API,
-  // which they still allow on a page that is not served from this
-  // machine, and says whether it worked.
-  function oldCopy(text, btn) {
-    const area = document.createElement('textarea');
-    area.className = 'more-clip';
-    area.value = text;
-    area.readOnly = true;
-    area.tabIndex = -1;
-    area.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(area);
-    area.select();
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-    area.remove();
-    btn.focus();
-    return ok;
-  }
-
-  // copy puts text on the clipboard. When the browser has no clipboard
-  // API or refuses it, as on a page that is not served from this machine,
-  // it copies the old way; when that fails too, it selects what target()
-  // returns, if anything, and asks the reader to press Ctrl+C.
+  // copy puts text on the clipboard (window.sindCopy of app.js). When
+  // that fails, it selects what target() returns, if anything, and asks
+  // the reader to press Ctrl+C.
   function copy(text, btn, target) {
-    const refused = () => {
-      if (oldCopy(text, btn)) { flash(btn, 'Copied'); return; }
-      const el = target();
-      if (el) select(el);
+    window.sindCopy.text(text).then(ok => {
+      if (ok) { flash(btn, 'Copied'); return; }
+      window.sindCopy.select(target());
       flash(btn, 'Press Ctrl+C');
-    };
-    if (!navigator.clipboard) { refused(); return; }
-    navigator.clipboard.writeText(text).then(() => flash(btn, 'Copied'), refused);
+    });
   }
 
   // shownText returns the element beside btn that shows text: the name in

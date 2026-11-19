@@ -249,18 +249,20 @@
     pauseBtn.addEventListener('click', () => setPaused(true));
     $('[data-logs-clear]').addEventListener('click', clear);
     $('[data-logs-copy]').addEventListener('click', ev => {
-      if (navigator.clipboard) navigator.clipboard.writeText(cmd.textContent).then(() => {
-        ev.target.textContent = 'Copied';
+      window.sindCopy.text(cmd.textContent).then(ok => {
+        if (!ok) window.sindCopy.select(cmd);
+        ev.target.textContent = ok ? 'Copied' : 'Press Ctrl+C';
         setTimeout(() => { ev.target.textContent = 'Copy'; }, 1500);
-      }, () => {});
+      });
     });
     $('[data-logs-copy-lines]').addEventListener('click', ev => {
       const text = shownText();
       if (!text) { said.textContent = 'No lines to copy.'; return; }
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => {
+      window.sindCopy.text(text).then(ok => {
+        if (!ok) { said.textContent = 'Could not copy. Use Download.'; return; }
         flash(ev.target, 'Copied');
         said.textContent = 'Copied the lines shown.';
-      }, () => { said.textContent = 'Could not copy. Use Download.'; });
+      });
     });
     $('[data-logs-download]').addEventListener('click', ev => {
       const text = shownText();
