@@ -38,6 +38,8 @@ import (
 // one per line, before anything else. fakeDockerPSEnv makes it answer
 // `docker ps` at once, with the output it holds, and fakeDockerNoNetworksEnv
 // `docker network inspect` at once, with a network not found.
+// fakeDockerStdoutEnv makes it write as many bytes as it names to stdout
+// and exit 0, after `docker ps`.
 //
 // Adapted from GSI-HPC/clusterctl cmd/clusterctl/signal_test.go.
 const (
@@ -48,6 +50,7 @@ const (
 	fakeDockerPSEnv   = "SIND_TEST_DOCKER_PS"
 
 	fakeDockerNoNetworksEnv = "SIND_TEST_DOCKER_NO_NETWORKS"
+	fakeDockerStdoutEnv     = "SIND_TEST_DOCKER_STDOUT_BYTES"
 )
 
 // fakeDockerSignals are the signals fakeDockerExitEnv can name.
@@ -105,6 +108,10 @@ func fakeDocker() {
 	}
 	if ps := os.Getenv(fakeDockerPSEnv); ps != "" && len(os.Args) > 1 && os.Args[1] == "ps" {
 		fmt.Print(ps)
+		os.Exit(0)
+	}
+	if n, err := strconv.Atoi(os.Getenv(fakeDockerStdoutEnv)); err == nil {
+		fmt.Print(strings.Repeat("x", n))
 		os.Exit(0)
 	}
 	if os.Getenv(fakeDockerNoNetworksEnv) != "" && len(os.Args) > 2 && os.Args[1] == "network" && os.Args[2] == "inspect" {

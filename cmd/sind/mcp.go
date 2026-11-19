@@ -180,9 +180,11 @@ var mcpNoDefault = map[string][]string{
 // mcpFlagUsage replaces, by command path below the root and flag name, the
 // help of a flag that describes a form a tool call cannot use: a tool's
 // sind process reads no stdin, so create cluster --config - would read
-// an empty configuration.
+// an empty configuration. logs --tail says what a call returns of a long
+// log without it (mcpOutputLimit).
 var mcpFlagUsage = map[string]map[string]string{
 	"create cluster": {"config": "path to cluster configuration file"},
+	"logs":           {"tail": "show only the last N lines (default: all lines, of which a tool call returns the first and the last MiB; 0 shows none)"},
 }
 
 // withMCPFlagSchemas makes cmd, `sind mcp start` or `sind mcp tools`,
@@ -262,9 +264,16 @@ func inProcessGroup(mw ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 	}
 }
 
+// mcpOutputLimit is about the most of a tool's stdout and of its stderr
+// that a call returns: the first and the last MiB of each. go-sdk sends
+// the output twice, as structured content and as its JSON text, and the
+// output of sind_exec or of sind_logs without tail has no other bound.
+const mcpOutputLimit = 2 << 20
+
 // mcpExecute runs a tool call as ophis does, the sind binary with the
 // call's command path, flags and arguments (mcpToolArgs), but in a process
-// group of its own (cmdexec.WithProcessGroup). ophis kills only the sind
+// group of its own (cmdexec.WithProcessGroup), and with at most about
+// mcpOutputLimit of each stream (cmdexec.WithOutputLimit). ophis kills only the sind
 // process when the call's context ends, and the docker exec or docker logs
 // it started would go on, holding its output open: the cancelled call
 // would answer only when that docker command ended, if ever. Killing the
@@ -277,7 +286,8 @@ func mcpExecute(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInpu
 	if err != nil {
 		return nil, ophis.ToolOutput{}, fmt.Errorf("locating the sind binary: %w", err)
 	}
-	ctx, endProgress := withToolProgress(cmdexec.WithProcessGroup(ctx), req)
+	ctx = cmdexec.WithOutputLimit(cmdexec.WithProcessGroup(ctx), mcpOutputLimit)
+	ctx, endProgress := withToolProgress(ctx, req)
 	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(ctx, exe, mcpToolArgs(req.Params.Name, in)...)
 	endProgress()

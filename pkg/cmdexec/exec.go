@@ -87,16 +87,16 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	if OrphanSafe(ctx) {
 		return runOrphanSafe(ctx, cmd)
 	}
-	var outBuf, errBuf bytes.Buffer
+	outBuf, errBuf := newOutput(ctx), newOutput(ctx)
 	// Under a progress span that shows lines, such as the target of an
 	// image docker pulls, its display shows the newest line the command
 	// wrote, of standard error alone when standard output is data
 	// (WithStdoutAsData); otherwise Tee returns the buffer itself. A line
 	// parser (WithLineParser) is handed the lines of the same streams.
 	parse := LineParser(ctx)
-	cmd.Stdout = &outBuf
+	cmd.Stdout = outBuf
 	if !StdoutIsData(ctx) {
-		cmd.Stdout = progress.Tee(ctx, &outBuf, progress.StreamStdout, parse)
+		cmd.Stdout = progress.Tee(ctx, outBuf, progress.StreamStdout, parse)
 	}
 	var term *terminal
 	if Terminal(ctx) {
@@ -108,7 +108,7 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 			opened()
 		}
 	}
-	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.StreamStderr, parse)
+	cmd.Stderr = progress.Tee(ctx, errBuf, progress.StreamStderr, parse)
 	err := cmd.Start()
 	if term != nil {
 		term.started(err == nil)

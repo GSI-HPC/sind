@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -914,6 +915,20 @@ func TestMCPExecute_ExitCode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, exitUsage, out.ExitCode)
 	assert.Contains(t, out.StdErr, "Bad_Name")
+}
+
+// TestMCPExecute_OutputLimit checks that a call returns the first and the
+// last MiB of a long output, such as of a whole log.
+func TestMCPExecute_OutputLimit(t *testing.T) {
+	mcpToolProcesses(t)
+	t.Setenv(fakeDockerPSEnv, `{"ID":"def","Names":"sind-default-controller","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=controller"}`+"\n")
+	t.Setenv(fakeDockerStdoutEnv, strconv.Itoa(3<<20))
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "sind_logs"}}
+	_, out, err := mcpExecute(t.Context(), req, ophis.ToolInput{Args: []string{"controller"}})
+	require.NoError(t, err)
+	require.Equal(t, 0, out.ExitCode, out.StdErr)
+	want := strings.Repeat("x", 1<<20) + fmt.Sprintf("\n[%d bytes truncated]\n", 1<<20) + strings.Repeat("x", 1<<20)
+	assert.True(t, out.StdOut == want, "stdout of %d bytes, want %d", len(out.StdOut), len(want))
 }
 
 // TestMCPExecute_CancelKillsDocker checks that a cancelled call of a tool
