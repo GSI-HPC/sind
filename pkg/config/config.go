@@ -506,7 +506,8 @@ func (c *Cluster) Managed() bool {
 
 // validateSection checks that a Slurm config section is valid.
 func validateSection(sectionName string, s Section) error {
-	for name, content := range s.Fragments {
+	for _, name := range s.FragmentNames() {
+		content := s.Fragments[name]
 		if name == "" {
 			return fmt.Errorf("slurm %s fragment name must not be empty", sectionName)
 		}

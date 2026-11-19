@@ -1166,6 +1166,16 @@ func TestValidate_SlurmSections(t *testing.T) {
 		require.ErrorContains(t, cfg.Validate(), "plain filename")
 	})
 
+	t.Run("first bad fragment in name order", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Main = Section{Fragments: map[string]string{
+			"a": "SchedulerType=sched/backfill\n", "b": "", "c": "", "d": "", "e": "", "f": "", "g": "", "h": "",
+		}}
+		for range 20 {
+			require.EqualError(t, cfg.Validate(), `slurm main fragment "b" must not be empty`)
+		}
+	})
+
 	t.Run("empty fragment content", func(t *testing.T) {
 		cfg := base()
 		cfg.Slurm.Gres = Section{Fragments: map[string]string{
