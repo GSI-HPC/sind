@@ -87,6 +87,10 @@ type Config struct {
 	Kill func(pid int, sig syscall.Signal) error
 	// Random fills b with random bytes, for the IDs; nil is crypto/rand.
 	Random func(b []byte)
+	// Check is called before a task starts; its error refuses the task, as
+	// when Binary is no longer the release that built the command. It may
+	// be nil.
+	Check func() error
 }
 
 // Runner executes tasks as child processes.
@@ -135,6 +139,11 @@ func KillGroup(pid int, sig syscall.Signal) error { return syscall.Kill(-pid, si
 func (r *Runner) Start(s Spec) (string, error) {
 	if len(s.Argv) == 0 || s.Argv[0] != "sind" {
 		return "", errors.New("not a sind command")
+	}
+	if r.cfg.Check != nil {
+		if err := r.cfg.Check(); err != nil {
+			return "", err
+		}
 	}
 	trace, span := r.hex(16), r.hex(8)
 	t := s

@@ -52,11 +52,29 @@ type actState struct {
 // The seams of Setup; tests replace them.
 var (
 	actExecutable  = os.Executable
+	actStat        = os.Stat
 	actStateDir    = state.Dir
 	actActivityLog = activityLogForChildren
 	actHome        = os.UserHomeDir
 	actEnviron     = os.Environ
 )
+
+// actBinaryCheck returns the check that the file at exe is still the sind
+// binary that sind ui started from. An upgrade replaces the file, as go
+// install or a package manager does, and a task would then run another
+// release with the command that this one built and checked.
+func actBinaryCheck(exe string) (func() error, error) {
+	first, err := actStat(exe)
+	if err != nil {
+		return nil, err
+	}
+	return func() error {
+		if now, err := actStat(exe); err != nil || !os.SameFile(first, now) {
+			return fmt.Errorf("%s is not the sind that runs sind ui any more, as after an upgrade: restart sind ui to run commands", exe)
+		}
+		return nil
+	}, nil
+}
 
 // actGrace is how long sind ui, when it stops, waits for the commands it
 // started to roll back before it kills them.
@@ -102,6 +120,10 @@ func actService() Service {
 			if err != nil {
 				return fmt.Errorf("finding the sind executable: %w", err)
 			}
+			check, err := actBinaryCheck(exe)
+			if err != nil {
+				return fmt.Errorf("finding the sind executable: %w", err)
+			}
 			stateDir, err := actStateDir()
 			if err != nil {
 				return fmt.Errorf("finding the state directory: %w", err)
@@ -110,7 +132,7 @@ func actService() Service {
 			logPath, _ := actActivityLog()
 			home, _ := actHome()
 			r := run.New(run.Config{
-				Exec: env.Exec, Store: env.Store, Binary: exe, ActivityLog: logPath, Environ: actEnviron,
+				Exec: env.Exec, Store: env.Store, Binary: exe, ActivityLog: logPath, Environ: actEnviron, Check: check,
 				Refresh: func(realm string) {
 					if refresh, ok := env.Get(ColRefreshKey).(func(string)); ok {
 						refresh(realm)

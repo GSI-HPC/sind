@@ -1072,6 +1072,11 @@ func TestActService_SetupErrors(t *testing.T) {
 	assert.EqualError(t, actService().Setup(cfg.Env), "finding the sind executable: no /proc")
 
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
+	actStat = func(string) (fs.FileInfo, error) { return nil, errors.New("gone") }
+	assert.EqualError(t, actService().Setup(cfg.Env), "finding the sind executable: gone")
+
+	actSeams(t)
+	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "", errors.New("no home") }
 	assert.EqualError(t, actService().Setup(cfg.Env), "finding the state directory: no home")
 	assert.Nil(t, cfg.Env.Get(actKey{}))
@@ -1091,10 +1096,38 @@ func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 	assert.Empty(t, got.home)
 }
 
-// actSeams puts the seams of Setup back when the test ends.
+// actSeams puts the seams of Setup back when the test ends. The executable
+// that a test names is a file of the test's own.
 func actSeams(t *testing.T) {
-	e, d, l, h, v := actExecutable, actStateDir, actActivityLog, actHome, actEnviron
-	t.Cleanup(func() { actExecutable, actStateDir, actActivityLog, actHome, actEnviron = e, d, l, h, v })
+	e, st, d, l, h, v := actExecutable, actStat, actStateDir, actActivityLog, actHome, actEnviron
+	t.Cleanup(func() { actExecutable, actStat, actStateDir, actActivityLog, actHome, actEnviron = e, st, d, l, h, v })
+	bin := filepath.Join(t.TempDir(), "sind")
+	require.NoError(t, os.WriteFile(bin, nil, 0o755))
+	actStat = func(string) (fs.FileInfo, error) { return os.Stat(bin) }
+}
+
+func TestActBinaryCheck(t *testing.T) {
+	actSeams(t)
+	actStat = os.Stat
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "sind")
+	require.NoError(t, os.WriteFile(exe, []byte("v1"), 0o755))
+
+	check, err := actBinaryCheck(exe)
+	require.NoError(t, err)
+	assert.NoError(t, check())
+
+	// An upgrade puts a new file in its place.
+	next := filepath.Join(dir, "sind.new")
+	require.NoError(t, os.WriteFile(next, []byte("v2"), 0o755))
+	require.NoError(t, os.Rename(next, exe))
+	assert.EqualError(t, check(), exe+" is not the sind that runs sind ui any more, as after an upgrade: restart sind ui to run commands")
+
+	require.NoError(t, os.Remove(exe))
+	require.Error(t, check(), "a binary that is gone")
+
+	_, err = actBinaryCheck(exe)
+	require.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {

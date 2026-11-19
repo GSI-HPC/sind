@@ -45,6 +45,10 @@ A browser opens at most six connections to `sind ui`, for all its tabs together.
 
 A tab that is in the background for 10 seconds lets its connections go, and takes them again when you show it. The page is then up to date at once, and the Logs tab shows its last lines again. The page of a run that goes on keeps its connection, so that its browser tab can show the step that runs. If pages still wait, you have more than six pages in view, for example in several windows side by side: close or minimize some of them.
 
+## A dialog says to restart sind ui
+
+You upgraded sind while `sind ui` ran. The UI runs its commands with the sind that started it, and that file is gone. Stop `sind ui` with Ctrl-C, start it again, and open the URL that it prints.
+
 ## A page says Not found
 
 The page names the address and says what is missing: a realm, a cluster, a node, a tab or a task. It offers the closest match first, such as a cluster of the same name in another realm, or a node with a similar name. Then it offers the list that holds what you asked for. A cluster or node that is gone was most likely deleted. sind ui keeps the last 25 commands that ended, until it stops; **Activity** lists the runs of the activity log. An address of a cluster without its realm, such as `/clusters/dev`, opens that cluster when only one realm has it. A `?realm=` that names no realm offers the realms with a similar name.

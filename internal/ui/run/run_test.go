@@ -211,6 +211,19 @@ func TestStart_Refusals(t *testing.T) {
 		require.EqualError(t, err, "not a sind command")
 	}
 	assert.Empty(t, f.st.Snapshot().Tasks)
+
+	// A failed check refuses the task before it runs.
+	f.r.cfg.Check = func() error { return errors.New("replaced") }
+	_, err := f.r.Start(spec)
+	require.EqualError(t, err, "replaced")
+	assert.Empty(t, f.st.Snapshot().Tasks)
+	assert.Empty(t, f.ex.calls)
+
+	f.r.cfg.Check = func() error { return nil }
+	id, err := f.r.Start(spec)
+	require.NoError(t, err)
+	f.ex.results <- result{}
+	f.waitDone(t, id)
 }
 
 func TestTask_Outcomes(t *testing.T) {
