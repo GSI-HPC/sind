@@ -3,9 +3,7 @@
 package ui
 
 import (
-	"fmt"
 	"sync/atomic"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
@@ -75,20 +73,4 @@ func moreRealms(v *View) []string {
 		names[i] = r.Name
 	}
 	return names
-}
-
-// moreAgo says how long before now t was, as "just now", "3 min ago".
-func moreAgo(now, t time.Time) string {
-	d := now.Sub(t)
-	switch {
-	case d < 10*time.Second:
-		return "just now"
-	case d < time.Minute:
-		return fmt.Sprintf("%d s ago", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%d min ago", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d h ago", int(d.Hours()))
-	}
-	return fmt.Sprintf("%d d ago", int(d.Hours()/24))
 }

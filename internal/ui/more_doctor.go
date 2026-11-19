@@ -205,7 +205,7 @@ func moreDoctorLoad(v *View) error {
 	if r := v.Snap.Doctor; r != nil {
 		d.HasReport, d.Running = !r.Time.IsZero(), r.Running
 		if d.HasReport {
-			d.Ago = moreAgo(v.Now, r.Time)
+			d.Ago = pgAgoSecs(v.Now.Sub(r.Time))
 		}
 		for _, c := range r.Checks {
 			mc := moreCheck{Check: c, Steps: moreFixSteps(c.Remediation)}

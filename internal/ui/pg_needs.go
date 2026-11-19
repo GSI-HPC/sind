@@ -358,14 +358,14 @@ func pgSameRealm(a, b []string) bool {
 func pgRunNeed(sn store.Snapshot, f pgFailure, e runEntry, now time.Time) pgNeed {
 	r := f.Run
 	need := pgNeed{
-		Key: "run/" + r.ID, Sev: "bad", Kind: pgNeedRun, Label: "Run", Subject: e.title, Title: "failed " + pgAgo(*r.End, now),
+		Key: "run/" + r.ID, Sev: "bad", Kind: pgNeedRun, Label: "Run", Subject: e.title, Title: "failed " + pgAgo(now.Sub(*r.End)),
 		Meta: e.realm, Dismiss: r.ID,
 	}
 	need.Detail, _, _ = strings.Cut(strings.TrimSpace(runFailure(r)), "\n")
 	show := pgAction{Label: "Show what failed", URL: pgRun{ID: r.ID}.Link(), Class: "sm ghost"}
 	if f.Fixed != nil {
 		need.Sev, need.Kind, need.Label, need.Dismiss = "ok", pgNeedFixed, "Fixed", ""
-		need.Title, need.Detail = "is fixed", "A newer run of the same command ended ok "+pgAgo(*f.Fixed.End, now)+"."
+		need.Title, need.Detail = "is fixed", "A newer run of the same command ended ok "+pgAgo(now.Sub(*f.Fixed.End))+"."
 		need.Actions = []pgAction{{Label: "Show the run", URL: pgRun{ID: f.Fixed.ID}.Link(), Class: "sm ghost"}}
 		need.HideAt = f.Fixed.End.Add(fixedFor).UnixMilli()
 		return need
@@ -432,7 +432,7 @@ func pgFixedNodes(sn store.Snapshot, realm string, nodes []pgNode, meta string, 
 			}
 			out = append(out, pgNeed{
 				Key: key, Sev: "ok", Kind: pgNeedFixed, Label: "Fixed", Subject: n.Arg, Title: "is fixed",
-				Detail: pgOr(t.Display, "The command") + " ended ok " + pgAgo(*t.End, now) + ".",
+				Detail: pgOr(t.Display, "The command") + " ended ok " + pgAgo(now.Sub(*t.End)) + ".",
 				Meta:   meta, HideAt: t.End.Add(fixedFor).UnixMilli(),
 				Actions: []pgAction{{Label: "Open " + n.Short, URL: n.Link(), Class: "sm ghost"}},
 			})

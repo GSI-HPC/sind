@@ -762,11 +762,11 @@ func pgRunOf(sn store.Snapshot, r store.Run, now time.Time) pgRun {
 		pr.Class = "run"
 		pr.Time = pgClock(now.Sub(r.Start))
 	case r.Status == store.StatusOK:
-		pr.Class, pr.Time = "ok", pgAgo(*r.End, now)
+		pr.Class, pr.Time = "ok", pgAgo(now.Sub(*r.End))
 	case r.Status == store.StatusCanceled:
-		pr.Class, pr.Time = "warn", pgAgo(*r.End, now)
+		pr.Class, pr.Time = "warn", pgAgo(now.Sub(*r.End))
 	default:
-		pr.Class, pr.Time = "bad", pgAgo(*r.End, now)
+		pr.Class, pr.Time = "bad", pgAgo(now.Sub(*r.End))
 	}
 	return pr
 }
@@ -846,18 +846,34 @@ func pgWorksOn(sn store.Snapshot, r store.Run, realm, name string) bool {
 	})
 }
 
-// pgAgo says how long ago t was, as "just now", "5 min ago", "3 h ago".
-func pgAgo(t, now time.Time) string {
-	d := now.Sub(t)
-	switch {
-	case d < 50*time.Second:
+// pgAgo says how long before now something happened that happened d ago,
+// to the nearest unit: "just now" below 50 s, "5 min ago", "3 h ago",
+// "2 d ago". It takes the duration, not two times, so that no caller can
+// swap them.
+func pgAgo(d time.Duration) string {
+	if d < 50*time.Second {
 		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%d min ago", int(d.Minutes()+0.5))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d h ago", int(d.Hours()+0.5))
 	}
-	return fmt.Sprintf("%d d ago", int(d.Hours()/24+0.5))
+	if m := int(d.Round(time.Minute) / time.Minute); m < 60 {
+		return fmt.Sprintf("%d min ago", m)
+	}
+	if h := int(d.Round(time.Hour) / time.Hour); h < 24 {
+		return fmt.Sprintf("%d h ago", h)
+	}
+	return fmt.Sprintf("%d d ago", int(d.Round(24*time.Hour)/(24*time.Hour)))
+}
+
+// pgAgoSecs is pgAgo that counts the seconds of the first minute: "just
+// now" below 10 s, then "40 s ago". The Doctor page says so of its report,
+// which Run checks again renews.
+func pgAgoSecs(d time.Duration) string {
+	switch s := int(d.Round(time.Second) / time.Second); {
+	case s < 10:
+		return "just now"
+	case s < 60:
+		return fmt.Sprintf("%d s ago", s)
+	}
+	return pgAgo(d)
 }
 
 // pgClock formats a duration as m:ss.s, the clock of a running command.

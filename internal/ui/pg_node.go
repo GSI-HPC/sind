@@ -724,7 +724,7 @@ func pgDiagService(d *pgDiag, n pgNode, jobs string, now time.Time) {
 		how := "It stopped" + pgUnitStatus(u, " with ")
 		if !u.Since.IsZero() {
 			how += " at " + pgHMS(u.Since)
-			d.Since = "since " + pgHM(u.Since) + " · " + pgAge(u.Since, now)
+			d.Since = "since " + pgHM(u.Since) + " · " + pgAge(now.Sub(u.Since))
 			d.Facts = append(d.Facts, pgFact{"failed", pgHMS(u.Since) + pgUnitStatus(u, ", "), true})
 		}
 		text = append(text, how+".")
@@ -772,7 +772,7 @@ func pgDiagStopped(d *pgDiag, n pgNode, jobs string, now time.Time) {
 		d.Text = "The container stopped"
 		if !e.At.IsZero() {
 			d.Text += " at " + pgHMS(e.At)
-			d.Since = "since " + pgHM(e.At) + " · " + pgAge(e.At, now)
+			d.Since = "since " + pgHM(e.At) + " · " + pgAge(now.Sub(e.At))
 		}
 		d.Text += fmt.Sprintf(" with exit code %d: %s.", e.Code, pgExitText(*e))
 		fact := pgExitShort(*e)
@@ -820,13 +820,14 @@ func pgDiagSlurm(sn store.Snapshot, d *pgDiag, n pgNode, now time.Time) {
 func pgSinceChange(sn store.Snapshot, n pgNode, source string, now time.Time) string {
 	changes := sn.Changes(n.Realm, n.Cluster, n.Short)
 	if i := slices.IndexFunc(changes, func(c store.Change) bool { return c.Source == source }); i >= 0 {
-		return "since " + pgHM(changes[i].At) + " · " + pgAge(changes[i].At, now)
+		return "since " + pgHM(changes[i].At) + " · " + pgAge(now.Sub(changes[i].At))
 	}
 	return "since before sind ui started"
 }
 
-// pgAge says how long ago t was, short: "29 min", "3 h", "just now".
-func pgAge(t, now time.Time) string { return strings.TrimSuffix(pgAgo(t, now), " ago") }
+// pgAge says how long ago something was that happened d ago, short:
+// "29 min", "3 h", "just now".
+func pgAge(d time.Duration) string { return strings.TrimSuffix(pgAgo(d), " ago") }
 
 // pgLineClass is the class of a line of a journal: an error, a warning, or
 // plain.

@@ -680,13 +680,6 @@ func TestMoreServiceSetup(t *testing.T) {
 }
 
 func TestMoreHelpers(t *testing.T) {
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	for d, want := range map[time.Duration]string{
-		time.Second: "just now", 30 * time.Second: "30 s ago", 5 * time.Minute: "5 min ago",
-		3 * time.Hour: "3 h ago", 50 * time.Hour: "2 d ago",
-	} {
-		assert.Equal(t, want, moreAgo(now, now.Add(-d)))
-	}
 	assert.Equal(t, "", moreDockerDown(store.DockerState{Err: "unchecked"}))
 	assert.Equal(t, "boom", moreDockerDown(store.DockerState{Checked: true, Err: "boom"}))
 	cls, mark := moreCheckMark("failed")
