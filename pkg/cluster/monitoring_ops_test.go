@@ -153,8 +153,17 @@ func TestWorkerRemove_Monitored(t *testing.T) {
 	require.Error(t, WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"}))
 	assert.Zero(t, countCalls(m.Calls, "exec", "sind-alloy"))
 
+	// A failed listing of the monitored nodes changes nothing: the
+	// workers stay in Slurm and the mesh.
 	f.fail["ps"] = mock.Result{Err: testutil.ExitCode1(t)}
+	m = &mock.Executor{OnCall: stackFirst(f, workerRemoveOnCall(t, nodesConf))}
+	client = docker.NewClient(m)
 	require.ErrorContains(t, WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"}), "listing monitored nodes")
+	assert.Empty(t, nodesConfWrites(m.Calls))
+	assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"))
+	assert.False(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+		return slices.Contains(c.Args, "sind-dns") || slices.Contains(c.Args, "sind-ssh")
+	}), "no call to the mesh")
 }
 
 // --- PowerOn ---

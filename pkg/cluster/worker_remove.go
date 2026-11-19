@@ -117,6 +117,20 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		}
 	}
 
+	// Which of the workers the monitoring stack collects is told by their
+	// containers, so before they go, and before anything changes: a
+	// failed listing leaves the workers in Slurm and the mesh.
+	monitored, err := monitoredContainers(ctx, client, realm, clusterName)
+	if err != nil {
+		return err
+	}
+	var forget []string
+	for _, c := range targets {
+		if slices.ContainsFunc(monitored, func(m docker.ContainerListEntry) bool { return m.Name == c.Name }) {
+			forget = append(forget, strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, clusterName)))
+		}
+	}
+
 	// Update Slurm, then deregister DNS + known_hosts, both before the
 	// containers go. A failed update keeps the workers, and with them their
 	// DNS records and known_hosts entries, so that they stay reachable.
@@ -136,19 +150,6 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	DeregisterMesh(ctx, meshMgr, clusterName, deregistered)
 	for _, name := range orphans {
 		meshMgr.Warn(ctx, fmt.Sprintf("node %q of cluster %q had no container: removed it from sind-nodes.conf and the mesh only", name, clusterName))
-	}
-
-	// Which of the workers the monitoring stack collects is told by their
-	// containers, so before they go.
-	monitored, err := monitoredContainers(ctx, client, realm, clusterName)
-	if err != nil {
-		return err
-	}
-	var forget []string
-	for _, c := range targets {
-		if slices.ContainsFunc(monitored, func(m docker.ContainerListEntry) bool { return m.Name == c.Name }) {
-			forget = append(forget, strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, clusterName)))
-		}
 	}
 
 	// Stop + remove containers.
