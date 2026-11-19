@@ -111,6 +111,7 @@ details.stopc>summary::-webkit-details-marker{display:none}
 .cmds-more{display:block;padding:6px 14px 4px 38px;font-size:var(--t-md)}
 .cmds-ft{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:9px 14px;border-top:1px solid var(--line-2);background:var(--panel-2);font-size:var(--t-sm);position:sticky;bottom:0}
 .cmds-ft .faint{margin-left:auto}
+.cmds-ft .bad{margin-left:auto;color:var(--bad)}
 
 /* the bar of a run's steps */
 .segbar{display:flex;gap:2px;height:8px}

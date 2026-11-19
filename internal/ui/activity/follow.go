@@ -4,6 +4,7 @@ package activity
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -28,22 +29,35 @@ const (
 // up to date, until ctx ends. It reads every 50 ms while a run has not
 // ended and every 250 ms otherwise, and sets the runs, with the IDs of
 // those that changed, only when something changed. The log may be missing
-// or be rotated: see Tail. A run without an event for StaleAfter ends.
-func Follow(ctx context.Context, st *store.Store, path string) {
-	follow(ctx, st, path, maxRuns, activeEvery, idleEvery, StaleAfter)
+// or be rotated: see Tail. A run without an event for StaleAfter ends. A
+// log that cannot be read is an empty one, which the next poll tries
+// again: Follow logs its error once to log and sets it as st's RunsErr
+// until the log can be read again.
+func Follow(ctx context.Context, st *store.Store, path string, log *slog.Logger) {
+	follow(ctx, st, path, log, maxRuns, activeEvery, idleEvery, StaleAfter)
 }
 
 // follow is Follow with the number of runs it keeps, its two intervals and
 // the time after which a run is stale.
-func follow(ctx context.Context, st *store.Store, path string, keep int, active, idle, staleAfter time.Duration) {
+func follow(ctx context.Context, st *store.Store, path string, log *slog.Logger, keep int, active, idle, staleAfter time.Duration) {
 	red := NewReducer(keep)
 	tail := eventlog.NewTail(path, red)
 	busy := false
 	var runs []store.Run
+	failing := ""
 	for {
 		var ids []string
-		// A log that cannot be read is an empty one: the next poll tries again.
-		if changed, _ := tail.Poll(); changed {
+		changed, err := tail.Poll()
+		switch {
+		case err != nil && err.Error() != failing:
+			failing = err.Error()
+			log.Warn("sind ui cannot read the activity log, so commands show no progress", "path", path, "err", err)
+			st.SetRunsErr(failing)
+		case err == nil && failing != "":
+			failing = ""
+			st.SetRunsErr("")
+		}
+		if changed {
 			if ids = red.Changed(); len(ids) > 0 {
 				runs = red.Runs()
 			}

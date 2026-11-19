@@ -75,6 +75,9 @@ type dockData struct {
 	Label string
 	// Failed counts the commands of the list that failed.
 	Failed int
+	// LogErr says why sind ui cannot read the activity log, which the list
+	// names, as the commands then show no progress (store.Snapshot.RunsErr).
+	LogErr string
 }
 
 // dockPart is a count of the button of the top bar.
@@ -163,6 +166,9 @@ func dockLoad(v *View) dockData {
 			run = &r
 		}
 		c := dockTaskCard(t, run, v.Now)
+		if run == nil && c.Line == "starting" && v.Snap.RunsErr != "" {
+			c.Line = "no progress to show"
+		}
 		c.here = (hideTask != "" && t.ID == hideTask) || (run != nil && hideRun != "" && run.ID == hideRun)
 		cards = append(cards, c)
 	}
@@ -183,7 +189,9 @@ func dockLoad(v *View) dockData {
 			cards[i].Stop.CSRF = v.CSRF
 		}
 	}
-	return dockFit(cards, v.Now)
+	d := dockFit(cards, v.Now)
+	d.LogErr = v.Snap.RunsErr
+	return d
 }
 
 // dockWords name the counts of the commands that ended, by class.

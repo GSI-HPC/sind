@@ -100,6 +100,6 @@ func colActivityService() Service {
 			env.Log.Warn("sind ui shows no activity: no state directory", "err", err)
 			return
 		}
-		activity.Follow(ctx, env.Store, path)
+		activity.Follow(ctx, env.Store, path, env.Log)
 	}}
 }
