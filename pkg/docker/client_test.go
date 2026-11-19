@@ -3,10 +3,12 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -393,4 +396,20 @@ func TestClient_OtherErrorsReachable(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", context.Canceled)
 	assert.NotErrorIs(t, NewClient(&m).do(t.Context(), "info"), ErrUnreachable)
+}
+
+func TestClient_TracesEveryCommand(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: sindlog.LevelTrace}))
+	ctx := sindlog.With(t.Context(), logger)
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	require.NoError(t, c.StopContainer(ctx, testContainerName))
+	require.NoError(t, c.ExecWithStdin(ctx, testContainerName, strings.NewReader("x"), "cat"))
+
+	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="stop `+string(testContainerName)+`"`), buf.String())
+	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="exec -i `+string(testContainerName)+` cat"`), buf.String())
 }

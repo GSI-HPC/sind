@@ -87,7 +87,6 @@ func (c *Client) acquire(ctx context.Context) (release func(), err error) {
 }
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
-	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
 		return c.Executor.Run(ctx, c.Command, args...)
 	})
@@ -126,7 +125,11 @@ func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...stri
 // pull, which writes its status there. Every other command writes data
 // there, a container's ID, a name or the JSON of inspect, which is no line
 // for a row that shows what a pull does (cmdexec.WithStdoutAsData).
+//
+// Every docker command, with stdin or without, is logged at LevelTrace
+// before it runs.
 func (c *Client) call(ctx context.Context, args []string, exec func(context.Context) (string, string, error)) (string, string, error) {
+	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 	name := callName(args)
 	ctx, span := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.Flagged(progress.FlagHidden))
 	release, err := c.acquire(ctx)
