@@ -357,7 +357,7 @@ func TestConnectExternal(t *testing.T) {
 	f, c, m := newExternalFake(t)
 	f.containers["kind-control-plane"] = externalContainer{networks: []string{"kind", "sind-mesh"}}
 
-	ConnectExternal(t.Context(), c, mesh.NewManager(c, "sind"), "sind-new-net")
+	connectExternal(t.Context(), c, mesh.NewManager(c, "sind"), "sind-new-net")
 
 	assert.Equal(t, []string{"network connect sind-new-net kind-control-plane"}, callsWithPrefix(m, "network connect"))
 }
@@ -374,7 +374,7 @@ func TestConnectExternal_Warnings(t *testing.T) {
 			var warned []string
 			ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
-			ConnectExternal(ctx, c, mesh.NewManager(c, "sind"), "sind-new-net")
+			connectExternal(ctx, c, mesh.NewManager(c, "sind"), "sind-new-net")
 
 			require.Len(t, warned, 1)
 			assert.Contains(t, warned[0], tt.want)

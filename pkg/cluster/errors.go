@@ -20,7 +20,7 @@ import (
 // one node, reports a missing cluster as a missing node.
 var (
 	// ErrClusterExists reports that resources with the names of the
-	// cluster to create exist already (PreflightCheck, Create).
+	// cluster to create exist already (preflightCheck, Create).
 	ErrClusterExists = errors.New("cluster resources exist")
 	// ErrClusterNotFound reports that a cluster, or its controller, does
 	// not exist in the realm: GetStatus, GetNodes, GetNode, GetAuthKey,
@@ -44,7 +44,7 @@ var (
 	// ErrNetworkFull reports that the nodes of a Create or WorkerAdd do
 	// not fit on the realm's mesh or the cluster network, Docker bridge
 	// networks of at most docker.MaxBridgeEndpoints containers
-	// (PreflightCheck, Create, WorkerAdd).
+	// (preflightCheck, Create, WorkerAdd).
 	ErrNetworkFull = errors.New("network full")
 	// ErrImageUnsupported reports that a monitored cluster's image cannot
 	// serve the HTTP endpoints the monitoring stack uses: a Slurm older

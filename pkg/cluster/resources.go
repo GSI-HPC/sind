@@ -13,14 +13,14 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-// CreateClusterNetwork creates the cluster-specific Docker bridge network.
+// createClusterNetwork creates the cluster-specific Docker bridge network.
 // A network of that name that exists already, as another create made it,
 // fails with ErrClusterExists: unlike a volume, a network is created once.
-func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
+func createClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	labels := docker.Labels{
 		LabelRealm:                 realm,
 		LabelCluster:               clusterName,
-		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
+		docker.ComposeProjectLabel: composeProject(realm, clusterName),
 		docker.ComposeNetworkLabel: "net",
 	}
 	name := NetworkName(realm, clusterName)
@@ -34,12 +34,12 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 	return nil
 }
 
-// CreateClusterVolume creates a single cluster volume.
-func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clusterName string, vtype VolumeType) error {
+// createClusterVolume creates a single cluster volume.
+func createClusterVolume(ctx context.Context, client *docker.Client, realm, clusterName string, vtype VolumeType) error {
 	labels := docker.Labels{
 		LabelRealm:                 realm,
 		LabelCluster:               clusterName,
-		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
+		docker.ComposeProjectLabel: composeProject(realm, clusterName),
 		docker.ComposeVolumeLabel:  string(vtype),
 	}
 	if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
@@ -49,7 +49,7 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 }
 
 // SlurmConfFiles returns slurm.conf and sind-nodes.conf as
-// WriteClusterConfig writes them for cfg, after ApplyDefaults: what the
+// writeClusterConfig writes them for cfg, after ApplyDefaults: what the
 // New cluster page of sind ui shows before the cluster exists.
 func SlurmConfFiles(cfg *config.Cluster) (slurmConf, nodesConf string, err error) {
 	workers, err := slurm.ManagedWorkers(cfg.Nodes)
@@ -67,7 +67,7 @@ func SlurmConfFiles(cfg *config.Cluster) (slurmConf, nodesConf string, err error
 	return slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, opts), slurm.GenerateNodesConf(workers, cfg.Slurm.Main), nil
 }
 
-// WriteClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
+// writeClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
 // cgroup.conf to the config volume. Uses a temporary container to access the
 // volume.
 //
@@ -85,7 +85,7 @@ func SlurmConfFiles(cfg *config.Cluster) (slurmConf, nodesConf string, err error
 // cp writes files as root, so the helper then runs (like the munge helper)
 // to give them to SlurmUser with docker exec, and the fragments' directory
 // too, with mode 0700.
-func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
+func writeClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
 	slurmConf, nodesConf, err := SlurmConfFiles(cfg)
 	if err != nil {
 		return err
@@ -216,9 +216,9 @@ func confPaths(names []string) []string {
 	return paths
 }
 
-// WriteMungeKey writes the given munge key to the munge volume.
+// writeMungeKey writes the given munge key to the munge volume.
 // Uses a temporary container to access the volume.
-func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) error {
+func writeMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) error {
 	helperName := ContainerName(realm, clusterName, "munge-helper")
 	volName := VolumeName(realm, clusterName, VolumeMunge)
 

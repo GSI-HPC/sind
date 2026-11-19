@@ -26,13 +26,7 @@ type Step struct {
 // they do for the create.
 func afterCreate(cfg *config.Cluster) (steps []Step, slurmConf string) {
 	if script := cluster.UsersScript(cfg); script != "" {
-		var on []string
-		for _, rc := range cluster.NodeRunConfigs(cfg, "", "", "", "") {
-			if rc.AddUsers {
-				on = append(on, rc.ShortName)
-			}
-		}
-		steps = append(steps, Step{Where: "On " + foldNames(on) + ": the users and groups", Lines: strings.Split(strings.TrimSuffix(script, "\n"), "\n")})
+		steps = append(steps, Step{Where: "On " + foldNames(cluster.UserNodes(cfg)) + ": the users and groups", Lines: strings.Split(strings.TrimSuffix(script, "\n"), "\n")})
 	}
 	if cfg.HasManagedDB() {
 		var lines []string

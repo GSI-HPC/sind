@@ -46,12 +46,12 @@ type NodeHealth struct {
 // docker inspect result, which the caller already holds.
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm service is checked;
-// unmanaged nodes (see IsManaged) get none. clusterName is used to select
+// unmanaged nodes (see isManaged) get none. clusterName is used to select
 // the cluster network IP.
 func GetNodeHealth(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
 	// sind cannot tell which controller of an unmanaged pair is in control.
-	if role == config.RoleController && IsManaged(info.Labels) {
+	if role == config.RoleController && isManaged(info.Labels) {
 		shortName := strings.TrimPrefix(string(info.Name), ContainerPrefix(realm, clusterName))
 		var err error
 		if health.HA, err = nodeHA(ctx, client, realm, clusterName, shortName, health); err != nil {
@@ -241,7 +241,7 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: config.StorageVolume},
 	}
 	if !slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool {
-		return IdentityFromLabels(c.Labels) == config.IdentityClientIDs
+		return identityFromLabels(c.Labels) == config.IdentityClientIDs
 	}) {
 		mounts = append(mounts, MountPoint{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume})
 	}
@@ -286,7 +286,7 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		}
 		m := MountPoint{Path: CVMFSPath, Source: cvmfsSource(backend), Type: backend, OK: true}
 		if backend == config.StorageVolume {
-			m.OK, _ = client.VolumeExists(ctx, CVMFSVolume)
+			m.OK, _ = client.VolumeExists(ctx, cvmfsVolume)
 		}
 		mounts = append(mounts, m)
 		break
@@ -306,13 +306,13 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 }
 
 // journalMount returns the journal mount of a monitored cluster's nodes
-// (see Monitored), with the cluster's directory of the volume as the
+// (see monitored), with the cluster's directory of the volume as the
 // subpath: docker inspect's top-level Mounts hide a volume's subpath, so
 // the node's host configuration tells it.
 func journalMount(realm, clusterName string, containers []*docker.ContainerInfo) (MountPoint, bool) {
 	journal := observability.JournalVolume(realm)
 	for _, c := range containers {
-		if !Monitored(realm, c) {
+		if !monitored(realm, c) {
 			continue
 		}
 		subpath := clusterName
@@ -333,7 +333,7 @@ func journalMount(realm, clusterName string, containers []*docker.ContainerInfo)
 // taken from their image.
 func dataMount(containers []*docker.ContainerInfo) (MountPoint, bool) {
 	for _, c := range containers {
-		path := DataMountPath(c.Labels)
+		path := dataMountPath(c.Labels)
 		for _, m := range c.Mounts {
 			if m.Destination != path {
 				continue
@@ -351,7 +351,7 @@ func dataMount(containers []*docker.ContainerInfo) (MountPoint, bool) {
 type NodeStatus struct {
 	Name    string      `json:"name"`    // DNS-style name: "controller.dev"
 	Role    config.Role `json:"role"`    // "controller", "db", "api", "submitter", "worker"
-	Managed bool        `json:"managed"` // sind manages Slurm on the node (see IsManaged)
+	Managed bool        `json:"managed"` // sind manages Slurm on the node (see isManaged)
 	Health  *NodeHealth `json:"health"`  //nolint:revive // nested health is intentional
 }
 
@@ -361,7 +361,7 @@ type Status struct {
 	Name         string         `json:"name"`
 	SlurmVersion string         `json:"slurm_version"`
 	State        State          `json:"status"`
-	Monitoring   bool           `json:"monitoring"` // the realm's monitoring stack collects the cluster (see Monitored)
+	Monitoring   bool           `json:"monitoring"` // the realm's monitoring stack collects the cluster (see monitored)
 	Nodes        []*NodeStatus  `json:"nodes"`
 	Network      *NetworkHealth `json:"network"`
 	Mounts       []MountPoint   `json:"mounts"`
@@ -440,7 +440,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 			nodes[i] = &NodeStatus{
 				Name:    shortName + "." + clusterName,
 				Role:    role,
-				Managed: IsManaged(info.Labels),
+				Managed: isManaged(info.Labels),
 				Health:  health,
 			}
 			return nil
@@ -475,7 +475,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		Name:         clusterName,
 		SlurmVersion: slurmVersion,
 		State:        aggregateState(states),
-		Monitoring:   slices.ContainsFunc(infos, func(info *docker.ContainerInfo) bool { return Monitored(realm, info) }),
+		Monitoring:   slices.ContainsFunc(infos, func(info *docker.ContainerInfo) bool { return monitored(realm, info) }),
 		Nodes:        nodes,
 		Network:      network,
 		Mounts:       mounts,
@@ -498,19 +498,19 @@ func nodeStatusOrder(n *NodeStatus) string {
 // mariadb next to slurmdbd, a managed api node slurmrestd, and a managed
 // submitter with identity clientIds sackd.
 func nodeServices(role config.Role, labels docker.Labels) []probe.Service {
-	identity := IdentityFromLabels(labels)
+	identity := identityFromLabels(labels)
 	var services []probe.Service
 	if identity != config.IdentityClientIDs {
 		services = append(services, probe.ServiceMunge)
 	}
 	services = append(services, probe.ServiceSSHD)
-	if !IsManaged(labels) {
+	if !isManaged(labels) {
 		return services
 	}
 	if role == config.RoleDB {
 		return append(services, probe.ServiceMariadb, probe.ServiceSlurmdbd)
 	}
-	if svc, ok := nodeSlurmService(RunConfig{Role: role, Identity: identity}); ok {
+	if svc, ok := nodeSlurmService(nodeRunConfig{Role: role, Identity: identity}); ok {
 		services = append(services, svc)
 	}
 	return services

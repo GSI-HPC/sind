@@ -67,7 +67,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
-	// GetStatus and ListClusterResources find the network and the volumes
+	// GetStatus and listClusterResources find the network and the volumes
 	// with one listing each.
 	status, err := GetStatus(ctx, c, realm, clusterName)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	for _, m := range status.Mounts {
 		assert.True(t, m.OK, "mount %s present", m.Path)
 	}
-	res, err := ListClusterResources(ctx, c, realm, clusterName)
+	res, err := listClusterResources(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.True(t, res.NetworkExists)
 	assert.Equal(t, []docker.VolumeName{
@@ -145,7 +145,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// The network and the volumes are gone too.
-	res, err = ListClusterResources(ctx, c, realm, clusterName)
+	res, err = listClusterResources(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.Empty(t, res.Containers)
 	assert.False(t, res.NetworkExists)
@@ -536,7 +536,7 @@ nodes:
 	require.Len(t, added, 1)
 	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].ShortName()))
 	require.NoError(t, err)
-	assert.False(t, IsManaged(info.Labels))
+	assert.False(t, isManaged(info.Labels))
 
 	// The blank slate is usable: configure and start Slurm by hand.
 	require.NoError(t, c.WriteFile(ctx, primary, slurm.ConfDir+"/slurm.conf", "ClusterName="+clusterName+`
@@ -1132,7 +1132,7 @@ users:
 	assert.NotContains(t, err.Error(), "rolling back")
 
 	// The rollback removed the cluster's nodes, network and volumes.
-	res, err := ListClusterResources(ctx, c, meshMgr.Realm, clusterName)
+	res, err := listClusterResources(ctx, c, meshMgr.Realm, clusterName)
 	require.NoError(t, err)
 	assert.Empty(t, res.Containers)
 	assert.False(t, res.NetworkExists)

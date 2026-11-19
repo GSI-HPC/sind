@@ -24,12 +24,12 @@ import (
 // DefaultDataMountPath is the default mount path for the shared data volume.
 const DefaultDataMountPath = "/data"
 
-// RunTmpfsSize is the size of every node's /run tmpfs. /run holds systemd's
+// runTmpfsSize is the size of every node's /run tmpfs. /run holds systemd's
 // runtime state, the daemons' sockets and pid files, and journald's
 // volatile journal, which journald keeps to a tenth of the file system;
 // without a size it could grow to half the host's memory, all of it
 // charged to the node. systemd wants 16M free on /run to reload.
-const RunTmpfsSize = "64m"
+const runTmpfsSize = "64m"
 
 // Label keys used on sind containers.
 //
@@ -56,7 +56,7 @@ const (
 	// empty for none.
 	LabelCVMFS = "sind.cvmfs"
 	// LabelUsers and LabelGroups record the cluster users and groups
-	// (users, groups), as space-separated entries (see LinuxUsers.Labels).
+	// (users, groups), as space-separated entries (see linuxUsers.Labels).
 	LabelUsers  = "sind.users"
 	LabelGroups = "sind.groups"
 	// LabelIdentity records the identity mode (identity) of the cluster:
@@ -65,36 +65,36 @@ const (
 	// LabelMonitoring records whether the node's cluster is monitored
 	// (monitoring): "true" or "false". It is for listings and filters
 	// only: an image could carry it too, so what decides is the node's
-	// mount of the realm's journal volume (see Monitored).
+	// mount of the realm's journal volume (see monitored).
 	LabelMonitoring = "sind.monitoring"
 )
 
-// IdentityFromLabels returns the identity mode a node container's
+// identityFromLabels returns the identity mode a node container's
 // LabelIdentity records, local without one.
-func IdentityFromLabels(labels docker.Labels) config.IdentityMode {
+func identityFromLabels(labels docker.Labels) config.IdentityMode {
 	return cmp.Or(config.IdentityMode(labels[LabelIdentity]), config.IdentityLocal)
 }
 
-// DataMountPath returns where a node container mounts the cluster's data:
+// dataMountPath returns where a node container mounts the cluster's data:
 // its LabelDataMountPath, or DefaultDataMountPath without one.
-func DataMountPath(labels docker.Labels) string {
+func dataMountPath(labels docker.Labels) string {
 	return cmp.Or(labels[LabelDataMountPath], DefaultDataMountPath)
 }
 
-// ComposeProject returns the Docker Compose project name for a cluster.
-func ComposeProject(realm, clusterName string) string {
+// composeProject returns the Docker Compose project name for a cluster.
+func composeProject(realm, clusterName string) string {
 	return realm + "-" + clusterName
 }
 
-// NodeLabels returns the standard labels for a node container.
-// managed records whether sind manages Slurm on the node (see IsManaged).
+// nodeLabels returns the standard labels for a node container.
+// managed records whether sind manages Slurm on the node (see isManaged).
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is always set, empty when sind does not know the
 // version (unmanaged clusters), and so is the data host path label, empty in
 // Docker volume mode: the image's labels would otherwise show through on the
 // container, and the sind-node image carries a slurm version label.
-func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
-	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
+func nodeLabels(realm, clusterName string, role config.Role, managed bool, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
+	labels := docker.ComposeLabels(composeProject(realm, clusterName), string(role), containerNumber)
 	labels[LabelRealm] = realm
 	labels[LabelCluster] = clusterName
 	labels[LabelRole] = string(role)
@@ -104,17 +104,17 @@ func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurm
 	return labels
 }
 
-// IsManaged reports whether a node container's labels mark it as managed by
+// isManaged reports whether a node container's labels mark it as managed by
 // sind: its Slurm configuration is sind's and sind runs its Slurm daemon.
 // On a controller it tells whether the whole cluster is managed. Containers
 // created before sind recorded LabelManaged count as managed.
-func IsManaged(labels docker.Labels) bool {
+func isManaged(labels docker.Labels) bool {
 	return labels[LabelManaged] != "false"
 }
 
-// RunConfig holds the parameters needed to build docker run arguments
+// nodeRunConfig holds the parameters needed to build docker run arguments
 // for creating a node container.
-type RunConfig struct {
+type nodeRunConfig struct {
 	Realm           string      // realm name (e.g. "sind")
 	ClusterName     string      // cluster name
 	ShortName       string      // node hostname: "controller", "worker-0"
@@ -127,7 +127,7 @@ type RunConfig struct {
 	DNSIP           string      // mesh DNS container IP (optional)
 	DataHostPath    string      // host path for data volume (empty = use docker volume)
 	DataMountPath   string      // mount point for data (default: /data)
-	Managed         bool        // sind manages Slurm on the node: its configuration and daemon (see IsManaged)
+	Managed         bool        // sind manages Slurm on the node: its configuration and daemon (see isManaged)
 	SharedState     bool        // mount the shared slurmctld state volume (controllers of a backup pair)
 	ContainerNumber int         // 1-based compose container instance number
 	CapAdd          []string    // extra Linux capabilities (e.g. "SYS_ADMIN")
@@ -137,16 +137,16 @@ type RunConfig struct {
 
 	// CVMFS is how the node mounts /cvmfs: config.StorageVolume for the
 	// plugin volume, config.StorageHostPath for the host's /cvmfs, or empty
-	// for none (see DetectCVMFS).
+	// for none (see detectCVMFS).
 	CVMFS config.StorageType
 
 	// MeshNetwork is the realm's mesh network, which the node joins next to
-	// its cluster network; CreateNode sets it from its mesh.Manager.
+	// its cluster network; createNode sets it from its mesh.Manager.
 	MeshNetwork docker.NetworkName
 
 	// Users are the cluster users and groups. The node records them in its
 	// labels, and with users it mounts the home volume at HomeMountPath.
-	Users LinuxUsers
+	Users linuxUsers
 	// AddUsers creates the users and groups on the node (see
 	// nodeGetsUsers).
 	AddUsers bool
@@ -165,50 +165,50 @@ type RunConfig struct {
 
 	// TaskAffinity is set on managed workers of a cluster whose slurm.conf
 	// enables task/affinity (see slurm.TaskAffinity): they get
-	// TaskAffinityCapability.
+	// taskAffinityCapability.
 	TaskAffinity bool
 
 	// Monitoring is set on every node of a monitored cluster: the node
 	// mounts its directory of the realm's journal volume at
 	// /var/log/journal, where journald writes a persistent journal that
-	// the monitoring stack reads, capped by JournalCap.
+	// the monitoring stack reads, capped by journalCap.
 	Monitoring bool
 }
 
 // clusterNetworkSpec returns the --network value that attaches a node to its
 // cluster network with gateway priority 1 (Docker 28 and later), ahead of
-// the mesh network (see BuildRunArgs).
+// the mesh network (see buildRunArgs).
 func clusterNetworkSpec(realm, clusterName string) string {
 	return "name=" + string(NetworkName(realm, clusterName)) + ",gw-priority=1"
 }
 
-// TaskAffinityCapability is the capability managed workers get when the
+// taskAffinityCapability is the capability managed workers get when the
 // cluster's TaskPlugin includes task/affinity: slurmstepd, as root, sets
 // each task's CPU affinity after the task has become the job's user, and
 // changing the affinity of another user's process needs CAP_SYS_NICE,
 // which Docker drops by default. Without it, every job of a user other
 // than root fails with task_g_set_affinity.
-const TaskAffinityCapability = "SYS_NICE"
+const taskAffinityCapability = "SYS_NICE"
 
-// getsTaskAffinityCapability reports whether BuildRunArgs gives a worker
-// TaskAffinityCapability: when its cluster's slurm.conf enables
+// getsTaskAffinityCapability reports whether buildRunArgs gives a worker
+// taskAffinityCapability: when its cluster's slurm.conf enables
 // task/affinity, unless capDrop lists the capability or ALL, as a
 // --cap-drop does not undo a --cap-add.
 func getsTaskAffinityCapability(taskAffinity bool, capDrop []string) bool {
-	return taskAffinity && !slices.Contains(capDrop, TaskAffinityCapability) && !slices.Contains(capDrop, "ALL")
+	return taskAffinity && !slices.Contains(capDrop, taskAffinityCapability) && !slices.Contains(capDrop, "ALL")
 }
 
-// addsTaskAffinityCapability reports whether BuildRunArgs adds
-// TaskAffinityCapability to the node of cfg: a worker that
+// addsTaskAffinityCapability reports whether buildRunArgs adds
+// taskAffinityCapability to the node of cfg: a worker that
 // getsTaskAffinityCapability.
-func addsTaskAffinityCapability(cfg RunConfig) bool {
+func addsTaskAffinityCapability(cfg nodeRunConfig) bool {
 	return cfg.Role == config.RoleWorker && getsTaskAffinityCapability(cfg.TaskAffinity, cfg.CapDrop)
 }
 
-// BuildRunArgs returns the docker arguments for creating a node container.
+// buildRunArgs returns the docker arguments for creating a node container.
 // The returned slice does not include "create" or "run -d" — the caller
 // passes these args to Client.CreateContainer or Client.RunContainer.
-func BuildRunArgs(cfg RunConfig) []string {
+func buildRunArgs(cfg nodeRunConfig) []string {
 	var args []string
 
 	// Identity
@@ -235,7 +235,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	if cfg.DNSIP != "" {
 		args = append(args, "--dns", cfg.DNSIP)
 	}
-	args = append(args, "--dns-search", DNSSearchDomain(cfg.ClusterName, cfg.Realm))
+	args = append(args, "--dns-search", dnsSearchDomain(cfg.ClusterName, cfg.Realm))
 
 	// Volume mounts
 	configMode := "ro"
@@ -281,7 +281,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
 	args = append(args,
 		"--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize,
-		"--tmpfs", "/run:exec,mode=755,size="+RunTmpfsSize,
+		"--tmpfs", "/run:exec,mode=755,size="+runTmpfsSize,
 		"--tmpfs", "/run/lock",
 	)
 
@@ -310,7 +310,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// other users' processes, unless the node drops the capability: a
 	// --cap-drop does not undo a --cap-add.
 	if addsTaskAffinityCapability(cfg) {
-		args = append(args, "--cap-add", TaskAffinityCapability)
+		args = append(args, "--cap-add", taskAffinityCapability)
 	}
 
 	// Extra capabilities and devices (opt-in)
@@ -328,7 +328,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	}
 
 	// Labels, each one set even when empty (see the label keys)
-	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
+	labels := nodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
 	labels[LabelDataMountPath] = dataMountPath
 	labels[LabelCVMFS] = string(cfg.CVMFS)
 	maps.Copy(labels, cfg.Users.Labels())
@@ -340,12 +340,12 @@ func BuildRunArgs(cfg RunConfig) []string {
 	args = append(args, "--entrypoint", "/bin/sh")
 
 	// Image, followed by the entrypoint's arguments
-	entrypoint := NodeEntrypoint
+	entrypoint := nodeEntrypoint
 	if cfg.Identity == config.IdentityClientIDs {
-		entrypoint = MaskMunge + entrypoint
+		entrypoint = maskMunge + entrypoint
 	}
 	if cfg.Monitoring {
-		entrypoint = JournalCap + entrypoint
+		entrypoint = journalCap + entrypoint
 	}
 	args = append(args, cfg.Image, "-c", entrypoint)
 
@@ -366,20 +366,20 @@ func bindMount(source, target string) string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-// MaskMunge is the line the node entrypoint starts with under identity
+// maskMunge is the line the node entrypoint starts with under identity
 // clientIds: it masks munge.service before systemd starts, as auth/slurm
 // replaces munge and the node has no munge key.
-const MaskMunge = "ln -sf /dev/null /etc/systemd/system/munge.service\n"
+const maskMunge = "ln -sf /dev/null /etc/systemd/system/munge.service\n"
 
-// JournalCap is the line the node entrypoint starts with on a monitored
+// journalCap is the line the node entrypoint starts with on a monitored
 // cluster: it caps the node's persistent journal on the shared journal
 // volume at 64 MB before journald starts, in a drop-in whose name sorts
 // after those images usually ship, so that it wins over a custom image's
 // cap or the lack of one (journald's default allows up to 4 GB).
-const JournalCap = "mkdir -p /etc/systemd/journald.conf.d && " +
+const journalCap = "mkdir -p /etc/systemd/journald.conf.d && " +
 	"printf '[Journal]\\nSystemMaxUse=64M\\n' > /etc/systemd/journald.conf.d/zz-sind-monitoring.conf\n"
 
-// NodeEntrypoint is the shell script every node container starts with, as
+// nodeEntrypoint is the shell script every node container starts with, as
 // PID 1, before it execs systemd. It moves itself into init.scope and enables
 // all available controllers in the root cgroup's cgroup.subtree_control.
 //
@@ -393,16 +393,16 @@ const JournalCap = "mkdir -p /etc/systemd/journald.conf.d && " +
 // cpu controller, which jobacct_gather/cgroup needs. Each controller is
 // enabled on its own, as one write of all of them fails as a whole if the
 // kernel refuses one. Failures are ignored so the node still boots.
-const NodeEntrypoint = `cg=/sys/fs/cgroup
+const nodeEntrypoint = `cg=/sys/fs/cgroup
 mkdir -p $cg/init.scope && echo $$ > $cg/init.scope/cgroup.procs
 for c in $(cat $cg/cgroup.controllers); do echo +$c > $cg/cgroup.subtree_control; done 2>/dev/null
 exec /sbin/init`
 
-// CreateNode creates a node container on its cluster network and the mesh
+// createNode creates a node container on its cluster network and the mesh
 // network, and starts it. Returns the container ID.
-func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg RunConfig) (docker.ContainerID, error) {
+func createNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg nodeRunConfig) (docker.ContainerID, error) {
 	cfg.MeshNetwork = meshMgr.NetworkName()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	id, err := client.CreateContainer(ctx, args...)
 	if err != nil {
@@ -417,18 +417,18 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 	return id, nil
 }
 
-// NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
+// nodeRunConfigs builds nodeRunConfig entries for all nodes in the cluster config.
 // Worker nodes are indexed sequentially across all worker groups. In an
 // unmanaged cluster every node is unmanaged; otherwise only workers, db and
 // api nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
-// with (see DetectCVMFS), empty for none. The identity mode decides which
+// with (see detectCVMFS), empty for none. The identity mode decides which
 // nodes get the cluster users and groups (see nodeGetsUsers) and which
 // resolve them with nss_slurm. Managed workers get TaskAffinity when the
 // slurm.conf sind generates enables task/affinity. Every node of a monitored
 // cluster gets Monitoring.
-func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
-	var configs []RunConfig
-	users := NewLinuxUsers(cfg)
+func nodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []nodeRunConfig {
+	var configs []nodeRunConfig
+	users := newLinuxUsers(cfg)
 	hasSubmitter := slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleSubmitter })
 	workerIdx := 0
 	clusterManaged := cfg.Managed()
@@ -438,9 +438,9 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 	if cfg.Storage.DataStorage.UsesHostPath() {
 		dataHostPath = absDataHostPath(cfg.Storage.DataStorage.HostPath)
 	}
-	// runConfig returns the RunConfig of one node of n.
-	runConfig := func(n config.Node, shortName string, containerNumber int, managed bool) RunConfig {
-		return RunConfig{
+	// runConfig returns the nodeRunConfig of one node of n.
+	runConfig := func(n config.Node, shortName string, containerNumber int, managed bool) nodeRunConfig {
+		return nodeRunConfig{
 			Realm:           realm,
 			ClusterName:     cfg.Name,
 			ShortName:       shortName,

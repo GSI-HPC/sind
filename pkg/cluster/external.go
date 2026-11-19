@@ -33,7 +33,7 @@ func ownContainer(name docker.ContainerName, labels docker.Labels) bool {
 // meshContainer reports whether the container name with these labels is the
 // DNS container, the SSH relay or a monitoring stack container of a realm's
 // mesh, of this realm or another. They carry no realm label, as a container
-// with one counts as a cluster's (HasOtherClusters), but only the Compose
+// with one counts as a cluster's (hasOtherClusters), but only the Compose
 // labels of the mesh's project, <realm>-mesh, with their service. The name
 // must be the one sind gives that service in the realm: a Compose project
 // of a user's that has the same name, such as service-mesh, names its
@@ -159,11 +159,10 @@ func missingContainer(ctx context.Context, client *docker.Client, names []docker
 }
 
 // Connect attaches containers outside sind to the realm's mesh network and
-// every cluster network, skipping the ones they already join. Clusters
-// created later, while the realm has a cluster, are connected to them as
-// well (ConnectExternal). It fails
-// for a realm without mesh, and for a container that does not exist or is
-// sind's own.
+// every cluster network, skipping the ones they already join. Create
+// connects them to the network of a cluster created later as well, while
+// they are on the mesh network. It fails for a realm without mesh, and for
+// a container that does not exist or is sind's own.
 //
 // The caller holds the realm lock (state.LockRealm) until Connect returns,
 // so that a cluster create does not add a network meanwhile.
@@ -266,10 +265,10 @@ func eachExternal(ctx context.Context, step, reason string, infos []*docker.Cont
 	return nil
 }
 
-// ConnectExternal connects the realm's external containers to a new
+// connectExternal connects the realm's external containers to a new
 // cluster network. It is best-effort: a container that cannot be connected
 // is a warning (meshMgr.Warn), and does not fail the create.
-func ConnectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, network docker.NetworkName) {
+func connectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, network docker.NetworkName) {
 	names, err := ExternalContainers(ctx, client, meshMgr)
 	if err != nil {
 		meshMgr.Warn(ctx, fmt.Sprintf("not connecting external containers to %s: %v", network, err))

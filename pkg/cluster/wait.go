@@ -119,7 +119,7 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 // managedWorkerLabels reports whether the labels are those of a worker on
 // which sind manages slurmd.
 func managedWorkerLabels(labels docker.Labels) bool {
-	return config.Role(labels[LabelRole]) == config.RoleWorker && IsManaged(labels)
+	return config.Role(labels[LabelRole]) == config.RoleWorker && isManaged(labels)
 }
 
 // nodeProbes returns the readiness probes of a node that exists, from its

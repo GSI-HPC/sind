@@ -96,7 +96,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	// A cluster whose controller is gone has no Slurm to tell.
 	var nodesConf string
 	updateConf := false
-	managed := hasController && IsManaged(controller.Labels)
+	managed := hasController && isManaged(controller.Labels)
 	if managed && (slices.ContainsFunc(targets, isManagedContainer) || len(orphans) > 0) {
 		nodesConf, err = readNodesConf(ctx, client, controller)
 		switch {
@@ -134,7 +134,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	// Update Slurm, then deregister DNS + known_hosts, both before the
 	// containers go. A failed update keeps the workers, and with them their
 	// DNS records and known_hosts entries, so that they stay reachable.
-	// DeregisterMesh logs its failures; worker removal continues.
+	// deregisterMesh logs its failures; worker removal continues.
 	if updateConf {
 		sctx, end := startStep(ctx, "slurm")
 		err = removeNodesConf(sctx, client, controller.Name, nodesConf, shortNames)
@@ -147,13 +147,13 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	for _, name := range orphans {
 		deregistered = append(deregistered, docker.ContainerListEntry{Name: ContainerName(realm, clusterName, name)})
 	}
-	DeregisterMesh(ctx, meshMgr, clusterName, deregistered)
+	deregisterMesh(ctx, meshMgr, clusterName, deregistered)
 	for _, name := range orphans {
 		meshMgr.Warn(ctx, fmt.Sprintf("node %q of cluster %q had no container: removed it from sind-nodes.conf and the mesh only", name, clusterName))
 	}
 
 	// Stop + remove containers.
-	if err := DeleteContainers(ctx, client, targets); err != nil {
+	if err := deleteContainers(ctx, client, targets); err != nil {
 		return err
 	}
 	if len(forget) > 0 {
@@ -163,9 +163,9 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 }
 
 // isManagedContainer reports whether sind manages Slurm on a node container
-// (see IsManaged).
+// (see isManaged).
 func isManagedContainer(c docker.ContainerListEntry) bool {
-	return IsManaged(c.Labels)
+	return isManaged(c.Labels)
 }
 
 // removeNodesConf removes node definitions from sind-nodes.conf and

@@ -21,12 +21,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Monitored reports whether a node container mounts the realm's journal
+// monitored reports whether a node container mounts the realm's journal
 // volume: the node is collected by the realm's monitoring stack, and on
 // a controller the whole cluster is monitored. The sind.monitoring label
 // does not decide, as an image could carry it; an image cannot forge a
 // mount.
-func Monitored(realm string, info *docker.ContainerInfo) bool {
+func monitored(realm string, info *docker.ContainerInfo) bool {
 	journal := observability.JournalVolume(realm)
 	return slices.ContainsFunc(info.Mounts, func(m docker.Mount) bool {
 		return m.Type == docker.MountVolume && m.Name == journal
@@ -65,7 +65,7 @@ func monitoringTargets(ctx context.Context, client *docker.Client, realm string)
 			Cluster:     cluster,
 			Node:        strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, cluster)),
 			Role:        config.Role(c.Labels[LabelRole]),
-			Managed:     IsManaged(c.Labels),
+			Managed:     isManaged(c.Labels),
 			Container:   c.Name,
 			ContainerID: c.ID,
 		})

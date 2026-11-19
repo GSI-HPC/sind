@@ -102,7 +102,7 @@ func happyOnCall(t *testing.T, override func(args []string, stdin string) (mock.
 			return mock.Result{Stdout: "sha256:local\n"}
 		}
 
-		// PreflightCheck: exists checks → "not found"
+		// preflightCheck: exists checks → "not found"
 		if len(args) >= 2 && args[1] == "inspect" {
 			switch args[0] {
 			case "network", "volume", "container":
@@ -550,7 +550,7 @@ func TestCreate_CVMFS(t *testing.T) {
 	}
 }
 
-// isCVMFSProbe reports whether args are the docker run of DetectCVMFS's
+// isCVMFSProbe reports whether args are the docker run of detectCVMFS's
 // probe of the host's /cvmfs.
 func isCVMFSProbe(args []string) bool {
 	i := slices.Index(args, "--entrypoint")
@@ -782,7 +782,7 @@ func meshRemoved(m *mock.Executor) bool {
 }
 
 // isRealmListing reports whether args list every container of the realm,
-// as HasOtherClusters does.
+// as hasOtherClusters does.
 func isRealmListing(args []string) bool {
 	return args[0] == "ps" && args[len(args)-1] == "label=sind.realm=sind"
 }
@@ -1065,7 +1065,7 @@ func TestResolveInfra_Errors(t *testing.T) {
 
 // setupNodesWith runs setupNodes for configs under ctx, polling every
 // millisecond, against nodesOnCall with override.
-func setupNodesWith(ctx context.Context, t *testing.T, override func([]string) (mock.Result, bool), configs ...RunConfig) (*mock.Executor, []nodeResult, error) {
+func setupNodesWith(ctx context.Context, t *testing.T, override func([]string) (mock.Result, bool), configs ...nodeRunConfig) (*mock.Executor, []nodeResult, error) {
 	t.Helper()
 	m := &mock.Executor{OnCall: nodesOnCall(t, override)}
 	results, err := setupNodesOn(ctx, m, configs...)
@@ -1073,13 +1073,13 @@ func setupNodesWith(ctx context.Context, t *testing.T, override func([]string) (
 }
 
 // setupNodesOn is setupNodesWith against m.
-func setupNodesOn(ctx context.Context, m *mock.Executor, configs ...RunConfig) ([]nodeResult, error) {
+func setupNodesOn(ctx context.Context, m *mock.Executor, configs ...nodeRunConfig) ([]nodeResult, error) {
 	client := docker.NewClient(m)
 	return setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 }
 
 // controllerConfig is the run config of the controller of cluster dev.
-var controllerConfig = RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}
+var controllerConfig = nodeRunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}
 
 func TestSetupNodes_InspectError(t *testing.T) {
 	// After the probes pass, the inspect for the node's addresses fails.
@@ -1162,7 +1162,7 @@ func TestRegisterNodes_DNSError(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
+	configs := []nodeRunConfig{{ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 	results := []nodeResult{{
 		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},
 		hostKey: "ssh-ed25519 AAAA-key",
@@ -1206,7 +1206,7 @@ func TestRegisterNodes_KnownHostError(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
+	configs := []nodeRunConfig{{ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 	results := []nodeResult{{
 		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},
 		hostKey: "ssh-ed25519 AAAA-key",
@@ -1220,20 +1220,20 @@ func TestRegisterNodes_KnownHostError(t *testing.T) {
 func TestLogExtraPrivileges(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  RunConfig
+		cfg  nodeRunConfig
 		want string // the notice's config, empty for none
 	}{
-		{"no privileges", RunConfig{ShortName: "worker-0"}, ""},
-		{"data volume and cvmfs volume", RunConfig{ShortName: "worker-0", CVMFS: config.StorageVolume}, ""},
-		{"capAdd", RunConfig{ShortName: "worker-0", CapAdd: []string{"SYS_ADMIN", "NET_ADMIN"}}, "capAdd=[SYS_ADMIN,NET_ADMIN]"},
-		{"devices", RunConfig{ShortName: "worker-0", Devices: []string{"/dev/fuse"}}, "devices=[/dev/fuse]"},
-		{"securityOpt", RunConfig{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}}, "securityOpt=[apparmor=unconfined]"},
-		{"data host path", RunConfig{ShortName: "worker-0", DataHostPath: "/home/u/proj"}, "hostMounts=[/home/u/proj:/data]"},
-		{"task/affinity", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_ADMIN"}}, "capAdd=[SYS_NICE,SYS_ADMIN]"},
-		{"task/affinity and SYS_NICE", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_NICE"}}, "capAdd=[SYS_NICE]"},
-		{"task/affinity dropped", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapDrop: []string{"ALL"}}, ""},
-		{"task/affinity on the controller", RunConfig{ShortName: "controller", Role: config.RoleController, TaskAffinity: true}, ""},
-		{"all", RunConfig{
+		{"no privileges", nodeRunConfig{ShortName: "worker-0"}, ""},
+		{"data volume and cvmfs volume", nodeRunConfig{ShortName: "worker-0", CVMFS: config.StorageVolume}, ""},
+		{"capAdd", nodeRunConfig{ShortName: "worker-0", CapAdd: []string{"SYS_ADMIN", "NET_ADMIN"}}, "capAdd=[SYS_ADMIN,NET_ADMIN]"},
+		{"devices", nodeRunConfig{ShortName: "worker-0", Devices: []string{"/dev/fuse"}}, "devices=[/dev/fuse]"},
+		{"securityOpt", nodeRunConfig{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}}, "securityOpt=[apparmor=unconfined]"},
+		{"data host path", nodeRunConfig{ShortName: "worker-0", DataHostPath: "/home/u/proj"}, "hostMounts=[/home/u/proj:/data]"},
+		{"task/affinity", nodeRunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_ADMIN"}}, "capAdd=[SYS_NICE,SYS_ADMIN]"},
+		{"task/affinity and SYS_NICE", nodeRunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_NICE"}}, "capAdd=[SYS_NICE]"},
+		{"task/affinity dropped", nodeRunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapDrop: []string{"ALL"}}, ""},
+		{"task/affinity on the controller", nodeRunConfig{ShortName: "controller", Role: config.RoleController, TaskAffinity: true}, ""},
+		{"all", nodeRunConfig{
 			ShortName:     "worker-0",
 			CapAdd:        []string{"SYS_ADMIN"},
 			Devices:       []string{"/dev/fuse"},
@@ -1247,7 +1247,7 @@ func TestLogExtraPrivileges(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
-			logExtraPrivileges(sindlog.With(t.Context(), logger), []RunConfig{tt.cfg})
+			logExtraPrivileges(sindlog.With(t.Context(), logger), []nodeRunConfig{tt.cfg})
 
 			if tt.want == "" {
 				assert.Empty(t, buf.String())
@@ -1272,7 +1272,7 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true}}
+	configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -1297,7 +1297,7 @@ func TestEnableSlurm_HTTPProbeTimeout(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true, Monitoring: true}}
+	configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true, Monitoring: true}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -1320,7 +1320,7 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
@@ -1360,7 +1360,7 @@ func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 	}
@@ -1378,7 +1378,7 @@ func TestEnableSlurm_DBEnableError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("mariadb failed"))
 	client := docker.NewClient(&m)
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 	}
@@ -1399,7 +1399,7 @@ func TestEnableSlurm_UnmanagedDBSkipped(t *testing.T) {
 		return mock.Result{}
 	}
 	client := docker.NewClient(&m)
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB},
 	}
@@ -1523,7 +1523,7 @@ func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
 				}()
 				watcher = w
 			}
-			configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
+			configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
 
 			_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs,
 				&readiness{interval: time.Millisecond}, watcher)

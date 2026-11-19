@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/execopt"
+	"github.com/GSI-HPC/sind/internal/nodecmd"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
@@ -88,11 +89,11 @@ type logsReq struct {
 // node stops.
 func logsArgs(q logsReq) []string {
 	tail := q.tail
-	opts := cluster.LogOptions{Follow: true, Tail: &tail}
+	opts := nodecmd.LogOptions{Follow: true, Tail: &tail}
 	if q.src == logsDocker {
-		return cluster.ContainerLogArgs(q.realm, q.cluster, q.node, opts)
+		return nodecmd.ContainerLogArgs(q.realm, q.cluster, q.node, opts)
 	}
-	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), cluster.ServiceLogCommand(q.unit, opts)...)
+	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), nodecmd.ServiceLogCommand(q.unit, opts)...)
 }
 
 // logsCheck validates the request against the store.

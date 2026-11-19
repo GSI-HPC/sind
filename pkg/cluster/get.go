@@ -123,7 +123,7 @@ type NodeDetail struct {
 	Container string        `json:"container"`
 	Cluster   string        `json:"cluster"`
 	Role      config.Role   `json:"role"`
-	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see IsManaged)
+	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see isManaged)
 	FQDN      string        `json:"fqdn"`
 	IP        string        `json:"ip"`
 	State     State         `json:"status"`
@@ -166,7 +166,7 @@ func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, sho
 		Container: string(containerName),
 		Cluster:   clusterName,
 		Role:      role,
-		Managed:   IsManaged(info.Labels),
+		Managed:   isManaged(info.Labels),
 		FQDN:      DNSName(shortName, clusterName, realm),
 		IP:        health.IP,
 		State:     health.State,
@@ -417,7 +417,7 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 		return nil, fmt.Errorf("cluster %q has no node to read a key from", clusterName)
 	}
 	primary := AuthMunge
-	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {
+	if identityFromLabels(containers[0].Labels) == config.IdentityClientIDs {
 		primary = AuthSlurm
 	}
 	if authType == "" {
@@ -427,7 +427,7 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 	switch {
 	case authType == AuthJWT:
 		i := slices.IndexFunc(containers, func(c docker.ContainerListEntry) bool {
-			return config.Role(c.Labels[LabelRole]) == config.RoleAPI && IsManaged(c.Labels)
+			return config.Role(c.Labels[LabelRole]) == config.RoleAPI && isManaged(c.Labels)
 		})
 		if i < 0 {
 			return nil, fmt.Errorf("cluster %q has no JWT key: sind sets up JWT only for a cluster with a managed api node", clusterName)

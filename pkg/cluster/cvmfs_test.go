@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- DetectCVMFS ---
+// --- detectCVMFS ---
 
 func TestDetectCVMFS_VolumePlugin(t *testing.T) {
 	// docker plugin ls prints managed plugins with their tag; an untagged
@@ -23,7 +23,7 @@ func TestDetectCVMFS_VolumePlugin(t *testing.T) {
 			var m mock.Executor
 			m.AddResult("vieux/sshfs:latest\n"+name+"\n", "", nil)
 
-			backend, err := DetectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
+			backend, err := detectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
 
 			require.NoError(t, err)
 			assert.Equal(t, config.StorageVolume, backend)
@@ -40,7 +40,7 @@ func TestDetectCVMFS_HostPath(t *testing.T) {
 	m.AddResult("cvmfs:v1\n", "", nil) // plugin ls
 	m.AddResult("", "", nil)           // bind mount probe
 
-	backend, err := DetectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
+	backend, err := detectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
 
 	require.NoError(t, err)
 	assert.Equal(t, config.StorageHostPath, backend)
@@ -56,7 +56,7 @@ func TestDetectCVMFS_Unavailable(t *testing.T) {
 	m.AddResult("", "docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /cvmfs",
 		fmt.Errorf("exit status 125"))
 
-	_, err := DetectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
+	_, err := detectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
 
 	require.ErrorContains(t, err, "storage.cvmfs")
 	assert.Contains(t, err.Error(), "install CVMFS on the Docker host or the \"cvmfs\" Docker volume plugin")
@@ -67,7 +67,7 @@ func TestDetectCVMFS_PluginListError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Cannot connect", fmt.Errorf("exit status 1"))
 
-	_, err := DetectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
+	_, err := detectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
 
 	require.ErrorContains(t, err, "listing volume plugins")
 	require.Len(t, m.Calls, 1)

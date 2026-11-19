@@ -21,7 +21,7 @@ import (
 )
 
 func TestNodeLabels(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
+	labels := nodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
 
 	assert.Equal(t, docker.Labels{
 		"sind.realm":                              mesh.DefaultRealm,
@@ -40,7 +40,7 @@ func TestNodeLabels(t *testing.T) {
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleWorker, false, "", "", 3)
+	labels := nodeLabels(mesh.DefaultRealm, "dev", config.RoleWorker, false, "", "", 3)
 
 	assert.Equal(t, docker.Labels{
 		"sind.realm":                              mesh.DefaultRealm,
@@ -59,13 +59,13 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 }
 
 func TestNodeLabels_WithDataHostPath(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "/home/user/project", 1)
+	labels := nodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "/home/user/project", 1)
 
 	assert.Equal(t, "/home/user/project", labels[LabelDataHostPath])
 }
 
 func TestNodeLabels_NoDataHostPath(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
+	labels := nodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
 
 	hostPath, ok := labels[LabelDataHostPath]
 	assert.True(t, ok, "set empty in volume mode, so that an image label cannot show through")
@@ -73,14 +73,14 @@ func TestNodeLabels_NoDataHostPath(t *testing.T) {
 }
 
 func TestIsManaged(t *testing.T) {
-	assert.True(t, IsManaged(docker.Labels{LabelManaged: "true"}))
-	assert.False(t, IsManaged(docker.Labels{LabelManaged: "false"}))
-	assert.True(t, IsManaged(docker.Labels{LabelRole: "worker"}), "created before the label existed")
-	assert.True(t, IsManaged(nil))
+	assert.True(t, isManaged(docker.Labels{LabelManaged: "true"}))
+	assert.False(t, isManaged(docker.Labels{LabelManaged: "false"}))
+	assert.True(t, isManaged(docker.Labels{LabelRole: "worker"}), "created before the label existed")
+	assert.True(t, isManaged(nil))
 }
 
-func defaultRunConfig() RunConfig {
-	return RunConfig{
+func defaultRunConfig() nodeRunConfig {
+	return nodeRunConfig{
 		Realm:           mesh.DefaultRealm,
 		ClusterName:     "dev",
 		ShortName:       "controller",
@@ -98,7 +98,7 @@ func defaultRunConfig() RunConfig {
 
 func TestBuildRunArgs_Basic(t *testing.T) {
 	cfg := defaultRunConfig()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	// Container name
 	name, ok := testutil.ArgValue(args, "--name")
@@ -111,7 +111,7 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.Equal(t, "controller", hostname)
 
 	// The image runs the node entrypoint, which ends by starting systemd
-	assert.Equal(t, []string{"--entrypoint", "/bin/sh", "ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint},
+	assert.Equal(t, []string{"--entrypoint", "/bin/sh", "ghcr.io/gsi-hpc/sind-node:25.11", "-c", nodeEntrypoint},
 		args[len(args)-5:])
 
 	// Labels
@@ -134,7 +134,7 @@ func TestBuildRunArgs_ComputeNode(t *testing.T) {
 	cfg.ShortName = "worker-0"
 	cfg.Role = "worker"
 	cfg.Managed = false
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	name, _ := testutil.ArgValue(args, "--name")
 	assert.Equal(t, "sind-dev-worker-0", name)
@@ -150,7 +150,7 @@ func TestBuildRunArgs_ComputeNode(t *testing.T) {
 func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.SlurmVersion = ""
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	// An empty label overrides the one the sind-node image carries.
 	labels := testutil.ArgValues(args, "--label")
@@ -161,7 +161,7 @@ func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
 
 func TestBuildRunArgs_Network(t *testing.T) {
 	cfg := defaultRunConfig()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	network, ok := testutil.ArgValue(args, "--network")
 	assert.True(t, ok, "--network flag present")
@@ -169,7 +169,7 @@ func TestBuildRunArgs_Network(t *testing.T) {
 	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1"}, testutil.ArgValues(args, "--network"), "no mesh without MeshNetwork")
 
 	cfg.MeshNetwork = "sind-mesh"
-	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1", "sind-mesh"}, testutil.ArgValues(BuildRunArgs(cfg), "--network"),
+	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1", "sind-mesh"}, testutil.ArgValues(buildRunArgs(cfg), "--network"),
 		"the cluster network stays the network mode, the mesh joins next to it")
 
 	dns, ok := testutil.ArgValue(args, "--dns")
@@ -184,7 +184,7 @@ func TestBuildRunArgs_Network(t *testing.T) {
 func TestBuildRunArgs_Network_NoDNSIP(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DNSIP = ""
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	_, ok := testutil.ArgValue(args, "--dns")
 	assert.False(t, ok, "--dns flag absent when DNSIP empty")
@@ -221,7 +221,7 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 			cfg := defaultRunConfig()
 			cfg.Role = tt.role
 			cfg.ShortName = string(tt.role)
-			args := BuildRunArgs(cfg)
+			args := buildRunArgs(cfg)
 
 			volumes := testutil.ArgValues(args, "-v")
 			assert.Contains(t, volumes, tt.wantConf)
@@ -233,17 +233,17 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 
 func TestBuildRunArgs_Mounts_SharedState(t *testing.T) {
 	cfg := defaultRunConfig()
-	assert.NotContains(t, testutil.ArgValues(BuildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
+	assert.NotContains(t, testutil.ArgValues(buildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
 
 	cfg.SharedState = true
-	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
+	assert.Contains(t, testutil.ArgValues(buildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
 }
 
 func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataHostPath = "/home/user/data"
 	cfg.DataMountPath = "/shared"
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Equal(t, []string{"type=bind,source=/home/user/data,target=/shared"}, testutil.ArgValues(args, "--mount"),
 		"--mount, which fails on a missing source that -v would create as root")
@@ -259,7 +259,7 @@ func TestBuildRunArgs_Mounts_HostPathQuoted(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataHostPath = `/srv/run,2024/"x"`
 	cfg.DataMountPath = "/my data"
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	mount := testutil.ArgValues(args, "--mount")
 	require.Len(t, mount, 1)
@@ -272,7 +272,7 @@ func TestBuildRunArgs_Mounts_HostPathQuoted(t *testing.T) {
 
 func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
 	cfg := defaultRunConfig()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Contains(t, testutil.ArgValues(args, "--mount"), "type=volume,source=sind-dev-data,target=/data")
 }
@@ -281,7 +281,7 @@ func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataHostPath = "/home/user/data"
 	// DataMountPath left empty — should default to /data
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Equal(t, []string{"type=bind,source=/home/user/data,target=/data"}, testutil.ArgValues(args, "--mount"))
 }
@@ -290,7 +290,7 @@ func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataMountPath = "/shared"
 	// DataHostPath left empty — should use docker volume
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Equal(t, []string{"type=volume,source=sind-dev-data,target=/shared"}, testutil.ArgValues(args, "--mount"))
 }
@@ -308,7 +308,7 @@ func mountsBesideData(args []string) []string {
 func TestBuildRunArgs_Mounts_VolumeColon(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataMountPath = "/data:2024"
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Equal(t, []string{"type=volume,source=sind-dev-data,target=/data:2024"}, testutil.ArgValues(args, "--mount"))
 	for _, v := range testutil.ArgValues(args, "-v") {
@@ -320,7 +320,7 @@ func TestBuildRunArgs_DataMountPathLabel(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataMountPath = "/shared"
 
-	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/shared")
+	assert.Contains(t, testutil.ArgValues(buildRunArgs(cfg), "--label"), LabelDataMountPath+"=/shared")
 }
 
 func TestBuildRunArgs_DataMountPathLabelForDefault(t *testing.T) {
@@ -328,7 +328,7 @@ func TestBuildRunArgs_DataMountPathLabelForDefault(t *testing.T) {
 		cfg := defaultRunConfig()
 		cfg.DataMountPath = mountPath
 
-		assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/data")
+		assert.Contains(t, testutil.ArgValues(buildRunArgs(cfg), "--label"), LabelDataMountPath+"=/data")
 	}
 }
 
@@ -340,7 +340,7 @@ func TestBuildRunArgs_DataMountPathLabelForDefault(t *testing.T) {
 func TestBuildRunArgs_ReadBackLabelsAlwaysSet(t *testing.T) {
 	cfg := defaultRunConfig()
 	labels := map[string]string{}
-	for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
+	for _, l := range testutil.ArgValues(buildRunArgs(cfg), "--label") {
 		k, v, _ := strings.Cut(l, "=")
 		labels[k] = v
 	}
@@ -373,7 +373,7 @@ func TestBuildRunArgs_CVMFS(t *testing.T) {
 		t.Run(string(tt.backend), func(t *testing.T) {
 			cfg := defaultRunConfig()
 			cfg.CVMFS = tt.backend
-			args := BuildRunArgs(cfg)
+			args := buildRunArgs(cfg)
 
 			assert.Equal(t, []string{tt.wantMount}, mountsBesideData(args))
 			assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"="+string(tt.backend))
@@ -382,15 +382,15 @@ func TestBuildRunArgs_CVMFS(t *testing.T) {
 }
 
 func TestBuildRunArgs_NoCVMFS(t *testing.T) {
-	args := BuildRunArgs(defaultRunConfig())
+	args := buildRunArgs(defaultRunConfig())
 
 	assert.Empty(t, mountsBesideData(args))
 	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=")
 }
 
 func TestDataMountPath(t *testing.T) {
-	assert.Equal(t, DefaultDataMountPath, DataMountPath(nil))
-	assert.Equal(t, "/shared", DataMountPath(docker.Labels{LabelDataMountPath: "/shared"}))
+	assert.Equal(t, DefaultDataMountPath, dataMountPath(nil))
+	assert.Equal(t, "/shared", dataMountPath(docker.Labels{LabelDataMountPath: "/shared"}))
 }
 
 func TestBuildRunArgs_Resources(t *testing.T) {
@@ -398,7 +398,7 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 	cfg.CPUs = 4
 	cfg.Memory = "8g"
 	cfg.TmpSize = "2g"
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	cpus, ok := testutil.ArgValue(args, "--cpus")
 	assert.True(t, ok)
@@ -426,7 +426,7 @@ func TestBuildRunArgs_ShmSize(t *testing.T) {
 	for memory, want := range map[string]string{"512m": "256m", "1g": "512m", "7m": "3m"} {
 		cfg := defaultRunConfig()
 		cfg.Memory = memory
-		shm, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")
+		shm, ok := testutil.ArgValue(buildRunArgs(cfg), "--shm-size")
 		assert.True(t, ok, memory)
 		assert.Equal(t, want, shm, memory)
 	}
@@ -435,13 +435,13 @@ func TestBuildRunArgs_ShmSize(t *testing.T) {
 	// Docker rejects or reads --memory itself.
 	cfg := defaultRunConfig()
 	cfg.Memory = "lots"
-	_, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")
+	_, ok := testutil.ArgValue(buildRunArgs(cfg), "--shm-size")
 	assert.False(t, ok)
 }
 
 func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	cfg := defaultRunConfig()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	secOpts := testutil.ArgValues(args, "--security-opt")
 	assert.Contains(t, secOpts, "writable-cgroups=true")
@@ -455,7 +455,7 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 
 func TestBuildRunArgs_NeverPulls(t *testing.T) {
 	cfg := defaultRunConfig()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	_, ok := testutil.ArgValue(args, "--pull")
 	assert.False(t, ok, "--pull flag absent by default")
@@ -464,7 +464,7 @@ func TestBuildRunArgs_NeverPulls(t *testing.T) {
 func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.ClusterName = "default"
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	name, _ := testutil.ArgValue(args, "--name")
 	assert.Equal(t, "sind-default-controller", name)
@@ -476,7 +476,7 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	assert.Equal(t, "default.sind.sind", search)
 }
 
-// --- CreateNode ---
+// --- createNode ---
 
 func TestCreateNode(t *testing.T) {
 	var m mock.Executor
@@ -487,7 +487,7 @@ func TestCreateNode(t *testing.T) {
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	id, err := CreateNode(t.Context(), c, mgr, cfg)
+	id, err := createNode(t.Context(), c, mgr, cfg)
 	require.NoError(t, err)
 	assert.Equal(t, docker.ContainerID("abc123"), id)
 
@@ -497,7 +497,7 @@ func TestCreateNode(t *testing.T) {
 	// CreateContainer: first arg is "create", then the image and its entrypoint arguments
 	assert.Equal(t, "create", m.Calls[0].Args[0])
 	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1", "sind-mesh"}, testutil.ArgValues(m.Calls[0].Args, "--network"))
-	assert.Equal(t, []string{"ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
+	assert.Equal(t, []string{"ghcr.io/gsi-hpc/sind-node:25.11", "-c", nodeEntrypoint}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
 
 	// StartContainer
 	assert.Equal(t, []string{"start", "sind-dev-controller"}, m.Calls[1].Args)
@@ -511,7 +511,7 @@ func TestCreateNode_CreateError(t *testing.T) {
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(t.Context(), c, mgr, cfg)
+	_, err := createNode(t.Context(), c, mgr, cfg)
 	assert.ErrorContains(t, err, "creating container")
 	assert.Len(t, m.Calls, 1)
 }
@@ -525,12 +525,12 @@ func TestCreateNode_StartError(t *testing.T) {
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(t.Context(), c, mgr, cfg)
+	_, err := createNode(t.Context(), c, mgr, cfg)
 	assert.ErrorContains(t, err, "starting container")
 	assert.Len(t, m.Calls, 2)
 }
 
-// --- NodeRunConfigs ---
+// --- nodeRunConfigs ---
 
 func TestNodeRunConfigs_Minimal(t *testing.T) {
 	cfg := &config.Cluster{
@@ -541,7 +541,7 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -569,7 +569,7 @@ func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 4)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
@@ -590,7 +590,7 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 3)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -609,7 +609,7 @@ func TestNodeRunConfigs_WithDB(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "25.11.9", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "25.11.9", "")
 
 	require.Len(t, configs, 3)
 	db := configs[1]
@@ -634,7 +634,7 @@ func TestNodeRunConfigs_WithAPI(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "26.05.6", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "26.05.6", "")
 
 	require.Len(t, configs, 3)
 	api := configs[1]
@@ -658,7 +658,7 @@ func TestNodeRunConfigs_UnmanagedAPI(t *testing.T) {
 			{Role: config.RoleWorker},
 		},
 	}
-	configs := NodeRunConfigs(inManaged, mesh.DefaultRealm, "", "26.05.6", "")
+	configs := nodeRunConfigs(inManaged, mesh.DefaultRealm, "", "26.05.6", "")
 	require.Len(t, configs, 3)
 	assert.True(t, configs[0].Managed, "controller")
 	assert.Equal(t, "api", configs[1].ShortName)
@@ -673,7 +673,7 @@ func TestNodeRunConfigs_UnmanagedAPI(t *testing.T) {
 			{Role: config.RoleWorker},
 		},
 	}
-	configs = NodeRunConfigs(inUnmanaged, mesh.DefaultRealm, "", "", "")
+	configs = nodeRunConfigs(inUnmanaged, mesh.DefaultRealm, "", "", "")
 	require.Len(t, configs, 3)
 	assert.False(t, configs[1].Managed, "bare api node in an unmanaged cluster")
 }
@@ -689,7 +689,7 @@ func TestNodeRunConfigs_UnmanagedDBInManagedCluster(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "25.11.9", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "25.11.9", "")
 
 	require.Len(t, configs, 4)
 	assert.True(t, configs[0].Managed, "controller")
@@ -709,7 +709,7 @@ func TestNodeRunConfigs_UnmanagedDB(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 3)
 	assert.Equal(t, "db", configs[1].ShortName)
@@ -725,7 +725,7 @@ func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
@@ -742,7 +742,7 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 4)
 	assert.False(t, configs[1].Managed, "worker-0 unmanaged")
@@ -761,7 +761,7 @@ func TestNodeRunConfigs_UnmanagedController(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 6)
 	for _, c := range configs {
@@ -781,7 +781,7 @@ func TestNodeRunConfigs_BackupController(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	require.Len(t, configs, 3)
 	primary, backup := configs[0], configs[1]
@@ -814,7 +814,7 @@ func TestNodeRunConfigs_CVMFS(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", config.StorageHostPath)
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", config.StorageHostPath)
 
 	require.Len(t, configs, 5)
 	for _, c := range configs {
@@ -831,7 +831,7 @@ func TestNodeRunConfigs_NoBackupController(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -853,7 +853,7 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Equal(t, "/data/shared", configs[0].DataHostPath)
@@ -869,7 +869,7 @@ func TestNodeRunConfigs_RelativeHostPath(t *testing.T) {
 		Nodes:   []config.Node{{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"}},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Equal(t, filepath.Join(dir, "data"), configs[0].DataHostPath,
@@ -915,7 +915,7 @@ func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath)
@@ -935,7 +935,7 @@ func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath, "volume type uses docker volume, not host path")
@@ -961,7 +961,7 @@ func TestNodeRunConfigs_StorageTypeDecidesTheMount(t *testing.T) {
 				},
 			}
 
-			configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+			configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 			require.Len(t, configs, 1)
 			assert.Equal(t, tt.wantHostPath, configs[0].DataHostPath)
@@ -972,17 +972,17 @@ func TestNodeRunConfigs_StorageTypeDecidesTheMount(t *testing.T) {
 func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	assert.Empty(t, configs)
 }
 
-// --- Security fields in BuildRunArgs ---
+// --- Security fields in buildRunArgs ---
 
 func TestBuildRunArgs_CapAdd(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.CapAdd = []string{"SYS_ADMIN", "NET_ADMIN"}
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	caps := testutil.ArgValues(args, "--cap-add")
 	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN"}, caps)
@@ -991,7 +991,7 @@ func TestBuildRunArgs_CapAdd(t *testing.T) {
 func TestBuildRunArgs_CapDrop(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.CapDrop = []string{"MKNOD"}
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	caps := testutil.ArgValues(args, "--cap-drop")
 	assert.Equal(t, []string{"MKNOD"}, caps)
@@ -1000,7 +1000,7 @@ func TestBuildRunArgs_CapDrop(t *testing.T) {
 func TestBuildRunArgs_Devices(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.Devices = []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	devs := testutil.ArgValues(args, "--device")
 	assert.Equal(t, []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}, devs)
@@ -1009,7 +1009,7 @@ func TestBuildRunArgs_Devices(t *testing.T) {
 func TestBuildRunArgs_SecurityOptExtra(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.SecurityOpt = []string{"apparmor=unconfined"}
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	secOpts := testutil.ArgValues(args, "--security-opt")
 	// Should contain both the built-in opts and the extra one
@@ -1020,7 +1020,7 @@ func TestBuildRunArgs_SecurityOptExtra(t *testing.T) {
 
 func TestBuildRunArgs_NoSecurityFieldsByDefault(t *testing.T) {
 	cfg := defaultRunConfig()
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	// No --cap-add, --cap-drop, or --device flags
 	caps := testutil.ArgValues(args, "--cap-add")
@@ -1037,7 +1037,7 @@ func TestBuildRunArgs_NoSecurityFieldsByDefault(t *testing.T) {
 	assert.Equal(t, []string{"writable-cgroups=true", "label=disable"}, secOpts)
 }
 
-// --- Security fields in NodeRunConfigs ---
+// --- Security fields in nodeRunConfigs ---
 
 func TestNodeRunConfigs_SecurityFields(t *testing.T) {
 	cfg := &config.Cluster{
@@ -1051,7 +1051,7 @@ func TestNodeRunConfigs_SecurityFields(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	require.Len(t, configs, 3)
 

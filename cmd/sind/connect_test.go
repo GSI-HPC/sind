@@ -16,8 +16,8 @@ import (
 // --- Integration ---
 
 // TestConnectContainerLifecycle attaches a container outside sind to the
-// realm, checks that a cluster network created afterwards gets it too,
-// detaches it, and deletes the realm.
+// realm, detaches it, and deletes the realm. That a cluster network created
+// afterwards gets it too is TestConnectExternalLifecycle of pkg/cluster.
 func TestConnectContainerLifecycle(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
@@ -25,13 +25,11 @@ func TestConnectContainerLifecycle(t *testing.T) {
 	realm := "it-conn-" + testID
 	meshMgr := mesh.NewManager(c, realm)
 	ext := docker.ContainerName(realm + "-external")
-	clusterNet := cluster.NetworkName(realm, "dev")
 
 	t.Cleanup(func() {
 		bg := context.Background()
 		_ = c.KillContainer(bg, ext)
 		_ = c.RemoveContainer(bg, ext)
-		_ = c.RemoveNetwork(bg, clusterNet)
 		_ = meshMgr.CleanupMesh(bg)
 	})
 
@@ -49,18 +47,11 @@ func TestConnectContainerLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []docker.ContainerName{ext}, external)
 
-	require.NoError(t, cluster.CreateClusterNetwork(ctx, c, realm, "dev"))
-	cluster.ConnectExternal(ctx, c, meshMgr, clusterNet)
-	info, err = c.InspectContainer(ctx, ext)
-	require.NoError(t, err)
-	assert.Contains(t, info.IPs, clusterNet)
-
 	_, _, err = executeWithRealm(realm, "disconnect", "container", string(ext))
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ext)
 	require.NoError(t, err)
 	assert.NotContains(t, info.IPs, meshMgr.NetworkName())
-	assert.NotContains(t, info.IPs, clusterNet)
 
 	// The realm goes with the container attached again.
 	_, _, err = executeWithRealm(realm, "connect", "container", string(ext))

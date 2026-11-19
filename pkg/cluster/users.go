@@ -22,17 +22,17 @@ func HomeDir(user string) string {
 	return HomeMountPath + "/" + user
 }
 
-// LinuxUser is a user account sind creates on the nodes that get the
+// linuxUser is a user account sind creates on the nodes that get the
 // cluster users.
-type LinuxUser struct {
+type linuxUser struct {
 	Name string
 	UID  int
 	GID  int // primary group
 }
 
-// LinuxGroup is a group sind creates on the nodes that get the cluster
+// linuxGroup is a group sind creates on the nodes that get the cluster
 // users.
-type LinuxGroup struct {
+type linuxGroup struct {
 	Name string
 	GID  int
 	// Members are the users that have the group as a supplementary group.
@@ -41,21 +41,21 @@ type LinuxGroup struct {
 	Members []string
 }
 
-// LinuxUsers are the user accounts and groups of a cluster (users and
+// linuxUsers are the user accounts and groups of a cluster (users and
 // groups), with every ID resolved: each user without a primary group has a
 // private group of its own name with gid = uid.
-type LinuxUsers struct {
-	Users  []LinuxUser
-	Groups []LinuxGroup
+type linuxUsers struct {
+	Users  []linuxUser
+	Groups []linuxGroup
 }
 
 // IsEmpty reports whether the cluster has neither users nor groups.
-func (l LinuxUsers) IsEmpty() bool {
+func (l linuxUsers) IsEmpty() bool {
 	return len(l.Users) == 0 && len(l.Groups) == 0
 }
 
 // supplementaryGroups returns the groups that list user as a member.
-func (l LinuxUsers) supplementaryGroups(user string) []string {
+func (l linuxUsers) supplementaryGroups(user string) []string {
 	var groups []string
 	for _, g := range l.Groups {
 		if slices.Contains(g.Members, user) {
@@ -65,11 +65,11 @@ func (l LinuxUsers) supplementaryGroups(user string) []string {
 	return groups
 }
 
-// NewLinuxUsers resolves the users and groups of a cluster config, after
+// newLinuxUsers resolves the users and groups of a cluster config, after
 // ApplyDefaults has assigned their IDs: the private groups, in user order,
 // then the declared groups with their members.
-func NewLinuxUsers(cfg *config.Cluster) LinuxUsers {
-	var l LinuxUsers
+func newLinuxUsers(cfg *config.Cluster) linuxUsers {
+	var l linuxUsers
 	gids := make(map[string]int, len(cfg.Groups))
 	for _, g := range cfg.Groups {
 		gids[g.Name] = g.GID
@@ -79,12 +79,12 @@ func NewLinuxUsers(cfg *config.Cluster) LinuxUsers {
 		if u.Group != "" {
 			gid = gids[u.Group]
 		} else {
-			l.Groups = append(l.Groups, LinuxGroup{Name: u.Name, GID: u.UID})
+			l.Groups = append(l.Groups, linuxGroup{Name: u.Name, GID: u.UID})
 		}
-		l.Users = append(l.Users, LinuxUser{Name: u.Name, UID: u.UID, GID: gid})
+		l.Users = append(l.Users, linuxUser{Name: u.Name, UID: u.UID, GID: gid})
 	}
 	for _, g := range cfg.Groups {
-		group := LinuxGroup{Name: g.Name, GID: g.GID}
+		group := linuxGroup{Name: g.Name, GID: g.GID}
 		for _, u := range cfg.Users {
 			if slices.Contains(u.Groups, g.Name) {
 				group.Members = append(group.Members, u.Name)
@@ -104,7 +104,7 @@ func NewLinuxUsers(cfg *config.Cluster) LinuxUsers {
 //
 //	sind.users   name:uid:gid ...          alice:1000:1000 bob:2002:3000
 //	sind.groups  name:gid[:member+...] ... alice:1000 hpc:3000:alice
-func (l LinuxUsers) Labels() docker.Labels {
+func (l linuxUsers) Labels() docker.Labels {
 	labels := docker.Labels{LabelUsers: "", LabelGroups: ""}
 	if len(l.Users) > 0 {
 		entries := make([]string, len(l.Users))
@@ -126,40 +126,40 @@ func (l LinuxUsers) Labels() docker.Labels {
 	return labels
 }
 
-// LinuxUsersFromLabels returns the users and groups a node container's
-// LabelUsers and LabelGroups record (see LinuxUsers.Labels), empty when it
+// linuxUsersFromLabels returns the users and groups a node container's
+// LabelUsers and LabelGroups record (see linuxUsers.Labels), empty when it
 // has neither.
-func LinuxUsersFromLabels(labels docker.Labels) (LinuxUsers, error) {
-	var l LinuxUsers
+func linuxUsersFromLabels(labels docker.Labels) (linuxUsers, error) {
+	var l linuxUsers
 	usersErr := fmt.Errorf("invalid %s label %q: want name:uid:gid entries", LabelUsers, labels[LabelUsers])
 	for entry := range strings.FieldsSeq(labels[LabelUsers]) {
 		fields := strings.Split(entry, ":")
 		if len(fields) != 3 || config.CheckUserName(fields[0]) != nil {
-			return LinuxUsers{}, usersErr
+			return linuxUsers{}, usersErr
 		}
 		uid, uidErr := strconv.Atoi(fields[1])
 		gid, gidErr := strconv.Atoi(fields[2])
 		if uidErr != nil || gidErr != nil {
-			return LinuxUsers{}, usersErr
+			return linuxUsers{}, usersErr
 		}
-		l.Users = append(l.Users, LinuxUser{Name: fields[0], UID: uid, GID: gid})
+		l.Users = append(l.Users, linuxUser{Name: fields[0], UID: uid, GID: gid})
 	}
 	groupsErr := fmt.Errorf("invalid %s label %q: want name:gid[:member+...] entries", LabelGroups, labels[LabelGroups])
 	for entry := range strings.FieldsSeq(labels[LabelGroups]) {
 		fields := strings.Split(entry, ":")
 		if len(fields) < 2 || len(fields) > 3 || config.CheckGroupName(fields[0]) != nil {
-			return LinuxUsers{}, groupsErr
+			return linuxUsers{}, groupsErr
 		}
 		gid, err := strconv.Atoi(fields[1])
 		if err != nil {
-			return LinuxUsers{}, groupsErr
+			return linuxUsers{}, groupsErr
 		}
-		group := LinuxGroup{Name: fields[0], GID: gid}
+		group := linuxGroup{Name: fields[0], GID: gid}
 		if len(fields) == 3 {
 			group.Members = strings.Split(fields[2], "+")
 			for _, m := range group.Members {
 				if config.CheckUserName(m) != nil {
-					return LinuxUsers{}, groupsErr
+					return linuxUsers{}, groupsErr
 				}
 			}
 		}
@@ -173,7 +173,7 @@ func LinuxUsersFromLabels(labels docker.Labels) (LinuxUsers, error) {
 // directory is on the shared home volume, which createHomes fills once per
 // cluster. The names are checked user and group names, safe to use
 // unquoted.
-func addUsersScript(l LinuxUsers) string {
+func addUsersScript(l linuxUsers) string {
 	var b strings.Builder
 	for _, g := range l.Groups {
 		fmt.Fprintf(&b, "groupadd --gid %d %s\n", g.GID, g.Name)
@@ -189,18 +189,31 @@ func addUsersScript(l LinuxUsers) string {
 }
 
 // UsersScript returns the groupadd and useradd commands that sind create
-// cluster runs on each node that gets the users of cfg (see
-// NodeRunConfigs), after ApplyDefaults; "" for a cluster without users and
-// groups.
+// cluster runs on each node that gets the users of cfg (see UserNodes),
+// after ApplyDefaults; "" for a cluster without users and groups.
 func UsersScript(cfg *config.Cluster) string {
-	return addUsersScript(NewLinuxUsers(cfg))
+	return addUsersScript(newLinuxUsers(cfg))
+}
+
+// UserNodes returns the short names of the nodes of cfg that Create adds
+// the cluster's users and groups to (UsersScript), in the order of the
+// config, after ApplyDefaults. Which nodes get them depends on the
+// identity mode and on whether sind manages the node.
+func UserNodes(cfg *config.Cluster) []string {
+	var names []string
+	for _, rc := range nodeRunConfigs(cfg, "", "", "", "") {
+		if rc.AddUsers {
+			names = append(names, rc.ShortName)
+		}
+	}
+	return names
 }
 
 // addUsersStep returns the node setup step (see nodeSetupSteps) that
 // creates the cluster's groups and users on a node. Every node runs the
 // same commands with the same IDs, so a user has one UID and GID across the
 // cluster, as munge and Slurm require.
-func addUsersStep(l LinuxUsers) setupStep {
+func addUsersStep(l linuxUsers) setupStep {
 	return setupStep{name: "users", what: "adding users", script: addUsersScript(l)}
 }
 
@@ -225,7 +238,7 @@ done`
 // createHomes creates the users' home directories on the home volume, which
 // every node mounts, so it runs once. The realm's SSH key may log in as each
 // user, as it may as root.
-func createHomes(ctx context.Context, client *docker.Client, container docker.ContainerName, users []LinuxUser, sshPubKey string) error {
+func createHomes(ctx context.Context, client *docker.Client, container docker.ContainerName, users []linuxUser, sshPubKey string) error {
 	args := []string{"sh", "-ec", createHomesScript, "sh", strings.TrimSpace(sshPubKey)}
 	for _, u := range users {
 		args = append(args, u.Name, strconv.Itoa(u.UID), strconv.Itoa(u.GID))

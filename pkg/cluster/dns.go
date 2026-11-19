@@ -11,7 +11,7 @@ func DNSName(shortName, cluster, realm string) string {
 	return shortName + "." + cluster + "." + realm + "." + DNSSuffix
 }
 
-// DNSSearchDomain returns the DNS search domain for a cluster.
-func DNSSearchDomain(cluster, realm string) string {
+// dnsSearchDomain returns the DNS search domain for a cluster.
+func dnsSearchDomain(cluster, realm string) string {
 	return cluster + "." + realm + "." + DNSSuffix
 }

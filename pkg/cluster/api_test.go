@@ -17,7 +17,7 @@ import (
 )
 
 func TestSlurmrestdStep(t *testing.T) {
-	api := RunConfig{Role: config.RoleAPI, Managed: true, Image: "sind-node:25.11", AddUsers: true, Users: testUsers}
+	api := nodeRunConfig{Role: config.RoleAPI, Managed: true, Image: "sind-node:25.11", AddUsers: true, Users: testUsers}
 	assert.Equal(t, []string{"slurmrestd", "slurmrestd-security", "users", "ssh"}, stepNames(nodeSetupSteps(api)), "checked before the users")
 	assert.Equal(t, slurmrestdCheck, nodeSetupSteps(api)[0].script)
 	assert.Equal(t, slurmrestdSecurity, nodeSetupSteps(api)[1].script)
@@ -41,7 +41,7 @@ systemctl daemon-reload`, slurmrestdSecurity)
 	var m mock.Executor
 	r := failedSetup(t, 1, "Failed to reload daemon", "slurmrestd", "slurmrestd-security")
 	m.AddResult(r.Stdout, r.Stderr, r.Err)
-	api := RunConfig{Role: config.RoleAPI, Managed: true, Image: "sind-node:26.05"}
+	api := nodeRunConfig{Role: config.RoleAPI, Managed: true, Image: "sind-node:26.05"}
 	_, err := setupNode(t.Context(), docker.NewClient(&m), "sind-dev-api", api, "ssh-ed25519 AAAA-test-key\n")
 	require.EqualError(t, err, "configuring slurmrestd to start without unsharing namespaces, which the container denies: exit status 1: Failed to reload daemon")
 }

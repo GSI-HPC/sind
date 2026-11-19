@@ -228,7 +228,7 @@ func TestEnableSlurm_UnmanagedWorkersNotWaitedFor(t *testing.T) {
 		}
 		return mock.Result{Stdout: "active\n"}
 	}
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker},
 	}

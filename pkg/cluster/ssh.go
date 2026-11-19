@@ -8,38 +8,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 )
-
-// SSHCommand is an ssh session on a node, run by BuildSSHArgs.
-type SSHCommand struct {
-	// Realm, Cluster and Node name the node; Node is its short name
-	// (e.g. "worker-0").
-	Realm, Cluster, Node string
-	// TTY adds -t to docker exec.
-	TTY bool
-	// Options are passed to ssh before the target.
-	Options []string
-	// Command is the remote command, if any.
-	Command []string
-}
-
-// BuildSSHArgs builds the docker CLI arguments for running ssh through the
-// SSH relay container of the realm. The returned args are suitable for
-// passing to docker directly (e.g. "docker exec -i -t sind-ssh ssh ...").
-// A "--" ends ssh's options before the target, as ssh reads a word after the
-// target that starts with "-" as an option, so the command may start with one.
-func BuildSSHArgs(c SSHCommand) []string {
-	args := []string{"exec", "-i"}
-	if c.TTY {
-		args = append(args, "-t")
-	}
-	args = append(args, string(mesh.RealmNames(c.Realm).SSHContainer), "ssh")
-	args = append(args, c.Options...)
-	args = append(args, "--", DNSName(c.Node, c.Cluster, c.Realm))
-	args = append(args, c.Command...)
-	return args
-}
 
 // EnterTarget determines the target node for sind enter and sind exec, and
 // the directory they start in: the node's data mount point.
@@ -58,7 +27,7 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 	if err != nil {
 		return "", "", err
 	}
-	return target, DataMountPath(node.Labels), nil
+	return target, dataMountPath(node.Labels), nil
 }
 
 // enterTarget picks the target of EnterTarget from the cluster's containers
@@ -78,7 +47,7 @@ func enterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 		// Only the backup runs.
 		return ControllerBackupShortName, controller, nil
 	}
-	if !IsManaged(controller.Labels) {
+	if !isManaged(controller.Labels) {
 		return string(config.RoleController), controller, nil
 	}
 	// Both controllers run: the heartbeat tells whether the backup has
@@ -92,27 +61,4 @@ func enterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 		}
 	}
 	return string(config.RoleController), controller, nil
-}
-
-// BuildContainerExecArgs builds docker CLI arguments for running a command
-// directly inside a cluster container via docker exec. The command runs as
-// root in workDir, the node's data mount point (see EnterTarget), or, when
-// user names a cluster user, as that user in its home directory. When
-// command is nil, an interactive login shell is started.
-func BuildContainerExecArgs(container docker.ContainerName, user, workDir string, isTTY bool, command []string) []string {
-	args := []string{"exec", "-i"}
-	if isTTY {
-		args = append(args, "-t")
-	}
-	if user != "" && user != "root" {
-		args = append(args, "-u", user)
-		workDir = HomeDir(user)
-	}
-	args = append(args, "-w", workDir, string(container))
-	if len(command) == 0 {
-		args = append(args, "bash", "-l")
-	} else {
-		args = append(args, command...)
-	}
-	return args
 }

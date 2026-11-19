@@ -404,10 +404,10 @@ func TestMonitored(t *testing.T) {
 		{Type: docker.MountVolume, Name: "sind-dev-config"},
 		{Type: docker.MountVolume, Name: "sind-journal"},
 	}}
-	assert.True(t, Monitored("sind", journal))
-	assert.False(t, Monitored("other", journal))
+	assert.True(t, monitored("sind", journal))
+	assert.False(t, monitored("other", journal))
 	bind := &docker.ContainerInfo{Mounts: []docker.Mount{{Type: docker.MountBind, Name: "sind-journal"}}}
-	assert.False(t, Monitored("sind", bind))
+	assert.False(t, monitored("sind", bind))
 }
 
 func TestAlloyConfig(t *testing.T) {

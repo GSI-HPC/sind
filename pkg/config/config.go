@@ -138,7 +138,7 @@ func (d DataStorage) validate() error {
 }
 
 // validateDataMountPath checks that the data storage's mountPath is not a
-// path where every node already has a mount (see cluster.BuildRunArgs):
+// path where every node already has a mount, such as /etc/slurm or /tmp:
 // Docker refuses a container with two mounts at one path.
 func (c *Cluster) validateDataMountPath() error {
 	if c.Storage.DataStorage.MountPath == "" {

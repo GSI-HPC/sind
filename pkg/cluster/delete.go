@@ -27,7 +27,7 @@ import (
 // partial clusters (e.g., from a failed creation) by removing whatever
 // resources exist.
 //
-//	HasOtherClusters?
+//	hasOtherClusters?
 //	      │
 //	deleteClusterResources   deregisters from the mesh and the monitoring stack only if other clusters remain
 //	      │
@@ -50,7 +50,7 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	log.InfoContext(ctx, "deleting cluster", "name", clusterName)
 
-	hasOther, err := HasOtherClusters(ctx, client, realm, clusterName)
+	hasOther, err := hasOtherClusters(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
@@ -200,11 +200,11 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			}
 			return fmt.Errorf("deleting cluster %s: %w", f.Name, f.Err)
 		}),
-	}, func(ctx context.Context, name string) (*Resources, error) {
+	}, func(ctx context.Context, name string) (*clusterResources, error) {
 		started[index[name]] = true
 		ctx = withoutTargets(ctx)
 		log.InfoContext(ctx, "deleting cluster", "name", name)
-		res, err := ListClusterResources(ctx, client, realm, name)
+		res, err := listClusterResources(ctx, client, realm, name)
 		if err != nil {
 			return nil, err
 		}
@@ -256,20 +256,20 @@ func realmClusterNames(ctx context.Context, client *docker.Client, realm string)
 //
 // Removing a non-existent cluster is not an error.
 //
-//	ListClusterResources
+//	listClusterResources
 //	      │
-//	DeregisterMesh        start mesh → DNS ║ known_hosts (with deregister)
+//	deregisterMesh        start mesh → DNS ║ known_hosts (with deregister)
 //	      │
-//	DeleteContainers      stop + rm per container
+//	deleteContainers      stop + rm per container
 //	      │
-//	DeleteNetwork         rm cluster network
+//	deleteNetwork         rm cluster network
 //	      │
-//	DeleteVolumes         rm cluster volumes
+//	deleteVolumes         rm cluster volumes
 func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, deregister bool) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
-	res, err := ListClusterResources(ctx, client, realm, clusterName)
+	res, err := listClusterResources(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
@@ -289,7 +289,7 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // stack and their journals (see forgetMonitoredNodes), also when the
 // removal of its network or volumes fails: a retry finds no containers to
 // tell that the stack collected the cluster.
-func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *Resources, deregister bool) error {
+func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *clusterResources, deregister bool) error {
 	log := sindlog.From(ctx)
 
 	// The realm's monitoring stack stays too: whether it collects the
@@ -302,13 +302,13 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 			return err
 		}
 		// Remove DNS records and known_hosts entries before deleting
-		// containers. Failures are logged inside DeregisterMesh; the
+		// containers. Failures are logged inside deregisterMesh; the
 		// teardown continues.
-		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+		deregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 	}
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
-	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
+	if err := deleteContainers(ctx, client, res.Containers); err != nil {
 		return err
 	}
 	if monitored {
@@ -322,20 +322,20 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	}
 
 	log.DebugContext(ctx, "removing volumes", "count", len(res.Volumes))
-	return DeleteVolumes(ctx, client, res.Volumes)
+	return deleteVolumes(ctx, client, res.Volumes)
 }
 
-// DeleteContainers force-removes the given containers in parallel
+// deleteContainers force-removes the given containers in parallel
 // (docker rm -f). A container that is already gone is logged and treated as
 // success — the caller asked for the resource removed, not for a particular
-// state transition. Like DeleteVolumes, it tries every container even when
+// state transition. Like deleteVolumes, it tries every container even when
 // one fails, so that one failure does not cancel the removals still waiting
 // for a docker call slot, and returns every failure.
 //
 // The removals are the progress step "nodes", with a target for each
 // container, named by its node's short name and with the node's role (see
 // removeEach). Without containers there is no step.
-func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
+func deleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
 	removals := make([]removal, len(containers))
 	for i, c := range containers {
 		removals[i] = removal{
@@ -355,9 +355,9 @@ func nodeOf(c docker.ContainerListEntry) string {
 	return strings.TrimPrefix(string(c.Name), ContainerPrefix(c.Labels[LabelRealm], c.Labels[LabelCluster]))
 }
 
-// DeleteNetwork removes the cluster network. A network that is already gone
+// deleteNetwork removes the cluster network. A network that is already gone
 // is logged and treated as success.
-func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
+func deleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
 	return removeOne(ctx, "network", string(name), func(ctx context.Context) error { return client.RemoveNetwork(ctx, name) })
 }
 
@@ -372,10 +372,10 @@ func removeClusterNetwork(ctx context.Context, client *docker.Client, network do
 		return fmt.Errorf("detaching containers from network %s: %w", network, err)
 	}
 	sindlog.From(ctx).DebugContext(ctx, "removing network", "name", string(network))
-	return DeleteNetwork(ctx, client, network)
+	return deleteNetwork(ctx, client, network)
 }
 
-// DeleteVolumes removes the given cluster volumes in parallel. Each removal
+// deleteVolumes removes the given cluster volumes in parallel. Each removal
 // retries past the dockerd async-cleanup race that follows `docker rm -f`.
 // A volume that is already gone is logged and treated as success. Every
 // volume is attempted; the errors of those that could not be removed are
@@ -383,7 +383,7 @@ func removeClusterNetwork(ctx context.Context, client *docker.Client, network do
 //
 // The removals are the progress step "volumes", with a target for each
 // volume, named by it (see removeEach). Without volumes there is no step.
-func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
+func deleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
 	removals := make([]removal, len(volumes))
 	for i, v := range volumes {
 		removals[i] = removal{
@@ -484,14 +484,14 @@ func failures(errs []error) error {
 	return poolFailure{error: errors.Join(failed...), class: class}
 }
 
-// DeregisterMesh removes DNS records and known_hosts entries for all
+// deregisterMesh removes DNS records and known_hosts entries for all
 // containers in batch, starting a stopped mesh first (see
 // deregisterHostnames). This is the inverse of registerNodes during cluster
 // creation. Failures are warnings, not errors: the cluster is being torn
 // down, and stale entries in a mesh helper that's already unreachable will
 // be overwritten on next register or cleared when the mesh itself is torn
 // down.
-func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) {
+func deregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) {
 	deregisterHostnames(ctx, meshMgr, meshHostnames(meshMgr.Realm, clusterName, containers))
 }
 

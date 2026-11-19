@@ -63,7 +63,7 @@ func TestCleanupWorkers_MeshFailures(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
-	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []RunConfig{{ShortName: "worker-1"}})
+	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []nodeRunConfig{{ShortName: "worker-1"}})
 
 	require.ErrorContains(t, err, "removing DNS records: ")
 	assert.Contains(t, err.Error(), "removing known hosts: ")
@@ -124,7 +124,7 @@ func TestCleanupWorkers_Parallel(t *testing.T) {
 	client := docker.NewClient(newBarrier(m, 2, "rm"))
 	mgr := mesh.NewManager(docker.NewClient(m), mesh.DefaultRealm)
 
-	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []RunConfig{{ShortName: "worker-1"}, {ShortName: "worker-2"}})
+	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []nodeRunConfig{{ShortName: "worker-1"}, {ShortName: "worker-2"}})
 
 	require.NoError(t, err, "the removals run at once")
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
@@ -147,7 +147,7 @@ func TestCleanupWorkers_ListingFails(t *testing.T) {
 	client := docker.NewClient(m)
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
-	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []RunConfig{{ShortName: "worker-1"}, {ShortName: "worker-2"}})
+	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []nodeRunConfig{{ShortName: "worker-1"}, {ShortName: "worker-2"}})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))

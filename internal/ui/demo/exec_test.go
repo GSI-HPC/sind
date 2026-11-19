@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/nodecmd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
 func testExec(every time.Duration) *Exec {
@@ -51,7 +50,7 @@ func TestExec_NoCommands(t *testing.T) {
 func TestExec_DockerLogs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	args := cluster.ContainerLogArgs("sind", "dev", "worker-1", cluster.LogOptions{Follow: true})
+	args := nodecmd.ContainerLogArgs("sind", "dev", "worker-1", nodecmd.LogOptions{Follow: true})
 	lines := readLines(ctx, t, testExec(0), head, args...)
 	assert.Contains(t, lines[0], "[09:27:00]")
 	assert.Contains(t, lines[0], "slurmd: ")
@@ -61,7 +60,7 @@ func TestExec_DockerLogs(t *testing.T) {
 func TestExec_Journal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	args := cluster.ServiceLogArgs("sind", "dev", "controller", "slurmctld", cluster.LogOptions{Follow: true})
+	args := nodecmd.ServiceLogArgs("sind", "dev", "controller", "slurmctld", nodecmd.LogOptions{Follow: true})
 	lines := readLines(ctx, t, testExec(0), 3, args...)
 	assert.Regexp(t, `^Oct 14 09:2\d:\d\d controller slurmctld\[\d+\]: `, lines[0])
 
@@ -197,7 +196,7 @@ func TestExec_ControllerLogFollowsTheFacts(t *testing.T) {
 	e.Facts = func(string) Facts {
 		return Facts{Up: []string{"worker-1"}, Down: []string{"worker-4"}}
 	}
-	lines := readLines(ctx, t, e, head, cluster.ServiceLogArgs("sind", "dev", "controller", "slurmctld", cluster.LogOptions{Follow: true})...)
+	lines := readLines(ctx, t, e, head, nodecmd.ServiceLogArgs("sind", "dev", "controller", "slurmctld", nodecmd.LogOptions{Follow: true})...)
 	all := strings.Join(lines, "\n")
 	assert.Contains(t, all, "Nodes worker-4 not responding")
 	assert.NotContains(t, all, "worker-3")
@@ -211,7 +210,7 @@ func TestExec_JournalOfAFailedUnit(t *testing.T) {
 	e.Failed = func(container, unit string) (time.Time, bool) {
 		return at, container == "sind-dev-worker-4" && unit == "slurmd"
 	}
-	args := cluster.ServiceLogArgs("sind", "dev", "worker-4", "slurmd", cluster.LogOptions{Follow: true})
+	args := nodecmd.ServiceLogArgs("sind", "dev", "worker-4", "slurmd", nodecmd.LogOptions{Follow: true})
 	p, err := e.Start(ctx, "docker", args...)
 	require.NoError(t, err)
 	defer func() { _ = p.Close() }()
@@ -230,9 +229,9 @@ func TestExec_JournalOfAFailedUnit(t *testing.T) {
 	// Other units, and the container's log, go on as ever.
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
-	other := readLines(ctx, t, e, head+3, cluster.ServiceLogArgs("sind", "dev", "worker-4", "munge", cluster.LogOptions{Follow: true})...)
+	other := readLines(ctx, t, e, head+3, nodecmd.ServiceLogArgs("sind", "dev", "worker-4", "munge", nodecmd.LogOptions{Follow: true})...)
 	assert.NotContains(t, strings.Join(other, "\n"), "FAILURE")
-	other = readLines(ctx, t, e, head+3, cluster.ContainerLogArgs("sind", "dev", "worker-4", cluster.LogOptions{Follow: true})...)
+	other = readLines(ctx, t, e, head+3, nodecmd.ContainerLogArgs("sind", "dev", "worker-4", nodecmd.LogOptions{Follow: true})...)
 	assert.NotContains(t, strings.Join(other, "\n"), "FAILURE")
 }
 
@@ -263,7 +262,7 @@ func TestExec_StoppedContainer(t *testing.T) {
 	e := testExec(time.Millisecond)
 	e.Stopped = func(container string) (time.Time, bool) { return at, container == "sind-legacy-worker-1" }
 	ctx := context.Background()
-	p, err := e.Start(ctx, "docker", cluster.ContainerLogArgs("sind", "legacy", "worker-1", cluster.LogOptions{Follow: true})...)
+	p, err := e.Start(ctx, "docker", nodecmd.ContainerLogArgs("sind", "legacy", "worker-1", nodecmd.LogOptions{Follow: true})...)
 	require.NoError(t, err)
 	sc := bufio.NewScanner(p.Stdout)
 	var lines []string
@@ -274,7 +273,7 @@ func TestExec_StoppedContainer(t *testing.T) {
 	assert.Contains(t, lines[head-1], "[08:47:00]")
 	require.NoError(t, p.Close())
 
-	p, err = e.Start(ctx, "docker", cluster.ServiceLogArgs("sind", "legacy", "worker-1", "slurmd", cluster.LogOptions{Follow: true})...)
+	p, err = e.Start(ctx, "docker", nodecmd.ServiceLogArgs("sind", "legacy", "worker-1", "slurmd", nodecmd.LogOptions{Follow: true})...)
 	require.NoError(t, err)
 	sc = bufio.NewScanner(p.Stdout)
 	require.True(t, sc.Scan())
@@ -284,8 +283,8 @@ func TestExec_StoppedContainer(t *testing.T) {
 
 	// A reader that goes ends it too.
 	for _, args := range [][]string{
-		cluster.ContainerLogArgs("sind", "legacy", "worker-1", cluster.LogOptions{}),
-		cluster.ServiceLogArgs("sind", "legacy", "worker-1", "slurmd", cluster.LogOptions{}),
+		nodecmd.ContainerLogArgs("sind", "legacy", "worker-1", nodecmd.LogOptions{}),
+		nodecmd.ServiceLogArgs("sind", "legacy", "worker-1", "slurmd", nodecmd.LogOptions{}),
 	} {
 		p, err = e.Start(ctx, "docker", args...)
 		require.NoError(t, err)

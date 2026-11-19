@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- NodeShortNames ---
+// --- nodeShortNames ---
 
 func TestNodeShortNames(t *testing.T) {
 	tests := []struct {
@@ -106,15 +106,15 @@ func TestNodeShortNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NodeShortNames(tt.nodes)
+			got := nodeShortNames(tt.nodes)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-// --- PreflightCheck ---
+// --- preflightCheck ---
 
-// preflightOnCall returns an OnCall handler for PreflightCheck dispatch:
+// preflightOnCall returns an OnCall handler for preflightCheck dispatch:
 //   - Network/volume inspects return "exists" when the queried name is a key
 //     in existing, without labels, and "not found" otherwise.
 //   - The filtered `docker ps` call returns NDJSON rows for every name in
@@ -153,7 +153,7 @@ func preflightOnCallLabels(t *testing.T, existing map[string]string, existingCon
 }
 
 // preflightSubject returns the name of the resource that a docker call of
-// PreflightCheck asks about: the volume of a label inspect, else the last
+// preflightCheck asks about: the volume of a label inspect, else the last
 // argument.
 func preflightSubject(args []string) string {
 	if len(args) > 2 && args[0] == "volume" && args[1] == "inspect" {
@@ -210,7 +210,7 @@ func TestPreflightCheck(t *testing.T) {
 			cfg.Nodes[0].BackupController = tt.backup
 			cfg.Nodes[1].Count = max(tt.workers, 1)
 
-			err := PreflightCheck(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg)
+			err := preflightCheck(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg)
 
 			if tt.want == nil {
 				require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestPreflightCheck_MeshFull(t *testing.T) {
 		return base(args, stdin)
 	}
 
-	err := PreflightCheck(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, minimalConfig())
+	err := preflightCheck(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, minimalConfig())
 
 	require.ErrorIs(t, err, ErrNetworkFull)
 	assert.Contains(t, err.Error(), "network sind-mesh has 1023 containers and would get 2 more")

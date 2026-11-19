@@ -41,6 +41,8 @@ internal/execopt/  The options that sind's packages give cmdexec.OSExecutor in t
   ├── execopt.go   WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup, WithStopGrace, WithOrphanSafe, WithStarted, WithEnv and WithOutputLimit for the commands of the CLI and sind ui
   └── terminal.go  WithTerminal: a command's stdout is a pseudo-terminal, as docker pull writes its byte counts only there; TerminalLines turns what it draws there into plain lines
 
+internal/nodecmd/  The docker command lines of ssh, enter, exec and logs, and of the log views of sind ui (BuildSSHArgs, BuildContainerExecArgs, ContainerLogArgs, ServiceLogArgs)
+
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
 internal/detach/   The context of a write that must not be cut short (mesh DNS, known_hosts, sind-nodes.conf): it ignores the caller's cancellation and deadline, but ends with the rollback it runs under
@@ -117,8 +119,8 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── external.go  External containers on the mesh: connect, disconnect, and their connection to new clusters
   ├── resources.go Resource creation helpers
   ├── types.go     Shared types (State)
-  ├── ssh.go       ssh/enter/exec arg building and target selection
-  ├── logs.go      Log command arg building
+  ├── ssh.go       EnterTarget: the node and directory of enter and exec
+  ├── logs.go      NodeServices: the units whose journal logs shows
   ├── dns.go       Node DNS names and search domain
   ├── naming.go    Resource naming conventions
   ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan), joinFailures, WithPanicLog

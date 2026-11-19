@@ -87,10 +87,10 @@ func nodesOnCall(t *testing.T, override func(args []string) (mock.Result, bool))
 }
 
 // nodeConfigs returns the run configs of workers named names.
-func workerConfigs(names ...string) []RunConfig {
-	configs := make([]RunConfig, len(names))
+func workerConfigs(names ...string) []nodeRunConfig {
+	configs := make([]nodeRunConfig, len(names))
 	for i, name := range names {
-		configs[i] = RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: name, Role: config.RoleWorker, Image: "img:1"}
+		configs[i] = nodeRunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: name, Role: config.RoleWorker, Image: "img:1"}
 	}
 	return configs
 }
@@ -100,7 +100,7 @@ func workerConfigs(names ...string) []RunConfig {
 func TestSetupNodes_ReportsTheNodes(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	_, _, err := setupNodesWith(ctx, t, func([]string) (mock.Result, bool) { return mock.Result{}, false },
-		append([]RunConfig{controllerConfig}, workerConfigs("worker-0", "worker-1")...)...)
+		append([]nodeRunConfig{controllerConfig}, workerConfigs("worker-0", "worker-1")...)...)
 
 	require.NoError(t, err)
 	w.Finish()
@@ -137,7 +137,7 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 			var m mock.Executor
 			m.AddResult(tc.stdout, "", nil)
 
-			_, _ = setupNode(ctx, docker.NewClient(&m), "sind-dev-worker-0", RunConfig{}, "ssh-ed25519 AAAA-test-key\n")
+			_, _ = setupNode(ctx, docker.NewClient(&m), "sind-dev-worker-0", nodeRunConfig{}, "ssh-ed25519 AAAA-test-key\n")
 
 			assert.Equal(t, tc.want, w.Finish())
 		})
@@ -298,7 +298,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
 		return mock.Result{}
 	}
 	ctx, w := progresstest.Watch(t.Context(), t)
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},

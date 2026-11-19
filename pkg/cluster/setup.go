@@ -89,7 +89,7 @@ func nodeSetupScript(steps []setupStep) string {
 // (createResources), so munge starts and the readiness wait sees it.
 // createHomes, which runs once on the controller after every node's setup,
 // sets ownership by number and needs none of the steps.
-func nodeSetupSteps(nc RunConfig) []setupStep {
+func nodeSetupSteps(nc nodeRunConfig) []setupStep {
 	var steps []setupStep
 	if nc.NSSSlurm {
 		steps = append(steps, nssSlurmSteps(nc)...)
@@ -111,7 +111,7 @@ func nodeSetupSteps(nc RunConfig) []setupStep {
 // The setup is the progress call "setup", under the node's target, with
 // the docker exec under it; it ends as endSpan ends it, canceled when a
 // sibling's failure or an interrupt stopped it.
-func setupNode(ctx context.Context, client *docker.Client, container docker.ContainerName, nc RunConfig, sshPubKey string) (_ string, err error) {
+func setupNode(ctx context.Context, client *docker.Client, container docker.ContainerName, nc nodeRunConfig, sshPubKey string) (_ string, err error) {
 	ctx, call := progress.Start(ctx, progress.KindCall, "setup")
 	defer func() { endSpan(ctx, call, err) }()
 	stdout, err := runSetupSteps(ctx, client, container, nodeSetupSteps(nc), strings.TrimSpace(sshPubKey))

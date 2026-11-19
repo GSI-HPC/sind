@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/GSI-HPC/go-clikit/cobratree"
+	"github.com/GSI-HPC/sind/internal/nodecmd"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +38,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	opts := cluster.LogOptions{}
+	opts := nodecmd.LogOptions{}
 	opts.Follow, _ = cmd.Flags().GetBool("follow")
 	if cmd.Flags().Changed("tail") {
 		tail, _ := cmd.Flags().GetInt("tail")
@@ -59,9 +60,9 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	}
 	var dockerArgs []string
 	if len(args) == 2 {
-		dockerArgs = cluster.ServiceLogArgs(realm, node.Cluster, node.ShortName, args[1], opts)
+		dockerArgs = nodecmd.ServiceLogArgs(realm, node.Cluster, node.ShortName, args[1], opts)
 	} else {
-		dockerArgs = cluster.ContainerLogArgs(realm, node.Cluster, node.ShortName, opts)
+		dockerArgs = nodecmd.ContainerLogArgs(realm, node.Cluster, node.ShortName, opts)
 	}
 
 	return dockerExec(cmd, dockerArgs)

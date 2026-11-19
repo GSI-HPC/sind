@@ -164,12 +164,12 @@ func (p *imagePull) wait(ctx context.Context) error {
 // host directories (the data directory, the host's /cvmfs), making the
 // node's access to the host visible with -v. The capabilities include the
 // one sind adds to a worker for task/affinity (addsTaskAffinityCapability).
-func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
+func logExtraPrivileges(ctx context.Context, configs []nodeRunConfig) {
 	log := sindlog.From(ctx)
 	for _, cfg := range configs {
 		capAdd := cfg.CapAdd
-		if addsTaskAffinityCapability(cfg) && !slices.Contains(capAdd, TaskAffinityCapability) {
-			capAdd = append([]string{TaskAffinityCapability}, capAdd...)
+		if addsTaskAffinityCapability(cfg) && !slices.Contains(capAdd, taskAffinityCapability) {
+			capAdd = append([]string{taskAffinityCapability}, capAdd...)
 		}
 		var binds []string
 		if cfg.DataHostPath != "" {
@@ -282,9 +282,9 @@ func CreateInRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 // after the last node container started. When the limit is reached, Create
 // rolls back and returns an error that wraps ErrNotReady.
 //
-//	┌ PreflightCheck → createResources ─────────────────┐
+//	┌ preflightCheck → createResources ─────────────────┐
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┤  (version from the image probe with monitoring)
-//	├ DetectCVMFS (storage.cvmfs only) ─────────────────┼→ setupNodes
+//	├ detectCVMFS (storage.cvmfs only) ─────────────────┼→ setupNodes
 //	├ CheckNsdelegate ──────────────────────────────────┤
 //	└ pullImages (missing images; all with cfg.Pull) ───┘
 //	                        │
@@ -296,7 +296,7 @@ func CreateInRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 //
 // Each distinct image the daemon does not have, or with cfg.Pull each
 // distinct image, is pulled once, concurrently, and the steps that run one
-// (the helpers of createResources, the Slurm version, DetectCVMFS,
+// (the helpers of createResources, the Slurm version, detectCVMFS,
 // CheckNsdelegate) wait for the pull; nothing is created with --pull
 // always, and no node container's docker create pulls (see startPull). A failed check rolls back what the other branches have
 // created by then; no node container exists yet.
@@ -317,7 +317,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	realm := meshMgr.Realm
 	rd := &readiness{interval: opts.Interval, wait: cfg.Wait}
 
-	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(NodeShortNames(cfg.Nodes)))
+	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(nodeShortNames(cfg.Nodes)))
 
 	// Register cleanup before any fallible operation. Cluster resource
 	// cleanup runs only after createResources starts; the mesh goes too
@@ -410,7 +410,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		if err := checkIdentityImages(prepCtx, client, cfg); err != nil {
 			return err
 		}
-		if err := PreflightCheck(prepCtx, client, realm, cfg); err != nil {
+		if err := preflightCheck(prepCtx, client, realm, cfg); err != nil {
 			return err
 		}
 		log.DebugContext(prepCtx, "preflight check passed")
@@ -441,7 +441,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			if err := pull.wait(prepCtx); err != nil {
 				return err
 			}
-			backend, err := DetectCVMFS(prepCtx, client, controllerImage(cfg))
+			backend, err := detectCVMFS(prepCtx, client, controllerImage(cfg))
 			if err != nil {
 				return err
 			}
@@ -477,7 +477,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return err
 	}
 
-	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion, cvmfs)
+	nodeConfigs := nodeRunConfigs(cfg, realm, dnsIP, slurmVersion, cvmfs)
 	logExtraPrivileges(ctx, nodeConfigs)
 
 	// Start event watcher before creating nodes so it captures all
@@ -525,7 +525,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return nil
 		})
 	}
-	if users := NewLinuxUsers(cfg).Users; len(users) > 0 {
+	if users := newLinuxUsers(cfg).Users; len(users) > 0 {
 		g.Go(func() error {
 			controller := ContainerName(realm, cfg.Name, string(config.RoleController))
 			hctx, end := startStep(gctx, "home directories")
@@ -568,7 +568,7 @@ func rollbackRemovesMesh(ctx context.Context, client *docker.Client, meshMgr *me
 	if resourcesCreated {
 		ours = clusterName
 	}
-	inUse, err := HasOtherClusters(ctx, client, meshMgr.Realm, ours)
+	inUse, err := hasOtherClusters(ctx, client, meshMgr.Realm, ours)
 	if err != nil {
 		sindlog.From(ctx).WarnContext(ctx, "keeping the mesh", "error", err)
 		return false
@@ -657,7 +657,7 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // fails, while docker volume create of one succeeds and hands over the
 // existing volume. Two creates whose realm and cluster names give the
 // same resource names (ci + 42-dev, ci-42 + dev) take different realm
-// locks, so both can pass PreflightCheck; the network decides which one
+// locks, so both can pass preflightCheck; the network decides which one
 // gets the names before either writes into a volume, and the other fails
 // with ErrClusterExists.
 //
@@ -667,7 +667,7 @@ func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 
-	if err := CreateClusterNetwork(ctx, client, realm, cfg.Name); err != nil {
+	if err := createClusterNetwork(ctx, client, realm, cfg.Name); err != nil {
 		return err
 	}
 	g, gctx := errgroup.WithContext(ctx)
@@ -675,11 +675,11 @@ func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 		if err := client.ConnectNetwork(gctx, NetworkName(realm, cfg.Name), meshMgr.SSHContainerName()); err != nil {
 			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
 		}
-		ConnectExternal(gctx, client, meshMgr, NetworkName(realm, cfg.Name))
+		connectExternal(gctx, client, meshMgr, NetworkName(realm, cfg.Name))
 		return nil
 	})
 	g.Go(func() error {
-		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeConfig); err != nil {
+		if err := createClusterVolume(gctx, client, realm, cfg.Name, VolumeConfig); err != nil {
 			return err
 		}
 		if !cfg.Managed() {
@@ -688,29 +688,29 @@ func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 		if err := pull.wait(gctx); err != nil {
 			return err
 		}
-		return WriteClusterConfig(gctx, client, realm, cfg, image)
+		return writeClusterConfig(gctx, client, realm, cfg, image)
 	})
 	// auth/slurm (identity clientIds) replaces munge: its slurm.key is on
 	// the config volume.
 	if cfg.Identity.Mode != config.IdentityClientIDs {
 		g.Go(func() error {
-			if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
+			if err := createClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
 				return err
 			}
 			if err := pull.wait(gctx); err != nil {
 				return err
 			}
-			return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image)
+			return writeMungeKey(gctx, client, realm, cfg.Name, mungeKey, image)
 		})
 	}
 	if !cfg.Storage.DataStorage.UsesHostPath() {
-		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
+		g.Go(func() error { return createClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
 	}
 	if cfg.HasBackupController() {
-		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeState) })
+		g.Go(func() error { return createClusterVolume(gctx, client, realm, cfg.Name, VolumeState) })
 	}
 	if len(cfg.Users) > 0 {
-		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeHome) })
+		g.Go(func() error { return createClusterVolume(gctx, client, realm, cfg.Name, VolumeHome) })
 	}
 	if cfg.Monitoring {
 		g.Go(func() error {
@@ -720,7 +720,7 @@ func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 			if err := pull.wait(gctx); err != nil {
 				return err
 			}
-			return resetClusterJournals(gctx, client, realm, cfg.Name, image, NodeShortNames(cfg.Nodes))
+			return resetClusterJournals(gctx, client, realm, cfg.Name, image, nodeShortNames(cfg.Nodes))
 		})
 	}
 	return g.Wait()
@@ -743,7 +743,7 @@ func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 // all announced before the first node starts, and under it the node's
 // docker calls, its wait "ready" and its call "setup". The first node that
 // fails cancels the others, whose targets end canceled.
-func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, rd *readiness, watcher *monitor.Watcher) (_ []nodeResult, err error) {
+func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []nodeRunConfig, rd *readiness, watcher *monitor.Watcher) (_ []nodeResult, err error) {
 	log := sindlog.From(ctx)
 	results := make([]nodeResult, len(nodeConfigs))
 
@@ -758,7 +758,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			tctx := ctxs[i]
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 
-			if _, err := CreateNode(tctx, client, meshMgr, nc); err != nil {
+			if _, err := createNode(tctx, client, meshMgr, nc); err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 			// The wait limit counts from here, once the container has
@@ -815,7 +815,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // registerNodes registers DNS records and known_hosts entries for all nodes
 // in batch. It is the progress step "mesh registration".
-func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) (err error) {
+func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []nodeRunConfig, results []nodeResult) (err error) {
 	ctx, end := startStep(ctx, "mesh registration")
 	defer func() { end(err) }()
 	dnsRecords := make([]mesh.DNSRecord, len(nodeConfigs))
@@ -882,10 +882,10 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 // The services are the progress step "slurm", with a target for each node
 // it enables one on, all announced before the db node starts; the wait for
 // the workers' registration is the step's wait "ready" after the targets.
-func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, controller docker.ContainerName, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) (err error) {
+func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, controller docker.ContainerName, nodeConfigs []nodeRunConfig, interval time.Duration, watcher *monitor.Watcher) (err error) {
 	log := sindlog.From(ctx)
 
-	var dbNodes, nodes []RunConfig
+	var dbNodes, nodes []nodeRunConfig
 	var services []probe.Service
 	var workers []string
 	for _, nc := range nodeConfigs {
