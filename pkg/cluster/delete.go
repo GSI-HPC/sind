@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -39,7 +41,9 @@ import (
 // The mesh is what makes a container one of the realm's external
 // containers (see ExternalContainers). Removing it detaches them, so a
 // cluster created later is not connected to them: Delete then names them
-// through meshMgr.Warn.
+// through meshMgr.Warn, also those that the removal of the mesh detached
+// before it failed (see detachedExternal), as a retry no longer finds
+// them on the mesh.
 func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -64,11 +68,33 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	if err != nil {
 		log.WarnContext(ctx, "listing external containers failed, continuing", "error", err)
 	}
-	if err := cleanupRealm(ctx, client, meshMgr); err != nil {
-		return err
+	err = cleanupRealm(ctx, client, meshMgr)
+	if err != nil {
+		external = detachedExternal(ctx, client, meshMgr, external)
 	}
 	warnDetached(ctx, meshMgr, external)
-	return nil
+	return err
+}
+
+// detachedExternal returns those of the external containers that are no
+// longer on the mesh, after a removal of the realm's shared resources that
+// failed, maybe after the mesh detached them. The listing ignores the
+// cancellation of ctx, which may have ended the removal, within the bound
+// of internal/detach. When sind cannot tell, it returns them all: a
+// container named for reconnecting that is still attached costs less than
+// one that nothing names.
+func detachedExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, external []docker.ContainerName) []docker.ContainerName {
+	if len(external) == 0 {
+		return nil
+	}
+	ctx, cancel := detach.Context(ctx)
+	defer cancel()
+	attached, err := ExternalContainers(ctx, client, meshMgr)
+	if err != nil {
+		sindlog.From(ctx).WarnContext(ctx, "listing external containers failed", "error", err)
+		return external
+	}
+	return slices.DeleteFunc(slices.Clone(external), func(n docker.ContainerName) bool { return slices.Contains(attached, n) })
 }
 
 // warnDetached tells the user, through meshMgr.Warn, that deleting the
