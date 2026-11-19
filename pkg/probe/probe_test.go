@@ -475,33 +475,6 @@ func TestServiceForRole(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestNodeProbes(t *testing.T) {
-	tests := []struct {
-		role  config.Role
-		names []string
-		units []string
-	}{
-		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}, []string{"", "", "sshd.service", "slurmctld.service"}},
-		{config.RoleDB, []string{"container", "systemd", "sshd", "slurmdbd"}, []string{"", "", "sshd.service", "slurmdbd.service"}},
-		{config.RoleAPI, []string{"container", "systemd", "sshd", "slurmrestd"}, []string{"", "", "sshd.service", "slurmrestd.service"}},
-		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}, []string{"", "", "sshd.service", "slurmd.service"}},
-		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}, []string{"", "", "sshd.service"}},
-		{"unknown", []string{"container", "systemd", "sshd"}, []string{"", "", "sshd.service"}},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.role), func(t *testing.T) {
-			probes := NodeProbes(tt.role)
-			var names, units []string
-			for _, p := range probes {
-				names = append(names, p.Name)
-				units = append(units, p.Unit)
-			}
-			assert.Equal(t, tt.names, names)
-			assert.Equal(t, tt.units, units)
-		})
-	}
-}
-
 func TestUntilReady_AllPass(t *testing.T) {
 	var m mock.Executor
 	// Single probe that succeeds immediately.

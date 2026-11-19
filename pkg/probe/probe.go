@@ -112,19 +112,6 @@ func ForService(svc Service) Probe {
 	return Probe{Name: string(svc), Check: check, Unit: string(svc) + ".service"}
 }
 
-// NodeProbes returns the probes applicable to a node with the given role.
-func NodeProbes(role config.Role) []Probe {
-	probes := []Probe{
-		{Name: "container", Check: ContainerRunning},
-		{Name: "systemd", Check: SystemdReady},
-		ForService(ServiceSSHD),
-	}
-	if svc, ok := ServiceForRole(role); ok {
-		probes = append(probes, ForService(svc))
-	}
-	return probes
-}
-
 // DefaultInterval is the delay between readiness probe rounds that
 // UntilReady and UntilReadyWithEvents use for an interval of zero or less.
 const DefaultInterval = 500 * time.Millisecond
