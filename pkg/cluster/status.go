@@ -113,9 +113,32 @@ type NetworkHealth struct {
 }
 
 // StackHealth returns the readiness fields of the monitoring stack's
-// services, in the order of observability.Services.
+// services, in the order of observability.Services; nil for a service
+// that NetworkHealth has no field of.
 func (h *NetworkHealth) StackHealth() []*bool {
-	return []*bool{h.Grafana, h.Prometheus, h.Loki, h.Alloy}
+	ready := make([]*bool, len(observability.Services))
+	for i, s := range observability.Services {
+		if f := h.stackField(s); f != nil {
+			ready[i] = *f
+		}
+	}
+	return ready
+}
+
+// stackField returns the readiness field of the stack's service s, nil
+// for a service that NetworkHealth has no field of.
+func (h *NetworkHealth) stackField(s observability.Service) **bool {
+	switch s {
+	case observability.ServiceGrafana:
+		return &h.Grafana
+	case observability.ServicePrometheus:
+		return &h.Prometheus
+	case observability.ServiceLoki:
+		return &h.Loki
+	case observability.ServiceAlloy:
+		return &h.Alloy
+	}
+	return nil
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, SSH relay, and cluster
@@ -170,12 +193,15 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, err
 	}
 	if found {
-		fields := []**bool{&health.Grafana, &health.Prometheus, &health.Loki, &health.Alloy}
-		for i, st := range stack {
+		for _, st := range stack {
+			f := health.stackField(st.Service)
+			if f == nil {
+				continue
+			}
 			// Without Grafana to run the readiness checks, a running
 			// container counts as healthy.
 			ok := st.Ready || !st.Checked && st.State == docker.StateRunning
-			*fields[i] = &ok
+			*f = &ok
 		}
 	}
 

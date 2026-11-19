@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -306,6 +307,25 @@ func meshHealthOnCall(t *testing.T) func([]string, string) mock.Result {
 		t.Errorf("unexpected call %v", args)
 		return mock.Result{Err: testutil.ExitCode1(t)}
 	}
+}
+
+// TestGetNetworkHealth_UnknownService checks that a stack service that
+// NetworkHealth has no field of is left out, by its name, rather than
+// taken for another by its place.
+func TestGetNetworkHealth_UnknownService(t *testing.T) {
+	saved := observability.Services
+	observability.Services = append([]observability.Service{"tempo"}, saved...)
+	t.Cleanup(func() { observability.Services = saved })
+	f := newStackFake(t).withStack()
+	f.containers["sind-alloy"].state = docker.StateExited
+	client := docker.NewClient(&mock.Executor{OnCall: stackFirst(f, meshHealthOnCall(t))})
+
+	health, err := GetNetworkHealth(t.Context(), client, "sind", "dev")
+
+	require.NoError(t, err)
+	require.NotNil(t, health.Alloy)
+	assert.False(t, *health.Alloy)
+	assert.Equal(t, []*bool{nil, health.Grafana, health.Prometheus, health.Loki, health.Alloy}, health.StackHealth())
 }
 
 func TestGetNetworkHealth_MonitoringStack(t *testing.T) {
