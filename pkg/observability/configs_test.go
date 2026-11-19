@@ -65,6 +65,7 @@ func TestStoreConfigs(t *testing.T) {
 	assert.Contains(t, prometheusArgs, "--storage.tsdb.retention.time=7d")
 	assert.Contains(t, lokiConfig, "retention_period: 168h")
 	assert.Contains(t, lokiConfig, "retention_enabled: true")
+	assert.Contains(t, lokiConfig, "deletion_mode: disabled", "no delete API")
 	assert.Contains(t, lokiConfig, "reporting_enabled: false")
 	assert.Contains(t, alloyArgs, "--disable-reporting")
 }

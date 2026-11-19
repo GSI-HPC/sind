@@ -57,7 +57,8 @@ func stackQuery(ctx context.Context, t *testing.T, c *docker.Client, realm strin
 // TestMonitoring creates a monitored cluster with a db node and checks
 // that the stack runs and collects its metrics and logs, that Grafana
 // serves its datasources and dashboards anonymously without password
-// login, and that deleting the cluster removes the stack. With an image of
+// login, that Loki refuses deletes, and that deleting the cluster removes
+// the stack. With an image of
 // Slurm 25.11, which serves no metrics, it checks that the create fails
 // before any node exists and skips the rest.
 func TestMonitoring(t *testing.T) {
@@ -153,10 +154,15 @@ func TestMonitoring(t *testing.T) {
 			return len(r.Data.Result) > 0 && r.Data.Result[0].Stream["node"] == node
 		}, 2*time.Minute, 2*time.Second, "no %s lines of %s in Loki", unit, node)
 	}
+	// Loki refuses its delete API (deletion_mode: disabled).
+	out, err := stackGet(ctx, c, realm, "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST",
+		observability.NewManager(c, realm).URL(observability.ServiceLoki, "/loki/api/v1/delete?query=%7Bcluster%3D%22"+name+"%22%7D&start=0"))
+	require.NoError(t, err)
+	assert.Equal(t, "403", out, "the delete API of Loki")
 
 	// Grafana: both datasources, served anonymously, no password login,
 	// sind's dashboards, and no plugin installed at start.
-	out, err := stackGet(ctx, c, realm, "http://localhost:3000/api/datasources")
+	out, err = stackGet(ctx, c, realm, "http://localhost:3000/api/datasources")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"uid":"`+observability.PrometheusUID+`"`)
 	assert.Contains(t, out, `"uid":"`+observability.LokiUID+`"`)
