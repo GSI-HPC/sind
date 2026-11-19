@@ -167,7 +167,7 @@ func TestEnsureSSH_KeyCheckError(t *testing.T) {
 }
 
 func TestSSHImage_DefaultNodeImage(t *testing.T) {
-	assert.Equal(t, config.DefaultImage, sshImage())
+	assert.Equal(t, config.DefaultNodeImage(), sshImage())
 }
 
 // --- AddKnownHosts / RemoveKnownHosts ---

@@ -29,7 +29,7 @@ func controllerImage(cfg *config.Cluster) string {
 			return n.Image
 		}
 	}
-	return config.DefaultImage
+	return config.DefaultNodeImage()
 }
 
 // clusterImages returns the distinct images of the cluster's nodes, the

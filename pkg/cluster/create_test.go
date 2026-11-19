@@ -46,7 +46,7 @@ func TestControllerImage_Fallback(t *testing.T) {
 			{Role: config.RoleWorker, Image: "compute:1"},
 		},
 	}
-	assert.Equal(t, config.DefaultImage, controllerImage(cfg))
+	assert.Equal(t, config.DefaultNodeImage(), controllerImage(cfg))
 }
 
 // --- Create (end-to-end) ---
@@ -1643,7 +1643,7 @@ func TestCreate_AppliesDefaults(t *testing.T) {
 		created++
 		memory, _ := testutil.ArgValue(c.Args, "--memory")
 		assert.Equal(t, config.DefaultMemory, memory)
-		assert.Contains(t, c.Args, config.DefaultImage)
+		assert.Contains(t, c.Args, config.DefaultNodeImage())
 	}
 	assert.Equal(t, 2, created)
 }

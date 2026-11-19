@@ -325,7 +325,7 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 		withNsd    = "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n"
 		withoutNsd = "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"
 	)
-	noImage := mock.Result{Stderr: "Error: No such image: " + config.DefaultImage + "\n", Err: testutil.ExitCode1(t)}
+	noImage := mock.Result{Stderr: "Error: No such image: " + config.DefaultNodeImage() + "\n", Err: testutil.ExitCode1(t)}
 	hasImage := mock.Result{Stdout: "{}\n"}
 	elsewhere := func(why string) clidoctor.Check {
 		return clidoctor.Check{Name: "Docker host", Status: clidoctor.StatusWarning, Detail: "not this machine: " + why + " (unsupported)",
@@ -351,8 +351,8 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 			results:  []mock.Result{{Stdout: `{"Name":"build","Endpoints":{"docker":{"Host":"ssh://ci@build-host"}}}`}, noImage},
 			wantHost: elsewhere(`docker context "build" connects to ssh://ci@build-host, not a unix socket`),
 			wantCgroup: clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning,
-				Detail:      "nsdelegate not checked: the Docker host has no " + config.DefaultImage + " to probe it with (sind create checks it)",
-				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + config.DefaultImage},
+				Detail:      "nsdelegate not checked: the Docker host has no " + config.DefaultNodeImage() + " to probe it with (sind create checks it)",
+				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + config.DefaultNodeImage()},
 		},
 		{
 			name: "Docker Desktop without nsdelegate", dockerHost: localDockerHost,
@@ -406,7 +406,7 @@ func TestRun_DaemonElsewhere(t *testing.T) {
 			assert.Len(t, m.Calls, 1+len(tt.results))
 			for _, c := range m.Calls {
 				if c.Args[0] == "run" {
-					assert.Equal(t, []string{"run", "--rm", "--network", "none", "--entrypoint", "cat", config.DefaultImage, "/proc/self/mounts"}, c.Args)
+					assert.Equal(t, []string{"run", "--rm", "--network", "none", "--entrypoint", "cat", config.DefaultNodeImage(), "/proc/self/mounts"}, c.Args)
 				}
 			}
 		})

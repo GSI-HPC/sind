@@ -11,8 +11,11 @@ bin="$HOME/.local/bin"
 mkdir -p "$bin"
 [ -n "${GITHUB_PATH:-}" ] && echo "$bin" >>"$GITHUB_PATH"
 
-# sind from this checkout, with its version from git describe.
-make build
+# sind from this checkout, with its version from git describe. Without the
+# build's VCS stamp it defaults to the node image latest, which is pulled
+# below, also in a clean checkout of a release tag, whose vX.Y.Z image the
+# image workflow may still be building.
+GOFLAGS=-buildvcs=false make build
 mv "sind-$(go env GOOS)-$(go env GOARCH)" "$bin/sind"
 
 # mise, for the install shot: it installs the latest sind release with

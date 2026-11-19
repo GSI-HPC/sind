@@ -25,7 +25,7 @@ builds:
       # Release binaries default to the node image the image workflow
       # publishes for their tag (.github/workflows/image.yml); snapshots
       # keep latest, as no image exists for their version.
-      - -X github.com/GSI-HPC/sind/pkg/config.DefaultImage=ghcr.io/gsi-hpc/sind-node:{{ if .IsSnapshot }}latest{{ else }}{{ .Tag }}{{ end }}
+      - -X github.com/GSI-HPC/sind/pkg/config.defaultImage=ghcr.io/gsi-hpc/sind-node:{{ if .IsSnapshot }}latest{{ else }}{{ .Tag }}{{ end }}
     goos: [linux]
     goarch: [amd64, arm64]
     mod_timestamp: "{{ .CommitTimestamp }}"

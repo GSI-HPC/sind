@@ -98,7 +98,7 @@ sind requires a container image with systemd, munge, sshd, and Slurm installed. 
 ghcr.io/gsi-hpc/sind-node:v0.17.0
 ```
 
-It carries the newest Slurm release line that release supports and is published for linux/amd64 and linux/arm64. sind built from source (`go install`, `make build`) defaults to `ghcr.io/gsi-hpc/sind-node:latest` instead, the newest supported release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images]({{< relref "/container-images/building-images#official-images" >}}) for the available tags.
+It carries the newest Slurm release line that release supports and is published for linux/amd64 and linux/arm64. sind installed with `go install` at a release (`@vX.Y.Z`, or `@latest`), or built with `make build` in a clean checkout of a release tag, defaults to that release's image too; built from any other commit (`go install ...@main`, `make build` between releases) it defaults to `ghcr.io/gsi-hpc/sind-node:latest` instead, the newest supported release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images]({{< relref "/container-images/building-images#official-images" >}}) for the available tags.
 
 sind pulls the image when it creates your first cluster, and after a sind upgrade, whose default image has a new tag. Subsequent creates reuse the cached image — use `--pull` to force a fresh pull:
 

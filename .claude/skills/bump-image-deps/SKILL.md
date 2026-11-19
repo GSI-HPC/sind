@@ -13,7 +13,8 @@ libjwt, which published no release tarball for 1.18.4, by version and git commit
 Slurm's version and checksum are build args without defaults; `SLURM_RELEASES` in
 `docker-bake.hcl` sets them for each image, one entry per supported release line,
 newest line first. The first entry is also tagged `latest`, the default image of
-builds from source, and at each sind release `vX.Y.Z`, the release binaries' default.
+sind built from a commit between releases, and at each sind release `vX.Y.Z`, the
+default of sind built from that release (its binaries, `go install`, library callers).
 
 | Component | ARG | Tarball URL |
 |-----------|-----|-------------|

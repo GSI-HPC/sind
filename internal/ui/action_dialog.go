@@ -156,7 +156,7 @@ var actSpecs = map[string]actSpec{
 				d.startDefaults()
 			}
 			d.def("name", action.FreeName(d.Snap, d.Realm, "hpc"))
-			d.def("image", config.DefaultImage)
+			d.def("image", config.DefaultNodeImage())
 			if w := d.Form.Get("wait"); w != "" && w != "other" && !slices.Contains(action.Waits, w) {
 				// A time that has no button of its own.
 				d.Form.Set("wait", "other")
@@ -334,7 +334,7 @@ var actClusterSections = []actSection{
 // actImageSum sums up the image of a new cluster: its last part, and the
 // Slurm release that sind ui knows of it.
 func actImageSum(p actPreview) string {
-	image := cmp.Or(strings.TrimSpace(p.Form.Get("image")), config.DefaultImage)
+	image := cmp.Or(strings.TrimSpace(p.Form.Get("image")), config.DefaultNodeImage())
 	sum := actImageShort(image)
 	for _, i := range p.Cmd.Images {
 		if i.Image == image && i.Version != "" {
@@ -561,7 +561,7 @@ type actEff struct {
 func actEffOf(f url.Values) actEff {
 	e := actEff{Image: strings.TrimSpace(f.Get("image")), CPUs: "1", Memory: config.DefaultMemory, TmpSize: config.DefaultTmpSize}
 	if e.Image == "" {
-		e.Image = config.DefaultImage
+		e.Image = config.DefaultNodeImage()
 	}
 	if f.Get("size") == "x" {
 		e.CPUs = cmp.Or(strings.TrimSpace(f.Get("cpus")), e.CPUs)

@@ -98,7 +98,7 @@ func Stat(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist }
 // default image, with the release of the demo's new clusters, the image
 // of an older release, and one built without a label.
 var demoImages = map[string]docker.Image{
-	config.DefaultImage:                     {ID: "sha256:d1", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmNew}},
+	config.DefaultNodeImage():               {ID: "sha256:d1", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmNew}},
 	"ghcr.io/gsi-hpc/sind-node:" + slurmNew: {ID: "sha256:d1", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmNew}},
 	"ghcr.io/gsi-hpc/sind-node:" + slurmOld: {ID: "sha256:d2", Labels: docker.Labels{cluster.LabelSlurmVersion: slurmOld}},
 	"sind-node:dev":                         {ID: "sha256:d3"},

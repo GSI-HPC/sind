@@ -221,7 +221,7 @@ const (
 )
 
 func TestOfficialImageRepo(t *testing.T) {
-	assert.True(t, strings.HasPrefix(config.DefaultImage, officialImageRepo+":"), config.DefaultImage)
+	assert.True(t, strings.HasPrefix(config.DefaultNodeImage(), officialImageRepo+":"), config.DefaultNodeImage())
 }
 
 func TestCheckIdentityImage(t *testing.T) {

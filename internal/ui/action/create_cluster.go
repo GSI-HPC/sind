@@ -351,10 +351,10 @@ var movingTag = regexp.MustCompile(`^v?\d+(\.\d+)?$`)
 // PullByDefault reports whether sind ui pulls the image unless told
 // otherwise, and why: it pulls an image of a registry whose tag can move to
 // a newer image, as latest does, so that the cluster gets that image. An
-// empty image is config.DefaultImage.
+// empty image is config.DefaultNodeImage.
 func PullByDefault(image string) (bool, string) {
 	if image == "" {
-		image = config.DefaultImage
+		image = config.DefaultNodeImage()
 	}
 	if strings.Contains(image, "@") {
 		return false, "the image names a digest, which is fixed"

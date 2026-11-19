@@ -57,7 +57,7 @@ const (
 )
 
 // officialImageRepo is the repository of the official sind-node images, of
-// which config.DefaultImage is a tag.
+// which config.DefaultNodeImage returns a tag.
 const officialImageRepo = "ghcr.io/gsi-hpc/sind-node"
 
 // checkIdentityImage refuses a local sind-node image from before identity

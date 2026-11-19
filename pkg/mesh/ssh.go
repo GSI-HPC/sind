@@ -28,7 +28,7 @@ const sshVolumeLabel = "ssh-config"
 // node image, which has an ssh client and bash, and which the default
 // cluster pulls anyway. Custom node images need not have an ssh client.
 func sshImage() string {
-	return config.DefaultImage
+	return config.DefaultNodeImage()
 }
 
 // ensureSSHVolume creates the SSH config volume if it does not exist yet,

@@ -149,7 +149,7 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 	case info == nil:
 		return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning, Detail: "nsdelegate not checked: Docker is not reachable"}
 	default:
-		image := config.DefaultImage
+		image := config.DefaultNodeImage()
 		_, present, err := client.ImageLabels(ctx, image)
 		if err == nil && !present {
 			return clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusWarning,
