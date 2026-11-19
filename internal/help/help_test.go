@@ -246,6 +246,8 @@ func TestLoadRefusesFaults(t *testing.T) {
 		"empty command":        {fixture(okWords, strings.Replace(okActions, "command: sind x", "command: ''", 1), okPages, okHowtos), "action \"x\": command is empty"},
 		"empty route":          {fixture(okWords, okActions, strings.Replace(okPages, "route: /p", "route: ''", 1), okHowtos), "route is empty"},
 		"relative route":       {fixture(okWords, okActions, strings.Replace(okPages, "route: /p", "route: p", 1), okHowtos), "route must start with /"},
+		"undo none":            {fixture(okWords, strings.Replace(okActions, "undo: U", "undo: Nothing to undo", 1), okPages, okHowtos), "action \"x\": an undo that says there is none needs irreversible or nothingToUndo"},
+		"undo cannot":          {fixture(okWords, strings.Replace(okActions, "undo: U", "undo: Cannot be undone", 1), okPages, okHowtos), "needs irreversible or nothingToUndo"},
 		"empty doc":            {fixture(okWords, okActions, okPages, strings.Replace(okHowtos, "doc: d", "doc: ''", 1)), "doc is empty"},
 		"no steps":             {fixture(okWords, okActions, okPages, strings.Replace(okHowtos, "steps: [one]", "steps: []", 1)), "it has no steps"},
 		"bad id":               {fixture("- {id: A b, title: A, summary: S}\n", okActions, okPages, okHowtos), "lower case"},
@@ -347,4 +349,10 @@ func TestActionUndoText(t *testing.T) {
 	assert.Equal(t, "To undo: delete the workers.", Action{Undo: "Delete the workers"}.UndoText())
 	assert.Equal(t, "Cannot be undone.", Action{Undo: "Cannot be undone", Irreversible: true}.UndoText())
 	assert.Equal(t, ".", Action{}.UndoText())
+	assert.Equal(t, "Nothing to undo.", Action{Undo: "Nothing to undo", NothingToUndo: true}.UndoText())
+
+	text, ok := Default().Text("restart-service")
+	require.True(t, ok)
+	assert.Contains(t, text, "\nNothing to undo.\n")
+	assert.NotContains(t, text, "To undo:")
 }
