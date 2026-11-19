@@ -53,33 +53,39 @@ func (h *Help) Text(id string) (string, bool) {
 // Index returns the list of topics that sind help can print: every topic
 // but those for which skip, unless nil, reports true. sind help prints the
 // help of a command for a topic of the command's name, so it skips those.
+// The titles line up in one column, after the longest id.
 func (h *Help) Index(skip func(id string) bool) string {
-	var b strings.Builder
-	b.WriteString("Topics of sind help. Run sind help TOPIC to read one.\n")
-	section := func(title string, rows [][2]string) {
-		fmt.Fprintf(&b, "\n%s:\n", title)
-		for _, r := range rows {
-			if skip != nil && skip(r[0]) {
-				continue
+	type section struct {
+		title string
+		rows  [][2]string
+	}
+	var sections []section
+	add := func(title string, row func(i int) [2]string, n int) {
+		s := section{title: title}
+		for i := range n {
+			if r := row(i); skip == nil || !skip(r[0]) {
+				s.rows = append(s.rows, r)
 			}
-			fmt.Fprintf(&b, "  %-16s %s\n", r[0], r[1])
+		}
+		sections = append(sections, s)
+	}
+	add("How to", func(i int) [2]string { return [2]string{h.howtos[i].ID, h.howtos[i].Title} }, len(h.howtos))
+	add("Words", func(i int) [2]string { return [2]string{h.words[i].ID, h.words[i].Title} }, len(h.words))
+	add("Actions of sind ui", func(i int) [2]string { return [2]string{h.actions[i].ID, h.actions[i].Title} }, len(h.actions))
+	idWidth := 0
+	for _, s := range sections {
+		for _, r := range s.rows {
+			idWidth = max(idWidth, len(r[0]))
 		}
 	}
-	var rows [][2]string
-	for _, t := range h.howtos {
-		rows = append(rows, [2]string{t.ID, t.Title})
+	var b strings.Builder
+	b.WriteString("Topics of sind help. Run sind help TOPIC to read one.\n")
+	for _, s := range sections {
+		fmt.Fprintf(&b, "\n%s:\n", s.title)
+		for _, r := range s.rows {
+			fmt.Fprintf(&b, "  %-*s %s\n", idWidth, r[0], r[1])
+		}
 	}
-	section("How to", rows)
-	rows = nil
-	for _, w := range h.words {
-		rows = append(rows, [2]string{w.ID, w.Title})
-	}
-	section("Words", rows)
-	rows = nil
-	for _, a := range h.actions {
-		rows = append(rows, [2]string{a.ID, a.Title})
-	}
-	section("Actions of sind ui", rows)
 	return b.String()
 }
 

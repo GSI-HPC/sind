@@ -331,6 +331,19 @@ func TestIndex(t *testing.T) {
 	idx = Default().Index(func(id string) bool { return id == "power" })
 	assert.NotContains(t, idx, "\n  power ", "a topic it skips")
 	assert.Contains(t, idx, "\n  delete-realm ")
+
+	// The titles line up, one space after the longest id.
+	longest, columns := 0, map[int]bool{}
+	for _, line := range strings.Split(idx, "\n") {
+		id, _, ok := strings.Cut(strings.TrimPrefix(line, "  "), " ")
+		if !strings.HasPrefix(line, "  ") || !ok {
+			continue
+		}
+		longest = max(longest, len(id))
+		columns[len(line)-len(strings.TrimLeft(line[2+len(id):], " "))] = true
+	}
+	assert.Greater(t, longest, 16, "an id longer than the old fixed column")
+	assert.Equal(t, map[int]bool{2 + longest + 1: true}, columns)
 }
 
 func TestWrap(t *testing.T) {
