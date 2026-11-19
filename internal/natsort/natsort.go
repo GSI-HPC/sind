@@ -6,16 +6,20 @@ package natsort
 
 import (
 	"cmp"
+	"strconv"
 	"strings"
 )
 
-// Key returns a comparison key where runs of ASCII digits are
-// zero-padded to a fixed width so that lexical comparison yields natural
-// order (e.g. "worker-2" < "worker-10").
+// Key returns a comparison key in which lexical comparison yields natural
+// order (e.g. "worker-2" < "worker-10"): each run of ASCII digits becomes
+// the number of digits of its length, then its length, then the run
+// without leading zeros (10 -> 1210, 9 -> 119). A longer number then sorts
+// after a shorter one, whatever their lengths, and numbers of one length
+// by their digits. Runs that differ only in leading zeros have the same
+// key.
 func Key(s string) string {
-	const padWidth = 20
 	var b strings.Builder
-	b.Grow(len(s) + padWidth)
+	b.Grow(len(s) + 2)
 	i := 0
 	for i < len(s) {
 		if s[i] >= '0' && s[i] <= '9' {
@@ -23,10 +27,10 @@ func Key(s string) string {
 			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
 				j++
 			}
-			run := s[i:j]
-			for k := len(run); k < padWidth; k++ {
-				b.WriteByte('0')
-			}
+			run := strings.TrimLeft(s[i:j], "0")
+			n := strconv.Itoa(len(run))
+			b.WriteString(strconv.Itoa(len(n)))
+			b.WriteString(n)
 			b.WriteString(run)
 			i = j
 			continue
