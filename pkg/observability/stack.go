@@ -127,12 +127,15 @@ var startOrder = []Service{ServicePrometheus, ServiceLoki, ServiceAlloy, Service
 // EnsureStack brings up the realm's stack on the mesh network: it creates
 // the data volumes and containers that do not exist yet, with alloyConfig
 // as Alloy's first configuration, recreates those of another fingerprint
-// (another sind version's) and keeps their volumes, starts those that are
-// stopped, and waits until all four are ready. dnsIP is the mesh DNS
-// container's pinned address, from which Grafana, Prometheus and Loki take
-// theirs (see mesh.ServiceIP); empty for a mesh without one, whose stack
-// gets dynamic addresses. It reports whether it created or started a
-// container.
+// (another sind version's) and those that never started, and keeps their
+// volumes, starts those that are stopped, and waits until all four are
+// ready. A container gets its configuration after its docker create, so an
+// EnsureStack killed or failed in between leaves one without it, which
+// never started; one that never started has nothing to lose. dnsIP is the
+// mesh DNS container's pinned address, from which Grafana, Prometheus and
+// Loki take theirs (see mesh.ServiceIP); empty for a mesh without one,
+// whose stack gets dynamic addresses. It reports whether it created or
+// started a container.
 func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (changed bool, err error) {
 	log := sindlog.From(ctx)
 	fp := m.Fingerprint()
@@ -152,9 +155,9 @@ func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (c
 		if err != nil {
 			return changed, fmt.Errorf("checking %s container: %w", s, err)
 		}
-		if info != nil && info.Labels[LabelVersion] != fp {
+		if info != nil && (info.Labels[LabelVersion] != fp || info.Status == docker.StateCreated) {
 			log.InfoContext(ctx, "recreating monitoring container", "container", string(name),
-				"fingerprint", info.Labels[LabelVersion], "want", fp)
+				"fingerprint", info.Labels[LabelVersion], "want", fp, "state", string(info.Status))
 			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(ctx, name)); err != nil {
 				return changed, fmt.Errorf("removing %s container: %w", s, err)
 			}
@@ -179,8 +182,9 @@ func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (c
 // Start starts the stack's containers that are stopped, as after a host
 // reboot, and waits until the stack is ready. It creates nothing: a realm
 // without any of the containers has no stack, and found is false then. A
-// stack that lacks some of its containers is an error, as it cannot get
-// ready; EnsureStack creates them again.
+// stack that lacks some of its containers, or has one that never started,
+// which may lack its configuration (see EnsureStack), is an error, as it
+// cannot get ready; EnsureStack creates them again.
 func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 	var missing []string
 	for _, s := range startOrder {
@@ -194,6 +198,10 @@ func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 			continue
 		}
 		found = true
+		if info.Status == docker.StateCreated {
+			missing = append(missing, string(name)+" (never started)")
+			continue
+		}
 		if info.Status == docker.StateRunning {
 			continue
 		}

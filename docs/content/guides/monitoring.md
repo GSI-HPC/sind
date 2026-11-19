@@ -181,7 +181,7 @@ MariaDB's own messages reach the journal only when its error log goes there, as 
 - **`sind create worker`** adds the new workers to the stack, and **`sind delete worker`** and **`sind delete cluster`** take their nodes out. The metrics and logs collected from them stay until they expire.
 - **Deleting the realm's last cluster** removes the stack with the mesh, its data included. The stack stays as long as the realm has a cluster, monitored or not.
 - **After a host reboot** the stack is stopped like the nodes; `sind power on` starts it again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
-- **After a sind upgrade** that changes the stack's images, configuration or dashboards, the next monitored `sind create cluster` or `sind create worker` replaces the stack's containers and keeps their data.
+- **After a sind upgrade** that changes the stack's images, configuration or dashboards, the next monitored `sind create cluster` or `sind create worker` replaces the stack's containers and keeps their data. It also replaces a container that never started, as an interrupted create can leave one without its configuration.
 - **Retention**: Prometheus keeps 7 days of metrics, at most 2 GB, and Loki 7 days of logs.
 
 ## In CI

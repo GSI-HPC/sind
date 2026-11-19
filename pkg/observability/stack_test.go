@@ -139,6 +139,26 @@ func TestEnsureStack_RecreatesOtherFingerprint(t *testing.T) {
 	assert.Contains(t, f.volumes, "sind-grafana", "the volume is kept")
 }
 
+// TestEnsureStack_RecreatesUnconfigured covers a container whose
+// configuration could not be copied: it never started, and the next
+// EnsureStack creates it again with its files.
+func TestEnsureStack_RecreatesUnconfigured(t *testing.T) {
+	m, f := newTestManager(t)
+	f.fail["cp - sind-prometheus"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
+	_, err := m.EnsureStack(t.Context(), "", "")
+	require.ErrorContains(t, err, "writing prometheus configuration")
+	require.Contains(t, f.containers, "sind-prometheus")
+	assert.Empty(t, f.containers["sind-prometheus"].files)
+	delete(f.fail, "cp - sind-prometheus")
+
+	changed, err := m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+	assert.True(t, changed)
+	prometheus := f.containers["sind-prometheus"]
+	assert.Equal(t, prometheusConfig, prometheus.files[prometheusConfigPath])
+	assert.Equal(t, docker.StateRunning, prometheus.state)
+}
+
 func TestEnsureStack_Errors(t *testing.T) {
 	exit := func(t *testing.T) mock.Result { return mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)} }
 	tests := []struct {
@@ -392,6 +412,13 @@ func TestStart_Errors(t *testing.T) {
 	found, err := m.Start(t.Context())
 	require.EqualError(t, err, "the monitoring stack lacks sind-loki: creating a monitored cluster creates it again")
 	assert.True(t, found)
+
+	// A container that never started may lack its configuration: Start
+	// leaves it to EnsureStack.
+	f.containers["sind-grafana"].state = docker.StateCreated
+	_, err = m.Start(t.Context())
+	require.EqualError(t, err, "the monitoring stack lacks sind-loki, sind-grafana (never started): creating a monitored cluster creates it again")
+	assert.Equal(t, docker.StateCreated, f.containers["sind-grafana"].state)
 
 	f.fail["inspect sind-prometheus"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())
