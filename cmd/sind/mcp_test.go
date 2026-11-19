@@ -28,6 +28,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMCPStream_Timeouts checks that the stream closes connections and
+// MCP sessions that stay idle, so that clients without the token cannot
+// hold them open.
+func TestMCPStream_Timeouts(t *testing.T) {
+	s := newMCPStreamServer(http.NotFoundHandler())
+	assert.Equal(t, 10*time.Second, s.ReadHeaderTimeout)
+	assert.Equal(t, 2*time.Minute, s.IdleTimeout)
+	assert.Zero(t, s.ReadTimeout, "no limit on a request, as a tool call can run long")
+	assert.Zero(t, s.WriteTimeout, "no limit on an answer, as an event stream can run long")
+	assert.Equal(t, 30*time.Minute, mcpStreamOptions().SessionTimeout)
+}
+
 func TestMCPStream_ListensOnLocalhost(t *testing.T) {
 	stream, _, err := NewRootCommand().Find([]string{"mcp", "stream"})
 	require.NoError(t, err)
