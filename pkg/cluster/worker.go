@@ -230,14 +230,20 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 	shape = shape.override(opts)
 
-	if err := checkWorkerImage(ctx, client, opts, managed, slurmVersion); err != nil {
+	if err := pullWorkerImage(ctx, client, opts); err != nil {
 		return nil, err
 	}
 	// The workers of a monitored cluster are monitored too: a managed
-	// worker's slurmd must serve the HTTP endpoint the stack probes.
+	// worker's slurmd must serve the HTTP endpoint the stack probes. An
+	// image given with --image must have the cluster's Slurm version; the
+	// newest worker's has it already.
 	monitored := Monitored(realm, infra.controller)
-	if monitored && managed {
-		if err := probeWorkerImage(ctx, client, shape.Image, slurmConf); err != nil {
+	if managed {
+		version := ""
+		if opts.Image != "" {
+			version = slurmVersion
+		}
+		if err := checkWorkerSlurm(ctx, client, opts.ClusterName, shape.Image, version, monitored, slurmConf); err != nil {
 			return nil, err
 		}
 	}
@@ -377,16 +383,35 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	return nodes, nil
 }
 
-// probeWorkerImage checks that the image of new managed workers of a
-// monitored cluster serves slurmd's HTTP endpoint (see
-// slurm.ImageInfo.MonitoringProblems), looking for plugins in the
+// checkWorkerSlurm checks the slurmd of image, the image of new managed
+// workers of cluster clusterName, with one slurm.ProbeImage, when there is
+// something to check. A worker runs slurmd, not slurmctld, so the probe
+// asks slurmd alone. With a version, the image must have slurmd of that
+// version, as slurmd may not be newer than slurmctld and sind labels every
+// node with the cluster's version. On a monitored cluster its slurmd must
+// serve the HTTP endpoint the stack probes (see
+// slurm.ImageInfo.MonitoringProblems), with plugins looked for in the
 // PluginDir slurmConf sets.
-func probeWorkerImage(ctx context.Context, client *docker.Client, image string, slurmConf config.Section) error {
+func checkWorkerSlurm(ctx context.Context, client *docker.Client, clusterName, image, version string, monitored bool, slurmConf config.Section) error {
+	if version == "" && !monitored {
+		return nil
+	}
 	pluginDir, _ := slurmConf.Parameter("PluginDir")
 	req := slurm.ProbeRequest{Daemons: []string{slurm.Slurmd}, PluginDir: pluginDir}
 	info, err := slurm.ProbeImage(ctx, client, image, req)
 	if err != nil {
 		return err
+	}
+	if version != "" {
+		if len(info.Missing) > 0 {
+			return fmt.Errorf("image %s has no slurmd, which managed workers run", image)
+		}
+		if info.Version != version {
+			return fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", image, info.Version, clusterName, version)
+		}
+	}
+	if !monitored {
+		return nil
 	}
 	if problems := info.MonitoringProblems(req); len(problems) > 0 {
 		return errorWith(ErrImageUnsupported, "image %s cannot serve monitoring: %s", image, strings.Join(problems, "; "))
@@ -520,38 +545,23 @@ func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mes
 	return
 }
 
-// checkWorkerImage pulls an image given with --image, once: when opts.Pull
-// asks for it, or else when the daemon does not have it, so that no worker
-// container's docker create pulls it (see startPull). It then checks the
-// image for managed workers of a cluster whose Slurm version sind knows:
-// it runs slurmctld -V in the image and refuses a version other than the
-// cluster's, as slurmd may not be newer than slurmctld and sind labels
-// every node with the cluster's version.
-func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions, managed bool, clusterVersion string) error {
-	if opts.Image != "" {
-		images := []string{opts.Image}
-		var err error
-		if !opts.Pull {
-			images, err = missingImages(ctx, client, images)
-		}
-		if err == nil && len(images) > 0 {
-			err = pullImages(ctx, client, images)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	if opts.Image == "" || !managed || clusterVersion == "" {
+// pullWorkerImage pulls an image given with --image, once: when opts.Pull
+// asks for it, or else when the daemon does not have it, so that neither
+// the image's check (checkWorkerSlurm) nor a worker container's docker
+// create pulls it (see startPull).
+func pullWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions) error {
+	if opts.Image == "" {
 		return nil
 	}
-	version, err := slurm.DiscoverVersion(ctx, client, opts.Image)
-	if err != nil {
-		return fmt.Errorf("discovering the Slurm version of %s: %w", opts.Image, err)
+	images := []string{opts.Image}
+	var err error
+	if !opts.Pull {
+		images, err = missingImages(ctx, client, images)
 	}
-	if version != clusterVersion {
-		return fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", opts.Image, version, opts.ClusterName, clusterVersion)
+	if err == nil && len(images) > 0 {
+		err = pullImages(ctx, client, images)
 	}
-	return nil
+	return err
 }
 
 // settingLabels are the labels of the controller that give new workers

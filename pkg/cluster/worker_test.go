@@ -24,6 +24,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -379,9 +380,9 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		case isNsdelegateProbe(args):
 			return mock.Result{Stdout: probeMounts}
 
-		// slurmctld -V in an explicit --image
+		// The probe of slurmd in an explicit --image
 		case args[0] == "run" && args[1] == "--rm":
-			return mock.Result{Stdout: "slurm 25.11.0\n"}
+			return mock.Result{Stdout: "daemon slurmd slurm 25.11.0\n"}
 
 		// ImageLabels: the image is not local
 		case args[0] == "image" && args[1] == "inspect":
@@ -1280,7 +1281,7 @@ func TestWorkerAdd_ExplicitImage(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, args, "custom:v1", "should use explicit image")
 	assert.NotContains(t, args, "img:1", "should not use controller image")
-	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v1", "slurmctld", "-V"), "Slurm version checked")
+	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v1"), "Slurm version checked")
 }
 
 func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
@@ -1292,7 +1293,7 @@ func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, countCalls(m.Calls, "pull", "custom:v2"))
-	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v2", "slurmctld", "-V"))
+	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v2"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
 	assert.NotContains(t, args, "--pull")
@@ -1304,7 +1305,7 @@ func TestWorkerAdd_ExplicitImageVersionMismatch(t *testing.T) {
 	base := workerAddOnCall(t)
 	onCall := func(args []string, stdin string) mock.Result {
 		if args[0] == "run" {
-			return mock.Result{Stdout: "slurm 26.05.6\n"}
+			return mock.Result{Stdout: "daemon slurmd slurm 26.05.6\n"}
 		}
 		return base(args, stdin)
 	}
@@ -1330,8 +1331,48 @@ func TestWorkerAdd_ExplicitImageVersionError(t *testing.T) {
 		ClusterName: "dev", Count: 1, Image: "custom:v1",
 	})
 
-	require.EqualError(t, err, "discovering the Slurm version of custom:v1: running slurmctld -V: pull access denied")
+	require.EqualError(t, err, "probing image custom:v1: pull access denied")
 	assert.Zero(t, countCalls(m.Calls, "create"))
+}
+
+func TestWorkerAdd_ExplicitImageWithoutSlurmctld(t *testing.T) {
+	// A worker runs slurmd alone: an image without slurmctld serves it,
+	// one without slurmd does not.
+	for _, tt := range []struct{ probe, wantErr string }{
+		{"daemon slurmd slurm 25.11.0\n", ""},
+		{"missing slurmd\n", "image slurmd-only:1 has no slurmd, which managed workers run"},
+	} {
+		base := workerAddOnCall(t)
+		onCall := func(args []string, stdin string) mock.Result {
+			if args[0] == "run" && slices.Contains(args, "slurmctld") {
+				return mock.Result{Stderr: "exec: \"slurmctld\": executable file not found in $PATH\n", Err: testutil.ExitCode1(t)}
+			}
+			if args[0] == "run" && slices.Contains(args, "slurmd-only:1") {
+				return mock.Result{Stdout: tt.probe}
+			}
+			return base(args, stdin)
+		}
+
+		m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "slurmd-only:1"})
+
+		if tt.wantErr != "" {
+			require.EqualError(t, err, tt.wantErr)
+			continue
+		}
+		require.NoError(t, err)
+		assert.Equal(t, 1, countSlurmdProbes(m.Calls, "slurmd-only:1"))
+	}
+}
+
+// countSlurmdProbes counts the probes of slurmd (slurm.ProbeImage) in image.
+func countSlurmdProbes(calls []mock.Call, image string) int {
+	n := 0
+	for _, c := range calls {
+		if i := slices.Index(c.Args, image); c.Args[0] == "run" && i > 0 && c.Args[i-1] == "/bin/sh" && c.Args[len(c.Args)-1] == slurm.Slurmd {
+			n++
+		}
+	}
+	return n
 }
 
 // TestWorkerAdd_NoNsdelegate checks that a Docker host without nsdelegate

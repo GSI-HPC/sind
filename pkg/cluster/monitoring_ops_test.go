@@ -102,6 +102,18 @@ func TestWorkerAdd_MonitoredUnsupportedImage(t *testing.T) {
 	require.ErrorContains(t, err, "probing image")
 }
 
+func TestWorkerAdd_MonitoredExplicitImage(t *testing.T) {
+	// One probe of the image checks its version and its monitoring.
+	f := newStackFake(t).withStack()
+	base := monitoredController(t, stackFirst(f, workerAddOnCall(t)))
+	m, _, err := addWorkers(t, base, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "custom:v1"})
+	require.EqualError(t, err, `image custom:v1 has Slurm 26.05.6, but cluster "dev" runs Slurm 25.11.0: managed workers need the cluster's version`)
+	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v1"))
+	assert.False(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+		return c.Args[0] == "run" && slices.Contains(c.Args, "slurmctld")
+	}), "no slurmctld -V")
+}
+
 func TestWorkerAdd_MonitoredStackErrors(t *testing.T) {
 	for _, prefix := range []string{"network inspect sind-mesh", "inspect sind-grafana sind-prometheus sind-loki", "exec sind-alloy sh"} {
 		t.Run(prefix, func(t *testing.T) {
