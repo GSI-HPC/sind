@@ -26,9 +26,9 @@ const powerConcurrency = 8
 
 // powerTarget is a node a power command acts on: its container, and the
 // name and role a display names its progress target by. The name is the
-// node's as a node argument writes it: the short name in the default
-// cluster, <short name>.<cluster> in another, so that the nodes of a
-// command that spans clusters, worker-0 and worker-0.dev, are told apart.
+// node's as a node argument writes it (nodeArgName), so that the nodes of
+// a command that spans clusters, worker-0 and worker-0.dev, are told
+// apart.
 type powerTarget struct {
 	container docker.ContainerName
 	node      string
@@ -284,6 +284,17 @@ func forEachContainer(ctx context.Context, targets []powerTarget, verb string, o
 	return done, err
 }
 
+// nodeArgName returns the name of a node as a node argument writes it:
+// the short name in the default cluster, <short name>.<cluster> in
+// another. A command that spans clusters names its progress targets so,
+// to tell worker-0 and worker-0.dev apart.
+func nodeArgName(shortName, clusterName string) string {
+	if clusterName == config.DefaultClusterName {
+		return shortName
+	}
+	return shortName + "." + clusterName
+}
+
 // uniqueNames returns names without repeats, each at its first place, as
 // a node named twice is acted on once.
 func uniqueNames(names []string) []string {
@@ -317,10 +328,6 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 		existing[e.Name] = e
 	}
 
-	suffix := ""
-	if clusterName != config.DefaultClusterName {
-		suffix = "." + clusterName
-	}
 	shortNames = uniqueNames(shortNames)
 	targets := make([]powerTarget, 0, len(shortNames))
 	for _, name := range shortNames {
@@ -329,7 +336,7 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 		if !ok {
 			return nil, errorWith(ErrNodeNotFound, "node %q not found in cluster %q", name, clusterName)
 		}
-		targets = append(targets, powerTarget{container: cn, node: name + suffix, role: e.Labels[LabelRole]})
+		targets = append(targets, powerTarget{container: cn, node: nodeArgName(name, clusterName), role: e.Labels[LabelRole]})
 	}
 	return targets, nil
 }

@@ -78,11 +78,11 @@ func TestWaitNodes(t *testing.T) {
 	require.NoError(t, err)
 	w.Finish()
 	assert.Equal(t, `step readiness total=4 [fold]: ok
-  target controller role=controller: ok
+  target controller.dev role=controller: ok
     wait ready: ok
-  target db role=db: ok
+  target db.dev role=db: ok
     wait ready: ok
-  target worker-[0-1] role=worker: ok
+  target worker-[0-1].dev role=worker: ok
     wait ready: ok
   wait ready: ok
 `, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""))
@@ -107,7 +107,7 @@ func TestWaitNodes_Twice(t *testing.T) {
 	require.NoError(t, err)
 	w.Finish()
 	assert.Equal(t, `step readiness total=1 [fold]: ok
-  target worker-0 role=worker: ok
+  target worker-0.dev role=worker: ok
     wait ready: ok
   wait ready: ok
 `, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""), "a node named twice is waited for once")

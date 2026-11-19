@@ -31,8 +31,9 @@ import (
 // running controller to register with: without one the wait fails at
 // once. interval is the delay between probe rounds, as for Create.
 //
-// The wait is the progress step "readiness", with a target for each node
-// and, after them, the wait for the workers' registration.
+// The wait is the progress step "readiness", with a target for each node,
+// named as the power commands name it (nodeArgName), and, after them, the
+// wait for the workers' registration.
 func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string, wait, interval time.Duration) (err error) {
 	if len(shortNames) == 0 {
 		return nil
@@ -81,7 +82,11 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 	sctx, end := startStep(ctx, "readiness", progress.Flagged(progress.FlagFold), progress.Total(len(nodes)))
 	defer func() { end(err) }()
 	g, gctx := errgroup.WithContext(sctx)
-	ctxs, targets := startTargets(gctx, shortNames, func(i int) string { return nodes[i].Labels[LabelRole] })
+	names := make([]string, len(shortNames))
+	for i, name := range shortNames {
+		names[i] = nodeArgName(name, clusterName)
+	}
+	ctxs, targets := startTargets(gctx, names, func(i int) string { return nodes[i].Labels[LabelRole] })
 	for i, c := range nodes {
 		g.Go(func() (err error) {
 			targets[i].Run()
