@@ -123,7 +123,8 @@ func (e *Events) Run(ctx context.Context) {
 var errStreamEnded = errors.New("stream ended")
 
 // stream runs one docker events process and publishes its events until it
-// ends, which it reports as an error, or ctx does.
+// ends, which it reports as an error, or ctx does. The error of a stream
+// whose docker command failed says why, in docker's words.
 func (e *Events) stream(ctx context.Context) error {
 	proc, err := e.Exec.Start(ctx, "docker", EventsArgs()...)
 	if err != nil {
@@ -162,8 +163,8 @@ func (e *Events) stream(ctx context.Context) error {
 			if !ok {
 				flush()
 				<-done
-				if readErr != nil {
-					return readErr
+				if err := errors.Join(readErr, docker.ClassifyUnreachable(proc.Close())); err != nil {
+					return err
 				}
 				return errStreamEnded
 			}

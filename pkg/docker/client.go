@@ -144,7 +144,7 @@ func (c *Client) call(ctx context.Context, args []string, exec func(context.Cont
 		runCtx = cmdexec.WithStdoutAsData(ctx)
 	}
 	stdout, stderr, err := exec(runCtx)
-	err = classifyUnreachable(err)
+	err = ClassifyUnreachable(err)
 	var end []progress.Option
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok {
 		end = append(end, progress.Exit(exitErr.ExitCode()))
@@ -333,10 +333,12 @@ func (e *UnreachableError) Unwrap() error { return e.Err }
 // ("error during connect: …").
 var unreachable = regexp.MustCompile(`^(docker: )?(cannot connect to the docker daemon|failed to connect to the docker api|permission denied while trying to connect to the docker|error during connect)`)
 
-// classifyUnreachable returns err as an *UnreachableError when it says the
+// ClassifyUnreachable returns err as an *UnreachableError when it says the
 // docker CLI is missing or could not reach the daemon, and unchanged
-// otherwise.
-func classifyUnreachable(err error) error {
+// otherwise. Every Client call classifies its error with it; callers that
+// run docker without a Client, such as a stream's (cmdexec.Process.Close),
+// call it themselves.
+func ClassifyUnreachable(err error) error {
 	if errors.Is(err, exec.ErrNotFound) {
 		return &UnreachableError{Err: err, Reason: "docker CLI not found in PATH"}
 	}

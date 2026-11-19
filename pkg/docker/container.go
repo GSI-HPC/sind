@@ -445,7 +445,7 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 // docker CLI exits 1 too when the daemon refuses the exec (the container is
 // missing, stopped or paused), and says so on stderr, where the inner
 // command has written nothing by then. A daemon that cannot be reached is
-// ErrUnreachable already (classifyUnreachable).
+// ErrUnreachable already (ClassifyUnreachable).
 func execFailed(stderr string) bool {
 	return strings.HasPrefix(strings.TrimSpace(stderr), "Error response from daemon:")
 }

@@ -173,16 +173,17 @@ func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 
 // runMonitor runs a monitor on proc's stdout until its stream ends or ctx
 // is cancelled, which closes the stream to unblock it. A stream that ends
-// while ctx runs is a monitor error: fail, with the stream's end.
+// while ctx runs is a monitor error: fail, with the stream's end and the
+// error of the docker command, which says why it failed.
 func (w *Watcher) runMonitor(ctx context.Context, proc *cmdexec.Process, source string,
 	run func(context.Context, io.Reader, chan<- Event) error, fail Event) {
 	w.wg.Go(func() {
-		defer func() { _ = proc.Close() }()
 		stop := context.AfterFunc(ctx, func() { _ = proc.Stdout.Close() })
-		defer stop()
 		err := run(ctx, proc.Stdout, w.internalCh)
+		stop()
+		exitErr := docker.ClassifyUnreachable(proc.Close())
 		if ctx.Err() == nil {
-			fail.Detail, fail.Err = streamEnd(source, err)
+			fail.Detail, fail.Err = streamEnd(source, err, exitErr)
 			w.emit(ctx, fail)
 		}
 	})
@@ -194,10 +195,11 @@ func (w *Watcher) runMonitor(ctx context.Context, proc *cmdexec.Process, source 
 var errStreamEnded = errors.New("stream ended")
 
 // streamEnd returns the detail and the error of the EventMonitorError for a
-// monitor stream that stopped with err, nil when it ended cleanly.
-func streamEnd(source string, err error) (string, error) {
-	if err != nil {
-		return source + " stream failed", err
+// monitor stream whose reading stopped with readErr and whose command
+// exited with exitErr, both nil when it ended cleanly.
+func streamEnd(source string, readErr, exitErr error) (string, error) {
+	if readErr != nil || exitErr != nil {
+		return source + " stream failed", errors.Join(readErr, exitErr)
 	}
 	return source + " stream ended", errStreamEnded
 }
@@ -221,7 +223,7 @@ func (w *Watcher) broadcastLoop(ctx context.Context) {
 	for {
 		select {
 		case ev := <-w.internalCh:
-			log.Log(ctx, sindlog.LevelTrace, "event", "kind", ev.Kind, "node", ev.Node, "unit", ev.Unit, "detail", ev.Detail)
+			log.Log(ctx, sindlog.LevelTrace, "event", "kind", ev.Kind, "node", ev.Node, "unit", ev.Unit, "detail", ev.Detail, "err", ev.Err)
 			w.mu.Lock()
 			for _, sub := range w.subscribers {
 				if !sub.wants(ev) {

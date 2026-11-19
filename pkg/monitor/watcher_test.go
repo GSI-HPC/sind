@@ -6,10 +6,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -322,4 +326,38 @@ func TestWatcher_Emit_CtxDoneWhenChannelFull(t *testing.T) {
 	}
 
 	assert.Equal(t, cap(w.internalCh), len(w.internalCh), "no slot should have been consumed")
+}
+
+// failedStream is the stdout of a docker command that failed: it ends at
+// once, and closing the Process returns the command's error.
+type failedStream struct {
+	io.Reader
+	err error
+}
+
+func (s failedStream) Close() error { return s.err }
+
+// TestWatcher_MonitorStreamExitError checks that the monitor error of a
+// stream whose docker command failed carries the command's error, as a
+// Client call classifies it.
+func TestWatcher_MonitorStreamExitError(t *testing.T) {
+	unreachable := cmdexec.WrapExitError(testutil.ExitCode1(t),
+		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n")
+	m := &mock.Executor{OnStart: func([]string) mock.StreamResult {
+		return mock.StreamResult{Reader: failedStream{Reader: strings.NewReader(""), err: unreachable}}
+	}}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	sub := w.Subscribe()
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, w.Start(ctx, nil))
+	t.Cleanup(func() {
+		cancel()
+		w.Wait()
+	})
+
+	ev := next(t, sub)
+	assert.Equal(t, EventMonitorError, ev.Kind)
+	assert.Equal(t, "docker events stream failed", ev.Detail)
+	require.ErrorIs(t, ev.Err, docker.ErrUnreachable)
+	assert.ErrorContains(t, ev.Err, "Cannot connect to the Docker daemon")
 }

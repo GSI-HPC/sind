@@ -17,8 +17,11 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -275,4 +278,26 @@ func TestReadEventsStopsWithContext(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "readEvents did not return")
 	}
+}
+
+// failedStream is the stdout of a docker command that failed: it ends at
+// once, and closing the Process returns the command's error.
+type failedStream struct {
+	io.Reader
+	err error
+}
+
+func (s failedStream) Close() error { return s.err }
+
+// TestEventsStreamExitError checks that a stream whose docker command
+// failed ends with the command's error, as a Client call classifies it.
+func TestEventsStreamExitError(t *testing.T) {
+	f := newEventsFixture(t)
+	f.handle(func([]string) mock.StreamResult {
+		return mock.StreamResult{Reader: failedStream{Reader: strings.NewReader(""),
+			err: cmdexec.WrapExitError(testutil.ExitCode1(t), "permission denied while trying to connect to the docker API at unix:///var/run/docker.sock\n")}}
+	})
+	err := f.ev.stream(t.Context())
+	require.ErrorIs(t, err, docker.ErrUnreachable)
+	assert.ErrorContains(t, err, "permission denied")
 }
