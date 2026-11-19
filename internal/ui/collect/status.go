@@ -134,6 +134,11 @@ func compareKeys(a, b store.StatusKey) int {
 //     lists it, every All while a page is open (Viewers), and After an
 //     event of the cluster.
 //
+// The reads run in the background, one at a time for each cluster, so that
+// a slow read, such as a sinfo that waits for its slurmctld, holds up the
+// reads of its own cluster alone. A read asked for while one of the same
+// cluster goes on follows it.
+//
 // The status of a cluster that the store no longer lists, and that no page
 // watches, is dropped. With the status of each cluster it reads what Slurm
 // says (cluster.GetSlurmInfo), as every page counts a worker that Slurm
@@ -190,6 +195,9 @@ func (s *Status) Run(ctx context.Context) {
 		paused, resume = s.Viewers.None, s.Viewers.arrivals()
 	}
 
+	reads := &statusReads{status: s, done: make(chan store.StatusKey), busy: map[store.StatusKey]bool{}}
+	defer reads.wg.Wait()
+
 	// seen are the clusters of the store that were read, so that one it
 	// newly lists is read at once.
 	seen := map[store.StatusKey]bool{}
@@ -197,7 +205,7 @@ func (s *Status) Run(ctx context.Context) {
 	for _, k := range read {
 		seen[k] = true
 	}
-	s.readEach(ctx, read)
+	reads.start(ctx, read)
 	// due are the clusters to read, and when.
 	due := map[store.StatusKey]time.Time{}
 	for {
@@ -262,6 +270,8 @@ func (s *Status) Run(ctx context.Context) {
 				}
 			}
 		case <-timerC:
+		case k := <-reads.done:
+			read = reads.finished(k)
 		}
 		if timer != nil {
 			timer.Stop()
@@ -273,8 +283,51 @@ func (s *Status) Run(ctx context.Context) {
 				delete(due, k)
 			}
 		}
-		s.readEach(ctx, read)
+		reads.start(ctx, read)
 	}
+}
+
+// statusReads are the reads of Status that go on. Only the loop of Run
+// uses busy.
+type statusReads struct {
+	status *Status
+	wg     sync.WaitGroup
+	// done gets the cluster of each read that ended.
+	done chan store.StatusKey
+	// busy holds the clusters whose read goes on, true for one that is to
+	// be read again after it.
+	busy map[store.StatusKey]bool
+}
+
+// start reads each cluster once, in the background, but one whose read
+// goes on: that one is read again once it ends.
+func (r *statusReads) start(ctx context.Context, keys []store.StatusKey) {
+	slices.SortFunc(keys, compareKeys)
+	for _, k := range slices.Compact(keys) {
+		if _, ok := r.busy[k]; ok {
+			r.busy[k] = true
+			continue
+		}
+		r.busy[k] = false
+		r.wg.Go(func() {
+			r.status.read(ctx, k)
+			select {
+			case r.done <- k:
+			case <-ctx.Done():
+			}
+		})
+	}
+}
+
+// finished notes that the read of k ended, and returns k if it is to be
+// read again.
+func (r *statusReads) finished(k store.StatusKey) []store.StatusKey {
+	again := r.busy[k]
+	delete(r.busy, k)
+	if again {
+		return []store.StatusKey{k}
+	}
+	return nil
 }
 
 // keep returns the clusters whose status the store keeps: the ones it
@@ -295,17 +348,6 @@ func earliest(due map[store.StatusKey]time.Time) (time.Time, bool) {
 		}
 	}
 	return first, found
-}
-
-// readEach reads the status of the clusters at once, each once.
-func (s *Status) readEach(ctx context.Context, keys []store.StatusKey) {
-	slices.SortFunc(keys, compareKeys)
-	keys = slices.Compact(keys)
-	var wg sync.WaitGroup
-	for _, k := range keys {
-		wg.Go(func() { s.read(ctx, k) })
-	}
-	wg.Wait()
 }
 
 // read reads the status of one cluster into the store and what Slurm says

@@ -3,11 +3,16 @@
 package collect
 
 import (
+	"context"
+	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -303,16 +308,72 @@ func TestEarliest(t *testing.T) {
 	assert.Equal(t, now, at)
 }
 
-func TestStatusDefaultsAndReadEachDeduplicates(t *testing.T) {
+func TestStatusDefaultsAndReadsDeduplicate(t *testing.T) {
 	f := newStatusFixture(t)
 	f.status.Every, f.status.After = 0, 0
 	f.watched.Watch([]store.Topic{devKey.Topic()})
 	n := f.reads()
-	f.status.readEach(t.Context(), []store.StatusKey{devKey, devKey})
-	assert.Equal(t, n+1, f.reads())
+	reads := &statusReads{status: f.status, done: make(chan store.StatusKey, 1), busy: map[store.StatusKey]bool{}}
+	reads.start(t.Context(), []store.StatusKey{devKey, devKey})
+	reads.start(t.Context(), []store.StatusKey{devKey})
+	assert.Equal(t, []store.StatusKey{devKey}, reads.finished(<-reads.done), "asked for while it went on: once more")
+	reads.wg.Wait()
+	assert.Equal(t, n+1, f.reads(), "one read at a time")
+	reads.start(t.Context(), []store.StatusKey{devKey})
+	assert.Empty(t, reads.finished(<-reads.done))
+	assert.Empty(t, reads.busy)
+
+	// A read that ends after Run did tells nobody.
+	ctx, cancel := cancelled(t.Context())
+	defer cancel()
+	reads.done = make(chan store.StatusKey)
+	reads.start(ctx, []store.StatusKey{prodKey})
+	reads.wg.Wait()
+
 	stop := start(t, f.status.Run)
 	f.fake.settle()
 	stop()
+}
+
+// slowSinfo is the executor of the fake, but that the sinfo of the nodes,
+// the first of a read, in the container node waits until gate closes.
+type slowSinfo struct {
+	*mock.Executor
+	node string
+	gate chan struct{}
+	held atomic.Int32
+}
+
+func (e *slowSinfo) Run(ctx context.Context, name string, args ...string) (string, string, error) {
+	if slices.Contains(args, "sinfo") && slices.Contains(args, "--Node") && slices.Contains(args, e.node) {
+		e.held.Add(1)
+		select {
+		case <-e.gate:
+		case <-ctx.Done():
+		}
+	}
+	return e.Executor.Run(ctx, name, args...)
+}
+
+// A sinfo that takes long holds up its own cluster alone: the other pages
+// get their status, and a read asked for meanwhile follows it.
+func TestStatusSlowSlurmHoldsUpItsClusterAlone(t *testing.T) {
+	f := newStatusFixture(t)
+	slow := &slowSinfo{Executor: f.fake.exec, node: "sind-prod-controller", gate: make(chan struct{})}
+	f.status.Client = docker.NewClient(slow)
+	start(t, f.status.Run)
+	f.watched.Watch([]store.Topic{prodKey.Topic()})
+	waitFor(t, "sinfo of prod", func() bool { return slow.held.Load() == 1 })
+
+	f.bus.Notify(Event{Kind: KindRefresh, Realm: "sind", Cluster: "prod"})
+	f.watched.Watch([]store.Topic{devKey.Topic()})
+	waitFor(t, "dev while prod waits for sinfo", func() bool { return f.st.Snapshot().Slurm("sind", "dev") != nil })
+	assert.Nil(t, f.st.Snapshot().Slurm("sind", "prod"))
+	assert.EqualValues(t, 1, slow.held.Load(), "prod is read once at a time")
+
+	close(slow.gate)
+	waitFor(t, "prod", func() bool { return f.st.Snapshot().Slurm("sind", "prod") != nil })
+	waitFor(t, "prod read again for the refresh", func() bool { return slow.held.Load() == 2 })
 }
 
 func TestStatusReadsEveryListedCluster(t *testing.T) {
