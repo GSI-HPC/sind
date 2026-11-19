@@ -223,7 +223,10 @@ type nodeResult struct {
 // before calling Create, and apply the config's defaults
 // (config.Cluster.ApplyDefaults). Create validates the config first, and
 // refuses a config realm other than meshMgr.Realm, the realm it creates the
-// cluster in. The context deadline controls the overall timeout;
+// cluster in. The context deadline controls the overall timeout, except
+// for the writes of the mesh DNS, known_hosts and sind-nodes.conf, which
+// ignore it so that they are not cut short, and may outlive it by up to
+// RollbackTimeout;
 // readinessInterval controls the polling interval for readiness probes, and
 // zero or less means DefaultReadinessInterval. cfg.Wait, when positive,
 // limits how long Create waits for the nodes and Slurm to become ready,
