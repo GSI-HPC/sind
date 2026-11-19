@@ -223,10 +223,23 @@
       if (!(since > 0)) return;
       const text = dur(now - since);
       if (el.textContent === text) return;
-      // Changing the text node leaves the observers below alone.
+      // Changing the text node keeps the element, its title and its
+      // place. The observers below see the change: tickAlone keeps it
+      // from them.
       if (el.firstChild && el.firstChild.nodeType === Node.TEXT_NODE) el.firstChild.nodeValue = text;
       else el.textContent = text;
     });
+  }
+
+  // The observers of the page (DOMContentLoaded below).
+  const observers = [];
+  // tickAlone is the tick of the timer. Its writes are no news to the
+  // observers, which would rescan the page, announce and draw the dock
+  // for each tick of a clock: it takes their records. The timer runs as a
+  // task of its own, so all they hold then is what this tick wrote.
+  function tickAlone() {
+    tick();
+    observers.forEach(o => o.takeRecords());
   }
 
   // The width that place gave a bar stays until its next tick, so that the
@@ -260,12 +273,14 @@
     if (!region) return;
     const out = [];
     const now = clock();
+    let changed = false;
     document.querySelectorAll('[data-say-key]').forEach(el => {
       const key = el.dataset.sayKey;
       const state = el.dataset.sayState;
       const prev = said[key];
       if (prev === state) return;
       said[key] = state;
+      changed = true;
       if (prev === undefined && firstScan) {
         const since = Number(el.dataset.saySince);
         if (!(state === 'running' && since > 0 && now - since < 10000)) return;
@@ -273,6 +288,8 @@
       if (el.dataset.say && !out.includes(el.dataset.say)) out.push(el.dataset.say);
     });
     firstScan = false;
+    // The tab keeps them only when they changed.
+    if (!changed) return;
     const keys = Object.keys(said);
     if (keys.length > 200) {
       // Forget the oldest.
@@ -296,14 +313,19 @@
     // watch those too: a clock the server drew is counted again before the
     // browser paints it.
     const what = { childList: true, characterData: true, attributes: true, attributeFilter: ['data-since', 'data-doc-title', 'data-say-state', 'data-stop-task'], subtree: true };
-    if (main) new MutationObserver(() => { update(); keepStops(); }).observe(main, what);
+    const watch = (el, fn) => {
+      const o = new MutationObserver(fn);
+      o.observe(el, what);
+      observers.push(o);
+    };
+    if (main) watch(main, () => { update(); keepStops(); });
     for (const id of ['tasks', 'cmds']) {
       const dock = document.getElementById(id);
-      if (dock) new MutationObserver(() => { tick(); announce(); drawDock(); keepStops(); refocus(); }).observe(dock, what);
+      if (dock) watch(dock, () => { tick(); announce(); drawDock(); keepStops(); refocus(); });
     }
     drawDock();
     update();
     // Tenths of a second, as the terminal draws them.
-    setInterval(tick, 100);
+    setInterval(tickAlone, 100);
   });
 })();
