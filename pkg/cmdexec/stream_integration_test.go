@@ -7,8 +7,10 @@ package cmdexec_test
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -178,4 +180,45 @@ func TestProcess_Close_LeftBehindHoldsStderr(t *testing.T) {
 	start := time.Now()
 	assert.NoError(t, proc.Close())
 	assert.Less(t, time.Since(start), 4*time.Second)
+}
+
+// TestStart_Env checks that Start runs the command with the environment
+// of WithEnv, as Run does.
+func TestStart_Env(t *testing.T) {
+	ctx := cmdexec.WithEnv(t.Context(), []string{"SIND_TEST_START_ENV=from-ctx"})
+	proc, err := cmdexec.Start(ctx, "sh", "-c", "echo $SIND_TEST_START_ENV")
+	require.NoError(t, err)
+	defer func() { _ = proc.Close() }()
+
+	scanner := bufio.NewScanner(proc.Stdout)
+	require.True(t, scanner.Scan(), "expected output line")
+	assert.Equal(t, "from-ctx", scanner.Text())
+}
+
+// TestStart_ProcessGroup checks that Close kills the whole process group
+// of a command started WithProcessGroup, as the end of its context does
+// for Run: a process the command started ends with it.
+func TestStart_ProcessGroup(t *testing.T) {
+	ctx := cmdexec.WithProcessGroup(t.Context())
+	proc, err := cmdexec.Start(ctx, "sh", "-c", "sleep 60 & echo $!; wait")
+	require.NoError(t, err)
+	scanner := bufio.NewScanner(proc.Stdout)
+	require.True(t, scanner.Scan(), "expected the pid of sleep")
+	pid, err := strconv.Atoi(scanner.Text())
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Close())
+	assert.Eventually(t, func() bool { return !running(pid) }, 5*time.Second, 20*time.Millisecond,
+		"sleep %d outlived the Process", pid)
+}
+
+// running reports whether the process pid exists and is no zombie.
+func running(pid int) bool {
+	stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	// The state follows the command name in parentheses.
+	_, rest, _ := strings.Cut(string(stat), ") ")
+	return !strings.HasPrefix(rest, "Z")
 }

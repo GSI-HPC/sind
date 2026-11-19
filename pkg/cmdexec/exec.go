@@ -20,6 +20,17 @@ import (
 )
 
 // Executor runs external commands and captures their output.
+//
+// Callers pass options in the context of a call. An Executor must honour
+// those that change what a command does or what a call returns: WithEnv,
+// the command's environment, for Run, RunWithStdin and Start, and
+// WithStderrMerged, what Start's Stdout carries. It may ignore the others,
+// which only a local process has or which change only what is shown or
+// kept of the output: WithProcessGroup, WithStopGrace, WithOrphanSafe and
+// WithStarted; WithOutputLimit, WithStdoutAsData, WithLineParser,
+// WithTerminal, WithTerminalOpened and the progress span of
+// go-clikit/progress. OSExecutor's Run and RunWithStdin honour them all,
+// its Start WithEnv, WithStderrMerged, WithProcessGroup and WithStopGrace.
 type Executor interface {
 	// Run executes the named command with the given arguments and returns
 	// the captured stdout and stderr. If the command exits with a non-zero

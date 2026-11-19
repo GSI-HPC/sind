@@ -25,6 +25,11 @@ type Process struct {
 	// stderr keeps the head and the tail of the command's standard error,
 	// outside WithStderrMerged.
 	stderr *headTail
+	// group is set for a command in a process group of its own
+	// (WithProcessGroup), which Close kills whole; groupDone ends what
+	// inProcessGroup started once the command has ended.
+	group     bool
+	groupDone func()
 
 	closeOnce sync.Once
 	closeErr  error
@@ -40,13 +45,26 @@ type Process struct {
 // command has ended or Close kills it, so that a docker exec -i whose
 // command ends with its stdin (docker.TiedExecArgs) runs as long as the
 // docker CLI.
+//
+// As OSExecutor.Run does, Start runs the command with the environment of
+// WithEnv, and in a process group of its own under WithProcessGroup, which
+// the end of ctx and Close kill whole.
 func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	if env := Env(ctx); len(env) > 0 {
+		cmd.Env = env
+	}
+	p := &Process{cmd: cmd, groupDone: func() {}}
+	if InProcessGroup(ctx) {
+		p.group = true
+		p.groupDone = inProcessGroup(cmd, StopGrace(ctx))
+	}
 	// Close closes the pipe, and so does Wait.
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
+	p.stdin = stdin
 	if StderrMerged(ctx) {
 		r, w, err := os.Pipe()
 		if err != nil {
@@ -59,22 +77,25 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 			_ = r.Close()
 			return nil, err
 		}
-		return &Process{Stdout: r, cmd: cmd, stdin: stdin}, nil
+		p.Stdout = r
+		return p, nil
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
 	// Wait waits for the copy of stderr, which a process the command left
-	// behind may hold open: at most outputWaitDelay.
-	stderr := &headTail{half: streamStderrHalf}
-	cmd.Stderr = stderr
-	cmd.WaitDelay = outputWaitDelay
+	// behind may hold open: at most outputWaitDelay, or the grace of
+	// WithStopGrace on top of it.
+	p.stderr = &headTail{half: streamStderrHalf}
+	cmd.Stderr = p.stderr
+	cmd.WaitDelay = max(cmd.WaitDelay, outputWaitDelay)
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		return nil, err
 	}
-	return &Process{Stdout: stdout, cmd: cmd, stdin: stdin, stderr: stderr}, nil
+	p.Stdout = stdout
+	return p, nil
 }
 
 // Close kills the process (if still running), waits for it to exit and
@@ -97,7 +118,11 @@ func (p *Process) close() error {
 	}
 	killed := false
 	if p.cmd.Process != nil {
-		if err := p.cmd.Process.Kill(); err == nil {
+		kill := p.cmd.Process.Kill
+		if p.group {
+			kill = func() error { return syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL) }
+		}
+		if err := kill(); err == nil {
 			killed = true
 		}
 	}
@@ -105,6 +130,7 @@ func (p *Process) close() error {
 	// of sh -c 'cat', ends with it and lets go of stderr.
 	_ = p.stdin.Close()
 	err := p.cmd.Wait()
+	p.groupDone()
 	if errors.Is(err, exec.ErrWaitDelay) {
 		err = nil // it exited 0; a process it left behind held stderr
 	}
