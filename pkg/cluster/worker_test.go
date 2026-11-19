@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -315,6 +316,8 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
 		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
+	// The workers that docker create made, which ps lists after worker-0.
+	created := []string{"worker-0"}
 	return func(args []string, _ string) mock.Result {
 		if len(args) == 0 {
 			return mock.Result{}
@@ -322,9 +325,10 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		joined := strings.Join(args, " ")
 
 		switch {
-		// ListContainers: cluster has controller + worker-0
+		// ListContainers: cluster has controller + worker-0, and the
+		// workers created since
 		case args[0] == "ps":
-			return mock.Result{Stdout: workerContainers("worker-0")}
+			return mock.Result{Stdout: workerContainers(created...)}
 
 		// InspectContainer: sind-dns → return mesh IP
 		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
@@ -374,6 +378,9 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 
 		// CreateContainer
 		case args[0] == "create":
+			if i := slices.Index(args, "--name"); i >= 0 {
+				created = append(created, strings.TrimPrefix(args[i+1], "sind-dev-"))
+			}
 			return mock.Result{Stdout: "new-cid\n"}
 
 		// CheckNsdelegate's probe
@@ -1800,6 +1807,36 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "cleanup should remove the new worker container")
+}
+
+func TestWorkerAdd_RollbackSkipsUncreatedWorkers(t *testing.T) {
+	// docker create fails for worker-2: the rollback removes worker-1 and
+	// leaves worker-2 alone, without a warning about a container that
+	// never existed.
+	inner := workerAddOnCall(t)
+	onCall := func(args []string, stdin string) mock.Result {
+		if args[0] == "create" && slices.Contains(args, "sind-dev-worker-2") {
+			return mock.Result{Stderr: "invalid argument\n", Err: fmt.Errorf("exit status 125")}
+		}
+		return inner(args, stdin)
+	}
+	pipes := &mock.Pipes{}
+	t.Cleanup(pipes.CloseAll)
+	m := &mock.Executor{OnCall: onCall, OnStart: pipes.OnStart}
+	client := docker.NewClient(m)
+	var logs strings.Builder
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
+
+	require.ErrorContains(t, err, "creating container worker-2")
+	assert.NotContains(t, logs.String(), "already gone")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
+	assert.Zero(t, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-2"))
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "inspect" && c.Args[len(c.Args)-1] == "sind-dev-worker-2",
+			"no diagnostics for a worker that was never created: %v", c.Args)
+	}
 }
 
 func TestWorkerAdd_CleanupErrors(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"golang.org/x/sync/errgroup"
 )
 
 // logTailLines is the number of container log lines captured during cleanup.
@@ -44,11 +45,32 @@ func logContainerDiagnostics(ctx context.Context, client *docker.Client, name do
 	log.ErrorContext(ctx, "container failed", attrs...)
 }
 
+// diagnosticsConcurrency bounds the containers whose diagnostics
+// logContainersDiagnostics reads at once.
+const diagnosticsConcurrency = 8
+
+// logContainersDiagnostics runs logContainerDiagnostics for each of names
+// in parallel, at most diagnosticsConcurrency at a time.
+func logContainersDiagnostics(ctx context.Context, client *docker.Client, names []docker.ContainerName) {
+	var g errgroup.Group
+	g.SetLimit(diagnosticsConcurrency)
+	for _, name := range names {
+		g.Go(func() error {
+			logContainerDiagnostics(ctx, client, name)
+			return nil
+		})
+	}
+	_ = g.Wait()
+}
+
 // logClusterDiagnostics logs diagnostics for all non-running containers in a
-// cluster. Called before cleanup removes them so that failures can be diagnosed.
+// cluster, in parallel. Called before cleanup removes them so that failures
+// can be diagnosed.
 func logClusterDiagnostics(ctx context.Context, client *docker.Client, realm, clusterName string) {
 	containers, _ := clusterContainers(ctx, client, realm, clusterName)
-	for _, c := range containers {
-		logContainerDiagnostics(ctx, client, c.Name)
+	names := make([]docker.ContainerName, len(containers))
+	for i, c := range containers {
+		names[i] = c.Name
 	}
+	logContainersDiagnostics(ctx, client, names)
 }

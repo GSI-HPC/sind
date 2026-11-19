@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -55,19 +56,27 @@ func TestLogClusterDiagnostics_ListError(t *testing.T) {
 }
 
 func TestLogClusterDiagnostics_InspectsEachContainer(t *testing.T) {
-	var m mock.Executor
-	// ListContainers returns two containers
-	m.AddResult(`{"ID":"a1","Names":"sind-dev-controller","State":"exited","Image":"img","Labels":""}
-{"ID":"a2","Names":"sind-dev-worker-0","State":"exited","Image":"img","Labels":""}`, "", nil)
-	// Inspect + logs for controller
-	m.AddResult(`[{"Id":"a1","Name":"sind-dev-controller","State":{"Status":"exited","ExitCode":1,"OOMKilled":false},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`, "", nil)
-	m.AddResult("error log line\n", "", nil)
-	// Inspect + logs for worker
-	m.AddResult(`[{"Id":"a2","Name":"sind-dev-worker-0","State":{"Status":"exited","ExitCode":1,"OOMKilled":false},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`, "", nil)
-	m.AddResult("worker error\n", "", nil)
-	c := docker.NewClient(&m)
+	// The containers' diagnostics are read in parallel.
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		switch args[0] {
+		case "ps":
+			return mock.Result{Stdout: `{"ID":"a1","Names":"sind-dev-controller","State":"exited","Image":"img","Labels":""}
+{"ID":"a2","Names":"sind-dev-worker-0","State":"exited","Image":"img","Labels":""}`}
+		case "inspect":
+			return mock.Result{Stdout: `[{"Id":"x","Name":"` + args[1] + `","State":{"Status":"exited","ExitCode":1,"OOMKilled":false},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`}
+		case "logs":
+			return mock.Result{Stdout: "error log line\n"}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}}
+	c := docker.NewClient(newBarrier(m, 2, "inspect"))
 
 	logClusterDiagnostics(t.Context(), c, "sind", "dev")
 
-	assert.Len(t, m.Calls, 5) // list + 2*(inspect + logs)
+	var calls []string
+	for _, call := range m.Calls {
+		calls = append(calls, strings.Join(call.Args[:2], " "))
+	}
+	assert.ElementsMatch(t, []string{"ps -a", "inspect sind-dev-controller", "inspect sind-dev-worker-0",
+		"logs --tail", "logs --tail"}, calls, "list + 2*(inspect + logs)")
 }

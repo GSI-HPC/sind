@@ -883,9 +883,12 @@ func nodeSecurityOpts() []string {
 }
 
 // cleanupWorkers removes containers and mesh registrations for the given
-// worker node configs. Used to roll back a failed WorkerAdd. It goes on past
-// a failure, a container that is already gone is no failure, and it
-// returns the failures joined.
+// worker node configs. Used to roll back a failed WorkerAdd. It logs the
+// diagnostics of the containers and removes them in parallel, as Create's
+// rollback does (DeleteContainers, the progress step "nodes"), but only
+// those that exist (see createdWorkers). It goes on past a failure, a
+// container that is already gone is no failure, and it returns the
+// failures joined.
 func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []RunConfig) error {
 	log := sindlog.From(ctx)
 	var errs []error
@@ -903,13 +906,42 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 		errs = append(errs, fmt.Errorf("removing known hosts: %w", err))
 	}
 
-	for _, nc := range nodeConfigs {
-		containerName := ContainerName(realm, clusterName, nc.ShortName)
-		logContainerDiagnostics(ctx, client, containerName)
-		if err := docker.IgnoreNotFound(client.RemoveContainer(ctx, containerName)); err != nil {
-			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
-			errs = append(errs, fmt.Errorf("removing container %s: %w", containerName, err))
-		}
+	containers := createdWorkers(ctx, client, realm, clusterName, nodeConfigs)
+	names := make([]docker.ContainerName, len(containers))
+	for i, c := range containers {
+		names[i] = c.Name
+	}
+	logContainersDiagnostics(ctx, client, names)
+	if err := DeleteContainers(ctx, client, containers); err != nil {
+		log.DebugContext(ctx, "cleanup: removing containers", "error", err)
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// createdWorkers returns the containers of the workers of nodeConfigs that
+// exist, as one listing of the cluster's containers shows them: a failed
+// create worker may not have made them all. When the listing fails, it
+// returns every worker, so that the rollback still tries to remove them.
+func createdWorkers(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig) []docker.ContainerListEntry {
+	listed, err := clusterContainers(ctx, client, realm, clusterName)
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "cleanup: listing containers", "error", err)
+	}
+	byName := make(map[docker.ContainerName]docker.ContainerListEntry, len(listed))
+	for _, c := range listed {
+		byName[c.Name] = c
+	}
+	var containers []docker.ContainerListEntry
+	for _, nc := range nodeConfigs {
+		name := ContainerName(realm, clusterName, nc.ShortName)
+		if c, ok := byName[name]; ok {
+			containers = append(containers, c)
+		} else if err != nil {
+			containers = append(containers, docker.ContainerListEntry{Name: name, Labels: docker.Labels{
+				LabelRealm: realm, LabelCluster: clusterName, LabelRole: string(nc.Role),
+			}})
+		}
+	}
+	return containers
 }
