@@ -3,7 +3,9 @@
 package cluster
 
 import (
+	"archive/tar"
 	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
 	"slices"
@@ -141,11 +143,22 @@ func TestDeleteVolumes_StillInUse(t *testing.T) {
 
 // --- DeregisterMesh ---
 
+// TestDeregisterMesh checks that the nodes of the cluster leave the
+// Corefile and known_hosts, and those of another cluster stay.
 func TestDeregisterMesh(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = meshDeregisterOnCall(
-		"controller.dev.sind.sind ssh-ed25519 AAAA1\nworker-0.dev.sind.sind ssh-ed25519 AAAA2\n",
+	corefile := strings.Replace(emptyCorefileContent(), "        fallthrough\n",
+		"        10.0.1.1 controller.dev.sind.sind\n        10.0.1.2 worker-0.dev.sind.sind\n        10.0.9.1 controller.other.sind.sind\n        fallthrough\n", 1)
+	require.Contains(t, corefile, "controller.other.sind.sind")
+	base := meshDeregisterOnCall(
+		"controller.dev.sind.sind ssh-ed25519 AAAA1\nworker-0.dev.sind.sind ssh-ed25519 AAAA2\ncontroller.other.sind.sind ssh-ed25519 AAAA3\n",
 	)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "cp" && args[1] == "sind-dns:/Corefile" {
+			return mock.Result{Stdout: testutil.TarArchive("Corefile", corefile)}
+		}
+		return base(args, stdin)
+	}
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
@@ -154,6 +167,26 @@ func TestDeregisterMesh(t *testing.T) {
 		{Name: "sind-dev-worker-0"},
 	}
 	DeregisterMesh(t.Context(), mgr, "dev", containers)
+
+	var corefiles, knownHosts []string
+	for _, call := range m.Calls {
+		switch {
+		case call.Args[0] == "cp" && call.Args[1] == "-" && call.Args[2] == "sind-dns:/":
+			tr := tar.NewReader(strings.NewReader(call.Stdin))
+			hdr, err := tr.Next()
+			require.NoError(t, err)
+			assert.Equal(t, "Corefile", hdr.Name)
+			data, err := io.ReadAll(tr)
+			require.NoError(t, err)
+			corefiles = append(corefiles, string(data))
+		case call.Args[0] == "exec" && call.Args[1] == "-i" && call.Args[2] == "sind-ssh":
+			knownHosts = append(knownHosts, call.Stdin)
+		}
+	}
+	require.Len(t, corefiles, 1)
+	assert.Contains(t, corefiles[0], "\n        10.0.9.1 controller.other.sind.sind\n        fallthrough\n")
+	assert.NotContains(t, corefiles[0], ".dev.sind.sind")
+	assert.Equal(t, []string{"controller.other.sind.sind ssh-ed25519 AAAA3\n"}, knownHosts)
 }
 
 func TestDeregisterMesh_Empty(t *testing.T) {

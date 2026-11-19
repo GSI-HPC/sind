@@ -3,13 +3,16 @@
 package mesh
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -334,7 +337,9 @@ func TestRevertHostDNS_InspectNetworkFails(t *testing.T) {
 	mgr, dockerMock := resolveTestManager(&sys)
 	dockerMock.AddResult("", "Error\n", fmt.Errorf("not found"))
 
-	mgr.revertHostDNS(t.Context()) // no-op
+	mgr.revertHostDNS(t.Context())
+	require.Len(t, sys.Calls, 1, "only the is-active check")
+	assert.Len(t, dockerMock.Calls, 1)
 }
 
 func TestRevertHostDNS_BridgeNotFound(t *testing.T) {
@@ -345,7 +350,8 @@ func TestRevertHostDNS_BridgeNotFound(t *testing.T) {
 	mgr, dockerMock := resolveTestManager(&sys)
 	dockerMock.AddResult(inspectNetworkJSON, "", nil)
 
-	mgr.revertHostDNS(t.Context()) // no-op
+	mgr.revertHostDNS(t.Context())
+	require.Len(t, sys.Calls, 1, "only the is-active check: no resolvectl revert without a bridge")
 }
 
 func TestRevertHostDNS_RevertError(t *testing.T) {
@@ -358,7 +364,13 @@ func TestRevertHostDNS_RevertError(t *testing.T) {
 	mgr, dockerMock := resolveTestManager(&sys)
 	dockerMock.AddResult(inspectNetworkJSON, "", nil)
 
-	mgr.revertHostDNS(t.Context()) // logs error but doesn't panic
+	var buf bytes.Buffer
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&buf, nil)))
+	mgr.revertHostDNS(ctx)
+	require.Len(t, sys.Calls, 2)
+	assert.Equal(t, []string{"revert", "br-abcdef012345"}, sys.Calls[1].Args)
+	assert.Contains(t, buf.String(), `level=INFO msg="failed to revert host DNS" error=`)
+	assert.Contains(t, buf.String(), "revert failed")
 }
 
 // fakeBridges points sysClassNet at a new directory with the given bridge

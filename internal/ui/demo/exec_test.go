@@ -5,6 +5,7 @@ package demo
 import (
 	"bufio"
 	"context"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -103,22 +104,29 @@ func TestExec_FollowEndsWithItsContext(t *testing.T) {
 	assert.NoError(t, sc.Err())
 }
 
+// goneReader is the write end of a pipe whose reader takes n lines and
+// then goes: each write after them fails.
+type goneReader struct {
+	n     int
+	lines int
+}
+
+func (w *goneReader) Write(p []byte) (int, error) {
+	if w.lines == w.n {
+		return 0, io.ErrClosedPipe
+	}
+	w.lines++
+	return len(p), nil
+}
+
 func TestExec_ReaderGone(t *testing.T) {
 	// A reader that goes ends the stream, in the first lines and later.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	p, err := testExec(time.Millisecond).Start(ctx, "docker", "logs", "sind-dev-api")
-	require.NoError(t, err)
-	require.NoError(t, p.Close())
-
-	p, err = testExec(time.Millisecond).Start(ctx, "docker", "logs", "sind-dev-api")
-	require.NoError(t, err)
-	sc := bufio.NewScanner(p.Stdout)
-	for range head + 2 {
-		require.True(t, sc.Scan())
+	for _, n := range []int{0, head + 2} {
+		w := &goneReader{n: n}
+		err := testExec(time.Millisecond).stream(t.Context(), w, false, "sind-dev-api", "")
+		require.ErrorIs(t, err, io.ErrClosedPipe, "after %d lines", n)
+		assert.Equal(t, n, w.lines)
 	}
-	require.NoError(t, p.Close())
-	time.Sleep(20 * time.Millisecond) // the writer sees the closed pipe
 }
 
 func TestShortName(t *testing.T) {
@@ -229,18 +237,16 @@ func TestExec_JournalOfAFailedUnit(t *testing.T) {
 }
 
 func TestExec_JournalOfAFailedUnit_ReaderGone(t *testing.T) {
+	// A reader that goes ends the stream, in the first lines and in the
+	// failure.
 	e := testExec(0)
 	e.Failed = func(string, string) (time.Time, bool) { return t0, true }
 	for _, n := range []int{0, head - 2} {
-		p, err := e.Start(context.Background(), "docker", cluster.ServiceLogArgs("sind", "worker-4", "dev", "slurmd", cluster.LogOptions{})...)
-		require.NoError(t, err)
-		sc := bufio.NewScanner(p.Stdout)
-		for range n {
-			require.True(t, sc.Scan())
-		}
-		require.NoError(t, p.Close())
+		w := &goneReader{n: n}
+		err := e.stream(t.Context(), w, true, "sind-dev-worker-4", "slurmd")
+		require.ErrorIs(t, err, io.ErrClosedPipe, "after %d lines", n)
+		assert.Equal(t, n, w.lines)
 	}
-	time.Sleep(20 * time.Millisecond)
 }
 
 func TestFailureLines(t *testing.T) {

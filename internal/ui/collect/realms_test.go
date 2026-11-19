@@ -298,13 +298,26 @@ func TestViewersCountPages(t *testing.T) {
 	assert.Len(t, one, 1, "the first page again")
 }
 
+// TestLockAndMonitoringStartWithDefaultIntervals checks that without
+// intervals of their own the collectors read at start and then wait for
+// their defaults, of many seconds, rather than read again at once.
 func TestLockAndMonitoringStartWithDefaultIntervals(t *testing.T) {
 	f := newRealmFixture(t, "sind")
+	f.fake.set(func() {
+		f.fake.locks["sind"] = "sind create cluster dev"
+		f.fake.monitoring["sind"] = true
+	})
 	l, m := f.lock(), f.monitoringCollector()
 	l.Every, m.Interval = 0, nil
-	stopL := start(t, l.Run)
-	stopM := start(t, m.Run)
-	f.fake.settle()
-	stopL()
-	stopM()
+	start(t, l.Run)
+	start(t, m.Run)
+
+	waitFor(t, "reads at start", func() bool {
+		return f.holder("sind") != "" && f.st.Snapshot().Monitorings["sind"] != nil
+	})
+	// A read of the lock is one docker network call, a read of the
+	// monitoring stack two docker ps.
+	never(t, "a read before the default intervals", 150*time.Millisecond, func() bool {
+		return f.fake.count("network") > 1 || f.fake.count("ps") > 2
+	})
 }

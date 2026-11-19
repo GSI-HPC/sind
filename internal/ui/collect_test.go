@@ -209,8 +209,11 @@ func TestColServiceReportsDockerDown(t *testing.T) {
 }
 
 func TestColRunWithoutSetupDoesNothing(t *testing.T) {
-	env := colEnv(t, &mock.Executor{})
+	m := &mock.Executor{}
+	env := colEnv(t, m)
 	colService().Run(t.Context(), env)
+	assert.Empty(t, m.Calls)
+	assert.Equal(t, store.New().Snapshot(), env.Store.Snapshot())
 }
 
 func TestColServicesAreRegistered(t *testing.T) {
