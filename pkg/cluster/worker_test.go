@@ -234,6 +234,16 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
+// TestWorkerAdd_InvalidRealm checks that WorkerAdd refuses a realm that is
+// no valid realm name before any docker call.
+func TestWorkerAdd_InvalidRealm(t *testing.T) {
+	var m mock.Executor
+	client := docker.NewClient(&m)
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, "a.b"), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.ErrorContains(t, err, `invalid realm name "a.b"`)
+	assert.Empty(t, m.Calls)
+}
+
 // TestWorkerAdd_MeshFull covers workers that do not fit on the realm's
 // mesh: WorkerAdd refuses them before it starts the mesh or creates any.
 func TestWorkerAdd_MeshFull(t *testing.T) {

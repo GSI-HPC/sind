@@ -128,6 +128,13 @@ func TestLockRealm_DefaultDir(t *testing.T) {
 }
 
 func TestLockRealm_Errors(t *testing.T) {
+	t.Run("invalid realm", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := LockRealm(t.Context(), "../x", &LockOptions{Dir: dir})
+		require.EqualError(t, err, `invalid realm name "../x": '.' is not a letter, a digit or a hyphen`)
+		entries, _ := os.ReadDir(dir)
+		assert.Empty(t, entries, "no lock file")
+	})
 	t.Run("no state directory", func(t *testing.T) {
 		t.Setenv("XDG_STATE_HOME", "")
 		t.Setenv("HOME", "")

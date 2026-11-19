@@ -231,7 +231,14 @@ func (m *Manager) ComposeProject() string {
 // docker create, when the daemon does not have it or with Pull, writes its
 // lines there, and reports its bytes as the work of the part. A part
 // not seen to because one before it failed ends canceled with the step.
+//
+// EnsureMesh refuses a realm name that config.CheckName refuses, before it
+// creates anything: an uppercase name would put the realm's names behind
+// another realm's in DNS, which ignores case.
 func (m *Manager) EnsureMesh(ctx context.Context) (err error) {
+	if err := config.CheckName("realm", m.Realm); err != nil {
+		return err
+	}
 	ctx, step := progress.Start(ctx, progress.KindStep, "mesh",
 		progress.Flagged(progress.FlagHidden|progress.FlagFold|progress.FlagShowLines), progress.Total(4))
 	defer func() { step.End(err) }()

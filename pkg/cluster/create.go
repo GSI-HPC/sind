@@ -222,11 +222,11 @@ type nodeResult struct {
 // The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
 // before calling Create, and apply the config's defaults
 // (config.Cluster.ApplyDefaults). Create validates the config first, and
-// refuses a config realm other than meshMgr.Realm, the realm it creates the
-// cluster in. The context deadline controls the overall timeout, except
-// for the writes of the mesh DNS, known_hosts and sind-nodes.conf, which
-// ignore it so that they are not cut short, and may outlive it by up to
-// RollbackTimeout;
+// refuses a meshMgr.Realm, the realm it creates the cluster in, that
+// config.CheckName refuses, and a config realm other than it. The context
+// deadline controls the overall timeout, except for the writes of the mesh
+// DNS, known_hosts and sind-nodes.conf, which ignore it so that they are
+// not cut short, and may outlive it by up to RollbackTimeout;
 // readinessInterval controls the polling interval for readiness probes, and
 // zero or less means DefaultReadinessInterval. cfg.Wait, when positive,
 // limits how long Create waits for the nodes and Slurm to become ready,
@@ -332,6 +332,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid cluster config: %w", err)
+	}
+	if err := config.CheckName("realm", realm); err != nil {
+		return nil, err
 	}
 	if cfg.Realm != "" && cfg.Realm != realm {
 		return nil, fmt.Errorf("config realm %q differs from the mesh manager's realm %q", cfg.Realm, realm)

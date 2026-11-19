@@ -86,8 +86,9 @@ func (o WorkerAddOptions) Check() error {
 // returns.
 //
 // For managed workers (default), the flow is:
-//  1. Validate: options, controller exists, room on the realm's mesh and
-//     the cluster network (see checkBridgePorts), sind-nodes.conf present
+//  1. Validate: options, the realm name (config.CheckName), controller
+//     exists, room on the realm's mesh and the cluster network (see
+//     checkBridgePorts), sind-nodes.conf present
 //  2. Inspect the controller and the newest worker, for the cluster's
 //     settings and the new workers' shape
 //  3. Check an explicit image: its Slurm version, its identity support,
@@ -120,6 +121,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// Check the options as the config's are checked, before any container
 	// exists.
 	if err := opts.Check(); err != nil {
+		return nil, err
+	}
+	if err := config.CheckName("realm", realm); err != nil {
 		return nil, err
 	}
 

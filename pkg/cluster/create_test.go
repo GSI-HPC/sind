@@ -415,6 +415,17 @@ func TestCreate_RealmMismatch(t *testing.T) {
 	assert.Empty(t, m.Calls)
 }
 
+// TestCreate_InvalidRealm checks that Create refuses the realm it creates
+// the cluster in when it is no valid realm name, also without a config
+// realm, before any docker call.
+func TestCreate_InvalidRealm(t *testing.T) {
+	var m mock.Executor
+	client := docker.NewClient(&m)
+	_, err := Create(t.Context(), client, mesh.NewManager(client, "CI"), createCfg(), time.Millisecond)
+	require.ErrorContains(t, err, `invalid realm name "CI"`)
+	assert.Empty(t, m.Calls)
+}
+
 func TestCreate_ConfigRealmMatches(t *testing.T) {
 	cfg := createCfg()
 	cfg.Realm = mesh.DefaultRealm

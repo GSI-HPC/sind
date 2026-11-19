@@ -15,6 +15,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+
+	"github.com/GSI-HPC/sind/pkg/config"
 )
 
 // Dir returns sind's state directory, $XDG_STATE_HOME/sind, falling back
@@ -38,8 +40,13 @@ func Dir() (string, error) {
 }
 
 // RealmDir returns the state directory of realm, Dir()/<realm>, which holds
-// the realm's lock file and SSH configuration export.
+// the realm's lock file and SSH configuration export. It refuses a realm
+// name that config.CheckName refuses, such as one with "/" or "..", which
+// would leave Dir().
 func RealmDir(realm string) (string, error) {
+	if err := config.CheckName("realm", realm); err != nil {
+		return "", err
+	}
 	dir, err := Dir()
 	if err != nil {
 		return "", err

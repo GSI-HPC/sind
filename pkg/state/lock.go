@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"golang.org/x/sys/unix"
@@ -118,8 +119,12 @@ func (o *LockOptions) withDefaults() LockOptions {
 //
 // The returned function removes the daemon lock, without ctx, so that it
 // works after Ctrl+C as well, and then releases the file lock. A second
-// call does nothing.
+// call does nothing. LockRealm refuses a realm name that config.CheckName
+// refuses, also with opts.Dir.
 func LockRealm(ctx context.Context, realm string, opts *LockOptions) (unlock func(), err error) {
+	if err := config.CheckName("realm", realm); err != nil {
+		return nil, err
+	}
 	o := opts.withDefaults()
 	dir := o.Dir
 	if dir == "" {

@@ -271,6 +271,17 @@ func TestEnsureMesh(t *testing.T) {
 	}
 }
 
+// TestEnsureMesh_InvalidRealm checks that EnsureMesh creates nothing for a
+// realm that is no valid realm name.
+func TestEnsureMesh_InvalidRealm(t *testing.T) {
+	var m mock.Executor
+	mgr := NewManager(docker.NewClient(&m), "Sind")
+	err := mgr.EnsureMesh(t.Context())
+	require.ErrorContains(t, err, `invalid realm name "Sind"`)
+	assert.Empty(t, m.Calls)
+	assert.False(t, mgr.Created())
+}
+
 // Without Pull, an image the daemon has is not pulled; with it, it is,
 // before the container is created.
 func TestEnsureMesh_Pull(t *testing.T) {
