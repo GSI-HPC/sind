@@ -1868,8 +1868,10 @@ sind ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
 Internally:
 
 ```bash
-docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND [ARGS...]]  # -t only when stdin and stdout are terminals
+docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] -- <node>.<cluster>.<realm>.sind [COMMAND [ARGS...]]  # -t only when stdin and stdout are terminals
 ```
+
+The `--` ends ssh's options: ssh reads a word after the host that starts with `-` as an option, so without it `sind ssh worker-0 -- -oProxyCommand=…` would run a command in the relay container instead of on the node.
 
 `-t` needs a terminal at both ends: through a pseudo-terminal, the output gets CRLF line endings and the remote stderr is merged into stdout, which would corrupt output that a script captures or redirects in an interactive shell.
 

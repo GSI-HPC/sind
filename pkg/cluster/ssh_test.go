@@ -23,19 +23,21 @@ func TestBuildSSHArgs(t *testing.T) {
 		opts, command []string
 		want          []string
 	}{
-		{"interactive", "worker-0", "dev", true, nil, nil, []string{"exec", "-i", "-t", ssh, "ssh", "worker-0.dev.sind.sind"}},
-		{"non-interactive", "worker-0", "dev", false, nil, nil, []string{"exec", "-i", ssh, "ssh", "worker-0.dev.sind.sind"}},
+		{"interactive", "worker-0", "dev", true, nil, nil, []string{"exec", "-i", "-t", ssh, "ssh", "--", "worker-0.dev.sind.sind"}},
+		{"non-interactive", "worker-0", "dev", false, nil, nil, []string{"exec", "-i", ssh, "ssh", "--", "worker-0.dev.sind.sind"}},
 		{"command", "controller", "default", false, nil, []string{"hostname"},
-			[]string{"exec", "-i", ssh, "ssh", "controller.default.sind.sind", "hostname"}},
+			[]string{"exec", "-i", ssh, "ssh", "--", "controller.default.sind.sind", "hostname"}},
 		{"multi-word command", "worker-0", "dev", false, nil, []string{"ls", "-la", "/tmp"},
-			[]string{"exec", "-i", ssh, "ssh", "worker-0.dev.sind.sind", "ls", "-la", "/tmp"}},
-		{"option", "worker-0", "dev", true, []string{"-v"}, nil, []string{"exec", "-i", "-t", ssh, "ssh", "-v", "worker-0.dev.sind.sind"}},
+			[]string{"exec", "-i", ssh, "ssh", "--", "worker-0.dev.sind.sind", "ls", "-la", "/tmp"}},
+		{"option", "worker-0", "dev", true, []string{"-v"}, nil, []string{"exec", "-i", "-t", ssh, "ssh", "-v", "--", "worker-0.dev.sind.sind"}},
 		{"port forwarding", "controller", "default", true, []string{"-L", "8080:localhost:80"}, nil,
-			[]string{"exec", "-i", "-t", ssh, "ssh", "-L", "8080:localhost:80", "controller.default.sind.sind"}},
+			[]string{"exec", "-i", "-t", ssh, "ssh", "-L", "8080:localhost:80", "--", "controller.default.sind.sind"}},
 		{"force tty", "worker-0", "dev", true, []string{"-t"}, []string{"top"},
-			[]string{"exec", "-i", "-t", ssh, "ssh", "-t", "worker-0.dev.sind.sind", "top"}},
+			[]string{"exec", "-i", "-t", ssh, "ssh", "-t", "--", "worker-0.dev.sind.sind", "top"}},
+		{"command of a leading dash", "worker-0", "dev", false, nil, []string{"-oProxyCommand=id"},
+			[]string{"exec", "-i", ssh, "ssh", "--", "worker-0.dev.sind.sind", "-oProxyCommand=id"}},
 		{"options and command", "worker-0", "dev", false, []string{"-v", "-o", "StrictHostKeyChecking=no"}, []string{"uptime"},
-			[]string{"exec", "-i", ssh, "ssh", "-v", "-o", "StrictHostKeyChecking=no", "worker-0.dev.sind.sind", "uptime"}},
+			[]string{"exec", "-i", ssh, "ssh", "-v", "-o", "StrictHostKeyChecking=no", "--", "worker-0.dev.sind.sind", "uptime"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -45,7 +45,7 @@ sind ssh alice@worker-0
 Internally, `sind ssh` executes SSH via the mesh SSH container:
 
 ```bash
-docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND...]
+docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] -- <node>.<cluster>.<realm>.sind [COMMAND...]
 ```
 
 The relay container is `<realm>-ssh`. `-t` is only passed when both stdin and stdout are terminals: through a pseudo-terminal, the output would get CRLF line endings and the remote stderr would arrive on stdout. Output that you capture or redirect, as in `v=$(sind ssh worker-0 -- hostname)` or `sind ssh worker-0 -- cat /etc/hosts > hosts`, therefore comes through unchanged, also in an interactive shell.

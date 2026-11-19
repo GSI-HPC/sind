@@ -348,7 +348,7 @@ func TestUser_DockerArgs(t *testing.T) {
 		},
 		"ssh": {
 			[]string{"ssh", "-v", "alice@worker-0", "--", "id"},
-			[]string{"exec", "-i", "sind-ssh", "ssh", "-v", "-l", "alice", "worker-0.default.sind.sind", "id"},
+			[]string{"exec", "-i", "sind-ssh", "ssh", "-v", "-l", "alice", "--", "worker-0.default.sind.sind", "id"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
