@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -549,10 +551,13 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, realm+"-"+cluster+"-munge")
 
 	// --- get auth-key ---
+	// The munge key of the controller, in base64.
 	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "auth-key", cluster)
 	require.NoError(t, err)
-	assert.NotEmpty(t, stdout)
-	assert.NotContains(t, stdout, "Error")
+	key, err := c.CopyFromContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-controller"), slurm.MungeKeyPath)
+	require.NoError(t, err)
+	require.NotEmpty(t, key)
+	assert.Equal(t, base64.StdEncoding.EncodeToString(key)+"\n", stdout)
 
 	// --- get cluster ---
 	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "cluster", cluster)
@@ -578,11 +583,10 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "controller")
 
 	// exec with default cluster
+	// The realm holds no cluster "default", and the error names the one
+	// it holds. Another realm of a parallel test may hold a "default".
 	_, _, err = executeWithRealmCtx(ctx, realm, "exec", "--", "echo", "hello")
-	if err != nil {
-		// Only fails if no "default" cluster exists — expected in isolation.
-		assert.Contains(t, err.Error(), "default")
-	}
+	require.ErrorContains(t, err, `cluster "default" not found in realm "`+realm+`" (existing clusters: `+cluster)
 
 	// exec missing separator
 	_, _, err = executeWithRealmCtx(ctx, realm, "exec", "hostname")
