@@ -862,16 +862,31 @@
     try { run = load(json); version++; } catch (e) { run = null; }
   }
 
+  // drawn is what the last frame drew of a run that ended, which stands
+  // still: frame draws it again only when its data, the shown range or the
+  // size of the axis changed, or a click or a key changed the zoom or the
+  // open steps (which empty drawn).
+  let drawn = '';
+  function still() {
+    const a = root.ticks.getBoundingClientRect(), g = root.g.getBoundingClientRect();
+    const key = [version, shown.a, shown.b, a.width, a.left - g.left, innerWidth].join(' ');
+    if (key === drawn) return true;
+    drawn = key;
+    return false;
+  }
+
   function frame(ms) {
     requestAnimationFrame(frame);
     if (document.hidden) return;
     const r = find();
     if (!r) { root = null; return; }
-    if (!root || root.g !== r.g) { root = r; rows.clear(); chosen.clear(); seenRunning.clear(); lanes.clear(); view.zoom = null; root.body.replaceChildren(); }
+    if (!root || root.g !== r.g) { root = r; rows.clear(); chosen.clear(); seenRunning.clear(); lanes.clear(); view.zoom = null; root.body.replaceChildren(); drawn = ''; }
     read();
     if (!run) return;
     const t = nowT(serverNow());
     range(ms, t);
+    if (run.end == null) drawn = '';
+    else if (still()) return;
     drawAxis(t);
     drawRows(t);
     drawSummary(t, ms);
@@ -879,6 +894,7 @@
 
   document.addEventListener('click', ev => {
     if (!(ev.target instanceof Element) || !root) return;
+    drawn = '';
     if (ev.target.closest('[data-g="whole"]')) { view.zoom = null; return; }
     const row = ev.target.closest('.g-body .srow');
     if (!row || !run) return;
@@ -897,6 +913,7 @@
     chosen.set(row.dataset.step, row.getAttribute('aria-expanded') !== 'true');
   });
   document.addEventListener('keydown', ev => {
+    drawn = '';
     if (ev.key === 'Escape' && view.zoom) view.zoom = null;
   });
 
