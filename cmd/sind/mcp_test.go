@@ -459,7 +459,9 @@ func startMCPStream(t *testing.T, args ...string) (string, *syncBuffer, func() e
 		}
 	}
 
-	listening := regexp.MustCompile(`MCP server listening on (http://\S+)\n`)
+	// The hint ends with the client config line: wait for all of it, as
+	// the tests check its later lines.
+	listening := regexp.MustCompile(`MCP server listening on (http://\S+)\n(?s:.*)Client config: .*\n`)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if m := listening.FindStringSubmatch(stderr.String()); m != nil {
