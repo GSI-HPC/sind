@@ -444,6 +444,60 @@ func TestLockRealm_DaemonHolderElsewhere(t *testing.T) {
 	}
 }
 
+// TestLockRealm_DaemonHolderChanges checks that a lock that changes hands
+// while a client waits is reported again, with its new holder, and that the
+// hint waits a minute for that holder, not for the first.
+func TestLockRealm_DaemonHolderChanges(t *testing.T) {
+	d := newFakeDaemon(t)
+	d.add("ci-7-lock", holderLabels("ci-runner-7", 4242))
+	var w warnings
+	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts.hintAfter = 500 * time.Millisecond
+	// When the waiter reports the new holder, and when it warns.
+	var mu sync.Mutex
+	var waited, warned time.Time
+	onWait, onWarning := opts.OnWait, opts.OnWarning
+	opts.OnWait = func(h *LockHolder) {
+		mu.Lock()
+		waited = time.Now()
+		mu.Unlock()
+		onWait(h)
+	}
+	opts.OnWarning = func(msg string) {
+		mu.Lock()
+		warned = time.Now()
+		mu.Unlock()
+		onWarning(msg)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	done := make(chan error)
+	go func() {
+		_, err := LockRealm(ctx, "ci-7", opts)
+		done <- err
+	}()
+
+	// The lock changes hands well before the first holder's hint is due.
+	require.Eventually(t, func() bool { return len(w.waits()) == 1 }, 2*time.Second, time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
+	d.add("ci-7-lock", holderLabels("ci-runner-8", 4343))
+	require.Eventually(t, func() bool { return len(w.warnings()) > 0 }, 4*time.Second, time.Millisecond)
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
+
+	waits := w.waits()
+	require.Len(t, waits, 2, "OnWait is called again for the new holder")
+	assert.Equal(t, "ci-runner-7", waits[0].Host)
+	assert.Equal(t, "ci-runner-8", waits[1].Host)
+	require.Len(t, w.warnings(), 1)
+	assert.Contains(t, w.warnings()[0], "still held by sind create cluster dev (pid 4343 on ci-runner-8,")
+	mu.Lock()
+	defer mu.Unlock()
+	assert.GreaterOrEqual(t, warned.Sub(waited), opts.hintAfter-50*time.Millisecond,
+		"the hint waits for the new holder, not from the first wait")
+}
+
 func TestLockRealm_DaemonNotALock(t *testing.T) {
 	d := newFakeDaemon(t)
 	d.add("sind-lock", docker.Labels{"com.example": "mine"})

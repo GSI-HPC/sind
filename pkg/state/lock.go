@@ -32,8 +32,9 @@ type LockOptions struct {
 	Command string
 	// OnWait, when set, is called once before LockRealm waits for each of
 	// the two locks: with a nil holder for the file lock, whose holder it
-	// does not know, and with the holder of the daemon lock. LockRealm logs
-	// at info level instead when it is nil.
+	// does not know, and with the holder of the daemon lock, again each
+	// time that lock changes hands. LockRealm logs at info level instead
+	// when it is nil.
 	OnWait func(holder *LockHolder)
 	// OnWarning, when set, receives the warnings meant for the user: a
 	// daemon lock whose holder no longer runs, which LockRealm removes; a
@@ -102,14 +103,15 @@ func (o *LockOptions) withDefaults() LockOptions {
 //
 // LockRealm tries each part without waiting first. When another process
 // holds the file lock, it calls opts.OnWait, and when another client holds
-// the daemon lock, it calls opts.OnWait with the holder; then it tries
-// again, at intervals that grow to two seconds. Callers take a freed lock
-// in no particular order. A holder that runs on
+// the daemon lock, it calls opts.OnWait with the holder, and again with
+// each new holder; then it tries again, at intervals that grow to two
+// seconds. Callers take a freed lock in no particular order. A holder that runs on
 // this host, in this PID namespace and since this boot, but no longer
 // exists, was killed before it could release the lock: LockRealm removes
 // its lock and says so through opts.OnWarning. Whether a holder elsewhere
-// still runs it cannot tell, so it leaves that lock alone, and after a
-// minute names the command that removes it, through opts.OnWarning. The
+// still runs it cannot tell, so it leaves that lock alone, and once that
+// holder has had it for a minute of the wait, names the command that
+// removes it, through opts.OnWarning. The
 // waits have no timeout; when ctx ends, LockRealm returns ctx.Err().
 //
 // The returned function removes the daemon lock, without ctx, so that it

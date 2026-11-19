@@ -203,8 +203,14 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 	labels := me.labels(realm, token, cmp.Or(o.Command, commandLine(os.Args)))
 
 	delay := o.pollFirst
-	var waitStart time.Time
-	hinted := false
+	// The wait notice and the hint are about one holder: the lock can
+	// change hands while this client waits, as clients take a freed lock in
+	// no particular order.
+	var (
+		waitFor   docker.NetworkID
+		waitStart time.Time
+		hinted    bool
+	)
 	for {
 		id, err := client.CreateConfigOnlyNetwork(ctx, name, labels)
 		if err == nil {
@@ -236,8 +242,8 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 				return nil, fmt.Errorf("removing %s: %w", name, err)
 			}
 			continue
-		case waitStart.IsZero():
-			waitStart = time.Now()
+		case h.id != waitFor:
+			waitFor, waitStart, hinted = h.id, time.Now(), false
 			o.waiting(ctx, realm, h)
 		case !hinted && !me.sees(h) && time.Since(waitStart) >= o.hintAfter:
 			hinted = true
