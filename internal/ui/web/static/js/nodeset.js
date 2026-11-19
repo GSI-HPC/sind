@@ -36,9 +36,14 @@
   // fold writes node names as one node set: controller,worker-[4-5].
   function fold(names) { return parts(names).join(','); }
 
+  // maxNames is the most names that expand gives: a cluster of sind ui has
+  // far fewer nodes, and a pasted w[0-4096][0-4096] would freeze the tab.
+  const maxNames = 1 << 16;
+
   // expand reads a node set of names, ranges and lists, such as
-  // controller,worker-[0-3,5]: the names, or null where it is not one. It
-  // knows no step, set operator or cluster, which the CLI takes too.
+  // controller,worker-[0-3,5]: the names, or null where it is not one, or
+  // where it names more than maxNames. It knows no step, set operator or
+  // cluster, which the CLI takes too.
   function expand(text) {
     const items = [];
     let depth = 0, cur = '';
@@ -67,11 +72,14 @@
           const from = +r[1], to = r[2] === undefined ? from : +r[2];
           if (to < from || to - from > 4096) return null;
           const width = r[1].length > 1 && r[1][0] === '0' ? r[1].length : 0;
+          if (nums.length + to - from >= maxNames) return null;
           for (let i = from; i <= to; i++) nums.push(String(i).padStart(width, '0'));
         }
+        if (names.length * nums.length > maxNames) return null;
         names = names.flatMap(n => nums.map(x => n + x));
       }
-      out.push(...names);
+      if (out.length + names.length > maxNames) return null;
+      for (const n of names) out.push(n);
     }
     return out;
   }

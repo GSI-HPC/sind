@@ -42,22 +42,31 @@ var slurmInfoTimeout = 10 * time.Second
 // slurmInfoTimeout ends it.
 var errSlurmInfoTimeout = errors.New("sinfo timed out")
 
-// GetSlurmInfo reads the cluster's slurm.conf and sind-nodes.conf on its
-// controller and runs sinfo there, within slurmInfoTimeout. A controller
-// that does not run, or a slurmctld that does not answer, is an error; the
+// GetSlurmInfo reads the cluster's slurm.conf and sind-nodes.conf on the
+// controller in control, the primary while it runs, else the backup (see
+// findController), and runs sinfo there, within slurmInfoTimeout. Both
+// controllers mount the config volume. A controller that does not run, or
+// a slurmctld that does not answer, is an error; the
 // SlurmInfo then holds the files alone, which cat reads without slurmctld,
 // and is nil when there are none. A file that cannot be read is left out.
 func GetSlurmInfo(ctx context.Context, client *docker.Client, realm, clusterName string) (*SlurmInfo, error) {
 	ctx, cancel := context.WithTimeoutCause(ctx, slurmInfoTimeout, errSlurmInfoTimeout)
 	defer cancel()
+	containers, err := clusterContainers(ctx, client, realm, clusterName)
+	if err != nil {
+		return nil, err
+	}
 	controller := ContainerName(realm, clusterName, slurm.ControllerHost)
+	if c, ok := findController(containers, realm, clusterName); ok {
+		controller = c.Name
+	}
 	info := &SlurmInfo{}
 	for _, path := range slurmInfoFiles {
 		if content, err := client.ReadFile(ctx, controller, path); err == nil {
 			info.Files = append(info.Files, SlurmFile{Path: path, Content: content})
 		}
 	}
-	err := readSinfo(ctx, client, controller, info)
+	err = readSinfo(ctx, client, controller, info)
 	if err == nil {
 		return info, nil
 	}

@@ -46,7 +46,9 @@ type fakeNetwork struct {
 // for code that runs docker calls concurrently, where queued results do not
 // work. It knows networks, volumes, containers and images, and the files
 // the mesh writes into containers; a pull downloads an image of one layer
-// of 2 MB. A network created without --subnet gets the
+// of 2 MB. A container that mounts a volume (-v) keeps its files in the
+// volume, as the relay does, so that a container created again on the
+// volume finds them. A network created without --subnet gets the
 // first free 10.N.0.0/16 and the gateway 10.N.0.1. A starting container
 // gets its --ip, or else the lowest free address of the network's ip-range,
 // and loses it when it stops, as Docker does. Calls whose joined arguments
@@ -54,7 +56,8 @@ type fakeNetwork struct {
 type fakeDocker struct {
 	t          *testing.T
 	networks   map[string]*fakeNetwork
-	volumes    map[string]docker.Labels // existing volumes, with their labels
+	volumes    map[string]docker.Labels     // existing volumes, with their labels
+	volFiles   map[string]map[string]string // files of the volumes, by absolute path in the container
 	containers map[string]*fakeContainer
 	images     map[string]bool // images the daemon has
 	fail       map[string]mock.Result
@@ -66,6 +69,7 @@ func newFake(t *testing.T) *fakeDocker {
 		t:          t,
 		networks:   map[string]*fakeNetwork{},
 		volumes:    map[string]docker.Labels{},
+		volFiles:   map[string]map[string]string{},
 		containers: map[string]*fakeContainer{},
 		images:     map[string]bool{},
 		fail:       map[string]mock.Result{},
@@ -130,11 +134,15 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 	f.volumes[string(mgr.SSHVolumeName())] = docker.Labels{
 		LabelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
 	}
+	sshFiles := map[string]string{
+		privateKeyPath: "-----BEGIN OPENSSH PRIVATE KEY-----\n", PublicKeyPath: "ssh-ed25519 AAAA\n", knownHostsPath: "",
+	}
+	f.volFiles[string(mgr.SSHVolumeName())] = sshFiles
 	f.containers[string(mgr.DNSContainerName())] = dns
 	require.NoError(f.t, f.start(string(mgr.DNSContainerName())))
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
 		image: SSHImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dns.ips[mesh]},
-		files: map[string]string{knownHostsPath: ""},
+		files: sshFiles,
 	}
 	require.NoError(f.t, f.start(string(mgr.SSHContainerName())))
 	if state != docker.StateRunning {
@@ -324,6 +332,7 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 			return notFound(f.t, testutil.NoSuchVolume(last))
 		}
 		delete(f.volumes, last)
+		delete(f.volFiles, last)
 		return mock.Result{}
 	case joined == "container inspect "+last:
 		if _, ok := f.containers[last]; !ok {
@@ -410,7 +419,11 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		if !ok {
 			return notFound(f.t, testutil.NoSuchContainer(name))
 		}
-		return mock.Result{Stdout: testutil.TarArchive(path.Base(file), c.files[file])}
+		content, ok := c.files[file]
+		if !ok {
+			return mock.Result{Stderr: "Error response from daemon: Could not find the file " + file + " in container " + name + "\n", Err: testutil.ExitCode1(f.t)}
+		}
+		return mock.Result{Stdout: testutil.TarArchive(path.Base(file), content)}
 	case args[0] == "exec":
 		return f.exec(args[1:], stdin)
 	}
@@ -437,7 +450,14 @@ func (f *fakeDocker) create(args []string) mock.Result {
 		case "--ip":
 			c.ip = args[i+1]
 			i++
-		case "-v", "--label", "--pull":
+		case "-v":
+			vol, _, _ := strings.Cut(args[i+1], ":")
+			if f.volFiles[vol] == nil {
+				f.volFiles[vol] = map[string]string{}
+			}
+			c.files = f.volFiles[vol]
+			i++
+		case "--label", "--pull":
 			i++
 		default:
 			rest = append(rest, args[i])

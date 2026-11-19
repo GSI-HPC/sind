@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
@@ -126,15 +125,10 @@ type pgOutside struct {
 }
 
 // pgOutsides returns the containers that sind did not make and that are
-// not on the mesh of the realm, those that run first, each by name. It
-// leaves out the containers of sind's other realms, such as their
-// monitoring stacks, which the docker ps of the realm does not tell apart.
+// not on the mesh of the realm, those that run first, each by name.
 func pgOutsides(sn store.Snapshot, realm string) []pgOutside {
 	var on, off []pgOutside
 	for _, c := range sn.Meshes[realm].Connectable {
-		if _, ok := action.SindContainer(sn, c.Name); ok {
-			continue
-		}
 		o := pgOutside{Name: c.Name, Image: c.Image, State: c.State, Off: c.State != "running", Up: strings.ToLower(c.Status),
 			ConnectURL: pgDialog("connect", "realm", realm, "container", c.Name)}
 		switch len(c.Networks) {

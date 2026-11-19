@@ -25,7 +25,7 @@ func (c *Cluster) validateAPI() error {
 		{"slurmdbd", c.Slurm.Slurmdbd},
 	} {
 		value, ok := s.section.Parameter("AuthAltTypes")
-		if ok && !ListsValue(value, JWTAuthType) && !ListsValue(value, "jwt") {
+		if ok && !ListsPlugin(value, JWTAuthType) {
 			return fmt.Errorf("slurm %s sets AuthAltTypes=%s: the api node needs %s in it", s.name, value, JWTAuthType)
 		}
 	}

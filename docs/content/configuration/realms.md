@@ -80,7 +80,7 @@ Mutating operations (`create cluster`, `delete cluster`, `delete realm`, `create
 
 - A lock on the Docker daemon, the network `<realm>-lock`, which exists while a command holds the lock. It serializes every sind client of the daemon: several users of a host, CI jobs that share the host's Docker socket, or containers that mount it. The network is configuration-only: it takes no subnet from Docker's address pools and no bridge device, and `sind get networks` does not list it.
 
-If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. For a command of another client the warning names it, for example:
+If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. For a command of another client the warning names it, and names the next one when the lock changes hands while sind waits, for example:
 
 {{< ways >}}
 {{< cli >}}
@@ -101,7 +101,7 @@ On a terminal, the [progress display]({{< relref "/usage/progress" >}}) shows th
 
 The wait has no timeout; Ctrl-C ends it. sind releases the lock when the command ends, also when it fails or is interrupted with Ctrl+C or SIGTERM.
 
-A command killed with SIGKILL leaves the daemon lock behind. When the killed command ran on the same host, in the same container and since the last boot, the next sind command finds that its process is gone, removes the lock and says so (`Warning: removing the realm lock of ..., which no longer runs`). A lock from another host or container is never removed automatically, as its command may still be running; after a minute of waiting, sind prints the command that removes it:
+A command killed with SIGKILL leaves the daemon lock behind. When the killed command ran on the same host, in the same container and since the last boot, the next sind command finds that its process is gone, also when another process has its PID now, removes the lock and says so (`Warning: removing the realm lock of ..., which no longer runs`). A lock from another host or container is never removed automatically, as its command may still be running, nor a lock of an earlier sind version whose PID another process has now; once one command has held it for a minute of the wait, sind prints the command that removes it:
 
 ```
 Warning: the realm lock is still held by sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03); if that command no longer runs, remove the lock with: docker network rm sind-lock

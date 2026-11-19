@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -168,6 +171,40 @@ func TestPower_WaitInvalid(t *testing.T) {
 	_, _, err = executeWithMock(&m, "power", "unfreeze", "worker-0.dev")
 	require.EqualError(t, err, `invalid SIND_WAIT value "soon": want a duration with a unit, such as 90s, 5m or 1h30m`)
 	assert.Empty(t, m.Calls)
+}
+
+// TestPower_SSHExport covers the SSH config export of the realm: the
+// commands that start nodes, and add host keys that known_hosts lacks,
+// bring it up to date once they started nodes; the others, and a command
+// that started none, leave it alone and warn about nothing.
+func TestPower_SSHExport(t *testing.T) {
+	t.Setenv("SIND_WAIT", "")
+	want := map[string]bool{
+		"on": true, "reboot": true, "cycle": true,
+		"shutdown": false, "cut": false, "freeze": false, "unfreeze": false,
+	}
+	for i, c := range powerCommands {
+		sub := strings.Fields(c.use)[0]
+		for _, fnErr := range []error{nil, cluster.ErrNodeNotFound} {
+			t.Run(fmt.Sprint(sub, " ", fnErr), func(t *testing.T) {
+				saved := powerCommands
+				powerCommands = slices.Clone(saved)
+				powerCommands[i].fn = func(context.Context, *docker.Client, *mesh.Manager, string, []string) error { return fnErr }
+				t.Cleanup(func() { powerCommands = saved })
+				ctx, export := emptyRealmCtx(t, nil)
+
+				_, stderr, err := execute(ctx, nil, "power", sub, "worker-0.dev")
+
+				require.ErrorIs(t, err, fnErr)
+				assert.NotContains(t, stderr, "could not update SSH config")
+				if want[sub] && fnErr == nil {
+					assert.NoFileExists(t, export, "SSH export synced")
+				} else {
+					assert.FileExists(t, export, "SSH export left alone")
+				}
+			})
+		}
+	}
 }
 
 // --- Integration ---

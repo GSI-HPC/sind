@@ -191,7 +191,7 @@ func TestDemoServices(t *testing.T) {
 		{Name: "act", Setup: fail, Run: func(context.Context, *Env) {}},
 		{Name: "collect", Setup: fail},
 		{Name: "collect-activity"},
-		{Name: "more"},
+		{Name: "other"},
 	}
 	d := demo.New(store.New(), true)
 	got := demoServices(d, registered)
@@ -200,7 +200,7 @@ func TestDemoServices(t *testing.T) {
 	for _, svc := range got {
 		names = append(names, svc.Name)
 	}
-	assert.Equal(t, []string{"act", "more", "demo"}, names, "no collectors, the runner and the demo's own service")
+	assert.Equal(t, []string{"act", "other", "demo"}, names, "no collectors, the runner and the demo's own service")
 	assert.NotNil(t, got[0].Run, "the runner keeps its Run, which stops the commands")
 
 	env := &Env{Store: store.New()}

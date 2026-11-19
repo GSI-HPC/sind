@@ -9,9 +9,11 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
-	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/ssh"
+	"golang.org/x/sync/errgroup"
 )
 
 // powerConcurrency bounds the docker calls a power command runs at once.
@@ -23,9 +25,9 @@ const powerConcurrency = 8
 
 // powerTarget is a node a power command acts on: its container, and the
 // name and role a display names its progress target by. The name is the
-// node's as a node argument writes it: the short name in the default
-// cluster, <short name>.<cluster> in another, so that the nodes of a
-// command that spans clusters, worker-0 and worker-0.dev, are told apart.
+// node's as a node argument writes it (QualifiedNodeName), so that the nodes of
+// a command that spans clusters, worker-0 and worker-0.dev, are told
+// apart.
 type powerTarget struct {
 	container docker.ContainerName
 	node      string
@@ -37,16 +39,33 @@ func PowerShutdown(ctx context.Context, client *docker.Client, realm, clusterNam
 	return forEachTarget(ctx, client, realm, clusterName, shortNames, "stopping", client.StopContainer)
 }
 
-// PowerCut immediately kills the specified nodes (docker kill).
+// PowerCut immediately kills the specified nodes (docker kill). A node that
+// does not run counts as killed, as PowerShutdown counts it stopped.
 func PowerCut(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
-	return forEachTarget(ctx, client, realm, clusterName, shortNames, "killing", client.KillContainer)
+	return forEachTarget(ctx, client, realm, clusterName, shortNames, "killing", killer(client))
+}
+
+// killer returns an op that kills a node's container (docker kill), and
+// counts one that does not run as killed: docker stop of a container that
+// does not run succeeds, while docker kill fails.
+func killer(client *docker.Client) func(context.Context, docker.ContainerName) error {
+	return func(ctx context.Context, name docker.ContainerName) error {
+		if err := client.KillContainer(ctx, name); err != nil && !docker.IsNotRunning(err) {
+			return err
+		}
+		return nil
+	}
 }
 
 // PowerOn starts the specified stopped nodes (docker start). It first starts
 // the realm's mesh DNS and SSH relay if they are stopped, as after a host
 // reboot, and afterwards points the started nodes' mesh DNS records at their
 // addresses: Docker can give a node another address each time it starts.
-// A stopped monitoring stack of the realm starts with the nodes.
+// It adds the host keys of started nodes that the relay's known_hosts
+// lacks (see addMissingHostKeys).
+// A stopped monitoring stack of the realm starts with the nodes; one that
+// cannot start or get ready fails the call when the cluster is monitored,
+// and is a warning (meshMgr.Warn) when it is not.
 func PowerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	targets, err := resolveTargets(ctx, client, meshMgr.Realm, clusterName, shortNames)
 	if err != nil {
@@ -62,9 +81,10 @@ func PowerReboot(ctx context.Context, client *docker.Client, meshMgr *mesh.Manag
 }
 
 // PowerCycle hard-restarts the specified nodes: it kills them all (docker
-// kill), then starts them as PowerOn does.
+// kill), then starts them as PowerOn does. A node that does not run is
+// started, as PowerReboot starts it.
 func PowerCycle(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
-	return powerRestart(ctx, client, meshMgr, clusterName, shortNames, "killing", client.KillContainer)
+	return powerRestart(ctx, client, meshMgr, clusterName, shortNames, "killing", killer(client))
 }
 
 // PowerFreeze suspends all processes in the specified nodes (docker pause).
@@ -121,13 +141,28 @@ func powerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 		containers[i] = t.container
 	}
 	dnsErr := refreshDNSRecords(ctx, client, meshMgr, clusterName, containers, dnsIP)
+	addMissingHostKeys(ctx, client, meshMgr, clusterName, containers)
 	// The Corefile takes one change at a time: the stack's names after
 	// the nodes'.
 	var stackErr error
 	if _, err := startMonitoring(ctx, client, meshMgr); err != nil {
-		stackErr = fmt.Errorf("starting the monitoring stack: %w", err)
+		stackErr = stackFailure(ctx, client, meshMgr, clusterName, err)
 	}
 	return errors.Join(startErr, dnsErr, stackErr)
+}
+
+// stackFailure returns the error of a power command whose start of the
+// realm's monitoring stack failed with err, for a monitored cluster. The
+// stack is the realm's, so for a cluster that it does not collect, which
+// a stack left partial by an interrupted create cannot keep from running,
+// the failure is a warning (meshMgr.Warn), and stackFailure returns nil.
+// When sind cannot tell, it returns the error.
+func stackFailure(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, err error) error {
+	if monitored, lerr := clusterMonitored(ctx, client, meshMgr.Realm, clusterName); lerr == nil && !monitored {
+		meshMgr.Warn(ctx, fmt.Sprintf("starting the monitoring stack of realm %q: %v", meshMgr.Realm, err))
+		return nil
+	}
+	return fmt.Errorf("starting the monitoring stack: %w", err)
 }
 
 // refreshDNSRecords points the mesh DNS records of the given running nodes
@@ -158,6 +193,73 @@ func refreshDNSRecords(ctx context.Context, client *docker.Client, meshMgr *mesh
 		return fmt.Errorf("updating DNS records: %w", err)
 	}
 	return nil
+}
+
+// addMissingHostKeys adds the host keys of the given running nodes that the
+// relay's known_hosts has no line of. Only the creates collect host keys
+// otherwise, and sind v0.8 to v0.12 rewrote known_hosts in place, so that a
+// write cut short could lose the keys of nodes that still run, which
+// sind ssh NODE CMD and the exported SSH config then refuse. A node's key
+// is read from its sshd's key file (ssh.HostKeyFile), which needs no
+// running sshd, unlike the ssh-keyscan of the node's setup: a node that
+// was just started may not run it yet. The power command is done by then,
+// so failures are warnings (meshMgr.Warn).
+func addMissingHostKeys(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerName) {
+	if len(containers) == 0 {
+		return
+	}
+	realm := meshMgr.Realm
+	prefix := ContainerPrefix(realm, clusterName)
+	byHost := make(map[string]docker.ContainerName, len(containers))
+	hostnames := make([]string, len(containers))
+	for i, c := range containers {
+		hostnames[i] = DNSName(strings.TrimPrefix(string(c), prefix), clusterName, realm)
+		byHost[hostnames[i]] = c
+	}
+	warn := func(err error) {
+		meshMgr.Warn(ctx, fmt.Sprintf("not adding the host keys that known_hosts lacks: %v", err))
+	}
+	missing, err := meshMgr.MissingKnownHosts(ctx, hostnames)
+	if err != nil {
+		warn(err)
+		return
+	}
+	if len(missing) == 0 {
+		return
+	}
+	// A node whose key cannot be read does not keep the others out.
+	keys := make([]string, len(missing))
+	errs := make([]error, len(missing))
+	var g errgroup.Group
+	g.SetLimit(powerConcurrency)
+	for i, h := range missing {
+		g.Go(func() error {
+			out, err := client.ReadFile(ctx, byHost[h], ssh.HostKeyFile)
+			if err == nil {
+				keys[i], err = ssh.HostKeyFromFile(out)
+			}
+			if err != nil {
+				errs[i] = fmt.Errorf("reading the host key of %s: %w", byHost[h], err)
+			}
+			return nil
+		})
+	}
+	_ = g.Wait() // the goroutines report through errs
+	var entries []mesh.KnownHostEntry
+	for i, h := range missing {
+		if errs[i] == nil {
+			entries = append(entries, mesh.KnownHostEntry{Hostname: h, HostKey: keys[i]})
+		}
+	}
+	if len(entries) > 0 {
+		sindlog.From(ctx).InfoContext(ctx, "adding host keys that known_hosts lacks", "nodes", len(entries))
+		if err := meshMgr.AddKnownHosts(ctx, entries); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		warn(err)
+	}
 }
 
 // forEachContainer applies op to the container of every target in
@@ -195,9 +297,24 @@ func forEachContainer(ctx context.Context, targets []powerTarget, verb string, o
 	return done, err
 }
 
+// uniqueNames returns names without repeats, each at its first place, as
+// a node named twice is acted on once.
+func uniqueNames(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	unique := make([]string, 0, len(names))
+	for _, name := range names {
+		if !seen[name] {
+			seen[name] = true
+			unique = append(unique, name)
+		}
+	}
+	return unique
+}
+
 // resolveTargets validates that all shortNames exist in the cluster and returns
 // their Docker container names, with their names (see powerTarget) and
-// roles. Returns nil without error for empty shortNames.
+// roles, once for a name given twice. Returns nil without error for empty
+// shortNames.
 func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) ([]powerTarget, error) {
 	if len(shortNames) == 0 {
 		return nil, nil
@@ -210,13 +327,12 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	existing := make(map[docker.ContainerName]docker.ContainerListEntry, len(entries))
 	for _, e := range entries {
-		existing[e.Name] = e
+		if isNode(e.Labels) {
+			existing[e.Name] = e
+		}
 	}
 
-	suffix := ""
-	if clusterName != config.DefaultClusterName {
-		suffix = "." + clusterName
-	}
+	shortNames = uniqueNames(shortNames)
 	targets := make([]powerTarget, 0, len(shortNames))
 	for _, name := range shortNames {
 		cn := ContainerName(realm, clusterName, name)
@@ -224,7 +340,7 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 		if !ok {
 			return nil, errorWith(ErrNodeNotFound, "node %q not found in cluster %q", name, clusterName)
 		}
-		targets = append(targets, powerTarget{container: cn, node: name + suffix, role: e.Labels[LabelRole]})
+		targets = append(targets, powerTarget{container: cn, node: QualifiedNodeName(clusterName, name), role: e.Labels[LabelRole]})
 	}
 	return targets, nil
 }

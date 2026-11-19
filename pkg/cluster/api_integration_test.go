@@ -57,7 +57,7 @@ func apiURL(t *testing.T, result *Cluster, path string) string {
 	t.Helper()
 	i := slices.IndexFunc(result.Nodes, func(n *Node) bool { return n.Role == config.RoleAPI })
 	require.NotEqual(t, -1, i, "api node missing")
-	return "http://" + result.Nodes[i].IP + ":" + probe.SlurmrestdPort + path
+	return "http://" + result.Nodes[i].IP + ":" + slurm.SlurmrestdPort + path
 }
 
 // restResponse is the part of slurmrestd's responses the tests read.

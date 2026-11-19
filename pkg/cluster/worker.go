@@ -86,8 +86,9 @@ func (o WorkerAddOptions) Check() error {
 // returns.
 //
 // For managed workers (default), the flow is:
-//  1. Validate: options, controller exists, room on the realm's mesh and
-//     the cluster network (see checkBridgePorts), sind-nodes.conf present
+//  1. Validate: options, the realm name (config.CheckName), controller
+//     exists, room on the realm's mesh and the cluster network (see
+//     checkBridgePorts), sind-nodes.conf present
 //  2. Inspect the controller and the newest worker, for the cluster's
 //     settings and the new workers' shape
 //  3. Check an explicit image: its Slurm version, its identity support,
@@ -107,7 +108,9 @@ func (o WorkerAddOptions) Check() error {
 // Workers added to an unmanaged cluster are always unmanaged. A failure
 // after the first container exists removes the new containers, mesh
 // entries and NodeName lines again. readinessInterval is the delay
-// between readiness probe rounds, as for Create.
+// between readiness probe rounds, as for Create. As there, the writes of
+// the mesh DNS, known_hosts and sind-nodes.conf ignore the end of ctx and
+// may outlive it by up to RollbackTimeout.
 func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -118,6 +121,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// Check the options as the config's are checked, before any container
 	// exists.
 	if err := opts.Check(); err != nil {
+		return nil, err
+	}
+	if err := config.CheckName("realm", realm); err != nil {
 		return nil, err
 	}
 
@@ -166,6 +172,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// inspect reports them, a map. docker ps joins all labels with commas,
 	// so it cannot return a value with a comma in it.
 	labels := infra.controller.Labels
+	if err := checkSettingLabels(ctx, client, infra.controller); err != nil {
+		return nil, err
+	}
 
 	// sind wrote no Slurm configuration for an unmanaged cluster to add
 	// workers to.
@@ -221,14 +230,20 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 	shape = shape.override(opts)
 
-	if err := checkWorkerImage(ctx, client, opts, managed, slurmVersion); err != nil {
+	if err := pullWorkerImage(ctx, client, opts); err != nil {
 		return nil, err
 	}
 	// The workers of a monitored cluster are monitored too: a managed
-	// worker's slurmd must serve the HTTP endpoint the stack probes.
+	// worker's slurmd must serve the HTTP endpoint the stack probes. An
+	// image given with --image must have the cluster's Slurm version; the
+	// newest worker's has it already.
 	monitored := Monitored(realm, infra.controller)
-	if monitored && managed {
-		if err := probeWorkerImage(ctx, client, shape.Image, slurmConf); err != nil {
+	if managed {
+		version := ""
+		if opts.Image != "" {
+			version = slurmVersion
+		}
+		if err := checkWorkerSlurm(ctx, client, opts.ClusterName, shape.Image, version, monitored, slurmConf); err != nil {
 			return nil, err
 		}
 	}
@@ -322,8 +337,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}()
 
 	// Start event watcher before creating nodes.
-	prefix := ContainerPrefix(realm, opts.ClusterName)
-	watcher, stopWatcher := startWatcher(ctx, client, prefix, opts.ClusterName)
+	watcher, stopWatcher := startWatcher(ctx, client, realm, opts.ClusterName)
 	defer stopWatcher()
 
 	// Create nodes, start systemd monitors, and wait for readiness.
@@ -368,18 +382,37 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	return nodes, nil
 }
 
-// probeWorkerImage checks that the image of new managed workers of a
-// monitored cluster serves slurmd's HTTP endpoint (see
-// slurm.ImageInfo.MonitoringProblems), looking for plugins in the
+// checkWorkerSlurm checks the slurmd of image, the image of new managed
+// workers of cluster clusterName, with one slurm.ProbeImage, when there is
+// something to check. A worker runs slurmd, not slurmctld, so the probe
+// asks slurmd alone. With a version, the image must have slurmd of that
+// version, as slurmd may not be newer than slurmctld and sind labels every
+// node with the cluster's version. On a monitored cluster its slurmd must
+// serve the HTTP endpoint the stack probes (see
+// slurm.ImageInfo.Problems), with plugins looked for in the
 // PluginDir slurmConf sets.
-func probeWorkerImage(ctx context.Context, client *docker.Client, image string, slurmConf config.Section) error {
+func checkWorkerSlurm(ctx context.Context, client *docker.Client, clusterName, image, version string, monitored bool, slurmConf config.Section) error {
+	if version == "" && !monitored {
+		return nil
+	}
 	pluginDir, _ := slurmConf.Parameter("PluginDir")
 	req := slurm.ProbeRequest{Daemons: []string{slurm.Slurmd}, PluginDir: pluginDir}
 	info, err := slurm.ProbeImage(ctx, client, image, req)
 	if err != nil {
 		return err
 	}
-	if problems := info.MonitoringProblems(req); len(problems) > 0 {
+	if version != "" {
+		if len(info.Missing) > 0 {
+			return fmt.Errorf("image %s has no slurmd, which managed workers run", image)
+		}
+		if info.Version != version {
+			return fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", image, info.Version, clusterName, version)
+		}
+	}
+	if !monitored {
+		return nil
+	}
+	if problems := info.Problems(); len(problems) > 0 {
 		return errorWith(ErrImageUnsupported, "image %s cannot serve monitoring: %s", image, strings.Join(problems, "; "))
 	}
 	return nil
@@ -511,36 +544,44 @@ func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mes
 	return
 }
 
-// checkWorkerImage pulls an image given with --image, once: when opts.Pull
-// asks for it, or else when the daemon does not have it, so that no worker
-// container's docker create pulls it (see startPull). It then checks the
-// image for managed workers of a cluster whose Slurm version sind knows:
-// it runs slurmctld -V in the image and refuses a version other than the
-// cluster's, as slurmd may not be newer than slurmctld and sind labels
-// every node with the cluster's version.
-func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions, managed bool, clusterVersion string) error {
-	if opts.Image != "" {
-		images := []string{opts.Image}
-		var err error
-		if !opts.Pull {
-			images, err = missingImages(ctx, client, images)
-		}
-		if err == nil && len(images) > 0 {
-			err = pullImages(ctx, client, images)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	if opts.Image == "" || !managed || clusterVersion == "" {
+// pullWorkerImage pulls an image given with --image, once: when opts.Pull
+// asks for it, or else when the daemon does not have it, so that neither
+// the image's check (checkWorkerSlurm) nor a worker container's docker
+// create pulls it (see startPull).
+func pullWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions) error {
+	if opts.Image == "" {
 		return nil
 	}
-	version, err := slurm.DiscoverVersion(ctx, client, opts.Image)
-	if err != nil {
-		return fmt.Errorf("discovering the Slurm version of %s: %w", opts.Image, err)
+	images := []string{opts.Image}
+	var err error
+	if !opts.Pull {
+		images, err = missingImages(ctx, client, images)
 	}
-	if version != clusterVersion {
-		return fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", opts.Image, version, opts.ClusterName, clusterVersion)
+	if err == nil && len(images) > 0 {
+		err = pullImages(ctx, client, images)
+	}
+	return err
+}
+
+// settingLabels are the labels of the controller that give new workers
+// their data and CVMFS mounts, users and identity mode.
+var settingLabels = []string{LabelDataHostPath, LabelDataMountPath, LabelCVMFS, LabelUsers, LabelGroups, LabelIdentity}
+
+// checkSettingLabels refuses a setting label of the controller that can
+// come from its image rather than from sind. Docker merges an image's
+// labels into its containers', and sind before v0.11.0 left out the labels
+// it had nothing to record, so on its nodes an image's label shows
+// through. A label that is not empty and has the image's value can be the
+// image's.
+func checkSettingLabels(ctx context.Context, client *docker.Client, controller *docker.ContainerInfo) error {
+	image, _, err := client.InspectImage(ctx, controller.Image)
+	if err != nil {
+		return fmt.Errorf("reading the labels of the controller's image: %w", err)
+	}
+	for _, key := range settingLabels {
+		if v := controller.Labels[key]; v != "" && image.Labels[key] == v {
+			return fmt.Errorf("controller label %s=%q can come from its image %s, not from sind: refusing to give it to new workers", key, v, controller.Image)
+		}
 	}
 	return nil
 }
@@ -710,7 +751,7 @@ func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallba
 		CapAdd:      capabilityNames(hc.CapAdd, own...),
 		CapDrop:     capDrop,
 		Devices:     deviceArgs(hc.Devices),
-		SecurityOpt: extraSecurityOpts(ctx, info.Name, hc.SecurityOpt),
+		SecurityOpt: extraSecurityOpts(ctx, info.Name, hc),
 	}
 	if cpus := int(hc.NanoCPUs / 1e9); cpus > 0 {
 		shape.CPUs = cpus
@@ -800,13 +841,19 @@ func deviceArgs(devices []docker.DeviceMapping) []string {
 }
 
 // extraSecurityOpts returns a container's security options other than the
-// ones BuildRunArgs gives every node. A seccomp profile is left out with a
-// warning: docker reports its content, which the docker CLI cannot take
-// back, as it reads a profile from a file.
-func extraSecurityOpts(ctx context.Context, container docker.ContainerName, opts []string) []string {
+// ones BuildRunArgs gives every node, from its host configuration. A
+// seccomp profile is left out with a warning: docker reports its content,
+// which the docker CLI cannot take back, as it reads a profile from a
+// file. systempaths=unconfined, which the docker CLI does not pass on to
+// the daemon, is read from the container's masked and read-only paths
+// (docker.HostConfig.SystemPathsUnconfined).
+func extraSecurityOpts(ctx context.Context, container docker.ContainerName, hc docker.HostConfig) []string {
 	own := nodeSecurityOpts()
 	var extra []string
-	for _, opt := range opts {
+	if hc.SystemPathsUnconfined() && !slices.Contains(hc.SecurityOpt, systemPathsUnconfined) {
+		extra = append(extra, systemPathsUnconfined)
+	}
+	for _, opt := range hc.SecurityOpt {
 		switch {
 		case slices.Contains(own, opt):
 		case strings.HasPrefix(opt, "seccomp={"):
@@ -817,6 +864,9 @@ func extraSecurityOpts(ctx context.Context, container docker.ContainerName, opts
 	}
 	return extra
 }
+
+// systemPathsUnconfined is the security option that unmasks /proc and /sys.
+const systemPathsUnconfined = "systempaths=unconfined"
 
 // nodeSecurityOpts returns the security options BuildRunArgs gives every
 // node.
@@ -832,9 +882,12 @@ func nodeSecurityOpts() []string {
 }
 
 // cleanupWorkers removes containers and mesh registrations for the given
-// worker node configs. Used to roll back a failed WorkerAdd. It goes on past
-// a failure, a container that is already gone is no failure, and it
-// returns the failures joined.
+// worker node configs. Used to roll back a failed WorkerAdd. It logs the
+// diagnostics of the containers and removes them in parallel, as Create's
+// rollback does (DeleteContainers, the progress step "nodes"), but only
+// those that exist (see createdWorkers). It goes on past a failure, a
+// container that is already gone is no failure, and it returns the
+// failures joined.
 func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []RunConfig) error {
 	log := sindlog.From(ctx)
 	var errs []error
@@ -852,13 +905,42 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 		errs = append(errs, fmt.Errorf("removing known hosts: %w", err))
 	}
 
-	for _, nc := range nodeConfigs {
-		containerName := ContainerName(realm, clusterName, nc.ShortName)
-		logContainerDiagnostics(ctx, client, containerName)
-		if err := docker.IgnoreNotFound(client.RemoveContainer(ctx, containerName)); err != nil {
-			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
-			errs = append(errs, fmt.Errorf("removing container %s: %w", containerName, err))
-		}
+	containers := createdWorkers(ctx, client, realm, clusterName, nodeConfigs)
+	names := make([]docker.ContainerName, len(containers))
+	for i, c := range containers {
+		names[i] = c.Name
+	}
+	logContainersDiagnostics(ctx, client, names)
+	if err := DeleteContainers(ctx, client, containers); err != nil {
+		log.DebugContext(ctx, "cleanup: removing containers", "error", err)
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// createdWorkers returns the containers of the workers of nodeConfigs that
+// exist, as one listing of the cluster's containers shows them: a failed
+// create worker may not have made them all. When the listing fails, it
+// returns every worker, so that the rollback still tries to remove them.
+func createdWorkers(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig) []docker.ContainerListEntry {
+	listed, err := clusterContainers(ctx, client, realm, clusterName)
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "cleanup: listing containers", "error", err)
+	}
+	byName := make(map[docker.ContainerName]docker.ContainerListEntry, len(listed))
+	for _, c := range listed {
+		byName[c.Name] = c
+	}
+	var containers []docker.ContainerListEntry
+	for _, nc := range nodeConfigs {
+		name := ContainerName(realm, clusterName, nc.ShortName)
+		if c, ok := byName[name]; ok {
+			containers = append(containers, c)
+		} else if err != nil {
+			containers = append(containers, docker.ContainerListEntry{Name: name, Labels: docker.Labels{
+				LabelRealm: realm, LabelCluster: clusterName, LabelRole: string(nc.Role),
+			}})
+		}
+	}
+	return containers
 }

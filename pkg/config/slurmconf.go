@@ -25,7 +25,7 @@ var lineKeys = []string{"DownNodes", "FrontendName", "NodeName", "NodeSet", "Par
 // is \), a line may hold several pairs, and a value may be quoted. A line
 // continued with a trailing backslash is not joined to the next.
 func LinePairs(line string) [][2]string {
-	line = unescape(stripComment(line))
+	line = unescape(StripComment(line))
 	var pairs [][2]string
 	for {
 		m := keyValuePattern.FindStringSubmatch(line)
@@ -37,9 +37,9 @@ func LinePairs(line string) [][2]string {
 	}
 }
 
-// stripComment cuts a slurm.conf-style line at its comment: a # that an
+// StripComment cuts a slurm.conf-style line at its comment: a # that an
 // even number of backslashes precedes.
-func stripComment(line string) string {
+func StripComment(line string) string {
 	backslashes := 0
 	for i := range len(line) {
 		switch {
@@ -130,10 +130,41 @@ func (s Section) SetsParameter(key string) bool {
 }
 
 // ListsValue reports whether a comma-separated parameter value, such as
-// LaunchParameters or AuthInfo, lists item.
+// AuthInfo, lists item.
 func ListsValue(value, item string) bool {
+	return listsWith(value, item, func(v, item string) bool { return v == item })
+}
+
+// ListsFlag reports whether a comma-separated list of flags that Slurm
+// reads without regard to case, such as LaunchParameters, lists flag, in
+// any case.
+func ListsFlag(value, flag string) bool {
+	return listsWith(value, flag, strings.EqualFold)
+}
+
+// IsPlugin reports whether a plugin parameter value, such as AuthType or
+// MetricsType, names plugin, which has the form <type>/<name>: Slurm also
+// takes the name without its type prefix. A plugin without a type prefix
+// matches only itself.
+func IsPlugin(value, plugin string) bool {
+	value = strings.TrimSpace(value)
+	if _, name, ok := strings.Cut(plugin, "/"); ok && value == name {
+		return true
+	}
+	return value == plugin
+}
+
+// ListsPlugin reports whether a comma-separated list of plugins, such as
+// AuthAltTypes or TaskPlugin, lists plugin (see IsPlugin).
+func ListsPlugin(value, plugin string) bool {
+	return listsWith(value, plugin, IsPlugin)
+}
+
+// listsWith reports whether an entry of the comma-separated value matches
+// item.
+func listsWith(value, item string, match func(v, item string) bool) bool {
 	for v := range strings.SplitSeq(value, ",") {
-		if strings.TrimSpace(v) == item {
+		if match(strings.TrimSpace(v), item) {
 			return true
 		}
 	}

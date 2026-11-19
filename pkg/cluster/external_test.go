@@ -38,6 +38,11 @@ type externalContainer struct {
 	networks []string
 }
 
+// meshLabels returns the labels of a container of realm's mesh project.
+func meshLabels(realm, service string) map[string]string {
+	return docker.ComposeLabels(realm+"-mesh", service, 1)
+}
+
 func newExternalFake(t *testing.T) (*externalFake, *docker.Client, *mock.Executor) {
 	f := &externalFake{
 		t:        t,
@@ -46,8 +51,7 @@ func newExternalFake(t *testing.T) (*externalFake, *docker.Client, *mock.Executo
 			"kind-control-plane": {networks: []string{"kind"}},
 			"sind-dev-controller": {labels: map[string]string{LabelRealm: "sind"},
 				networks: []string{"sind-dev-net", "sind-mesh"}},
-			"sind-prometheus": {labels: map[string]string{docker.ComposeProjectLabel: "sind-mesh"},
-				networks: []string{"sind-mesh"}},
+			"sind-prometheus": {labels: meshLabels("sind", "prometheus"), networks: []string{"sind-mesh"}},
 		},
 		fail: map[string]mock.Result{},
 	}
@@ -149,11 +153,18 @@ func TestConnectableContainers(t *testing.T) {
 	f.containers["kind-worker"] = externalContainer{networks: []string{"kind", "sind-mesh"}}
 	f.containers["db"] = externalContainer{networks: []string{"bridge"}}
 	f.containers["ci-dev-controller"] = externalContainer{labels: map[string]string{LabelRealm: "ci"}, networks: []string{"ci-dev-net"}}
+	for _, service := range []string{"dns", "ssh", "grafana", "prometheus", "loki", "alloy"} {
+		f.containers["ci-"+service] = externalContainer{labels: meshLabels("ci", service), networks: []string{"ci-mesh"}}
+	}
+	f.containers["web"] = externalContainer{labels: meshLabels("service", "web"), networks: []string{"service-mesh"}}
+	// A user's Compose project service-mesh with a prometheus service: its
+	// container has Compose's name, not the one sind gives realm service's.
+	f.containers["service-mesh-prometheus-1"] = externalContainer{labels: meshLabels("service", "prometheus"), networks: []string{"service-mesh"}}
 
 	names, err := ConnectableContainers(t.Context(), c, mesh.NewManager(c, "sind"))
 
 	require.NoError(t, err)
-	assert.Equal(t, []docker.ContainerName{"db", "kind-control-plane"}, names,
+	assert.Equal(t, []docker.ContainerName{"db", "kind-control-plane", "service-mesh-prometheus-1", "web"}, names,
 		"kind-worker joins the mesh already, and sind's containers of any realm are left out")
 }
 
@@ -191,6 +202,43 @@ func TestConnect(t *testing.T) {
 		"network connect sind-mesh kind-control-plane",
 		"network connect sind-ci-net kind-control-plane",
 	}, callsWithPrefix(m, "network connect"), "the mesh first, the lock left out, joined networks skipped")
+}
+
+// TestConnect_OtherRealmsMesh checks that Connect refuses the mesh and
+// monitoring stack containers of another realm, which carry no realm label.
+func TestConnect_OtherRealmsMesh(t *testing.T) {
+	f, c, m := newExternalFake(t)
+	f.containers["ci-ssh"] = externalContainer{labels: meshLabels("ci", "ssh"), networks: []string{"ci-mesh"}}
+	f.containers["ci-grafana"] = externalContainer{labels: meshLabels("ci", "grafana"), networks: []string{"ci-mesh"}}
+
+	for _, name := range []docker.ContainerName{"ci-ssh", "ci-grafana"} {
+		err := Connect(t.Context(), c, mesh.NewManager(c, "sind"), name)
+		require.EqualError(t, err, string(name)+" is a sind container")
+	}
+	assert.Empty(t, callsWithPrefix(m, "network connect"))
+}
+
+func TestMeshContainer(t *testing.T) {
+	for _, tt := range []struct {
+		name   docker.ContainerName
+		labels map[string]string
+		want   bool
+	}{
+		{"sind-dns", meshLabels("sind", "dns"), true},
+		{"ci-2-ssh", meshLabels("ci-2", "ssh"), true},
+		{"ci-loki", meshLabels("ci", "loki"), true},
+		{"ci-web", meshLabels("ci", "web"), false},                                // another service of a project of that name
+		{"service-mesh-prometheus-1", meshLabels("service", "prometheus"), false}, // Compose's name, not sind's
+		{"ci-ssh", meshLabels("ci", "dns"), false},                                // the name of another service
+		{"ci-2-dns", meshLabels("ci", "dns"), false},                              // the name of another realm's
+		{"CI-dns", meshLabels("CI", "dns"), false},                                // no realm's project
+		{"-dns", meshLabels("", "dns"), false},                                    // a project named "-mesh"
+		{"ci-dev-dns", docker.ComposeLabels("ci-dev", "dns", 1), false},           // a cluster's project
+		{"dns", map[string]string{docker.ComposeServiceLabel: "dns"}, false},
+		{"sind-dns", nil, false},
+	} {
+		assert.Equal(t, tt.want, meshContainer(tt.name, tt.labels), "%s %v", tt.name, tt.labels)
+	}
 }
 
 func TestConnect_NoMesh(t *testing.T) {

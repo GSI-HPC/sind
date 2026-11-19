@@ -87,7 +87,6 @@ func (c *Client) acquire(ctx context.Context) (release func(), err error) {
 }
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
-	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
 		return c.Executor.Run(ctx, c.Command, args...)
 	})
@@ -126,7 +125,11 @@ func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...stri
 // pull, which writes its status there. Every other command writes data
 // there, a container's ID, a name or the JSON of inspect, which is no line
 // for a row that shows what a pull does (cmdexec.WithStdoutAsData).
+//
+// Every docker command, with stdin or without, is logged at LevelTrace
+// before it runs.
 func (c *Client) call(ctx context.Context, args []string, exec func(context.Context) (string, string, error)) (string, string, error) {
+	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 	name := callName(args)
 	ctx, span := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.Flagged(progress.FlagHidden))
 	release, err := c.acquire(ctx)
@@ -141,7 +144,7 @@ func (c *Client) call(ctx context.Context, args []string, exec func(context.Cont
 		runCtx = cmdexec.WithStdoutAsData(ctx)
 	}
 	stdout, stderr, err := exec(runCtx)
-	err = classifyUnreachable(err)
+	err = ClassifyUnreachable(err)
 	var end []progress.Option
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok {
 		end = append(end, progress.Exit(exitErr.ExitCode()))
@@ -303,7 +306,8 @@ const DoctorHint = "; run `sind doctor` for the fix"
 // why in docker's own words, and points to `sind doctor`, which names the
 // fix; it leaves out the exit status. It matches ErrUnreachable and
 // unwraps to the command's error, an *exec.Error for a missing CLI or an
-// *cmdexec.ExitError.
+// *cmdexec.ExitError, or, from Info, to a plain error with the entry of
+// docker info's ServerErrors that says so.
 type UnreachableError struct {
 	Err    error
 	Reason string // why, such as "docker CLI not found in PATH"
@@ -329,10 +333,12 @@ func (e *UnreachableError) Unwrap() error { return e.Err }
 // ("error during connect: …").
 var unreachable = regexp.MustCompile(`^(docker: )?(cannot connect to the docker daemon|failed to connect to the docker api|permission denied while trying to connect to the docker|error during connect)`)
 
-// classifyUnreachable returns err as an *UnreachableError when it says the
+// ClassifyUnreachable returns err as an *UnreachableError when it says the
 // docker CLI is missing or could not reach the daemon, and unchanged
-// otherwise.
-func classifyUnreachable(err error) error {
+// otherwise. Every Client call classifies its error with it; callers that
+// run docker without a Client, such as a stream's (cmdexec.Process.Close),
+// call it themselves.
+func ClassifyUnreachable(err error) error {
 	if errors.Is(err, exec.ErrNotFound) {
 		return &UnreachableError{Err: err, Reason: "docker CLI not found in PATH"}
 	}
@@ -340,13 +346,23 @@ func classifyUnreachable(err error) error {
 	if !ok {
 		return err
 	}
-	for line := range strings.SplitSeq(exitErr.Stderr, "\n") {
-		line = strings.TrimSpace(line)
-		if unreachable.MatchString(strings.ToLower(line)) {
-			return &UnreachableError{Err: err, Reason: strings.TrimPrefix(line, "docker: ")}
-		}
+	if reason, ok := unreachableReason(exitErr.Stderr); ok {
+		return &UnreachableError{Err: err, Reason: reason}
 	}
 	return err
+}
+
+// unreachableReason returns the first line of msg that says the docker CLI
+// could not reach the daemon, without docker's "docker: " prefix, and
+// whether there is one.
+func unreachableReason(msg string) (string, bool) {
+	for line := range strings.SplitSeq(msg, "\n") {
+		line = strings.TrimSpace(line)
+		if unreachable.MatchString(strings.ToLower(line)) {
+			return strings.TrimPrefix(line, "docker: "), true
+		}
+	}
+	return "", false
 }
 
 // IsAlreadyExists reports whether err is docker's error for a network name
@@ -358,6 +374,32 @@ func IsAlreadyExists(err error) bool {
 	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
 	return ok && exitErr.ExitCode() == 1 && strings.Contains(strings.ToLower(exitErr.Stderr), "already exists")
 }
+
+// IsFileNotFound reports whether err is docker cp's error for a path that
+// a container does not have: "Could not find the file /x in container y"
+// from the daemon, or "No such container:path: y:/x" from a docker CLI
+// before v25, which IsNotFound counts as a missing container too.
+func IsFileNotFound(err error) bool {
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	if !ok || exitErr.ExitCode() != 1 {
+		return false
+	}
+	msg := strings.ToLower(exitErr.Stderr)
+	return strings.Contains(msg, "could not find the file") || strings.Contains(msg, "no such container:path")
+}
+
+// IsNotRunning reports whether err is the docker CLI's error for a
+// command that needs a running container, such as docker kill, on one that
+// does not run: "container x is not running". It takes the
+// *cmdexec.ExitError and its stderr, as IsNotFound does.
+func IsNotRunning(err error) bool {
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	return ok && exitErr.ExitCode() == 1 && notRunning.MatchString(strings.ToLower(exitErr.Stderr))
+}
+
+// notRunning matches docker's message for a container that does not run,
+// lowercased.
+var notRunning = regexp.MustCompile(`\bcontainer \S+ is not running\b`)
 
 // notFound matches docker's messages for a missing resource, lowercased.
 var notFound = regexp.MustCompile(`no such (container|image|object|volume|network)|\bnetwork \S+ not found\b`)

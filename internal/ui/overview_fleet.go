@@ -180,8 +180,10 @@ func pgLifeNow(l *pgLife) (node, text string) {
 // (pgCluster.NeedsLook): it may be starting what is down; "not ready" when
 // it runs no job, "needs a look" (red or amber, as pgLook colours the count
 // of the nodes that need a look) when it runs jobs but something is wrong;
-// and "not checked yet" before the first probe of a cluster that looks
-// fine. A command that creates or deletes it says how far it got.
+// "unmanaged" for a cluster on which sind checks no Slurm, or "needs a
+// look" when a node or the files of its jobs need one; and "not checked
+// yet" before the first probe of a cluster that looks fine. A command that
+// creates or deletes it says how far it got.
 func pgFleetReadyOf(sn store.Snapshot, c pgCluster) (pill pgPill, words, note string) {
 	if l := c.Life; l != nil {
 		pill, words = pgFleetLifeReady(l)
@@ -204,27 +206,51 @@ func pgFleetReadyOf(sn store.Snapshot, c pgCluster) (pill pgPill, words, note st
 		return pgPill{"not checked yet", ""}, "sind ui has not probed it yet", ""
 	}
 	workers := pgWorkersText(r.Took, r.Of)
+	ctl, wk := r.Checks[0], r.Checks[1]
+	switch {
+	case ctl.State == "none":
+		// An unmanaged cluster: sind checks no Slurm on it.
+		workers = "sind does not manage Slurm"
+	case wk.Title == pgNoManagedWorker:
+		workers = "no managed worker"
+	}
 	if len(c.Runs) > 0 && !look {
 		return pgPill{"a command runs", "run"}, workers, ""
 	}
 	notReady := pgPill{"not ready", "bad"}
-	switch ctl, wk := r.Checks[0], r.Checks[1]; {
+	switch {
 	case ctl.State == "bad":
 		return notReady, ctl.Title, ctl.Detail
-	case r.Of == 0:
+	case ctl.State == "none" && look:
+		return needsLook, workers, ""
+	case ctl.State == "none":
+		// The files of jobs, which sind manages on an unmanaged cluster too.
+		if ch, ok := pgFleetLaterIssue(r); ok {
+			return needsLook, ch.Title, ch.Detail
+		}
+		return pgPill{"unmanaged", ""}, workers, ""
+	case wk.State == "bad" && r.Of == 0:
 		return notReady, workers, wk.Detail
 	case r.Class == "bad":
 		return notReady, workers, ""
 	case look || wk.State == "warn":
 		return needsLook, workers, ""
 	}
-	// The checks after the workers: accounting, and the files of jobs.
-	for _, ch := range r.Checks[2:] {
-		if ch.State == "warn" || ch.State == "bad" {
-			return needsLook, ch.Title, ch.Detail
-		}
+	if ch, ok := pgFleetLaterIssue(r); ok {
+		return needsLook, ch.Title, ch.Detail
 	}
 	return pgPill{"ready", "ok"}, workers, ""
+}
+
+// pgFleetLaterIssue returns the first of the checks after the workers,
+// accounting and the files of jobs, that is not ok.
+func pgFleetLaterIssue(r *pgReady) (pgReadyCheck, bool) {
+	for _, ch := range r.Checks[2:] {
+		if ch.State == "warn" || ch.State == "bad" {
+			return ch, true
+		}
+	}
+	return pgReadyCheck{}, false
 }
 
 // pgFleetLifeReady is the answer of pgFleetReadyOf while a command creates

@@ -23,10 +23,10 @@ const (
 	// exitUsage is the exit status of a command line that sind rejected
 	// before acting on it (cobratree.IsUsage).
 	exitUsage = 2
-	// exitInterrupted is the exit status of a command that SIGINT or
-	// SIGTERM stopped: 128 + SIGINT, as a shell reports an interrupt.
-	// SIGTERM exits with it too, so that callers check one status for
-	// "interrupted".
+	// exitInterrupted is the exit status of a command that SIGINT, SIGTERM
+	// or SIGHUP stopped: 128 + SIGINT, as a shell reports an interrupt.
+	// SIGTERM and SIGHUP exit with it too, so that callers check one status
+	// for "interrupted".
 	exitInterrupted = 130
 )
 
@@ -122,14 +122,14 @@ type childExitError struct {
 
 // newChildExitError returns the error of a program that exited non-zero.
 // One killed by signal N exits 128+N, as a shell reports it, except that
-// SIGINT and SIGTERM exit exitInterrupted: they reach docker when they are
-// sent to sind's process group, and sind reports them as an interrupt
-// whichever process ends first.
+// SIGINT, SIGTERM and SIGHUP exit exitInterrupted: they reach docker when
+// they are sent to sind's process group, and sind reports them as an
+// interrupt whichever process ends first.
 func newChildExitError(err *exec.ExitError) *childExitError {
 	code := err.ExitCode()
 	if ws, ok := err.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
 		code = 128 + int(ws.Signal())
-		if ws.Signal() == syscall.SIGINT || ws.Signal() == syscall.SIGTERM {
+		if s := ws.Signal(); s == syscall.SIGINT || s == syscall.SIGTERM || s == syscall.SIGHUP {
 			code = exitInterrupted
 		}
 	}

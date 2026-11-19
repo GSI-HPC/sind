@@ -6,8 +6,11 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -22,6 +25,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -232,6 +236,16 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
+// TestWorkerAdd_InvalidRealm checks that WorkerAdd refuses a realm that is
+// no valid realm name before any docker call.
+func TestWorkerAdd_InvalidRealm(t *testing.T) {
+	var m mock.Executor
+	client := docker.NewClient(&m)
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, "a.b"), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.ErrorContains(t, err, `invalid realm name "a.b"`)
+	assert.Empty(t, m.Calls)
+}
+
 // TestWorkerAdd_MeshFull covers workers that do not fit on the realm's
 // mesh: WorkerAdd refuses them before it starts the mesh or creates any.
 func TestWorkerAdd_MeshFull(t *testing.T) {
@@ -302,6 +316,8 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
 		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
+	// The workers that docker create made, which ps lists after worker-0.
+	created := []string{"worker-0"}
 	return func(args []string, _ string) mock.Result {
 		if len(args) == 0 {
 			return mock.Result{}
@@ -309,9 +325,10 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		joined := strings.Join(args, " ")
 
 		switch {
-		// ListContainers: cluster has controller + worker-0
+		// ListContainers: cluster has controller + worker-0, and the
+		// workers created since
 		case args[0] == "ps":
-			return mock.Result{Stdout: workerContainers("worker-0")}
+			return mock.Result{Stdout: workerContainers(created...)}
 
 		// InspectContainer: sind-dns → return mesh IP
 		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
@@ -361,15 +378,18 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 
 		// CreateContainer
 		case args[0] == "create":
+			if i := slices.Index(args, "--name"); i >= 0 {
+				created = append(created, strings.TrimPrefix(args[i+1], "sind-dev-"))
+			}
 			return mock.Result{Stdout: "new-cid\n"}
 
 		// CheckNsdelegate's probe
 		case isNsdelegateProbe(args):
 			return mock.Result{Stdout: probeMounts}
 
-		// slurmctld -V in an explicit --image
+		// The probe of slurmd in an explicit --image
 		case args[0] == "run" && args[1] == "--rm":
-			return mock.Result{Stdout: "slurm 25.11.0\n"}
+			return mock.Result{Stdout: "daemon slurmd slurm 25.11.0\n"}
 
 		// ImageLabels: the image is not local
 		case args[0] == "image" && args[1] == "inspect":
@@ -719,6 +739,52 @@ func TestWorkerAdd_RelativeDataHostPath(t *testing.T) {
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
+// TestWorkerAdd_SettingLabelsOfTheImage checks that new workers get no
+// setting from a label of the controller's image: on a node of sind
+// before v0.11.0, which left out the labels it had nothing to record, the
+// image's label shows through.
+func TestWorkerAdd_SettingLabelsOfTheImage(t *testing.T) {
+	imageInspect := []string{"image", "inspect", "--format", `{"id":{{json .Id}},"labels":{{json .Config.Labels}}}`, testControllerImageID}
+	for _, tt := range []struct {
+		name        string
+		controller  docker.Labels
+		image       mock.Result
+		wantErr     string
+		wantCreated bool
+	}{
+		{"shows through", docker.Labels{LabelDataHostPath: "/"},
+			mock.Result{Stdout: `{"id":"` + testControllerImageID + `","labels":{"sind.data.hostpath":"/"}}`},
+			`controller label sind.data.hostpath="/" can come from its image ` + testControllerImageID + `, not from sind: refusing to give it to new workers`, false},
+		{"set by sind", docker.Labels{LabelDataHostPath: "", LabelUsers: "alice:1000:1000"},
+			mock.Result{Stdout: `{"id":"` + testControllerImageID + `","labels":{"sind.data.hostpath":"/","sind.users":"root:0:0"}}`},
+			"", true},
+		{"image of no labels", docker.Labels{LabelDataHostPath: "/srv"},
+			mock.Result{Stdout: `{"id":"` + testControllerImageID + `","labels":null}`}, "", true},
+		{"inspect error", nil, mock.Result{Err: errors.New("daemon gone")},
+			"reading the labels of the controller's image: daemon gone", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			labels := testControllerLabels()
+			maps.Copy(labels, tt.controller)
+			base := withController(t, workerAddOnCall(t), labels)
+			m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
+				if slices.Equal(args, imageInspect) {
+					return tt.image
+				}
+				return base(args, stdin)
+			}, WorkerAddOptions{ClusterName: "dev", Count: 1})
+
+			assert.Equal(t, 1, countCalls(m.Calls, imageInspect...))
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantCreated, countCalls(m.Calls, "create") > 0)
+		})
+	}
+}
+
 func TestWorkerAdd_InheritsCVMFS(t *testing.T) {
 	// New workers mount CVMFS the way the cluster's nodes do, without
 	// detecting the backend again.
@@ -737,7 +803,7 @@ func TestWorkerAdd_InheritsCVMFS(t *testing.T) {
 
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
-	assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, testutil.ArgValues(args, "--mount"))
+	assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, mountsBesideData(args))
 	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=volume")
 }
 
@@ -890,6 +956,95 @@ func TestWorkerRemove_NodeNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+// TestWorkerRemove_NodeWithoutContainer covers a worker that
+// sind-nodes.conf defines but no container backs, as a WorkerAdd rollback
+// that could not restore the file leaves it: it leaves the file and the
+// mesh, with a warning, beside a worker that has its container.
+func TestWorkerRemove_NodeWithoutContainer(t *testing.T) {
+	nodesConf := "# Generated by sind\n" +
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=worker-3 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0,worker-1,worker-3 Default=YES MaxTime=INFINITE State=UP\n"
+	base := workerRemoveOnCall(t, nodesConf)
+	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		switch {
+		case args[0] == "ps" && slices.Contains(args, "volume=sind-journal"):
+			return mock.Result{} // not monitored
+		case args[0] == "exec" && args[1] == "sind-ssh":
+			return mock.Result{Stdout: "worker-0.dev.sind.sind ssh-ed25519 A\nworker-1.dev.sind.sind ssh-ed25519 B\nworker-3.dev.sind.sind ssh-ed25519 C\n"}
+		}
+		return base(args, stdin)
+	}}
+	client := docker.NewClient(m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	var warned []string
+	mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-3", "worker-1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{`node "worker-3" of cluster "dev" had no container: removed it from sind-nodes.conf and the mesh only`}, warned)
+	writes := nodesConfWrites(m.Calls)
+	require.Len(t, writes, 1)
+	assert.Equal(t, "# Generated by sind\n"+
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n"+
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n", writes[0])
+	assert.Positive(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"))
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
+	assert.Zero(t, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-3"))
+	var hosts string
+	for _, c := range m.Calls {
+		if c.Args[0] == "exec" && c.Args[1] == "-i" && c.Args[2] == "sind-ssh" {
+			hosts = c.Stdin
+		}
+	}
+	assert.Equal(t, "worker-0.dev.sind.sind ssh-ed25519 A\n", hosts, "the known_hosts entries of both workers are gone")
+	assert.Equal(t, 1, countCalls(m.Calls, "exec", "-i", "sind-ssh"))
+}
+
+// TestWorkerRemove_NodeWithoutContainerNotInConf covers names without a
+// container that sind-nodes.conf does not define either, or that sind
+// cannot look up there: they fail as not found, and nothing changes.
+func TestWorkerRemove_NodeWithoutContainerNotInConf(t *testing.T) {
+	const notFound = `node "worker-3" not found in cluster "dev"`
+	for name, tc := range map[string]struct {
+		conf, labels, state, want string
+	}{
+		"not in the file":   {conf: "NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n", want: notFound},
+		"no file":           {conf: "", want: notFound},
+		"unmanaged cluster": {conf: "NodeName=worker-3 CPUs=2 RealMemory=2048 State=UNKNOWN\n", labels: ",sind.managed=false", want: notFound},
+		"stopped controller": {
+			conf: "NodeName=worker-3 CPUs=2 RealMemory=2048 State=UNKNOWN\n", state: "exited",
+			want: notFound + " (sind-nodes.conf could not be checked: controller sind-dev-controller is not running (exited): " +
+				"sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first)",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			state := cmp.Or(tc.state, "running")
+			base := workerRemoveOnCall(t, tc.conf)
+			onCall := func(args []string, stdin string) mock.Result {
+				if args[0] == "ps" {
+					return mock.Result{Stdout: testutil.NDJSON(
+						testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: state, Image: "img:1",
+							Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller" + tc.labels},
+						testutil.PsEntry{ID: "c1", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
+							Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker"},
+					)}
+				}
+				return base(args, stdin)
+			}
+
+			m, err := removeWorkers(t, onCall, "worker-1", "worker-3")
+
+			require.ErrorIs(t, err, ErrNodeNotFound)
+			assert.EqualError(t, err, tc.want)
+			assert.Empty(t, nodesConfWrites(m.Calls))
+			assert.Zero(t, countCalls(m.Calls, "rm"))
+		})
+	}
+}
+
 func TestWorkerRemove_ClusterNotFound(t *testing.T) {
 	client := docker.NewClient(notFoundExecutor(t, mock.Result{}))
 	mgr := mesh.NewManager(client, "ci-42")
@@ -1025,6 +1180,32 @@ func TestWorkerRemove_ReconfigureError(t *testing.T) {
 	assert.Equal(t, nodesConf, writes[1], "the file lists worker-1 again, so a retry reconfigures")
 }
 
+// TestWorkerRemove_NodeWithoutContainerReconfigureError covers a worker
+// without a container whose removal from sind-nodes.conf fails: it is not
+// reported as removed.
+func TestWorkerRemove_NodeWithoutContainerReconfigureError(t *testing.T) {
+	nodesConf := "# Generated by sind\n" +
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=worker-3 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0,worker-3 Default=YES MaxTime=INFINITE State=UP\n"
+	base := workerRemoveOnCall(t, nodesConf)
+	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "scontrol" {
+			return mock.Result{Err: fmt.Errorf("slurmctld down")}
+		}
+		return base(args, stdin)
+	}}
+	client := docker.NewClient(m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	var warned []string
+	mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-3"})
+
+	require.EqualError(t, err, "reconfiguring slurmctld: slurmctld down")
+	assert.Empty(t, warned)
+}
+
 func TestWorkerRemove_ReconfigureAndRestoreError(t *testing.T) {
 	// The original file cannot be written back either: both errors count.
 	nodesConf := "# Generated by sind\n" +
@@ -1107,7 +1288,7 @@ func TestWorkerAdd_ExplicitImage(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, args, "custom:v1", "should use explicit image")
 	assert.NotContains(t, args, "img:1", "should not use controller image")
-	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v1", "slurmctld", "-V"), "Slurm version checked")
+	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v1"), "Slurm version checked")
 }
 
 func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
@@ -1119,7 +1300,7 @@ func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, countCalls(m.Calls, "pull", "custom:v2"))
-	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v2", "slurmctld", "-V"))
+	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v2"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
 	assert.NotContains(t, args, "--pull")
@@ -1131,7 +1312,7 @@ func TestWorkerAdd_ExplicitImageVersionMismatch(t *testing.T) {
 	base := workerAddOnCall(t)
 	onCall := func(args []string, stdin string) mock.Result {
 		if args[0] == "run" {
-			return mock.Result{Stdout: "slurm 26.05.6\n"}
+			return mock.Result{Stdout: "daemon slurmd slurm 26.05.6\n"}
 		}
 		return base(args, stdin)
 	}
@@ -1157,8 +1338,48 @@ func TestWorkerAdd_ExplicitImageVersionError(t *testing.T) {
 		ClusterName: "dev", Count: 1, Image: "custom:v1",
 	})
 
-	require.EqualError(t, err, "discovering the Slurm version of custom:v1: running slurmctld -V: pull access denied")
+	require.EqualError(t, err, "probing image custom:v1: pull access denied")
 	assert.Zero(t, countCalls(m.Calls, "create"))
+}
+
+func TestWorkerAdd_ExplicitImageWithoutSlurmctld(t *testing.T) {
+	// A worker runs slurmd alone: an image without slurmctld serves it,
+	// one without slurmd does not.
+	for _, tt := range []struct{ probe, wantErr string }{
+		{"daemon slurmd slurm 25.11.0\n", ""},
+		{"missing slurmd\n", "image slurmd-only:1 has no slurmd, which managed workers run"},
+	} {
+		base := workerAddOnCall(t)
+		onCall := func(args []string, stdin string) mock.Result {
+			if args[0] == "run" && slices.Contains(args, "slurmctld") {
+				return mock.Result{Stderr: "exec: \"slurmctld\": executable file not found in $PATH\n", Err: testutil.ExitCode1(t)}
+			}
+			if args[0] == "run" && slices.Contains(args, "slurmd-only:1") {
+				return mock.Result{Stdout: tt.probe}
+			}
+			return base(args, stdin)
+		}
+
+		m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "slurmd-only:1"})
+
+		if tt.wantErr != "" {
+			require.EqualError(t, err, tt.wantErr)
+			continue
+		}
+		require.NoError(t, err)
+		assert.Equal(t, 1, countSlurmdProbes(m.Calls, "slurmd-only:1"))
+	}
+}
+
+// countSlurmdProbes counts the probes of slurmd (slurm.ProbeImage) in image.
+func countSlurmdProbes(calls []mock.Call, image string) int {
+	n := 0
+	for _, c := range calls {
+		if i := slices.Index(c.Args, image); c.Args[0] == "run" && i > 0 && c.Args[i-1] == "/bin/sh" && c.Args[len(c.Args)-1] == slurm.Slurmd {
+			n++
+		}
+	}
+	return n
 }
 
 // TestWorkerAdd_NoNsdelegate checks that a Docker host without nsdelegate
@@ -1586,6 +1807,36 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "cleanup should remove the new worker container")
+}
+
+func TestWorkerAdd_RollbackSkipsUncreatedWorkers(t *testing.T) {
+	// docker create fails for worker-2: the rollback removes worker-1 and
+	// leaves worker-2 alone, without a warning about a container that
+	// never existed.
+	inner := workerAddOnCall(t)
+	onCall := func(args []string, stdin string) mock.Result {
+		if args[0] == "create" && slices.Contains(args, "sind-dev-worker-2") {
+			return mock.Result{Stderr: "invalid argument\n", Err: fmt.Errorf("exit status 125")}
+		}
+		return inner(args, stdin)
+	}
+	pipes := &mock.Pipes{}
+	t.Cleanup(pipes.CloseAll)
+	m := &mock.Executor{OnCall: onCall, OnStart: pipes.OnStart}
+	client := docker.NewClient(m)
+	var logs strings.Builder
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
+
+	require.ErrorContains(t, err, "creating container worker-2")
+	assert.NotContains(t, logs.String(), "already gone")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
+	assert.Zero(t, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-2"))
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "inspect" && c.Args[len(c.Args)-1] == "sind-dev-worker-2",
+			"no diagnostics for a worker that was never created: %v", c.Args)
+	}
 }
 
 func TestWorkerAdd_CleanupErrors(t *testing.T) {
@@ -2205,11 +2456,27 @@ func TestExtraSecurityOpts(t *testing.T) {
 	var warned []string
 	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
-	extra := extraSecurityOpts(ctx, "sind-dev-worker-0", []string{
+	extra := extraSecurityOpts(ctx, "sind-dev-worker-0", docker.HostConfig{SecurityOpt: []string{
 		"writable-cgroups=true", "label=disable", "apparmor=unconfined", `seccomp={"defaultAction":"SCMP_ACT_ALLOW"}`, "seccomp=unconfined",
-	})
+	}})
 
 	assert.Equal(t, []string{"apparmor=unconfined", "seccomp=unconfined"}, extra)
 	assert.Equal(t, []string{"not inheriting the seccomp profile of sind-dev-worker-0: pass it with --security-opt seccomp=FILE"}, warned)
 	assert.Equal(t, []string{"writable-cgroups=true", "label=disable"}, nodeSecurityOpts())
+}
+
+func TestExtraSecurityOpts_SystemPaths(t *testing.T) {
+	// The docker CLI turns systempaths=unconfined into empty masked and
+	// read-only paths, which docker inspect reports as [].
+	opts := func(paths string, securityOpt ...string) []string {
+		var inspect struct{ HostConfig docker.HostConfig }
+		require.NoError(t, json.Unmarshal([]byte(`{"HostConfig":{"SecurityOpt":["label=disable"],"MaskedPaths":`+paths+`,"ReadonlyPaths":`+paths+`}}`), &inspect))
+		inspect.HostConfig.SecurityOpt = append(inspect.HostConfig.SecurityOpt, securityOpt...)
+		return extraSecurityOpts(t.Context(), "sind-dev-worker-0", inspect.HostConfig)
+	}
+
+	assert.Equal(t, []string{"systempaths=unconfined"}, opts(`[]`))
+	assert.Empty(t, opts(`null`), "docker reports no paths")
+	assert.Empty(t, opts(`["/proc/kcore"]`), "the default masks")
+	assert.Equal(t, []string{"systempaths=unconfined"}, opts(`[]`, "systempaths=unconfined"), "once, should docker report it")
 }

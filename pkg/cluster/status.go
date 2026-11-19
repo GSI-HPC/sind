@@ -113,9 +113,32 @@ type NetworkHealth struct {
 }
 
 // StackHealth returns the readiness fields of the monitoring stack's
-// services, in the order of observability.Services.
+// services, in the order of observability.Services; nil for a service
+// that NetworkHealth has no field of.
 func (h *NetworkHealth) StackHealth() []*bool {
-	return []*bool{h.Grafana, h.Prometheus, h.Loki, h.Alloy}
+	ready := make([]*bool, len(observability.Services))
+	for i, s := range observability.Services {
+		if f := h.stackField(s); f != nil {
+			ready[i] = *f
+		}
+	}
+	return ready
+}
+
+// stackField returns the readiness field of the stack's service s, nil
+// for a service that NetworkHealth has no field of.
+func (h *NetworkHealth) stackField(s observability.Service) **bool {
+	switch s {
+	case observability.ServiceGrafana:
+		return &h.Grafana
+	case observability.ServicePrometheus:
+		return &h.Prometheus
+	case observability.ServiceLoki:
+		return &h.Loki
+	case observability.ServiceAlloy:
+		return &h.Alloy
+	}
+	return nil
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, SSH relay, and cluster
@@ -124,19 +147,18 @@ func (h *NetworkHealth) StackHealth() []*bool {
 // host reboot they exist but are stopped. The stack's services count as
 // healthy when they are ready.
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
-	// nil Docker client: only realm-derived names are needed here.
-	meshMgr := mesh.NewManager(nil, realm)
+	names := mesh.RealmNames(realm)
 	clusterNet := NetworkName(realm, clusterName)
 
 	health := &NetworkHealth{
-		MeshName:    string(meshMgr.NetworkName()),
-		DNSName:     string(meshMgr.DNSContainerName()),
-		SSHName:     string(meshMgr.SSHContainerName()),
+		MeshName:    string(names.Network),
+		DNSName:     string(names.DNSContainer),
+		SSHName:     string(names.SSHContainer),
 		ClusterName: string(clusterNet),
 	}
 
 	// One inspect per resource: missing → not exists, any other error → propagate.
-	if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
+	if info, err := client.InspectNetwork(ctx, names.Network); err == nil {
 		health.Mesh = true
 		health.MeshDriver = info.Driver
 		health.MeshSubnet = info.Subnet
@@ -145,13 +167,13 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 
-	if info, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
+	if info, err := client.InspectContainer(ctx, names.DNSContainer); err == nil {
 		health.DNS = info.Status == docker.StateRunning
 	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
 	}
 
-	if info, err := client.InspectContainer(ctx, meshMgr.SSHContainerName()); err == nil {
+	if info, err := client.InspectContainer(ctx, names.SSHContainer); err == nil {
 		health.SSH = info.Status == docker.StateRunning
 	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking SSH container: %w", err)
@@ -171,12 +193,15 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, err
 	}
 	if found {
-		fields := []**bool{&health.Grafana, &health.Prometheus, &health.Loki, &health.Alloy}
-		for i, st := range stack {
+		for _, st := range stack {
+			f := health.stackField(st.Service)
+			if f == nil {
+				continue
+			}
 			// Without Grafana to run the readiness checks, a running
 			// container counts as healthy.
 			ok := st.Ready || !st.Checked && st.State == docker.StateRunning
-			*fields[i] = &ok
+			*f = &ok
 		}
 	}
 
@@ -340,9 +365,11 @@ type Status struct {
 }
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
-// and volume health information.
+// and volume health information. A node whose container went away between
+// the listing and the inspect, as one being deleted, is left out, unless
+// all of them did.
 func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*Status, error) {
-	containers, err := clusterContainers(ctx, client, realm, clusterName)
+	containers, err := clusterNodes(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +387,8 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		names[i] = c.Name
 	}
 	infos, err := client.InspectContainers(ctx, names...)
-	if err != nil {
+	gone := docker.IsNotFound(err)
+	if err != nil && (!gone || len(infos) == 0) {
 		return nil, fmt.Errorf("inspecting cluster containers: %w", err)
 	}
 	for _, info := range infos {
@@ -368,11 +396,18 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
+	present := make([]docker.ContainerListEntry, 0, len(containers))
 	for _, c := range containers {
-		if _, ok := infoByName[c.Name]; !ok {
+		switch _, ok := infoByName[c.Name]; {
+		case ok:
+			present = append(present, c)
+		case gone:
+			sindlog.From(ctx).DebugContext(ctx, "leaving out a node whose container is gone", "container", string(c.Name), "err", err)
+		default:
 			return nil, fmt.Errorf("checking node %s: inspect returned no entry", strings.TrimPrefix(string(c.Name), prefix))
 		}
 	}
+	containers = present
 	nodes := make([]*NodeStatus, len(containers))
 	states := make([]docker.ContainerState, len(containers))
 

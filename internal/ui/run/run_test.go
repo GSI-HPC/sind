@@ -25,6 +25,8 @@ type call struct {
 	name string
 	args []string
 	env  []string
+	// group and orphanSafe are the options of the context it ran with.
+	group, orphanSafe bool
 }
 
 // fakeExec is an executor whose commands end when the test says: a command
@@ -48,7 +50,7 @@ func newFakeExec() *fakeExec { return &fakeExec{pid: 4242, results: make(chan re
 
 func (f *fakeExec) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	f.mu.Lock()
-	f.calls = append(f.calls, call{name, args, cmdexec.Env(ctx)})
+	f.calls = append(f.calls, call{name, args, cmdexec.Env(ctx), cmdexec.InProcessGroup(ctx), cmdexec.OrphanSafe(ctx)})
 	f.mu.Unlock()
 	if f.noStart != nil {
 		return "", "", f.noStart
@@ -127,7 +129,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{ex: newFakeExec(), st: store.New(), kill: &kill{}, refresh: make(chan string, 4)}
 	n := byte(0)
 	f.r = New(Config{
-		Exec: f.ex, Store: f.st, Binary: "/usr/bin/sind", ActivityLog: "/state/activity.jsonl",
+		Exec: f.ex, Store: f.st, Binary: "/usr/bin/sind",
 		Environ: func() []string {
 			return []string{"PATH=/bin", "SIND_REALM=ci", "SIND_PROGRESS=plain", "SIND_PROGRESS_LOG=/x", "TRACEPARENT=old", "TRACESTATE=s"}
 		},
@@ -194,8 +196,10 @@ func TestStart_RunsTheBinaryWithTheEnvironment(t *testing.T) {
 	assert.Equal(t, spec.Argv[1:], c.args)
 	assert.Equal(t, []string{
 		"PATH=/bin", "SIND_PROGRESS=none", "TRACEPARENT=00-" + wantTrace + "-" + wantSpan + "-01",
-		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl",
-	}, c.env)
+		"TRACESTATE=sind=ui",
+	}, c.env, "the child writes the default activity log, which it rotates")
+	assert.True(t, c.group, "the child runs in a process group of its own")
+	assert.True(t, c.orphanSafe, "the child must outlive sind ui and roll back")
 	f.ex.results <- result{}
 	f.waitDone(t, id)
 }
@@ -207,6 +211,19 @@ func TestStart_Refusals(t *testing.T) {
 		require.EqualError(t, err, "not a sind command")
 	}
 	assert.Empty(t, f.st.Snapshot().Tasks)
+
+	// A failed check refuses the task before it runs.
+	f.r.cfg.Check = func() error { return errors.New("replaced") }
+	_, err := f.r.Start(spec)
+	require.EqualError(t, err, "replaced")
+	assert.Empty(t, f.st.Snapshot().Tasks)
+	assert.Empty(t, f.ex.calls)
+
+	f.r.cfg.Check = func() error { return nil }
+	id, err := f.r.Start(spec)
+	require.NoError(t, err)
+	f.ex.results <- result{}
+	f.waitDone(t, id)
 }
 
 func TestTask_Outcomes(t *testing.T) {
@@ -219,14 +236,31 @@ func TestTask_Outcomes(t *testing.T) {
 	}{
 		{"ok", func(*testing.T) result { return result{stderr: "warning\n"} }, store.TaskOK, 0, ""},
 		{"failed", func(t *testing.T) result {
-			out := "Warning: x\nError: no such cluster dev\n"
+			out := "Warning: x\n00:44:20.743 ERRO config /nonexistent: no such file or directory\n"
 			return result{stderr: out, err: exitErr(t, "1", out)}
-		}, store.TaskFailed, 1, "no such cluster dev"},
+		}, store.TaskFailed, 1, "config /nonexistent: no such file or directory"},
+		{"failed, without timestamps", func(t *testing.T) result {
+			out := "ERRO cluster \"dev\" not found in realm \"sind\"\n12:00:00.001 WARN later\n"
+			return result{stderr: out, err: exitErr(t, "1", out)}
+		}, store.TaskFailed, 1, `cluster "dev" not found in realm "sind"`},
+		{"interrupted, failed", func(t *testing.T) result {
+			out := "12:00:00.000 ERRO interrupted: setting up nodes: context canceled\n"
+			return result{stderr: out, err: exitErr(t, "1", out)}
+		}, store.TaskFailed, 1, "setting up nodes: context canceled"},
 		{"failed without an error line", func(t *testing.T) result {
-			return result{stderr: "boom\n", err: exitErr(t, "2", "boom\n")}
-		}, store.TaskFailed, 2, "sind exit status 2"},
+			out := "systemctl: unit not found\nWarning: x\n12:00:00.000 INFO done\n\n"
+			return result{stderr: out, err: exitErr(t, "2", out)}
+		}, store.TaskFailed, 2, "systemctl: unit not found"},
+		{"killed", func(t *testing.T) result {
+			out := "pulling image\n"
+			err := exec.Command("/bin/sh", "-c", "kill -9 $$").Run()
+			var ee *exec.ExitError
+			require.ErrorAs(t, err, &ee)
+			return result{stderr: out, err: cmdexec.WrapExitError(ee, out)}
+		}, store.TaskFailed, -1, "sind signal: killed"},
 		{"empty error line", func(t *testing.T) result {
-			return result{stderr: "Error:\n", err: exitErr(t, "3", "Error:\n")}
+			out := "Warning: y\n12:00:00.000 ERRO\n"
+			return result{stderr: out, err: exitErr(t, "3", out)}
 		}, store.TaskFailed, 3, "sind exit status 3"},
 		{"canceled", func(t *testing.T) result {
 			return result{stderr: "interrupted\n", err: exitErr(t, "130", "interrupted\n")}
@@ -409,7 +443,7 @@ func TestNew_Defaults(t *testing.T) {
 }
 
 func TestChildEnv(t *testing.T) {
-	got := childEnv([]string{"A=1", "SIND_REALM=x", "TRACESTATE=y", "B=2=3"}, "", "00-t-s-01")
+	got := childEnv([]string{"A=1", "SIND_REALM=x", "TRACESTATE=y", "B=2=3"}, "00-t-s-01")
 	assert.Equal(t, []string{"A=1", "B=2=3", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01", "TRACESTATE=sind=ui"}, got)
 }
 
@@ -421,7 +455,7 @@ func TestChildEnv_CommandLine(t *testing.T) {
 	for _, name := range envvar.CommandLine {
 		env = append(env, name+"=from-the-shell")
 	}
-	got := childEnv(env, "/state/activity.jsonl", "00-t-s-01")
+	got := childEnv(env, "00-t-s-01")
 	assert.Equal(t, []string{"SIND_MCP_TOKEN=kept", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01",
-		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl"}, got)
+		"TRACESTATE=sind=ui"}, got)
 }

@@ -6,9 +6,12 @@ package cmdexec
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -36,40 +39,64 @@ type Executor interface {
 // OSExecutor runs commands using os/exec.
 type OSExecutor struct{}
 
-// processGroupWaitDelay bounds how long a command run WithProcessGroup
-// waits, once its context ended or it exited, for the processes that hold
-// its output open, before its output is closed.
-const processGroupWaitDelay = 2 * time.Second
+// outputWaitDelay bounds how long a command waits, once its context ended
+// or it exited, for the processes that hold its output open, such as one
+// it started and left behind, before its output is closed. Without it, a
+// context deadline would not bound a command whose child outlives it.
+const outputWaitDelay = 2 * time.Second
 
 // inProcessGroup makes cmd run in a process group of its own, which the
-// end of its context kills whole (WithProcessGroup).
-func inProcessGroup(cmd *exec.Cmd) {
+// end of its context kills whole (WithProcessGroup), or with a grace
+// (WithStopGrace), stops with SIGTERM and kills whole once grace has
+// passed. The caller calls done once cmd.Wait has returned.
+func inProcessGroup(cmd *exec.Cmd, grace time.Duration) (done func()) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
+	killGroup := func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
-	cmd.WaitDelay = processGroupWaitDelay
+	cmd.Cancel = killGroup
+	if grace <= 0 {
+		return func() {}
+	}
+	// Wait returns only after Cancel, if exec called it, has returned, so
+	// done reads kill after it was set.
+	var kill *time.Timer
+	cmd.Cancel = func() error {
+		kill = time.AfterFunc(grace, func() { _ = killGroup() })
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
+	cmd.WaitDelay = grace + outputWaitDelay
+	return func() {
+		if kill != nil {
+			kill.Stop()
+		}
+	}
 }
 
 func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = stdin
+	cmd.WaitDelay = outputWaitDelay
 	if env := Env(ctx); len(env) > 0 {
 		cmd.Env = env
 	}
 	if InProcessGroup(ctx) {
-		inProcessGroup(cmd)
+		done := inProcessGroup(cmd, StopGrace(ctx))
+		defer done()
 	}
-	var outBuf, errBuf bytes.Buffer
+	if OrphanSafe(ctx) {
+		return runOrphanSafe(ctx, cmd)
+	}
+	outBuf, errBuf := newOutput(ctx), newOutput(ctx)
 	// Under a progress span that shows lines, such as the target of an
 	// image docker pulls, its display shows the newest line the command
 	// wrote, of standard error alone when standard output is data
 	// (WithStdoutAsData); otherwise Tee returns the buffer itself. A line
 	// parser (WithLineParser) is handed the lines of the same streams.
 	parse := LineParser(ctx)
-	cmd.Stdout = &outBuf
+	cmd.Stdout = outBuf
 	if !StdoutIsData(ctx) {
-		cmd.Stdout = progress.Tee(ctx, &outBuf, progress.StreamStdout, parse)
+		cmd.Stdout = progress.Tee(ctx, outBuf, progress.StreamStdout, parse)
 	}
 	var term *terminal
 	if Terminal(ctx) {
@@ -81,7 +108,7 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 			opened()
 		}
 	}
-	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.StreamStderr, parse)
+	cmd.Stderr = progress.Tee(ctx, errBuf, progress.StreamStderr, parse)
 	err := cmd.Start()
 	if term != nil {
 		term.started(err == nil)
@@ -91,11 +118,47 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 			started(cmd.Process.Pid)
 		}
 		err = cmd.Wait()
+		// The command succeeded, and a process it left behind held its
+		// output open for longer than outputWaitDelay.
+		if errors.Is(err, exec.ErrWaitDelay) {
+			err = nil
+		}
 	}
 	if term != nil {
 		term.wait()
 	}
 	return outBuf.String(), errBuf.String(), WrapExitError(err, errBuf.String())
+}
+
+// runOrphanSafe runs cmd as WithOrphanSafe describes: its standard output
+// goes to the null device and its standard error to a temporary file that
+// is unlinked at once, so that nothing is left of it once both processes
+// have ended. The goroutine keeps its thread until cmd ends, as the signal
+// of the parent's death (orphanSignal) comes when the thread that started
+// cmd ends.
+func runOrphanSafe(ctx context.Context, cmd *exec.Cmd) (string, string, error) {
+	f, err := os.CreateTemp("", "sind-stderr-")
+	if err != nil {
+		return "", "", fmt.Errorf("creating a file for the standard error of %s: %w", cmd.Path, err)
+	}
+	defer func() { _ = f.Close() }()
+	_ = os.Remove(f.Name())
+	cmd.Stdout, cmd.Stderr = nil, f
+	orphanSignal(cmd)
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	err = cmd.Start()
+	if err == nil {
+		if started := Started(ctx); started != nil {
+			started(cmd.Process.Pid)
+		}
+		err = cmd.Wait()
+	}
+	var errBuf bytes.Buffer
+	if _, serr := f.Seek(0, io.SeekStart); serr == nil {
+		_, _ = errBuf.ReadFrom(f)
+	}
+	return "", errBuf.String(), WrapExitError(err, errBuf.String())
 }
 
 // terminal is the pseudo-terminal of a command run WithTerminal: the
@@ -119,7 +182,28 @@ func openTerminal(w io.Writer) *terminal {
 		_ = tty.Close()
 		return nil
 	}
+	if p, err = pollable(p); err != nil {
+		_ = tty.Close()
+		return nil
+	}
 	return &terminal{pty: p, tty: tty, out: NewTerminalLines(w), done: make(chan struct{})}
+}
+
+// pollable returns a non-blocking copy of f, which the runtime's poller
+// reads, and closes f. pty.Open and pty.Setsize call f.Fd(), which puts f
+// in blocking mode, where closing f does not end a read of it.
+func pollable(f *os.File) (*os.File, error) {
+	defer func() { _ = f.Close() }()
+	fd, err := syscall.Dup(int(f.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	syscall.CloseOnExec(fd)
+	if err := syscall.SetNonblock(fd, true); err != nil {
+		_ = syscall.Close(fd)
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), f.Name()), nil
 }
 
 // started lets go of the parent's end of the terminal once the command
@@ -141,12 +225,12 @@ func (t *terminal) started(ok bool) {
 }
 
 // wait waits for what the command wrote to have been read, at most
-// processGroupWaitDelay after the command ended, as a process it left
-// behind may hold the terminal, and closes the terminal.
+// outputWaitDelay after the command ended, as a process it left behind may
+// hold the terminal, and closes the terminal, which ends the read.
 func (t *terminal) wait() {
 	select {
 	case <-t.done:
-	case <-time.After(processGroupWaitDelay):
+	case <-time.After(outputWaitDelay):
 	}
 	_ = t.pty.Close()
 	<-t.done

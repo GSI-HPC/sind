@@ -4,7 +4,9 @@
 // keeps their tasks in the store while they run.
 //
 // A task's command is a child process of its own: the running sind binary,
-// in a process group of its own, with no input and no progress display. Its
+// in a process group of its own, with no input and no progress display.
+// It writes no pipe of sind ui (cmdexec.WithOrphanSafe), so it can go on
+// and roll back if sind ui dies, which sends it SIGINT on Linux. Its
 // progress comes from the activity log, where the child writes the same
 // events that make a terminal's progress display: the runner hands the child
 // a trace ID in TRACEPARENT, and the pages find the run with that trace.
@@ -18,6 +20,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -71,9 +74,6 @@ type Config struct {
 	Store *store.Store
 	// Binary is the sind executable, which runs in place of "sind".
 	Binary string
-	// ActivityLog is the event log that the child appends to; empty for the
-	// child's own default.
-	ActivityLog string
 	// Environ returns the environment the child's is made from; nil is
 	// none, which the caller sets to os.Environ.
 	Environ func() []string
@@ -85,6 +85,10 @@ type Config struct {
 	Kill func(pid int, sig syscall.Signal) error
 	// Random fills b with random bytes, for the IDs; nil is crypto/rand.
 	Random func(b []byte)
+	// Check is called before a task starts; its error refuses the task, as
+	// when Binary is no longer the release that built the command. It may
+	// be nil.
+	Check func() error
 }
 
 // Runner executes tasks as child processes.
@@ -122,7 +126,7 @@ func New(cfg Config) *Runner {
 			_, _ = rand.Read(b)
 		}
 	}
-	ctx, cancel := context.WithCancel(cmdexec.WithProcessGroup(context.Background()))
+	ctx, cancel := context.WithCancel(cmdexec.WithOrphanSafe(cmdexec.WithProcessGroup(context.Background())))
 	return &Runner{cfg: cfg, ctx: ctx, cancel: cancel, running: map[string]*child{}}
 }
 
@@ -134,6 +138,11 @@ func (r *Runner) Start(s Spec) (string, error) {
 	if len(s.Argv) == 0 || s.Argv[0] != "sind" {
 		return "", errors.New("not a sind command")
 	}
+	if r.cfg.Check != nil {
+		if err := r.cfg.Check(); err != nil {
+			return "", err
+		}
+	}
 	trace, span := r.hex(16), r.hex(8)
 	t := s
 	t.ID, t.Trace, t.Start, t.Status = r.hex(8), trace, time.Now(), store.TaskRunning
@@ -141,7 +150,7 @@ func (r *Runner) Start(s Spec) (string, error) {
 	if r.cfg.Environ != nil {
 		environ = r.cfg.Environ()
 	}
-	env := childEnv(environ, r.cfg.ActivityLog, "00-"+trace+"-"+span+"-01")
+	env := childEnv(environ, "00-"+trace+"-"+span+"-01")
 	r.mu.Lock()
 	if r.closing {
 		r.mu.Unlock()
@@ -220,21 +229,38 @@ func outcome(err error) (int, string) {
 	return exit, store.TaskFailed
 }
 
-// failure says in one line why a command failed: the error line sind
-// printed if it printed one, else how the process ended.
+// logLine matches a line that sind's logger writes, "15:04:05.000 ERRO
+// msg", without the time when SIND_LOG_TIMESTAMPS is false: its level and
+// its message.
+var logLine = regexp.MustCompile(`^(?:\d\d:\d\d:\d\d\.\d{3} )?(ERRO|WARN|INFO|DEBU|TRAC)(?: (.*))?$`)
+
+// failure says in one line why a command failed: the error that sind
+// printed last; for a command that exited, else the last line that is not
+// one of sind's log lines or warnings, as a command that sind ssh or exec
+// ran writes; else how the process ended.
 func failure(out string, err error) string {
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	other := ""
 	for i := len(lines) - 1; i >= 0; i-- {
-		if msg, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), "Error:"); ok {
-			if msg = strings.TrimSpace(msg); msg != "" {
+		line := strings.TrimSpace(lines[i])
+		if m := logLine.FindStringSubmatch(line); m != nil {
+			if msg := strings.TrimSpace(strings.TrimPrefix(m[2], "interrupted: ")); m[1] == "ERRO" && msg != "" {
 				return msg
 			}
+			continue
+		}
+		if other == "" && line != "" && !strings.HasPrefix(line, "Warning:") {
+			other = line
 		}
 	}
-	if ee, ok := errors.AsType[*cmdexec.ExitError](err); ok {
-		return "sind " + ee.Err.String()
+	ee, ok := errors.AsType[*cmdexec.ExitError](err)
+	switch {
+	case !ok:
+		return err.Error()
+	case other != "" && ee.ExitCode() >= 0:
+		return other
 	}
-	return err.Error()
+	return "sind " + ee.Err.String()
 }
 
 // tail returns the end of stderr that a task keeps, escaped: from the start
@@ -310,25 +336,23 @@ func (r *Runner) hex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// childEnv returns env for a sind child: no progress display, the event log
-// sind ui reads, the trace that tells the child's run with the tracestate
-// that marks it as a run of sind ui (store.UITraceState), and none of the
-// other variables that stand in for the command line (envvar.CommandLine),
-// such as SIND_REALM: the dialog's command names any realm but the default
-// one on its command line, and without a name must run in the default
-// realm, whatever the environment of sind ui says. The environment does not
-// change the command line, so what the dialog showed still holds.
-func childEnv(env []string, activityLog, traceparent string) []string {
-	out := make([]string, 0, len(env)+4)
+// childEnv returns env for a sind child: no progress display, the trace
+// that tells the child's run with the tracestate that marks it as a run of
+// sind ui (store.UITraceState), and none of the variables that stand in for
+// the command line (envvar.CommandLine), such as SIND_REALM: the dialog's
+// command names any realm but the default one on its command line, and
+// without a name must run in the default realm, whatever the environment of
+// sind ui says. The environment does not change the command line, so what
+// the dialog showed still holds. SIND_PROGRESS_LOG is one of them too, so
+// the child writes the default activity log, which sind ui reads, and moves
+// it aside at 8 MiB as a command in a terminal does.
+func childEnv(env []string, traceparent string) []string {
+	out := make([]string, 0, len(env)+3)
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
 		if !slices.Contains(envvar.CommandLine, name) && name != "TRACEPARENT" && name != "TRACESTATE" {
 			out = append(out, kv)
 		}
 	}
-	out = append(out, envvar.Progress+"=none", "TRACEPARENT="+traceparent, "TRACESTATE="+store.UITraceState)
-	if activityLog != "" {
-		out = append(out, envvar.ProgressLog+"="+activityLog)
-	}
-	return out
+	return append(out, envvar.Progress+"=none", "TRACEPARENT="+traceparent, "TRACESTATE="+store.UITraceState)
 }

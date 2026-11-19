@@ -55,7 +55,7 @@ The first monitored cluster of a realm creates the stack, and the next ones join
 
   Custom images need a few more things; see [Building Images]({{< relref "/container-images/building-images#with-monitoring" >}}).
 - **A managed cluster.** An [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}) is rejected, as sind writes no `slurm.conf` for it. Unmanaged workers, db and api nodes of a managed cluster are collected, without Slurm probes.
-- **Metrics without a token.** The [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}) must not set a `MetricsType` other than `metrics/openmetrics`, `CommunicationParameters=disable_http` or `MetricsAuthUsers`, and with `PrivateData` it must also set `MetricsParameters=ignore_private_data`. sind sets `MetricsType=metrics/openmetrics` itself.
+- **Metrics without a token.** The [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}) must not set a `MetricsType` other than `metrics/openmetrics` (or `openmetrics`), `CommunicationParameters=disable_http` or `MetricsAuthUsers`, and with `PrivateData` it must also set `MetricsParameters=ignore_private_data`. sind sets `MetricsType=metrics/openmetrics` itself.
 
 sind pulls the stack's four images with the node images when it creates the stack, so the first monitored create downloads them once; later ones reuse them.
 
@@ -94,7 +94,7 @@ ssh -L 3000:grafana.sind.sind:3000 devbox
 
 and open `http://localhost:3000`. sind publishes no host port, so realms and CI jobs never compete for port 3000.
 
-There is no login: every visitor is an anonymous org Admin, who can use Explore and edit dashboards and datasources. Grafana installs no plugins and contacts nothing on the internet, so the stack works offline once its images are on the host.
+There is no login: every visitor is an anonymous org Editor, who can use Explore and save dashboards, but cannot add or change datasources. Grafana installs no plugins and contacts nothing on the internet, so the stack works offline once its images are on the host.
 
 ## What is collected
 
@@ -181,7 +181,7 @@ MariaDB's own messages reach the journal only when its error log goes there, as 
 - **`sind create worker`** adds the new workers to the stack, and **`sind delete worker`** and **`sind delete cluster`** take their nodes out. The metrics and logs collected from them stay until they expire.
 - **Deleting the realm's last cluster** removes the stack with the mesh, its data included. The stack stays as long as the realm has a cluster, monitored or not.
 - **After a host reboot** the stack is stopped like the nodes; `sind power on` starts it again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
-- **After a sind upgrade** that changes the stack's images, configuration or dashboards, the next monitored `sind create cluster` or `sind create worker` replaces the stack's containers and keeps their data.
+- **After a sind upgrade** that changes the stack's images, configuration or dashboards, the next monitored `sind create cluster` or `sind create worker` replaces the stack's containers and keeps their data. It also replaces a container that never started, as an interrupted create can leave one without its configuration.
 - **Retention**: Prometheus keeps 7 days of metrics, at most 2 GB, and Loki 7 days of logs.
 
 ## In CI
@@ -211,7 +211,7 @@ The stack's images come from Docker Hub; a runner that cannot reach it needs the
 
 ## Limits
 
-- Anyone who reaches the mesh, local users of the host and jobs on the nodes alike, is a Grafana org Admin and can add datasources that point anywhere the Grafana container reaches. Prometheus and Loki have no authentication either. The stack is a development tool.
+- Anyone who reaches the mesh is a Grafana org Editor and reads everything that the stack holds: local users of the host, jobs on the nodes, and web pages that a browser on the host opens. A page reaches the stack by its address or by DNS rebinding, and needs no answer to write: it can add series to Prometheus through its remote-write receiver, add log lines to Loki, and stop Loki with `/ingester/shutdown`, which `sind get monitoring` then shows and `sind power on` repairs. Loki refuses deletes. Browsers that ask before a page reaches a local network, such as Chrome from version 142, ask first. Prometheus and Loki have no authentication. The stack is a development tool: do not browse untrusted pages on a host where it holds data that matters.
 - Grafana, Prometheus and Loki get 1 GB of memory each, Alloy 512 MB.
 - Slurm reports memory in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in its metric names says.
 - Job history, such as efficiency and timelines as `sacct` shows them, is not collected: no metric carries accounting data.

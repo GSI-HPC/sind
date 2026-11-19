@@ -12,7 +12,9 @@
 package activity
 
 import (
+	"bytes"
 	"slices"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/eventlog"
@@ -45,21 +47,43 @@ type Reducer struct {
 	*eventlog.Reducer
 	rates   rates
 	history history
+	// converted holds the runs as Runs last returned them, by ID.
+	converted map[string]converted
+}
+
+// converted is a run as Runs converted it, with what tells whether
+// eventlog.Reducer has built its run anew since: the newest event, and the
+// first child of its command span. eventlog.Reducer builds a run that
+// changes anew, every child of its command in a new slice, and returns
+// the same run while it does not change.
+type converted struct {
+	run   store.Run
+	last  time.Time
+	first *eventlog.Span
 }
 
 // NewReducer returns an empty reducer that keeps at most keep runs, at
 // least one: the newest, and of the older ones those that have not ended.
 func NewReducer(keep int) *Reducer {
-	return &Reducer{Reducer: eventlog.NewReducer(eventlog.ReducerOptions{KeepRuns: max(keep, 1)}), rates: rates{}, history: history{}}
+	return &Reducer{Reducer: eventlog.NewReducer(eventlog.ReducerOptions{KeepRuns: max(keep, 1)}),
+		rates: rates{}, history: history{}, converted: map[string]converted{}}
 }
 
 // Take folds one line of a log in, as eventlog.Reducer does, and notes the
 // amount of a span that works in bytes, for its rate, and of one that works
-// in a unit, for its history.
+// in a unit, for its history. The rates and the histories read a line of
+// a unit, decoded once for both.
 func (r *Reducer) Take(b []byte) {
 	r.Reducer.Take(b)
-	r.rates.take(b)
-	r.history.take(b)
+	if !bytes.Contains(b, []byte(`"unit"`)) {
+		return
+	}
+	l, err := eventlog.Decode(b)
+	if err != nil {
+		return
+	}
+	r.rates.take(l)
+	r.history.take(l)
 }
 
 // Reset forgets the runs, the rates and the histories, as the log is read again.
@@ -67,20 +91,41 @@ func (r *Reducer) Reset() {
 	r.Reducer.Reset()
 	clear(r.rates)
 	clear(r.history)
+	clear(r.converted)
 }
 
-// Runs returns the runs that have a command span, newest first.
+// Runs returns the runs that have a command span, newest first. It
+// converts only the runs that changed since the last call: while a run
+// does not change, Runs returns the same store.Run again, its spans
+// shared, so a caller does not change what it was given.
 func (r *Reducer) Runs() []store.Run {
 	runs := r.Reducer.Runs()
 	out := make([]store.Run, len(runs))
 	keep := make(map[string]bool, len(runs))
+	next := make(map[string]converted, len(runs))
 	for i, ru := range runs {
-		out[i] = convertRun(ru, r.rates, r.history)
+		c, ok := r.converted[ru.ID]
+		if !ok || !c.of(ru) {
+			c = converted{run: convertRun(ru, r.rates, r.history), last: ru.Last}
+			if len(ru.Root.Children) > 0 {
+				c.first = &ru.Root.Children[0]
+			}
+		}
+		out[i] = c.run
+		next[ru.ID] = c
 		keep[ru.ID] = true
 	}
+	r.converted = next
 	r.rates.forget(keep)
 	r.history.forget(keep)
 	return out
+}
+
+// of reports whether c is the conversion of ru: of the same build of the
+// run. A run whose command has no children is converted each time, as it
+// is cheap to.
+func (c converted) of(ru eventlog.Run) bool {
+	return c.first != nil && len(ru.Root.Children) > 0 && c.first == &ru.Root.Children[0] && c.last.Equal(ru.Last)
 }
 
 // convertRun returns the run as sind ui holds it.

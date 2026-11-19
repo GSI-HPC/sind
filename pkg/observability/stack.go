@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/GSI-HPC/sind/internal/hostname"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -51,13 +52,13 @@ func NewManager(dc *docker.Client, realm string) *Manager {
 
 // network is the realm's mesh network, which the stack runs on.
 func (m *Manager) network() docker.NetworkName {
-	return docker.NetworkName(m.Realm + "-mesh")
+	return mesh.RealmNames(m.Realm).Network
 }
 
 // composeProject is the Compose project of the realm's mesh, which the
 // stack's containers and volumes join.
 func (m *Manager) composeProject() string {
-	return m.Realm + "-mesh"
+	return mesh.RealmNames(m.Realm).ComposeProject
 }
 
 // createArgs returns the docker create arguments of a service's container:
@@ -127,12 +128,15 @@ var startOrder = []Service{ServicePrometheus, ServiceLoki, ServiceAlloy, Service
 // EnsureStack brings up the realm's stack on the mesh network: it creates
 // the data volumes and containers that do not exist yet, with alloyConfig
 // as Alloy's first configuration, recreates those of another fingerprint
-// (another sind version's) and keeps their volumes, starts those that are
-// stopped, and waits until all four are ready. dnsIP is the mesh DNS
-// container's pinned address, from which Grafana, Prometheus and Loki take
-// theirs (see mesh.ServiceIP); empty for a mesh without one, whose stack
-// gets dynamic addresses. It reports whether it created or started a
-// container.
+// (another sind version's) and those that never started, and keeps their
+// volumes, starts those that are stopped, and waits until all four are
+// ready. A container gets its configuration after its docker create, so an
+// EnsureStack killed or failed in between leaves one without it, which
+// never started; one that never started has nothing to lose. dnsIP is the
+// mesh DNS container's pinned address, from which Grafana, Prometheus and
+// Loki take theirs (see mesh.ServiceIP); empty for a mesh without one,
+// whose stack gets dynamic addresses. It reports whether it created or
+// started a container.
 func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (changed bool, err error) {
 	log := sindlog.From(ctx)
 	fp := m.Fingerprint()
@@ -152,9 +156,9 @@ func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (c
 		if err != nil {
 			return changed, fmt.Errorf("checking %s container: %w", s, err)
 		}
-		if info != nil && info.Labels[LabelVersion] != fp {
+		if info != nil && (info.Labels[LabelVersion] != fp || info.Status == docker.StateCreated) {
 			log.InfoContext(ctx, "recreating monitoring container", "container", string(name),
-				"fingerprint", info.Labels[LabelVersion], "want", fp)
+				"fingerprint", info.Labels[LabelVersion], "want", fp, "state", string(info.Status))
 			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(ctx, name)); err != nil {
 				return changed, fmt.Errorf("removing %s container: %w", s, err)
 			}
@@ -179,8 +183,9 @@ func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (c
 // Start starts the stack's containers that are stopped, as after a host
 // reboot, and waits until the stack is ready. It creates nothing: a realm
 // without any of the containers has no stack, and found is false then. A
-// stack that lacks some of its containers is an error, as it cannot get
-// ready; EnsureStack creates them again.
+// stack that lacks some of its containers, or has one that never started,
+// which may lack its configuration (see EnsureStack), is an error, as it
+// cannot get ready; EnsureStack creates them again.
 func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 	var missing []string
 	for _, s := range startOrder {
@@ -194,6 +199,10 @@ func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 			continue
 		}
 		found = true
+		if info.Status == docker.StateCreated {
+			missing = append(missing, string(name)+" (never started)")
+			continue
+		}
 		if info.Status == docker.StateRunning {
 			continue
 		}
@@ -242,9 +251,15 @@ const (
 )
 
 // curl runs curl in the Grafana container, the one image of the four with
-// curl, which reaches the others by container name.
+// curl, which reaches the others by container name. An HTTP status of 400
+// or more is an error.
 func (m *Manager) curl(ctx context.Context, maxTime string, args ...string) (string, error) {
-	cmd := append([]string{"curl", "-fsS", "--max-time", maxTime}, args...)
+	return m.curlWith(ctx, "-fsS", maxTime, args...)
+}
+
+// curlWith is curl with the flags given, instead of -fsS.
+func (m *Manager) curlWith(ctx context.Context, flags, maxTime string, args ...string) (string, error) {
+	cmd := append([]string{"curl", flags, "--max-time", maxTime}, args...)
 	return m.Docker.Exec(ctx, ContainerName(m.Realm, ServiceGrafana), cmd...)
 }
 
@@ -307,8 +322,18 @@ done`
 
 // journalOp runs journalScript in the Alloy container on the directories of
 // nodes of a cluster in the journal volume, or on the cluster's directory
-// when nodes is empty.
+// when nodes is empty. The cluster and each node must be a host name label:
+// an empty name or ".." would name the journal directory of every cluster
+// of the realm.
 func (m *Manager) journalOp(ctx context.Context, op, cluster string, nodes []string) error {
+	if err := hostname.CheckLabel(cluster); err != nil {
+		return fmt.Errorf("invalid cluster name %q: %w", cluster, err)
+	}
+	for _, n := range nodes {
+		if err := hostname.CheckLabel(n); err != nil {
+			return fmt.Errorf("invalid node name %q: %w", n, err)
+		}
+	}
 	dirs := []string{path.Join(JournalDir, cluster)}
 	if len(nodes) > 0 {
 		dirs = dirs[:0]
@@ -323,7 +348,8 @@ func (m *Manager) journalOp(ctx context.Context, op, cluster string, nodes []str
 
 // ResetJournals empties the journal directories of nodes of a cluster,
 // creating them, so that a node's container can mount its directory and
-// shows no journal of an earlier node of its name.
+// shows no journal of an earlier node of its name. A cluster or node name
+// that is not a host name label is an error.
 func (m *Manager) ResetJournals(ctx context.Context, cluster string, nodes ...string) error {
 	if err := m.journalOp(ctx, "reset", cluster, nodes); err != nil {
 		return fmt.Errorf("resetting journal directories: %w", err)
@@ -332,7 +358,8 @@ func (m *Manager) ResetJournals(ctx context.Context, cluster string, nodes ...st
 }
 
 // RemoveJournals removes the journal directories of nodes of a cluster, or
-// the cluster's whole directory when no node is given.
+// the cluster's whole directory when no node is given. A cluster or node
+// name that is not a host name label is an error.
 func (m *Manager) RemoveJournals(ctx context.Context, cluster string, nodes ...string) error {
 	if err := m.journalOp(ctx, "remove", cluster, nodes); err != nil {
 		return fmt.Errorf("removing journal directories: %w", err)

@@ -49,6 +49,7 @@ func TestInfo(t *testing.T) {
 		KernelVersion:   "6.8.0-1017-azure",
 		MemTotal:        16766226432,
 		NCPU:            4,
+		ClientVersion:   "29.1.0",
 	}, info)
 	assert.False(t, info.DockerDesktop())
 	assert.Equal(t, []string{"info", "--format", "{{json .}}"}, m.Calls[0].Args)
@@ -61,8 +62,8 @@ func TestInfo_Errors(t *testing.T) {
 		wantErr string
 	}{
 		{"exit status", mock.Result{Stderr: "permission denied\n", Err: fmt.Errorf("exit status 1")}, "exit status 1"},
-		{"server errors", mock.Result{Stdout: `{"ServerErrors":["Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"],"ClientInfo":{}}`},
-			"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"},
+		{"server errors", mock.Result{Stdout: `{"ServerErrors":["Error response from daemon: client version 1.52 is too new"],"ClientInfo":{}}`},
+			"Error response from daemon: client version 1.52 is too new"},
 		{"no server version", mock.Result{Stdout: `{"ClientInfo":{}}`}, "docker info reported no server version"},
 		{"not JSON", mock.Result{Stdout: "Client: Docker Engine"}, "parsing docker info"},
 	}
@@ -73,6 +74,29 @@ func TestInfo_Errors(t *testing.T) {
 			info, err := NewClient(&m).Info(t.Context())
 			require.ErrorContains(t, err, tt.wantErr)
 			assert.Nil(t, info)
+		})
+	}
+}
+
+// TestInfo_ServerErrorsUnreachable checks that a daemon the CLI cannot
+// reach, which docker info --format reports in ServerErrors with exit
+// status 0, is an *UnreachableError like that of a failed command, in
+// whichever entry it is.
+func TestInfo_ServerErrorsUnreachable(t *testing.T) {
+	for name, serverErrors := range map[string]string{
+		"only":   `["Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"]`,
+		"second": `["WARNING: something else","Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(`{"ServerErrors":`+serverErrors+`,"ClientInfo":{}}`, "", nil)
+			info, err := NewClient(&m).Info(t.Context())
+			assert.Nil(t, info)
+			require.ErrorIs(t, err, ErrUnreachable)
+			var unreachable *UnreachableError
+			require.ErrorAs(t, err, &unreachable)
+			assert.Equal(t, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?", unreachable.Reason)
+			assert.EqualError(t, err, "Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"+DoctorHint)
 		})
 	}
 }

@@ -300,7 +300,7 @@ func moreDuration(d time.Duration) string {
 // moreIntervalLoad fills the picker; with no interval to change, it draws
 // nothing.
 func moreIntervalLoad(v *View) error {
-	iv := moreEnvGet[moreInterval](ColMonitoringIntervalKey)
+	iv := viewEnv[moreInterval](v, ColMonitoringIntervalKey)
 	if iv == nil {
 		return nil
 	}
@@ -320,7 +320,7 @@ func moreIntervalLoad(v *View) error {
 // one that the picker offers, and answers with the picker, or a plain form
 // with a 303 to the page.
 func moreIntervalSet(s *Server, w http.ResponseWriter, r *http.Request) {
-	iv := moreEnvGet[moreInterval](ColMonitoringIntervalKey)
+	iv, _ := s.env.Get(ColMonitoringIntervalKey).(moreInterval)
 	if iv == nil {
 		s.Fail(w, r, ErrNotFound)
 		return

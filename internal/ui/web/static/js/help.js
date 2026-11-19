@@ -37,7 +37,9 @@
     cache: new Map(),
     stack: [],
     hint: null, timer: 0, over: null,
-    jumpTimer: 0, jumpSeq: 0, searchTimer: 0, searchSeq: 0,
+    // paneSeq counts what the pane fetched, a topic or a search: only the
+    // latest may fill it.
+    jumpTimer: 0, jumpSeq: 0, searchTimer: 0, paneSeq: 0,
     g: 0, gTimer: 0,
     // The pane element, kept while the pane is open, so that a swap of the
     // layer does not lose it; where the focus goes back to on close.
@@ -110,9 +112,10 @@
 
   // fetchHTML asks for a part of a page, as htmx does: GET /help opened in
   // the browser is a page of its own.
+  // An answer other than 2xx throws an error with its status.
   async function fetchHTML(url) {
     const r = await fetch(url, { headers: { Accept: 'text/html', 'HX-Request': 'true' } });
-    if (!r.ok) throw new Error(r.status + ' ' + url);
+    if (!r.ok) throw Object.assign(new Error(r.status + ' ' + url), { status: r.status });
     return r.text();
   }
 
@@ -159,8 +162,15 @@
     if (!topic) return;
     let html = H.cache.get(topic);
     if (html === undefined) {
-      try { html = await fetchHTML(topicURL(topic, { card: '1' })); } catch (e) { html = null; }
-      H.cache.set(topic, html);
+      try {
+        html = await fetchHTML(topicURL(topic, { card: '1' }));
+        H.cache.set(topic, html);
+      } catch (e) {
+        // A word without a card has none; a fetch that failed may work
+        // the next time.
+        html = null;
+        if (e.status === 404) H.cache.set(topic, null);
+      }
     }
     if (!html || !el.isConnected || (H.over !== el && document.activeElement !== el)) return;
     hideHint();
@@ -326,21 +336,30 @@
   }
 
   async function load() {
+    // A search that waits or runs would replace the topic.
+    clearTimeout(H.searchTimer);
+    const seq = ++H.paneSeq;
+    // The stack changed: keep it for a reload, even if this load is
+    // superseded.
+    save();
     const topic = current();
-    const body = $('help-body');
     const q = $('help-q');
     if (q) q.value = '';
+    let html;
     try {
-      body.innerHTML = await fetchHTML(topicURL(topic));
+      html = await fetchHTML(topicURL(topic));
     } catch (e) {
-      body.innerHTML = '<p class="muted">There is no help for this. Reload the page if sind ui was upgraded.</p>';
+      html = '<p class="muted">There is no help for this. Reload the page if sind ui was upgraded.</p>';
     }
+    // Another topic, a search or a close came first.
+    if (seq !== H.paneSeq || !pane()) return;
+    const body = $('help-body');
+    body.innerHTML = html;
     if (topic.startsWith('word/')) see(topic.slice(5));
     afterLoad();
     const h2 = body.querySelector('h2');
     say('Help: ' + (h2 ? h2.textContent : 'not found'));
     body.scrollTop = 0;
-    save();
   }
 
   function afterLoad() {
@@ -355,10 +374,10 @@
     clearTimeout(H.searchTimer);
     H.searchTimer = setTimeout(async () => {
       if (!q.trim()) { load(); return; }
-      const seq = ++H.searchSeq;
+      const seq = ++H.paneSeq;
       try {
         const html = await fetchHTML('/help?' + new URLSearchParams({ q }));
-        if (seq !== H.searchSeq || !pane()) return;
+        if (seq !== H.paneSeq || !pane()) return;
         $('help-body').innerHTML = html;
         afterLoad();
         const n = $('help-body').querySelectorAll('.hits li').length;
@@ -500,8 +519,7 @@
   // closes the box, as an entry that copies has nothing else to open.
   function copyJump(text, done) {
     const say = msg => document.dispatchEvent(new CustomEvent('sind:toast', { detail: msg }));
-    const p = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
-    p.then(() => say('Copied ' + text), () => say('Select the text and press Ctrl+C to copy'));
+    window.sindCopy.text(text).then(ok => say(ok ? 'Copied ' + text : 'Select the text and press Ctrl+C to copy'));
     if (done) closeJump();
   }
 

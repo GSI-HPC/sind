@@ -58,17 +58,23 @@ sind publishes no host port: on Linux the host reaches the containers' addresses
 Every request carries a user name and a JSON Web Token in the headers `X-SLURM-USER-NAME` and `X-SLURM-USER-TOKEN`. Root can get a token for any user from slurmctld:
 
 ```bash
-TOKEN=$(sind exec -- scontrol token username=root lifespan=3600 | cut -d= -f2)
+TOKEN=$(sind exec -- scontrol token username=root lifespan=600 | cut -d= -f2)
 API=http://api.default.sind.sind:6820
 
-curl -s -H "X-SLURM-USER-NAME: root" -H "X-SLURM-USER-TOKEN: $TOKEN" \
+curl -s -H "X-SLURM-USER-NAME: root" -H @<(echo "X-SLURM-USER-TOKEN: $TOKEN") \
   $API/slurm/v0.0.45/ping/
 ```
 
-`scontrol token` prints `SLURM_JWT=<token>`; `lifespan` is in seconds, 1800 by default. Submit a job:
+`scontrol token` prints `SLURM_JWT=<token>`; `lifespan` is in seconds, 1800 by default. `-H @file` reads the header from a file, here a pipe of the shell, so that the token is not on curl's command line, which every user of the host can read.
+
+{{< callout type="warning" >}}
+Every account of the host and every job on the realm's nodes can reach slurmrestd: a token is all that guards it. A token of root runs jobs as root, and they write to the cluster's data directory on the host, by default the directory where you created the cluster. Keep tokens and the key of `sind get auth-key --type jwt` as you would keep root's password: out of command lines and shared files, with a short `lifespan`.
+{{< /callout >}}
+
+Submit a job:
 
 ```bash
-curl -s -X POST -H "X-SLURM-USER-NAME: root" -H "X-SLURM-USER-TOKEN: $TOKEN" \
+curl -s -X POST -H "X-SLURM-USER-NAME: root" -H @<(echo "X-SLURM-USER-TOKEN: $TOKEN") \
   -H "Content-Type: application/json" \
   -d '{"job": {"script": "#!/bin/bash\nhostname", "current_working_directory": "/data", "environment": ["PATH=/usr/bin:/bin"]}}' \
   $API/slurm/v0.0.45/job/submit
@@ -96,7 +102,7 @@ accounts: [physics]
 
 ```bash
 TOKEN=$(sind exec -- scontrol token username=alice | cut -d= -f2)
-curl -s -H "X-SLURM-USER-NAME: alice" -H "X-SLURM-USER-TOKEN: $TOKEN" \
+curl -s -H "X-SLURM-USER-NAME: alice" -H @<(echo "X-SLURM-USER-TOKEN: $TOKEN") \
   http://api.default.sind.sind:6820/slurmdb/v0.0.45/jobs/
 ```
 

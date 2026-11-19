@@ -5,11 +5,16 @@ package monitor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -152,6 +157,27 @@ func TestWatcher_Unsubscribe(t *testing.T) {
 	assert.Equal(t, EventContainerStart, next(t, sub2).Kind)
 	_, ok := <-sub1
 	assert.False(t, ok, "sub1 should be closed after Unsubscribe")
+}
+
+func TestWatcher_UnsubscribeAndWait(t *testing.T) {
+	// Wait and Unsubscribe may run in either order, and at the same time:
+	// each channel is closed once.
+	m := &mock.Executor{}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	before, during, after := w.Subscribe(), w.Subscribe(), w.Subscribe()
+	w.Unsubscribe(before)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Unsubscribe(during)
+	}()
+	w.Wait()
+	<-done
+	w.Unsubscribe(after)
+	for _, ch := range []<-chan Event{before, during, after} {
+		_, ok := <-ch
+		assert.False(t, ok)
+	}
 }
 
 func TestWatcher_UnsubscribeNonexistent(_ *testing.T) {
@@ -322,4 +348,115 @@ func TestWatcher_Emit_CtxDoneWhenChannelFull(t *testing.T) {
 	}
 
 	assert.Equal(t, cap(w.internalCh), len(w.internalCh), "no slot should have been consumed")
+}
+
+// failedStream is the stdout of a docker command that failed: it ends at
+// once, and closing the Process returns the command's error.
+type failedStream struct {
+	io.Reader
+	err error
+}
+
+func (s failedStream) Close() error { return s.err }
+
+// TestWatcher_MonitorStreamExitError checks that the monitor error of a
+// stream whose docker command failed carries the command's error, as a
+// Client call classifies it.
+func TestWatcher_MonitorStreamExitError(t *testing.T) {
+	unreachable := cmdexec.WrapExitError(testutil.ExitCode1(t),
+		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n")
+	m := &mock.Executor{OnStart: func([]string) mock.StreamResult {
+		return mock.StreamResult{Reader: failedStream{Reader: strings.NewReader(""), err: unreachable}}
+	}}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	sub := w.Subscribe()
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, w.Start(ctx, nil))
+	t.Cleanup(func() {
+		cancel()
+		w.Wait()
+	})
+
+	ev := next(t, sub)
+	assert.Equal(t, EventMonitorError, ev.Kind)
+	assert.Equal(t, "docker events stream failed", ev.Detail)
+	require.ErrorIs(t, ev.Err, docker.ErrUnreachable)
+	assert.ErrorContains(t, ev.Err, "Cannot connect to the Docker daemon")
+}
+
+// TestWatcher_FullSubscriberGetsMonitorError checks that a subscriber whose
+// buffer is full still gets a monitor error, in place of its oldest event,
+// while other events that find no room are dropped.
+func TestWatcher_FullSubscriberGetsMonitorError(t *testing.T) {
+	w := NewWatcher(nil, "sind-dev-", "dev")
+	full := w.SubscribeTo("sind-dev-controller")
+	other := w.SubscribeTo("sind-dev-worker-0")
+	for i := range cap(full) {
+		w.subscribers[0].ch <- Event{Kind: EventContainerStart, Container: "sind-dev-controller", Detail: fmt.Sprint(i)}
+	}
+	w.internalCh <- Event{Kind: EventContainerStart, Container: "sind-dev-controller", Detail: "no room"}
+	w.internalCh <- Event{Kind: EventMonitorError, Container: "sind-dev-controller", Detail: "systemd monitor stream ended"}
+	// The loop handles the events in order: once other has this one, it
+	// has handled those before.
+	w.internalCh <- Event{Kind: EventContainerStart, Container: "sind-dev-worker-0"}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.broadcastLoop(ctx)
+	}()
+	next(t, other)
+	cancel()
+	<-done
+
+	require.Len(t, full, cap(full))
+	for i := 1; i < cap(full); i++ {
+		assert.Equal(t, fmt.Sprint(i), (<-full).Detail)
+	}
+	ev := <-full
+	assert.Equal(t, EventMonitorError, ev.Kind)
+	assert.Equal(t, "systemd monitor stream ended", ev.Detail)
+}
+
+func TestTakeOldest(t *testing.T) {
+	ch := make(chan Event, 2)
+	_, ok := takeOldest(ch)
+	assert.False(t, ok)
+	ch <- Event{Detail: "a"}
+	ch <- Event{Detail: "b"}
+	ev, ok := takeOldest(ch)
+	assert.True(t, ok)
+	assert.Equal(t, "a", ev.Detail)
+}
+
+// TestWatcher_StartManyFailingMonitors checks that Start returns when more
+// systemd monitors fail to start than internalCh holds: their errors go
+// through the broadcast loop.
+func TestWatcher_StartManyFailingMonitors(t *testing.T) {
+	pipes := &mock.Pipes{}
+	m := &mock.Executor{OnStart: func(args []string) mock.StreamResult {
+		if args[0] == "events" {
+			return pipes.OnStart(args)
+		}
+		return mock.StreamResult{Err: errors.New("busctl not available")}
+	}}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	nodes := make([]NodeTarget, 2*cap(w.internalCh))
+	for i := range nodes {
+		nodes[i] = NodeTarget{ShortName: fmt.Sprintf("worker-%d", i), Container: docker.ContainerName(fmt.Sprintf("sind-dev-worker-%d", i))}
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(func() {
+		cancel()
+		pipes.CloseAll()
+		w.Wait()
+	})
+	started := make(chan error, 1)
+	go func() { started <- w.Start(ctx, nodes) }()
+	select {
+	case err := <-started:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start blocked")
+	}
 }

@@ -22,7 +22,7 @@ func TestBuildCreateCluster_YAML(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cmd.Problems)
 
-	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/lab.yaml --pull --wait 0", cmd.Display)
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/sind/lab.yaml --pull --wait 0", cmd.Display)
 	assert.Contains(t, cmd.Config.Content, "name: lab # my lab\n", "the YAML as the user wrote it")
 	var shorts []string
 	for _, n := range cmd.Nodes {
@@ -31,6 +31,15 @@ func TestBuildCreateCluster_YAML(t *testing.T) {
 	assert.Equal(t, []string{"controller", "controller-backup", "db", "worker-0", "worker-1", "worker-2", "worker-3"}, shorts)
 	assert.Equal(t, "7 containers, 10 CPUs, 3.5 GiB of memory.", cmd.Summary)
 	assert.Equal(t, []string{"/scratch/missing-lab"}, cmd.Dirs, "a missing directory is created")
+}
+
+func TestBuildCreateCluster_YAMLWithoutFinalNewline(t *testing.T) {
+	cmd, err := build(t, "create-cluster", yamlForm("kind: Cluster\nname: lab"))
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Cluster\nname: lab", cmd.Config.Content, "the file as the user wrote it")
+	lines := strings.Split(cmd.Script, "\n")
+	tag := strings.TrimSuffix(strings.TrimPrefix(lines[2], `(umask 077 && cat >"$cfg") <<'`), "'")
+	assert.Equal(t, []string{"kind: Cluster", "name: lab", tag}, lines[3:6], "the tag ends the here-document on a line of its own")
 }
 
 func TestBuildCreateCluster_YAMLLineEnds(t *testing.T) {
@@ -84,4 +93,17 @@ func TestBuildCreateCluster_YAMLManyWorkers(t *testing.T) {
 	assert.Len(t, cmd.Nodes, 1+maxPlanned)
 	require.Len(t, cmd.Problems, 1)
 	assert.Equal(t, Problem{Field: "yaml", Label: "Workers", Text: "a cluster here has at most 16384 workers"}, cmd.Problems[0])
+	assert.Empty(t, cmd.SlurmConf, "no Slurm files that name every worker")
+	assert.Empty(t, cmd.After)
+}
+
+// A count of a million workers builds no node of it.
+func TestBuildCreateCluster_YAMLAMillionWorkers(t *testing.T) {
+	var cmd Command
+	allocs := testing.AllocsPerRun(1, func() {
+		cmd, _ = build(t, "create-cluster", yamlForm("kind: Cluster\nname: lab\nnodes: [controller, worker: 1000000]\n"))
+	})
+	assert.Len(t, cmd.Nodes, 1+maxPlanned)
+	assert.Empty(t, cmd.SlurmConf)
+	assert.Less(t, allocs, 500000.0)
 }

@@ -309,20 +309,24 @@
     return '/dialogs/delete-clusters?' + q.toString();
   }
 
-  // copy copies the text. The button says Copied for a moment, or, with
-  // data-pg-copy-say, keeps its label and its sign and a toast says what
-  // it copied and what to do with it.
-  function copy(text, btn) {
-    const done = () => {
-      if (btn.dataset.pgCopySay) {
-        document.dispatchEvent(new CustomEvent('sind:toast', { detail: btn.dataset.pgCopySay }));
+  // copy copies the text (window.sindCopy of app.js). The button says
+  // Copied for a moment, or, with data-pg-copy-say, keeps its label and
+  // its sign and a toast says what it copied and what to do with it. When
+  // the copy fails, a toast says so, and shown, the element that shows the
+  // text, if any, is selected for the reader to copy by hand.
+  function copy(text, btn, shown) {
+    const toast = msg => document.dispatchEvent(new CustomEvent('sind:toast', { detail: msg }));
+    window.sindCopy.text(text).then(ok => {
+      if (!ok) {
+        window.sindCopy.select(shown);
+        toast(shown ? 'Could not copy: press Ctrl+C to copy the selected text' : 'Could not copy');
         return;
       }
+      if (btn.dataset.pgCopySay) { toast(btn.dataset.pgCopySay); return; }
       const old = btn.textContent;
       btn.textContent = 'Copied';
       setTimeout(() => { btn.textContent = old; }, 1200);
-    };
-    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {});
+    });
   }
 
   // The menus of the head of a node page, of the rows of a list and the
@@ -512,7 +516,7 @@
       const cp = t.closest('[data-pg-copy]');
       if (cp) {
         const code = cp.closest('.cmd').querySelector('code');
-        copy(code.textContent, cp);
+        copy(code.textContent, cp, code);
         return;
       }
       const ct = t.closest('[data-pg-copy-text]');
@@ -522,7 +526,7 @@
       const cf = t.closest('[data-pg-copy-from]');
       if (cf) {
         const src = document.getElementById(cf.dataset.pgCopyFrom);
-        if (src) copy(src.textContent, cf);
+        if (src) copy(src.textContent, cf, src);
         return;
       }
       // A row of a list is a link, for the mouse; its first link is for

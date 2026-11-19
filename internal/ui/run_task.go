@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/localweb/page"
+
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
@@ -97,12 +99,8 @@ func runWaitOf(v *View) *runWait {
 // runless reports whether the command of the task writes no event log, so
 // that it has no run page: sind exec, which Drain and Resume run.
 func runless(t store.Task) bool {
-	words := strings.Fields(t.Display)
-	i := 1
-	if len(words) > i && words[i] == "--realm" {
-		i += 2
-	}
-	return len(words) > i && words[i] == "exec"
+	_, words := action.SplitRealm(strings.Fields(t.Display))
+	return len(words) > 0 && words[0] == "exec"
 }
 
 // runTaskPage answers GET /tasks/{id}: a redirect to the run page when the

@@ -18,3 +18,10 @@ func TestCustomRealm_NamingFunctions(t *testing.T) {
 	assert.Equal(t, "myrealm-dev-", ContainerPrefix(realm, "dev"))
 	assert.Equal(t, "myrealm-dev", ComposeProject(realm, "dev"))
 }
+
+func TestQualifiedNodeName(t *testing.T) {
+	assert.Equal(t, "worker-0.dev", QualifiedNodeName("dev", "worker-0"))
+	assert.Equal(t, "worker-0", QualifiedNodeName("default", "worker-0"))
+	assert.Equal(t, ".dev", NodeNameSuffix("dev"))
+	assert.Empty(t, NodeNameSuffix("default"))
+}

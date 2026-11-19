@@ -167,7 +167,7 @@ func (d *Demo) startMidRun(now time.Time) {
 	d.sim.Feed(midRun(now))
 	d.st.AddTask(store.Task{
 		ID: midRunTask, Action: "create-cluster", Realm: "ci", Cluster: "nightly",
-		Display: "sind --realm ci create cluster --config " + ConfigDir + "/nightly.yaml",
+		Display: "sind --realm ci create cluster --config " + ConfigDir + "/ci/nightly.yaml",
 		Trace:   traceHex(traceID(midRunIndex)), Start: now.Add(-midRunAge), Status: store.TaskRunning,
 	})
 	d.st.SetLock("ci", &state.LockHolder{Command: "sind --realm ci create cluster", Host: "demo", PID: 4242, Since: now.Add(-midRunAge)})

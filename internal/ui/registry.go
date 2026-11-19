@@ -89,6 +89,18 @@ type View struct {
 
 	// reg is the registry of the server that renders the view.
 	reg *Registry
+	// env is the Env of that server, which Env reads.
+	env *Env
+}
+
+// Env returns what a service put under key in the Env of the server that
+// renders the view (Env.Get), nil when none did or the view has no server.
+// A page's Load reads the values of the services through it.
+func (v *View) Env(key any) any {
+	if v.env == nil {
+		return nil
+	}
+	return v.env.Get(key)
 }
 
 // A Page is a screen of sind ui at its own address.
@@ -133,6 +145,10 @@ type Fragment struct {
 	Params []string
 	// Load fills v.Data from v.Snap and v.Params.
 	Load func(v *View) error
+	// Share names the Load that the fragment shares with others, such as
+	// the fragments of one page: a stream runs it once for all the
+	// fragments of a Share that it renders at a time. Empty shares none.
+	Share string
 }
 
 // depends reports whether a change of any topic in changed makes f stale.
@@ -246,8 +262,9 @@ func (e *Env) watch(topics []store.Topic) (release func()) {
 	}
 }
 
-// Put keeps value under key, for a route or another service to Get. The
-// key is a value of a type of the caller's own, as with context values.
+// Put keeps value under key, for a route or another service to Get, and for
+// a page's Load through View.Env. The key is a value of a type of the
+// caller's own, as with context values.
 func (e *Env) Put(key, value any) { e.values.Store(key, value) }
 
 // Get returns what Put kept under key, or nil.

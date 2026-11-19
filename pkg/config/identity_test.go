@@ -77,6 +77,14 @@ func TestValidate_IdentityParameters(t *testing.T) {
 		{IdentityNSSSlurm, "LaunchParameters=enable_nss_slurm\nlaunchparameters = use_interactive_step # later wins\n",
 			"slurm main sets LaunchParameters=use_interactive_step: identity nssSlurm needs enable_nss_slurm in it"},
 		{IdentityClientIDs, "AuthType=auth/slurm\nCredType=cred/slurm\nAuthInfo=use_client_ids,cred_expire=30\n", ""},
+		// Slurm takes a plugin without its type prefix, and the flags of
+		// LaunchParameters in any case.
+		{IdentityClientIDs, "AuthType=slurm\nCredType=slurm\nLaunchParameters=Enable_NSS_Slurm\n", ""},
+		{IdentityNSSSlurm, "LaunchParameters=use_interactive_step,ENABLE_NSS_SLURM\n", ""},
+		{IdentityClientIDs, "AuthType=munge\n",
+			"slurm main sets AuthType=munge: identity clientIds needs auth/slurm in it"},
+		{IdentityClientIDs, "AuthType=cred/slurm\n",
+			"slurm main sets AuthType=cred/slurm: identity clientIds needs auth/slurm in it"},
 		{IdentityClientIDs, "AuthType=auth/munge\n",
 			"slurm main sets AuthType=auth/munge: identity clientIds needs auth/slurm in it"},
 		{IdentityClientIDs, "CredType=cred/munge\n",

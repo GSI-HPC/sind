@@ -17,13 +17,13 @@ import (
 )
 
 // WaitNodes waits until nodes of a cluster that exist, by their short
-// names, are ready, as Create and WorkerAdd wait for the nodes they make:
-// each node's container runs, systemd has booted, and the node's services
-// are ready (sshd, munge but with identity clientIds, and where sind
-// manages Slurm the node's Slurm daemon, see nodeServices); then
-// slurmctld has the registration of each managed worker among nodes, as
-// sinfo on the controller in control tells (probe.WorkersRegistered). The
-// power commands that start nodes call it with --wait.
+// names, each once, are ready, as Create and WorkerAdd wait for the nodes
+// they make: each node's container runs, systemd has booted, and the
+// node's services are ready (sshd, munge but with identity clientIds, and
+// where sind manages Slurm the node's Slurm daemon, see nodeServices);
+// then slurmctld has the registration of each managed worker among nodes,
+// as sinfo on the controller in control tells (probe.WorkersRegistered).
+// The power commands that start nodes call it with --wait.
 //
 // wait bounds the whole wait; zero or less sets no limit. When the limit
 // ends it, the error wraps ErrNotReady. A container that exits, or a unit
@@ -31,8 +31,9 @@ import (
 // running controller to register with: without one the wait fails at
 // once. interval is the delay between probe rounds, as for Create.
 //
-// The wait is the progress step "readiness", with a target for each node
-// and, after them, the wait for the workers' registration.
+// The wait is the progress step "readiness", with a target for each node,
+// named as the power commands name it (QualifiedNodeName), and, after them, the
+// wait for the workers' registration.
 func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string, wait, interval time.Duration) (err error) {
 	if len(shortNames) == 0 {
 		return nil
@@ -43,8 +44,11 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 	byName := make(map[docker.ContainerName]docker.ContainerListEntry, len(containers))
 	for _, c := range containers {
-		byName[c.Name] = c
+		if isNode(c.Labels) {
+			byName[c.Name] = c
+		}
 	}
+	shortNames = uniqueNames(shortNames)
 	nodes := make([]docker.ContainerListEntry, len(shortNames))
 	var workers []string
 	for i, name := range shortNames {
@@ -80,7 +84,11 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 	sctx, end := startStep(ctx, "readiness", progress.Flagged(progress.FlagFold), progress.Total(len(nodes)))
 	defer func() { end(err) }()
 	g, gctx := errgroup.WithContext(sctx)
-	ctxs, targets := startTargets(gctx, shortNames, func(i int) string { return nodes[i].Labels[LabelRole] })
+	names := make([]string, len(shortNames))
+	for i, name := range shortNames {
+		names[i] = QualifiedNodeName(clusterName, name)
+	}
+	ctxs, targets := startTargets(gctx, names, func(i int) string { return nodes[i].Labels[LabelRole] })
 	for i, c := range nodes {
 		g.Go(func() (err error) {
 			targets[i].Run()
@@ -106,16 +114,15 @@ func managedWorkerLabels(labels docker.Labels) bool {
 
 // nodeProbes returns the readiness probes of a node that exists, from its
 // role and labels: its container and systemd, then the services that sind
-// checks on it (nodeServices) and waits for.
+// checks on it (nodeServices). UntilReady skips those that sind does not
+// wait for, which have no check.
 func nodeProbes(role config.Role, labels docker.Labels) []probe.Probe {
 	probes := []probe.Probe{
 		{Name: "container", Check: probe.ContainerRunning},
 		{Name: "systemd", Check: probe.SystemdReady},
 	}
 	for _, svc := range nodeServices(role, labels) {
-		if p := probe.ForService(svc); p.Check != nil {
-			probes = append(probes, p)
-		}
+		probes = append(probes, probe.ForService(svc))
 	}
 	return probes
 }

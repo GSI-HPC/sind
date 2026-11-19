@@ -20,7 +20,8 @@ const LevelTrace = slog.Level(-8)
 
 type contextKey struct{}
 
-// With stores a logger in the context.
+// With stores a logger in the context. A nil logger stands for none:
+// From then returns the no-op logger.
 func With(ctx context.Context, l *slog.Logger) context.Context {
 	return context.WithValue(ctx, contextKey{}, l)
 }
@@ -29,9 +30,9 @@ func With(ctx context.Context, l *slog.Logger) context.Context {
 var nop = slog.New(slog.DiscardHandler)
 
 // From extracts the logger from the context.
-// Returns a no-op logger if none is set.
+// Returns a no-op logger if none is set, or the one set is nil.
 func From(ctx context.Context) *slog.Logger {
-	if l, ok := ctx.Value(contextKey{}).(*slog.Logger); ok {
+	if l, ok := ctx.Value(contextKey{}).(*slog.Logger); ok && l != nil {
 		return l
 	}
 	return nop
@@ -40,7 +41,8 @@ func From(ctx context.Context) *slog.Logger {
 type warnKey struct{}
 
 // WithWarn stores in the context where the warnings meant for the user go
-// (Warn). The sind CLI prints each as a "Warning:" line on stderr.
+// (Warn). The sind CLI prints each as a "Warning:" line on stderr. A nil
+// warn stands for none: Warn then logs the warning.
 func WithWarn(ctx context.Context, warn func(msg string)) context.Context {
 	return context.WithValue(ctx, warnKey{}, warn)
 }
@@ -50,7 +52,7 @@ func WithWarn(ctx context.Context, warn func(msg string)) context.Context {
 // skipped: to the function the context carries (WithWarn), or else, for a
 // library caller that set none, to the context's logger at warn level.
 func Warn(ctx context.Context, msg string) {
-	if warn, ok := ctx.Value(warnKey{}).(func(string)); ok {
+	if warn, ok := ctx.Value(warnKey{}).(func(string)); ok && warn != nil {
 		warn(msg)
 		return
 	}

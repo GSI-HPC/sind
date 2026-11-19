@@ -142,7 +142,7 @@ func buildPower(f Form, c Context) (Command, error) {
 		return Command{}, err
 	}
 	shorts := shortNames(picked)
-	cmd := NewCommand(sindArgv(realm, append([]string{"power", op.ID}, nodeWords(cl.Name, shorts)...)...)...)
+	cmd := NewCommand(SindArgv(realm, append([]string{"power", op.ID}, nodeWords(cl.Name, shorts)...)...)...)
 	cmd.OK = op.Heading(countOr(shorts, NodesNoun(picked)))
 	if stops(op.ID) {
 		all, st := c.Snap.ClusterNodes(realm, cl.Name), c.Snap.Status(realm, cl.Name)
@@ -330,10 +330,10 @@ func buildSlurmState(f Form, c Context, realm, clusterName string, op PowerOp) (
 		case utf8.RuneCountInString(reason) > maxReason || !plainText(reason):
 			return Command{}, fmt.Errorf("reason: write one line of at most %d characters", maxReason)
 		}
-		cmd = NewCommand(sindArgv(realm, append(words, "State=DRAIN", "Reason="+reason)...)...)
+		cmd = NewCommand(SindArgv(realm, append(words, "State=DRAIN", "Reason="+reason)...)...)
 		cmd.Notes = append(cmd.Notes, "Running jobs go on; Slurm starts no new job on the nodes. sinfo shows them as draining, then drained. Resume puts them back.")
 	} else {
-		cmd = NewCommand(sindArgv(realm, append(words, "State=RESUME")...)...)
+		cmd = NewCommand(SindArgv(realm, append(words, "State=RESUME")...)...)
 		cmd.Notes = append(cmd.Notes, "The nodes take jobs again. A node that is down because its container stopped comes back once you start it.")
 	}
 	cmd.OK = op.Heading(countOr(shorts, "workers"))

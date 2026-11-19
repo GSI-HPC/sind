@@ -61,7 +61,7 @@ func buildConnect(f Form, c Context) (Command, error) {
 	if r, ok := SindContainer(c.Snap, name); ok {
 		return Command{}, fmt.Errorf("container: %s is a container of sind in realm %s; pick one that sind did not make", name, r)
 	}
-	cmd := NewCommand(sindArgv(realm, "connect", "container", name)...)
+	cmd := NewCommand(SindArgv(realm, "connect", "container", name)...)
 	cmd.OK = "Connect " + name
 	if _, ok := c.Snap.Realm(realm); !ok {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("sind ui sees no realm %s. sind connects a container only to a realm with a cluster, whose mesh it joins; create a cluster in %s first.", realm, realm))
@@ -173,5 +173,5 @@ func buildDisconnect(f Form, _ Context) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	return NewCommand(sindArgv(realm, "disconnect", "container", name)...), nil
+	return NewCommand(SindArgv(realm, "disconnect", "container", name)...), nil
 }

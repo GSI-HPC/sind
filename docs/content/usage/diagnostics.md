@@ -37,7 +37,7 @@ Checks system prerequisites and reports pass/fail for each:
 
 | Check | Required | Description |
 |-------|----------|-------------|
-| Docker Engine | yes | Docker >= 28.0 reachable (`docker info`) |
+| Docker Engine | yes | Docker >= 28.0 reachable (`docker info`), with a docker CLI >= 28.0 |
 | Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
 | Docker host | no | the daemon runs on this machine, not in Docker Desktop's VM or on another host |
 | cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and the Docker host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |

@@ -35,6 +35,14 @@ import (
 // user's, even if it contains a sind-nodes.conf. So is a configuration
 // without sind-nodes.conf.
 //
+// A worker that sind-nodes.conf of a managed cluster still defines but
+// whose container is gone (left by a rollback of WorkerAdd that could not
+// restore the file, or by a container removed outside sind) is removed
+// from the file and from the mesh, with a warning (meshMgr.Warn). Any
+// other name without a container fails with ErrNodeNotFound, and nothing
+// is removed. So does one when sind-nodes.conf cannot be read, as with a
+// stopped controller: the error then says why.
+//
 // The steps it reports are "slurm" (the update of sind-nodes.conf and the
 // reconfigure), then "mesh deregistration", "nodes" with a target for each
 // worker, and "monitoring" on a monitored cluster.
@@ -60,9 +68,11 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		containerMap[c.Name] = c
 	}
 
-	// Resolve which nodes to remove, checking they exist and are worker nodes.
+	// Resolve which nodes to remove, checking they exist and are worker
+	// nodes. Those without a container may still be in sind-nodes.conf.
 	seen := make(map[string]bool, len(shortNames))
 	var targets []docker.ContainerListEntry
+	var orphans []string
 	for _, name := range shortNames {
 		if seen[name] {
 			continue
@@ -71,7 +81,8 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		cn := ContainerName(realm, clusterName, name)
 		c, ok := containerMap[cn]
 		if !ok {
-			return errorWith(ErrNodeNotFound, "node %q not found in cluster %q", name, clusterName)
+			orphans = append(orphans, name)
+			continue
 		}
 		if config.Role(c.Labels[LabelRole]) != config.RoleWorker {
 			return fmt.Errorf("node %q has role %q: only worker nodes can be removed", name, c.Labels[LabelRole])
@@ -85,15 +96,38 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	// A cluster whose controller is gone has no Slurm to tell.
 	var nodesConf string
 	updateConf := false
-	if hasController && IsManaged(controller.Labels) && slices.ContainsFunc(targets, isManagedContainer) {
+	managed := hasController && IsManaged(controller.Labels)
+	if managed && (slices.ContainsFunc(targets, isManagedContainer) || len(orphans) > 0) {
 		nodesConf, err = readNodesConf(ctx, client, controller)
 		switch {
 		case errors.Is(err, ErrNodesConfMissing):
 			log.DebugContext(ctx, "no sind-nodes.conf, leaving the Slurm configuration alone", "cluster", clusterName)
+		case err != nil && len(orphans) > 0:
+			// A name without a container is not known to be a worker.
+			return errorWith(ErrNodeNotFound, "node %q not found in cluster %q (sind-nodes.conf could not be checked: %v)", orphans[0], clusterName, err)
 		case err != nil:
 			return err
 		default:
 			updateConf = true
+		}
+	}
+	for _, name := range orphans {
+		if !updateConf || slurm.RemoveNodesFromConf(nodesConf, []string{name}) == slurm.RemoveNodesFromConf(nodesConf, nil) {
+			return errorWith(ErrNodeNotFound, "node %q not found in cluster %q", name, clusterName)
+		}
+	}
+
+	// Which of the workers the monitoring stack collects is told by their
+	// containers, so before they go, and before anything changes: a
+	// failed listing leaves the workers in Slurm and the mesh.
+	monitored, err := monitoredContainers(ctx, client, realm, clusterName)
+	if err != nil {
+		return err
+	}
+	var forget []string
+	for _, c := range targets {
+		if slices.ContainsFunc(monitored, func(m docker.ContainerListEntry) bool { return m.Name == c.Name }) {
+			forget = append(forget, strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, clusterName)))
 		}
 	}
 
@@ -109,19 +143,13 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 			return err
 		}
 	}
-	DeregisterMesh(ctx, meshMgr, clusterName, targets)
-
-	// Which of the workers the monitoring stack collects is told by their
-	// containers, so before they go.
-	monitored, err := monitoredContainers(ctx, client, realm, clusterName)
-	if err != nil {
-		return err
+	deregistered := slices.Clone(targets)
+	for _, name := range orphans {
+		deregistered = append(deregistered, docker.ContainerListEntry{Name: ContainerName(realm, clusterName, name)})
 	}
-	var forget []string
-	for _, c := range targets {
-		if slices.ContainsFunc(monitored, func(m docker.ContainerListEntry) bool { return m.Name == c.Name }) {
-			forget = append(forget, strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, clusterName)))
-		}
+	DeregisterMesh(ctx, meshMgr, clusterName, deregistered)
+	for _, name := range orphans {
+		meshMgr.Warn(ctx, fmt.Sprintf("node %q of cluster %q had no container: removed it from sind-nodes.conf and the mesh only", name, clusterName))
 	}
 
 	// Stop + remove containers.

@@ -17,6 +17,8 @@ import (
 // node is the short name (e.g. "worker-0"), cluster is the cluster name,
 // isTTY controls whether -t is added to docker exec, sshOptions are passed
 // through to SSH before the target, and command is the optional remote command.
+// A "--" ends ssh's options before the target, as ssh reads a word after the
+// target that starts with "-" as an option, so command may start with one.
 func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string, isTTY bool, sshOptions, command []string) []string {
 	args := []string{"exec", "-i"}
 	if isTTY {
@@ -24,7 +26,7 @@ func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string
 	}
 	args = append(args, string(sshContainer), "ssh")
 	args = append(args, sshOptions...)
-	args = append(args, DNSName(node, cluster, realm))
+	args = append(args, "--", DNSName(node, cluster, realm))
 	args = append(args, command...)
 	return args
 }

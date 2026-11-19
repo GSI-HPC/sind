@@ -24,8 +24,10 @@ import (
 // the cluster users sind creates on the db node cannot reach the accounting
 // database. With the StoragePass the slurmdbd section sets, as a site's
 // slurmdbd.conf would, the user has that password instead. It is given as
-// its mysql_native_password hash, which keeps the password out of the
-// docker exec command line and needs no quoting.
+// its mysql_native_password hash, which needs no quoting. The SQL goes to
+// mysql on its standard input, as the hash, unsalted, is as good as the
+// password to anyone who can crack it, and every user of the host reads
+// the command lines of docker and of mysql in /proc.
 func accountingSQL(storagePass string) string {
 	auth := "IDENTIFIED VIA unix_socket"
 	if storagePass != "" {
@@ -55,7 +57,7 @@ func enableDBNode(ctx context.Context, client *docker.Client, name docker.Contai
 	if err := enableService(ctx, client, name, shortName, probe.ServiceMariadb); err != nil {
 		return err
 	}
-	if _, err := client.Exec(ctx, name, "mysql", "-e", accountingSQL(storagePass)); err != nil {
+	if err := client.ExecWithStdin(ctx, name, strings.NewReader(accountingSQL(storagePass)), "mysql"); err != nil {
 		return fmt.Errorf("initializing accounting database on %s: %w", shortName, err)
 	}
 	return enableService(ctx, client, name, shortName, probe.ServiceSlurmdbd)

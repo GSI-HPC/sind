@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -72,14 +73,14 @@ func pgClusterFragments() []Fragment {
 	load := func(v *View) (err error) { v.Data, err = pgLoadCluster(v); return }
 	return []Fragment{
 		{
-			Name: "pg-cluster-head", Params: params, Watch: pgClusterWatch, Load: load,
+			Name: "pg-cluster-head", Params: params, Watch: pgClusterWatch, Load: load, Share: "pg-cluster",
 		},
 		{
 			// The Logs tab reads its own keys too, so that the body that a
 			// stream sends first is the one that the page holds.
 			Name: "pg-cluster-body", Params: append(slices.Clone(params), logsTabParams...),
 			Watch: func(p Params) []store.Topic { return pgClusterTopics(p, p.Get("tab")) },
-			Load:  load,
+			Load:  load, Share: "pg-cluster",
 		},
 	}
 }
@@ -344,9 +345,9 @@ func pgNodesTab(d *pgClusterView) {
 // first probe.
 func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 	mine := string(cluster.NetworkName(d.Realm, d.Name))
-	mesh := d.Realm + "-mesh"
+	meshNet := string(mesh.RealmNames(d.Realm).Network)
 	for _, n := range sn.Networks[d.Realm] {
-		if n.Name == mine || n.Name == mesh {
+		if n.Name == mine || n.Name == meshNet {
 			d.Networks = append(d.Networks, pgNetRow{n.Name, n.Driver, n.Subnet, n.Gateway, n.Name == mine})
 		}
 	}
@@ -460,7 +461,7 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 		)
 	}
 	if api != nil {
-		d.API = "http://" + api.FQDN + ":6820"
+		d.API = "http://" + api.FQDN + ":" + slurm.SlurmrestdPort
 	}
 	if m := pgDataMount(d.Status); m != nil {
 		f := pgFilesOf(*m, pgFilesNode(d.Cluster.Nodes))

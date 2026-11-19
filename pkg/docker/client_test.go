@@ -3,10 +3,12 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +69,20 @@ func TestIsNotFound_OtherExit1(t *testing.T) {
 	}
 }
 
+func TestIsNotRunning(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: Cannot kill container: sind-dev-worker-0: Container abc is not running\n",
+		"Error response from daemon: cannot kill container: sind-dev-worker-0: container abc is not running\n",
+	} {
+		err := exitError(t, 1, stderr)
+		assert.True(t, IsNotRunning(err), stderr)
+		assert.True(t, IsNotRunning(fmt.Errorf("kill: %w", err)), stderr)
+	}
+	assert.False(t, IsNotRunning(exitError(t, 1, "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running\n")))
+	assert.False(t, IsNotRunning(exitError(t, 2, "Error response from daemon: container abc is not running\n")))
+	assert.False(t, IsNotRunning(nil))
+}
+
 func TestIsNotFound_OtherExitCode(t *testing.T) {
 	assert.False(t, IsNotFound(exitError(t, 2, "Error: No such container: x\n")))
 }
@@ -96,6 +113,25 @@ func TestIfExists(t *testing.T) {
 	n, err := IfExists(1, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, n)
+}
+
+func TestIsFileNotFound(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: Could not find the file /Corefile in container sind-dns\n",
+		"Error: No such container:path: sind-dns:/Corefile\n",
+	} {
+		err := exitError(t, 1, stderr)
+		assert.True(t, IsFileNotFound(err), stderr)
+		assert.True(t, IsFileNotFound(fmt.Errorf("cp: %w", err)), stderr)
+	}
+	for name, err := range map[string]error{
+		"nil":               nil,
+		"plain error":       fmt.Errorf("could not find the file"),
+		"missing container": exitError(t, 1, "Error response from daemon: No such container: sind-dns\n"),
+		"other exit code":   exitError(t, 2, "Error response from daemon: Could not find the file /x in container y\n"),
+	} {
+		assert.False(t, IsFileNotFound(err), name)
+	}
 }
 
 func TestIsAlreadyExists(t *testing.T) {
@@ -360,4 +396,20 @@ func TestClient_OtherErrorsReachable(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", context.Canceled)
 	assert.NotErrorIs(t, NewClient(&m).do(t.Context(), "info"), ErrUnreachable)
+}
+
+func TestClient_TracesEveryCommand(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: sindlog.LevelTrace}))
+	ctx := sindlog.With(t.Context(), logger)
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	require.NoError(t, c.StopContainer(ctx, testContainerName))
+	require.NoError(t, c.ExecWithStdin(ctx, testContainerName, strings.NewReader("x"), "cat"))
+
+	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="stop `+string(testContainerName)+`"`), buf.String())
+	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="exec -i `+string(testContainerName)+` cat"`), buf.String())
 }

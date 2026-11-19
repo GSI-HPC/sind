@@ -249,18 +249,20 @@
     pauseBtn.addEventListener('click', () => setPaused(true));
     $('[data-logs-clear]').addEventListener('click', clear);
     $('[data-logs-copy]').addEventListener('click', ev => {
-      if (navigator.clipboard) navigator.clipboard.writeText(cmd.textContent).then(() => {
-        ev.target.textContent = 'Copied';
+      window.sindCopy.text(cmd.textContent).then(ok => {
+        if (!ok) window.sindCopy.select(cmd);
+        ev.target.textContent = ok ? 'Copied' : 'Press Ctrl+C';
         setTimeout(() => { ev.target.textContent = 'Copy'; }, 1500);
-      }, () => {});
+      });
     });
     $('[data-logs-copy-lines]').addEventListener('click', ev => {
       const text = shownText();
       if (!text) { said.textContent = 'No lines to copy.'; return; }
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => {
+      window.sindCopy.text(text).then(ok => {
+        if (!ok) { said.textContent = 'Could not copy. Use Download.'; return; }
         flash(ev.target, 'Copied');
         said.textContent = 'Copied the lines shown.';
-      }, () => { said.textContent = 'Could not copy. Use Download.'; });
+      });
     });
     $('[data-logs-download]').addEventListener('click', ev => {
       const text = shownText();
@@ -277,6 +279,22 @@
       following = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
     });
     window.addEventListener('pagehide', stop);
+    // A tab that is hidden for a moment lets its streams go (app.js). The
+    // stream sends its last lines again when it opens, so the panel starts
+    // anew with them when the tab is shown.
+    let slept = false;
+    document.addEventListener('sind:sleep', () => {
+      if (!es || !root.isConnected) return;
+      stop();
+      slept = true;
+      setState('Paused while the tab is hidden');
+    });
+    document.addEventListener('sind:wake', () => {
+      if (!slept || !root.isConnected) return;
+      slept = false;
+      clear();
+      start();
+    });
 
     // The tab can be swapped out of the page: stop when the root leaves.
     new MutationObserver(() => { if (!root.isConnected) stop(); })

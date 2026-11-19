@@ -200,7 +200,8 @@ func TestNewChildExitError(t *testing.T) {
 		{"exit 42", 42},
 		{"exit 255", 255},
 		{"kill -KILL $$", 128 + 9},
-		{"kill -HUP $$", 128 + 1},
+		{"kill -QUIT $$", 128 + 3},
+		{"kill -HUP $$", exitInterrupted},
 		{"kill -INT $$", exitInterrupted},
 		{"kill -TERM $$", exitInterrupted},
 	} {
@@ -269,6 +270,7 @@ func TestRun_PassesTheChildStatusThrough(t *testing.T) {
 		{"255", 255, "fake docker exits 255\n"},
 		{"SIGKILL", 128 + 9, ""},
 		{"SIGTERM", exitInterrupted, ""},
+		{"SIGHUP", exitInterrupted, ""},
 		{"SIGINT", exitInterrupted, ""},
 	} {
 		for name, args := range commands {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -57,19 +58,27 @@ type Node struct {
 	SecurityOpt      []string `yaml:"securityOpt,omitempty"`
 }
 
-// UnmarshalYAML supports three YAML forms, which checkSyntax has checked:
+// UnmarshalYAML supports three YAML forms:
 //   - bare string: "controller"
 //   - shorthand map: "worker: 3"  (role: count)
 //   - full object: "role: worker\n  count: 3\n  cpus: 4"
+//
+// Parse has checked the form with checkSyntax, whose errors say more; a
+// caller that decodes a Cluster itself gets an error for any other form.
 func (n *Node) UnmarshalYAML(v *yaml.Node) error {
 	type alias Node // prevents infinite recursion
 	switch {
 	case v.Kind == yaml.ScalarNode:
 		n.Role = Role(v.Value)
+	case v.Kind != yaml.MappingNode:
+		return fmt.Errorf("line %d: a node is a role, an object or \"ROLE: COUNT\", not %s", v.Line, describe(v))
 	case hasKey(v, "role"):
 		return v.Decode((*alias)(n))
 	default:
 		pairs := pairsOf(v)
+		if len(pairs) != 2 {
+			return fmt.Errorf(`line %d: a node object needs "role: NAME"; the shorthand "NAME: COUNT" takes no other keys`, v.Line)
+		}
 		n.Role = Role(pairs[0].Value)
 		return pairs[1].Decode(&n.Count)
 	}
@@ -117,6 +126,14 @@ func (d DataStorage) validate() error {
 	if strings.Contains(d.MountPath, ",") {
 		return fmt.Errorf("storage.dataStorage.mountPath must not contain a comma, got %q", d.MountPath)
 	}
+	// The nodes mount the data volume with -v NAME:PATH:rw, which a colon
+	// would split, and Docker mounts nothing at /.
+	if strings.Contains(d.MountPath, ":") {
+		return fmt.Errorf("storage.dataStorage.mountPath must not contain a colon, got %q", d.MountPath)
+	}
+	if d.MountPath != "" && filepath.Clean(d.MountPath) == "/" {
+		return fmt.Errorf("storage.dataStorage.mountPath must not be /, got %q", d.MountPath)
+	}
 	return nil
 }
 
@@ -160,6 +177,9 @@ type Storage struct {
 // Section represents a Slurm config file section that can be either:
 //   - a string (content appended directly to the config file)
 //   - a map of fragment name → content (creates a .conf.d/ directory)
+//
+// Only one of the two forms may be set: sind writes only the fragments of
+// a section that has them, and Validate refuses a section with both.
 type Section struct {
 	Content   string            // string form
 	Fragments map[string]string // map form
@@ -496,14 +516,25 @@ func (c *Cluster) Managed() bool {
 	return true
 }
 
+// fragmentNamePattern is the names a fragment may have. sind includes a
+// fragment by a line "include <section>.conf.d/<name>.conf", which Slurm,
+// and ReadSlurmConf, read up to the first blank, cut at a "#" and in which
+// they put the cluster name for "%c"; plugstack.conf includes its
+// fragments by a glob, which skips a name that begins with a dot.
+var fragmentNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
+
 // validateSection checks that a Slurm config section is valid.
 func validateSection(sectionName string, s Section) error {
-	for name, content := range s.Fragments {
+	if s.Content != "" && s.IsMap() {
+		return fmt.Errorf("slurm %s has both content and fragments: a section is a string or a map of fragments", sectionName)
+	}
+	for _, name := range s.FragmentNames() {
+		content := s.Fragments[name]
 		if name == "" {
 			return fmt.Errorf("slurm %s fragment name must not be empty", sectionName)
 		}
-		if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
-			return fmt.Errorf("slurm %s fragment name %q must be a plain filename without path separators", sectionName, name)
+		if !fragmentNamePattern.MatchString(name) {
+			return fmt.Errorf("slurm %s fragment name %q may hold only ASCII letters, digits, '_', '.' and '-', and must not begin with '.' or '-'", sectionName, name)
 		}
 		if content == "" {
 			return fmt.Errorf("slurm %s fragment %q must not be empty", sectionName, name)

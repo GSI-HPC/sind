@@ -3,6 +3,7 @@
 package action
 
 import (
+	"cmp"
 	"io/fs"
 	"net/url"
 	"slices"
@@ -154,15 +155,44 @@ func TestAction_Target(t *testing.T) {
 	r, c = create.Target(form("realm", "ci", "name", "hpc"))
 	assert.Equal(t, "ci", r)
 	assert.Equal(t, "hpc", c)
+	for yaml, want := range map[string]string{
+		"kind: Cluster\nname: lab\n": "lab",
+		"{kind: Cluster, name: lab}": "lab",
+		"kind: Cluster\n":            "default",
+		"kind: [":                    "ignored",
+	} {
+		_, c = create.Target(yamlForm(yaml))
+		assert.Equal(t, want, c, "in YAML mode the cluster of the YAML: %q", yaml)
+	}
 	realm, _ := Lookup("delete-realm")
 	r, c = realm.Target(form("realm", "ci"))
 	assert.Equal(t, "ci", r)
 	assert.Empty(t, c)
 }
 
+func TestSplitRealm(t *testing.T) {
+	for _, realm := range []string{"", "sind", "ci"} {
+		for _, words := range [][]string{nil, {"exec", "--", "true"}, {"get", "nodes", "--realm", "x"}} {
+			got, rest := SplitRealm(SindArgv(realm, words...))
+			assert.Equal(t, cmp.Or(realm, "sind"), got, "the realm of %q %q", realm, words)
+			assert.True(t, slices.Equal(words, rest), "the words of %q %q: %q", realm, words, rest)
+		}
+	}
+	realm, rest := SplitRealm([]string{"sind", "--realm=ci", "exec"})
+	assert.Equal(t, "ci", realm)
+	assert.Equal(t, []string{"exec"}, rest)
+	realm, rest = SplitRealm([]string{"sind", "--realm"})
+	assert.Equal(t, "sind", realm, "a --realm without a value names none")
+	assert.Equal(t, []string{"--realm"}, rest)
+	realm, rest = SplitRealm(nil)
+	assert.Equal(t, "sind", realm)
+	assert.Empty(t, rest)
+}
+
 func TestSindArgv(t *testing.T) {
-	assert.Equal(t, []string{"sind", "x"}, sindArgv("sind", "x"))
-	assert.Equal(t, []string{"sind", "--realm", "ci", "x"}, sindArgv("ci", "x"))
+	assert.Equal(t, []string{"sind", "x"}, SindArgv("sind", "x"))
+	assert.Equal(t, []string{"sind", "x"}, SindArgv("", "x"))
+	assert.Equal(t, []string{"sind", "--realm", "ci", "x"}, SindArgv("ci", "x"))
 }
 
 func TestNumber(t *testing.T) {

@@ -29,6 +29,8 @@ var (
 	ErrCgroupV1 = errors.New("the Docker daemon runs containers on cgroup v1")
 	// ErrDockerTooOld is a Docker Engine older than doctor.MinDockerMajor.
 	ErrDockerTooOld = errors.New("the Docker Engine is too old")
+	// ErrDockerCLITooOld is a docker CLI older than doctor.MinDockerMajor.
+	ErrDockerCLITooOld = errors.New("the docker CLI is too old")
 	// ErrNoNsdelegate is a Docker host whose cgroup2 hierarchy is mounted
 	// without nsdelegate (CheckNsdelegate).
 	ErrNoNsdelegate = errors.New("the Docker host mounts cgroup2 without nsdelegate")
@@ -63,8 +65,10 @@ func CheckDaemon(ctx context.Context, client *docker.Client) error {
 // need cgroup v2; on cgroup v1 the node never becomes ready. Docker
 // Engines before doctor.MinDockerMajor know neither writable-cgroups nor
 // the gw-priority of the nodes' network endpoints, and refuse every node
-// at `docker create`. A version that does not parse passes, as `sind
-// doctor` reports it.
+// at `docker create`; so does a docker CLI before doctor.MinDockerMajor,
+// which parses the gw-priority itself. A version that does not parse, or
+// a CLI version that docker info lacks, passes, as `sind doctor` reports
+// it.
 func DaemonSupport(info *docker.DaemonInfo) error {
 	const need = "sind needs a rootful Docker daemon without userns-remap, because Docker refuses the writable cgroups of sind's nodes otherwise"
 	switch {
@@ -77,6 +81,9 @@ func DaemonSupport(info *docker.DaemonInfo) error {
 	}
 	if major, _, err := doctor.ParseVersion(info.ServerVersion); err == nil && major < doctor.MinDockerMajor {
 		return fmt.Errorf("%w: %s; sind requires Docker Engine %d.0 or later, for the writable cgroups and network options of its nodes", ErrDockerTooOld, info.ServerVersion, doctor.MinDockerMajor)
+	}
+	if major, _, err := doctor.ParseVersion(info.ClientVersion); err == nil && major < doctor.MinDockerMajor {
+		return fmt.Errorf("%w: %s; sind requires a docker CLI %d.0 or later, which knows the network options of its nodes", ErrDockerCLITooOld, info.ClientVersion, doctor.MinDockerMajor)
 	}
 	return nil
 }
@@ -136,6 +143,15 @@ func NodeShortNames(nodes []config.Node) []string {
 // realm's mesh and the cluster network have room for the nodes
 // (checkBridgePorts).
 //
+// Its conflicts are what a failed Create's rollback removes
+// (ListClusterResources), so that a create neither adopts nor removes what
+// it did not make: every container with the cluster's realm and name
+// labels, under whatever name, such as a worker that sind create worker
+// added or a helper container, and a volume of each type, of those the
+// config does not use too when the cluster owns it. A volume of a type the
+// config uses conflicts whoever owns it, as docker volume create would
+// hand it over.
+//
 // Container existence is checked with a single `docker ps` filtered by the
 // cluster's realm + name labels; this keeps the call count constant regardless
 // of node count.
@@ -168,16 +184,16 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		})
 	})
 
-	// Check the volumes this cluster will create.
+	// Check the volumes this cluster will create, and those of the other
+	// types that it owns, which the rollback would remove.
 	for _, vtype := range AllVolumeTypes {
-		if vtype == VolumeState && !cfg.HasBackupController() || vtype == VolumeHome && len(cfg.Users) == 0 ||
-			vtype == VolumeMunge && cfg.Identity.Mode == config.IdentityClientIDs {
-			continue
-		}
+		unused := vtype == VolumeState && !cfg.HasBackupController() || vtype == VolumeHome && len(cfg.Users) == 0 ||
+			vtype == VolumeMunge && cfg.Identity.Mode == config.IdentityClientIDs
 		volName := VolumeName(realm, cfg.Name, vtype)
 		g.Go(func() error {
 			return check(gctx, "volume", string(volName), func(ctx context.Context) (bool, error) {
-				return client.VolumeExists(ctx, volName)
+				labels, exists, err := client.VolumeLabels(ctx, volName)
+				return exists && (!unused || ownedBy(labels, realm, cfg.Name)), err
 			})
 		})
 	}
@@ -190,17 +206,10 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		if err != nil {
 			return fmt.Errorf("listing cluster containers: %w", err)
 		}
-		existing := make(map[docker.ContainerName]struct{}, len(entries))
+		mu.Lock()
+		defer mu.Unlock()
 		for _, e := range entries {
-			existing[e.Name] = struct{}{}
-		}
-		for _, shortName := range NodeShortNames(cfg.Nodes) {
-			name := ContainerName(realm, cfg.Name, shortName)
-			if _, ok := existing[name]; ok {
-				mu.Lock()
-				conflicts = append(conflicts, "container "+string(name))
-				mu.Unlock()
-			}
+			conflicts = append(conflicts, "container "+string(e.Name))
 		}
 		return nil
 	})
@@ -233,15 +242,15 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 // container and the relay where the network lacks them, as when this
 // create makes the mesh or the cluster network.
 func checkBridgePorts(ctx context.Context, client *docker.Client, realm, clusterName string, nodes int) error {
-	meshMgr := mesh.NewManager(nil, realm)
+	names := mesh.RealmNames(realm)
 	networks := []struct {
 		name  docker.NetworkName
 		needs []docker.ContainerName // the containers the network has to hold besides the nodes
 		hint  string
 	}{
-		{meshMgr.NetworkName(), []docker.ContainerName{meshMgr.DNSContainerName(), meshMgr.SSHContainerName()},
+		{names.Network, []docker.ContainerName{names.DNSContainer, names.SSHContainer},
 			"the realm's mesh holds the nodes of all its clusters, while another realm (--realm) has a mesh of its own"},
-		{NetworkName(realm, clusterName), []docker.ContainerName{meshMgr.SSHContainerName()},
+		{NetworkName(realm, clusterName), []docker.ContainerName{names.SSHContainer},
 			"the cluster network holds the cluster's nodes and the SSH relay"},
 	}
 	entries, err := client.ListContainers(ctx,

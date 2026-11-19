@@ -89,7 +89,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target.Cluster, target.ShortName); err != nil {
 		return err
 	}
-	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
+	sshContainer := mesh.RealmNames(realm).SSHContainer
 	dockerArgs := cluster.BuildSSHArgs(sshContainer, target.ShortName, target.Cluster, realm, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)
@@ -350,15 +350,25 @@ func completeSSHNodeArg(cmd *cobra.Command, args []string, toComplete string) ([
 	return completeNodeNames(cmd, nil, toComplete)
 }
 
-// completeExecClusterArg provides completion for the CLUSTER argument of the exec command.
+// completeExecClusterArg provides completion for the CLUSTER argument of
+// the exec command. exec parses its flags itself, so cobra hands them over
+// in args: they are parsed as runExec parses them, so that only a
+// positional argument counts as the cluster, and a --realm after exec
+// names the realm whose clusters are completed.
 func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	flags := cmd.Flags()
+	flags.AddFlagSet(cmd.InheritedFlags())
+	if err := flags.Parse(args); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	// After --, we're in command territory.
-	if slices.Contains(args, "--") {
+	if flags.ArgsLenAtDash() >= 0 {
 		return nil, cobra.ShellCompDirectiveDefault
 	}
 
 	// Cluster name already provided — wait for --.
-	if len(args) > 0 {
+	if flags.NArg() > 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 

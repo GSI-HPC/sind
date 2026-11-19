@@ -87,8 +87,6 @@ func moreTestServer(t *testing.T, fixture, withDoctor bool) (*testServer, *int) 
 	if withDoctor {
 		cfg.Env.Put(ColDoctorKey, func() { *calls++ })
 	}
-	moreEnv.Store(cfg.Env)
-	t.Cleanup(func() { moreEnv.Store(nil) })
 	ts := newTestServerFrom(t, cfg, st)
 	ts.srv.now = func() time.Time { return pgNow }
 	if fixture {

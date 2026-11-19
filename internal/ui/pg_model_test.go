@@ -14,16 +14,28 @@ import (
 )
 
 func TestPgAgoAndClock(t *testing.T) {
-	now := pgNow
 	for ago, want := range map[time.Duration]string{
-		0: "just now", 49 * time.Second: "just now", 50 * time.Second: "1 min ago", 5 * time.Minute: "5 min ago",
-		59 * time.Minute: "59 min ago", time.Hour: "1 h ago", 5 * time.Hour: "5 h ago", 24 * time.Hour: "1 d ago", 80 * time.Hour: "3 d ago",
+		-time.Minute: "just now", 0: "just now", 49 * time.Second: "just now", 50 * time.Second: "1 min ago",
+		5 * time.Minute: "5 min ago", 59 * time.Minute: "59 min ago", 59*time.Minute + 30*time.Second: "1 h ago",
+		time.Hour: "1 h ago", 5 * time.Hour: "5 h ago", 23*time.Hour + 30*time.Minute: "1 d ago",
+		24 * time.Hour: "1 d ago", 80 * time.Hour: "3 d ago",
 	} {
-		assert.Equal(t, want, pgAgo(now.Add(-ago), now), ago.String())
+		assert.Equal(t, want, pgAgo(ago), ago.String())
+	}
+	for ago, want := range map[time.Duration]string{
+		0: "just now", 9 * time.Second: "just now", 10 * time.Second: "10 s ago", 30 * time.Second: "30 s ago",
+		59 * time.Second: "59 s ago", 59*time.Second + 600*time.Millisecond: "1 min ago",
+		5 * time.Minute: "5 min ago", 3 * time.Hour: "3 h ago", 50 * time.Hour: "2 d ago",
+	} {
+		assert.Equal(t, want, pgAgoSecs(ago), ago.String())
 	}
 	assert.Equal(t, "0:00.0", pgClock(-time.Second))
 	assert.Equal(t, "1:05.5", pgClock(65*time.Second+500*time.Millisecond))
 	assert.Equal(t, "12:00.0", pgClock(12*time.Minute))
+	// The clock rounds before it splits off the minutes.
+	assert.Equal(t, "0:59.9", pgClock(59*time.Second+940*time.Millisecond))
+	assert.Equal(t, "1:00.0", pgClock(59*time.Second+960*time.Millisecond))
+	assert.Equal(t, "2:00.0", pgClock(119*time.Second+950*time.Millisecond))
 }
 
 func TestPgPlural(t *testing.T) {

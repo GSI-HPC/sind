@@ -4,6 +4,7 @@ package slurm
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -83,19 +84,27 @@ func newPartitionLine(nodes []string, isDefault bool) string {
 	return "PartitionName=" + PartitionAll + " Nodes=" + strings.Join(nodes, ",") + " Default=" + flag
 }
 
+// nodesPairPattern matches the Nodes= pair of a partition line, and
+// partitionNamePattern its PartitionName= pair, as config.LinePairs reads
+// them: in any case, with blanks around the "=", an optional operator
+// before it, and a value in double quotes or up to the next blank.
+var (
+	nodesPairPattern     = regexp.MustCompile(`(?i)(^|\s)Nodes\s*[-*+/]?=\s*(?:"[^"]*"|\S+)`)
+	partitionNamePattern = regexp.MustCompile(`(?i)^\s*PartitionName\s*[-*+/]?=\s*(?:"[^"]*"|\S+)`)
+)
+
 // partitionLine returns old, the earlier line of partition all, with its
 // Nodes= list replaced by nodes, so that other changes to the line
-// survive.
+// survive. A line without a Nodes= pair gets one after its name. A
+// comment at the end of the line stays as it is.
 func partitionLine(old string, nodes []string) string {
 	list := "Nodes=" + strings.Join(nodes, ",")
-	fields := strings.Fields(old)
-	for i, f := range fields {
-		if key, _, _ := strings.Cut(f, "="); strings.EqualFold(key, "Nodes") {
-			fields[i] = list
-			return strings.Join(fields, " ")
-		}
+	code := config.StripComment(old)
+	if loc := nodesPairPattern.FindStringSubmatchIndex(code); loc != nil {
+		return old[:loc[3]] + list + old[loc[1]:]
 	}
-	return strings.Join(append(fields, list), " ")
+	name := partitionNamePattern.FindStringIndex(code)
+	return old[:name[1]] + " " + list + old[name[1]:]
 }
 
 // declaresDefaultPartition reports whether slurm.conf content, such as the
@@ -128,12 +137,12 @@ type NodeEntry struct {
 // A node that already has a NodeName line, such as one a failed
 // `sind create worker` left behind, gets its line replaced, as Slurm
 // refuses to start with a node defined twice; the other nodes get new
-// lines. The PartitionName Nodes= list is updated to include both existing
-// and new nodes, each once; the rest of the partition line stays (see
-// partitionLine). Content without a partition line, as RemoveNodesFromConf
-// leaves it without managed nodes, gets a new one, the default partition
-// unless conf, the cluster's slurm.conf as ReadSlurmConf returns it,
-// declares another one (see GenerateNodesConf).
+// lines. The Nodes= list of partition all is updated to include both
+// existing and new nodes, each once; the rest of its line, and every other
+// line, stays (see partitionLine). Content without that line, as
+// RemoveNodesFromConf leaves it without managed nodes, gets a new one, the
+// default partition unless conf, the cluster's slurm.conf as ReadSlurmConf
+// returns it, declares another one (see GenerateNodesConf).
 func AddNodesToConf(existing string, nodes []NodeEntry, conf config.Section) string {
 	lines := strings.Split(strings.TrimRight(existing, "\n"), "\n")
 
@@ -149,7 +158,7 @@ func AddNodesToConf(existing string, nodes []NodeEntry, conf config.Section) str
 	var partition string
 
 	for _, line := range lines {
-		if strings.HasPrefix(line, "PartitionName=") {
+		if isPartitionAll(line) {
 			partition = line
 			continue // will be regenerated
 		}
@@ -190,19 +199,29 @@ func AddNodesToConf(existing string, nodes []NodeEntry, conf config.Section) str
 }
 
 // nodeName returns the node a NodeName line defines, and whether line is
-// one.
+// one. A NodeName=DEFAULT line sets defaults for the lines after it and
+// defines no node.
 func nodeName(line string) (string, bool) {
-	if !strings.HasPrefix(line, "NodeName=") {
+	pairs := config.LinePairs(line)
+	if len(pairs) == 0 || !strings.EqualFold(pairs[0][0], "NodeName") || strings.EqualFold(pairs[0][1], "DEFAULT") {
 		return "", false
 	}
-	return strings.TrimPrefix(strings.Fields(line)[0], "NodeName="), true
+	return pairs[0][1], true
+}
+
+// isPartitionAll reports whether line is the line of partition all, the
+// one sind puts every managed worker in. Other partition lines stay as
+// they are.
+func isPartitionAll(line string) bool {
+	pairs := config.LinePairs(line)
+	return len(pairs) > 0 && strings.EqualFold(pairs[0][0], "PartitionName") && pairs[0][1] == PartitionAll
 }
 
 // RemoveNodesFromConf removes the named nodes from existing sind-nodes.conf
-// content. NodeName lines for the removed nodes are deleted and the
-// PartitionName Nodes= list is updated; the rest of the partition line
-// stays (see partitionLine). The partition line goes with the last node,
-// and content without one gets none.
+// content. NodeName lines for the removed nodes are deleted and the Nodes=
+// list of partition all is updated; the rest of its line, and every other
+// line, stays (see partitionLine). The line of partition all goes with the
+// last node, and content without one gets none.
 func RemoveNodesFromConf(existing string, names []string) string {
 	remove := make(map[string]bool, len(names))
 	for _, n := range names {
@@ -216,7 +235,7 @@ func RemoveNodesFromConf(existing string, names []string) string {
 	var partition string
 
 	for _, line := range lines {
-		if strings.HasPrefix(line, "PartitionName=") {
+		if isPartitionAll(line) {
 			partition = line
 			continue // will be regenerated
 		}

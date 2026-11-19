@@ -87,6 +87,9 @@ func TestRunBytes(t *testing.T) {
 	for n, want := range map[int64]string{
 		-5: "0 B", 999: "999 B", 1000: "1.0 kB", 12_345: "12 kB", 100_663_296: "101 MB",
 		4_194_304: "4.2 MB", 3_000_000_000: "3.0 GB", 5_000_000_000_000: "5000 GB",
+		// The unit and the decimal follow from the rounded value.
+		9_940: "9.9 kB", 9_960: "10 kB", 999_400: "999 kB", 999_600: "1.0 MB", 9_960_000: "10 MB",
+		999_600_000: "1.0 GB",
 	} {
 		assert.Equal(t, want, runBytes(n), want)
 	}

@@ -20,11 +20,12 @@ import (
 // MinDockerMajor is the minimum required Docker Engine major version.
 const MinDockerMajor = 28
 
+// dockerInstallRemediation is shown when there is no docker CLI.
+var dockerInstallRemediation = fmt.Sprintf("Install Docker Engine %d or later: https://docs.docker.com/engine/install/", MinDockerMajor)
+
 // The remediations for the common reasons the docker CLI cannot reach the
 // daemon.
 const (
-	dockerInstallRemediation = "Install Docker Engine 28 or later: https://docs.docker.com/engine/install/"
-
 	dockerPermissionRemediation = "Add your user to the docker group, then log in again (or run newgrp docker):\n" +
 		"\n" +
 		"sudo usermod -aG docker $USER"
@@ -59,12 +60,15 @@ func DockerUnreachable(err error) (detail, remediation string) {
 }
 
 // ErrorLine returns the first line of what a failed command wrote to
-// stderr, or of err's message when it wrote nothing: the line that says
-// what went wrong, for the detail of a check.
+// stderr, or else of the reason of a *docker.UnreachableError (as from
+// docker info's ServerErrors), or else of err's message: the line that
+// says what went wrong, for the detail of a check.
 func ErrorLine(err error) string {
 	msg := err.Error()
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
 		msg = exitErr.Stderr
+	} else if unreachable, ok := errors.AsType[*docker.UnreachableError](err); ok {
+		msg = unreachable.Reason
 	}
 	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
 	return strings.TrimSpace(msg)
@@ -88,6 +92,21 @@ func CheckDockerVersion(version string) error {
 	}
 	if major < MinDockerMajor {
 		return fmt.Errorf("%s (requires >= %d.0)", version, MinDockerMajor)
+	}
+	return nil
+}
+
+// dockerCLIRemediation is shown for a docker CLI older than MinDockerMajor.
+const dockerCLIRemediation = "Install the docker CLI of the Engine's release (the docker-ce-cli package): https://docs.docker.com/engine/install/"
+
+// checkCLIVersion returns an error if the version of the docker CLI is
+// below MinDockerMajor: the CLI parses the gw-priority of sind's network
+// endpoints itself, and an older one refuses every node at docker create
+// even when the Engine is new enough. A version that does not parse, or
+// one that docker info lacks, passes.
+func checkCLIVersion(version string) error {
+	if major, _, err := ParseVersion(version); err == nil && major < MinDockerMajor {
+		return fmt.Errorf("docker CLI %s (requires >= %d.0)", version, MinDockerMajor)
 	}
 	return nil
 }

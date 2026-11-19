@@ -17,7 +17,8 @@ const maxColors = 256
 // shrink re-encodes a screenshot with at most 256 colours. The pages are
 // flat colours and the grey steps of anti-aliased text, which the palette
 // holds without a difference the eye sees, in about 40% of the bytes: the
-// images sit in the repository, and in its history each time they change.
+// docs workflow takes the images for every build of the site, so they go
+// into each Pages artifact and are what a reader of the docs downloads.
 func shrink(data []byte) ([]byte, error) {
 	src, err := png.Decode(bytes.NewReader(data))
 	if err != nil {

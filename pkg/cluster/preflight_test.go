@@ -116,11 +116,24 @@ func TestNodeShortNames(t *testing.T) {
 
 // preflightOnCall returns an OnCall handler for PreflightCheck dispatch:
 //   - Network/volume inspects return "exists" when the queried name is a key
-//     in existing, and "not found" otherwise.
+//     in existing, without labels, and "not found" otherwise.
 //   - The filtered `docker ps` call returns NDJSON rows for every name in
 //     existingContainers (simulating containers that already exist with the
 //     cluster's realm+name labels).
 func preflightOnCall(t *testing.T, existing map[string]bool, existingContainers ...string) func([]string, string) mock.Result {
+	t.Helper()
+	labels := make(map[string]string, len(existing))
+	for name, ok := range existing {
+		if ok {
+			labels[name] = ""
+		}
+	}
+	return preflightOnCallLabels(t, labels, existingContainers...)
+}
+
+// preflightOnCallLabels is preflightOnCall with the labels of each
+// existing resource, as JSON.
+func preflightOnCallLabels(t *testing.T, existing map[string]string, existingContainers ...string) func([]string, string) mock.Result {
 	t.Helper()
 	notFound := testutil.ExitCode1(t)
 	return func(args []string, _ string) mock.Result {
@@ -132,12 +145,21 @@ func preflightOnCall(t *testing.T, existing map[string]bool, existingContainers 
 			}
 			return mock.Result{Stdout: strings.Join(lines, "\n")}
 		}
-		name := args[len(args)-1]
-		if existing[name] {
-			return mock.Result{}
+		if labels, ok := existing[preflightSubject(args)]; ok {
+			return mock.Result{Stdout: labels}
 		}
 		return mock.Result{Stderr: "Error: No such object\n", Err: notFound}
 	}
+}
+
+// preflightSubject returns the name of the resource that a docker call of
+// PreflightCheck asks about: the volume of a label inspect, else the last
+// argument.
+func preflightSubject(args []string) string {
+	if len(args) > 2 && args[0] == "volume" && args[1] == "inspect" {
+		return args[2]
+	}
+	return args[len(args)-1]
 }
 
 func TestPreflightCheck(t *testing.T) {
@@ -165,6 +187,12 @@ func TestPreflightCheck(t *testing.T) {
 			want: []string{"network sind-dev-net", "container sind-dev-controller", "container sind-dev-worker-0"}},
 		{name: "multi compute", workers: 3, containers: []string{"sind-dev-worker-0", "sind-dev-worker-2"},
 			want: []string{"container sind-dev-worker-0", "container sind-dev-worker-2"}, notWant: []string{"worker-1"}},
+		// The rollback would remove every container with the cluster's
+		// labels, and a create would adopt them.
+		{name: "other containers", containers: []string{"sind-dev-worker-7", "sind-dev-journal-helper"},
+			want: []string{"container sind-dev-journal-helper", "container sind-dev-worker-7"}},
+		{name: "unused owned volume", existing: map[string]bool{"sind-dev-home": true},
+			want: []string{"volume sind-dev-home"}},
 		{name: "network check error", fail: "sind-dev-net", want: []string{"checking network sind-dev-net: "}},
 		{name: "volume check error", fail: "sind-dev-config", want: []string{"checking volume sind-dev-config: "}},
 		{name: "container list error", fail: "label=sind.cluster=dev", want: []string{"listing cluster containers: "}},
@@ -173,7 +201,7 @@ func TestPreflightCheck(t *testing.T) {
 			base := preflightOnCall(t, tt.existing, tt.containers...)
 			var m mock.Executor
 			m.OnCall = func(args []string, stdin string) mock.Result {
-				if args[len(args)-1] == tt.fail {
+				if preflightSubject(args) == tt.fail {
 					return mock.Result{Err: errors.New("docker daemon not running")}
 				}
 				return base(args, stdin)
@@ -186,7 +214,7 @@ func TestPreflightCheck(t *testing.T) {
 
 			if tt.want == nil {
 				require.NoError(t, err)
-				assert.Len(t, m.Calls, 6) // network + 3 volumes + 2 filtered ps
+				assert.Len(t, m.Calls, 3+len(AllVolumeTypes)) // network + volumes + 2 filtered ps
 				return
 			}
 			require.Error(t, err)
@@ -303,6 +331,9 @@ func TestCheckDaemon(t *testing.T) {
 		{"Docker 28", `{"ServerVersion":"28.0.0","CgroupVersion":"2","SecurityOptions":[]}`, nil},
 		{"Docker 27", `{"ServerVersion":"27.5.1","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin"]}`, ErrDockerTooOld},
 		{"unparsable version", `{"ServerVersion":"dev","CgroupVersion":"2","SecurityOptions":[]}`, nil},
+		{"CLI 28", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"28.0.0"}}`, nil},
+		{"CLI 27", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"27.5.1"}}`, ErrDockerCLITooOld},
+		{"unparsable CLI version", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"dev"}}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -317,6 +348,10 @@ func TestCheckDaemon(t *testing.T) {
 			assert.Contains(t, err.Error(), "; run `sind doctor` for the fix")
 			if tt.wantErr == ErrCgroupV1 {
 				assert.Contains(t, err.Error(), "sind requires cgroup v2")
+				return
+			}
+			if tt.wantErr == ErrDockerCLITooOld {
+				assert.EqualError(t, err, "the docker CLI is too old: 27.5.1; sind requires a docker CLI 28.0 or later, which knows the network options of its nodes; run `sind doctor` for the fix")
 				return
 			}
 			if tt.wantErr == ErrDockerTooOld {

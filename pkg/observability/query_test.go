@@ -18,7 +18,7 @@ func TestQuery(t *testing.T) {
 
 	ex.AddResult(`{"status":"success","data":{"resultType":"vector","result":[`+
 		`{"metric":{"__name__":"slurm_jobs_running","cluster":"dev"},"value":[1761040500.1,"3"]},`+
-		`{"metric":{"cluster":"dev"},"value":[1761040500.1,"0.5"]}]}}`, "", nil)
+		`{"metric":{"cluster":"dev"},"value":[1761040500.1,"0.5"]}]}}`+"\n200", "", nil)
 	samples, err := m.Query(t.Context(), `max by (cluster) (slurm_nodes{realm="sind"})`)
 	require.NoError(t, err)
 	assert.Equal(t, []Sample{
@@ -27,11 +27,11 @@ func TestQuery(t *testing.T) {
 	}, samples)
 	require.Len(t, ex.Calls, 1)
 	assert.Equal(t, []string{
-		"exec", "sind-grafana", "curl", "-fsS", "--max-time", "5", "-G", "--data-urlencode",
+		"exec", "sind-grafana", "curl", "-sS", "--max-time", "5", "-w", "\n%{http_code}", "-G", "--data-urlencode",
 		`query=max by (cluster) (slurm_nodes{realm="sind"})`, "http://sind-prometheus:9090/api/v1/query",
 	}, ex.Calls[0].Args)
 
-	ex.AddResult(`{"status":"success","data":{"resultType":"vector","result":[]}}`, "", nil)
+	ex.AddResult(`{"status":"success","data":{"resultType":"vector","result":[]}}`+"\n200", "", nil)
 	samples, err = m.Query(t.Context(), "up")
 	require.NoError(t, err)
 	assert.Empty(t, samples)
@@ -41,10 +41,14 @@ func TestQuery(t *testing.T) {
 		err                error
 	}{
 		{"exec", "", "querying Prometheus: ", testutil.ExitCode1(t)},
-		{"json", "not json", "reading the answer of Prometheus: ", nil},
-		{"refused", `{"status":"error","error":"parse error"}`, "prometheus refused the query: parse error", nil},
-		{"matrix", `{"status":"success","data":{"resultType":"matrix","result":[]}}`, "prometheus answered a matrix, not a vector", nil},
-		{"value", `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1,7]}]}}`, "reading the value 7 of Prometheus: ", nil},
+		{"json", "not json\n200", "reading the answer of Prometheus: ", nil},
+		{"no status", "not json", "reading the answer of Prometheus: ", nil},
+		{"http error", "<html>Bad Gateway</html>\n502", "querying Prometheus: it answered with HTTP status 502", nil},
+		// Prometheus refuses a bad query with an error status and its
+		// reason in the body.
+		{"refused", `{"status":"error","errorType":"bad_data","error":"parse error"}` + "\n400", "prometheus refused the query: parse error", nil},
+		{"matrix", `{"status":"success","data":{"resultType":"matrix","result":[]}}` + "\n200", "prometheus answered a matrix, not a vector", nil},
+		{"value", `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1,7]}]}}` + "\n200", "reading the value 7 of Prometheus: ", nil},
 	} {
 		ex.AddResult(tc.stdout, "", tc.err)
 		_, err := m.Query(t.Context(), "up")

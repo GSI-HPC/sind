@@ -381,7 +381,7 @@ func TestAPanicInAPoolIsReportedAlikeWithAndWithoutABus(t *testing.T) {
 				if args[0] == "stop" {
 					panic("boom in docker stop")
 				}
-				return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running"}` + "\n"}
+				return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running","Labels":"sind.role=worker"}` + "\n"}
 			}}
 			var stderr bytes.Buffer
 
@@ -433,7 +433,7 @@ func TestTheTreeLeavesOnlyItsStepsOnSuccess(t *testing.T) {
 		c.draw()
 		frames = append(frames, screen.String())
 		if args[0] == "ps" {
-			return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running"}` + "\n"}
+			return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running","Labels":"sind.role=worker"}` + "\n"}
 		}
 		return mock.Result{Stdout: "sind-default-worker-0\n"}
 	}}
@@ -463,7 +463,7 @@ func TestAnEventLogOnTheTerminalOfTheTree(t *testing.T) {
 	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 		c.draw()
 		if args[0] == "ps" {
-			return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running"}` + "\n"}
+			return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running","Labels":"sind.role=worker"}` + "\n"}
 		}
 		return mock.Result{Stdout: "sind-default-worker-0\n"}
 	}}

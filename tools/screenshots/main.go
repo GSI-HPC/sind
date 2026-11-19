@@ -34,8 +34,13 @@ func main() {
 }
 
 // epoch is the time a still demo stands at (demo.Epoch of internal/ui/demo,
-// which this module cannot import): the page's clock is set to it.
+// which this module cannot import): the page's clock is set to it. A test
+// of internal/ui checks that the two agree.
 const epoch = "2026-10-21T09:15:00Z"
+
+// urlPrefix starts the line in which sind ui prints its URL (urlLine of
+// internal/ui, which a test there checks against this one).
+const urlPrefix = "sind ui: "
 
 func run(args []string) error {
 	var o options
@@ -66,13 +71,16 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := list.checkNames(o.Only); err != nil {
+		return err
+	}
 	if o.Chromium, err = findChromium(o.Chromium); err != nil {
 		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	ui, err := startUI(ctx, o.Sind, o.Port)
+	ui, err := startUI(ctx, o.Sind, o.Port, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -124,12 +132,15 @@ func uiArgs(port int) []string {
 
 // urlOf returns the address in the line sind ui prints for it.
 func urlOf(line string) (string, bool) {
-	_, url, ok := strings.Cut(line, "sind ui: ")
+	_, url, ok := strings.Cut(line, urlPrefix)
 	return url, ok
 }
 
-// startUI starts the still demo and returns when it prints its URL.
-func startUI(ctx context.Context, sind string, port int) (*ui, error) {
+// startUI starts the still demo and returns when it prints its URL. What
+// else sind ui prints on standard error, before the URL and after it, goes
+// to log. When sind ui ends before it prints its URL, as when its port is
+// taken, startUI returns at once, with its exit status.
+func startUI(ctx context.Context, sind string, port int, log io.Writer) (*ui, error) {
 	cmd := exec.CommandContext(ctx, sind, uiArgs(port)...)
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
 	cmd.WaitDelay = 5 * time.Second
@@ -143,19 +154,37 @@ func startUI(ctx context.Context, sind string, port int) (*ui, error) {
 	}
 	u := &ui{cmd: cmd}
 	found := make(chan string, 1)
+	ended := make(chan struct{})
 	go func() {
+		defer close(ended)
 		sc := bufio.NewScanner(out)
+		sent := false
 		for sc.Scan() {
-			if url, ok := urlOf(sc.Text()); ok {
+			if url, ok := urlOf(sc.Text()); ok && !sent {
 				found <- url
-				break
+				sent = true
+				continue
 			}
+			_, _ = fmt.Fprintln(log, sc.Text())
 		}
-		_, _ = io.Copy(os.Stderr, out)
+		// A line too long for the scanner: the rest as it comes.
+		_, _ = io.Copy(log, out)
 	}()
 	select {
 	case u.url = <-found:
 		return u, nil
+	case <-ended:
+		// The URL may have come just before the end.
+		select {
+		case u.url = <-found:
+			return u, nil
+		default:
+		}
+		// The output has ended, so Wait may close the pipe.
+		if err := cmd.Wait(); err != nil {
+			return nil, fmt.Errorf("sind ui printed no URL: %w", err)
+		}
+		return nil, errors.New("sind ui printed no URL and ended")
 	case <-time.After(30 * time.Second):
 		u.stop()
 		return nil, errors.New("sind ui printed no URL")

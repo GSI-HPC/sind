@@ -162,10 +162,15 @@ func (p *imagePull) wait(ctx context.Context) error {
 // logExtraPrivileges emits a notice, at info level, for each node that has
 // extra capabilities, devices or security options configured or bind-mounts
 // host directories (the data directory, the host's /cvmfs), making the
-// node's access to the host visible with -v.
+// node's access to the host visible with -v. The capabilities include the
+// one sind adds to a worker for task/affinity (addsTaskAffinityCapability).
 func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 	log := sindlog.From(ctx)
 	for _, cfg := range configs {
+		capAdd := cfg.CapAdd
+		if addsTaskAffinityCapability(cfg) && !slices.Contains(capAdd, TaskAffinityCapability) {
+			capAdd = append([]string{TaskAffinityCapability}, capAdd...)
+		}
 		var binds []string
 		if cfg.DataHostPath != "" {
 			mountPath := cfg.DataMountPath
@@ -182,7 +187,7 @@ func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 			name   string
 			values []string
 		}{
-			{"capAdd", cfg.CapAdd},
+			{"capAdd", capAdd},
 			{"devices", cfg.Devices},
 			{"securityOpt", cfg.SecurityOpt},
 			{"hostMounts", binds},
@@ -222,8 +227,11 @@ type nodeResult struct {
 // The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
 // before calling Create, and apply the config's defaults
 // (config.Cluster.ApplyDefaults). Create validates the config first, and
-// refuses a config realm other than meshMgr.Realm, the realm it creates the
-// cluster in. The context deadline controls the overall timeout;
+// refuses a meshMgr.Realm, the realm it creates the cluster in, that
+// config.CheckName refuses, and a config realm other than it. The context
+// deadline controls the overall timeout, except for the writes of the mesh
+// DNS, known_hosts and sind-nodes.conf, which ignore it so that they are
+// not cut short, and may outlive it by up to RollbackTimeout;
 // readinessInterval controls the polling interval for readiness probes, and
 // zero or less means DefaultReadinessInterval. cfg.Wait, when positive,
 // limits how long Create waits for the nodes and Slurm to become ready,
@@ -299,23 +307,26 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			}
 		}
 		// The monitoring stack goes with the mesh, or when this create
-		// made it and no other cluster is monitored; its containers
-		// before the mesh network, its volumes after them.
+		// made it and no other cluster is monitored: its containers, then
+		// its volumes, before the mesh, as cleanupRealm removes them.
+		// A part of the stack that is left keeps the mesh, as in
+		// cleanupRealm, so that the next delete finds both.
 		removeStack := removeMesh || stackCreated && !rollbackKeepsStack(cleanupCtx, client, realm, cfg.Name)
+		stackLeft := false
 		if removeStack {
 			if err := removeMonitoringContainers(cleanupCtx, client, realm); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: %w", err))
+				stackLeft = true
+			}
+			if err := removeMonitoringVolumes(cleanupCtx, client, realm); err != nil {
+				errs = append(errs, fmt.Errorf("rolling back: %w", err))
+				stackLeft = true
 			}
 		}
-		if removeMesh {
+		if removeMesh && !stackLeft {
 			log.DebugContext(ctx, "removing mesh created by this invocation")
 			if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: removing the mesh: %w", err))
-			}
-		}
-		if removeStack {
-			if err := removeMonitoringVolumes(cleanupCtx, client, realm); err != nil {
-				errs = append(errs, fmt.Errorf("rolling back: %w", err))
 			}
 		}
 		endRollback(errors.Join(errs[1:]...))
@@ -326,6 +337,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid cluster config: %w", err)
+	}
+	if err := config.CheckName("realm", realm); err != nil {
+		return nil, err
 	}
 	if cfg.Realm != "" && cfg.Realm != realm {
 		return nil, fmt.Errorf("config realm %q differs from the mesh manager's realm %q", cfg.Realm, realm)
@@ -426,8 +440,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// Start event watcher before creating nodes so it captures all
 	// container start events. If the watcher fails to start, fall back
 	// to poll-only mode.
-	prefix := ContainerPrefix(realm, cfg.Name)
-	watcher, stopWatcher := startWatcher(ctx, client, prefix, cfg.Name)
+	watcher, stopWatcher := startWatcher(ctx, client, realm, cfg.Name)
 	defer stopWatcher()
 
 	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, cfg.Name, sshPubKey, nodeConfigs, rd, watcher)
@@ -600,17 +613,25 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // On a monitored cluster it also creates the realm's journal volume, and
 // makes the nodes' directories in it (resetClusterJournals).
 //
-//	(network → relay connect → external containers connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
+// The network comes first: docker network create of a name that exists
+// fails, while docker volume create of one succeeds and hands over the
+// existing volume. Two creates whose realm and cluster names give the
+// same resource names (ci + 42-dev, ci-42 + dev) take different realm
+// locks, so both can pass PreflightCheck; the network decides which one
+// gets the names before either writes into a volume, and the other fails
+// with ErrClusterExists.
+//
+//	network → (relay connect → external containers connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
 func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, pull *imagePull) error {
 	realm := meshMgr.Realm
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 
+	if err := CreateClusterNetwork(ctx, client, realm, cfg.Name); err != nil {
+		return err
+	}
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		if err := CreateClusterNetwork(gctx, client, realm, cfg.Name); err != nil {
-			return err
-		}
 		if err := client.ConnectNetwork(gctx, NetworkName(realm, cfg.Name), meshMgr.SSHContainerName()); err != nil {
 			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
 		}
@@ -700,8 +721,8 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			if _, err := CreateNode(tctx, client, meshMgr, nc); err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
-			// The wait limit counts from here, after the image pull
-			// that docker create may have made.
+			// The wait limit counts from here, once the container has
+			// started.
 			nctx, cancel := rd.nodeContext(tctx)
 			defer cancel()
 
@@ -951,13 +972,14 @@ func enableService(ctx context.Context, client *docker.Client, name docker.Conta
 	return nil
 }
 
-// startWatcher creates and starts an event watcher for the given cluster.
+// startWatcher creates and starts an event watcher for the given cluster of
+// realm.
 // If the watcher fails to start (e.g. docker events unavailable), nil is
 // returned and the caller falls back to poll-only mode. The returned stop
 // function cancels the watcher and waits for its goroutines to exit.
-func startWatcher(ctx context.Context, client *docker.Client, containerPrefix, clusterName string) (w *monitor.Watcher, stop func()) {
+func startWatcher(ctx context.Context, client *docker.Client, realm, clusterName string) (w *monitor.Watcher, stop func()) {
 	watchCtx, cancel := context.WithCancel(ctx)
-	w = monitor.NewWatcher(client.Executor, containerPrefix, clusterName)
+	w = monitor.NewRealmWatcher(client.Executor, realm, ContainerPrefix(realm, clusterName), clusterName)
 	if err := w.Start(watchCtx, nil); err != nil {
 		cancel()
 		sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "event watcher not available, using poll-only mode", "err", err)

@@ -96,9 +96,10 @@ func (noGroups) All(string) (string, error)             { return "", errNoGroups
 // "default" (withDefaultCluster). The targets come in go-nodeset's order: by
 // the name with its numbers left out, then by number. An expression that
 // names no node is a usage error, and so is one that names nodes of two
-// clusters whose names differ only in zero padding (see paddingClash), and
-// one that is not NODE[.CLUSTER], such as an FQDN (see parseNodeName). An
-// invalid SIND_CLUSTER is an error, but no usage error.
+// clusters whose names differ only in zero padding (see paddingClash), one
+// whose operators would miss a node named with and without its cluster (see
+// suffixClash), and one that is not NODE[.CLUSTER], such as an FQDN (see
+// parseNodeName). An invalid SIND_CLUSTER is an error, but no usage error.
 func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	set, err := nodeset.ParseWith(expr, noGroups{})
 	if err != nil {
@@ -110,15 +111,28 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 			first, second, clusterSuffix(first), clusterSuffix(second))
 	}
 	names := set.Expand()
-	if len(names) == 0 {
-		return nil, argsErrorf("expanding nodes: %q names no node", expr)
-	}
-
 	targets := make([]nodeTarget, len(names))
 	for i, name := range names {
-		if targets[i], err = parseNodeName(name, typedTerm(expr, name)); err != nil {
+		// The typed term is looked up only for an error: finding it
+		// expands the terms of expr again.
+		typed := func() string { return typedTerm(expr, name) }
+		if targets[i], err = parseNodeName(name, typed); err != nil {
 			return nil, err
 		}
+	}
+	// After the names, so that a name that is not valid comes before an
+	// invalid SIND_CLUSTER, and before the empty set an operator that
+	// missed a node may leave.
+	first, second, found, err := suffixClash(expr)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return nil, argsErrorf("expanding nodes: %s and %s are one node, but !, & and ^ compare names as written and take them for two; "+
+			"write its cluster the same way throughout the expression", first, second)
+	}
+	if len(names) == 0 {
+		return nil, argsErrorf("expanding nodes: %q names no node", expr)
 	}
 	return withDefaultCluster(targets)
 }
@@ -172,33 +186,34 @@ func typedTerm(expr, name string) string {
 // both parts; the cluster of a name without one is "", for
 // withDefaultCluster. A name with more dots is not NODE[.CLUSTER]: the FQDN
 // that get nodes prints is NODE.CLUSTER.REALM.sind, which the node commands
-// do not take, as they act in the realm of --realm. The errors quote typed,
-// the term of the node argument that named name.
-func parseNodeName(name, typed string) (nodeTarget, error) {
+// do not take, as they act in the realm of --realm. The errors quote what
+// typed returns, the term of the node argument that named name.
+func parseNodeName(name string, typed func() string) (nodeTarget, error) {
 	t := nodeTarget{ShortName: name}
 	dot := strings.LastIndex(name, ".")
 	if dot >= 0 {
 		t.ShortName, t.Cluster = name[:dot], name[dot+1:]
 	}
 	if t.ShortName == "" || dot >= 0 && t.Cluster == "" {
-		return nodeTarget{}, argsErrorf("invalid node name %q", typed)
+		return nodeTarget{}, argsErrorf("invalid node name %q", typed())
 	}
 	if strings.Contains(t.ShortName, ".") {
 		if strings.HasSuffix(name, "."+cluster.DNSSuffix) {
-			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", typed)
+			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", typed())
 		}
-		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", typed)
+		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", typed())
 	}
 	if err := config.CheckName("node", t.ShortName); err != nil {
-		if t.ShortName == typed {
+		term := typed()
+		if t.ShortName == term {
 			return nodeTarget{}, argsError(err)
 		}
 		// The short name of a name with a cluster, or of a node set.
-		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, config.CheckName("short", t.ShortName))
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", term, config.CheckName("short", t.ShortName))
 	}
 	if t.Cluster != "" {
 		if err := config.CheckName("cluster", t.Cluster); err != nil {
-			return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, err)
+			return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed(), err)
 		}
 	}
 	return t, nil
@@ -250,6 +265,79 @@ func paddingClash(expr string) (first, second string, found bool) {
 		}
 	}
 	return "", "", false
+}
+
+// suffixClash finds a node of the default cluster that expr names both
+// without and with its cluster suffix, worker-2 and worker-2.default, when
+// expr has an operator !, & or ^. go-nodeset compares the names as written,
+// so the operator does not match the two, while a command takes them for one
+// node: worker-[0-3]!worker-2.default would act on worker-2. It returns the
+// two names as the terms of expr write them, and found false when there are
+// none. The short names match as go-nodeset matches them, without their
+// zero padding, the clusters as sind's do, byte for byte: worker-2.dev01 is
+// no node of the cluster dev1. It resolves the default cluster
+// (cluster.ResolveCluster) only for a short name that expr names both with
+// and without a cluster.
+func suffixClash(expr string) (first, second string, found bool, err error) {
+	terms := nodeTerms(expr)
+	hasSuffix := func(term string) bool { return strings.Contains(term, ".") }
+	if !hasSetOperator(expr) || !slices.ContainsFunc(terms, hasSuffix) ||
+		!slices.ContainsFunc(terms, func(term string) bool { return !hasSuffix(term) }) {
+		return "", "", false, nil
+	}
+	def := ""
+	// seen holds the short names, so that their zero padding does not
+	// count, and spellings the names that named each, as written.
+	seen := nodeset.New()
+	spellings := make(map[string][]string)
+	for _, term := range terms {
+		set, err := nodeset.Parse(term)
+		if err != nil {
+			continue // as in paddingClash
+		}
+		for _, name := range set.Expand() {
+			short := strings.TrimSuffix(name, "."+clusterSuffix(name))
+			key, ok := seen.Canonical(short)
+			if !ok {
+				_ = seen.Add(short) // a part of a name Expand returned parses
+				key = short
+			}
+			for _, prev := range spellings[key] {
+				if hasSuffix(prev) == hasSuffix(name) {
+					continue
+				}
+				if def == "" {
+					if def, err = cluster.ResolveCluster(""); err != nil {
+						return "", "", false, err
+					}
+				}
+				if clusterSuffix(prev)+clusterSuffix(name) == def {
+					return prev, name, true, nil
+				}
+			}
+			if !slices.Contains(spellings[key], name) {
+				spellings[key] = append(spellings[key], name)
+			}
+		}
+	}
+	return "", "", false, nil
+}
+
+// hasSetOperator reports whether the node set expression expr has an
+// operator !, & or ^ outside brackets.
+func hasSetOperator(expr string) bool {
+	depth := 0
+	for i := 0; i < len(expr); i++ {
+		switch c := expr[i]; {
+		case c == '[':
+			depth++
+		case c == ']':
+			depth--
+		case depth == 0 && strings.IndexByte("!&^", c) >= 0:
+			return true
+		}
+	}
+	return false
 }
 
 // nodeTerms splits a node set expression into its terms, the operands of

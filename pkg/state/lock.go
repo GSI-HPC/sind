@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"golang.org/x/sys/unix"
@@ -31,14 +33,15 @@ type LockOptions struct {
 	Command string
 	// OnWait, when set, is called once before LockRealm waits for each of
 	// the two locks: with a nil holder for the file lock, whose holder it
-	// does not know, and with the holder of the daemon lock. LockRealm logs
-	// at info level instead when it is nil.
+	// does not know, and with the holder of the daemon lock, again each
+	// time that lock changes hands. LockRealm logs at info level instead
+	// when it is nil.
 	OnWait func(holder *LockHolder)
 	// OnWarning, when set, receives the warnings meant for the user: a
 	// daemon lock whose holder no longer runs, which LockRealm removes; a
-	// holder that LockRealm cannot check and that keeps the lock for long,
-	// with the command that removes the lock; and a lock that the unlock
-	// function could not remove. LockRealm reports them through the
+	// holder that LockRealm cannot tell for sure still runs and that keeps
+	// the lock for long, with the command that removes the lock; and a lock
+	// that the unlock function could not remove. LockRealm reports them through the
 	// context (sindlog.Warn) instead when it is nil.
 	OnWarning func(msg string)
 
@@ -100,20 +103,28 @@ func (o *LockOptions) withDefaults() LockOptions {
 // serialized against each other.
 //
 // LockRealm tries each part without waiting first. When another process
-// holds the file lock, it calls opts.OnWait and blocks until the lock is
-// free. When another client holds the daemon lock, it calls opts.OnWait
-// with the holder and tries again, at intervals that grow to two seconds;
-// clients take a freed lock in no particular order. A holder that runs on
-// this host, in this PID namespace and since this boot, but no longer
-// exists, was killed before it could release the lock: LockRealm removes
-// its lock and says so through opts.OnWarning. Whether a holder elsewhere
-// still runs it cannot tell, so it leaves that lock alone, and after a
-// minute names the command that removes it, through opts.OnWarning. The
-// waits have no timeout; when ctx ends, LockRealm returns ctx.Err().
+// holds the file lock, it calls opts.OnWait, and when another client holds
+// the daemon lock, it calls opts.OnWait with the holder, and again with
+// each new holder; then it tries again, at intervals that grow to two
+// seconds. Callers take a freed lock in no particular order. A holder that
+// ran on this host, in this PID namespace and since this boot, but whose
+// PID is free, or taken by a process that started at another time, was
+// killed before it could release the lock: LockRealm removes its lock and
+// says so through opts.OnWarning. Whether a holder elsewhere still runs it
+// cannot tell, nor whether a holder of an earlier sind, which records no
+// start time, is the process that has its PID now. It leaves such a lock
+// alone, and once that holder has had it for a minute of the wait, names
+// the command that removes it, through opts.OnWarning. The waits have no
+// timeout; when ctx ends, LockRealm returns ctx.Err().
 //
 // The returned function removes the daemon lock, without ctx, so that it
-// works after Ctrl+C as well, and then releases the file lock.
+// works after Ctrl+C as well, and then releases the file lock. A second
+// call does nothing. LockRealm refuses a realm name that config.CheckName
+// refuses, also with opts.Dir.
 func LockRealm(ctx context.Context, realm string, opts *LockOptions) (unlock func(), err error) {
+	if err := config.CheckName("realm", realm); err != nil {
+		return nil, err
+	}
 	o := opts.withDefaults()
 	dir := o.Dir
 	if dir == "" {
@@ -130,39 +141,19 @@ func LockRealm(ctx context.Context, realm string, opts *LockOptions) (unlock fun
 	if err != nil {
 		return nil, fmt.Errorf("opening lock file: %w", err)
 	}
-	fd := int(f.Fd())
-
-	// Try non-blocking first, so that a lock nobody holds gives no notice.
-	if err := o.flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		if !errors.Is(err, unix.EWOULDBLOCK) {
-			_ = f.Close()
-			return nil, fmt.Errorf("acquiring lock: %w", err)
-		}
-
-		o.waiting(ctx, realm, nil)
-
-		// Block in a goroutine so we can respect context cancellation.
-		done := make(chan error, 1)
-		go func() { done <- o.flock(fd, unix.LOCK_EX) }()
-
-		select {
-		case err := <-done:
-			if err != nil {
-				_ = f.Close()
-				return nil, fmt.Errorf("acquiring lock: %w", err)
-			}
-		case <-ctx.Done():
-			_ = f.Close() // unblocks the goroutine (Flock returns EBADF)
-			return nil, ctx.Err()
-		}
+	if err := o.lockFile(ctx, realm, int(f.Fd())); err != nil {
+		_ = f.Close()
+		return nil, err
 	}
 
 	log.DebugContext(ctx, "realm lock acquired", "realm", realm)
-	unlockFile := func() {
-		_ = unix.Flock(fd, unix.LOCK_UN)
+	// Closing f, the only descriptor of the lock file's open file
+	// description, releases the file lock. A flock(LOCK_UN) of its number
+	// would reach, on a second call, the file that has the number since.
+	unlockFile := sync.OnceFunc(func() {
 		_ = f.Close()
 		log.DebugContext(ctx, "realm lock released", "realm", realm)
-	}
+	})
 	if o.Client == nil {
 		return unlockFile, nil
 	}
@@ -172,8 +163,36 @@ func LockRealm(ctx context.Context, realm string, opts *LockOptions) (unlock fun
 		unlockFile()
 		return nil, fmt.Errorf("taking the realm lock on the Docker daemon: %w", err)
 	}
-	return func() {
+	return sync.OnceFunc(func() {
 		unlockDaemon()
 		unlockFile()
-	}, nil
+	}), nil
+}
+
+// lockFile takes the flock of fd, the open lock file. It tries without
+// waiting first, so that a lock nobody holds gives no notice, and while
+// another process holds the lock, again at intervals that grow from
+// pollFirst to pollMax, until ctx ends. It never blocks in flock(2): a
+// blocked flock does not end when its file is closed, so a wait that ctx
+// ends would keep a goroutine and its thread until the holder lets go.
+func (o *LockOptions) lockFile(ctx context.Context, realm string, fd int) error {
+	delay := o.pollFirst
+	for waited := false; ; waited = true {
+		err := o.flock(fd, unix.LOCK_EX|unix.LOCK_NB)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, unix.EWOULDBLOCK) {
+			return fmt.Errorf("acquiring lock: %w", err)
+		}
+		if !waited {
+			o.waiting(ctx, realm, nil)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		delay = min(2*delay, o.pollMax)
+	}
 }

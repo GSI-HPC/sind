@@ -287,6 +287,31 @@ func TestChangedAndImmutableRuns(t *testing.T) {
 	assert.Equal(t, third[0], r.Runs()[0])
 }
 
+// Runs converts a run again only once it changed: the runs that did not
+// change are the ones it returned before, their spans shared.
+func TestRunsConvertsOnlyWhatChanged(t *testing.T) {
+	r := NewReducer(5)
+	for _, id := range []string{"aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"} {
+		r.Take(ev("start", id, "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"create cluster"`))
+		r.Take(ev("start", id, "2026-01-01T00:00:01Z", `"span":"s1","parent":"r1","kind":"step","name":"nodes"`))
+	}
+	r.Take(ev("start", "cccccccccccccccc", "2026-01-01T00:00:00Z", `"span":"r1","kind":"command","name":"get cluster"`))
+	first := r.Runs()
+	require.Len(t, first, 3)
+	second := r.Runs()
+	assert.Same(t, &first[1].Root.Children[0], &second[1].Root.Children[0], "run b did not change")
+	assert.Same(t, &first[2].Root.Children[0], &second[2].Root.Children[0], "nor did run a")
+
+	r.Take(ev("update", "aaaaaaaaaaaaaaaa", "2026-01-01T00:00:02Z", `"span":"s1","parent":"r1","kind":"step","name":"nodes","message":"hi"`))
+	third := r.Runs()
+	assert.Same(t, &second[1].Root.Children[0], &third[1].Root.Children[0], "run b still did not change")
+	assert.NotSame(t, &second[2].Root.Children[0], &third[2].Root.Children[0], "run a did")
+	assert.Equal(t, "hi", third[2].Root.Children[0].Message)
+	assert.Empty(t, second[2].Root.Children[0].Message, "a run handed out does not change")
+	assert.Equal(t, "get cluster", third[0].Command, "a run of no children is converted each time")
+	assert.Len(t, r.converted, 3)
+}
+
 // runA is the run of the tests that make their lines by hand.
 const runA = "aaaaaaaaaaaaaaaa"
 

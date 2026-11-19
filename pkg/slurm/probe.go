@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
@@ -88,9 +89,14 @@ type ImageInfo struct {
 	// Unloadable those whose libraries do not.
 	Plugins, Unloadable []string
 	// MariaDBLogError is MariaDB's last log-error option, such as
-	// "--skip-log-error", empty when it has none; set only when the request
-	// asked for MariaDB.
+	// "--skip-log-error" or "--log-error=/var/log/mariadb.log", empty when
+	// it has none; set only when the request asked for MariaDB. A path in
+	// it has no blanks, control or format characters.
 	MariaDBLogError string
+
+	// req is the request ProbeImage was given, which decides the checks of
+	// Problems.
+	req ProbeRequest
 }
 
 // ProbeImage runs one throwaway container of image, without a network and
@@ -122,14 +128,15 @@ var pluginFilePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+\.so$`)
 // printable characters without blanks or colons.
 var probePathPattern = regexp.MustCompile(`^/[A-Za-z0-9_./+@-]*$`)
 
-// mariadbOptionPattern is the form of a MariaDB log-error option.
-var mariadbOptionPattern = regexp.MustCompile(`^--(skip-)?log[-_]error(=\S+)?$`)
+// mariadbOptionPattern is the form of a MariaDB log-error option: its
+// value, if any, has no blanks, control or format characters.
+var mariadbOptionPattern = regexp.MustCompile(`^--(skip-)?log[-_]error(=[^\s\p{C}]+)?$`)
 
 // parseProbe reads the output of probeScript. Every line must have one of
 // the forms the script prints, with words and paths of the expected shapes,
 // so that nothing an image prints can reach sind's output unchecked.
 func parseProbe(stdout string, req ProbeRequest) (*ImageInfo, error) {
-	info := &ImageInfo{}
+	info := &ImageInfo{req: req}
 	daemons := map[string]bool{}
 	for line := range strings.Lines(stdout) {
 		line = strings.TrimSuffix(line, "\n")
@@ -169,7 +176,7 @@ func parseProbe(stdout string, req ProbeRequest) (*ImageInfo, error) {
 				info.Unloadable = append(info.Unloadable, rest)
 			}
 		case "mariadb":
-			if !req.MariaDB {
+			if !req.MariaDB || rest != "" && (!utf8.ValidString(rest) || !mariadbOptionPattern.MatchString(rest)) {
 				return nil, unexpectedProbeLine(line)
 			}
 			info.MariaDBLogError = rest
@@ -212,12 +219,29 @@ var monitoringPlugins = []monitoringPlugin{
 // which only slurmctld needs.
 var openMetricsPlugin = monitoringPlugin{"metrics_openmetrics.so", "OpenMetrics plugin (metrics/openmetrics)", ""}
 
-// MonitoringProblems returns what keeps an image from serving the HTTP
-// endpoints the monitoring stack uses, one problem per entry, empty when
-// nothing does: a missing daemon, a Slurm older than MonitoringMinVersion,
-// no plugin directory, and each plugin type of which no loadable plugin
-// was found; slurmctld also needs the OpenMetrics plugin.
+// Problems returns what keeps an image from serving the HTTP endpoints
+// the monitoring stack uses for the daemons ProbeImage was asked about,
+// one problem per entry, empty when nothing does: a missing daemon, a
+// Slurm older than MonitoringMinVersion, no plugin directory, and each
+// plugin type of which no loadable plugin was found; slurmctld also needs
+// the OpenMetrics plugin. An ImageInfo that ProbeImage did not return
+// names no daemons, and so has none of the version and plugin checks
+// that daemons need.
+func (i *ImageInfo) Problems() []string {
+	return i.monitoringProblems(i.req)
+}
+
+// MonitoringProblems returns the problems of Problems for the daemons of
+// req, which must be the request ProbeImage was given.
+//
+// Deprecated: use Problems, which takes the request ProbeImage was given.
 func (i *ImageInfo) MonitoringProblems(req ProbeRequest) []string {
+	return i.monitoringProblems(req)
+}
+
+// monitoringProblems returns the problems of Problems for the daemons of
+// req.
+func (i *ImageInfo) monitoringProblems(req ProbeRequest) []string {
 	var problems []string
 	for _, d := range i.Missing {
 		problems = append(problems, "has no "+d)
@@ -259,9 +283,6 @@ func (i *ImageInfo) MariaDBWarning() string {
 	opt := i.MariaDBLogError
 	if opt == "" || opt == "--skip-log-error" {
 		return ""
-	}
-	if !mariadbOptionPattern.MatchString(opt) {
-		return "cannot read MariaDB's error log setting, so monitoring may not collect MariaDB's log"
 	}
 	return "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file"
 }

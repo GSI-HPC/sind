@@ -12,15 +12,17 @@ import (
 )
 
 func TestContextIgnoresCancelAndDeadline(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	cancel()
 
+	before := time.Now()
 	wctx, wcancel := Context(ctx)
 	defer wcancel()
 
 	require.NoError(t, wctx.Err())
-	_, ok := wctx.Deadline()
-	assert.False(t, ok, "the caller's deadline does not bound the write")
+	got, ok := wctx.Deadline()
+	require.True(t, ok, "Timeout bounds the write")
+	assert.WithinRange(t, got, before.Add(Timeout), time.Now().Add(Timeout), "the caller's deadline does not")
 }
 
 func TestContextKeepsTheRollbackDeadline(t *testing.T) {
@@ -60,6 +62,7 @@ func TestRollbackWithoutDeadline(t *testing.T) {
 
 	wctx, wcancel := Context(Rollback(ctx))
 	defer wcancel()
-	_, ok := wctx.Deadline()
-	assert.False(t, ok)
+	got, ok := wctx.Deadline()
+	require.True(t, ok)
+	assert.WithinDuration(t, time.Now().Add(Timeout), got, time.Minute, "Timeout bounds the write")
 }

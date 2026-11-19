@@ -45,6 +45,7 @@ var openBackup = func(name string, mode fs.FileMode) (io.WriteCloser, error) {
 
 // File is an editor configuration file loaded for editing.
 type File struct {
+	name string // the path Load was given, which Save writes through
 	path string // the file itself, after symbolic links
 	key  string // the member that holds the servers: mcpServers or servers
 
@@ -53,7 +54,12 @@ type File struct {
 	orig    []byte
 	root    hujson.Value
 	newline string // the file's line break: \r\n if it has one, else \n
+	bom     bool   // whether the file starts with a byte order mark
 }
+
+// bom is the byte order mark of UTF-8, which some editors write at the
+// start of a file, as VS Code's "UTF-8 with BOM" does.
+var bom = []byte("\xef\xbb\xbf")
 
 // Server is an entry of a configuration's server list.
 type Server struct {
@@ -67,14 +73,18 @@ type Server struct {
 
 // Load reads the configuration file at path, whose servers are the members
 // of the object key. A file that does not exist, or holds only whitespace,
-// loads as an empty configuration. A symbolic link is followed, so that
-// Save writes the file it points to rather than replacing the link.
+// loads as an empty configuration, and so does one that holds only
+// comments, which Save keeps before the object. A byte order mark at the
+// start is left out, and Save writes it back. A symbolic link is followed,
+// so that Save writes the file it points to rather than replacing the
+// link.
 func Load(path, key string) (*File, error) {
+	name := path
 	path, err := resolve(path)
 	if err != nil {
 		return nil, err
 	}
-	f := &File{path: path, key: key, mode: 0o600, newline: "\n"}
+	f := &File{name: name, path: path, key: key, mode: 0o600, newline: "\n"}
 	var data []byte
 	info, err := os.Stat(path)
 	if err == nil {
@@ -88,8 +98,15 @@ func Load(path, key string) (*File, error) {
 	if bytes.Contains(data, []byte("\r\n")) {
 		f.newline = "\r\n"
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
+	data, f.bom = bytes.CutPrefix(data, bom)
+	switch {
+	case len(bytes.TrimSpace(data)) == 0:
 		data = []byte("{}\n")
+	case onlyComments(data):
+		if !bytes.HasSuffix(data, []byte("\n")) {
+			data = slices.Concat(data, []byte(f.newline))
+		}
+		data = slices.Concat(data, []byte("{}"+f.newline))
 	}
 	f.root, err = hujson.Parse(data)
 	if err != nil {
@@ -100,7 +117,7 @@ func Load(path, key string) (*File, error) {
 	}
 	// An editor reads the last of two members of the same name, while
 	// Set and Remove would change the first.
-	if duplicate(f.object()) == key {
+	if count(f.object(), key) > 1 {
 		return nil, fmt.Errorf("parsing %s: %q is defined more than once", path, key)
 	}
 	if m := member(f.object(), key); m != nil {
@@ -129,24 +146,93 @@ func duplicate(obj *hujson.Object) string {
 	return ""
 }
 
+// onlyComments reports whether data holds nothing but whitespace and
+// comments, which JSONC allows around the value.
+func onlyComments(data []byte) bool {
+	for {
+		data = bytes.TrimLeft(data, " \t\r\n")
+		switch {
+		case len(data) == 0:
+			return true
+		case bytes.HasPrefix(data, []byte("//")):
+			end := bytes.IndexByte(data, '\n')
+			if end < 0 {
+				return true
+			}
+			data = data[end+1:]
+		case bytes.HasPrefix(data, []byte("/*")):
+			end := bytes.Index(data[2:], []byte("*/"))
+			if end < 0 {
+				return false
+			}
+			data = data[2+end+2:]
+		default:
+			return false
+		}
+	}
+}
+
+// count returns how many members of obj are named name.
+func count(obj *hujson.Object, name string) int {
+	n := 0
+	for i := range obj.Members {
+		if obj.Members[i].Name.Value.(hujson.Literal).String() == name {
+			n++
+		}
+	}
+	return n
+}
+
+// geteuid returns the user whose links resolve follows besides root's,
+// os.Geteuid. A test replaces it.
+var geteuid = os.Geteuid
+
 // resolve follows the symbolic links of path to the file they point to,
-// which need not exist.
+// which need not exist, as fsutil.WriteAtomic follows them. A relative
+// target is read against the directory the link is really in, as the
+// system reads it: behind a linked directory, ../x is beside the directory
+// the link leads to, not beside its name. A link that neither this user
+// nor root owns is refused with an error that matches fsutil.ErrUntrusted,
+// as fsutil.WriteAtomic refuses it, but before Save does anything at the
+// place it leads to: whoever made it would choose the file sind writes.
 func resolve(path string) (string, error) {
 	for range maxSymlinks {
-		target, err := os.Readlink(path)
-		// EINVAL says that path is no link.
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.EINVAL) {
+		info, err := os.Lstat(path)
+		if errors.Is(err, fs.ErrNotExist) || err == nil && info.Mode()&fs.ModeSymlink == 0 {
 			return path, nil
+		}
+		if err == nil {
+			err = trustedLink(info)
+		}
+		var target string
+		if err == nil {
+			target, err = linkTarget(path)
 		}
 		if err != nil {
 			return "", fmt.Errorf("reading %s: %w", path, err)
 		}
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(filepath.Dir(path), target)
-		}
 		path = target
 	}
 	return "", fmt.Errorf("reading %s: too many levels of symbolic links", path)
+}
+
+// trustedLink refuses a link, described by info, that neither this user
+// nor root owns.
+func trustedLink(info fs.FileInfo) error {
+	if uid, me := int(info.Sys().(*syscall.Stat_t).Uid), geteuid(); uid != 0 && uid != me {
+		return fmt.Errorf("the link is owned by uid %d, neither this user (uid %d) nor root: %w", uid, me, fsutil.ErrUntrusted)
+	}
+	return nil
+}
+
+// linkTarget returns the path the symbolic link path points to.
+func linkTarget(path string) (string, error) {
+	target, err := os.Readlink(path)
+	if err != nil || filepath.IsAbs(target) {
+		return target, err
+	}
+	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
+	return filepath.Join(dir, target), err
 }
 
 // Path returns the path of the file, after symbolic links.
@@ -168,8 +254,10 @@ func (f *File) servers() *hujson.Object {
 }
 
 // Servers returns the configured servers, in the order of the file. An
-// entry that is not an object, or whose fields have other types, is listed
-// by its name alone.
+// entry that is not an object is listed by its name alone, and a field of
+// an entry that has another type is left empty, without the others. A
+// variable of env whose value is no string has its JSON text, such as
+// 8080, as its value, so that a Set of the server keeps it.
 func (f *File) Servers() []Server {
 	obj := f.servers()
 	if obj == nil {
@@ -177,16 +265,63 @@ func (f *File) Servers() []Server {
 	}
 	servers := make([]Server, 0, len(obj.Members))
 	for _, m := range obj.Members {
-		s := Server{}
 		v := m.Value.Clone()
 		v.Standardize()
-		if json.Unmarshal(v.Pack(), &s) != nil {
-			s = Server{}
-		}
+		s := decodeServer(v.Pack())
 		s.Name = m.Name.Value.(hujson.Literal).String()
 		servers = append(servers, s)
 	}
 	return servers
+}
+
+// decodeServer decodes the entry data field by field, so that a field of
+// another type does not hide the others.
+func decodeServer(data []byte) Server {
+	fields := decode[map[string]json.RawMessage](data)
+	return Server{
+		Type:    decode[string](fields["type"]),
+		Command: decode[string](fields["command"]),
+		Args:    decode[[]string](fields["args"]),
+		URL:     decode[string](fields["url"]),
+		Env:     decodeEnv(fields["env"]),
+	}
+}
+
+// decodeEnv decodes the env of an entry: a variable whose value is no
+// string gets the value's JSON text.
+func decodeEnv(data json.RawMessage) map[string]string {
+	vars := decode[map[string]json.RawMessage](data)
+	if len(vars) == 0 {
+		return nil
+	}
+	env := make(map[string]string, len(vars))
+	for name, raw := range vars {
+		value, err := decodeValue[string](raw)
+		if err != nil {
+			var text bytes.Buffer
+			_ = json.Compact(&text, raw) // raw is valid JSON
+			value = text.String()
+		}
+		env[name] = value
+	}
+	return env
+}
+
+// decode returns data decoded as a T, or the zero T when data is missing
+// or is no T.
+func decode[T any](data []byte) T {
+	v, _ := decodeValue[T](data)
+	return v
+}
+
+// decodeValue decodes data as a T, all or nothing.
+func decodeValue[T any](data []byte) (T, error) {
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		var zero T
+		return zero, err
+	}
+	return v, nil
 }
 
 // Server returns the entry name, as Servers lists it, and whether there
@@ -378,9 +513,15 @@ func (f *File) indentUnit() string {
 // it, named after the time now, and returns the backup's path. The file is
 // replaced in one step, through a temporary file and a rename, and keeps
 // its permissions; a new file is readable by its owner alone, as its
-// entries can hold secrets in their environment.
+// entries can hold secrets in their environment. Save writes through the
+// path Load was given, with fsutil.WriteAtomic, which refuses a symbolic
+// link that neither this user nor root owns. A write that fails leaves the
+// file as it was, and removes the backup.
 func (f *File) Save(now time.Time) (backup string, err error) {
 	data := f.root.Pack()
+	if f.bom {
+		data = slices.Concat(bom, data)
+	}
 	if f.exists && bytes.Equal(data, f.orig) {
 		return "", nil
 	}
@@ -392,8 +533,11 @@ func (f *File) Save(now time.Time) (backup string, err error) {
 	} else if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
-	if err := fsutil.WriteAtomic(f.path, data, f.mode); err != nil {
-		return backup, fmt.Errorf("writing %s: %w", f.path, err)
+	if err := fsutil.WriteAtomic(f.name, data, f.mode); err != nil {
+		if backup != "" {
+			_ = os.Remove(backup)
+		}
+		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
 	f.exists, f.orig = true, data
 	return backup, nil

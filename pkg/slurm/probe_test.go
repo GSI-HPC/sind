@@ -39,7 +39,7 @@ func TestProbeImage(t *testing.T) {
 	assert.Equal(t, []string{"/usr/lib64/slurm"}, info.PluginDirs)
 	assert.Len(t, info.Plugins, 7)
 	assert.Equal(t, "--skip-log-error", info.MariaDBLogError)
-	assert.Empty(t, info.MonitoringProblems(req))
+	assert.Empty(t, info.Problems())
 	assert.Empty(t, info.MariaDBWarning())
 
 	require.Len(t, m.Calls, 1)
@@ -101,6 +101,26 @@ func TestParseProbe_Rejects(t *testing.T) {
 		{"plugin before a dir", "daemon slurmctld slurm 26.05.6\nplugin tls_none.so\n", ctld, `unexpected probe output: "plugin tls_none.so"`},
 		{"plugin with a slash", "daemon slurmctld slurm 26.05.6\nplugindir /p\nplugin ../x.so\n", ctld, `unexpected probe output: "plugin ../x.so"`},
 		{"mariadb not asked for", "daemon slurmctld slurm 26.05.6\nmariadb \n", ctld, `unexpected probe output: "mariadb "`},
+		{
+			"control sequence in the mariadb option",
+			"daemon slurmctld slurm 26.05.6\nmariadb \x1b[31mANY TEXT\n", ProbeRequest{Daemons: []string{"slurmctld"}, MariaDB: true},
+			`unexpected probe output: "mariadb \x1b[31mANY TEXT"`,
+		},
+		{
+			"bidi control in the mariadb option",
+			"daemon slurmctld slurm 26.05.6\nmariadb --log-error=/a\u202eb\n", ProbeRequest{Daemons: []string{"slurmctld"}, MariaDB: true},
+			`unexpected probe output: "mariadb --log-error=/a\u202eb"`,
+		},
+		{
+			"invalid UTF-8 in the mariadb option",
+			"daemon slurmctld slurm 26.05.6\nmariadb --log-error=/a\x9bb\n", ProbeRequest{Daemons: []string{"slurmctld"}, MariaDB: true},
+			`unexpected probe output: "mariadb --log-error=/a\x9bb"`,
+		},
+		{
+			"mariadb option of another form",
+			"daemon slurmctld slurm 26.05.6\nmariadb --log-error=/a b\n", ProbeRequest{Daemons: []string{"slurmctld"}, MariaDB: true},
+			`unexpected probe output: "mariadb --log-error=/a b"`,
+		},
 		{"extra line", "daemon slurmctld slurm 26.05.6\n\n", ctld, `unexpected probe output: ""`},
 		{"daemon without a result", "", ctld, "no result for slurmctld"},
 	}
@@ -118,6 +138,14 @@ func TestParseProbe_Unloadable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"slurmctld"}, info.Missing)
 	assert.Equal(t, []string{"http_parser_llhttp_parser.so"}, info.Unloadable)
+}
+
+func TestParseProbe_MariaDBOptions(t *testing.T) {
+	for _, opt := range []string{"", "--skip-log-error", "--log_error", "--log-error=/var/log/mariadb/müll.log"} {
+		info, err := parseProbe("daemon slurmctld slurm 26.05.6\nmariadb "+opt+"\n", ProbeRequest{Daemons: []string{Slurmctld}, MariaDB: true})
+		require.NoError(t, err, opt)
+		assert.Equal(t, opt, info.MariaDBLogError)
+	}
 }
 
 func TestMonitoringProblems(t *testing.T) {
@@ -161,8 +189,30 @@ func TestMonitoringProblems(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.info.MonitoringProblems(tt.req))
+			tt.info.req = tt.req
+			assert.Equal(t, tt.want, tt.info.Problems())
 		})
 	}
+}
+
+func TestProbeImage_ProblemsOfItsRequest(t *testing.T) {
+	// Problems checks what the request of ProbeImage asked for: here the
+	// version, and the OpenMetrics plugin that slurmctld needs.
+	var m mock.Executor
+	m.AddResult("daemon slurmctld slurm 26.05.6\nplugindir /p\n"+
+		"plugin http_parser_llhttp_parser.so\nplugin url_parser_internal.so\nplugin tls_none.so\n"+
+		"plugin http_auth_local.so\nplugin data_parser_v0_0_44.so\n", "", nil)
+	m.AddResult("daemon slurmctld slurm 25.11.9\n", "", nil)
+	c := docker.NewClient(&m)
+	req := ProbeRequest{Daemons: []string{Slurmctld}}
+
+	info, err := ProbeImage(t.Context(), c, "img", req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Slurm has no OpenMetrics plugin (metrics/openmetrics) in /p"}, info.Problems())
+
+	info, err = ProbeImage(t.Context(), c, "img", req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Slurm 25.11.9 is older than 26.05, which monitoring needs"}, info.Problems())
 }
 
 func TestMariaDBWarning(t *testing.T) {
@@ -171,7 +221,6 @@ func TestMariaDBWarning(t *testing.T) {
 		"--skip-log-error": "",
 		"--log-error=/var/log/mariadb/mariadb.log": "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file",
 		"--log_error": "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file",
-		"\x1b[31m":    "cannot read MariaDB's error log setting, so monitoring may not collect MariaDB's log",
 	} {
 		assert.Equal(t, want, (&ImageInfo{MariaDBLogError: opt}).MariaDBWarning(), opt)
 	}

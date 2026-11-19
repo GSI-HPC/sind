@@ -18,8 +18,10 @@ import (
 // which finds a lock whose command died.
 const lockEvery = 15 * time.Second
 
-// Lock reads who holds the lock of each realm (state.Holder), when a
-// network <realm>-lock is created or removed, and when a realm is first seen.
+// Lock reads who holds the lock of each realm (state.Holder): when a
+// network <realm>-lock is created or removed, when a command of sind ui
+// ends, when a realm is first seen, and every 15 s, which finds a lock
+// whose command died.
 type Lock struct {
 	Store  *store.Store
 	Client *docker.Client

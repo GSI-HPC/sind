@@ -139,6 +139,26 @@ func TestEnsureStack_RecreatesOtherFingerprint(t *testing.T) {
 	assert.Contains(t, f.volumes, "sind-grafana", "the volume is kept")
 }
 
+// TestEnsureStack_RecreatesUnconfigured covers a container whose
+// configuration could not be copied: it never started, and the next
+// EnsureStack creates it again with its files.
+func TestEnsureStack_RecreatesUnconfigured(t *testing.T) {
+	m, f := newTestManager(t)
+	f.fail["cp - sind-prometheus"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
+	_, err := m.EnsureStack(t.Context(), "", "")
+	require.ErrorContains(t, err, "writing prometheus configuration")
+	require.Contains(t, f.containers, "sind-prometheus")
+	assert.Empty(t, f.containers["sind-prometheus"].files)
+	delete(f.fail, "cp - sind-prometheus")
+
+	changed, err := m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+	assert.True(t, changed)
+	prometheus := f.containers["sind-prometheus"]
+	assert.Equal(t, prometheusConfig, prometheus.files[prometheusConfigPath])
+	assert.Equal(t, docker.StateRunning, prometheus.state)
+}
+
 func TestEnsureStack_Errors(t *testing.T) {
 	exit := func(t *testing.T) mock.Result { return mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)} }
 	tests := []struct {
@@ -238,6 +258,24 @@ func TestJournals(t *testing.T) {
 
 	require.NoError(t, m.RemoveJournals(t.Context(), "dev"))
 	assert.Equal(t, []string{"sind-alloy", "sh", "-c", journalScript, "sh", "remove", "/var/log/sind/dev"}, f.execs[len(f.execs)-1])
+
+	// A name that is no host name label could name every cluster's
+	// directory: nothing runs.
+	before := len(f.execs)
+	for _, tc := range []struct {
+		cluster string
+		nodes   []string
+		want    string
+	}{
+		{"", nil, `removing journal directories: invalid cluster name "": it is empty`},
+		{"..", nil, `removing journal directories: invalid cluster name "..": '.' is not a letter, a digit or a hyphen`},
+		{"dev", []string{""}, `removing journal directories: invalid node name "": it is empty`},
+		{"dev", []string{"worker-0", "../x"}, `removing journal directories: invalid node name "../x": '.' is not a letter, a digit or a hyphen`},
+	} {
+		assert.EqualError(t, m.RemoveJournals(t.Context(), tc.cluster, tc.nodes...), tc.want)
+	}
+	assert.EqualError(t, m.ResetJournals(t.Context(), "dev", ".."), `resetting journal directories: invalid node name "..": '.' is not a letter, a digit or a hyphen`)
+	assert.Len(t, f.execs, before)
 
 	f.containers["sind-alloy"].state = docker.StateExited
 	err = m.ResetJournals(t.Context(), "dev", "worker-0")
@@ -392,6 +430,13 @@ func TestStart_Errors(t *testing.T) {
 	found, err := m.Start(t.Context())
 	require.EqualError(t, err, "the monitoring stack lacks sind-loki: creating a monitored cluster creates it again")
 	assert.True(t, found)
+
+	// A container that never started may lack its configuration: Start
+	// leaves it to EnsureStack.
+	f.containers["sind-grafana"].state = docker.StateCreated
+	_, err = m.Start(t.Context())
+	require.EqualError(t, err, "the monitoring stack lacks sind-loki, sind-grafana (never started): creating a monitored cluster creates it again")
+	assert.Equal(t, docker.StateCreated, f.containers["sind-grafana"].state)
 
 	f.fail["inspect sind-prometheus"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())

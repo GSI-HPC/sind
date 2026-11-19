@@ -44,7 +44,7 @@ func TestRunPageRenders(t *testing.T) {
 		`<b>Stop create cluster dev?</b> sind removes the nodes it has made so far (rollback). The saved config stays.`,
 		`data-stop-keep>Keep running</button>`,
 		`name="csrf" value="` + ts.csrf + `"`,
-		`data-doc-title="▸ nodes 0/3 · sind ui"`,
+		`data-doc-title="▸ nodes 0/3 · sind ui" data-keep-live>`,
 		`<span hidden data-gantt="{&#34;origin&#34;:` + fmt.Sprint(runAt(0).UnixMilli()) + `,&#34;last&#34;:`,
 		`&#34;title&#34;:&#34;create cluster dev&#34;`,
 		`&#34;n&#34;:&#34;nodes&#34;`,
@@ -65,6 +65,7 @@ func TestRunPageRenders(t *testing.T) {
 
 	failed := ts.get("/runs/r-failed").Body.String()
 	assert.Contains(t, failed, `<section class="panel rout bad" aria-labelledby="rout-t">`)
+	assert.NotContains(t, failed, "data-keep-live", "an ended run lets the stream of a hidden tab go")
 	assert.Contains(t, failed, `<h2 id="rout-t">create cluster failed</h2>`)
 	assert.Contains(t, failed, `worker-[1-2] ran out of the 5m wait · sind rolled back · nothing is left`)
 	assert.Contains(t, failed, `<b class="mono">worker-[1-2]</b>`)

@@ -55,7 +55,7 @@ func (a *actWorkers) sizes(ctx context.Context, containers []string) []action.Wo
 			a.mu.Lock()
 			for _, info := range infos {
 				got[string(info.Name)] = actWorkerFactsOf(info)
-				a.seen[string(info.Name)] = actSeen[action.WorkerFacts]{got[string(info.Name)], a.now()}
+				actKeep(ctx, a.seen, string(info.Name), got[string(info.Name)], a.now())
 			}
 			a.mu.Unlock()
 			for i, c := range containers {
@@ -95,6 +95,6 @@ func (a *actWorkers) facts(ctx context.Context, container string) action.WorkerF
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.seen[container] = actSeen[action.WorkerFacts]{f, a.now()}
+	actKeep(ctx, a.seen, container, f, a.now())
 	return f
 }

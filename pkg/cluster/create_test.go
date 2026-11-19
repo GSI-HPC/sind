@@ -285,6 +285,44 @@ func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	return created
 }
 
+// TestCreateResources_NetworkExists covers another create, in a realm whose
+// names give the same resource names, that made the cluster network after
+// the preflight check: the create fails as for an existing cluster before
+// it creates a volume, which docker volume create would hand over.
+func TestCreateResources_NetworkExists(t *testing.T) {
+	m := &mock.Executor{OnCall: happyOnCall(t, func(args []string, _ string) (mock.Result, bool) {
+		if len(args) > 1 && args[0] == "network" && args[1] == "create" {
+			return mock.Result{Stderr: "Error response from daemon: network with name sind-dev-net already exists\n", Err: testutil.ExitCode1(t)}, true
+		}
+		return mock.Result{}, false
+	})}
+	client := docker.NewClient(m)
+
+	err := createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), t.Context(), nil, client, nil, false))
+
+	require.ErrorIs(t, err, ErrClusterExists)
+	assert.EqualError(t, err, "creating cluster network: network sind-dev-net already exists")
+	assert.Zero(t, countCalls(m.Calls, "volume", "create"))
+}
+
+// TestCreateResources_NetworkError covers another failure of the network:
+// no volume is created either.
+func TestCreateResources_NetworkError(t *testing.T) {
+	m := &mock.Executor{OnCall: happyOnCall(t, func(args []string, _ string) (mock.Result, bool) {
+		if len(args) > 1 && args[0] == "network" && args[1] == "create" {
+			return mock.Result{Err: errors.New("daemon gone")}, true
+		}
+		return mock.Result{}, false
+	})}
+	client := docker.NewClient(m)
+
+	err := createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), t.Context(), nil, client, nil, false))
+
+	require.EqualError(t, err, "creating cluster network: daemon gone")
+	assert.NotErrorIs(t, err, ErrClusterExists)
+	assert.Zero(t, countCalls(m.Calls, "volume", "create"))
+}
+
 func TestCreateResources_DataVolume(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -377,6 +415,17 @@ func TestCreate_RealmMismatch(t *testing.T) {
 	assert.Empty(t, m.Calls)
 }
 
+// TestCreate_InvalidRealm checks that Create refuses the realm it creates
+// the cluster in when it is no valid realm name, also without a config
+// realm, before any docker call.
+func TestCreate_InvalidRealm(t *testing.T) {
+	var m mock.Executor
+	client := docker.NewClient(&m)
+	_, err := Create(t.Context(), client, mesh.NewManager(client, "CI"), createCfg(), time.Millisecond)
+	require.ErrorContains(t, err, `invalid realm name "CI"`)
+	assert.Empty(t, m.Calls)
+}
+
 func TestCreate_ConfigRealmMatches(t *testing.T) {
 	cfg := createCfg()
 	cfg.Realm = mesh.DefaultRealm
@@ -455,11 +504,11 @@ func TestCreate_CVMFS(t *testing.T) {
 			mounted := map[string]bool{}
 			for _, c := range m.Calls {
 				a := c.Args
-				if a[0] == "run" && slices.Contains(a, "--entrypoint") && !isNsdelegateProbe(a) {
+				if isCVMFSProbe(a) {
 					probed = true
 				}
 				if a[0] == "create" && slices.Contains(a, "--hostname") {
-					assert.Equal(t, []string{tt.wantMount}, testutil.ArgValues(a, "--mount"))
+					assert.Equal(t, []string{tt.wantMount}, mountsBesideData(a))
 					assert.Contains(t, testutil.ArgValues(a, "--label"), tt.wantLabel)
 					mounted[testutil.ArgValues(a, "--name")[0]] = true
 				}
@@ -468,6 +517,13 @@ func TestCreate_CVMFS(t *testing.T) {
 			assert.Equal(t, map[string]bool{"sind-dev-controller": true, "sind-dev-worker-0": true}, mounted)
 		})
 	}
+}
+
+// isCVMFSProbe reports whether args are the docker run of DetectCVMFS's
+// probe of the host's /cvmfs.
+func isCVMFSProbe(args []string) bool {
+	i := slices.Index(args, "--entrypoint")
+	return args[0] == "run" && i >= 0 && args[i+1] == "true"
 }
 
 // assertNoNodeCreated fails for a docker create of a node container in m.
@@ -487,7 +543,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
-		if args[0] == "run" && slices.Contains(args, "--entrypoint") && !isNsdelegateProbe(args) {
+		if isCVMFSProbe(args) {
 			return mock.Result{Stderr: "bind source path does not exist: /cvmfs", Err: fmt.Errorf("exit status 125")}, true
 		}
 		return mock.Result{}, false
@@ -527,8 +583,8 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
-		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint") && !isNsdelegateProbe(c.Args), "no CVMFS probe: %v", c.Args)
-		assert.Empty(t, testutil.ArgValues(c.Args, "--mount"))
+		assert.False(t, isCVMFSProbe(c.Args), "no CVMFS probe: %v", c.Args)
+		assert.Empty(t, mountsBesideData(c.Args))
 	}
 }
 
@@ -1087,6 +1143,10 @@ func TestLogExtraPrivileges(t *testing.T) {
 		{"devices", RunConfig{ShortName: "worker-0", Devices: []string{"/dev/fuse"}}, "devices=[/dev/fuse]"},
 		{"securityOpt", RunConfig{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}}, "securityOpt=[apparmor=unconfined]"},
 		{"data host path", RunConfig{ShortName: "worker-0", DataHostPath: "/home/u/proj"}, "hostMounts=[/home/u/proj:/data]"},
+		{"task/affinity", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_ADMIN"}}, "capAdd=[SYS_NICE,SYS_ADMIN]"},
+		{"task/affinity and SYS_NICE", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_NICE"}}, "capAdd=[SYS_NICE]"},
+		{"task/affinity dropped", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapDrop: []string{"ALL"}}, ""},
+		{"task/affinity on the controller", RunConfig{ShortName: "controller", Role: config.RoleController, TaskAffinity: true}, ""},
 		{"all", RunConfig{
 			ShortName:     "worker-0",
 			CapAdd:        []string{"SYS_ADMIN"},
@@ -1187,7 +1247,7 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 	// first and in order; slurmctld and slurmd follow in either order.
 	require.GreaterOrEqual(t, len(m.Calls), 4)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "mariadb"}, m.Calls[0].Args)
-	assert.Equal(t, "mysql", m.Calls[1].Args[2])
+	assert.Equal(t, []string{"exec", "-i", "sind-dev-db", "mysql"}, m.Calls[1].Args)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "slurmdbd"}, m.Calls[2].Args)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "is-active", "slurmdbd"}, m.Calls[3].Args)
 	var enabled []string
@@ -1274,11 +1334,13 @@ func TestStartWatcher_Success(t *testing.T) {
 	m := &mock.Executor{OnStart: pipes.OnStart}
 	client := docker.NewClient(m)
 
-	w, stop := startWatcher(t.Context(), client, "sind-dev-", "dev")
+	w, stop := startWatcher(t.Context(), client, "sind", "dev")
 	assert.NotNil(t, w)
 	// Close pipe writers to unblock scanner reads before stopping.
 	pipes.CloseAll()
 	stop()
+	require.NotEmpty(t, m.Calls)
+	assert.Equal(t, monitor.DockerRealmEventsArgs("sind", "dev"), m.Calls[0].Args, "the stream asks for the realm's cluster only")
 }
 
 func TestStartWatcher_Fallback(t *testing.T) {
@@ -1291,7 +1353,7 @@ func TestStartWatcher_Fallback(t *testing.T) {
 	}
 	client := docker.NewClient(m)
 
-	w, stop := startWatcher(t.Context(), client, "sind-dev-", "dev")
+	w, stop := startWatcher(t.Context(), client, "sind", "dev")
 	defer stop()
 	assert.Nil(t, w)
 }
@@ -1366,7 +1428,7 @@ func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
 			defer cancel()
 			var watcher *monitor.Watcher
 			if tt.watch {
-				w, stop := startWatcher(ctx, client, "sind-dev-", "dev")
+				w, stop := startWatcher(ctx, client, "sind", "dev")
 				require.NotNil(t, w)
 				defer func() {
 					cancel()

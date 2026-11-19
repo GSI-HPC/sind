@@ -32,9 +32,8 @@
 .more-dns{border-top:1px solid var(--line-2)}
 .more-dns code,.more-nowrap{white-space:nowrap}
 .more-nonum{white-space:normal}
-/* What a Copy copies, while the browser copies it the old way, and the
-   lines of Copy list, shown for Ctrl+C when the browser copies nothing */
-.more-clip{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}
+/* The lines of Copy list, shown for Ctrl+C when the browser copies
+   nothing */
 .more-copybox{display:block;box-sizing:border-box;width:calc(100% - 28px);margin:10px 14px 4px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:var(--t-sm)/1.5 var(--f-mono);color:var(--fg);resize:vertical}
 
 /* mesh: the containers that can connect, while none is, and Show all of

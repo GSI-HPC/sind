@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -30,7 +32,7 @@ import (
 //	deleteClusterResources   deregisters from the mesh and the monitoring stack only if other clusters remain
 //	      │
 //	    yes → done
-//	    no  → cleanupRealm (monitoring stack containers → mesh → stack volumes)
+//	    no  → cleanupRealm (monitoring stack containers → stack volumes → mesh)
 //
 // Whether other clusters remain does not depend on this cluster's
 // containers, so Delete settles it first: when the mesh goes too, removing
@@ -39,7 +41,9 @@ import (
 // The mesh is what makes a container one of the realm's external
 // containers (see ExternalContainers). Removing it detaches them, so a
 // cluster created later is not connected to them: Delete then names them
-// through meshMgr.Warn.
+// through meshMgr.Warn, also those that the removal of the mesh detached
+// before it failed (see detachedExternal), as a retry no longer finds
+// them on the mesh.
 func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -64,11 +68,33 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	if err != nil {
 		log.WarnContext(ctx, "listing external containers failed, continuing", "error", err)
 	}
-	if err := cleanupRealm(ctx, client, meshMgr); err != nil {
-		return err
+	err = cleanupRealm(ctx, client, meshMgr)
+	if err != nil {
+		external = detachedExternal(ctx, client, meshMgr, external)
 	}
 	warnDetached(ctx, meshMgr, external)
-	return nil
+	return err
+}
+
+// detachedExternal returns those of the external containers that are no
+// longer on the mesh, after a removal of the realm's shared resources that
+// failed, maybe after the mesh detached them. The listing ignores the
+// cancellation of ctx, which may have ended the removal, within the bound
+// of internal/detach. When sind cannot tell, it returns them all: a
+// container named for reconnecting that is still attached costs less than
+// one that nothing names.
+func detachedExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, external []docker.ContainerName) []docker.ContainerName {
+	if len(external) == 0 {
+		return nil
+	}
+	ctx, cancel := detach.Context(ctx)
+	defer cancel()
+	attached, err := ExternalContainers(ctx, client, meshMgr)
+	if err != nil {
+		sindlog.From(ctx).WarnContext(ctx, "listing external containers failed", "error", err)
+		return external
+	}
+	return slices.DeleteFunc(slices.Clone(external), func(n docker.ContainerName) bool { return slices.Contains(attached, n) })
 }
 
 // warnDetached tells the user, through meshMgr.Warn, that deleting the
@@ -90,20 +116,23 @@ func warnDetached(ctx context.Context, meshMgr *mesh.Manager, external []docker.
 
 // cleanupRealm removes a realm's shared resources once its last cluster is
 // gone: the monitoring stack's containers, which hold endpoints on the mesh
-// network, then the mesh, then the stack's volumes and the journal volume,
-// which Docker removes only once no container references them.
+// network, then the stack's volumes and the journal volume, which Docker
+// removes only once no container references them, then the mesh. The
+// volumes go before the mesh, so that a cleanup cut short leaves a mesh,
+// which a later delete finds, rather than data of the realm that a stack
+// created later would take up.
 //
-// The parts are the progress steps "monitoring stack", "mesh" and
-// "monitoring volumes". The two of the stack are hidden, since a realm
+// The parts are the progress steps "monitoring stack", "monitoring
+// volumes" and "mesh". The two of the stack are hidden, since a realm
 // without a monitoring stack has nothing for them to do.
 func cleanupRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	if err := removeMonitoringContainers(ctx, client, meshMgr.Realm); err != nil {
 		return err
 	}
-	if err := removeMesh(ctx, meshMgr); err != nil {
+	if err := removeMonitoringVolumes(ctx, client, meshMgr.Realm); err != nil {
 		return err
 	}
-	return removeMonitoringVolumes(ctx, client, meshMgr.Realm)
+	return removeMesh(ctx, meshMgr)
 }
 
 // removeMesh removes the realm's mesh (mesh.Manager.CleanupMesh), as the
@@ -124,7 +153,10 @@ const deleteAllConcurrency = 4
 //
 // A cluster that fails to delete does not stop the others. The mesh then
 // stays for what is left, the clusters that were deleted are deregistered
-// from it, and DeleteAll returns the failures, joined. Once ctx has ended
+// from it, and so are the nodes of a cluster that failed after it listed
+// them, as Delete deregisters them before it removes any: a later delete
+// of that cluster would find no containers to name them by. DeleteAll
+// returns the failures, joined. Once ctx has ended
 // no further cluster is tried, and those left out fail with the context's
 // error, worded as "deleting cluster <name>: listing containers: <err>",
 // as when they were tried and failed at their first lookup; a panic while
@@ -132,8 +164,8 @@ const deleteAllConcurrency = 4
 //
 // The clusters are the progress step "clusters", with a target for each
 // (fanout.Map), under which each cluster's removal reports its steps as
-// Delete does; the realm's the steps "monitoring stack", "mesh" and
-// "monitoring volumes".
+// Delete does; the realm's the steps "monitoring stack", "monitoring
+// volumes" and "mesh".
 func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -181,7 +213,7 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if err != nil {
 		var hostnames []string
 		for i, d := range deleted {
-			if d.Err == nil {
+			if d.Value != nil {
 				hostnames = append(hostnames, meshHostnames(realm, names[i], d.Value.Containers)...)
 			}
 		}
@@ -254,26 +286,33 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // removeClusterResources removes the cluster resources that res lists, and
 // with deregister first the nodes' DNS records and known_hosts entries, and
 // last, for a monitored cluster, its nodes from the realm's monitoring
-// stack and their journals (see forgetMonitoredNodes).
+// stack and their journals (see forgetMonitoredNodes), also when the
+// removal of its network or volumes fails: a retry finds no containers to
+// tell that the stack collected the cluster.
 func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *Resources, deregister bool) error {
 	log := sindlog.From(ctx)
 
-	// Remove DNS records and known_hosts entries before deleting containers.
-	// Failures are logged inside DeregisterMesh; the teardown continues.
 	// The realm's monitoring stack stays too: whether it collects the
-	// cluster is told by its containers, so before they go.
+	// cluster is told by its containers, so before they go, and before
+	// the mesh changes, so that a failed listing changes nothing.
 	monitored := false
 	if deregister {
-		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 		var err error
 		if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
 			return err
 		}
+		// Remove DNS records and known_hosts entries before deleting
+		// containers. Failures are logged inside DeregisterMesh; the
+		// teardown continues.
+		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 	}
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
 	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
 		return err
+	}
+	if monitored {
+		defer forgetMonitoredNodes(ctx, client, meshMgr, clusterName)
 	}
 
 	if res.NetworkExists {
@@ -283,14 +322,7 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	}
 
 	log.DebugContext(ctx, "removing volumes", "count", len(res.Volumes))
-	if err := DeleteVolumes(ctx, client, res.Volumes); err != nil {
-		return err
-	}
-
-	if monitored {
-		forgetMonitoredNodes(ctx, client, meshMgr, clusterName)
-	}
-	return nil
+	return DeleteVolumes(ctx, client, res.Volumes)
 }
 
 // DeleteContainers force-removes the given containers in parallel

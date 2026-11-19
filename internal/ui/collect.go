@@ -13,19 +13,23 @@ import (
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 
+// colEnvKey is the type of the Env keys that the collectors provide, a type
+// of their own as Env.Put asks.
+type colEnvKey string
+
 // The Env keys that the collectors provide, for the parts that act on them.
 // The values are plain funcs and interfaces, so that no part imports
 // another.
 const (
 	// ColRefreshKey holds a func(realm string) that reads that realm again
 	// now, such as after a task that changed it ended.
-	ColRefreshKey = "collect.refresh"
+	ColRefreshKey colEnvKey = "collect.refresh"
 	// ColDoctorKey holds a func() that runs the host checks again.
-	ColDoctorKey = "collect.doctor"
+	ColDoctorKey colEnvKey = "collect.doctor"
 	// ColMonitoringIntervalKey holds the interval at which the monitoring
 	// stacks are read, a value with the methods Get() time.Duration and
 	// Set(time.Duration).
-	ColMonitoringIntervalKey = "collect.monitoring-interval"
+	ColMonitoringIntervalKey colEnvKey = "collect.monitoring-interval"
 )
 
 // colKey is the Env key of the collectors that Setup made.
@@ -61,7 +65,7 @@ func colSetup(env *Env) error {
 	interval := collect.NewInterval(cmp.Or(env.Opts.MonitoringInterval, collect.MonitoringEvery))
 	viewers := &collect.Viewers{}
 	set := &colSet{
-		events:     &collect.Events{Exec: env.Exec, Bus: bus, Log: env.Log},
+		events:     &collect.Events{Exec: env.Exec, Bus: bus, Log: env.Log, Realms: collect.StoreRealms(env.Store)},
 		sind:       &collect.Sind{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		lock:       &collect.Lock{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		monitoring: &collect.Monitoring{Store: env.Store, Client: client, Bus: bus, Interval: interval, Viewers: viewers, Log: env.Log},
@@ -100,6 +104,6 @@ func colActivityService() Service {
 			env.Log.Warn("sind ui shows no activity: no state directory", "err", err)
 			return
 		}
-		activity.Follow(ctx, env.Store, path)
+		activity.Follow(ctx, env.Store, path, env.Log)
 	}}
 }

@@ -17,11 +17,11 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-nodeset"
 
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 
@@ -117,7 +117,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 	if len(spec.Argv) == 0 || spec.Argv[0] != "sind" {
 		return "", errors.New("not a sind command")
 	}
-	p, err := s.plan(spec.Argv[1:])
+	p, err := s.plan(spec.Argv)
 	if err != nil {
 		return "", err
 	}
@@ -180,7 +180,8 @@ func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, 
 			t.Status, t.Exit = store.TaskCanceled, run.ExitInterrupted
 		default:
 			t.Status, t.Exit, t.Err = store.TaskFailed, 1, err.Error()
-			t.Output = "Error: " + err.Error() + "\n"
+			// As sind writes it: a timestamp, the level and the error.
+			t.Output = end.Format("15:04:05.000") + " ERRO " + err.Error() + "\n"
 		}
 	})
 }
@@ -351,10 +352,7 @@ func systemctl(p play, args []string) {
 // plan reads the command line of a command that a dialog built and makes
 // the script that plays it. A command it does not know plays as one step.
 func (s *Sim) plan(argv []string) (plan, error) {
-	realm := mesh.DefaultRealm
-	if len(argv) >= 2 && argv[0] == "--realm" {
-		realm, argv = argv[1], argv[2:]
-	}
+	realm, argv := action.SplitRealm(argv)
 	if len(argv) > 0 && argv[0] == "exec" {
 		// sind exec runs a command in a node, such as the scontrol of a
 		// drain, and draws no progress.

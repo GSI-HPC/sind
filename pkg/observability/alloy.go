@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // AlloyConfigPath is the configuration file sind writes into the Alloy
@@ -143,7 +145,7 @@ func writeSlurmScrapes(w *alloyWriter, targets []Target) {
 		w.line("targets = [")
 		w.indent++
 		for _, t := range controllers {
-			w.line("%s,", labelMap(append([]string{"__address__", string(t.Container) + ":" + slurmctldPort}, nodeLabels(t)...)...))
+			w.line("%s,", labelMap(append([]string{"__address__", string(t.Container) + ":" + slurm.SlurmctldPort}, nodeLabels(t)...)...))
 		}
 		w.indent--
 		w.line("]")

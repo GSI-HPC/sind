@@ -4,6 +4,7 @@ package action
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -25,7 +26,19 @@ import (
 )
 
 func init() {
-	register(Action{ID: "create-cluster", Build: buildCreateCluster, Cluster: func(f Form) string { return strings.TrimSpace(f.Get("name")) }})
+	register(Action{ID: "create-cluster", Build: buildCreateCluster, Cluster: newClusterName})
+}
+
+// newClusterName is the cluster of the New cluster page: in YAML mode the
+// name in the YAML, which the command creates, else the field "name". The
+// field follows the YAML in the browser only for the lines it reads.
+func newClusterName(f Form) string {
+	if f.Get("yaml_on") != "" {
+		if cfg, err := parseConfig([]byte(f.Get("yaml"))); err == nil {
+			return cmp.Or(cfg.Name, config.DefaultClusterName)
+		}
+	}
+	return strings.TrimSpace(f.Get("name"))
 }
 
 // Waits are the values of the field "wait" of the New cluster page that
@@ -43,8 +56,10 @@ const HostMemoryWarn = 80
 // leaves out.
 const DefaultWait = "5m"
 
-// ConfigPath returns where sind ui saves the config of the cluster name.
-func ConfigPath(dir, name string) string { return filepath.Join(dir, name+".yaml") }
+// ConfigPath returns where sind ui saves the config of the cluster name in
+// realm: a folder for each realm, as each realm can have a cluster of that
+// name.
+func ConfigPath(dir, realm, name string) string { return filepath.Join(dir, realm, name+".yaml") }
 
 // FreeName returns base, or else base-2, base-3 and so on: the first name
 // of a cluster that realm does not have.
@@ -108,10 +123,13 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cfg, data, content := plan.cfg, plan.data, plan.content
 	pull := clusterPull(f, cfg.Defaults.Image, &ps)
 	wait := clusterWait(f, &ps)
-	file := cfg.Name
+	file, folder := cfg.Name, realm
+	// Never a path from a name that sind refuses, such as ../x.
 	if config.CheckName("cluster", file) != nil {
-		// Never a path from a name that sind refuses, such as ../x.
 		file = "NAME"
+	}
+	if config.CheckName("realm", folder) != nil {
+		folder = "REALM"
 	}
 	// The images go to a command of their own first: their notes come
 	// after those of the files.
@@ -135,9 +153,10 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if wait != DefaultWait {
 		flags = append(flags, "--wait", wait)
 	}
-	run := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
+	saved := ConfigPath(c.ConfigDir, folder, file)
+	run := NewCommand(append(SindArgv(realm, "create", "cluster", "--config", saved), flags...)...)
 	cmd.Argv, cmd.Display = run.Argv, run.Display
-	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
+	cmd.Config = &File{Path: saved, Content: content}
 	cmd.Nodes = plan.planned
 	if plan.final != nil {
 		cmd.After, cmd.SlurmConf = afterCreate(plan.final)
@@ -158,7 +177,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if data.mkdir {
 		cmd.Dirs = []string{data.dir}
 	}
-	cmd.Script = clusterScript(realm, file, content, cmd.Dirs, flags)
+	cmd.Script = clusterScript(realm, folder, file, content, cmd.Dirs, flags)
 	cmd.Images = images.Images
 	cmd.Notes = append(cmd.Notes, images.Notes...)
 	cmd.Warns = append(cmd.Warns, images.Warns...)
@@ -244,13 +263,17 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	for _, err := range errs {
 		yps.add("", "Config", false, err)
 	}
-	if len(errs) == 0 {
+	// A config of more workers than a plan holds has no final config: what
+	// comes after the create, its Slurm files among them, would name every
+	// worker, and a preview comes with each key.
+	before := len(yps)
+	p.planned = plannedOf(p.cfg.Nodes, &yps)
+	if len(errs) == 0 && len(yps) == before {
 		p.warns = parsed.Warnings()
 		if !nps.has("name") {
 			p.final = parsed
 		}
 	}
-	p.planned = plannedOf(p.cfg.Nodes, &yps)
 	if ds := p.cfg.Storage.DataStorage; ds.UsesHostPath() && path.IsAbs(ds.HostPath) {
 		p.data.dir = path.Clean(ds.HostPath)
 		checkDir(c, &p.data, true, &yps)
@@ -469,8 +492,8 @@ func mountPath(f Form, ps *problems) string {
 	switch {
 	case m == "":
 		return ""
-	case !plainText(m) || !path.IsAbs(m) || strings.Contains(m, ","):
-		ps.add("mount", "Mount path", true, errors.New("write a path in the nodes that starts with / and has no comma, such as /data"))
+	case !plainText(m) || !path.IsAbs(m) || strings.ContainsAny(m, ",:") || path.Clean(m) == "/":
+		ps.add("mount", "Mount path", true, errors.New("write a path in the nodes that starts with /, is not / and has no comma or colon, such as /data"))
 		return ""
 	}
 	return path.Clean(m)
@@ -479,15 +502,21 @@ func mountPath(f Form, ps *problems) string {
 // clusterScript is the shell script that does what Create does: it writes
 // the config, readable by its owner alone, creates the directories and
 // runs the command. file is the name of the cluster, which names the config
-// file too. It always names the realm and the cluster, as SIND_REALM and
-// SIND_CLUSTER in the shell would else take the place of the config's.
-func clusterScript(realm, file, content string, dirs, flags []string) string {
+// file too, and folder the realm's folder of configs (ConfigPath). It
+// always names the realm and the cluster, as SIND_REALM and SIND_CLUSTER
+// in the shell would else take the place of the config's.
+func clusterScript(realm, folder, file, content string, dirs, flags []string) string {
 	sum := sha256.Sum256([]byte(content))
 	// The tag of the here-document: a line that the config cannot hold.
 	tag := "SIND_CONFIG_" + hex.EncodeToString(sum[:8])
 	var b strings.Builder
-	fmt.Fprintf(&b, "cfg=\"${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/%s.yaml\"\n", file)
+	fmt.Fprintf(&b, "cfg=\"${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/%s/%s.yaml\"\n", folder, file)
 	b.WriteString("mkdir -p \"$(dirname \"$cfg\")\"\n")
+	// The YAML of the editor can end without a newline; the tag stands on
+	// a line of its own all the same.
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
 	fmt.Fprintf(&b, "(umask 077 && cat >\"$cfg\") <<'%s'\n%s%s\n", tag, content, tag)
 	for _, d := range dirs {
 		fmt.Fprintf(&b, "mkdir -p %s\n", quoteWord(d))

@@ -254,11 +254,11 @@ func TestCreateResources_HomeVolume(t *testing.T) {
 
 func TestPreflightCheck_HomeVolume(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-home": true})
+	m.OnCall = preflightOnCallLabels(t, map[string]string{"sind-dev-home": `{"sind.realm":"other"}`})
 	client := docker.NewClient(&m)
 
-	// Without users, sind creates no home volume, so an existing one is
-	// not in the way.
+	// Without users, sind creates no home volume, so another realm's of
+	// that name is not in the way.
 	require.NoError(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()))
 
 	cfg := minimalConfig()

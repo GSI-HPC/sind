@@ -140,6 +140,32 @@ func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 	assert.Equal(t, 1, clusters[0].NodeCount)
 }
 
+// helperEntry is a config helper of cluster dev that an interrupted create
+// left behind: it carries the realm and cluster labels but no role.
+func helperEntry() testutil.PsEntry {
+	return testutil.PsEntry{ID: "h", Names: "sind-dev-config-helper", State: "created", Image: "img",
+		Labels: "sind.realm=sind,sind.cluster=dev"}
+}
+
+func TestGetClusters_Helper(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		helperEntry(),
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0"},
+		testutil.PsEntry{ID: "b", Names: "sind-prod-config-helper", State: "created", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod"},
+	), "", nil)
+
+	clusters, err := GetClusters(t.Context(), docker.NewClient(&m), mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []*Summary{
+		{Name: "dev", SlurmVersion: "25.11.0", State: StateRunning, NodeCount: 1, Controllers: 1},
+		{Name: "prod", State: StateEmpty},
+	}, clusters, "a helper lists its cluster but is no node")
+}
+
 // --- GetNodes ---
 
 func TestGetNodes(t *testing.T) {
@@ -293,6 +319,29 @@ func TestGetNodes_InspectError(t *testing.T) {
 	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
 	assert.Empty(t, nodes[0].IP)
 	assert.Equal(t, []string{"listing the nodes without their IPs: docker daemon busy"}, warned)
+}
+
+// TestGetNodes_InspectOneContainerGone verifies that the nodes whose
+// containers docker did inspect keep their IPs when another one went away
+// since the listing.
+func TestGetNodes_InspectOneContainerGone(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+	), "", nil)
+	m.AddResult(statusInspectJSON(t, "sind-dev-controller", "running", "172.18.0.2", nil),
+		testutil.NoSuchContainer("sind-dev-worker-0"), testutil.ExitCode1(t))
+	var warned []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
+
+	nodes, err := GetNodes(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	assert.Equal(t, "172.18.0.2", nodes[0].IP)
+	assert.Empty(t, nodes[1].IP)
+	assert.Empty(t, warned)
 }
 
 // TestGetNodes_InspectContainerGone verifies that a container that went away
@@ -497,6 +546,47 @@ func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
 	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
 }
 
+func TestGetNodes_SkipsHelpers(t *testing.T) {
+	var m mock.Executor
+	ps := testutil.NDJSON(
+		helperEntry(),
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller"},
+	)
+	m.AddResult(ps, "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", nil), "", nil)
+	m.AddResult(ps, "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", nil), "", nil)
+	m.AddResult(ps, "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
+	assert.Equal(t, []docker.ContainerName{"sind-dev-controller"}, inspected(m.Calls[1].Args), "the helper is not inspected")
+
+	nodes, err = GetAllNodes(t.Context(), c, mesh.DefaultRealm)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"controller.dev"}, names)
+}
+
+// inspected returns the containers a docker inspect names.
+func inspected(args []string) []docker.ContainerName {
+	var names []docker.ContainerName
+	for _, a := range args[1:] {
+		if strings.HasPrefix(a, "-") {
+			break
+		}
+		names = append(names, docker.ContainerName(a))
+	}
+	return names
+}
+
 func TestContainerStateToState(t *testing.T) {
 	tests := []struct {
 		state  docker.ContainerState
@@ -646,6 +736,7 @@ func TestGetAuthKey(t *testing.T) {
 func TestGetAuthKey_NoContainers(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
+	m.AddResult("", testutil.NoSuchNetwork("sind-dev-net"), testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
@@ -653,6 +744,46 @@ func TestGetAuthKey_NoContainers(t *testing.T) {
 	require.Error(t, err)
 	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
+}
+
+// TestGetAuthKey_Helper checks that the key is read from a node, not from
+// a helper container left behind, and that a cluster of which only a
+// helper is left has no key to read.
+func TestGetAuthKey_Helper(t *testing.T) {
+	helper := testutil.PsEntry{
+		ID: "h1", Names: "sind-dev-config-helper", State: "created",
+		Image: "img:1", Labels: "sind.realm=sind,sind.cluster=dev",
+	}
+	controller := testutil.PsEntry{
+		ID: "c1", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller",
+	}
+
+	t.Run("with a node", func(t *testing.T) {
+		var m mock.Executor
+		m.AddResult(testutil.NDJSON(helper, controller), "", nil)
+		m.AddResult(testutil.TarArchive("munge.key", "key"), "", nil)
+
+		key, err := GetAuthKey(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", "")
+
+		require.NoError(t, err)
+		assert.Equal(t, []byte("key"), key.Key)
+		require.Len(t, m.Calls, 2)
+		assert.Equal(t, []string{"cp", "sind-dev-controller:/etc/munge/munge.key", "-"}, m.Calls[1].Args)
+	})
+
+	t.Run("only a helper", func(t *testing.T) {
+		var m mock.Executor
+		m.AddResult(testutil.NDJSON(helper), "", nil)
+		m.AddResult(`[{"Name":"sind-dev-net"}]`, "", nil) // the cluster network
+
+		_, err := GetAuthKey(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", "")
+
+		require.EqualError(t, err, `cluster "dev" has no node to read a key from`)
+		for _, c := range m.Calls {
+			assert.NotEqual(t, "cp", c.Args[0])
+		}
+	})
 }
 
 func TestGetAuthKey_CopyError(t *testing.T) {

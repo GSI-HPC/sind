@@ -4,17 +4,20 @@ package docker
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -325,7 +328,9 @@ func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
     "CapDrop": null,
     "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
     "SecurityOpt": ["writable-cgroups=true", "label=disable"],
-    "Mounts": [{"Type": "volume", "Source": "sind-journal", "Target": "/var/log/journal", "VolumeOptions": {"Subpath": "dev/worker-0"}}]
+    "Mounts": [{"Type": "volume", "Source": "sind-journal", "Target": "/var/log/journal", "VolumeOptions": {"Subpath": "dev/worker-0"}}],
+    "MaskedPaths": [],
+    "ReadonlyPaths": []
   },
   "NetworkSettings": {"Networks": {}}
 }]`, "", nil)
@@ -346,7 +351,17 @@ func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
 			Type: MountVolume, Source: "sind-journal", Target: "/var/log/journal",
 			VolumeOptions: VolumeOptions{Subpath: "dev/worker-0"},
 		}},
+		MaskedPaths:   []string{},
+		ReadonlyPaths: []string{},
 	}, info.HostConfig)
+	assert.True(t, info.HostConfig.SystemPathsUnconfined(), "systempaths=unconfined")
+}
+
+func TestHostConfig_SystemPathsUnconfined(t *testing.T) {
+	assert.False(t, HostConfig{}.SystemPathsUnconfined(), "no paths reported")
+	assert.False(t, HostConfig{MaskedPaths: []string{}}.SystemPathsUnconfined(), "read-only paths not reported")
+	assert.False(t, HostConfig{MaskedPaths: []string{}, ReadonlyPaths: []string{"/proc/bus"}}.SystemPathsUnconfined())
+	assert.True(t, HostConfig{MaskedPaths: []string{}, ReadonlyPaths: []string{}}.SystemPathsUnconfined())
 }
 
 func TestInspectContainer_Error(t *testing.T) {
@@ -413,6 +428,31 @@ func TestInspectContainers_Multiple(t *testing.T) {
 	assert.Equal(t, []string{"inspect", "sind-dev-controller", "sind-dev-worker-0", "--type", "container"}, m.Calls[0].Args)
 }
 
+// TestInspectContainers_Partial checks that the containers docker did
+// print come back with the error of one that is missing.
+func TestInspectContainers_Partial(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Id":"id-a","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`+"\n",
+		"Error: No such container: sind-dev-worker-0\n", exitError(t, 1, "Error: No such container: sind-dev-worker-0\n"))
+	c := NewClient(&m)
+
+	infos, err := c.InspectContainers(t.Context(), "sind-dev-controller", "sind-dev-worker-0")
+	require.Error(t, err)
+	assert.True(t, IsNotFound(err))
+	require.Len(t, infos, 1)
+	assert.Equal(t, ContainerName("sind-dev-controller"), infos[0].Name)
+}
+
+// TestInspectContainers_ErrorWithoutOutput checks that a failed inspect
+// that printed no JSON returns its own error, not the parse error.
+func TestInspectContainers_ErrorWithoutOutput(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-dev-worker-0\n", exitError(t, 1, "Error: No such container: sind-dev-worker-0\n"))
+	infos, err := NewClient(&m).InspectContainers(t.Context(), "sind-dev-worker-0")
+	assert.True(t, IsNotFound(err), "%v", err)
+	assert.Nil(t, infos)
+}
+
 func TestInspectContainers_Empty(t *testing.T) {
 	var m mock.Executor
 	c := NewClient(&m)
@@ -460,7 +500,7 @@ func TestInspectContainer_NeverStarted(t *testing.T) {
 
 func TestLogs(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("line1\nline2\nline3\n", "", nil)
+	m.AddResult("2026-11-19T16:00:00.1Z line1\n2026-11-19T16:00:00.2Z line2\n2026-11-19T16:00:00.3Z line3\n", "", nil)
 	c := NewClient(&m)
 
 	logs, err := c.Logs(t.Context(), testContainerName, 3)
@@ -468,7 +508,38 @@ func TestLogs(t *testing.T) {
 	assert.Equal(t, "line1\nline2\nline3\n", logs)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"logs", "--tail", "3", string(testContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"logs", "--timestamps", "--tail", "3", string(testContainerName)}, m.Calls[0].Args)
+}
+
+// TestLogs_Stderr checks that Logs keeps what the container wrote to its
+// standard error, which docker logs writes to its own, in the order of the
+// lines' times.
+func TestLogs_Stderr(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(
+		"2026-11-19T16:00:00.100000000Z booting\n2026-11-19T16:00:00.3Z exec /sbin/init\n2026-11-19T16:00:01Z same time",
+		"2026-11-19T16:00:00.2Z sh: 1: /etc/sind/setup: not found\n2026-11-19T16:00:01Z on stderr\n2026-11-19T16:00:02Z last\n", nil)
+	c := NewClient(&m)
+
+	logs, err := c.Logs(t.Context(), testContainerName, 6)
+	require.NoError(t, err)
+	assert.Equal(t, "booting\nsh: 1: /etc/sind/setup: not found\nexec /sbin/init\nsame time\non stderr\nlast\n", logs)
+}
+
+// TestLogs_NoTimestamps checks that lines without a time are kept as they
+// are, those of standard output first, and before the lines of the other
+// stream with a time.
+func TestLogs_NoTimestamps(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("out\n", "err\nlonger line\n", nil)
+	m.AddResult("2026-11-19T16:00:00Z out\n", "no time on stderr\n", nil)
+	c := NewClient(&m)
+	logs, err := c.Logs(t.Context(), testContainerName, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "out\nerr\nlonger line\n", logs)
+	logs, err = c.Logs(t.Context(), testContainerName, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "no time on stderr\nout\n", logs)
 }
 
 func TestLogs_Error(t *testing.T) {
@@ -709,6 +780,65 @@ func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
 	}
 }
 
+// exitCode returns the *exec.ExitError of a command that exits with code.
+func exitCode(t *testing.T, code int) *exec.ExitError {
+	t.Helper()
+	err := exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run()
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	require.True(t, ok, "%v", err)
+	require.Equal(t, code, exitErr.ExitCode())
+	return exitErr
+}
+
+// TestExecAllowNonZero_NotStarted checks that a command the runtime cannot
+// start is a failed exec: the daemon writes why to the exec's stdout, and
+// the docker CLI exits 126 or 127 with nothing on stderr.
+func TestExecAllowNonZero_NotStarted(t *testing.T) {
+	for _, tt := range []struct {
+		code int
+		msg  string
+	}{
+		{126, "OCI runtime exec failed: exec failed: unable to start container process: error adding pid 4242 to cgroups: failed to write 4242: write /sys/fs/cgroup/system.slice/cgroup.procs: device or resource busy: unknown"},
+		{127, "OCI runtime exec failed: exec failed: unable to start container process: exec: \"systemctl\": executable file not found in $PATH: unknown"},
+	} {
+		t.Run(strconv.Itoa(tt.code), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(tt.msg+"\r\n", "", cmdexec.WrapExitError(exitCode(t, tt.code), ""))
+
+			stdout, err := NewClient(&m).ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+			assert.Empty(t, stdout)
+			exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+			require.True(t, ok, "%v", err)
+			assert.Equal(t, tt.code, exitErr.ExitCode())
+			assert.Equal(t, tt.msg, exitErr.Stderr)
+			assert.EqualError(t, err, "exit status "+strconv.Itoa(tt.code)+": "+tt.msg)
+		})
+	}
+}
+
+// TestExecAllowNonZero_InnerExit126 checks that the inner command's own
+// exit 126 or 127, or docker's message under another exit code, stays the
+// inner command's exit.
+func TestExecAllowNonZero_InnerExit126(t *testing.T) {
+	for _, tt := range []struct {
+		code   int
+		stdout string
+	}{
+		{126, "inactive\n"},
+		{127, ""},
+		{1, "OCI runtime exec failed: printed by the command\n"},
+	} {
+		t.Run(strconv.Itoa(tt.code), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(tt.stdout, "sh: 1: systemctl: not found\n", cmdexec.WrapExitError(exitCode(t, tt.code), "sh: 1: systemctl: not found\n"))
+
+			stdout, err := NewClient(&m).ExecAllowNonZero(t.Context(), testContainerName, "sh", "-c", "systemctl is-active munge")
+			require.NoError(t, err)
+			assert.Equal(t, tt.stdout, stdout)
+		})
+	}
+}
+
 // TestExecAllowNonZero_InnerStderr checks that what the inner command writes
 // to stderr does not turn its non-zero exit into an error.
 func TestExecAllowNonZero_InnerStderr(t *testing.T) {
@@ -719,6 +849,34 @@ func TestExecAllowNonZero_InnerStderr(t *testing.T) {
 	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
 	require.NoError(t, err)
 	assert.Equal(t, "failed\n", stdout)
+}
+
+// TestExecAllowNonZero_KilledCLI checks that a docker CLI killed by a
+// signal, as the end of ctx kills it, is a failed exec, not the inner
+// command's exit with no output.
+func TestExecAllowNonZero_KilledCLI(t *testing.T) {
+	err := exec.Command("sh", "-c", "kill -KILL $$").Run()
+	killed, ok := errors.AsType[*exec.ExitError](err)
+	require.True(t, ok, "%v", err)
+	require.Equal(t, -1, killed.ExitCode())
+
+	var m mock.Executor
+	m.AddResult("", "", killed)
+	_, err = NewClient(&m).ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+	assert.ErrorContains(t, err, "signal: killed")
+}
+
+// TestExecAllowNonZero_ContextEnded checks that a non-zero exit after ctx
+// ended is a failed exec: the output may be cut short.
+func TestExecAllowNonZero_ContextEnded(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	var m mock.Executor
+	m.OnCall = func([]string, string) mock.Result {
+		cancel()
+		return mock.Result{Stdout: "act", Err: &exec.ExitError{ProcessState: exitCode1(t)}}
+	}
+	_, err := NewClient(&m).ExecAllowNonZero(ctx, testContainerName, "systemctl", "is-active", "munge")
+	assert.Error(t, err)
 }
 
 func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
@@ -781,11 +939,12 @@ func TestWriteFile(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.WriteFile(t.Context(), testContainerName, "/tmp/out", "hello\n")
+	err := c.WriteFile(t.Context(), testContainerName, "/tmp/my out; rm -rf /", "hello\n")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat > /tmp/out"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", `cat > "$1"`, "sh", "/tmp/my out; rm -rf /"}, m.Calls[0].Args,
+		"the path is an argument of the shell, not a part of its script")
 	assert.Equal(t, "hello\n", m.Calls[0].Stdin)
 }
 
@@ -1114,4 +1273,56 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/nonexistent")
 	assert.ErrorContains(t, err, "file not found in tar output")
 	assert.Nil(t, data)
+}
+
+func TestTiedExecArgs(t *testing.T) {
+	assert.Equal(t, []string{"exec", "-i", "sind-dev-worker-0", "sh", "-c", tiedExecScript, "sh", "journalctl", "--follow"},
+		TiedExecArgs("sind-dev-worker-0", "journalctl", "--follow"))
+}
+
+// TestTiedExecScript runs the shell of TiedExecArgs as the exec would: the
+// command ends with its standard input, and gives its own output and
+// status when it ends first.
+func TestTiedExecScript(t *testing.T) {
+	t.Run("standard input ends", func(t *testing.T) {
+		cmd := exec.Command("sh", "-c", tiedExecScript, "sh", "sh", "-c", "echo started; exec sleep 30")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		stdout, err := cmd.StdoutPipe()
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+		line, err := bufio.NewReader(stdout).ReadString('\n')
+		require.NoError(t, err)
+		assert.Equal(t, "started\n", line)
+
+		start := time.Now()
+		require.NoError(t, stdin.Close())
+		err = cmd.Wait()
+		assert.Less(t, time.Since(start), 5*time.Second, "the command is killed")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 128+15, exitErr.ExitCode(), "killed by SIGTERM")
+	})
+	t.Run("runs while standard input is open", func(t *testing.T) {
+		// The shell gives a background job /dev/null as its standard
+		// input: the tie must not read that and kill the command at once.
+		cmd := exec.Command("sh", "-c", tiedExecScript, "sh", "sh", "-c", "sleep 0.3; echo still running")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		defer func() { _ = stdin.Close() }()
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		assert.Equal(t, "still running\n", string(out))
+	})
+	t.Run("command ends first", func(t *testing.T) {
+		cmd := exec.Command("sh", "-c", tiedExecScript, "sh", "sh", "-c", "echo done; exit 3")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		defer func() { _ = stdin.Close() }()
+		out, err := cmd.Output()
+		assert.Equal(t, "done\n", string(out))
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 3, exitErr.ExitCode())
+	})
 }

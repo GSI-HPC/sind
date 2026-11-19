@@ -25,7 +25,7 @@ toc: true
 | Munge helper (temporary, not with identity `clientIds`) | `<realm>-<cluster>-munge-helper` | `sind-dev-munge-helper` |
 | Journal helper (temporary, `monitoring` only) | `<realm>-<cluster>-journal-helper` | `sind-dev-journal-helper` |
 
-The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, and the realm's journal volume while it makes an empty journal directory for each node of a monitored cluster, using the controller's image, and are removed once they are done. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
+The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, and the realm's journal volume while it makes an empty journal directory for each node of a monitored cluster, using the controller's image, and are removed once they are done. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`). They carry no `sind.role`, which tells them from nodes: `sind get clusters`, `get cluster`, `get nodes`, `get node`, `get auth-key` and the power commands leave them out, so a cluster of which only a helper is left shows as `empty` with no nodes.
 
 With identity `clientIds` there is no munge volume: the authentication secret, `slurm.key`, is on the config volume (see [Slurm Configuration]({{< relref "/architecture/slurm-config#slurmkey" >}})).
 
@@ -57,7 +57,7 @@ A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has
 
 The stack runs on the mesh network only. Grafana, Prometheus and Loki have fixed addresses just below the DNS container's and the DNS names `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind`; Alloy has neither. Grafana, Prometheus and Loki are capped at 1 GB of memory, Alloy at 512 MB. Alloy runs as root in the host's cgroup namespace, with the host's `/sys/fs/cgroup` mounted read-only and the journal volume at `/var/log/sind`, so that it reads the nodes' cgroups and journals; it needs no Docker socket.
 
-The images do not follow `defaults.image`. sind pins each of them and pulls them with the node images when a monitored `sind create cluster` creates the stack. An existing stack keeps its containers and images until the realm's last cluster is deleted, or until a newer sind replaces the containers, keeping the volumes, because their images, configuration or dashboards changed. Deleting the realm's last cluster removes the stack's containers, then the mesh, then the stack's volumes and the journal volume.
+The images do not follow `defaults.image`. sind pins each of them and pulls them with the node images when a monitored `sind create cluster` creates the stack. An existing stack keeps its containers and images until the realm's last cluster is deleted, or until a newer sind replaces the containers, keeping the volumes, because their images, configuration or dashboards changed. Deleting the realm's last cluster removes the stack's containers, then the stack's volumes and the journal volume, then the mesh.
 
 ## Realm lock
 
@@ -67,7 +67,7 @@ The images do not follow `defaults.image`. sind pins each of them and pulls them
 
 While a sind command creates or deletes clusters or workers, connects or disconnects containers, or powers nodes on, it holds the realm's lock on the Docker daemon: this network, which it creates when it takes the lock and removes when it releases it (see [Advisory locking]({{< relref "/configuration/realms#advisory-locking" >}})). Docker refuses a second network of the same name, so only one command at a time holds it. A configuration-only network (`docker network create --config-only`) has the driver `null`: it takes no subnet from the address pools, has no bridge device, and no container joins it.
 
-Besides `sind.realm`, its labels name the command that holds it (`sind.lock.command`, `sind.lock.host`, `sind.lock.pid`), let sind tell whether a holder on the same host still runs (`sind.lock.boot-id`, `sind.lock.pid-ns`), and mark one acquisition (`sind.lock.token`). `sind get networks` does not list it.
+Besides `sind.realm`, its labels name the command that holds it (`sind.lock.command`, `sind.lock.host`, `sind.lock.pid`), let sind tell whether a holder on the same host still runs (`sind.lock.boot-id`, `sind.lock.pid-ns`, and `sind.lock.start`, the start time that tells the holder from a later process of its PID), and mark one acquisition (`sind.lock.token`). `sind get networks` does not list it.
 
 ## Volume mounts
 
@@ -95,7 +95,7 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 -v sind-dev-config:/etc/slurm:rw      # controller
 -v sind-dev-config:/etc/slurm:ro      # all others
 -v sind-dev-munge:/etc/munge:ro       # all nodes, not with identity clientIds
--v sind-dev-data:/data:rw             # all nodes
+--mount type=volume,source=sind-dev-data,target=/data  # all nodes
 -v sind-dev-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 -v sind-dev-home:/home:rw             # all nodes, with users
 --tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size
@@ -151,7 +151,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.identity` | `clientIds` | The identity mode: `local`, `nssSlurm` or `clientIds` |
 | `sind.monitoring` | `true` | Whether the node's cluster is [monitored]({{< relref "/guides/monitoring" >}}): `true` or `false`. For listings and filters only: sind tells a monitored node by its mount of the realm's journal volume, which an image cannot forge |
 
-Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image.
+Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image. Nodes of sind before v0.11.0 lack some of them, so there a label of the image shows through: `sind create worker` refuses a data, CVMFS, users, groups or identity label of the controller that is not empty and has the image's value.
 
 A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network, the SSH volume, the monitoring stack's volumes and the realm lock carry `sind.realm` only. The monitoring stack's containers carry no `sind.realm`, so that they do not count as a cluster of the realm, only the Compose labels and `sind.observability.version`, a fingerprint of their images, configuration and dashboards. `sind get networks` and `sind get volumes` find resources by these labels, leaving out the realm lock. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
 

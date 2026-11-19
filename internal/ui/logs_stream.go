@@ -18,6 +18,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
 // The log stream, GET /logs/{realm}/{cluster}?node=&source=&unit=&lines=,
@@ -44,12 +45,10 @@ const (
 	// logsBuffer is how many lines wait for a slow client before lines are
 	// skipped.
 	logsBuffer = 256
-	// logsMaxStreams is the most streams, and so children, at one time.
+	// logsMaxStreams is the most streams, and so children, of a server at
+	// one time.
 	logsMaxStreams = 16
 )
-
-// logsStreams counts the open streams.
-var logsStreams atomic.Int32
 
 // logsUnitRE is what a systemd unit name may look like. It starts with a
 // letter or digit, so that it is never read as an option of journalctl.
@@ -82,18 +81,18 @@ type logsReq struct {
 }
 
 // logsArgs returns the docker arguments of a stream. Every value in them
-// is a name that the store knows, or a unit that passed logsUnitRE.
+// is a name that the store knows, or a unit that passed logsUnitRE. The
+// journalctl of a journal stream ends with the docker CLI
+// (docker.TiedExecArgs), which the end of the stream kills: it would
+// otherwise follow the journal, and hold an inotify instance, until the
+// node stops.
 func logsArgs(q logsReq) []string {
 	tail := q.tail
 	opts := cluster.LogOptions{Follow: true, Tail: &tail}
 	if q.src == logsDocker {
 		return cluster.ContainerLogArgs(q.realm, q.node, q.cluster, opts)
 	}
-	if q.unit != "" {
-		return cluster.ServiceLogArgs(q.realm, q.node, q.cluster, q.unit, opts)
-	}
-	return []string{"exec", string(cluster.ContainerName(q.realm, q.cluster, q.node)),
-		"journalctl", "--follow", "-n", fmt.Sprint(tail)}
+	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), cluster.ServiceLogCommand(q.unit, opts)...)
 }
 
 // logsCheck validates the request against the store.
@@ -141,12 +140,12 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	if logsStreams.Add(1) > logsMaxStreams {
-		logsStreams.Add(-1)
+	if s.logsStreams.Add(1) > logsMaxStreams {
+		s.logsStreams.Add(-1)
 		http.Error(w, "too many log streams are open", http.StatusTooManyRequests)
 		return
 	}
-	defer logsStreams.Add(-1)
+	defer s.logsStreams.Add(-1)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

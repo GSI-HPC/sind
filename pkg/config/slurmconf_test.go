@@ -90,6 +90,29 @@ func TestSection_Parameter(t *testing.T) {
 	assert.False(t, frag.SetsParameter("ReturnToService"))
 }
 
+func TestListsFlag(t *testing.T) {
+	assert.True(t, ListsFlag("use_interactive_step, ENABLE_NSS_SLURM", "enable_nss_slurm"))
+	assert.False(t, ListsFlag("enable_nss_slurm_x", "enable_nss_slurm"))
+}
+
+func TestIsPlugin(t *testing.T) {
+	assert.True(t, IsPlugin("auth/slurm", "auth/slurm"))
+	assert.True(t, IsPlugin(" slurm ", "auth/slurm"))
+	assert.False(t, IsPlugin("cred/slurm", "auth/slurm"))
+	assert.False(t, IsPlugin("Auth/Slurm", "auth/slurm"))
+	assert.False(t, IsPlugin("", "auth/slurm"))
+	assert.True(t, IsPlugin("slurm", "slurm"))
+	assert.False(t, IsPlugin("", "slurm"))
+	assert.False(t, ListsPlugin("a,,b", "slurm"))
+}
+
+func TestListsPlugin(t *testing.T) {
+	assert.True(t, ListsPlugin("auth/jwt", "auth/jwt"))
+	assert.True(t, ListsPlugin("auth/munge, jwt", "auth/jwt"))
+	assert.False(t, ListsPlugin("auth/jwtx", "auth/jwt"))
+	assert.False(t, ListsPlugin("", "auth/jwt"))
+}
+
 func TestListsValue(t *testing.T) {
 	assert.True(t, ListsValue("enable_nss_slurm", "enable_nss_slurm"))
 	assert.True(t, ListsValue("use_interactive_step, enable_nss_slurm", "enable_nss_slurm"))

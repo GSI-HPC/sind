@@ -313,6 +313,62 @@ func TestCompleteExecClusterArg_AfterDashDash(t *testing.T) {
 	assert.Equal(t, cobra.ShellCompDirectiveDefault, directive)
 }
 
+// TestCompleteExecClusterArg_Flags verifies that exec's own flags, which
+// cobra hands over unparsed, are not taken for the cluster, and that a
+// --realm after exec names the realm whose clusters are completed.
+func TestCompleteExecClusterArg_Flags(t *testing.T) {
+	// networks records the arguments of docker network ls in call.
+	networks := func(call *string) *mock.Executor {
+		return &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+			if args[0] == "network" {
+				*call = strings.Join(args, " ")
+				return mock.Result{Stdout: `{"Name":"ci-dev-net","Labels":"sind.realm=ci,sind.cluster=dev"}`}
+			}
+			return mock.Result{} // no volumes
+		}}
+	}
+	for name, tc := range map[string]struct {
+		args      []string
+		wantRealm string
+	}{
+		"user":                 {[]string{"-u", "alice"}, "label=sind.realm=sind"},
+		"user with =":          {[]string{"--user=alice"}, "label=sind.realm=sind"},
+		"realm":                {[]string{"--realm", "ci"}, "label=sind.realm=ci"},
+		"realm and user":       {[]string{"--realm=ci", "-u", "alice", "-v"}, "label=sind.realm=ci"},
+		"root flag after exec": {[]string{"--progress", "plain"}, "label=sind.realm=sind"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var call string
+			sub := findCmd(completionCtx(networks(&call)), t, "exec")
+
+			names, directive := completeExecClusterArg(sub, tc.args, "")
+			assert.ElementsMatch(t, []string{"dev"}, names)
+			assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+			assert.Contains(t, call, tc.wantRealm)
+		})
+	}
+
+	for name, args := range map[string][]string{
+		"cluster after a flag":  {"-u", "alice", "dev"},
+		"cluster before a flag": {"dev", "-u", "alice"},
+		"a flag without value":  {"-u"},
+		"an unknown flag":       {"--no-such-flag"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			sub := findCmd(completionCtx(&mock.Executor{}), t, "exec")
+
+			names, directive := completeExecClusterArg(sub, args, "")
+			assert.Nil(t, names)
+			assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+		})
+	}
+
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "exec")
+	names, directive := completeExecClusterArg(sub, []string{"-u", "alice", "--"}, "")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveDefault, directive, "after --, the command is completed")
+}
+
 func TestCompleteClusterNames_DockerError(t *testing.T) {
 	mock := &mock.Executor{OnCall: func([]string, string) mock.Result {
 		return mock.Result{Stderr: "Error", Err: assert.AnError}

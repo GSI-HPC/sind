@@ -12,7 +12,8 @@ import (
 )
 
 // DaemonInfo is the part of `docker info` that sind checks: facts about the
-// daemon, which need not run on the machine sind runs on.
+// daemon, which need not run on the machine sind runs on, and the version
+// of the docker CLI that asked.
 type DaemonInfo struct {
 	// ServerVersion is the Docker Engine version, e.g. "28.1.1".
 	ServerVersion string `json:"ServerVersion"`
@@ -39,13 +40,19 @@ type DaemonInfo struct {
 	// CPUs: what all containers share.
 	MemTotal int64 `json:"MemTotal"`
 	NCPU     int   `json:"NCPU"`
+	// ClientVersion is the version of the docker CLI, e.g. "28.1.1", from
+	// the output's ClientInfo: the CLI parses the options of docker create
+	// itself, so an old one refuses some that the Engine knows.
+	ClientVersion string `json:"-"`
 }
 
 // Info runs `docker info` and returns what it says about the daemon.
 //
 // With --format the docker CLI reports a daemon it cannot reach in the
-// output's ServerErrors, and may still exit 0; Info returns the first of
-// them as its error.
+// output's ServerErrors, and may still exit 0 (up to Docker 28.0). Info
+// returns the first entry that says that the daemon could not be reached
+// as an *UnreachableError, as a failed command would, and else the first
+// entry as a plain error.
 func (c *Client) Info(ctx context.Context) (*DaemonInfo, error) {
 	stdout, _, err := c.run(ctx, "info", "--format", "{{json .}}")
 	if err != nil {
@@ -54,9 +61,17 @@ func (c *Client) Info(ctx context.Context) (*DaemonInfo, error) {
 	var out struct {
 		DaemonInfo
 		ServerErrors []string `json:"ServerErrors"`
+		ClientInfo   struct {
+			Version string `json:"Version"`
+		} `json:"ClientInfo"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &out); err != nil {
 		return nil, fmt.Errorf("parsing docker info: %w", err)
+	}
+	for _, msg := range out.ServerErrors {
+		if reason, ok := unreachableReason(msg); ok {
+			return nil, &UnreachableError{Err: errors.New(msg), Reason: reason}
+		}
 	}
 	if len(out.ServerErrors) > 0 {
 		return nil, errors.New(out.ServerErrors[0])
@@ -64,6 +79,7 @@ func (c *Client) Info(ctx context.Context) (*DaemonInfo, error) {
 	if out.ServerVersion == "" {
 		return nil, errors.New("docker info reported no server version")
 	}
+	out.ClientVersion = out.ClientInfo.Version
 	return &out.DaemonInfo, nil
 }
 

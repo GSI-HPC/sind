@@ -202,3 +202,20 @@ func TestIsUITraceState(t *testing.T) {
 	assert.False(t, IsUITraceState(""))
 	assert.False(t, IsUITraceState("sind=terminal"))
 }
+
+func TestSetRunsErr(t *testing.T) {
+	s := New()
+	sub := s.Notifier().Subscribe()
+	defer sub.Close()
+
+	s.SetRunsErr("read activity.jsonl: is a directory")
+	assert.Equal(t, "read activity.jsonl: is a directory", s.Snapshot().RunsErr)
+	assert.ElementsMatch(t, []Topic{TopicRuns, TopicTasks}, sub.Take())
+
+	s.SetRunsErr("read activity.jsonl: is a directory")
+	assert.Empty(t, sub.Take(), "the same error again notifies nothing")
+
+	s.SetRunsErr("")
+	assert.Empty(t, s.Snapshot().RunsErr)
+	assert.ElementsMatch(t, []Topic{TopicRuns, TopicTasks}, sub.Take())
+}

@@ -31,6 +31,7 @@ const (
 	labelLockPID     = "sind.lock.pid"
 	labelLockBootID  = "sind.lock.boot-id"
 	labelLockPIDNS   = "sind.lock.pid-ns"
+	labelLockStart   = "sind.lock.start"
 )
 
 // Timing of the daemon lock.
@@ -40,8 +41,8 @@ const (
 	// the most.
 	lockPollFirst = 100 * time.Millisecond
 	lockPollMax   = 2 * time.Second
-	// lockHintAfter is how long LockRealm waits for a holder whose process
-	// it cannot check before it says how to remove the lock.
+	// lockHintAfter is how long LockRealm waits for a holder that it cannot
+	// tell for sure still runs before it says how to remove the lock.
 	lockHintAfter = time.Minute
 	// lockCleanupTimeout bounds each removal of the lock, which runs after
 	// the caller's context may have ended.
@@ -71,6 +72,7 @@ type LockHolder struct {
 	token  string
 	bootID string
 	pidNS  string
+	start  string
 }
 
 // String describes the holder for a message: its command, process and host,
@@ -93,6 +95,7 @@ func holderOf(meta *docker.NetworkMeta) *LockHolder {
 		token:   meta.Labels[labelLockToken],
 		bootID:  meta.Labels[labelLockBootID],
 		pidNS:   meta.Labels[labelLockPIDNS],
+		start:   meta.Labels[labelLockStart],
 	}
 }
 
@@ -129,22 +132,50 @@ func Holder(ctx context.Context, client *docker.Client, realm string) (*LockHold
 
 // process identifies a process among the machines and containers that share
 // a Docker daemon: by its host name, the boot ID of its kernel, its PID
-// namespace and its PID in that namespace. An empty part is one that could
-// not be read; it never matches.
+// namespace, its PID in that namespace and its start time, which tells it
+// from a later process that got the same PID. An empty part is one that
+// could not be read; it never matches.
 type process struct {
 	host   string
 	bootID string
 	pidNS  string
 	pid    int
+	start  string
 }
 
 // self returns the identity of the calling process. procRoot is /proc
-// outside tests.
+// outside tests. It reads the start time only from a procRoot of its own
+// PID namespace, whose self is its PID, as only there the start times of
+// other PIDs are those of the processes that it can signal.
 func self(procRoot string) process {
 	host, _ := os.Hostname()
 	bootID, _ := os.ReadFile(filepath.Join(procRoot, "sys", "kernel", "random", "boot_id"))
 	pidNS, _ := os.Readlink(filepath.Join(procRoot, "self", "ns", "pid"))
-	return process{host: host, bootID: strings.TrimSpace(string(bootID)), pidNS: pidNS, pid: os.Getpid()}
+	p := process{host: host, bootID: strings.TrimSpace(string(bootID)), pidNS: pidNS, pid: os.Getpid()}
+	if link, _ := os.Readlink(filepath.Join(procRoot, "self")); link == strconv.Itoa(p.pid) {
+		p.start = startTime(procRoot, p.pid)
+	}
+	return p
+}
+
+// startTime returns the start time of process pid, in clock ticks since
+// boot, from field 22 of procRoot/<pid>/stat, or "" when it cannot read it.
+func startTime(procRoot string, pid int) string {
+	stat, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return ""
+	}
+	// Field 2, the command name, is in parentheses and may hold spaces and
+	// parentheses; field 3 follows the last ')'.
+	i := strings.LastIndexByte(string(stat), ')')
+	if i < 0 {
+		return ""
+	}
+	fields := strings.Fields(string(stat[i+1:]))
+	if len(fields) < 20 {
+		return ""
+	}
+	return fields[19]
 }
 
 // labels returns the labels of the lock that p takes in realm.
@@ -157,6 +188,7 @@ func (p process) labels(realm, token, command string) docker.Labels {
 		labelLockPID:     strconv.Itoa(p.pid),
 		labelLockBootID:  p.bootID,
 		labelLockPIDNS:   p.pidNS,
+		labelLockStart:   p.start,
 	}
 }
 
@@ -169,6 +201,33 @@ func (p process) sees(h *LockHolder) bool {
 	return h.PID > 0 && h.Host == p.host &&
 		p.bootID != "" && h.bootID == p.bootID &&
 		p.pidNS != "" && h.pidNS == p.pidNS
+}
+
+// holderRuns reports whether the holder h of a lock still runs, as far as
+// me can tell, and whether it can tell for sure. A holder that me cannot
+// see runs. One that it sees is gone when its PID is free, or taken by a
+// process that started at another time, such as me: me does not hold the
+// lock it tries to take, but another goroutine of its process may, which
+// started when me did. A holder without a start time, of an earlier sind,
+// runs while its PID is taken, but not for sure, as the PID may have been
+// given to another process.
+func (o *LockOptions) holderRuns(me process, h *LockHolder) (runs, sure bool) {
+	switch {
+	case !me.sees(h):
+		return true, false
+	case h.PID == me.pid:
+		return me.start == "" || h.start == me.start, me.start != ""
+	case !o.alive(h.PID):
+		return false, true
+	case me.start == "" || h.start == "":
+		return true, false
+	}
+	start := startTime(o.procRoot, h.PID)
+	if start == "" {
+		// It ended meanwhile, or its /proc entry is hidden (hidepid).
+		return true, false
+	}
+	return start == h.start, true
 }
 
 // processAlive reports whether a process with the PID runs. EPERM means
@@ -203,8 +262,14 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 	labels := me.labels(realm, token, cmp.Or(o.Command, commandLine(os.Args)))
 
 	delay := o.pollFirst
-	var waitStart time.Time
-	hinted := false
+	// The wait notice and the hint are about one holder: the lock can
+	// change hands while this client waits, as clients take a freed lock in
+	// no particular order.
+	var (
+		waitFor   docker.NetworkID
+		waitStart time.Time
+		hinted    bool
+	)
 	for {
 		id, err := client.CreateConfigOnlyNetwork(ctx, name, labels)
 		if err == nil {
@@ -225,21 +290,25 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 		if err != nil {
 			return nil, fmt.Errorf("inspecting %s: %w", name, err)
 		}
+		runs, sure := true, false
+		if h != nil && h.token != "" {
+			runs, sure = o.holderRuns(me, h)
+		}
 		switch {
 		case h == nil:
 			// Released between the create and the inspect: try again.
 		case h.token == "":
 			return nil, fmt.Errorf("network %s exists but is not a sind realm lock: remove or rename it", name)
-		case me.sees(h) && !o.alive(h.PID):
+		case !runs:
 			o.warn(ctx, fmt.Sprintf("removing the realm lock of %s, which no longer runs", h))
 			if err := docker.IgnoreNotFound(client.RemoveNetworkByID(ctx, h.id)); err != nil {
 				return nil, fmt.Errorf("removing %s: %w", name, err)
 			}
 			continue
-		case waitStart.IsZero():
-			waitStart = time.Now()
+		case h.id != waitFor:
+			waitFor, waitStart, hinted = h.id, time.Now(), false
 			o.waiting(ctx, realm, h)
-		case !hinted && !me.sees(h) && time.Since(waitStart) >= o.hintAfter:
+		case !hinted && !sure && time.Since(waitStart) >= o.hintAfter:
 			hinted = true
 			o.warn(ctx, fmt.Sprintf("the realm lock is still held by %s; if that command no longer runs, remove the lock with: docker network rm %s", h, name))
 		}

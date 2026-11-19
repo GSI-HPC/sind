@@ -166,27 +166,27 @@ func jumpTargetOf(nodes []pgNode, clusters []pgCluster, ctx jumpContext, words [
 		return t
 	}
 	var picked []pgNode
-	// names holds the part of the node set that names each name, as
-	// typed: the groups and the clusters keep that order.
-	names := map[string]int{}
-	for i, part := range jumpSetParts(strings.Join(words, ",")) {
+	// sets are the parts of the node set, as typed: the groups and the
+	// clusters keep that order. A part is never expanded: the names of the
+	// snapshot are looked up in it, so a typed range of a million hosts
+	// costs no more than one of three.
+	var sets []*nodeset.NodeSet
+	for _, part := range jumpSetParts(strings.Join(words, ",")) {
 		if set, err := nodeset.Parse(part); err == nil {
-			for _, name := range set.Expand() {
-				if _, ok := names[name]; !ok {
-					names[name] = i
-				}
-			}
+			sets = append(sets, set)
 		}
 	}
 	typed := map[string]int{}
+	// at returns the first part that names one of keys.
 	at := func(keys ...string) (int, bool) {
-		best, ok := 0, false
-		for _, k := range keys {
-			if i, has := names[k]; has && (!ok || i < best) {
-				best, ok = i, true
+		for i, set := range sets {
+			for _, k := range keys {
+				if set.Contains(k) {
+					return i, true
+				}
 			}
 		}
-		return best, ok
+		return 0, false
 	}
 	for _, n := range nodes {
 		if i, ok := at(n.Short+"."+n.Cluster, n.Arg, n.Short); ok {
@@ -198,7 +198,7 @@ func jumpTargetOf(nodes []pgNode, clusters []pgCluster, ctx jumpContext, words [
 		}
 	}
 	for _, c := range clusters {
-		if i, ok := names[c.Name]; ok {
+		if i, ok := at(c.Name); ok {
 			t.Clusters = append(t.Clusters, c)
 			typed["cluster "+c.Realm+"/"+c.Name] = i
 		}

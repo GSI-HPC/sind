@@ -85,7 +85,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 
 func TestRunDockTaskEnded(t *testing.T) {
 	failed := runFixture(t, "create-failed.jsonl", -1)[0]
-	task := store.Task{ID: "t", Display: "d", Trace: failed.Trace, Start: runAt(0), End: failed.End, Status: store.TaskFailed, Err: "node worker-1: timed out\nmore", Output: "Error: node worker-1: timed out\nmore"}
+	task := store.Task{ID: "t", Display: "d", Trace: failed.Trace, Start: runAt(0), End: failed.End, Status: store.TaskFailed, Err: "node worker-1: timed out\nmore", Output: "12:00:00.000 ERRO node worker-1: timed out\nmore"}
 	d := runDockOf(store.Snapshot{Runs: []store.Run{failed}, Tasks: []store.Task{task}}, runAt(900))
 	require.Len(t, d.Ended, 1)
 	c := d.Ended[0]
@@ -422,6 +422,16 @@ func TestRunDockTemplates(t *testing.T) {
 	menu = runFragment(t, ts, runNow, "tasks-menu")
 	assert.Contains(t, menu, `aria-label="Commands: 1 ended: 1 done"><span class="cmds-p"><i class="dot" aria-hidden="true"></i>1<span class="u"> ended</span></span></button>`)
 	assert.Contains(t, menu, `<span class="cmds-s">3 nodes ready for jobs · <a href="/clusters/sind/dev">Open dev</a></span>`)
+
+	// A log that sind ui cannot read: the list says why the commands show
+	// no progress, and a task without a run says so in place of starting.
+	ts = runTestServer(t, runNow)
+	ts.st.SetRunsErr("read /state/activity.jsonl: is a directory")
+	ts.st.AddTask(store.Task{ID: "t-x", Action: "power", Realm: "sind", Cluster: "dev", Display: "sind power on dev", Trace: "trace-x", Start: runAt(0), Status: store.TaskRunning})
+	menu = runFragment(t, ts, runNow, "tasks-menu")
+	assert.Contains(t, menu, `<span class="bad">sind ui cannot read the activity log, so the commands show no progress: read /state/activity.jsonl: is a directory</span>`)
+	assert.NotContains(t, menu, "A command from a terminal shows while it runs.")
+	assert.Contains(t, runFragment(t, ts, runNow, "tasks"), `<span class="ts-l">no progress to show</span>`)
 
 	// Nothing to show: no strip, no button.
 	ts = runTestServer(t, runNow)

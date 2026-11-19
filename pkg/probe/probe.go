@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,9 +74,9 @@ type Probe struct {
 	Name  string
 	Check Func
 	// Unit is the systemd unit whose state the check follows, as busctl
-	// names it ("munge.service"), or empty. A wait with events does not run
-	// a check that has passed again until an event of its unit arrives (see
-	// UntilReadyWithEvents).
+	// names it ("munge.service"), or empty. A wait with events that has had
+	// a unit event of the container does not run a check that has passed
+	// again until an event of its unit arrives (see UntilReadyWithEvents).
 	Unit string
 }
 
@@ -102,7 +103,7 @@ func unitReady(svc Service) Func {
 
 // ForService returns the readiness probe for a service, which follows the
 // service's systemd unit. A service sind does not wait for (mariadb) gets
-// a probe without a check.
+// a probe without a check, which UntilReady and UntilReadyWithEvents skip.
 func ForService(svc Service) Probe {
 	check, ok := serviceChecks[svc]
 	if !ok {
@@ -140,7 +141,9 @@ const DefaultInterval = 500 * time.Millisecond
 // killed call; a probe after it, which the round reached as that one
 // passed, with its own error. A wait that its deadline ended reads "timed
 // out" and wraps context.DeadlineExceeded. The error does not name the
-// node, which the caller knows by a better name than the container's.
+// node, which the caller knows by a better name than the container's. A
+// probe without a Check, as ForService returns for a service that sind
+// does not wait for, is skipped.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
@@ -158,11 +161,16 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 //
 //   - an event of its unit (Probe.Unit) runs it again: a unit that became
 //     active again, or one that failed, which a unit probe reports as a
-//     TerminalError;
+//     TerminalError. A unit probe that passed before the wait had any unit
+//     event of the container runs again in every round: systemd sends unit
+//     events only while a D-Bus client of the node has subscribed to them,
+//     which the systemd monitor does not do, so until one has come the
+//     monitor's silence tells nothing;
 //   - another event of the container (start, oom, pause, unpause) runs
 //     every passed probe again;
 //   - a full events buffer runs every passed probe again, as the watcher
-//     drops the events a full subscriber has no room for;
+//     drops the events a full subscriber has no room for (a monitor error
+//     takes the place of the oldest one instead);
 //   - from a monitor error on (monitor.EventMonitorError of the container
 //     or of the whole watcher), once events is closed, and for an
 //     unbuffered events channel, every round runs every probe, as in
@@ -188,6 +196,7 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 	ctx, wait := spans.Start(ctx, spans.KindWait, "ready", bound...)
 	defer func() { wait.End(err) }()
 	log := sindlog.From(ctx)
+	probes = slices.DeleteFunc(slices.Clone(probes), func(p Probe) bool { return p.Check == nil })
 	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
 
@@ -279,6 +288,10 @@ type progress struct {
 	// trusted is whether the events tell the wait about changes: they come
 	// on a buffered channel, and no monitor has stopped.
 	trusted bool
+	// unitEvents is whether a unit event of the container has come, which
+	// shows that systemd sends them (see UntilReadyWithEvents); until then
+	// a passed unit probe is not skipped.
+	unitEvents bool
 	// died is the error of the wait once a die event of its container has
 	// come, which ends it before the next round.
 	died error
@@ -297,7 +310,7 @@ func newProgress(probes []Probe, events <-chan monitor.Event) *progress {
 // pass records that probe i passed: later rounds skip it, if the events
 // can tell when it changes.
 func (p *progress) pass(i int) {
-	p.passed[i] = p.trusted
+	p.passed[i] = p.trusted && (p.probes[i].Unit == "" || p.unitEvents)
 }
 
 // distrust makes every later round run every probe: the events no longer
@@ -366,6 +379,7 @@ func (p *progress) changed(ev monitor.Event) {
 	case ev.Kind == monitor.EventMonitorError:
 		p.distrust()
 	case ev.Unit != "":
+		p.unitEvents = true
 		for i, probe := range p.probes {
 			if probe.Unit == ev.Unit {
 				p.passed[i] = false
@@ -594,20 +608,21 @@ func nodeStateText(n slurm.NodeInfo) string {
 	return n.Name + " (" + n.State + ": " + n.Reason + ")"
 }
 
-// SlurmrestdPort is the TCP port slurmrestd listens on: SLURMRESTD_LISTEN
-// of the unit Slurm ships, Slurm's default port for it.
-const SlurmrestdPort = "6820"
+// SlurmrestdPort is the TCP port slurmrestd listens on.
+//
+// Deprecated: use slurm.SlurmrestdPort.
+const SlurmrestdPort = slurm.SlurmrestdPort
 
 // SlurmrestdReady verifies that the slurmrestd service is active and
-// accepts connections on SlurmrestdPort. The unit is of type simple, so it
+// accepts connections on slurm.SlurmrestdPort. The unit is of type simple, so it
 // is active as soon as slurmrestd started, before it listens. A failed unit
 // is a TerminalError (see UnitActive).
 func SlurmrestdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	if err := UnitActive(ctx, client, name, string(ServiceSlurmrestd)); err != nil {
 		return err
 	}
-	if _, err := client.Exec(ctx, name, "bash", "-c", "exec 3<>/dev/tcp/localhost/"+SlurmrestdPort); err != nil {
-		return fmt.Errorf("slurmrestd not listening on port %s: %w", SlurmrestdPort, err)
+	if _, err := client.Exec(ctx, name, "bash", "-c", "exec 3<>/dev/tcp/localhost/"+slurm.SlurmrestdPort); err != nil {
+		return fmt.Errorf("slurmrestd not listening on port %s: %w", slurm.SlurmrestdPort, err)
 	}
 	return nil
 }
@@ -659,11 +674,13 @@ func failedUnit(ctx context.Context, client *docker.Client, name docker.Containe
 }
 
 // Snapshot returns a one-shot readiness snapshot of the given services on a
-// running node, fusing the systemd-based checks (munge, sshd, slurmd,
-// mariadb, slurmdbd) into a single docker exec. slurmctld is checked with
-// scontrol ping instead, because "slurmctld is active" is weaker than
-// "slurmctld answers RPCs" — the unit can be active during startup while RPCs
-// still fail.
+// running node, fusing the checks of every service but slurmctld (munge,
+// sshd, slurmd, mariadb, slurmdbd, sackd, slurmrestd) into a single
+// systemctl is-active in one docker exec. A service passes when its unit
+// is active: slurmrestd's port is not checked, as SlurmrestdReady does.
+// slurmctld is checked with scontrol ping instead, because "slurmctld is
+// active" is weaker than "slurmctld answers RPCs" — the unit can be active
+// during startup while RPCs still fail.
 //
 // Snapshot is intended for status-query call sites such as cluster.GetStatus.
 // Unlike the individual *Ready probes, it does not surface per-probe errors;

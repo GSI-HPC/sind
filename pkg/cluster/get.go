@@ -35,7 +35,10 @@ type Summary struct {
 }
 
 // GetClusters lists all sind clusters by querying Docker for containers
-// with the sind.cluster label. Containers are grouped by cluster name.
+// with the sind.cluster label. Containers are grouped by cluster name; a
+// helper (see isNode) lists its cluster but is not counted as a node, so
+// that a cluster an interrupted create left only a helper of shows as
+// empty.
 func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*Summary, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
@@ -55,13 +58,16 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		}
 		cd, ok := byCluster[name]
 		if !ok {
-			cd = &clusterData{
-				summary: &Summary{
-					Name:         name,
-					SlurmVersion: c.Labels[LabelSlurmVersion],
-				},
-			}
+			cd = &clusterData{summary: &Summary{Name: name}}
 			byCluster[name] = cd
+		}
+		// A helper left behind lists its cluster, as a node does, but
+		// counts as none.
+		if !isNode(c.Labels) {
+			continue
+		}
+		if cd.summary.SlurmVersion == "" {
+			cd.summary.SlurmVersion = c.Labels[LabelSlurmVersion]
 		}
 		cd.summary.NodeCount++
 		cd.states = append(cd.states, c.State)
@@ -121,13 +127,17 @@ type NodeDetail struct {
 
 // GetNode returns the identity and health of one node, for 'sind get node',
 // with what slurmctld says about a managed worker (NodeDetail.Slurm).
-// A node that does not exist fails with what CheckNode reports for a
-// cluster without containers in the realm (ErrClusterNotFound), and
-// otherwise with a "not found" error naming the node and its cluster.
+// A node that does not exist, whose container's labels name another realm
+// or cluster, or whose container is a helper (see isNode), fails with what
+// CheckNode reports for a cluster without containers in the realm
+// (ErrClusterNotFound), and otherwise with a "not found" error naming the
+// node and its cluster.
 func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) (*NodeDetail, error) {
 	containerName := ContainerName(realm, clusterName, shortName)
 	info, err := client.InspectContainer(ctx, containerName)
-	if docker.IsNotFound(err) {
+	// Realm and cluster join with a hyphen in the name, so another realm's
+	// node can have this one's name (see ownedBy), and a helper is no node.
+	if docker.IsNotFound(err) || err == nil && (!ownedBy(info.Labels, realm, clusterName) || !isNode(info.Labels)) {
 		// Tell a missing cluster from a missing node, as logs and ssh do.
 		if err := CheckNode(ctx, client, realm, clusterName, shortName); err != nil {
 			return nil, err
@@ -171,7 +181,7 @@ func GetAllNodes(ctx context.Context, client *docker.Client, realm string) ([]*N
 // GetNodes lists all nodes in the named cluster. A cluster that does not
 // exist is an error (see ErrClusterNotFound), not an empty list.
 func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName string) ([]*NodeSummary, error) {
-	containers, err := clusterContainers(ctx, client, realm, clusterName)
+	containers, err := clusterNodes(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -190,9 +200,12 @@ func GetNodeNames(ctx context.Context, client *docker.Client, realm string, role
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
-	// Mesh containers carry the realm label but no cluster label.
+	// The mesh's and the monitoring stack's containers carry only the
+	// Compose labels of <realm>-mesh, so the list has none of them; a
+	// container of the realm without a cluster label is no node either,
+	// nor is a helper, which has no role.
 	containers = slices.DeleteFunc(containers, func(c docker.ContainerListEntry) bool {
-		return c.Labels[LabelCluster] == "" || len(roles) > 0 && !slices.Contains(roles, config.Role(c.Labels[LabelRole]))
+		return c.Labels[LabelCluster] == "" || !isNode(c.Labels) || len(roles) > 0 && !slices.Contains(roles, config.Role(c.Labels[LabelRole]))
 	})
 	slices.SortFunc(containers, func(a, b docker.ContainerListEntry) int {
 		return cmp.Or(natsort.Compare(a.Labels[LabelCluster], b.Labels[LabelCluster]),
@@ -206,14 +219,15 @@ func GetNodeNames(ctx context.Context, client *docker.Client, realm string, role
 	return names, nil
 }
 
-// buildNodeSummaries converts container list entries into node summaries.
+// buildNodeSummaries converts container list entries into node summaries,
+// of the nodes alone: mesh containers and helpers are left out.
 func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string, containers []docker.ContainerListEntry) ([]*NodeSummary, error) {
 	// Filter containers that belong to a cluster and collect names for a
 	// single batched docker inspect call.
 	filtered := make([]docker.ContainerListEntry, 0, len(containers))
 	names := make([]docker.ContainerName, 0, len(containers))
 	for _, c := range containers {
-		if c.Labels[LabelCluster] == "" {
+		if c.Labels[LabelCluster] == "" || !isNode(c.Labels) {
 			continue
 		}
 		filtered = append(filtered, c)
@@ -224,16 +238,19 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 	// and shell completion, so an inspect failure should degrade to empty
 	// IPs rather than fail the whole call, with a warning that says why. A
 	// container that went away since the listing, as in a cluster being
-	// deleted, is no warning: the next listing leaves it out.
+	// deleted, is no warning, and only its IPs are missing: the next
+	// listing leaves it out.
 	ipByName := make(map[docker.ContainerName]map[docker.NetworkName]string, len(names))
-	if infos, err := client.InspectContainers(ctx, names...); docker.IsNotFound(err) {
-		sindlog.From(ctx).DebugContext(ctx, "listing the nodes without their IPs: a container is gone", "err", err)
-	} else if err != nil {
+	infos, err := client.InspectContainers(ctx, names...)
+	switch {
+	case docker.IsNotFound(err):
+		sindlog.From(ctx).DebugContext(ctx, "listing the nodes without the IPs of a container that is gone", "err", err)
+	case err != nil:
 		sindlog.Warn(ctx, fmt.Sprintf("listing the nodes without their IPs: %v", err))
-	} else {
-		for _, info := range infos {
-			ipByName[info.Name] = info.IPs
-		}
+		infos = nil
+	}
+	for _, info := range infos {
+		ipByName[info.Name] = info.IPs
 	}
 
 	result := make([]*NodeSummary, 0, len(filtered))
@@ -379,9 +396,15 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 	if authType != "" && !slices.Contains(AuthTypes, authType) {
 		return nil, fmt.Errorf("unknown authentication type %q: must be %s, %s or %s", authType, AuthMunge, AuthSlurm, AuthJWT)
 	}
-	containers, err := existingClusterContainers(ctx, client, realm, clusterName)
+	containers, err := clusterNodes(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
+	}
+	if err := checkClusterExists(ctx, client, realm, clusterName, containers); err != nil {
+		return nil, err
+	}
+	if len(containers) == 0 {
+		return nil, fmt.Errorf("cluster %q has no node to read a key from", clusterName)
 	}
 	primary := AuthMunge
 	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {

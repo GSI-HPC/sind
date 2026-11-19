@@ -40,8 +40,17 @@ func ContainerLogArgs(realm, node, cluster string, opts LogOptions) []string {
 // unit name (e.g. "slurmctld", "slurmd"), and opts selects following and the
 // number of lines.
 func ServiceLogArgs(realm, node, cluster, service string, opts LogOptions) []string {
-	args := []string{"exec", string(ContainerName(realm, cluster, node)),
-		"journalctl", "-u", service}
+	return append([]string{"exec", string(ContainerName(realm, cluster, node))}, ServiceLogCommand(service, opts)...)
+}
+
+// ServiceLogCommand returns the journalctl command line of ServiceLogArgs,
+// which runs in the node: the journal of the unit service, all units for
+// an empty one, with opts.
+func ServiceLogCommand(service string, opts LogOptions) []string {
+	args := []string{"journalctl"}
+	if service != "" {
+		args = append(args, "-u", service)
+	}
 	if opts.Follow {
 		args = append(args, "--follow")
 	}
@@ -54,11 +63,16 @@ func ServiceLogArgs(realm, node, cluster, service string, opts LogOptions) []str
 // NodeServices returns the systemd units of a node whose journal
 // ServiceLogArgs shows, by name: those get node checks on it, which depend
 // on its role and on whether sind manages Slurm on it. It inspects the
-// node's container, for shell completion.
+// node's container, for shell completion; a container whose labels name
+// another realm or cluster (see ownedBy), or a helper (see isNode), is not
+// the node.
 func NodeServices(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) ([]string, error) {
 	info, err := client.InspectContainer(ctx, ContainerName(realm, clusterName, shortName))
 	if err != nil {
 		return nil, fmt.Errorf("inspecting container: %w", err)
+	}
+	if !ownedBy(info.Labels, realm, clusterName) || !isNode(info.Labels) {
+		return nil, errorWith(ErrNodeNotFound, "node %q not found in cluster %q", shortName, clusterName)
 	}
 	services := nodeServices(config.Role(info.Labels[LabelRole]), info.Labels)
 	names := make([]string, len(services))

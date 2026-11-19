@@ -87,3 +87,14 @@ func TestDefaultRegistryHasTheShell(t *testing.T) {
 		assert.Contains(t, defaultRegistry.fragments, name)
 	}
 }
+
+func TestViewEnv(t *testing.T) {
+	assert.Nil(t, (&View{}).Env(ColDoctorKey), "a view without a server")
+	env := &Env{}
+	env.Put(ColDoctorKey, "x")
+	v := &View{env: env}
+	assert.Equal(t, "x", v.Env(ColDoctorKey))
+	assert.Equal(t, "x", viewEnv[string](v, ColDoctorKey))
+	assert.Nil(t, v.Env("collect.doctor"), "a plain string is another key")
+	assert.Zero(t, viewEnv[int](v, ColDoctorKey))
+}

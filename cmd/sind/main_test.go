@@ -36,7 +36,10 @@ import (
 // it names (fakeDockerSignals), like a docker exec whose command failed.
 // fakeDockerArgsEnv names a file the fake docker writes its arguments to,
 // one per line, before anything else. fakeDockerPSEnv makes it answer
-// `docker ps` at once, with the output it holds.
+// `docker ps` at once, with the output it holds, and fakeDockerNoNetworksEnv
+// `docker network inspect` at once, with a network not found.
+// fakeDockerStdoutEnv makes it write as many bytes as it names to stdout
+// and exit 0, after `docker ps`.
 //
 // Adapted from GSI-HPC/clusterctl cmd/clusterctl/signal_test.go.
 const (
@@ -45,10 +48,14 @@ const (
 	fakeDockerExitEnv = "SIND_TEST_DOCKER_EXIT"
 	fakeDockerArgsEnv = "SIND_TEST_DOCKER_ARGS"
 	fakeDockerPSEnv   = "SIND_TEST_DOCKER_PS"
+
+	fakeDockerNoNetworksEnv = "SIND_TEST_DOCKER_NO_NETWORKS"
+	fakeDockerStdoutEnv     = "SIND_TEST_DOCKER_STDOUT_BYTES"
 )
 
 // fakeDockerSignals are the signals fakeDockerExitEnv can name.
 var fakeDockerSignals = map[string]syscall.Signal{
+	"SIGHUP":  syscall.SIGHUP,
 	"SIGINT":  syscall.SIGINT,
 	"SIGKILL": syscall.SIGKILL,
 	"SIGTERM": syscall.SIGTERM,
@@ -102,6 +109,14 @@ func fakeDocker() {
 	if ps := os.Getenv(fakeDockerPSEnv); ps != "" && len(os.Args) > 1 && os.Args[1] == "ps" {
 		fmt.Print(ps)
 		os.Exit(0)
+	}
+	if n, err := strconv.Atoi(os.Getenv(fakeDockerStdoutEnv)); err == nil {
+		fmt.Print(strings.Repeat("x", n))
+		os.Exit(0)
+	}
+	if os.Getenv(fakeDockerNoNetworksEnv) != "" && len(os.Args) > 2 && os.Args[1] == "network" && os.Args[2] == "inspect" {
+		fmt.Fprintln(os.Stderr, "Error response from daemon: network "+os.Args[len(os.Args)-1]+" not found")
+		os.Exit(1)
 	}
 	if exit := os.Getenv(fakeDockerExitEnv); exit != "" {
 		if sig, ok := fakeDockerSignals[exit]; ok {
@@ -209,12 +224,13 @@ func TestSecondInterruptEndsTheProcess(t *testing.T) {
 	assert.Equal(t, syscall.SIGINT, status.Signal())
 }
 
-// TestInterruptExits130 checks that SIGINT and SIGTERM stop a command whose
-// docker call is still running, and that it exits 130. SIGTERM was not
-// caught, so `timeout` or `docker stop` killed sind without cleanup, and an
-// interrupt exited 1 with "signal: killed".
+// TestInterruptExits130 checks that SIGINT, SIGTERM and SIGHUP stop a
+// command whose docker call is still running, and that it exits 130.
+// SIGTERM and SIGHUP were not caught, so `timeout`, `docker stop` or a
+// terminal that went away killed sind without cleanup, and an interrupt
+// exited 1 with "signal: killed".
 func TestInterruptExits130(t *testing.T) {
-	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
 		t.Run(sig.String(), func(t *testing.T) {
 			t.Parallel()
 			cmd, started := child(t, "main", "get", "clusters")
@@ -228,6 +244,41 @@ func TestInterruptExits130(t *testing.T) {
 			assert.Equal(t, exitInterrupted, cmd.ProcessState.ExitCode(), "%v; stderr:\n%s", err, &stderr)
 			assert.Contains(t, stderr.String(), "interrupted: ")
 		})
+	}
+}
+
+// TestNohupKeepsRunningOnSIGHUP checks that sind run by nohup, which
+// starts it with SIGHUP ignored, keeps ignoring it.
+func TestNohupKeepsRunningOnSIGHUP(t *testing.T) {
+	t.Parallel()
+	nohup, err := exec.LookPath("nohup")
+	if err != nil {
+		t.Skip("no nohup")
+	}
+	cmd, started := child(t, "main", "get", "clusters")
+	cmd.Args = append([]string{nohup}, cmd.Args...)
+	cmd.Path = nohup
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Start())
+	waitForFile(t, started, cmd, &stderr)
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	require.NoError(t, cmd.Process.Signal(syscall.SIGHUP))
+	select {
+	case err := <-done:
+		t.Fatalf("sind ended on SIGHUP: %v; stderr:\n%s", err, &stderr)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	require.NoError(t, cmd.Process.Signal(os.Interrupt))
+	select {
+	case err := <-done:
+		assert.Equal(t, exitInterrupted, cmd.ProcessState.ExitCode(), "%v; stderr:\n%s", err, &stderr)
+	case <-time.After(15 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("sind did not end on SIGINT")
 	}
 }
 

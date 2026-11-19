@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -43,6 +44,25 @@ type actSeen[T any] struct {
 	at    time.Time
 }
 
+// actSeenMax is how many entries a cache of actSeen holds before it drops
+// those that are too old to use (actKeep).
+const actSeenMax = 256
+
+// actKeep keeps f in seen under key, as seen at now, unless ctx ended: an
+// error of a request that went away, such as context.Canceled, says
+// nothing of the image or the container. Once seen holds actSeenMax
+// entries, it drops those older than actImageTTL first, so that every
+// image typed into New cluster does not stay for good.
+func actKeep[T any](ctx context.Context, seen map[string]actSeen[T], key string, f T, now time.Time) {
+	if ctx.Err() != nil {
+		return
+	}
+	if len(seen) >= actSeenMax {
+		maps.DeleteFunc(seen, func(_ string, s actSeen[T]) bool { return now.Sub(s.at) >= actImageTTL })
+	}
+	seen[key] = actSeen[T]{f, now}
+}
+
 // newActImages returns the images of client.
 func newActImages(inspect func(context.Context, string) (docker.Image, bool, error), discover func(context.Context, string) (string, error)) *actImages {
 	return &actImages{inspect: inspect, discover: discover, now: time.Now, seen: map[string]actSeen[action.ImageFacts]{}, checked: map[string]string{}}
@@ -69,7 +89,7 @@ func (a *actImages) facts(ctx context.Context, image string) action.ImageFacts {
 			f.Version, f.Checked = v, true
 		}
 	}
-	a.seen[image] = actSeen[action.ImageFacts]{f, a.now()}
+	actKeep(ctx, a.seen, image, f, a.now())
 	return f
 }
 

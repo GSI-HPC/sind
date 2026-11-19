@@ -56,7 +56,7 @@ New workers take the indices after the highest one in the cluster: with `worker-
 
 ### Defaults from the newest worker
 
-New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list. Give one empty to add workers without any, e.g. `sind create worker --device=` on a cluster whose workers have `/dev/fuse`. An empty `--image`, `--memory` or `--tmp-size` is a usage error, so that an unset variable in `--image "$IMAGE"` does not quietly add workers like the newest one.
+New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker (`systempaths=unconfined` among them, which Docker records as unmasked `/proc` and `/sys` paths), so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list. Give one empty to add workers without any, e.g. `sind create worker --device=` on a cluster whose workers have `/dev/fuse`. An empty `--image`, `--memory` or `--tmp-size` is a usage error, so that an unset variable in `--image "$IMAGE"` does not quietly add workers like the newest one.
 
 Not inherited:
 
@@ -69,7 +69,7 @@ A cluster without workers gets the controller's image and 1 CPU, `512m` memory a
 
 Without `--image`, new workers run the image the newest worker (or the controller) runs, by its ID: the tag it was created from may since point to another image, even another Slurm release. `--pull` therefore needs `--image`.
 
-With `--image`, sind pulls the image once if the daemon does not have it (with `--pull` in any case), runs `slurmctld -V` in it, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.9`.
+With `--image`, sind pulls the image once if the daemon does not have it (with `--pull` in any case), runs `slurmd -V` in it, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. A worker image needs slurmd, not slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.9`.
 
 Before it creates a worker container, sind checks that the Docker host still mounts cgroup2 with `nsdelegate`, in a throwaway container of the controller's image, as [`sind create cluster`]({{< relref "/usage/cluster-lifecycle#preflight-checks" >}}) does, and fails with the commands that enable it otherwise.
 
@@ -142,6 +142,8 @@ On the page of a worker, the **⋯** menu has **Delete worker…** too.
 For managed workers, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.
 
 Deleting a managed worker needs a running controller: with the controller stopped or frozen, `sind delete worker` fails and removes nothing, as the node would otherwise stay in Slurm's configuration without a container. Unmanaged workers can be deleted at any time.
+
+A worker that `sind-nodes.conf` still defines but whose container is gone (left by a failed `sind create worker` that could not restore the file, or by a container removed outside sind) is deleted too: sind removes it from `sind-nodes.conf` and the mesh, and warns that it had no container. Any other name without a container fails with `node not found`, and nothing is deleted. So does a name without a container while sind cannot read `sind-nodes.conf`, as with a stopped controller: the error says why.
 
 ```bash
 # Remove a single worker

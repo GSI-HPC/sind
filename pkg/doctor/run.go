@@ -41,6 +41,8 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 		engine.Detail, engine.Remediation = DockerUnreachable(err)
 	} else if vErr := CheckDockerVersion(info.ServerVersion); vErr != nil {
 		engine.Detail = vErr.Error()
+	} else if cErr := checkCLIVersion(info.ClientVersion); cErr != nil {
+		engine.Detail, engine.Remediation = cErr.Error(), dockerCLIRemediation
 	} else {
 		engine.Status = clidoctor.StatusOK
 		engine.Detail = fmt.Sprintf("%s (>= %d.0)", info.ServerVersion, MinDockerMajor)
@@ -187,13 +189,13 @@ configuration and reboot.`
 
 // inotifyRemediation is shown when fs.inotify.max_user_instances is below
 // MinInotifyInstances.
-const inotifyRemediation = `Raise the limit now:
+var inotifyRemediation = fmt.Sprintf(`Raise the limit now:
 
-sudo sysctl fs.inotify.max_user_instances=1024
+sudo sysctl fs.inotify.max_user_instances=%[1]d
 
 Keep it across reboots:
 
-echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf`
+echo fs.inotify.max_user_instances=%[1]d | sudo tee /etc/sysctl.d/99-sind.conf`, MinInotifyInstances)
 
 // elsewhereRemediation is shown when the Docker daemon does not run on
 // this machine.

@@ -23,7 +23,7 @@ Every node also joins its realm's mesh network, which carries the realm's DNS se
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and `sind-ssh` |
 | Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS, connects [external containers](#external-containers) to the new cluster network |
 | Cluster deleted | Disconnects nodes, updates DNS (unless it was the last cluster) |
-| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns` and `sind-ssh`, detaches any other container from `sind-mesh` and removes it, then the stack's volumes |
+| Last cluster deleted | Removes the monitoring stack's containers and volumes, if any, then `sind-dns` and `sind-ssh`, detaches any other container from `sind-mesh` and removes it |
 
 The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.
 
@@ -69,9 +69,9 @@ prometheus.<realm>.sind → Prometheus, port 9090
 loki.<realm>.sind       → Loki, port 3100
 ```
 
-sind writes the records when it creates or deletes nodes, and again when `sind power on`, `reboot` or `cycle` start nodes: Docker can give a node another address each time it starts. CoreDNS reloads its configuration in place on `SIGUSR1`, without dropping queries.
+sind writes the records when it creates or deletes nodes, and again when `sind power on`, `reboot` or `cycle` start nodes: Docker can give a node another address each time it starts. The records have a TTL of one second, so the host's resolver does not keep a node's old address. CoreDNS reloads its configuration in place on `SIGUSR1`, without dropping queries.
 
-The DNS container is lightweight — no systemd or sshd.
+The DNS container is lightweight — no systemd or sshd. It logs errors only, not each query, so `docker logs sind-dns` stays short.
 
 ### After a host reboot or a Docker daemon restart
 
@@ -194,8 +194,9 @@ The `sind-ssh-config` volume contains:
 | Event | Result |
 |-------|--------|
 | First cluster created | Generates Ed25519 keypair, starts `sind-ssh` |
-| Cluster created | Connects `sind-ssh` to cluster network |
+| Cluster created | Connects `sind-ssh` to cluster network; generates a keypair for a volume that has no public key, as an interrupted first create leaves it |
 | Node created | Public key injected, host key collected and added to `known_hosts` |
+| Node powered on | Host key added again when `known_hosts` lacks it |
 | Node deleted | Entry removed from `known_hosts` |
 | Cluster deleted | Disconnects `sind-ssh`, and any other container still attached, from the cluster network |
 | Last cluster deleted | SSH container and volume removed |

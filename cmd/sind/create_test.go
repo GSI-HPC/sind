@@ -421,6 +421,26 @@ accounts:
 	assert.Contains(t, stderr, "Warning: Slurm does not enforce the accounts' limits (physics: MaxJobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it\n")
 }
 
+func TestCreateCluster_EscapesConfigWarnings(t *testing.T) {
+	// The warning quotes slurm.main's AccountingStorageEnforce as the
+	// config gives it.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SIND_REALM", "")
+	path := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("kind: Cluster\nnodes: [controller, db, worker]\n"+
+		"accounts:\n  - name: physics\n    limits:\n      MaxJobs: 1\n"+
+		"slurm:\n  main: \"AccountingStorageEnforce=qos\\e]0;owned\\a\\n\"\n"), 0o644))
+	m := &mock.Executor{OnCall: func([]string, string) mock.Result {
+		return mock.Result{Err: errors.New("no docker")}
+	}}
+
+	_, stderr, err := executeWithMock(m, "create", "cluster", "--config", path)
+
+	require.Error(t, err)
+	assert.Contains(t, stderr, "Warning: Slurm does not enforce the accounts' limits")
+	assert.NotContains(t, stderr, "\x1b", "no terminal escape from the config reaches stderr")
+}
+
 func TestCreateCluster_MonitoringFlag(t *testing.T) {
 	// --monitoring adds to the config's monitoring before validation:
 	// an unmanaged config fails like monitoring: true in the file, as a

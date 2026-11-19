@@ -3,37 +3,22 @@
 package ui
 
 import (
-	"fmt"
-	"sync/atomic"
-	"time"
-
 	"github.com/GSI-HPC/sind/internal/ui/store"
 )
 
 // The "more" part: Mesh and DNS, Monitoring, Topology and Doctor. This file
 // holds what the four pages share.
 
-// moreEnv is the Env of the running server, which Setup of the "more"
-// service keeps for the Doctor page to look for the key "collect.doctor":
-// a page's Load sees only its View.
-var moreEnv atomic.Pointer[Env]
-
 func init() {
-	defaultRegistry.AddService(Service{
-		Name:  "more",
-		Setup: func(env *Env) error { moreEnv.Store(env); return nil },
-	})
 	defaultRegistry.SetNavCount("monitoring", moreMonitoringCount)
 	defaultRegistry.SetNavCount("doctor", moreDoctorCount)
 }
 
-// moreEnvGet returns the value of the key in moreEnv, the zero value when
-// no service put one of type T there.
-func moreEnvGet[T any](key string) (v T) {
-	if env := moreEnv.Load(); env != nil {
-		v, _ = env.Get(key).(T)
-	}
-	return v
+// viewEnv returns the value under key in the Env of the view's server, the
+// zero value when no service put one of type T there.
+func viewEnv[T any](v *View, key any) T {
+	t, _ := v.Env(key).(T)
+	return t
 }
 
 // moreNotice is the plain statement of a page that has nothing to show,
@@ -75,20 +60,4 @@ func moreRealms(v *View) []string {
 		names[i] = r.Name
 	}
 	return names
-}
-
-// moreAgo says how long before now t was, as "just now", "3 min ago".
-func moreAgo(now, t time.Time) string {
-	d := now.Sub(t)
-	switch {
-	case d < 10*time.Second:
-		return "just now"
-	case d < time.Minute:
-		return fmt.Sprintf("%d s ago", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%d min ago", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d h ago", int(d.Hours()))
-	}
-	return fmt.Sprintf("%d d ago", int(d.Hours()/24))
 }

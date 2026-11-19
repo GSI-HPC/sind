@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/GSI-HPC/go-clikit/fsutil"
+
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 )
 
@@ -396,6 +398,8 @@ func TestServers(t *testing.T) {
     "web": {"type": "http", "url": "https://example.com/mcp", /* auth */ "headers": {}},
     "bad": "not an object",
     "odd": {"args": "not a list"},
+    "mixed": {"type": 1, "command": "/bin/m", "args": ["a", 2], "env": {"SIND_REALM": "ci", "PORT": 8080, "ON": true, "L": [1, 2]}},
+    "envless": {"command": "/bin/e", "env": ["K=V"]},
   }
 }`), "mcpServers")
 	assert.Equal(t, []mcpconfig.Server{
@@ -403,6 +407,10 @@ func TestServers(t *testing.T) {
 		{Name: "web", Type: "http", URL: "https://example.com/mcp"},
 		{Name: "bad"},
 		{Name: "odd"},
+		// A field of another type is left out alone, and a variable that
+		// is no string has its JSON text.
+		{Name: "mixed", Command: "/bin/m", Env: map[string]string{"SIND_REALM": "ci", "PORT": "8080", "ON": "true", "L": "[1,2]"}},
+		{Name: "envless", Command: "/bin/e"},
 	}, f.Servers())
 	assert.Equal(t, path, f.Path())
 
@@ -419,6 +427,9 @@ func TestLoad_Errors(t *testing.T) {
 		{"servers not an object", `{"mcpServers": []}`, `"mcpServers" is not an object`},
 		{"duplicate server", `{"mcpServers": {"sind": {}, "a": {}, "sind": {}}}`, `server "sind" is defined more than once in "mcpServers"`},
 		{"duplicate servers", `{"mcpServers": {}, "x": 1, "mcpServers": {}}`, `"mcpServers" is defined more than once`},
+		// Another name defined twice before does not hide it.
+		{"duplicate servers after another duplicate", `{"a": 1, "a": 2, "mcpServers": {"old": {}}, "mcpServers": {"new": {}}}`,
+			`"mcpServers" is defined more than once`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -428,6 +439,56 @@ func TestLoad_Errors(t *testing.T) {
 			require.EqualError(t, err, "parsing "+path+": "+tt.wantErr)
 		})
 	}
+}
+
+// TestLoad_ByteOrderMark checks that a file that starts with a byte order
+// mark loads, and keeps it.
+func TestLoad_ByteOrderMark(t *testing.T) {
+	path, f := load(t, new("\ufeff{\n  \"mcpServers\": {}\n}\n"), "mcpServers")
+	backup, err := f.Save(now)
+	require.NoError(t, err)
+	assert.Empty(t, backup, "an unchanged file is not written")
+
+	f.Set(sindEntry)
+	_, err = f.Save(now)
+	require.NoError(t, err)
+	assert.Equal(t, "\ufeff"+newServers, read(t, path))
+
+	// One with only whitespace after the mark is empty.
+	path, f = load(t, new("\ufeff\n"), "mcpServers")
+	f.Set(sindEntry)
+	_, err = f.Save(now)
+	require.NoError(t, err)
+	assert.Equal(t, "\ufeff"+newServers, read(t, path))
+}
+
+// TestLoad_OnlyComments checks that a file that holds only comments loads
+// as an empty configuration, and keeps its comments before the object.
+func TestLoad_OnlyComments(t *testing.T) {
+	for in, want := range map[string]string{
+		"// nothing yet\n":        "// nothing yet\n" + newServers,
+		"/* a */\n// b":           "/* a */\n// b\n" + newServers,
+		"\ufeff/* settings */\n":  "\ufeff/* settings */\n" + newServers,
+		"// one\r\n/* two */\r\n": "// one\r\n/* two */\r\n" + strings.ReplaceAll(newServers, "\n", "\r\n"),
+	} {
+		t.Run(in, func(t *testing.T) {
+			path, f := load(t, &in, "mcpServers")
+			assert.Empty(t, f.Servers())
+			f.Set(sindEntry)
+			_, err := f.Save(now)
+			require.NoError(t, err)
+			assert.Equal(t, want, read(t, path))
+		})
+	}
+
+	// A comment that does not end is still an error.
+	path := filepath.Join(t.TempDir(), "c.json")
+	require.NoError(t, os.WriteFile(path, []byte("// a\n/* b"), 0o644))
+	_, err := mcpconfig.Load(path, "mcpServers")
+	require.ErrorContains(t, err, "parsing "+path+": ")
+	require.NoError(t, os.WriteFile(path, []byte("// a\n1"), 0o644))
+	_, err = mcpconfig.Load(path, "mcpServers")
+	require.EqualError(t, err, "parsing "+path+": not a JSON object")
 }
 
 func TestLoad_ReadErrors(t *testing.T) {
@@ -472,6 +533,90 @@ func TestLoad_FollowsSymlinks(t *testing.T) {
 	f, err = mcpconfig.Load(filepath.Join(dir, "dangling.json"), "mcpServers")
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(dir, "new.json"), f.Path())
+}
+
+// TestLoad_LinkBehindALinkedDirectory checks that a relative link is read
+// against the directory it is really in, as the system reads it: behind a
+// linked directory, ../x is beside the directory the link leads to.
+func TestLoad_LinkBehindALinkedDirectory(t *testing.T) {
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	user := filepath.Join(home, "dotfiles", "config", "Code", "User")
+	require.NoError(t, os.MkdirAll(user, 0o755))
+	require.NoError(t, os.Symlink("dotfiles/config", filepath.Join(home, ".config")))
+	require.NoError(t, os.Symlink("../../../shared/mcp.json", filepath.Join(user, "mcp.json")))
+	target := filepath.Join(home, "dotfiles", "shared", "mcp.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte(`{"servers": {"mine": {"command": "x"}}}`), 0o600))
+
+	f, err := mcpconfig.Load(filepath.Join(home, ".config", "Code", "User", "mcp.json"), "servers")
+	require.NoError(t, err)
+	assert.Equal(t, target, f.Path())
+	assert.Equal(t, []mcpconfig.Server{{Name: "mine", Command: "x"}}, f.Servers())
+	f.Set(sindEntry)
+	backup, err := f.Save(now)
+	require.NoError(t, err)
+	assert.Equal(t, target+".20261019-163005.bak", backup)
+	assert.Contains(t, read(t, target), `"mine"`)
+	assert.Contains(t, read(t, target), `"sind"`)
+	assert.NoDirExists(t, filepath.Join(home, "shared"), "nothing is written beside the link's name")
+}
+
+// TestLoad_UntrustedLink checks that Load refuses a symbolic link that
+// neither this user nor root owns, whose owner would choose the file Save
+// writes, before Save could make a directory or a backup where it leads.
+func TestLoad_UntrustedLink(t *testing.T) {
+	// untrust makes the link another user's: as root, by giving it away,
+	// else by taking Load for another user.
+	untrust := func(t *testing.T, link string) {
+		t.Helper()
+		if os.Geteuid() == 0 {
+			require.NoError(t, os.Lchown(link, 12345, 12345))
+			return
+		}
+		t.Cleanup(mcpconfig.Geteuid(os.Geteuid() + 1))
+	}
+
+	t.Run("to a file", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "target.json")
+		require.NoError(t, os.WriteFile(target, []byte("{}\n"), 0o600))
+		link := filepath.Join(dir, "c.json")
+		require.NoError(t, os.Symlink("target.json", link))
+		untrust(t, link)
+
+		_, err := mcpconfig.Load(link, "mcpServers")
+		require.ErrorIs(t, err, fsutil.ErrUntrusted)
+		require.ErrorContains(t, err, "reading "+link+": the link is owned by uid ")
+		assert.Equal(t, "{}\n", read(t, target), "the file is unchanged")
+		files, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		assert.Len(t, files, 2, "no backup is made")
+	})
+
+	t.Run("into a missing directory", func(t *testing.T) {
+		dir := t.TempDir()
+		link := filepath.Join(dir, "c.json")
+		require.NoError(t, os.Symlink(filepath.Join("target-dir", "sub", "mcp.json"), link))
+		untrust(t, link)
+
+		_, err := mcpconfig.Load(link, "mcpServers")
+		require.ErrorIs(t, err, fsutil.ErrUntrusted)
+		assert.NoDirExists(t, filepath.Join(dir, "target-dir"), "no directory is made")
+	})
+
+	t.Run("of root", func(t *testing.T) {
+		if os.Geteuid() != 0 {
+			t.Skip("only root can make a link of root")
+		}
+		t.Cleanup(mcpconfig.Geteuid(12345))
+		dir := t.TempDir()
+		link := filepath.Join(dir, "c.json")
+		require.NoError(t, os.Symlink("target.json", link))
+		f, err := mcpconfig.Load(link, "mcpServers")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "target.json"), f.Path())
+	})
 }
 
 func TestLoad_SymlinkErrors(t *testing.T) {
@@ -609,8 +754,11 @@ func TestSave_Errors(t *testing.T) {
 				tt.setup(t, path)
 			}
 
-			_, err := f.Save(now)
+			backup, err := f.Save(now)
 			require.ErrorContains(t, err, fmt.Sprintf(tt.wantErr, path))
+			assert.Empty(t, backup)
+			backups, _ := filepath.Glob(path + ".*.bak")
+			assert.Empty(t, backups, "a failed save leaves no backup")
 			if tt.backup != nil {
 				assert.Equal(t, "{}\n", read(t, path), "the file is unchanged")
 			}

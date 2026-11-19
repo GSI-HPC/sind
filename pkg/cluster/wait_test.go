@@ -78,11 +78,11 @@ func TestWaitNodes(t *testing.T) {
 	require.NoError(t, err)
 	w.Finish()
 	assert.Equal(t, `step readiness total=4 [fold]: ok
-  target controller role=controller: ok
+  target controller.dev role=controller: ok
     wait ready: ok
-  target db role=db: ok
+  target db.dev role=db: ok
     wait ready: ok
-  target worker-[0-1] role=worker: ok
+  target worker-[0-1].dev role=worker: ok
     wait ready: ok
   wait ready: ok
 `, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""))
@@ -96,6 +96,26 @@ func TestWaitNodes(t *testing.T) {
 	require.Len(t, sinfo, 1, "one sinfo for the managed workers")
 	assert.Equal(t, "sind-dev-controller", sinfo[0][1])
 	assert.Equal(t, "--nodes=worker-0", sinfo[0][len(sinfo[0])-1])
+}
+
+func TestWaitNodes_Twice(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	m := &mock.Executor{OnCall: waitOnCall(t, nil)}
+
+	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0", "worker-0"}, time.Minute, time.Millisecond)
+
+	require.NoError(t, err)
+	w.Finish()
+	assert.Equal(t, `step readiness total=1 [fold]: ok
+  target worker-0.dev role=worker: ok
+    wait ready: ok
+  wait ready: ok
+`, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""), "a node named twice is waited for once")
+	for _, c := range m.Calls {
+		if isSinfo(c.Args) {
+			assert.Equal(t, "--nodes=worker-0", c.Args[len(c.Args)-1])
+		}
+	}
 }
 
 func TestWaitNodes_NoNodes(t *testing.T) {
@@ -180,7 +200,7 @@ func TestNodeProbes(t *testing.T) {
 	}
 	assert.Equal(t, []string{"container", "systemd", "munge", "sshd", "slurmd"}, names(nodeProbes(config.RoleWorker, docker.Labels{})))
 	assert.Equal(t, []string{"container", "systemd", "munge", "sshd"}, names(nodeProbes(config.RoleWorker, docker.Labels{LabelManaged: "false"})))
-	assert.Equal(t, []string{"container", "systemd", "munge", "sshd", "slurmdbd"}, names(nodeProbes(config.RoleDB, docker.Labels{})))
+	assert.Equal(t, []string{"container", "systemd", "munge", "sshd", "mariadb", "slurmdbd"}, names(nodeProbes(config.RoleDB, docker.Labels{})))
 	assert.Equal(t, []string{"container", "systemd", "sshd", "sackd"}, names(nodeProbes(config.RoleSubmitter, docker.Labels{LabelIdentity: string(config.IdentityClientIDs)})))
 	assert.True(t, slices.ContainsFunc(nodeProbes(config.RoleController, docker.Labels{}), func(p probe.Probe) bool { return p.Name == "slurmctld" }))
 }

@@ -637,9 +637,9 @@ func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
-	assert.Contains(t, body, `<span class="act-rl"><span class="tok">sind</span> <span class="tok">create</span> <span class="tok">cluster \</span></span><span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">hpc.yaml</span></span></code>`)
+	assert.Contains(t, body, `<span class="act-rl"><span class="tok">sind</span> <span class="tok">create</span> <span class="tok">cluster \</span></span><span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">sind/</span><span class="tok">hpc.yaml</span></span></code>`)
 	assert.Contains(t, body, `<div class="act-tiles"><span class="act-tile controller" title="controller">controller</span><span class="act-tile worker" title="worker-0">worker-0</span><span class="act-tile worker" title="worker-1">worker-1</span></div>`)
-	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/hpc.yaml</span>`)
+	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/sind/hpc.yaml</span>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
 	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML"></span>`)
 	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true"><span class="act-okl">Create hpc</span><kbd`)
@@ -724,14 +724,14 @@ func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	// A new cluster follows its run, and its draft goes.
 	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
 	assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": true}}`, w.Header().Get("HX-Trigger"))
-	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, slices.Collect(maps.Keys(f.saved)))
-	assert.Contains(t, f.saved["/state/sind/ui/configs/hpc.yaml"], "name: hpc\nrealm: ci\n")
+	assert.Equal(t, []string{"/state/sind/ui/configs/ci/hpc.yaml"}, slices.Collect(maps.Keys(f.saved)))
+	assert.Contains(t, f.saved["/state/sind/ui/configs/ci/hpc.yaml"], "name: hpc\nrealm: ci\n")
 	require.Len(t, f.starter.specs, 1)
-	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --wait 2m", f.starter.specs[0].Display)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/ci/hpc.yaml --wait 2m", f.starter.specs[0].Display)
 	assert.Equal(t, "ci", f.starter.specs[0].Realm)
 	assert.Equal(t, "hpc", f.starter.specs[0].Cluster)
-	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", f.starter.specs[0].ConfigPath)
-	assert.Equal(t, f.saved["/state/sind/ui/configs/hpc.yaml"], f.starter.specs[0].Config, "the task keeps the config it ran with")
+	assert.Equal(t, "/state/sind/ui/configs/ci/hpc.yaml", f.starter.specs[0].ConfigPath)
+	assert.Equal(t, f.saved["/state/sind/ui/configs/ci/hpc.yaml"], f.starter.specs[0].Config, "the task keeps the config it ran with")
 }
 
 func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
@@ -1050,7 +1050,6 @@ func TestActService_Setup(t *testing.T) {
 	actSeams(t)
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
-	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
 	actHome = func() (string, error) { return "/home/ada", nil }
 	actEnviron = func() []string { return []string{"A=1"} }
 
@@ -1072,6 +1071,11 @@ func TestActService_SetupErrors(t *testing.T) {
 	assert.EqualError(t, actService().Setup(cfg.Env), "finding the sind executable: no /proc")
 
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
+	actStat = func(string) (fs.FileInfo, error) { return nil, errors.New("gone") }
+	assert.EqualError(t, actService().Setup(cfg.Env), "finding the sind executable: gone")
+
+	actSeams(t)
+	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "", errors.New("no home") }
 	assert.EqualError(t, actService().Setup(cfg.Env), "finding the state directory: no home")
 	assert.Nil(t, cfg.Env.Get(actKey{}))
@@ -1082,7 +1086,6 @@ func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 	actSeams(t)
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
-	actActivityLog = func() (string, error) { return "", errors.New("read-only home") }
 	actHome = func() (string, error) { return "", errors.New("no home") }
 
 	require.NoError(t, actService().Setup(cfg.Env))
@@ -1091,10 +1094,38 @@ func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 	assert.Empty(t, got.home)
 }
 
-// actSeams puts the seams of Setup back when the test ends.
+// actSeams puts the seams of Setup back when the test ends. The executable
+// that a test names is a file of the test's own.
 func actSeams(t *testing.T) {
-	e, d, l, h, v := actExecutable, actStateDir, actActivityLog, actHome, actEnviron
-	t.Cleanup(func() { actExecutable, actStateDir, actActivityLog, actHome, actEnviron = e, d, l, h, v })
+	e, st, d, h, v := actExecutable, actStat, actStateDir, actHome, actEnviron
+	t.Cleanup(func() { actExecutable, actStat, actStateDir, actHome, actEnviron = e, st, d, h, v })
+	bin := filepath.Join(t.TempDir(), "sind")
+	require.NoError(t, os.WriteFile(bin, nil, 0o755))
+	actStat = func(string) (fs.FileInfo, error) { return os.Stat(bin) }
+}
+
+func TestActBinaryCheck(t *testing.T) {
+	actSeams(t)
+	actStat = os.Stat
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "sind")
+	require.NoError(t, os.WriteFile(exe, []byte("v1"), 0o755))
+
+	check, err := actBinaryCheck(exe)
+	require.NoError(t, err)
+	assert.NoError(t, check())
+
+	// An upgrade puts a new file in its place.
+	next := filepath.Join(dir, "sind.new")
+	require.NoError(t, os.WriteFile(next, []byte("v2"), 0o755))
+	require.NoError(t, os.Rename(next, exe))
+	assert.EqualError(t, check(), exe+" is not the sind that runs sind ui any more, as after an upgrade: restart sind ui to run commands")
+
+	require.NoError(t, os.Remove(exe))
+	require.Error(t, check(), "a binary that is gone")
+
+	_, err = actBinaryCheck(exe)
+	require.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
@@ -1102,11 +1133,10 @@ func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
 	actSeams(t)
 	actExecutable = func() (string, error) { return "/bin/sh", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
-	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
 	actHome = func() (string, error) { return "/home/ada", nil }
 	actEnviron = func() []string { return []string{"PATH=/bin"} }
 	refreshed := make(chan string, 2)
-	cfg.Env.Put("collect.refresh", func(realm string) { refreshed <- realm })
+	cfg.Env.Put(ColRefreshKey, func(realm string) { refreshed <- realm })
 	cfg.Env.Exec = &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
 	require.NoError(t, actService().Setup(cfg.Env))
 
@@ -1122,7 +1152,7 @@ func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
 	assert.Eventually(t, func() bool { task, _ := st.Snapshot().Task(id); return task.Done() }, 5*time.Second, time.Millisecond)
 
 	// A collector that is not there is no reason to fail.
-	cfg.Env.Put("collect.refresh", nil)
+	cfg.Env.Put(ColRefreshKey, nil)
 	id, err = cfg.Env.Get(actKey{}).(*actState).starter.Start(run.Spec{Argv: []string{"sind", "x"}})
 	require.NoError(t, err)
 	assert.Eventually(t, func() bool { task, _ := st.Snapshot().Task(id); return task.Done() }, 5*time.Second, time.Millisecond)
@@ -1145,27 +1175,6 @@ func TestActService_RunShutsTheRunnerDownWithTheServer(t *testing.T) {
 	cfg.Env.Put(actKey{}, nil)
 	actService().Run(ctx, cfg.Env)
 	assert.Len(t, starter.shutdown, 1)
-}
-
-func TestActActivityLog(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
-	path, err := activityLogForChildren()
-
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(dir, "sind", "activity.jsonl"), path)
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-
-	// A state directory that cannot be made still gives the path.
-	blocker := filepath.Join(dir, "file")
-	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
-	t.Setenv("XDG_STATE_HOME", blocker)
-	path, err = activityLogForChildren()
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(blocker, "sind", "activity.jsonl"), path)
 }
 
 func TestActMkdirAll(t *testing.T) {
@@ -1375,7 +1384,7 @@ func TestActPreview_NewClusterYAML(t *testing.T) {
 	assert.NotContains(t, body, "data-act-yaml-edit")
 	assert.Contains(t, body, `</span><button type="button" class="btn sm" data-pg-copy-text="kind: Cluster`+"\nname: lab # mine\n"+`">Copy YAML</button></div>`)
 	assert.Contains(t, body, "The YAML that you edit, as it is.")
-	assert.Contains(t, body, `<span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">lab.yaml</span></span>`)
+	assert.Contains(t, body, `<span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">sind/</span><span class="tok">lab.yaml</span></span>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: [")).Body.String()

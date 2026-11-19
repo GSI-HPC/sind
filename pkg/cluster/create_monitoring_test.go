@@ -164,7 +164,8 @@ func TestCreate_MonitoringRollback(t *testing.T) {
 			f.fail["inspect sind-grafana sind-prometheus sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
 			_, _, err := createMonitored(t, f, createCfg(), func(args []string, _ string) (mock.Result, bool) {
 				// The mesh is in use by the other cluster, so it stays.
-				if tt.other && args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && !slices.Contains(args, "label=sind.role") {
+				if tt.other && args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && !slices.Contains(args, "label=sind.role") &&
+					!slices.Contains(args, "label=sind.cluster=dev") {
 					return mock.Result{Stdout: testutil.NDJSON(map[string]string{"Names": "sind-prod-controller", "Labels": "sind.cluster=prod"})}, true
 				}
 				return mock.Result{}, false
@@ -177,6 +178,54 @@ func TestCreate_MonitoringRollback(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCreate_MonitoringRollbackWithMesh covers a failed create that made
+// the realm's mesh and stack: the stack's volumes go before the mesh, so
+// that a rollback cut short leaves no volume of the stack without a mesh.
+func TestCreate_MonitoringRollbackWithMesh(t *testing.T) {
+	f := newStackFake(t)
+	f.fail["inspect sind-grafana sind-prometheus sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
+	cfg := createCfg()
+	cfg.Monitoring = true
+	// The calls of EnsureMeshNetwork, before Create, make the mesh.
+	ensured := false
+	m, _, err := runCreate(t.Context(), t, cfg, true, func(args []string, stdin string) (mock.Result, bool) {
+		if ensured = ensured || args[0] != "network"; !ensured {
+			return mock.Result{}, false
+		}
+		return f.handle(args, stdin)
+	})
+
+	require.ErrorContains(t, err, "inspecting the monitoring stack")
+	assert.Empty(t, f.volumes)
+	journal := slices.IndexFunc(m.Calls, func(c mock.Call) bool { return strings.Join(c.Args, " ") == "volume rm sind-journal" })
+	mesh := slices.IndexFunc(m.Calls, func(c mock.Call) bool { return isMeshRm(c.Args) })
+	require.Positive(t, journal)
+	require.Positive(t, mesh)
+	assert.Less(t, journal, mesh)
+}
+
+// TestCreate_MonitoringRollbackKeepsMesh covers a failed create that made
+// the realm's mesh and stack, whose rollback cannot remove a volume of the
+// stack: the mesh stays with it, as the cleanup of a realm keeps it.
+func TestCreate_MonitoringRollbackKeepsMesh(t *testing.T) {
+	f := newStackFake(t)
+	f.fail["inspect sind-grafana sind-prometheus sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
+	f.fail["volume rm sind-journal"] = mock.Result{Stderr: "rm failed\n", Err: testutil.ExitCode1(t)}
+	cfg := createCfg()
+	cfg.Monitoring = true
+	// The calls of EnsureMeshNetwork, before Create, make the mesh.
+	ensured := false
+	m, _, err := runCreate(t.Context(), t, cfg, true, func(args []string, stdin string) (mock.Result, bool) {
+		if ensured = ensured || args[0] != "network"; !ensured {
+			return mock.Result{}, false
+		}
+		return f.handle(args, stdin)
+	})
+
+	require.ErrorContains(t, err, "rolling back: removing the monitoring stack's volumes: ")
+	assert.False(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool { return isMeshRm(c.Args) }), "the mesh stays")
 }
 
 func TestCreate_MonitoringRollbackErrors(t *testing.T) {

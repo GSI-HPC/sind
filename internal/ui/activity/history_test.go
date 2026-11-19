@@ -19,12 +19,12 @@ import (
 func TestHistory(t *testing.T) {
 	h := history{}
 	key := spanKey{"a", progress.SpanID(3)}
-	h.take(byteLine("a", "advance", 0, 0, "bytes"))
-	h.take(byteLine("a", "advance", 100, 0, "bytes")) // no change
-	h.take(byteLine("a", "advance", 200, 1_000, "bytes"))
-	h.take(byteLine("a", "advance", 300, 2_000, "bytes")) // replaces the one before it
-	h.take(byteLine("a", "advance", 600, 3_000, "items"))
-	h.take(byteLine("a", "end", 700, 4_000, "bytes"))
+	h.take(byteEvent("a", "advance", 0, 0, "bytes"))
+	h.take(byteEvent("a", "advance", 100, 0, "bytes")) // no change
+	h.take(byteEvent("a", "advance", 200, 1_000, "bytes"))
+	h.take(byteEvent("a", "advance", 300, 2_000, "bytes")) // replaces the one before it
+	h.take(byteEvent("a", "advance", 600, 3_000, "items"))
+	h.take(byteEvent("a", "end", 700, 4_000, "bytes"))
 	at := func(ms int64) time.Time { return rateT0.Add(time.Duration(ms) * time.Millisecond) }
 	assert.Equal(t, []store.Sample{
 		{At: at(0), Amount: 0, Size: 100_000_000},
@@ -33,9 +33,8 @@ func TestHistory(t *testing.T) {
 		{At: at(700), Amount: 4_000, Size: 100_000_000},
 	}, h[key])
 
-	h.take([]byte(`{"unit":"bytes"}`))
-	h.take(byteLine("b", "advance", 0, 1, ""))
-	assert.Len(t, h, 1, "a line that cannot be read, or of no unit, is left out")
+	h.take(byteEvent("b", "advance", 0, 1, ""))
+	assert.Len(t, h, 1, "a line of no unit is left out")
 
 	h.forget(map[string]bool{"b": true})
 	assert.Empty(t, h)
@@ -46,7 +45,7 @@ func TestHistory(t *testing.T) {
 func TestHistoryThins(t *testing.T) {
 	h := history{}
 	for i := range int64(HistoryMax + 1) {
-		h.take(byteLine("a", "advance", i*1000, i, "bytes"))
+		h.take(byteEvent("a", "advance", i*1000, i, "bytes"))
 	}
 	s := h[spanKey{"a", progress.SpanID(3)}]
 	require.Len(t, s, HistoryMax/2+1)

@@ -41,6 +41,11 @@ func TestLogArgs(t *testing.T) {
 	}
 }
 
+func TestServiceLogCommand(t *testing.T) {
+	assert.Equal(t, []string{"journalctl", "--follow", "-n", "5"}, ServiceLogCommand("", LogOptions{Follow: true, Tail: new(5)}), "every unit")
+	assert.Equal(t, []string{"journalctl", "-u", "slurmd"}, ServiceLogCommand("slurmd", LogOptions{}))
+}
+
 func TestNodeServicesOfContainer(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -65,6 +70,26 @@ func TestNodeServicesOfContainer(t *testing.T) {
 			assert.Equal(t, []string{"inspect", "sind-dev-node", "--type", "container"}, m.Calls[0].Args)
 		})
 	}
+}
+
+func TestNodeServicesOfContainer_OtherCluster(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Id":"x","Name":"/ci-42-dev-node","State":{"Status":"running"},"Config":{"Labels":{"sind.realm":"ci-42","sind.cluster":"dev","sind.role":"worker"}}}]`, "", nil)
+
+	_, err := NodeServices(t.Context(), docker.NewClient(&m), "ci", "42-dev", "node")
+
+	require.EqualError(t, err, `node "node" not found in cluster "42-dev"`)
+	assert.ErrorIs(t, err, ErrNodeNotFound)
+}
+
+func TestNodeServicesOfContainer_Helper(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Id":"x","Name":"/sind-dev-config-helper","State":{"Status":"created"},"Config":{"Labels":{"sind.realm":"sind","sind.cluster":"dev"}}}]`, "", nil)
+
+	_, err := NodeServices(t.Context(), docker.NewClient(&m), "sind", "dev", "config-helper")
+
+	require.EqualError(t, err, `node "config-helper" not found in cluster "dev"`)
+	assert.ErrorIs(t, err, ErrNodeNotFound)
 }
 
 func TestNodeServicesOfContainer_Error(t *testing.T) {

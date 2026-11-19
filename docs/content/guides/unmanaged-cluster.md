@@ -39,6 +39,8 @@ sind create cluster --config unmanaged.yaml
 {{< /ui >}}
 {{< /ways >}}
 
+In the web UI, **Ready for jobs** on the cluster's Summary says `not checked: sind does not manage Slurm`, and the cluster's row on the Overview says `unmanaged`.
+
 The flag applies to the whole cluster:
 
 - Every node is unmanaged. A worker, db or api node with `managed: true` is rejected.

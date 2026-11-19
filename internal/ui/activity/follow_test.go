@@ -3,8 +3,13 @@
 package activity
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +27,7 @@ func runFollow(t *testing.T, st *store.Store, path string, active, idle, staleAf
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		follow(ctx, st, path, 10, active, idle, staleAfter)
+		follow(ctx, st, path, slog.New(slog.DiscardHandler), 10, active, idle, staleAfter)
 	}()
 	return func() {
 		cancel()
@@ -156,7 +161,7 @@ func TestFollow(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		Follow(ctx, st, path)
+		Follow(ctx, st, path, slog.New(slog.DiscardHandler))
 	}()
 	next(t, ch)
 	cancel()
@@ -240,4 +245,47 @@ func TestFollowEndsARunThatFallsSilent(t *testing.T) {
 	assert.Equal(t, store.RunTopic(runA), next(t, ch))
 	r, _ = st.Snapshot().Run(runA)
 	assert.True(t, r.Unfinished)
+}
+
+// syncBuffer is a bytes.Buffer that a logger and a test share.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
+// A log that cannot be read is logged once, with its path, and its error is
+// the store's RunsErr until the log can be read again.
+func TestFollow_ReportsALogThatCannotBeRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "activity.jsonl")
+	require.NoError(t, os.Mkdir(path, 0o700))
+	st := store.New()
+	var out syncBuffer
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		follow(ctx, st, path, slog.New(slog.NewTextHandler(&out, nil)), 10, time.Millisecond, time.Millisecond, forever)
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+
+	require.Eventually(t, func() bool { return st.Snapshot().RunsErr != "" }, 5*time.Second, time.Millisecond)
+	time.Sleep(20 * time.Millisecond) // many polls fail the same way
+	assert.Equal(t, 1, strings.Count(out.String(), "cannot read the activity log"), out.String())
+	assert.Contains(t, out.String(), "path="+path)
+
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.WriteFile(path, nil, 0o600))
+	require.Eventually(t, func() bool { return st.Snapshot().RunsErr == "" }, 5*time.Second, time.Millisecond)
 }

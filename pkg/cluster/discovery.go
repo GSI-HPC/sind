@@ -200,7 +200,10 @@ func sortedClusterNames(names []string) []string {
 // A container belongs to clusterName only if its sind.cluster label says so.
 // The name prefix "<realm>-<clusterName>-" cannot tell: it also matches the
 // containers of cluster "<clusterName>-2". A realm container without a
-// cluster label counts as another cluster, which keeps the mesh.
+// cluster label counts as another cluster, which keeps the mesh. The mesh's
+// and the monitoring stack's containers have no realm label for this
+// reason: they carry only the Compose labels of <realm>-mesh, by which
+// ownContainer knows them.
 func HasOtherClusters(ctx context.Context, client *docker.Client, realm, clusterName string) (bool, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {

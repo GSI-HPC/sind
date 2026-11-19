@@ -61,3 +61,13 @@ func TestRealmDir(t *testing.T) {
 	_, err = RealmDir("ci-42")
 	require.Error(t, err)
 }
+
+// TestRealmDir_InvalidRealm checks that a realm name that is no DNS label
+// gets no state directory, such as one that leaves Dir().
+func TestRealmDir_InvalidRealm(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/custom/state")
+	for _, realm := range []string{"..", "a/b", "CI", ""} {
+		_, err := RealmDir(realm)
+		require.ErrorContains(t, err, "invalid realm name", realm)
+	}
+}

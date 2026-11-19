@@ -35,6 +35,15 @@ const mcpTokenFile = "mcp-token"
 // in flight.
 const mcpShutdownTimeout = 5 * time.Second
 
+// mcpIdleTimeout closes a keep-alive connection that sends no new request
+// for this long, with or without the token. It does not apply while a
+// request runs, so the event stream of a long tool call stays open.
+const mcpIdleTimeout = 2 * time.Minute
+
+// mcpSessionTimeout closes an MCP session that sends no new request for
+// this long. go-sdk stops the clock while a request of the session runs.
+const mcpSessionTimeout = 30 * time.Minute
+
 // runMCPStream serves sind's MCP tools over streamable HTTP, on --host and
 // --port, to clients that send the bearer token from mcpStreamToken.
 //
@@ -45,7 +54,8 @@ const mcpShutdownTimeout = 5 * time.Second
 // no hook for authentication, so the stream is sind's: an HTTP server
 // whose MCP server forwards each tool call to ophis's server (mcpStreamHandler).
 //
-// It stops cleanly, exiting 0, when the context ends (SIGINT or SIGTERM).
+// It stops cleanly, exiting 0, when the context ends (SIGINT, SIGTERM or
+// SIGHUP).
 func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) error {
 	ctx := cmd.Context()
 	host, _ := cmd.Flags().GetString("host")
@@ -84,7 +94,7 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 	}
 	defer stop()
 
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	server := newMCPStreamServer(handler)
 	defer context.AfterFunc(ctx, func() {
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mcpShutdownTimeout)
 		defer cancel()
@@ -188,8 +198,8 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 		defer close(served)
 		_ = start.RunE(start, nil)
 	}()
-	// A tool call that runs to completion after its client is gone
-	// (mcpRunsToCompletion) must not hold up the shutdown of the stream.
+	// A tool call that rolls back after its client is gone
+	// (mcpChangesState) must not hold up the shutdown of the stream.
 	stopInner := func() {
 		cancel()
 		select {
@@ -229,8 +239,20 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 		})
 	}
 
-	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, mcpStreamOptions())
 	return requireBearerToken(token, handler), stop, nil
+}
+
+// newMCPStreamServer returns the HTTP server of `sind mcp stream`, which
+// closes connections that are slow to send their headers or stay idle.
+func newMCPStreamServer(h http.Handler) *http.Server {
+	return &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: mcpIdleTimeout}
+}
+
+// mcpStreamOptions are the options of the streamable HTTP handler, which
+// closes idle sessions.
+func mcpStreamOptions() *mcp.StreamableHTTPOptions {
+	return &mcp.StreamableHTTPOptions{SessionTimeout: mcpSessionTimeout}
 }
 
 // requireBearerToken returns h behind go-sdk's bearer token check, which

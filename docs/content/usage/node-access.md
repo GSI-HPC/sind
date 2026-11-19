@@ -45,7 +45,7 @@ sind ssh alice@worker-0
 Internally, `sind ssh` executes SSH via the mesh SSH container:
 
 ```bash
-docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND...]
+docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] -- <node>.<cluster>.<realm>.sind [COMMAND...]
 ```
 
 The relay container is `<realm>-ssh`. `-t` is only passed when both stdin and stdout are terminals: through a pseudo-terminal, the output would get CRLF line endings and the remote stderr would arrive on stdout. Output that you capture or redirect, as in `v=$(sind ssh worker-0 -- hostname)` or `sind ssh worker-0 -- cat /etc/hosts > hosts`, therefore comes through unchanged, also in an interactive shell.
@@ -112,6 +112,15 @@ sind ssh worker-0 -- false; echo $?    # 1
 
 `ssh` exits `255` when it cannot connect. A command line that sind rejects, such as `sind exec` without `--`, exits `2`. See [Exit Status]({{< relref "/usage/exit-status" >}}).
 
+## Interrupted sessions
+
+`sind ssh`, `sind enter` and `sind exec` run through `docker exec`, and Docker has no way to stop what `docker exec` started: Ctrl-C, `timeout` or a closed terminal ends the local `docker` process only. The command runs on in the node, and for `sind ssh` so does the `ssh` in the relay container, until it ends. A command that reads its standard input gets its end and can stop then; any other one runs to its end. Bound a long command in the node itself:
+
+```bash
+sind exec -- timeout 60 srun hostname
+sind ssh worker-0 -- timeout 60 ./long-job
+```
+
 ## Data mount
 
 By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` start in the data mount point, `/data` unless the cluster config sets another `mountPath`, so files from the host are immediately accessible.
@@ -159,7 +168,7 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 | `known_hosts` | Host keys |
 | `lock` | Advisory lock that serializes your commands that create and delete clusters and workers, `sind connect container` and `disconnect container`, and `sind power on`, `reboot` and `cycle`, in the realm; the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}) on the Docker daemon serializes them with other users' |
 
-The SSH files are updated on every create/delete operation, also on a delete that fails partway, and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file. Only your own sind commands update them: in a realm that you share with another user of the Docker daemon, that user's creates and deletes do not reach your files.
+The SSH files are updated on every create/delete operation, also on a delete that fails partway, and by a `sind power on`, `reboot` or `cycle` that started nodes, and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file. Only your own sind commands update them: in a realm that you share with another user of the Docker daemon, that user's creates and deletes do not reach your files.
 
 To find the path for your current realm:
 

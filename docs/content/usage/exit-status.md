@@ -14,7 +14,7 @@ Scripts branch on sind's exit status, so it is part of the command line contract
 | `0` | The command succeeded | |
 | `1` | The command ran and failed | Docker is not reachable, a node did not become ready within `--wait`, a cluster does not exist, a required `sind doctor` check failed, an invalid `SIND_*` variable, such as `SIND_REALM`, or config file |
 | `2` | sind rejected the command line before acting on it | An unknown command or flag, a flag value or argument that is not valid, the wrong number of arguments |
-| `130` | SIGINT or SIGTERM interrupted the command | Ctrl-C, `timeout`, `docker stop` |
+| `130` | SIGINT, SIGTERM or SIGHUP interrupted the command | Ctrl-C, `timeout`, `docker stop`, a closed terminal or SSH session |
 
 `sind ssh`, `sind exec`, `sind enter` and `sind logs` exit with the status of the program they run instead, see [below](#commands-that-run-a-program).
 
@@ -62,11 +62,11 @@ $ echo $?
 
 - The status is the command's, as `docker exec` reports it, and for `sind ssh` the remote command's, as `ssh` reports it. `ssh` exits `255` when it cannot connect. Docker's own errors, such as a container that is not running, give docker's status and message.
 - A failure before the program starts is sind's: `sind exec` in a cluster that does not exist, or without a submitter or controller, exits `1`, as do `sind ssh` and `sind logs` for a node or cluster that does not exist, and a usage error exits `2`.
-- A `docker` process killed by signal N exits 128 + N, as a shell reports it. Killed by SIGINT or SIGTERM, it exits `130`, like an interrupted sind: these signals reach `docker` when they are sent to sind's process group, as by Ctrl-C.
+- A `docker` process killed by signal N exits 128 + N, as a shell reports it. Killed by SIGINT, SIGTERM or SIGHUP, it exits `130`, like an interrupted sind: these signals reach `docker` when they are sent to sind's process group, as by Ctrl-C.
 
 ## Interrupts
 
-The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. A `--wait` limit of a power command that runs out exits `1` too; the nodes stay as they are. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish. `sind ui` and `sind mcp stream` are the exceptions: SIGINT or SIGTERM is how a server is stopped, so they shut down and exit `0`. On a terminal, the [progress display]({{< relref "/usage/progress" >}}) says `interrupting` while the cleanup runs, and the summary line it leaves says the command was `canceled`.
+The first SIGINT, SIGTERM or SIGHUP stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. A `--wait` limit of a power command that runs out exits `1` too; the nodes stay as they are. SIGTERM and SIGHUP exit `130` too, not `143` or `129`, so that a script checks one status for "interrupted". SIGHUP comes when the terminal or SSH session of the command goes away; under `nohup`, sind ignores it. A second signal ends sind at once, without waiting for the cleanup to finish. `sind ui` and `sind mcp stream` are the exceptions: SIGINT, SIGTERM or SIGHUP is how a server is stopped, so they shut down and exit `0`. On a terminal, the [progress display]({{< relref "/usage/progress" >}}) says `interrupting` while the cleanup runs, and the summary line it leaves says the command was `canceled`.
 
 ## MCP tools
 

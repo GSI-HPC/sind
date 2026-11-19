@@ -97,5 +97,5 @@ func TestAfterCreate_SlurmConfFails(t *testing.T) {
 
 func TestFoldNames(t *testing.T) {
 	assert.Equal(t, "controller,worker-[0-2]", foldNames([]string{"controller", "worker-0", "worker-1", "worker-2"}))
-	assert.Equal(t, "a[, b", foldNames([]string{"a[", "b"}), "names that are no node set stay as they are")
+	assert.Equal(t, "a[,b", foldNames([]string{"a[", "b"}), "names that are no node set stay as they are")
 }

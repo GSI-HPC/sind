@@ -58,9 +58,11 @@
   function bytes(n) {
     const u = ['B', 'kB', 'MB', 'GB', 'TB'];
     let i = 0;
-    while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+    // The unit and the decimal follow from the rounded value: 999600 is
+    // 1.0 MB, not 1000 kB.
+    while (Math.round(n) >= 1000 && i < u.length - 1) { n /= 1000; i++; }
     if (i === 0) return Math.max(Math.round(n), 0) + ' B';
-    return (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
+    return (Math.round(n * 10) < 100 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
   }
   function plural(n, noun) { return n + ' ' + noun + (n === 1 ? '' : 's'); }
   function tickLabel(v) {
@@ -206,12 +208,15 @@
   const view = { from: 0, to: 10, f0: 0, t0: 10, at: 0, zoom: null };
   function ease(p) { return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
   // goal is the range the axis should show at t: the zoomed step, the
-  // whole run once it ended, or else the nice horizon past the clock.
+  // whole run once it ended, or else the nice horizon past the clock, and
+  // after the last one the next whole hour. The goal stays the same from
+  // frame to frame until the clock passes 88 % of it, as range starts its
+  // ease anew whenever the goal changes.
   function goal(t) {
     if (view.zoom) return view.zoom;
     if (run.end != null) return [0, Math.max(10, run.end * 1.02)];
     const need = Math.max(t, 1) / 0.88;
-    return [0, nice.find(n => n >= need) || need * 1.2];
+    return [0, nice.find(n => n >= need) || Math.ceil(need / 3600) * 3600];
   }
   // range eases the shown range towards the goal and returns it.
   const shown = { a: 0, b: 10 };
@@ -857,16 +862,31 @@
     try { run = load(json); version++; } catch (e) { run = null; }
   }
 
+  // drawn is what the last frame drew of a run that ended, which stands
+  // still: frame draws it again only when its data, the shown range or the
+  // size of the axis changed, or a click or a key changed the zoom or the
+  // open steps (which empty drawn).
+  let drawn = '';
+  function still() {
+    const a = root.ticks.getBoundingClientRect(), g = root.g.getBoundingClientRect();
+    const key = [version, shown.a, shown.b, a.width, a.left - g.left, innerWidth].join(' ');
+    if (key === drawn) return true;
+    drawn = key;
+    return false;
+  }
+
   function frame(ms) {
     requestAnimationFrame(frame);
     if (document.hidden) return;
     const r = find();
     if (!r) { root = null; return; }
-    if (!root || root.g !== r.g) { root = r; rows.clear(); chosen.clear(); seenRunning.clear(); lanes.clear(); view.zoom = null; root.body.replaceChildren(); }
+    if (!root || root.g !== r.g) { root = r; rows.clear(); chosen.clear(); seenRunning.clear(); lanes.clear(); view.zoom = null; root.body.replaceChildren(); drawn = ''; }
     read();
     if (!run) return;
     const t = nowT(serverNow());
     range(ms, t);
+    if (run.end == null) drawn = '';
+    else if (still()) return;
     drawAxis(t);
     drawRows(t);
     drawSummary(t, ms);
@@ -874,6 +894,7 @@
 
   document.addEventListener('click', ev => {
     if (!(ev.target instanceof Element) || !root) return;
+    drawn = '';
     if (ev.target.closest('[data-g="whole"]')) { view.zoom = null; return; }
     const row = ev.target.closest('.g-body .srow');
     if (!row || !run) return;
@@ -892,6 +913,7 @@
     chosen.set(row.dataset.step, row.getAttribute('aria-expanded') !== 'true');
   });
   document.addEventListener('keydown', ev => {
+    drawn = '';
     if (ev.key === 'Escape' && view.zoom) view.zoom = null;
   });
 

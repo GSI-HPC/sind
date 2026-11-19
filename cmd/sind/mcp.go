@@ -12,9 +12,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
@@ -178,9 +180,11 @@ var mcpNoDefault = map[string][]string{
 // mcpFlagUsage replaces, by command path below the root and flag name, the
 // help of a flag that describes a form a tool call cannot use: a tool's
 // sind process reads no stdin, so create cluster --config - would read
-// an empty configuration.
+// an empty configuration. logs --tail says what a call returns of a long
+// log without it (mcpOutputLimit).
 var mcpFlagUsage = map[string]map[string]string{
 	"create cluster": {"config": "path to cluster configuration file"},
+	"logs":           {"tail": "show only the last N lines (default: all lines, of which a tool call returns the first and the last MiB; 0 shows none)"},
 }
 
 // withMCPFlagSchemas makes cmd, `sind mcp start` or `sind mcp tools`,
@@ -241,8 +245,8 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 			}
 		}
 		in.Flags = emptyListsAsNone(in.Flags)
-		if mcpRunsToCompletion(req.Params.Name) {
-			ctx = context.WithoutCancel(ctx)
+		if mcpChangesState(req.Params.Name) {
+			ctx = cmdexec.WithStopGrace(ctx, mcpStopGrace)
 		}
 		run = failedAsError(run)
 		if next == nil {
@@ -260,9 +264,16 @@ func inProcessGroup(mw ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 	}
 }
 
+// mcpOutputLimit is about the most of a tool's stdout and of its stderr
+// that a call returns: the first and the last MiB of each. go-sdk sends
+// the output twice, as structured content and as its JSON text, and the
+// output of sind_exec or of sind_logs without tail has no other bound.
+const mcpOutputLimit = 2 << 20
+
 // mcpExecute runs a tool call as ophis does, the sind binary with the
 // call's command path, flags and arguments (mcpToolArgs), but in a process
-// group of its own (cmdexec.WithProcessGroup). ophis kills only the sind
+// group of its own (cmdexec.WithProcessGroup), and with at most about
+// mcpOutputLimit of each stream (cmdexec.WithOutputLimit). ophis kills only the sind
 // process when the call's context ends, and the docker exec or docker logs
 // it started would go on, holding its output open: the cancelled call
 // would answer only when that docker command ended, if ever. Killing the
@@ -275,7 +286,8 @@ func mcpExecute(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInpu
 	if err != nil {
 		return nil, ophis.ToolOutput{}, fmt.Errorf("locating the sind binary: %w", err)
 	}
-	ctx, endProgress := withToolProgress(cmdexec.WithProcessGroup(ctx), req)
+	ctx = cmdexec.WithOutputLimit(cmdexec.WithProcessGroup(ctx), mcpOutputLimit)
+	ctx, endProgress := withToolProgress(ctx, req)
 	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(ctx, exe, mcpToolArgs(req.Params.Name, in)...)
 	endProgress()
@@ -356,18 +368,24 @@ func failedAsError(run ophis.ExecuteFunc) ophis.ExecuteFunc {
 	}
 }
 
-// mcpRunsToCompletion reports whether the tool changes state and so runs
-// on after its call is cancelled or its client disconnects. mcpExecute
-// kills a tool's sind process and the docker commands it started with
-// SIGKILL when the call's context ends, which skips the rollback of a
-// failed create and leaves partial resources and the realm lock behind.
-// Run to completion, the command finishes or rolls back on its own,
-// bounded by its own timeouts (--wait), and the call answers when it ends.
-// Read-only tools and exec keep their cancellation: exec runs a command in
-// a node that nothing rolls back, and a client that stops waiting for it
-// means to stop it. Killing docker exec does not stop that command, though:
-// Docker has no way to signal a process that docker exec started.
-func mcpRunsToCompletion(tool string) bool {
+// mcpStopGrace is how long a cancelled call of a tool that changes state
+// waits for its sind process to stop on SIGTERM before it kills the
+// process group: the rollback's bound and a minute for the release of the
+// realm lock and the writes that must not be cut short.
+const mcpStopGrace = cluster.RollbackTimeout + time.Minute
+
+// mcpChangesState reports whether the tool changes state, so that a call
+// that is cancelled, or whose client disconnects, stops it as an interrupt
+// does (cmdexec.WithStopGrace): SIGTERM to its sind process, which stops
+// waiting for the realm lock or a pull at once and rolls back a create
+// that has begun, and SIGKILL to its process group only after
+// mcpStopGrace. The SIGKILL that mcpExecute sends at once otherwise would
+// skip the rollback and leave partial resources and the realm lock
+// behind. Read-only tools and exec are killed at once: exec runs a command
+// in a node that nothing rolls back, and a client that stops waiting for
+// it means to stop it. Killing docker exec does not stop that command,
+// though: Docker has no way to signal a process that docker exec started.
+func mcpChangesState(tool string) bool {
 	for path, effect := range mcpEffects {
 		if mcpToolName(path) == tool {
 			return effect != readOnly && path != "exec"
@@ -482,9 +500,10 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 //     activity log, as every command does, and nothing on its stderr;
 //   - SIND_LOG_TIMESTAMPS=false: the time an error line was written means
 //     nothing to the client, which gets the line with the call's result;
-//   - the root's Version, which ophis reports to MCP clients, only while
-//     the server runs: set on the root for good, it would give every sind
-//     command a --version flag.
+//   - the root's Version to the bare version, such as 0.17.0, which ophis
+//     reports to MCP clients as serverInfo.version. Otherwise the root's
+//     Version is the human line that `sind --version` prints, such as
+//     "sind 0.17.0 (abc1234)".
 func asMCPServer(cmd *cobra.Command) {
 	run := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

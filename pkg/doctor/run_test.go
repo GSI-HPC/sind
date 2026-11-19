@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -94,6 +95,30 @@ func TestRun_DockerTooOld(t *testing.T) {
 	assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
 }
 
+// TestRun_DockerCLITooOld checks that a docker CLI before
+// MinDockerMajor fails the Docker Engine check, even with a new Engine.
+func TestRun_DockerCLITooOld(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"ServerVersion":"28.1.1","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"27.5.1"}}`, "", nil)
+
+	checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
+	require.Len(t, checks, 4)
+	assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed,
+		Detail: "docker CLI 27.5.1 (requires >= 28.0)", Remediation: dockerCLIRemediation}, checks[0])
+}
+
+func TestRun_DockerCLIVersion(t *testing.T) {
+	for _, version := range []string{"28.0.0", "29.1.0", "dev", ""} {
+		t.Run(version, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(`{"ServerVersion":"28.1.1","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"`+version+`"}}`, "", nil)
+
+			checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
+			assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusOK, Detail: "28.1.1 (>= 28.0)"}, checks[0])
+		})
+	}
+}
+
 func TestRun_UnparseableVersion(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("bogus"), "", nil)
@@ -103,17 +128,28 @@ func TestRun_UnparseableVersion(t *testing.T) {
 	assert.Contains(t, checks[0].Detail, "unable to parse")
 }
 
+// TestRun_DockerNotReachable checks the Docker Engine check of a daemon
+// the docker CLI cannot reach, whether it exits 1 or, before Docker 28.1,
+// exits 0 and reports it in docker info's ServerErrors.
 func TestRun_DockerNotReachable(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n", testutil.ExitCode1(t))
+	const msg = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+	for name, result := range map[string]mock.Result{
+		"exit status":   {Stderr: msg + "\n", Err: testutil.ExitCode1(t)},
+		"server errors": {Stdout: `{"ServerErrors":["` + msg + `"],"ClientInfo":{"Version":"28.0.4"}}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(result.Stdout, result.Stderr, result.Err)
 
-	checks := Run(context.Background(), hermeticDeps(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
-	assert.Equal(t, []clidoctor.Check{
-		{Name: "Docker Engine", Status: clidoctor.StatusFailed,
-			Detail:      "not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
-			Remediation: "Start the Docker daemon:\n\nsudo systemctl start docker"},
-		{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
-	}, checks)
+			checks := Run(context.Background(), hermeticDeps(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
+			assert.Equal(t, []clidoctor.Check{
+				{Name: "Docker Engine", Status: clidoctor.StatusFailed,
+					Detail:      "not reachable: " + msg,
+					Remediation: dockerStartRemediation},
+				{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
+			}, checks)
+		})
+	}
 }
 
 func TestRun_CgroupMounts(t *testing.T) {
@@ -236,6 +272,15 @@ func TestRun_DaemonCgroupV1(t *testing.T) {
 	require.Len(t, checks, 4)
 	assert.Equal(t, clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 		Detail: "Docker runs containers on cgroup v1 (sind requires cgroupv2)", Remediation: unifiedRemediation}, checks[3])
+}
+
+// TestRemediationsNameTheMinimums checks that the fixes ask for the values
+// the checks compare with.
+func TestRemediationsNameTheMinimums(t *testing.T) {
+	limit := strconv.Itoa(MinInotifyInstances)
+	assert.Equal(t, 2, strings.Count(inotifyRemediation, "fs.inotify.max_user_instances="+limit+"\n")+
+		strings.Count(inotifyRemediation, "fs.inotify.max_user_instances="+limit+" |"), inotifyRemediation)
+	assert.True(t, strings.HasPrefix(dockerInstallRemediation, "Install Docker Engine "+strconv.Itoa(MinDockerMajor)+" or later: "))
 }
 
 // TestRun_Inotify checks the advisory inotify check: a warning below the

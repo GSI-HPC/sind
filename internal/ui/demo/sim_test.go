@@ -75,10 +75,10 @@ nodes:
 
 func TestSim_CreateCluster(t *testing.T) {
 	s, st := newSim(t)
-	require.NoError(t, s.SaveFile(ConfigDir+"/nightly.yaml", []byte(nightly)))
+	require.NoError(t, s.SaveFile(ConfigDir+"/ci/nightly.yaml", []byte(nightly)))
 
 	id, err := s.Start(run.Spec{Action: "create-cluster", Realm: "ci", Cluster: "nightly", Display: "sind create cluster",
-		Argv: []string{"sind", "create", "cluster", "--config", ConfigDir + "/nightly.yaml", "--data", "volume", "--pull"}})
+		Argv: []string{"sind", "create", "cluster", "--config", ConfigDir + "/ci/nightly.yaml", "--data", "volume", "--pull"}})
 	require.NoError(t, err)
 	task, ok := st.Snapshot().Task(id)
 	require.True(t, ok)
@@ -146,7 +146,7 @@ func TestSim_CreateCluster_PullFails(t *testing.T) {
 	assert.Equal(t, store.TaskFailed, task.Status)
 	assert.Equal(t, 1, task.Exit)
 	assert.Contains(t, task.Err, "pull access denied for example.org/none")
-	assert.Contains(t, task.Output, "Error: pulling")
+	assert.Contains(t, task.Output, " ERRO pulling")
 	_, ok := st.Snapshot().Cluster("sind", "bad")
 	assert.False(t, ok)
 	r, _ := st.Snapshot().RunOfTrace(task.Trace)

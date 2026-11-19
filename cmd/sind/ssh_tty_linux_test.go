@@ -60,8 +60,8 @@ func openPTYPair(t *testing.T) (ptmx, pts *os.File) {
 // through a pseudo-terminal, with CRLF line endings and the remote stderr.
 func TestSSH_TTYOnlyWithTerminalsAtBothEnds(t *testing.T) {
 	tty := openPTY(t)
-	withTTY := []string{"exec", "-i", "-t", "sind-ssh", "ssh", "worker-0.default.sind.sind", "hostname"}
-	withoutTTY := []string{"exec", "-i", "sind-ssh", "ssh", "worker-0.default.sind.sind", "hostname"}
+	withTTY := []string{"exec", "-i", "-t", "sind-ssh", "ssh", "--", "worker-0.default.sind.sind", "hostname"}
+	withoutTTY := []string{"exec", "-i", "sind-ssh", "ssh", "--", "worker-0.default.sind.sind", "hostname"}
 	for name, tc := range map[string]struct {
 		stdin  io.Reader
 		stdout io.Writer

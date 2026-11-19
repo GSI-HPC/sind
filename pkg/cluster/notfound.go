@@ -56,6 +56,21 @@ func clusterContainers(ctx context.Context, client *docker.Client, realm, cluste
 	return containers, nil
 }
 
+// isNode reports whether a container of a cluster, by its labels, is one
+// of the cluster's nodes. The config, munge and journal helpers carry the
+// realm and cluster labels but no role, and an interrupted create can
+// leave one behind: the queries and the power commands leave them out,
+// while ListClusterResources lists them, so that delete removes them.
+func isNode(labels docker.Labels) bool {
+	return labels[LabelRole] != ""
+}
+
+// clusterNodes is clusterContainers without the helpers (see isNode).
+func clusterNodes(ctx context.Context, client *docker.Client, realm, clusterName string) ([]docker.ContainerListEntry, error) {
+	containers, err := clusterContainers(ctx, client, realm, clusterName)
+	return slices.DeleteFunc(containers, func(c docker.ContainerListEntry) bool { return !isNode(c.Labels) }), err
+}
+
 // existingClusterContainers is clusterContainers for a cluster that must
 // exist: a cluster without containers fails with clusterNotFound.
 func existingClusterContainers(ctx context.Context, client *docker.Client, realm, clusterName string) ([]docker.ContainerListEntry, error) {

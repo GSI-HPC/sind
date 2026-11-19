@@ -63,6 +63,9 @@ button,input,select,textarea{font:inherit;color:inherit}
    the corner of its containing block, so that text in a box that scrolls
    sideways does not widen the page. */
 .vh{position:absolute!important;top:0;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* .copy-clip holds what a Copy copies while the browser copies it the old
+   way. */
+.copy-clip{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}
 /* hidden hides, whatever display a rule gives the element. */
 [hidden]{display:none!important}
 /* The skip link is the first stop of Tab, and shows only then. */

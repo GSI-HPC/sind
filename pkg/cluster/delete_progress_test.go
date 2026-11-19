@@ -92,8 +92,8 @@ func TestDelete_ReportsItsSteps(t *testing.T) {
 }
 
 // The last cluster takes the realm's shared resources with it: its
-// monitoring stack, which is hidden as a realm may have none, the mesh, and
-// then the stack's volumes.
+// monitoring stack, which is hidden as a realm may have none, the stack's
+// volumes, and then the mesh.
 func TestDelete_LastClusterReportsTheRealm(t *testing.T) {
 	tree, order, err := deleteDev(t, false, newStackFake(t), deleteOnCallOpts{})
 
@@ -109,7 +109,7 @@ func TestDelete_LastClusterReportsTheRealm(t *testing.T) {
   step volumes total=3 [fold]: ok
     target sind-dev-config,sind-dev-data,sind-dev-munge: ok
 `, tree)
-	assert.Equal(t, []string{"nodes", "network", "volumes", "monitoring stack", "mesh", "monitoring volumes"}, order)
+	assert.Equal(t, []string{"nodes", "network", "volumes", "monitoring stack", "monitoring volumes", "mesh"}, order)
 }
 
 // A node that cannot be removed fails its target and the step, with the

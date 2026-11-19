@@ -85,7 +85,7 @@ func buildCreateWorker(f Form, c Context) (Command, error) {
 			size.memoryMB, _ = config.MemoryMB(m) // checked
 		}
 	}
-	cmd := NewCommand(sindArgv(realm, words...)...)
+	cmd := NewCommand(SindArgv(realm, words...)...)
 	added := nextWorkers(nodes, count)
 	names := added[0]
 	if count > 1 {
@@ -188,7 +188,7 @@ func buildDeleteCluster(f Form, c Context) (Command, error) {
 	}
 	// The command names the default cluster too, so that a copy deletes
 	// this cluster in a shell with SIND_CLUSTER.
-	cmd := NewCommand(sindArgv(realm, "delete", "cluster", cl.Name)...)
+	cmd := NewCommand(SindArgv(realm, "delete", "cluster", cl.Name)...)
 	cmd.OK = "Delete cluster " + cl.Name
 	g := clusterGoesOf(c, realm, cl.Name)
 	for _, d := range g.data {
@@ -475,7 +475,7 @@ func buildDeleteClusters(f Form, c Context) (Command, error) {
 		if _, ok := c.Snap.Cluster(realm, name); !ok {
 			return Command{}, fmt.Errorf("realm %s has no cluster %s", realm, name)
 		}
-		argv := sindArgv(realm, "delete", "cluster", name)
+		argv := SindArgv(realm, "delete", "cluster", name)
 		parts = append(parts, Part{Action: "delete-cluster", Realm: realm, Cluster: name, Argv: argv, Display: Quote(argv)})
 	}
 	slices.SortFunc(parts, func(a, b Part) int {
@@ -526,7 +526,7 @@ func buildDeleteWorker(f Form, c Context) (Command, error) {
 	shorts := shortNames(picked)
 	// The command names the default cluster too, so that a copy deletes
 	// these workers in a shell with SIND_CLUSTER.
-	cmd := NewCommand(sindArgv(realm, append([]string{"delete", "worker"}, namedNodeWords(cl.Name, shorts)...)...)...)
+	cmd := NewCommand(SindArgv(realm, append([]string{"delete", "worker"}, namedNodeWords(cl.Name, shorts)...)...)...)
 	cmd.OK = "Delete " + countOr(shorts, "workers")
 	if len(picked) == 1 {
 		cmd.Goes = append(cmd.Goes, "the container "+picked[0].Container+" and its DNS record", "its Slurm node: jobs on it fail")

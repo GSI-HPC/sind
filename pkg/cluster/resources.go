@@ -14,6 +14,8 @@ import (
 )
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
+// A network of that name that exists already, as another create made it,
+// fails with ErrClusterExists: unlike a volume, a network is created once.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	labels := docker.Labels{
 		LabelRealm:                 realm,
@@ -21,7 +23,11 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
 		docker.ComposeNetworkLabel: "net",
 	}
-	_, err := client.CreateNetwork(ctx, NetworkName(realm, clusterName), labels)
+	name := NetworkName(realm, clusterName)
+	_, err := client.CreateNetwork(ctx, name, labels)
+	if docker.IsAlreadyExists(err) {
+		return errorWith(ErrClusterExists, "creating cluster network: network %s already exists", name)
+	}
 	if err != nil {
 		return fmt.Errorf("creating cluster network: %w", err)
 	}
@@ -114,15 +120,18 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		"--label", LabelCluster + "=" + cfg.Name,
 		"-v", string(volName) + ":" + slurm.ConfDir,
 	}
+	// The helper sets its own entrypoint, as a custom image may set one
+	// that would not run sleep, or none and no command, which docker
+	// create refuses.
 	if len(secrets) > 0 {
-		args = append(args, image, "sleep", "30")
+		args = append(args, "--entrypoint", "sleep", image, "30")
 		if _, err := client.RunContainer(ctx, args...); err != nil {
 			return fmt.Errorf("creating config helper container: %w", err)
 		}
 		// docker rm -f kills the helper's sleep first.
 		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	} else {
-		args = append(args, image)
+		args = append(args, "--entrypoint", "true", image)
 		if _, err := client.CreateContainer(ctx, args...); err != nil {
 			return fmt.Errorf("creating config helper container: %w", err)
 		}
@@ -219,7 +228,7 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		"--label", LabelCluster + "=" + clusterName,
 		"-v", string(volName) + ":" + slurm.MungeDir,
 	}
-	args = append(args, image, "sleep", "30")
+	args = append(args, "--entrypoint", "sleep", image, "30")
 	_, err := client.RunContainer(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("creating munge helper container: %w", err)

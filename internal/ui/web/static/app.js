@@ -71,6 +71,42 @@
     return e;
   }
 
+  // Copy. copyText puts text on the clipboard and resolves to whether it
+  // did. When the browser has no clipboard API or refuses it, as on a page
+  // that is not served from this machine, it copies the way browsers did
+  // before the API. selectText selects what an element shows, for the
+  // reader to copy with Ctrl+C when both failed. Every copy button of the
+  // pages uses them, as window.sindCopy.
+  function oldCopy(text) {
+    const back = document.activeElement;
+    const area = el('textarea', 'copy-clip');
+    area.value = text;
+    area.readOnly = true;
+    area.tabIndex = -1;
+    area.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    area.remove();
+    if (back instanceof HTMLElement) back.focus();
+    return ok;
+  }
+  function copyText(text) {
+    if (!navigator.clipboard) return Promise.resolve(oldCopy(text));
+    return navigator.clipboard.writeText(text).then(() => true, () => oldCopy(text));
+  }
+  function selectText(e) {
+    if (!e) return;
+    if (e instanceof HTMLTextAreaElement) { e.focus(); e.select(); e.scrollTop = 0; return; }
+    const range = document.createRange();
+    range.selectNodeContents(e);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  window.sindCopy = Object.freeze({ text: copyText, select: selectText });
+
   // The connection. A stream that drops for a moment and comes back shows
   // only in the indicator; one that stays away for longer dims the page,
   // holds its actions and fills the banner #conn, which says how old the
@@ -271,7 +307,106 @@
     if (told.length) say(told.join(' '));
   }
 
+  // The streams. A browser opens at most six HTTP/1.1 connections to sind
+  // ui, for all its tabs together, and every live page holds one; the Logs
+  // tab holds a second. A seventh stream, and then every request of every
+  // tab, would wait for one to close. So a tab that is hidden for a moment
+  // lets its streams go, and opens them again when it is shown: a stream
+  // opens with every fragment, so that the page is up to date at once. A
+  // page that marks itself data-keep-live, as the page of a run that goes
+  // on does for the tab's title, keeps them while it is hidden.
+  const sleepAfter = 10000;
+  const sources = new Set();
+
+  // LiveSource is the EventSource that htmx's SSE extension gets: a stream
+  // that can let its connection go and open a new one later, with the
+  // listeners that the extension added to it. A stream that the browser
+  // gave up on is closed, and the extension makes a new one.
+  class LiveSource {
+    constructor(url, opts) {
+      this.url = url;
+      this.opts = opts;
+      this.listeners = [];
+      this.onopen = this.onerror = this.onmessage = null;
+      this.es = null;
+      this.closed = false;
+      sources.add(this);
+      if (!asleep) this.wake();
+    }
+
+    get readyState() {
+      if (this.closed) return EventSource.CLOSED;
+      return this.es ? this.es.readyState : EventSource.CONNECTING;
+    }
+
+    addEventListener(type, fn) {
+      this.listeners.push([type, fn]);
+      if (this.es) this.es.addEventListener(type, fn);
+    }
+
+    removeEventListener(type, fn) {
+      this.listeners = this.listeners.filter(([t, f]) => t !== type || f !== fn);
+      if (this.es) this.es.removeEventListener(type, fn);
+    }
+
+    wake() {
+      if (this.closed || this.es) return;
+      const es = new EventSource(this.url, this.opts);
+      this.es = es;
+      for (const [type, fn] of this.listeners) es.addEventListener(type, fn);
+      es.onopen = ev => { if (this.onopen) this.onopen(ev); };
+      es.onmessage = ev => { if (this.onmessage) this.onmessage(ev); };
+      es.onerror = ev => {
+        if (es.readyState === EventSource.CLOSED) this.close();
+        if (this.onerror) this.onerror(ev);
+      };
+    }
+
+    sleep() {
+      if (!this.es) return;
+      this.es.close();
+      this.es = null;
+    }
+
+    close() {
+      this.closed = true;
+      this.sleep();
+      sources.delete(this);
+    }
+  }
+
+  let asleep = false;
+  let sleepTimer = 0;
+  function keepLive() { return !document.hidden || !!document.querySelector('[data-keep-live]'); }
+
+  // settle wakes the streams of a page that is shown or wants to stay
+  // live, and lets them go once it has been hidden for sleepAfter. The
+  // event sind:sleep or sind:wake tells logs.js, which has a stream of its
+  // own.
+  function settle() {
+    if (keepLive()) {
+      clearTimeout(sleepTimer);
+      sleepTimer = 0;
+      if (!asleep) return;
+      asleep = false;
+      for (const s of sources) s.wake();
+      document.dispatchEvent(new Event('sind:wake'));
+      return;
+    }
+    if (asleep || sleepTimer) return;
+    sleepTimer = setTimeout(() => {
+      sleepTimer = 0;
+      if (keepLive()) return;
+      asleep = true;
+      for (const s of sources) s.sleep();
+      document.dispatchEvent(new Event('sind:sleep'));
+    }, sleepAfter);
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    // htmx's SSE extension opens its streams through this hook, once htmx
+    // processes the page, which it does after this listener.
+    if (window.htmx) window.htmx.createEventSource = (url, opts) => new LiveSource(url, opts || { withCredentials: true });
     showTheme();
     showTabs(document);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', showTheme);
@@ -306,8 +441,7 @@
       if (t.closest('[data-conn-retry]')) { probe(true); return; }
       const copy = t.closest('[data-shell-copy]');
       if (copy) {
-        const done = navigator.clipboard ? navigator.clipboard.writeText(copy.dataset.shellCopy) : Promise.reject(new Error('no clipboard'));
-        done.then(() => toast('Copied'), () => toast('Select the text and press Ctrl+C to copy'));
+        copyText(copy.dataset.shellCopy).then(ok => toast(ok ? 'Copied' : 'Select the text and press Ctrl+C to copy'));
         return;
       }
       // A table cell that holds only a checkbox is the checkbox's target
@@ -333,6 +467,12 @@
     };
     document.body.addEventListener('htmx:beforeRequest', hold);
     document.addEventListener('submit', hold, true);
+
+    // A hidden tab lets its streams go after a moment, and opens them again
+    // when it is shown (see LiveSource).
+    document.addEventListener('visibilitychange', settle);
+    document.body.addEventListener('htmx:sseMessage', () => { if (document.hidden) settle(); });
+    settle();
 
     // The live stream closes when the page goes, before the browser cuts
     // it: a cut stream is an error, which htmx logs and the page would

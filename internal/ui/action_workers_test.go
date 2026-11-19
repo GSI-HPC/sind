@@ -37,6 +37,15 @@ func TestActWorkers_Facts(t *testing.T) {
 	fail = errors.New("no such container")
 	assert.Equal(t, action.WorkerFacts{Err: "no such container"}, a.facts(ctx, "sind-dev-worker-1"))
 	assert.Equal(t, 2, inspects)
+
+	// The error of a request that went away is not kept.
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	fail = context.Canceled
+	a.facts(canceled, "sind-dev-worker-2")
+	fail = nil
+	assert.Equal(t, action.WorkerFacts{CPUs: 4, Memory: 2 << 30}, a.facts(ctx, "sind-dev-worker-2"))
+	assert.Equal(t, 4, inspects)
 }
 
 func TestActWorkers_Sizes(t *testing.T) {

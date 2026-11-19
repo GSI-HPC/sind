@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 
@@ -22,11 +23,36 @@ import (
 // deleting the realm's networks detaches them. Deleting the realm's last
 // cluster removes the mesh, and with it the record of them (see Delete).
 
-// ownContainer reports whether a container with these labels is sind's:
-// a node or mesh container, which carry the realm label, or a container of
-// a realm's monitoring stack, which joins the mesh's Compose project.
-func ownContainer(labels docker.Labels, meshMgr *mesh.Manager) bool {
-	return labels[LabelRealm] != "" || labels[docker.ComposeProjectLabel] == meshMgr.ComposeProject()
+// ownContainer reports whether the container name with these labels is
+// sind's, in any realm: a node, which carries the realm label, or a
+// container of a realm's mesh (meshContainer).
+func ownContainer(name docker.ContainerName, labels docker.Labels) bool {
+	return labels[LabelRealm] != "" || meshContainer(name, labels)
+}
+
+// meshContainer reports whether the container name with these labels is the
+// DNS container, the SSH relay or a monitoring stack container of a realm's
+// mesh, of this realm or another. They carry no realm label, as a container
+// with one counts as a cluster's (HasOtherClusters), but only the Compose
+// labels of the mesh's project, <realm>-mesh, with their service. The name
+// must be the one sind gives that service in the realm: a Compose project
+// of a user's that has the same name, such as service-mesh, names its
+// containers <project>-<service>-N.
+func meshContainer(name docker.ContainerName, labels docker.Labels) bool {
+	realm, ok := mesh.ProjectRealm(labels[docker.ComposeProjectLabel])
+	if !ok {
+		return false
+	}
+	names := mesh.RealmNames(realm)
+	switch service := labels[docker.ComposeServiceLabel]; service {
+	case mesh.ComposeServiceDNS:
+		return name == names.DNSContainer
+	case mesh.ComposeServiceSSH:
+		return name == names.SSHContainer
+	default:
+		s := observability.Service(service)
+		return slices.Contains(observability.Services, s) && name == observability.ContainerName(realm, s)
+	}
 }
 
 // ExternalContainers returns the containers outside sind attached to the
@@ -38,7 +64,7 @@ func ExternalContainers(ctx context.Context, client *docker.Client, meshMgr *mes
 	}
 	var names []docker.ContainerName
 	for _, e := range entries {
-		if !ownContainer(e.Labels, meshMgr) {
+		if !ownContainer(e.Name, e.Labels) {
 			names = append(names, e.Name)
 		}
 	}
@@ -66,7 +92,7 @@ func Connectable(ctx context.Context, client *docker.Client, meshMgr *mesh.Manag
 	}
 	var out []docker.ContainerListEntry
 	for _, e := range entries {
-		if !ownContainer(e.Labels, meshMgr) && !slices.Contains(e.Networks, meshMgr.NetworkName()) {
+		if !ownContainer(e.Name, e.Labels) && !slices.Contains(e.Networks, meshMgr.NetworkName()) {
 			out = append(out, e)
 		}
 	}
@@ -103,7 +129,7 @@ func realmNetworks(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 
 // inspectExternal inspects the named containers and fails for one that does
 // not exist or is sind's own.
-func inspectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names []docker.ContainerName) ([]*docker.ContainerInfo, error) {
+func inspectExternal(ctx context.Context, client *docker.Client, names []docker.ContainerName) ([]*docker.ContainerInfo, error) {
 	infos, err := client.InspectContainers(ctx, names...)
 	if docker.IsNotFound(err) {
 		return nil, missingContainer(ctx, client, names, err)
@@ -112,7 +138,7 @@ func inspectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 		return nil, fmt.Errorf("inspecting containers: %w", err)
 	}
 	for _, info := range infos {
-		if ownContainer(info.Labels, meshMgr) {
+		if ownContainer(info.Name, info.Labels) {
 			return nil, fmt.Errorf("%s is a sind container", info.Name)
 		}
 	}
@@ -155,7 +181,7 @@ func Connect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 	if len(networks) == 0 || networks[0] != meshMgr.NetworkName() {
 		return fmt.Errorf("no mesh found for realm %q", meshMgr.Realm)
 	}
-	infos, err := inspectExternal(ctx, client, meshMgr, names)
+	infos, err := inspectExternal(ctx, client, names)
 	if err != nil {
 		return err
 	}
@@ -189,7 +215,7 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 	if err != nil {
 		return err
 	}
-	infos, err := inspectExternal(ctx, client, meshMgr, names)
+	infos, err := inspectExternal(ctx, client, names)
 	if err != nil {
 		return err
 	}

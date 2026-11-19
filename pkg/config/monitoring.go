@@ -14,6 +14,7 @@ const MetricsType = "metrics/openmetrics"
 // its port, and metrics that need no authentication. The collector has no
 // JWT and is not SlurmUser, so MetricsAuthUsers would lock it out, and so
 // would PrivateData unless MetricsParameters lists ignore_private_data.
+// Slurm also takes the plugin without its metrics/ prefix.
 // The unmanaged rejection is in Validate, with the others of an unmanaged
 // cluster.
 func (c *Cluster) validateMonitoring() error {
@@ -21,7 +22,7 @@ func (c *Cluster) validateMonitoring() error {
 		return nil
 	}
 	main := c.Slurm.Main
-	if value, ok := main.Parameter("MetricsType"); ok && value != MetricsType {
+	if value, ok := main.Parameter("MetricsType"); ok && !IsPlugin(value, MetricsType) {
 		return fmt.Errorf("slurm main sets MetricsType=%s: monitoring needs %s", value, MetricsType)
 	}
 	if value, ok := main.Parameter("CommunicationParameters"); ok && ListsValue(value, "disable_http") {

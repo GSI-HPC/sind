@@ -73,9 +73,6 @@ func takeShots(ctx context.Context, o options, l Shots, base string) error {
 			}
 		}
 	}
-	if taken == 0 {
-		return fmt.Errorf("no shot is named %v", []string(o.Only))
-	}
 	fmt.Printf("took %d screenshots into %s\n", taken, o.Out)
 	return nil
 }

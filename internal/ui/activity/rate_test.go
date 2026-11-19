@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/eventlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,6 +24,15 @@ func byteLine(r, typ string, ms, amount int64, unit string) []byte {
 		r, rateT0.Add(time.Duration(ms)*time.Millisecond).Format(time.RFC3339Nano), typ, amount, unit)
 }
 
+// byteEvent is byteLine as the reducer decodes it.
+func byteEvent(r, typ string, ms, amount int64, unit string) eventlog.Line {
+	l, err := eventlog.Decode(byteLine(r, typ, ms, amount, unit))
+	if err != nil {
+		panic(err)
+	}
+	return l
+}
+
 // The rate of a span is the bytes it moved over the last five seconds, by
 // the times of its events, counted from the amount the line between two
 // samples gives at the start of the window: 0 until a second sample, and
@@ -30,41 +40,40 @@ func byteLine(r, typ string, ms, amount int64, unit string) []byte {
 func TestRates(t *testing.T) {
 	r := rates{}
 	span := progress.SpanID(3)
-	r.take(byteLine("a", "advance", 0, 0, "bytes"))
+	r.take(byteEvent("a", "advance", 0, 0, "bytes"))
 	assert.Zero(t, r.rate("a", span, rateT0))
-	r.take(byteLine("a", "advance", 1000, 10_000_000, "bytes"))
+	r.take(byteEvent("a", "advance", 1000, 10_000_000, "bytes"))
 	assert.InDelta(t, 10e6, r.rate("a", span, rateT0), 1)
-	r.take(byteLine("a", "advance", 1500, 10_000_000, "bytes")) // no change
-	r.take(byteLine("a", "advance", 2000, 30_000_000, "bytes"))
+	r.take(byteEvent("a", "advance", 1500, 10_000_000, "bytes")) // no change
+	r.take(byteEvent("a", "advance", 2000, 30_000_000, "bytes"))
 	assert.InDelta(t, 15e6, r.rate("a", span, rateT0.Add(2*time.Second)), 1)
 	for ms := int64(3000); ms <= 8000; ms += 1000 {
-		r.take(byteLine("a", "advance", ms, 30_000_000+(ms-2000)*5_000, "bytes"))
+		r.take(byteEvent("a", "advance", ms, 30_000_000+(ms-2000)*5_000, "bytes"))
 	}
 	assert.Len(t, r[spanKey{"a", span}], 6, "the samples from the start of the window")
 	assert.InDelta(t, 5e6, r.rate("a", span, rateT0.Add(8*time.Second)), 1)
-	r.take(byteLine("a", "advance", 8500, 62_500_000, "bytes"))
+	r.take(byteEvent("a", "advance", 8500, 62_500_000, "bytes"))
 	assert.Len(t, r[spanKey{"a", span}], 7, "the newest sample before the window and those in it")
 	assert.InDelta(t, 5e6, r.rate("a", span, rateT0.Add(8*time.Second)), 1)
 	assert.Zero(t, r.rate("a", span, rateT0.Add(14*time.Second)), "stalled")
 	assert.Zero(t, r.rate("b", span, rateT0), "another run")
 
-	r.take(byteLine("a", "end", 9000, 100_000_000, "bytes"))
+	r.take(byteEvent("a", "end", 9000, 100_000_000, "bytes"))
 	assert.NotContains(t, r, spanKey{"a", span}, "forgotten at its end")
 }
 
 // Lines that are not of bytes, or that cannot be read, are left out.
 func TestRatesLeftOut(t *testing.T) {
 	r := rates{}
-	r.take(byteLine("a", "advance", 0, 1, "items"))
-	r.take([]byte(`{"unit":"bytes"}`))
+	r.take(byteEvent("a", "advance", 0, 1, "items"))
 	assert.Empty(t, r)
 }
 
 // Two samples at the same time give no rate.
 func TestRatesSameTime(t *testing.T) {
 	r := rates{}
-	r.take(byteLine("a", "advance", 0, 1, "bytes"))
-	r.take(byteLine("a", "advance", 0, 2, "bytes"))
+	r.take(byteEvent("a", "advance", 0, 1, "bytes"))
+	r.take(byteEvent("a", "advance", 0, 2, "bytes"))
 	assert.Zero(t, r.rate("a", 3, rateT0))
 }
 
@@ -85,7 +94,10 @@ func TestReducerRates(t *testing.T) {
 	red.Runs()
 	assert.Empty(t, red.rates, "run a is no longer kept")
 
+	red.Take([]byte(`{"unit":"bytes"}`))
+	assert.Empty(t, red.rates, "a line that cannot be read is left out")
 	red.Take(byteLine("b", "advance", 0, 0, "bytes"))
 	red.Reset()
 	assert.Empty(t, red.rates)
+	assert.Empty(t, red.converted)
 }

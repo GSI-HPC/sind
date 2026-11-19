@@ -503,7 +503,7 @@ func (w *World) connectable(r *realm) []store.Outside {
 		o.Networks = slices.Clone(o.Networks)
 		for _, other := range w.realms {
 			if slices.Contains(other.external, o.Name) {
-				o.Networks = append(o.Networks, string(mesh.NewManager(nil, other.name).NetworkName()))
+				o.Networks = append(o.Networks, string(mesh.RealmNames(other.name).Network))
 			}
 		}
 		out = append(out, o)
@@ -523,12 +523,12 @@ func (w *World) clear(st *store.Store, name string) {
 
 // publishRealm writes one realm.
 func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey) {
-	m := mesh.NewManager(nil, r.name)
+	names := mesh.RealmNames(r.name)
 	var (
 		clusters []cluster.Summary
 		nodes    []cluster.NodeSummary
-		networks = []cluster.NetworkSummary{{Name: string(m.NetworkName()), Driver: "bridge", Subnet: fmt.Sprintf("172.%d.0.0/16", r.net), Gateway: fmt.Sprintf("172.%d.0.1", r.net)}}
-		volumes  = []cluster.VolumeSummary{{Name: string(m.SSHVolumeName()), Driver: "local"}}
+		networks = []cluster.NetworkSummary{{Name: string(names.Network), Driver: "bridge", Subnet: fmt.Sprintf("172.%d.0.0/16", r.net), Gateway: fmt.Sprintf("172.%d.0.1", r.net)}}
+		volumes  = []cluster.VolumeSummary{{Name: string(names.SSHVolume), Driver: "local"}}
 		records  []mesh.DNSRecord
 		watched  []cluster.MonitoredCluster
 	)
@@ -566,7 +566,7 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 		if c.monitoring {
 			watched = append(watched, cluster.MonitoredCluster{Name: c.name, Nodes: len(c.nodes), SlurmVersion: c.slurm, Slurm: slurmCountsOf(c)})
 		}
-		st.SetStatus(r.name, c.name, w.statusOf(r, c, m))
+		st.SetStatus(r.name, c.name, w.statusOf(r, c, names))
 		st.SetSlurm(r.name, c.name, slurmOf(c))
 		faults := map[string]store.Fault{}
 		for _, n := range c.nodes {
@@ -584,9 +584,9 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 	st.SetVolumes(r.name, volumes)
 	st.SetMesh(r.name, store.Mesh{
 		Info: &mesh.Info{
-			Network: string(m.NetworkName()), DNSContainer: string(m.DNSContainerName()), DNSIP: fmt.Sprintf("172.%d.255.254", r.net),
+			Network: string(names.Network), DNSContainer: string(names.DNSContainer), DNSIP: fmt.Sprintf("172.%d.255.254", r.net),
 			DNSZone: r.name + ".sind", DNSImage: mesh.DNSImage,
-			SSHContainer: string(m.SSHContainerName()), SSHVolume: string(m.SSHVolumeName()), SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
+			SSHContainer: string(names.SSHContainer), SSHVolume: string(names.SSHVolume), SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
 		},
 		Records:     records,
 		External:    slices.Clone(r.external),
@@ -655,7 +655,7 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 
 // statusOf returns the status of a cluster, as the page of the cluster
 // shows it.
-func (w *World) statusOf(r *realm, c *clusterState, m *mesh.Manager) *cluster.Status {
+func (w *World) statusOf(r *realm, c *clusterState, names mesh.Names) *cluster.Status {
 	st := &cluster.Status{Name: c.name, SlurmVersion: c.slurm, State: clusterStateOf(c), Monitoring: c.monitoring}
 	pair := c.find(cluster.ControllerBackupShortName) != nil
 	for _, n := range c.nodes {
@@ -673,8 +673,8 @@ func (w *World) statusOf(r *realm, c *clusterState, m *mesh.Manager) *cluster.St
 	}
 	meshOK := fmt.Sprintf("172.%d.0.0/16", r.net)
 	st.Network = &cluster.NetworkHealth{
-		Mesh: true, MeshName: string(m.NetworkName()), MeshDriver: "bridge", MeshSubnet: meshOK, MeshGateway: fmt.Sprintf("172.%d.0.1", r.net),
-		DNS: true, DNSName: string(m.DNSContainerName()), SSH: true, SSHName: string(m.SSHContainerName()),
+		Mesh: true, MeshName: string(names.Network), MeshDriver: "bridge", MeshSubnet: meshOK, MeshGateway: fmt.Sprintf("172.%d.0.1", r.net),
+		DNS: true, DNSName: string(names.DNSContainer), SSH: true, SSHName: string(names.SSHContainer),
 		Cluster: true, ClusterName: string(cluster.NetworkName(r.name, c.name)), ClusterDriver: "bridge",
 		ClusterSubnet: fmt.Sprintf("172.%d.0.0/16", c.net), ClusterGateway: fmt.Sprintf("172.%d.0.1", c.net),
 	}

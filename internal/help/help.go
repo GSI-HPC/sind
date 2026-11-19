@@ -67,15 +67,19 @@ type Action struct {
 	// Undo says how to take the action back, or that nobody can.
 	Undo string `yaml:"undo"`
 	// Irreversible marks an action that cannot be undone.
-	Irreversible bool     `yaml:"irreversible"`
-	Doc          string   `yaml:"doc"`
-	Words        []string `yaml:"words"`
+	Irreversible bool `yaml:"irreversible"`
+	// NothingToUndo marks an action that leaves nothing to undo, such as
+	// a restart.
+	NothingToUndo bool     `yaml:"nothingToUndo"`
+	Doc           string   `yaml:"doc"`
+	Words         []string `yaml:"words"`
 }
 
 // UndoText says how to take the action back, as a sentence that says so
-// ("To undo: delete the workers."), or that nobody can.
+// ("To undo: delete the workers."), or, as Undo says it, that nobody can
+// or that there is nothing to undo.
 func (a Action) UndoText() string {
-	if a.Irreversible || a.Undo == "" {
+	if a.Irreversible || a.NothingToUndo || a.Undo == "" {
 		return a.Undo + "."
 	}
 	return "To undo: " + strings.ToLower(a.Undo[:1]) + a.Undo[1:] + "."
@@ -210,6 +214,10 @@ func (h *Help) check() error {
 		where := add(KindAction, a.ID)
 		empty(where, map[string]string{"title": a.Title, "summary": a.Summary, "command": a.Command, "undo": a.Undo, "doc": a.Doc},
 			map[string][]string{"words": a.Words})
+		// UndoText would put "To undo:" before it.
+		if !a.Irreversible && !a.NothingToUndo && (strings.HasPrefix(a.Undo, "Nothing") || strings.HasPrefix(a.Undo, "Cannot")) {
+			fail("%s: an undo that says there is none needs irreversible or nothingToUndo", where)
+		}
 	}
 	for _, p := range h.pages {
 		where := add(KindPage, p.ID)
@@ -368,15 +376,21 @@ func (h *Help) Commands() []string {
 	return out
 }
 
-// DocURL returns the URL of a doc path, such as usage/progress#event-log.
+// DocURL returns the URL of a doc path, such as usage/progress#event-log,
+// or "" for no path, as a word may have no page of its own.
 func DocURL(doc string) string { return docURL(doc, "") }
 
 // UIDocURL returns the URL of a doc path for a reader of sind ui: the page
-// then shows the steps for the web UI, and keeps showing them.
+// then shows the steps for the web UI, and keeps showing them. It returns ""
+// for no path, as DocURL does.
 func UIDocURL(doc string) string { return docURL(doc, "?via=ui") }
 
-// docURL returns the URL of a doc path, with the query before the fragment.
+// docURL returns the URL of a doc path, with the query before the fragment,
+// or "" for no path.
 func docURL(doc, query string) string {
+	if doc == "" {
+		return ""
+	}
 	path, frag, hasFrag := strings.Cut(doc, "#")
 	u := DocsURL + path + "/" + query
 	if hasFrag {

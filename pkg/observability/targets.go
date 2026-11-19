@@ -9,6 +9,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Target is a monitored node: a node container of a monitored cluster,
@@ -30,13 +31,6 @@ type Check struct {
 	Port    string
 	Path    string // the HTTP path, empty for tcp
 }
-
-// Slurm daemons' ports.
-const (
-	slurmctldPort = "6817"
-	slurmdPort    = "6818"
-	slurmdbdPort  = "6819"
-)
 
 // Collection is what the stack collects from a node.
 type Collection struct {
@@ -65,13 +59,13 @@ func Collect(role config.Role, managed bool) Collection {
 	case config.RoleController:
 		c.SlurmMetrics = true
 		c.Checks = []Check{
-			{Service: "slurmctld", Check: "live", Module: "http", Port: slurmctldPort, Path: "/livez"},
-			{Service: "slurmctld", Check: "ready", Module: "http", Port: slurmctldPort, Path: "/readyz"},
+			{Service: "slurmctld", Check: "live", Module: "http", Port: slurm.SlurmctldPort, Path: "/livez"},
+			{Service: "slurmctld", Check: "ready", Module: "http", Port: slurm.SlurmctldPort, Path: "/readyz"},
 		}
 	case config.RoleWorker:
-		c.Checks = []Check{{Service: "slurmd", Check: "ready", Module: "http", Port: slurmdPort, Path: "/readyz"}}
+		c.Checks = []Check{{Service: "slurmd", Check: "ready", Module: "http", Port: slurm.SlurmdPort, Path: "/readyz"}}
 	case config.RoleDB:
-		c.Checks = []Check{{Service: "slurmdbd", Check: "tcp", Module: "tcp", Port: slurmdbdPort}}
+		c.Checks = []Check{{Service: "slurmdbd", Check: "tcp", Module: "tcp", Port: slurm.SlurmdbdPort}}
 	}
 	return c
 }

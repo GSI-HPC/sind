@@ -41,6 +41,9 @@ func RunTopic(id string) Topic { return Topic("run/" + id) }
 type Snapshot struct {
 	// Runs are the runs of the event log, newest first.
 	Runs []Run
+	// RunsErr says why sind ui cannot read the event log, so that the runs
+	// show no progress; empty while it can.
+	RunsErr string
 	// Tasks are the commands sind ui started, oldest first.
 	Tasks []Task
 	// Dismissed holds the IDs of the runs that failed and that the user
@@ -137,6 +140,18 @@ func (s *Store) SetRuns(runs []Run, changed ...string) {
 		s.logRuns = runs
 		sn.Runs = s.endRuns(runs)
 	}, ts...)
+}
+
+// SetRunsErr sets why sind ui cannot read the event log, empty once it can,
+// and notifies TopicRuns and TopicTasks when that changes.
+func (s *Store) SetRunsErr(msg string) {
+	s.updateTopics(func(sn *Snapshot) []Topic {
+		if sn.RunsErr == msg {
+			return nil
+		}
+		sn.RunsErr = msg
+		return []Topic{TopicRuns, TopicTasks}
+	})
 }
 
 // endRuns returns runs with each run that has not ended, of a task that

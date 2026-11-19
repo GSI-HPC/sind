@@ -139,6 +139,8 @@ func TestDocURL(t *testing.T) {
 func TestUIDocURL(t *testing.T) {
 	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/?via=ui", UIDocURL("usage/progress"))
 	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/?via=ui#event-log", UIDocURL("usage/progress#event-log"))
+	assert.Empty(t, UIDocURL(""), "no page")
+	assert.Empty(t, DocURL(""), "no page")
 }
 
 func TestLookups(t *testing.T) {
@@ -244,6 +246,8 @@ func TestLoadRefusesFaults(t *testing.T) {
 		"empty command":        {fixture(okWords, strings.Replace(okActions, "command: sind x", "command: ''", 1), okPages, okHowtos), "action \"x\": command is empty"},
 		"empty route":          {fixture(okWords, okActions, strings.Replace(okPages, "route: /p", "route: ''", 1), okHowtos), "route is empty"},
 		"relative route":       {fixture(okWords, okActions, strings.Replace(okPages, "route: /p", "route: p", 1), okHowtos), "route must start with /"},
+		"undo none":            {fixture(okWords, strings.Replace(okActions, "undo: U", "undo: Nothing to undo", 1), okPages, okHowtos), "action \"x\": an undo that says there is none needs irreversible or nothingToUndo"},
+		"undo cannot":          {fixture(okWords, strings.Replace(okActions, "undo: U", "undo: Cannot be undone", 1), okPages, okHowtos), "needs irreversible or nothingToUndo"},
 		"empty doc":            {fixture(okWords, okActions, okPages, strings.Replace(okHowtos, "doc: d", "doc: ''", 1)), "doc is empty"},
 		"no steps":             {fixture(okWords, okActions, okPages, strings.Replace(okHowtos, "steps: [one]", "steps: []", 1)), "it has no steps"},
 		"bad id":               {fixture("- {id: A b, title: A, summary: S}\n", okActions, okPages, okHowtos), "lower case"},
@@ -290,6 +294,7 @@ func TestTextWithoutRelatedWords(t *testing.T) {
 	require.True(t, ok)
 	assert.NotContains(t, text, "Related")
 	assert.NotContains(t, text, "In a terminal")
+	assert.Equal(t, "A (word)\n\nS\n", text, "a word without a doc page links none")
 }
 
 func TestText(t *testing.T) {
@@ -326,6 +331,19 @@ func TestIndex(t *testing.T) {
 	idx = Default().Index(func(id string) bool { return id == "power" })
 	assert.NotContains(t, idx, "\n  power ", "a topic it skips")
 	assert.Contains(t, idx, "\n  delete-realm ")
+
+	// The titles line up, one space after the longest id.
+	longest, columns := 0, map[int]bool{}
+	for _, line := range strings.Split(idx, "\n") {
+		id, _, ok := strings.Cut(strings.TrimPrefix(line, "  "), " ")
+		if !strings.HasPrefix(line, "  ") || !ok {
+			continue
+		}
+		longest = max(longest, len(id))
+		columns[len(line)-len(strings.TrimLeft(line[2+len(id):], " "))] = true
+	}
+	assert.Greater(t, longest, 16, "an id longer than the old fixed column")
+	assert.Equal(t, map[int]bool{2 + longest + 1: true}, columns)
 }
 
 func TestWrap(t *testing.T) {
@@ -344,4 +362,10 @@ func TestActionUndoText(t *testing.T) {
 	assert.Equal(t, "To undo: delete the workers.", Action{Undo: "Delete the workers"}.UndoText())
 	assert.Equal(t, "Cannot be undone.", Action{Undo: "Cannot be undone", Irreversible: true}.UndoText())
 	assert.Equal(t, ".", Action{}.UndoText())
+	assert.Equal(t, "Nothing to undo.", Action{Undo: "Nothing to undo", NothingToUndo: true}.UndoText())
+
+	text, ok := Default().Text("restart-service")
+	require.True(t, ok)
+	assert.Contains(t, text, "\nNothing to undo.\n")
+	assert.NotContains(t, text, "To undo:")
 }

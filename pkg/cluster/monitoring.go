@@ -277,7 +277,7 @@ func removeMonitoringVolumes(ctx context.Context, client *docker.Client, realm s
 func createJournalVolume(ctx context.Context, client *docker.Client, realm string) error {
 	labels := docker.Labels{
 		LabelRealm:                 realm,
-		docker.ComposeProjectLabel: realm + "-mesh",
+		docker.ComposeProjectLabel: mesh.RealmNames(realm).ComposeProject,
 		docker.ComposeVolumeLabel:  "journal",
 	}
 	if err := client.CreateVolume(ctx, observability.JournalVolume(realm), labels); err != nil {
@@ -372,7 +372,7 @@ func probeMonitoringImages(ctx context.Context, client *docker.Client, meshMgr *
 		return "", err
 	}
 	for i, p := range probes {
-		if problems := infos[i].MonitoringProblems(p.req); len(problems) > 0 {
+		if problems := infos[i].Problems(); len(problems) > 0 {
 			return "", errorWith(ErrImageUnsupported, "image %s cannot serve monitoring: %s", p.image, strings.Join(problems, "; "))
 		}
 		if p.req.MariaDB {

@@ -6,18 +6,16 @@ import (
 	"cmp"
 	"fmt"
 	"net/url"
-	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
+	"github.com/GSI-HPC/sind/internal/ui/nodefold"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() { registerRun(defaultRegistry) }
@@ -286,7 +284,7 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 	if run.Title == "" {
 		return
 	}
-	h.Command = &pgCmd{Label: "What the event log names", Text: action.Quote(sindArgvOf(e.realm, runLogWords(run)...))}
+	h.Command = &pgCmd{Label: "What the event log names", Text: action.Quote(action.SindArgv(e.realm, runLogWords(run)...))}
 	h.CmdNote = "Its flags and config are not in the log."
 	if runSource(rc.Snap, run) == runFromUI {
 		h.CmdNote = "sind ui no longer keeps its form, and the log has no flags or config."
@@ -411,16 +409,6 @@ func runNamedBy(r store.Run, line string) bool {
 	return true
 }
 
-// sindArgvOf is the command line of sind in realm, which names a realm
-// other than the default one; an empty realm is the default one.
-func sindArgvOf(realm string, words ...string) []string {
-	argv := []string{"sind"}
-	if realm != "" && realm != mesh.DefaultRealm {
-		argv = append(argv, "--realm", realm)
-	}
-	return append(argv, words...)
-}
-
 // runTimedOut reports whether a run failed as a node ran out of time.
 func runTimedOut(run store.Run) bool {
 	if run.Class == "timeout" {
@@ -452,7 +440,7 @@ func runBack(snap store.Snapshot, t store.Task) *runLink {
 	_, exists := snap.Cluster(t.Realm, t.Cluster)
 	switch {
 	case t.Cluster != "" && exists:
-		return &runLink{Label: "Open " + t.Cluster, Href: "/clusters/" + t.Realm + "/" + t.Cluster}
+		return &runLink{Label: "Open " + t.Cluster, Href: pgClusterURL(t.Realm, t.Cluster, "")}
 	case t.Cluster != "":
 		return &runLink{Label: "Open Clusters", Href: "/clusters"}
 	case t.Action == "connect" || t.Action == "disconnect" || t.Action == "delete-realm":
@@ -488,6 +476,9 @@ type runSummary struct {
 	Data string
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
+	// Live says that the run goes on: the page keeps its stream while its
+	// tab is hidden (app.js), so that the tab's title follows the run.
+	Live bool
 	// SayKey, SayState and Say are what run.js announces when the state
 	// of the run changes, as for a command of the dock; SaySince is when the
 	// run started, in milliseconds since 1970, so that a page opened just
@@ -516,6 +507,7 @@ func runSummaryOf(rc runCtx) *runSummary {
 		s.SaySince = origin.UnixMilli()
 	}
 	s.DocTitle = runDocTitle(run)
+	s.Live = !run.Done()
 	return s
 }
 
@@ -634,67 +626,10 @@ func runRollbackNote(run store.Run) string {
 	return ""
 }
 
-var runNameRE = regexp.MustCompile(`^(.*?)([1-9][0-9]*|0)$`)
-
-// runFoldNodes writes a set of node names the short way, as node sets do:
-// worker-[2,5] for worker-2 and worker-5, worker-[0-3] for four in a row
-// and worker-[0-1] for two. Names without a number at the end stay as they
-// are.
+// runFoldNodes writes the names of the targets of a run as node sets, as
+// the titles of the runs and the commands do (nodefold): worker-[2,5] for
+// worker-2 and worker-5, worker-[0-1].dev for two workers of dev. A name
+// that is no node's, such as an image's, stays as it is.
 func runFoldNodes(names []string) string {
-	type group struct {
-		prefix string
-		nums   []int
-		plain  bool
-	}
-	var groups []*group
-	index := map[string]*group{}
-	for _, name := range names {
-		m := runNameRE.FindStringSubmatch(name)
-		key, plain := name, true
-		var n int
-		if m != nil {
-			key, plain = m[1], false
-			n, _ = strconv.Atoi(m[2])
-		}
-		k := key
-		if plain {
-			k = "\x00" + key
-		}
-		g := index[k]
-		if g == nil {
-			g = &group{prefix: key, plain: plain}
-			index[k] = g
-			groups = append(groups, g)
-		}
-		if !plain {
-			g.nums = append(g.nums, n)
-		}
-	}
-	out := make([]string, 0, len(groups))
-	for _, g := range groups {
-		if g.plain {
-			out = append(out, g.prefix)
-			continue
-		}
-		sort.Ints(g.nums)
-		var parts []string
-		for i := 0; i < len(g.nums); {
-			j := i
-			for j+1 < len(g.nums) && g.nums[j+1] <= g.nums[j]+1 {
-				j++
-			}
-			if g.nums[j] > g.nums[i] {
-				parts = append(parts, fmt.Sprintf("%d-%d", g.nums[i], g.nums[j]))
-			} else {
-				parts = append(parts, strconv.Itoa(g.nums[i]))
-			}
-			i = j + 1
-		}
-		if len(parts) == 1 && !strings.ContainsAny(parts[0], "-") {
-			out = append(out, g.prefix+parts[0])
-			continue
-		}
-		out = append(out, g.prefix+"["+strings.Join(parts, ",")+"]")
-	}
-	return strings.Join(out, ", ")
+	return strings.Join(nodefold.Words(names), ",")
 }

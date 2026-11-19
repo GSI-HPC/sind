@@ -18,6 +18,7 @@ import (
 // and broadcasts events to subscribers.
 type Watcher struct {
 	executor    cmdexec.Executor
+	realm       string
 	clusterName string
 	prefix      string
 
@@ -35,9 +36,18 @@ type Watcher struct {
 
 // NewWatcher creates a Watcher for the given cluster. The executor is used
 // to start long-lived streaming processes (docker events, busctl monitor).
+// Its docker events stream asks for the events of the clusters of that
+// name in every realm; NewRealmWatcher asks for those of one realm.
 func NewWatcher(executor cmdexec.Executor, containerPrefix, clusterName string) *Watcher {
+	return NewRealmWatcher(executor, "", containerPrefix, clusterName)
+}
+
+// NewRealmWatcher is NewWatcher for the cluster of one realm, or of every
+// realm when realm is empty.
+func NewRealmWatcher(executor cmdexec.Executor, realm, containerPrefix, clusterName string) *Watcher {
 	return &Watcher{
 		executor:    executor,
+		realm:       realm,
 		clusterName: clusterName,
 		prefix:      containerPrefix,
 		internalCh:  make(chan Event, 64),
@@ -60,8 +70,10 @@ func (s subscriber) wants(ev Event) bool {
 }
 
 // Subscribe returns a channel that receives a copy of every event.
-// The channel is closed when the Watcher stops. The caller should
-// drain the channel to avoid blocking the broadcast loop.
+// The channel is closed when the Watcher stops. The caller should drain
+// the channel: the broadcast loop drops an event that a full channel has
+// no room for, and for a monitor error, which a subscriber must not miss,
+// the oldest event the channel holds instead.
 func (w *Watcher) Subscribe() <-chan Event {
 	return w.SubscribeTo("")
 }
@@ -101,13 +113,18 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 	log := sindlog.From(ctx)
 
 	// Start docker events monitor.
-	dockerArgs := DockerEventsArgs(w.clusterName)
+	dockerArgs := DockerRealmEventsArgs(w.realm, w.clusterName)
 	proc, err := w.executor.Start(ctx, "docker", dockerArgs...)
 	if err != nil {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start docker events monitor", "err", err)
 		return err
 	}
 	w.ctx = ctx
+
+	// The broadcast loop runs before the monitors, as a monitor that fails
+	// to start emits its error, which waits for the loop once internalCh
+	// is full.
+	w.wg.Go(func() { w.broadcastLoop(ctx) })
 
 	w.runMonitor(ctx, proc, "docker events", NewDockerMonitor(w.prefix).Run, Event{Kind: EventMonitorError})
 
@@ -116,17 +133,13 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 		w.startSystemdMonitor(ctx, node)
 	}
 
-	w.wg.Go(func() { w.broadcastLoop(ctx) })
-
 	return nil
 }
 
 // Wait blocks until all monitor goroutines have exited and closes
-// all remaining subscriber channels. Any Unsubscribe calls must complete
-// before Wait runs; otherwise a concurrent Unsubscribe would double-close
-// the channel Wait is iterating. Callers using the usual
-// defer watcher.Wait() / defer watcher.Unsubscribe(ch) pattern get this
-// ordering for free (deferred calls run LIFO).
+// all remaining subscriber channels. Wait and Unsubscribe may run in either
+// order, or at the same time: each takes the watcher's lock and removes the
+// channels it closes, so each channel is closed once.
 func (w *Watcher) Wait() {
 	w.wg.Wait()
 	w.mu.Lock()
@@ -173,16 +186,17 @@ func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 
 // runMonitor runs a monitor on proc's stdout until its stream ends or ctx
 // is cancelled, which closes the stream to unblock it. A stream that ends
-// while ctx runs is a monitor error: fail, with the stream's end.
+// while ctx runs is a monitor error: fail, with the stream's end and the
+// error of the docker command, which says why it failed.
 func (w *Watcher) runMonitor(ctx context.Context, proc *cmdexec.Process, source string,
 	run func(context.Context, io.Reader, chan<- Event) error, fail Event) {
 	w.wg.Go(func() {
-		defer func() { _ = proc.Close() }()
 		stop := context.AfterFunc(ctx, func() { _ = proc.Stdout.Close() })
-		defer stop()
 		err := run(ctx, proc.Stdout, w.internalCh)
+		stop()
+		exitErr := docker.ClassifyUnreachable(proc.Close())
 		if ctx.Err() == nil {
-			fail.Detail, fail.Err = streamEnd(source, err)
+			fail.Detail, fail.Err = streamEnd(source, err, exitErr)
 			w.emit(ctx, fail)
 		}
 	})
@@ -194,10 +208,11 @@ func (w *Watcher) runMonitor(ctx context.Context, proc *cmdexec.Process, source 
 var errStreamEnded = errors.New("stream ended")
 
 // streamEnd returns the detail and the error of the EventMonitorError for a
-// monitor stream that stopped with err, nil when it ended cleanly.
-func streamEnd(source string, err error) (string, error) {
-	if err != nil {
-		return source + " stream failed", err
+// monitor stream whose reading stopped with readErr and whose command
+// exited with exitErr, both nil when it ended cleanly.
+func streamEnd(source string, readErr, exitErr error) (string, error) {
+	if readErr != nil || exitErr != nil {
+		return source + " stream failed", errors.Join(readErr, exitErr)
 	}
 	return source + " stream ended", errStreamEnded
 }
@@ -221,7 +236,7 @@ func (w *Watcher) broadcastLoop(ctx context.Context) {
 	for {
 		select {
 		case ev := <-w.internalCh:
-			log.Log(ctx, sindlog.LevelTrace, "event", "kind", ev.Kind, "node", ev.Node, "unit", ev.Unit, "detail", ev.Detail)
+			log.Log(ctx, sindlog.LevelTrace, "event", "kind", ev.Kind, "node", ev.Node, "unit", ev.Unit, "detail", ev.Detail, "err", ev.Err)
 			w.mu.Lock()
 			for _, sub := range w.subscribers {
 				if !sub.wants(ev) {
@@ -230,13 +245,36 @@ func (w *Watcher) broadcastLoop(ctx context.Context) {
 				select {
 				case sub.ch <- ev:
 				default:
-					// Subscriber is full — drop event to avoid blocking.
-					log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", ev.Kind, "node", ev.Node)
+					if ev.Kind != EventMonitorError {
+						// Subscriber is full — drop event to avoid blocking.
+						log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", ev.Kind, "node", ev.Node)
+						continue
+					}
+					// After a monitor error, the subscriber must stop
+					// trusting the events: drop the oldest one to make
+					// room. Only this loop sends, under w.mu, so the send
+					// then cannot block.
+					if old, ok := takeOldest(sub.ch); ok {
+						log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", old.Kind, "node", old.Node)
+					}
+					sub.ch <- ev
 				}
 			}
 			w.mu.Unlock()
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// takeOldest takes the oldest event of ch without waiting, and reports
+// whether there was one: a subscriber may have taken them all since ch was
+// full.
+func takeOldest(ch chan Event) (Event, bool) {
+	select {
+	case ev := <-ch:
+		return ev, true
+	default:
+		return Event{}, false
 	}
 }

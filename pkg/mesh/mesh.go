@@ -16,6 +16,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"golang.org/x/sync/errgroup"
@@ -41,13 +42,21 @@ const LabelDNSIP = "sind.dns.ip"
 // the subnet in between, before it keeps one without.
 const meshSubnetAttempts = 5
 
-// Default-realm resource names. Production code uses Manager methods;
-// these constants are used in tests as expected values for DefaultRealm.
+// Default-realm resource names. Production code uses RealmNames or the
+// Manager methods; these constants are used in tests as expected values for DefaultRealm.
 const (
 	NetworkName      docker.NetworkName   = "sind-mesh"
 	DNSContainerName docker.ContainerName = "sind-dns"
 	SSHContainerName docker.ContainerName = "sind-ssh"
 	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
+)
+
+// The Compose services of the mesh's containers, in the project
+// Names.ComposeProject. The monitoring stack's containers join that project
+// too, as the services of pkg/observability.
+const (
+	ComposeServiceDNS = "dns"
+	ComposeServiceSSH = "ssh"
 )
 
 // composeLabelFlags returns sorted --label flags for a mesh container.
@@ -73,6 +82,12 @@ const zonefilePath = "/zone.db"
 // The SOA's TTL and minimum, 0, keep resolvers from caching the answer for a
 // node about to be created.
 const zonefile = "@ 0 IN SOA ns hostmaster 1 7200 1800 86400 0\n"
+
+// hostsTTL is the TTL, in seconds, of the records of the hosts block, the
+// least the hosts plugin takes (its default is an hour). A node can get
+// another address on each start, and the host's resolver caches an answer
+// for its TTL.
+const hostsTTL = "1"
 
 // dnsFiles returns the DNS container's configuration files, for docker cp
 // into its root, with the given host entries in the Corefile.
@@ -132,24 +147,58 @@ func NewHostManager(docker *docker.Client, realm string) *Manager {
 	return m
 }
 
+// Names are the names of a realm's mesh resources.
+type Names struct {
+	Network      docker.NetworkName   // the mesh network, <realm>-mesh
+	DNSContainer docker.ContainerName // the DNS container, <realm>-dns
+	SSHContainer docker.ContainerName // the SSH relay, <realm>-ssh
+	SSHVolume    docker.VolumeName    // the relay's volume, <realm>-ssh-config
+	// ComposeProject is the Docker Compose project, <realm>-mesh, of the
+	// mesh's containers and volumes and of the monitoring stack's.
+	ComposeProject string
+}
+
+// RealmNames returns the names of realm's mesh resources, for a caller that
+// needs a name and no Manager.
+func RealmNames(realm string) Names {
+	return Names{
+		Network:        docker.NetworkName(realm + "-mesh"),
+		DNSContainer:   docker.ContainerName(realm + "-dns"),
+		SSHContainer:   docker.ContainerName(realm + "-ssh"),
+		SSHVolume:      docker.VolumeName(realm + "-ssh-config"),
+		ComposeProject: realm + "-mesh",
+	}
+}
+
+// ProjectRealm returns the realm whose mesh Compose project, or mesh
+// network, is named name, <realm>-mesh; false when name is no such name
+// of a valid realm.
+func ProjectRealm(name string) (string, bool) {
+	realm, ok := strings.CutSuffix(name, "-mesh")
+	if !ok || config.CheckName("realm", realm) != nil {
+		return "", false
+	}
+	return realm, true
+}
+
 // NetworkName returns the mesh network name for this realm.
 func (m *Manager) NetworkName() docker.NetworkName {
-	return docker.NetworkName(m.Realm + "-mesh")
+	return RealmNames(m.Realm).Network
 }
 
 // DNSContainerName returns the DNS container name for this realm.
 func (m *Manager) DNSContainerName() docker.ContainerName {
-	return docker.ContainerName(m.Realm + "-dns")
+	return RealmNames(m.Realm).DNSContainer
 }
 
 // SSHContainerName returns the SSH container name for this realm.
 func (m *Manager) SSHContainerName() docker.ContainerName {
-	return docker.ContainerName(m.Realm + "-ssh")
+	return RealmNames(m.Realm).SSHContainer
 }
 
 // SSHVolumeName returns the SSH volume name for this realm.
 func (m *Manager) SSHVolumeName() docker.VolumeName {
-	return docker.VolumeName(m.Realm + "-ssh-config")
+	return RealmNames(m.Realm).SSHVolume
 }
 
 // SSHKeygenName returns the temporary keygen container name for this realm.
@@ -159,7 +208,7 @@ func (m *Manager) SSHKeygenName() docker.ContainerName {
 
 // ComposeProject returns the Docker Compose project name for this realm's mesh.
 func (m *Manager) ComposeProject() string {
-	return m.Realm + "-mesh"
+	return RealmNames(m.Realm).ComposeProject
 }
 
 // EnsureMesh creates the global infrastructure resources (mesh network, DNS,
@@ -182,7 +231,14 @@ func (m *Manager) ComposeProject() string {
 // docker create, when the daemon does not have it or with Pull, writes its
 // lines there, and reports its bytes as the work of the part. A part
 // not seen to because one before it failed ends canceled with the step.
+//
+// EnsureMesh refuses a realm name that config.CheckName refuses, before it
+// creates anything: an uppercase name would put the realm's names behind
+// another realm's in DNS, which ignores case.
 func (m *Manager) EnsureMesh(ctx context.Context) (err error) {
+	if err := config.CheckName("realm", m.Realm); err != nil {
+		return err
+	}
 	ctx, step := progress.Start(ctx, progress.KindStep, "mesh",
 		progress.Flagged(progress.FlagHidden|progress.FlagFold|progress.FlagShowLines), progress.Total(4))
 	defer func() { step.End(err) }()
@@ -448,7 +504,8 @@ func (m *Manager) Created() bool {
 // the daemon (state.LockRealm with LockOptions.Client), such as a library
 // caller, can create the network between the check and the create.
 // Docker's "already exists" error then counts as an existing network, so
-// that the caller's failure handling never removes it.
+// that the caller's failure handling never removes it, and its labels are
+// read again for the address it pins the DNS container to.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	_, err := m.ensureMeshNetwork(ctx)
 	return err
@@ -481,7 +538,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 	for attempt := 1; ; attempt++ {
 		if _, err := m.Docker.CreateNetwork(ctx, name, labels); err != nil {
 			if docker.IsAlreadyExists(err) {
-				return "", nil
+				return m.concurrentMeshDNSIP(ctx)
 			}
 			return "", fmt.Errorf("creating mesh network: %w", err)
 		}
@@ -513,12 +570,25 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 			log.DebugContext(ctx, "mesh network created", "subnet", ipam.Subnet, "ip-range", ipam.IPRange, "dns", dnsIP)
 			return dnsIP, nil
 		case docker.IsAlreadyExists(err):
-			return "", nil
+			return m.concurrentMeshDNSIP(ctx)
 		case !isSubnetTaken(err):
 			return "", fmt.Errorf("creating mesh network: %w", err)
 		}
 		log.DebugContext(ctx, "mesh subnet taken meanwhile, trying another one", "subnet", ipam.Subnet, "error", err)
 	}
+}
+
+// concurrentMeshDNSIP returns the pinned DNS address of the mesh network
+// that another client created while createMeshNetwork created it, empty
+// for one without: the DNS container that EnsureMesh creates next must
+// have that address, which every node of the other client resolves
+// through.
+func (m *Manager) concurrentMeshDNSIP(ctx context.Context) (string, error) {
+	labels, _, err := m.Docker.NetworkLabels(ctx, m.NetworkName())
+	if err != nil {
+		return "", fmt.Errorf("checking mesh network: %w", err)
+	}
+	return labels[LabelDNSIP], nil
 }
 
 // pinnedLayout returns the IPAM configuration of a mesh network with the
@@ -608,7 +678,7 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 	if pinnedIP != "" {
 		args = append(args, "--ip", pinnedIP)
 	}
-	args = append(args, composeLabelFlags(m.ComposeProject(), "dns")...)
+	args = append(args, composeLabelFlags(m.ComposeProject(), ComposeServiceDNS)...)
 	args = append(args, DNSImage)
 	if err := m.pullFor(ctx, DNSImage); err != nil {
 		return nil, err
@@ -622,16 +692,54 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 		return nil, fmt.Errorf("writing DNS configuration: %w", err)
 	}
 
-	return m.startDNS(ctx, &docker.ContainerInfo{Name: name, Status: docker.StateCreated})
+	return m.bootDNS(ctx, &docker.ContainerInfo{Name: name, Status: docker.StateCreated})
 }
 
 // startDNS starts the DNS container that info describes unless it is
 // running, and then returns its details again: the started container has a
 // new address on the mesh network.
+//
+// A container that never ran (docker.StateCreated) gets an empty
+// configuration first if it has no Corefile: an EnsureMesh killed, or
+// failed, between its docker create and the copy of its Corefile leaves
+// one, and CoreDNS started without a Corefile serves its default and never
+// loads one on SIGUSR1.
 func (m *Manager) startDNS(ctx context.Context, info *docker.ContainerInfo) (*docker.ContainerInfo, error) {
 	if info.Status == docker.StateRunning {
 		return info, nil
 	}
+	if info.Status == docker.StateCreated {
+		if err := m.writeMissingDNSConfig(ctx, info.Name); err != nil {
+			return nil, err
+		}
+	}
+	return m.bootDNS(ctx, info)
+}
+
+// writeMissingDNSConfig copies an empty configuration into the DNS
+// container name unless it has a Corefile. The copy ignores the
+// cancellation of ctx (internal/detach), so that Ctrl+C cannot leave half
+// of it.
+func (m *Manager) writeMissingDNSConfig(ctx context.Context, name docker.ContainerName) error {
+	_, err := m.Docker.CopyFromContainer(ctx, name, corefilePath)
+	if err == nil {
+		return nil
+	}
+	if !docker.IsFileNotFound(err) {
+		return fmt.Errorf("reading DNS Corefile: %w", err)
+	}
+	sindlog.From(ctx).InfoContext(ctx, "writing the missing DNS configuration", "container", string(name))
+	wctx, cancel := detach.Context(ctx)
+	defer cancel()
+	if err := m.Docker.CopyToContainer(wctx, name, "/", dnsFiles(m.Realm, nil)); err != nil {
+		return fmt.Errorf("writing DNS configuration: %w", err)
+	}
+	return nil
+}
+
+// bootDNS starts the DNS container that info describes and returns its
+// details again.
+func (m *Manager) bootDNS(ctx context.Context, info *docker.ContainerInfo) (*docker.ContainerInfo, error) {
 	sindlog.From(ctx).InfoContext(ctx, "starting mesh DNS", "container", string(info.Name), "state", string(info.Status))
 	if err := m.Docker.StartContainer(ctx, info.Name); err != nil {
 		return nil, fmt.Errorf("starting DNS container: %w", err)
@@ -650,7 +758,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	if len(records) == 0 {
 		return nil
 	}
-	entries, err := m.readDNSEntries(ctx)
+	entries, found, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return err
 	}
@@ -686,7 +794,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 		kept = append(kept, r.IP+" "+r.Hostname)
 	}
 
-	return m.writeDNSEntries(ctx, kept)
+	return m.writeDNSEntries(ctx, kept, !found)
 }
 
 // RemoveDNSRecords removes all A records for the given hostnames from the
@@ -695,12 +803,12 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 	if len(hostnames) == 0 {
 		return nil
 	}
-	entries, err := m.readDNSEntries(ctx)
+	entries, found, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return err
 	}
 
-	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames))
+	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames), !found)
 }
 
 // Info holds information about the mesh infrastructure for a realm.
@@ -810,7 +918,7 @@ func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 	if err := m.requireMeshContainer(ctx, m.DNSContainerName()); err != nil {
 		return nil, err
 	}
-	entries, err := m.readDNSEntries(ctx)
+	entries, _, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -825,26 +933,34 @@ func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 	return records, nil
 }
 
-// readDNSEntries reads the current Corefile and extracts the host entries.
-func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
+// readDNSEntries reads the current Corefile and extracts the host entries,
+// and reports whether the DNS container has a Corefile. One without, which
+// an earlier sind could start before it had copied its configuration, has
+// no entries.
+func (m *Manager) readDNSEntries(ctx context.Context) (entries []string, found bool, err error) {
 	data, err := m.Docker.CopyFromContainer(ctx, m.DNSContainerName(), corefilePath)
-	if err != nil {
-		return nil, fmt.Errorf("reading DNS Corefile: %w", err)
+	if docker.IsFileNotFound(err) {
+		return nil, false, nil
 	}
-	return parseEntries(string(data)), nil
+	if err != nil {
+		return nil, false, fmt.Errorf("reading DNS Corefile: %w", err)
+	}
+	return parseEntries(string(data)), true, nil
 }
 
 // writeDNSEntries writes a Corefile with the given host entries into the
 // DNS container and has CoreDNS load it. A running CoreDNS reloads it on
 // SIGUSR1 without dropping queries. A stopped DNS container is started,
 // with a stopped relay (see StartMesh), as every node and the relay resolve
-// through it.
+// through it. With restart, a running DNS container is stopped and started
+// in the same way: CoreDNS started without a Corefile serves its default
+// and does not reload on SIGUSR1.
 //
 // The write and the reload ignore the cancellation and the deadline of
 // ctx, so that Ctrl+C cannot leave the DNS container stopped or with a
 // Corefile it has not loaded, but end with the rollback that ctx runs
 // under (internal/detach).
-func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
+func (m *Manager) writeDNSEntries(ctx context.Context, entries []string, restart bool) error {
 	ctx, cancel := detach.Context(ctx)
 	defer cancel()
 	name := m.DNSContainerName()
@@ -856,6 +972,13 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	info, err := m.Docker.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspecting DNS container: %w", err)
+	}
+	if info.Status == docker.StateRunning && restart {
+		sindlog.From(ctx).InfoContext(ctx, "restarting mesh DNS, as it runs without its Corefile", "container", string(name))
+		if err := m.Docker.StopContainer(ctx, name); err != nil {
+			return fmt.Errorf("restarting DNS: %w", err)
+		}
+		info.Status = docker.StateExited
 	}
 	if info.Status != docker.StateRunning {
 		if _, _, err := m.StartMesh(ctx); err != nil {
@@ -871,21 +994,24 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 }
 
 // generateCorefile builds a complete CoreDNS Corefile with the given host entries
-// inlined in the hosts block. Each entry is an "IP hostname" string.
-// The zone is derived from the realm: "<realm>.sind".
+// inlined in the hosts block, after its ttl option. Each entry is an
+// "IP hostname" string. The zone is derived from the realm: "<realm>.sind".
+// It logs errors only, not each query (the log plugin), as the container
+// lives as long as the mesh, and Docker need not bound its log.
 func generateCorefile(realm string, entries []string) string {
 	var b strings.Builder
-	b.WriteString(realm + ".sind:53 {\n    hosts {\n")
+	b.WriteString(realm + ".sind:53 {\n    hosts {\n        ttl " + hostsTTL + "\n")
 	for _, entry := range entries {
 		b.WriteString("        " + entry + "\n")
 	}
-	b.WriteString("        fallthrough\n    }\n    file " + zonefilePath + "\n    reload\n    log\n    errors\n}\n\n")
-	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n")
+	b.WriteString("        fallthrough\n    }\n    file " + zonefilePath + "\n    reload\n    errors\n}\n\n")
+	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    errors\n}\n")
 	return b.String()
 }
 
-// parseEntries extracts host entries from a Corefile's hosts block.
-// Each returned string is an "IP hostname" line.
+// parseEntries extracts host entries from a Corefile's hosts block: the
+// lines that start with an IP address, not the options such as ttl. Each
+// returned string is an "IP hostname" line.
 func parseEntries(corefile string) []string {
 	var entries []string
 	inHosts := false
@@ -899,11 +1025,20 @@ func parseEntries(corefile string) []string {
 			inHosts = false
 			continue
 		}
-		if inHosts && trimmed != "" {
+		if inHosts && isEntry(trimmed) {
 			entries = append(entries, trimmed)
 		}
 	}
 	return entries
+}
+
+// isEntry reports whether a line of the hosts block is a host entry, whose
+// first field is an IP address.
+func isEntry(line string) bool {
+	addr, _, _ := strings.Cut(line, " ")
+	addr, _, _ = strings.Cut(addr, "\t")
+	_, err := netip.ParseAddr(addr)
+	return err == nil
 }
 
 // withoutNames returns lines without the blank ones and those whose field i

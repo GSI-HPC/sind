@@ -70,3 +70,24 @@ func TestWarn_WithoutWarnLogs(t *testing.T) {
 	Warn(With(context.Background(), logger), "careful")
 	assert.Contains(t, buf.String(), "level=WARN msg=careful")
 }
+
+func TestWith_NilLogger(t *testing.T) {
+	var buf bytes.Buffer
+	outer := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	ctx := With(With(context.Background(), outer), nil)
+
+	l := From(ctx)
+	require.NotNil(t, l)
+	assert.NotPanics(t, func() { l.InfoContext(ctx, "hello") })
+	assert.False(t, l.Enabled(ctx, slog.LevelError), "a nil logger stands for none")
+	assert.Empty(t, buf.String())
+}
+
+func TestWarn_NilWarn(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	ctx := WithWarn(With(context.Background(), logger), nil)
+
+	assert.NotPanics(t, func() { Warn(ctx, "careful") })
+	assert.Contains(t, buf.String(), "level=WARN msg=careful")
+}

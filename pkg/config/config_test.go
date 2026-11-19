@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -163,6 +164,21 @@ nodes:
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
 
+func TestNode_UnmarshalYAMLWithoutParse(t *testing.T) {
+	// A caller that decodes a Cluster itself skips checkSyntax.
+	for _, tc := range []struct{ input, want string }{
+		{"nodes: [{}]\n", `line 1: a node object needs "role: NAME"`},
+		{"nodes: [{worker: 1, cpus: 2}]\n", `line 1: a node object needs "role: NAME"`},
+		{"nodes: [[worker]]\n", `line 1: a node is a role, an object or "ROLE: COUNT", not a list`},
+	} {
+		var c Cluster
+		assert.ErrorContains(t, yaml.Unmarshal([]byte(tc.input), &c), tc.want, tc.input)
+	}
+	var c Cluster
+	require.NoError(t, yaml.Unmarshal([]byte("nodes: [controller, {worker: 2}, {role: db}]\n"), &c))
+	assert.Equal(t, []Node{{Role: RoleController}, {Role: RoleWorker, Count: 2}, {Role: RoleDB}}, c.Nodes)
+}
+
 func TestParse_NodesMixed(t *testing.T) {
 	input := `kind: Cluster
 nodes:
@@ -283,6 +299,9 @@ func TestValidate_DataStorage(t *testing.T) {
 		{name: "hostPath type without path", ds: DataStorage{Type: StorageHostPath}, wantErr: "storage.dataStorage.hostPath is required"},
 		{name: "relative mountPath", ds: DataStorage{MountPath: "data"}, wantErr: "storage.dataStorage.mountPath must be absolute"},
 		{name: "mountPath with a comma", ds: DataStorage{MountPath: "/data,2"}, wantErr: "storage.dataStorage.mountPath must not contain a comma"},
+		{name: "mountPath with a colon", ds: DataStorage{MountPath: "/da:ta"}, wantErr: `storage.dataStorage.mountPath must not contain a colon, got "/da:ta"`},
+		{name: "mountPath /", ds: DataStorage{MountPath: "/"}, wantErr: `storage.dataStorage.mountPath must not be /, got "/"`},
+		{name: "mountPath // ", ds: DataStorage{Type: StorageHostPath, HostPath: "/srv", MountPath: "//."}, wantErr: `storage.dataStorage.mountPath must not be /, got "//."`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1143,12 +1162,36 @@ func TestValidate_SlurmSections(t *testing.T) {
 		require.ErrorContains(t, cfg.Validate(), "must not be empty")
 	})
 
-	t.Run("fragment name with path separator", func(t *testing.T) {
+	t.Run("fragment names", func(t *testing.T) {
+		for _, name := range []string{
+			"../escape", `a\b`, "my site", "a#b", "%c", "a%cb", "tab\tname", ".hidden", "-x", ".", "..", "naïve", "a:b",
+		} {
+			cfg := base()
+			cfg.Slurm.Cgroup = Section{Fragments: map[string]string{name: "content"}}
+			require.EqualError(t, cfg.Validate(), fmt.Sprintf(
+				"slurm cgroup fragment name %q may hold only ASCII letters, digits, '_', '.' and '-', and must not begin with '.' or '-'", name), name)
+		}
+		for _, name := range []string{"scheduling", "00-site", "gpu.a100", "_x", "Site_1-b"} {
+			cfg := base()
+			cfg.Slurm.Main = Section{Fragments: map[string]string{name: "MaxJobCount=100\n"}}
+			require.NoError(t, cfg.Validate(), name)
+		}
+	})
+
+	t.Run("both forms", func(t *testing.T) {
 		cfg := base()
-		cfg.Slurm.Cgroup = Section{Fragments: map[string]string{
-			"../escape": "content",
+		cfg.Slurm.Topology = Section{Content: "SwitchName=s0 Nodes=worker-0\n", Fragments: map[string]string{"a": "SwitchName=s1\n"}}
+		require.EqualError(t, cfg.Validate(), "slurm topology has both content and fragments: a section is a string or a map of fragments")
+	})
+
+	t.Run("first bad fragment in name order", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Main = Section{Fragments: map[string]string{
+			"a": "SchedulerType=sched/backfill\n", "b": "", "c": "", "d": "", "e": "", "f": "", "g": "", "h": "",
 		}}
-		require.ErrorContains(t, cfg.Validate(), "plain filename")
+		for range 20 {
+			require.EqualError(t, cfg.Validate(), `slurm main fragment "b" must not be empty`)
+		}
 	})
 
 	t.Run("empty fragment content", func(t *testing.T) {

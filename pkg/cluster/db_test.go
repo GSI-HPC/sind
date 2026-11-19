@@ -27,10 +27,10 @@ func TestEnableDBNode(t *testing.T) {
 	require.Len(t, m.Calls, 3)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "mariadb"}, m.Calls[0].Args)
 	// Only the OS user slurm, which slurmdbd runs as, logs in as slurm.
-	assert.Equal(t, []string{"exec", "sind-dev-db", "mysql", "-e",
-		"CREATE DATABASE IF NOT EXISTS slurm_acct_db; " +
-			"CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED VIA unix_socket; " +
-			"GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost';"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"exec", "-i", "sind-dev-db", "mysql"}, m.Calls[1].Args)
+	assert.Equal(t, "CREATE DATABASE IF NOT EXISTS slurm_acct_db; "+
+		"CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED VIA unix_socket; "+
+		"GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost';", m.Calls[1].Stdin)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "slurmdbd"}, m.Calls[2].Args)
 }
 
@@ -44,11 +44,11 @@ func TestEnableDBNode_StoragePass(t *testing.T) {
 	err := enableDBNode(t.Context(), c, "sind-dev-db", "db", "password")
 
 	require.NoError(t, err)
-	// The password's hash, never the password, is on the command line.
-	assert.Equal(t, []string{"exec", "sind-dev-db", "mysql", "-e",
-		"CREATE DATABASE IF NOT EXISTS slurm_acct_db; " +
-			"CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED BY PASSWORD '*2470C0C06DEE42FD1618BB99005ADCA2EC9D1E19'; " +
-			"GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost';"}, m.Calls[1].Args)
+	// The password's hash goes on stdin, never on the command line.
+	assert.Equal(t, []string{"exec", "-i", "sind-dev-db", "mysql"}, m.Calls[1].Args)
+	assert.Equal(t, "CREATE DATABASE IF NOT EXISTS slurm_acct_db; "+
+		"CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED BY PASSWORD '*2470C0C06DEE42FD1618BB99005ADCA2EC9D1E19'; "+
+		"GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost';", m.Calls[1].Stdin)
 }
 
 func TestEnableDBNode_Errors(t *testing.T) {

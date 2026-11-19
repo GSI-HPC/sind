@@ -32,6 +32,10 @@ func TestPgFleetReadyOf(t *testing.T) {
 	ctl := fleetNode("controller", config.RoleController, "slurmctld")
 	w0, w1 := fleetNode("worker-0", config.RoleWorker, "slurmd"), fleetNode("worker-1", config.RoleWorker, "slurmd")
 	down := fleetNode("worker-1", config.RoleWorker, "slurmd", "slurmd")
+	unmanaged := func(n pgNode) pgNode {
+		n.Managed, n.Services = false, n.Services[:1]
+		return n
+	}
 	c := func(nodes ...pgNode) pgCluster {
 		return pgCluster{Realm: "ci", Name: "c", State: cluster.StateRunning, Nodes: nodes}
 	}
@@ -57,6 +61,15 @@ func TestPgFleetReadyOf(t *testing.T) {
 		{"a worker takes none", probed, c(ctl, w0, down), pgPill{"needs a look", "bad"}, "1 of 2 workers takes jobs", ""},
 		{"no worker takes jobs", probed, c(ctl, down), pgPill{"not ready", "bad"}, "no worker takes jobs", ""},
 		{"no worker at all", probed, c(ctl), pgPill{"not ready", "bad"}, "no worker", "Slurm runs jobs on workers. Add one."},
+		{"no managed worker", probed, c(ctl, unmanaged(w0)), pgPill{"not ready", "bad"}, "no managed worker", "Slurm runs jobs on the workers that sind manages, and worker-0 is not managed. Add a managed one."},
+		{"an unmanaged cluster", probed, c(unmanaged(ctl), unmanaged(w0), unmanaged(w1)), pgPill{"unmanaged", ""}, "sind does not manage Slurm", ""},
+		{"an unmanaged cluster with a stopped node", probed, func() pgCluster {
+			u := c(unmanaged(ctl), unmanaged(w0))
+			u.Nodes[1].State = cluster.StateStopped
+			return u
+		}(), pgPill{"needs a look", "bad"}, "sind does not manage Slurm", ""},
+		{"the data volume of an unmanaged cluster is missing", noData, c(unmanaged(ctl), unmanaged(w0)), pgPill{"needs a look", "warn"}, "The data volume is missing", "Docker has no volume sind-c-data, so /data is empty."},
+		{"a command works on an unmanaged cluster", probed, busy(unmanaged(ctl), unmanaged(w0)), pgPill{"a command runs", "run"}, "sind does not manage Slurm", ""},
 		{"the controller is down", probed, c(fleetNode("controller", config.RoleController, "slurmctld", "slurmctld"), w0), pgPill{"not ready", "bad"}, "The controller does not answer", "controller: slurmctld is down."},
 		{"sinfo fails", noSinfo, c(ctl, w0), pgPill{"not ready", "bad"}, "The controller does not answer", "sinfo fails: slurm_load_partitions: Unable to contact slurm controller"},
 		{"a node that is no worker needs a look", probed, c(ctl, w0, fleetNode("db", config.RoleDB, "slurmdbd", "slurmdbd")), pgPill{"needs a look", "bad"}, "1 of 1 worker takes jobs", ""},

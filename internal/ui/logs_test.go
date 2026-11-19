@@ -23,6 +23,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -128,23 +129,25 @@ func waitDone(t *testing.T, done <-chan struct{}) {
 func TestLogsArgs(t *testing.T) {
 	assert.Equal(t, []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"},
 		logsArgs(logsReq{src: logsDocker, realm: "sind", cluster: "dev", node: "worker-0", tail: 200}))
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000"},
+	tied := docker.TiedExecArgs("sind-dev-worker-0")
+	assert.Equal(t, append(tied, "journalctl", "-u", "slurmd", "--follow", "-n", "1000"),
 		logsArgs(logsReq{src: logsJournal, realm: "sind", cluster: "dev", node: "worker-0", unit: "slurmd", tail: 1000}))
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "--follow", "-n", "5000"},
+	assert.Equal(t, append(tied, "journalctl", "--follow", "-n", "5000"),
 		logsArgs(logsReq{src: logsJournal, realm: "sind", cluster: "dev", node: "worker-0", tail: 5000}))
 }
 
 func TestLogsStreamArgvPerSource(t *testing.T) {
+	tied := func(ctr docker.ContainerName, argv ...string) []string { return docker.TiedExecArgs(ctr, argv...) }
 	cases := []struct {
 		query string
 		want  []string
 	}{
 		{"node=worker-0", []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"}},
 		{"node=worker-0&source=docker&unit=slurmd", []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"}},
-		{"node=worker-0&source=journal&unit=slurmd", []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "200"}},
-		{"node=controller&source=journal", []string{"exec", "sind-dev-controller", "journalctl", "--follow", "-n", "200"}},
+		{"node=worker-0&source=journal&unit=slurmd", tied("sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "200")},
+		{"node=controller&source=journal", tied("sind-dev-controller", "journalctl", "--follow", "-n", "200")},
 		{"node=worker-0&lines=5000", []string{"logs", "--follow", "--tail", "5000", "sind-dev-worker-0"}},
-		{"node=worker-0&source=journal&unit=slurmd&lines=1000", []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000"}},
+		{"node=worker-0&source=journal&unit=slurmd&lines=1000", tied("sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000")},
 	}
 	for _, c := range cases {
 		t.Run(c.query, func(t *testing.T) {
@@ -203,7 +206,7 @@ func TestLogsStreamStopsChildOnDisconnect(t *testing.T) {
 	ex, ct := trackedExecutor()
 	ts := logsServer(t, ex)
 	cancel, done := logsRun(ts, newLockedWriter(-1), "/logs/sind/dev?node=worker-0")
-	waitFor(t, "start", func() bool { return logsStreams.Load() == 1 })
+	waitFor(t, "start", func() bool { return ts.srv.logsStreams.Load() == 1 })
 	select {
 	case <-ct.closed:
 		t.Fatal("closed before the client left")
@@ -216,14 +219,14 @@ func TestLogsStreamStopsChildOnDisconnect(t *testing.T) {
 	default:
 		t.Fatal("the child was not stopped")
 	}
-	assert.Zero(t, logsStreams.Load())
+	assert.Zero(t, ts.srv.logsStreams.Load())
 }
 
 func TestLogsStreamStopsChildOnShutdown(t *testing.T) {
 	ex, ct := trackedExecutor()
 	ts := logsServer(t, ex)
 	_, done := logsRun(ts, newLockedWriter(-1), "/logs/sind/dev?node=worker-0&source=journal&unit=slurmd")
-	waitFor(t, "start", func() bool { return logsStreams.Load() == 1 })
+	waitFor(t, "start", func() bool { return ts.srv.logsStreams.Load() == 1 })
 	ts.cancel()
 	waitDone(t, done)
 	select {
@@ -342,7 +345,7 @@ func TestLogsStreamStartFailure(t *testing.T) {
 	}})
 	w := ts.get("/logs/sind/dev?node=worker-0")
 	assert.Equal(t, http.StatusBadGateway, w.Code)
-	assert.Zero(t, logsStreams.Load())
+	assert.Zero(t, ts.srv.logsStreams.Load())
 }
 
 func TestLogsStreamNoFlusher(t *testing.T) {
@@ -367,11 +370,20 @@ func TestLogsStreamLimit(t *testing.T) {
 	}
 	waitFor(t, "streams", func() bool { return pipes.Len() == logsMaxStreams })
 	assert.Equal(t, http.StatusTooManyRequests, ts.get("/logs/sind/dev?node=worker-0").Code)
+
+	// The limit is each server's own: another server still opens one.
+	ex2, pipes2 := pipeStarter()
+	ts2 := logsServer(t, ex2)
+	c2, d2 := logsRun(ts2, newLockedWriter(-1), "/logs/sind/dev?node=worker-0")
+	waitFor(t, "a stream of another server", func() bool { return pipes2.Len() == 1 })
+	c2()
+	waitDone(t, d2)
+
 	for i, c := range cancels {
 		c()
 		waitDone(t, dones[i])
 	}
-	assert.Zero(t, logsStreams.Load())
+	assert.Zero(t, ts.srv.logsStreams.Load())
 }
 
 func TestLogsRead(t *testing.T) {

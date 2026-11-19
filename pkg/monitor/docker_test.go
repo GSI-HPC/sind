@@ -93,6 +93,15 @@ func TestDockerEventsArgs(t *testing.T) {
 	assert.Equal(t, want, args)
 }
 
+// TestDockerRealmEventsArgs checks that the stream of a realm's cluster
+// asks for its realm's events only: realm sind's cluster dev and realm
+// sind-dev's cluster dev share the container prefix sind-dev-.
+func TestDockerRealmEventsArgs(t *testing.T) {
+	args := DockerRealmEventsArgs("sind", "dev")
+	assert.Equal(t, []string{"events", "--filter", "type=container", "--filter", "label=sind.realm=sind", "--filter", "label=sind.cluster=dev"}, args[:7])
+	assert.Equal(t, DockerEventsArgs("dev")[5:], args[7:])
+}
+
 func TestDockerMonitor_ContextCancelledMidScan(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 

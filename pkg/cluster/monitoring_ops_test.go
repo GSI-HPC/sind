@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -102,6 +103,18 @@ func TestWorkerAdd_MonitoredUnsupportedImage(t *testing.T) {
 	require.ErrorContains(t, err, "probing image")
 }
 
+func TestWorkerAdd_MonitoredExplicitImage(t *testing.T) {
+	// One probe of the image checks its version and its monitoring.
+	f := newStackFake(t).withStack()
+	base := monitoredController(t, stackFirst(f, workerAddOnCall(t)))
+	m, _, err := addWorkers(t, base, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "custom:v1"})
+	require.EqualError(t, err, `image custom:v1 has Slurm 26.05.6, but cluster "dev" runs Slurm 25.11.0: managed workers need the cluster's version`)
+	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v1"))
+	assert.False(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+		return c.Args[0] == "run" && slices.Contains(c.Args, "slurmctld")
+	}), "no slurmctld -V")
+}
+
 func TestWorkerAdd_MonitoredStackErrors(t *testing.T) {
 	for _, prefix := range []string{"network inspect sind-mesh", "inspect sind-grafana sind-prometheus sind-loki", "exec sind-alloy sh"} {
 		t.Run(prefix, func(t *testing.T) {
@@ -153,8 +166,17 @@ func TestWorkerRemove_Monitored(t *testing.T) {
 	require.Error(t, WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"}))
 	assert.Zero(t, countCalls(m.Calls, "exec", "sind-alloy"))
 
+	// A failed listing of the monitored nodes changes nothing: the
+	// workers stay in Slurm and the mesh.
 	f.fail["ps"] = mock.Result{Err: testutil.ExitCode1(t)}
+	m = &mock.Executor{OnCall: stackFirst(f, workerRemoveOnCall(t, nodesConf))}
+	client = docker.NewClient(m)
 	require.ErrorContains(t, WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"}), "listing monitored nodes")
+	assert.Empty(t, nodesConfWrites(m.Calls))
+	assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"))
+	assert.False(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+		return slices.Contains(c.Args, "sind-dns") || slices.Contains(c.Args, "sind-ssh")
+	}), "no call to the mesh")
 }
 
 // --- PowerOn ---
@@ -177,10 +199,27 @@ func TestPower_On_Monitoring(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, f.containers["sind-grafana"].state)
 	assert.Contains(t, written, "grafana.sind.sind")
 
+	// A stack that does not start fails the command of a monitored
+	// cluster, and of one that sind cannot tell.
+	f.nodes = []docker.ContainerListEntry{monitoredNode("dev", "worker-0", "worker")}
 	f.stopped()
 	f.fail["start sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
 	require.ErrorContains(t, err, "starting the monitoring stack")
+
+	f.fail["ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume="] = mock.Result{Err: testutil.ExitCode1(t)}
+	err = PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
+	require.ErrorContains(t, err, "starting the monitoring stack")
+	delete(f.fail, "ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume=")
+
+	// For a cluster that the stack does not collect, it is a warning.
+	f.nodes = []docker.ContainerListEntry{monitoredNode("prod", "worker-0", "worker")}
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	var warned []string
+	mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+	require.NoError(t, PowerOn(t.Context(), client, mgr, "dev", []string{"worker-0"}))
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], `starting the monitoring stack of realm "sind": starting loki container: `)
 }
 
 // --- Delete ---
@@ -194,8 +233,9 @@ func TestCleanupRealm(t *testing.T) {
 	require.NoError(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
 	assert.Empty(t, f.containers)
 	assert.Empty(t, f.volumes)
-	assert.Less(t, slices.Index(removed(m), "sind-grafana"), slices.Index(removed(m), "sind-mesh"))
-	assert.Less(t, slices.Index(removed(m), "sind-mesh"), slices.Index(removed(m), "sind-journal"))
+	assert.Less(t, slices.Index(removed(m), "sind-grafana"), slices.Index(removed(m), "sind-journal"))
+	assert.Less(t, slices.Index(removed(m), "sind-journal"), slices.Index(removed(m), "sind-mesh"),
+		"a cleanup cut short leaves no volume of the stack without the mesh")
 
 	for _, prefix := range []string{"ps -a --no-trunc --format json --filter label=com.docker.compose.project", "volume ls --format json --filter label=com.docker.compose.project"} {
 		f := newStackFake(t).withStack()
@@ -205,13 +245,14 @@ func TestCleanupRealm(t *testing.T) {
 		require.Error(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)), prefix)
 	}
 
-	// A failed mesh cleanup leaves the volumes.
+	// A failed removal of the volumes leaves the mesh, which a later
+	// delete finds.
 	f = newStackFake(t).withStack()
-	realm = &realmFake{t: t, clusters: map[string][]string{}, fail: func(args []string) bool { return args[0] == "network" && args[1] == "rm" }}
+	f.fail["volume rm sind-journal"] = mock.Result{Err: testutil.ExitCode1(t)}
 	m = &mock.Executor{OnCall: stackFirst(f, realm.onCall)}
 	client = docker.NewClient(m)
 	require.Error(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
-	assert.NotEmpty(t, f.volumes)
+	assert.NotContains(t, removed(m), "sind-mesh")
 }
 
 func TestDelete_Monitored(t *testing.T) {
@@ -232,8 +273,23 @@ func TestDelete_Monitored(t *testing.T) {
 	assert.Equal(t, []string{"exec", "sind-alloy", "sh"}, last[:3])
 	assert.Equal(t, "/var/log/sind/dev", last[len(last)-1])
 
+	// A delete that fails after the containers are gone still takes the
+	// cluster out of the stack: a retry finds no containers to tell it by.
+	m = &mock.Executor{OnCall: failNth(t, "volume rm sind-dev-config", 1, stackFirst(f, base))}
+	client = docker.NewClient(m)
+	require.ErrorContains(t, Delete(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev"), "removing volume sind-dev-config")
+	last = m.Calls[len(m.Calls)-1].Args
+	assert.Equal(t, []string{"exec", "sind-alloy", "sh"}, last[:3])
+	assert.Equal(t, "/var/log/sind/dev", last[len(last)-1])
+
+	// A failed listing of the monitored nodes changes nothing, the mesh
+	// included.
 	f.fail["ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume="] = mock.Result{Err: testutil.ExitCode1(t)}
+	m = &mock.Executor{OnCall: stackFirst(f, base)}
+	client = docker.NewClient(m)
 	require.ErrorContains(t, Delete(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev"), "listing monitored nodes")
+	assert.Empty(t, meshUpdates(m))
+	assert.Zero(t, countCalls(m.Calls, "rm"))
 }
 
 // --- Status ---
@@ -251,6 +307,25 @@ func meshHealthOnCall(t *testing.T) func([]string, string) mock.Result {
 		t.Errorf("unexpected call %v", args)
 		return mock.Result{Err: testutil.ExitCode1(t)}
 	}
+}
+
+// TestGetNetworkHealth_UnknownService checks that a stack service that
+// NetworkHealth has no field of is left out, by its name, rather than
+// taken for another by its place.
+func TestGetNetworkHealth_UnknownService(t *testing.T) {
+	saved := observability.Services
+	observability.Services = append([]observability.Service{"tempo"}, saved...)
+	t.Cleanup(func() { observability.Services = saved })
+	f := newStackFake(t).withStack()
+	f.containers["sind-alloy"].state = docker.StateExited
+	client := docker.NewClient(&mock.Executor{OnCall: stackFirst(f, meshHealthOnCall(t))})
+
+	health, err := GetNetworkHealth(t.Context(), client, "sind", "dev")
+
+	require.NoError(t, err)
+	require.NotNil(t, health.Alloy)
+	assert.False(t, *health.Alloy)
+	assert.Equal(t, []*bool{nil, health.Grafana, health.Prometheus, health.Loki, health.Alloy}, health.StackHealth())
 }
 
 func TestGetNetworkHealth_MonitoringStack(t *testing.T) {

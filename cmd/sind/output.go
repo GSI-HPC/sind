@@ -46,6 +46,15 @@ func validateOutputFlag(cmd *cobra.Command) error {
 	case cmd.Flag("output").Changed:
 		return invalidFlagValue("output", out, outputHuman, outputJSON)
 	default:
-		return invalidEnvValue(envvar.Output, out, oneOf([]string{outputHuman, outputJSON}))
+		return checkOutputEnv(out)
 	}
+}
+
+// checkOutputEnv checks a value of SIND_OUTPUT: human or json. Its error
+// names the variable.
+func checkOutputEnv(value string) error {
+	if value == outputHuman || value == outputJSON {
+		return nil
+	}
+	return invalidEnvValue(envvar.Output, value, oneOf([]string{outputHuman, outputJSON}))
 }

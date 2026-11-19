@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -93,12 +93,7 @@ func pgShort(realm, name, container string) string {
 
 // pgArg returns a node's name as sind's commands take it: the short name,
 // and the cluster unless it is the default one.
-func pgArg(name, short string) string {
-	if name == config.DefaultClusterName {
-		return short
-	}
-	return short + "." + name
-}
+func pgArg(name, short string) string { return cluster.QualifiedNodeName(name, short) }
 
 // pgClusterArg returns the optional CLUSTER argument of a command: empty for
 // the default cluster, else a space and the name.
@@ -110,12 +105,7 @@ func pgClusterArg(name string) string {
 }
 
 // pgSind returns "sind", or "sind --realm R" in any realm but the default.
-func pgSind(realm string) string {
-	if realm == "" || realm == mesh.DefaultRealm {
-		return "sind"
-	}
-	return "sind --realm " + realm
-}
+func pgSind(realm string) string { return strings.Join(action.SindArgv(realm), " ") }
 
 // pgStateClass returns the class of the pill of a node's state.
 func pgStateClass(s cluster.State) string {
@@ -767,11 +757,11 @@ func pgRunOf(sn store.Snapshot, r store.Run, now time.Time) pgRun {
 		pr.Class = "run"
 		pr.Time = pgClock(now.Sub(r.Start))
 	case r.Status == store.StatusOK:
-		pr.Class, pr.Time = "ok", pgAgo(*r.End, now)
+		pr.Class, pr.Time = "ok", pgAgo(now.Sub(*r.End))
 	case r.Status == store.StatusCanceled:
-		pr.Class, pr.Time = "warn", pgAgo(*r.End, now)
+		pr.Class, pr.Time = "warn", pgAgo(now.Sub(*r.End))
 	default:
-		pr.Class, pr.Time = "bad", pgAgo(*r.End, now)
+		pr.Class, pr.Time = "bad", pgAgo(now.Sub(*r.End))
 	}
 	return pr
 }
@@ -851,23 +841,41 @@ func pgWorksOn(sn store.Snapshot, r store.Run, realm, name string) bool {
 	})
 }
 
-// pgAgo says how long ago t was, as "just now", "5 min ago", "3 h ago".
-func pgAgo(t, now time.Time) string {
-	d := now.Sub(t)
-	switch {
-	case d < 50*time.Second:
+// pgAgo says how long before now something happened that happened d ago,
+// to the nearest unit: "just now" below 50 s, "5 min ago", "3 h ago",
+// "2 d ago". It takes the duration, not two times, so that no caller can
+// swap them.
+func pgAgo(d time.Duration) string {
+	if d < 50*time.Second {
 		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%d min ago", int(d.Minutes()+0.5))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d h ago", int(d.Hours()+0.5))
 	}
-	return fmt.Sprintf("%d d ago", int(d.Hours()/24+0.5))
+	if m := int(d.Round(time.Minute) / time.Minute); m < 60 {
+		return fmt.Sprintf("%d min ago", m)
+	}
+	if h := int(d.Round(time.Hour) / time.Hour); h < 24 {
+		return fmt.Sprintf("%d h ago", h)
+	}
+	return fmt.Sprintf("%d d ago", int(d.Round(24*time.Hour)/(24*time.Hour)))
+}
+
+// pgAgoSecs is pgAgo that counts the seconds of the first minute: "just
+// now" below 10 s, then "40 s ago". The Doctor page says so of its report,
+// which Run checks again renews.
+func pgAgoSecs(d time.Duration) string {
+	switch s := int(d.Round(time.Second) / time.Second); {
+	case s < 10:
+		return "just now"
+	case s < 60:
+		return fmt.Sprintf("%d s ago", s)
+	}
+	return pgAgo(d)
 }
 
 // pgClock formats a duration as m:ss.s, the clock of a running command.
+// It rounds before it splits off the minutes, so that 59.96 s reads 1:00.0
+// and not 0:60.0.
 func pgClock(d time.Duration) string {
-	d = max(d, 0)
+	d = max(d, 0).Round(100 * time.Millisecond)
 	m := int(d / time.Minute)
 	return fmt.Sprintf("%d:%04.1f", m, (d - time.Duration(m)*time.Minute).Seconds())
 }

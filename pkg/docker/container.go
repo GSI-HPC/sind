@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
 // ContainerExists returns true if the given container exists (running or stopped).
@@ -81,9 +83,62 @@ func (c *Client) UnpauseContainer(ctx context.Context, name ContainerName) error
 	return c.do(ctx, "unpause", string(name))
 }
 
-// Logs returns the last n lines of a container's log output.
+// Logs returns the last n lines of a container's log output: what it
+// wrote to its standard output and to its standard error, in the order it
+// wrote them. docker logs writes the two to its own standard output and
+// standard error, each line after the time it was logged (--timestamps),
+// by which Logs merges them; it returns the lines without the times.
 func (c *Client) Logs(ctx context.Context, name ContainerName, n int) (string, error) {
-	return c.output(ctx, "logs", "--tail", fmt.Sprintf("%d", n), string(name))
+	stdout, stderr, err := c.run(ctx, "logs", "--timestamps", "--tail", strconv.Itoa(n), string(name))
+	if err != nil {
+		return "", err
+	}
+	return mergeLogs(logLines(stdout), logLines(stderr)), nil
+}
+
+// logLine is a line of docker logs --timestamps: the time it was logged,
+// zero when the line has none, and the line without it.
+type logLine struct {
+	at   time.Time
+	text string
+}
+
+// logLines splits the output of docker logs --timestamps into its lines,
+// each ending with a newline.
+func logLines(out string) []logLine {
+	var lines []logLine
+	for line := range strings.Lines(out) {
+		if !strings.HasSuffix(line, "\n") {
+			line += "\n"
+		}
+		l := logLine{text: line}
+		if ts, text, ok := strings.Cut(line, " "); ok {
+			if at, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+				l = logLine{at: at, text: text}
+			}
+		}
+		lines = append(lines, l)
+	}
+	return lines
+}
+
+// mergeLogs joins the lines of a container's standard output and standard
+// error in the order of their times, keeping the order of each stream. A
+// line without a time comes before any line of the other stream with one;
+// of two lines logged at the same time, or both without one, the one of
+// standard output comes first.
+func mergeLogs(stdout, stderr []logLine) string {
+	var b strings.Builder
+	for len(stdout) > 0 || len(stderr) > 0 {
+		if len(stderr) == 0 || len(stdout) > 0 && !stderr[0].at.Before(stdout[0].at) {
+			b.WriteString(stdout[0].text)
+			stdout = stdout[1:]
+			continue
+		}
+		b.WriteString(stderr[0].text)
+		stderr = stderr[1:]
+	}
+	return b.String()
 }
 
 // ContainerState represents the state of a Docker container.
@@ -152,6 +207,20 @@ type HostConfig struct {
 	SecurityOpt []string          `json:"SecurityOpt"`
 	DNS         []string          `json:"Dns"`    // --dns
 	Mounts      []HostMount       `json:"Mounts"` // --mount, as given; docker inspect's top-level Mounts hide a volume's subpath
+	// MaskedPaths and ReadonlyPaths are the paths of /proc and /sys that
+	// the container masks or mounts read-only; nil when docker reports
+	// none (null).
+	MaskedPaths   []string `json:"MaskedPaths"`
+	ReadonlyPaths []string `json:"ReadonlyPaths"`
+}
+
+// SystemPathsUnconfined reports whether the container was created with
+// --security-opt systempaths=unconfined. The docker CLI does not pass
+// that option on to the daemon, which does not record it in SecurityOpt:
+// the CLI sets MaskedPaths and ReadonlyPaths to empty lists instead, which
+// docker inspect reports as [], unlike null.
+func (h HostConfig) SystemPathsUnconfined() bool {
+	return h.MaskedPaths != nil && len(h.MaskedPaths) == 0 && h.ReadonlyPaths != nil && len(h.ReadonlyPaths) == 0
 }
 
 // HostMount is a mount given with --mount, as the container's host
@@ -222,6 +291,12 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 // network of the name, such as the monitoring stack's <realm>-<service>
 // volume when its container is missing. The flag follows the names, as
 // the docker CLI allows.
+//
+// When some of the containers cannot be inspected, e.g. one was removed
+// after it was listed, docker exits non-zero but still prints the others.
+// InspectContainers then returns those, in argument order, together with
+// the error (IsNotFound for a missing one), so callers that can do without
+// the missing ones may use them.
 func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) ([]*ContainerInfo, error) {
 	if len(names) == 0 {
 		return nil, nil
@@ -232,12 +307,12 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 		args = append(args, string(n))
 	}
 	args = append(args, "--type", "container")
-	stdout, _, err := c.run(ctx, args...)
-	if err != nil {
-		return nil, err
-	}
+	stdout, _, runErr := c.run(ctx, args...)
 	var results []inspectResult
 	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
+		if runErr != nil {
+			return nil, runErr
+		}
 		return nil, fmt.Errorf("parsing inspect output: %w", err)
 	}
 	infos := make([]*ContainerInfo, 0, len(results))
@@ -264,7 +339,7 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			DNS:        r.HostConfig.DNS,
 		})
 	}
-	return infos, nil
+	return infos, runErr
 }
 
 // ContainerListEntry holds summary information from docker ps. Networks are
@@ -295,7 +370,9 @@ type psEntry struct {
 // ListContainers returns containers matching the given filters, running or
 // not. Each filter is passed as a --filter flag to docker ps (e.g.
 // "label=sind.cluster"); docker ps keeps a container that matches every
-// filter key, and any of the values a key is given more than once with
+// filter key. A container must match every label= filter
+// ("label=sind.realm=x", "label=sind.cluster=y"), while the repeated values
+// of another key, such as network= or name=, are alternatives
 // ("network=a", "network=b").
 func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]ContainerListEntry, error) {
 	ps, err := listJSON[psEntry](ctx, c, "ps", filters, "ps", "-a", "--no-trunc")
@@ -352,19 +429,24 @@ func (c *Client) Exec(ctx context.Context, container ContainerName, command ...s
 
 // ExecAllowNonZero is like Exec but returns stdout even when the inner
 // command exits non-zero. The returned error is non-nil iff the exec itself
-// failed (daemon unreachable, container missing, stopped or paused);
-// command-level non-zero exits are surfaced via the stdout return. Intended
-// for commands whose stdout is meaningful on failure (e.g. systemctl
-// is-active, which exits non-zero whenever any listed unit is inactive but
-// still prints the unit states).
+// failed (daemon unreachable, container missing, stopped or paused, the
+// command could not start, or the docker CLI was killed, as when ctx
+// ended); command-level non-zero exits are surfaced via the stdout return.
+// Intended for commands whose stdout is meaningful on failure (e.g.
+// systemctl is-active, which exits non-zero whenever any listed unit is
+// inactive but still prints the unit states).
 func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, command ...string) (string, error) {
 	args := append([]string{"exec", string(container)}, command...)
 	stdout, stderr, err := c.run(ctx, args...)
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && !errors.Is(err, ErrUnreachable) && !execFailed(stderr) {
-		return stdout, nil
+	// A docker CLI killed by a signal has no exit status of the command.
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	if !ok || exitErr.ExitCode() < 0 || ctx.Err() != nil || errors.Is(err, ErrUnreachable) || execFailed(stderr) {
+		return stdout, err
 	}
-	return stdout, err
+	if msg, ok := execNotStarted(exitErr.ExitCode(), stdout); ok {
+		return "", &cmdexec.ExitError{Err: exitErr, Stderr: msg}
+	}
+	return stdout, nil
 }
 
 // execFailed reports whether a non-zero exit of docker exec, given its
@@ -372,9 +454,23 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 // docker CLI exits 1 too when the daemon refuses the exec (the container is
 // missing, stopped or paused), and says so on stderr, where the inner
 // command has written nothing by then. A daemon that cannot be reached is
-// ErrUnreachable already (classifyUnreachable).
+// ErrUnreachable already (ClassifyUnreachable).
 func execFailed(stderr string) bool {
 	return strings.HasPrefix(strings.TrimSpace(stderr), "Error response from daemon:")
+}
+
+// execNotStarted returns the message with which the daemon reports that
+// the runtime could not start the command of an exec (it is missing in the
+// container, or a cgroup refuses it), given the docker CLI's exit code and
+// stdout, and whether there is one. The daemon writes that message to the
+// exec's standard output, and the docker CLI exits 126 or 127 with nothing
+// on stderr.
+func execNotStarted(code int, stdout string) (string, bool) {
+	stdout = strings.TrimSpace(stdout)
+	if (code == 126 || code == 127) && strings.HasPrefix(stdout, "OCI runtime exec failed:") {
+		return stdout, true
+	}
+	return "", false
 }
 
 // ExecWithStdin runs a command inside a container, piping stdin to it.
@@ -389,10 +485,12 @@ func (c *Client) ReadFile(ctx context.Context, container ContainerName, path str
 	return c.Exec(ctx, container, "cat", path)
 }
 
-// WriteFile overwrites a file in a running container via docker exec.
+// WriteFile overwrites a file in a running container via docker exec. The
+// shell gets path as an argument, so that it takes a path with spaces or
+// shell syntax as it is.
 func (c *Client) WriteFile(ctx context.Context, container ContainerName, path, content string) error {
 	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
-		"sh", "-c", "cat > "+path)
+		"sh", "-c", `cat > "$1"`, "sh", path)
 }
 
 // ReplaceFile replaces a file in a running container via docker exec in
@@ -491,4 +589,23 @@ func (c *Client) CopyFromContainer(ctx context.Context, container ContainerName,
 		return nil, fmt.Errorf("reading file content: %w", err)
 	}
 	return data, nil
+}
+
+// tiedExecScript runs its arguments, and kills them once the exec's
+// standard input ends: when the docker CLI that runs it ends or closes its
+// own standard input, as the daemon then closes the exec's. Their output
+// and status are the exec's. The shell gives an asynchronous list
+// /dev/null as its standard input, so the one that waits for the end reads
+// the exec's from fd 3.
+const tiedExecScript = `exec 3<&0; "$@" </dev/null 3<&- & p=$!; (cat <&3 >/dev/null; kill "$p") >/dev/null 2>&1 & wait "$p"`
+
+// TiedExecArgs returns the docker CLI arguments that run argv in container
+// for as long as the docker CLI runs: docker exec -i, with a shell that
+// kills argv once the exec's standard input ends. Docker has no other way
+// to stop a process that docker exec started: killing the CLI leaves it
+// running, and a follow of a log or bus would run until the container
+// stops. The CLI's standard input must stay open, without data, while the
+// command runs, as cmdexec.Start keeps it.
+func TiedExecArgs(container ContainerName, argv ...string) []string {
+	return append([]string{"exec", "-i", string(container), "sh", "-c", tiedExecScript, "sh"}, argv...)
 }
