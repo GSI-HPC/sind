@@ -228,7 +228,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 	for _, w := range cfg.Warnings() {
-		cmd.PrintErrln("Warning:", w)
+		cmd.PrintErrln("Warning:", termtext.EscapeLines(w))
 	}
 
 	ctx := cmd.Context()
