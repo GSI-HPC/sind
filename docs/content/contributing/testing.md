@@ -74,6 +74,8 @@ assert.Equal(t, "create", m.Calls[0].Args[0])
 assert.Contains(t, m.Calls[0].Args, "--name")
 ```
 
+Read `Calls` once the code under test has returned. While it still runs, such as a server or a watcher that a test starts, `m.CallsSnapshot()` returns a copy of the calls so far. Queue results and set `OnCall` before the code runs; `AddResult` may also run while it does.
+
 ## Simulating missing resources
 
 The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr.

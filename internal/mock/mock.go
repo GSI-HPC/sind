@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -37,7 +38,9 @@ type Result struct {
 }
 
 // Executor records all calls and returns preconfigured results.
-// It is safe for concurrent use.
+// Run, RunWithStdin, Start, AddResult and CallsSnapshot are safe for
+// concurrent use. Set OnCall and OnStart before the first call, and read
+// Calls only once the code under test has returned, or use CallsSnapshot.
 //
 // Results are dispatched in two modes:
 //   - If OnCall is set, it is called for every invocation to produce a result.
@@ -72,7 +75,24 @@ var _ cmdexec.Executor = (*Executor)(nil)
 // AddResult enqueues a result to be returned by the next Run or RunWithStdin call.
 // Only used when OnCall is nil.
 func (m *Executor) AddResult(stdout, stderr string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.results = append(m.results, Result{Stdout: stdout, Stderr: stderr, Err: err})
+}
+
+// CallsSnapshot returns a copy of the calls recorded so far, which a test
+// can read while the code under test still runs.
+func (m *Executor) CallsSnapshot() []Call {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.Calls)
+}
+
+// setOnCall sets OnCall under the lock that guards its calls.
+func (m *Executor) setOnCall(onCall func(args []string, stdin string) Result) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.OnCall = onCall
 }
 
 func (m *Executor) record(ctx context.Context, name string, args []string, stdin string) (string, string, error) {

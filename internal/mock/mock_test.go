@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress"
@@ -333,4 +334,36 @@ func TestExecutorTerminalOpened(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "a\rb", stdout)
 	assert.Equal(t, 1, opened)
+}
+
+// TestExecutor_ConcurrentSetup checks that results can be queued, an OnCall
+// set and the calls read while other goroutines run commands.
+func TestExecutor_ConcurrentSetup(t *testing.T) {
+	var m Executor
+	rec := NewRecorder()
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			_, _, _ = m.Run(t.Context(), "docker", "ps")
+			_, _, _ = rec.Run(t.Context(), "docker", "ps")
+		})
+		wg.Go(func() {
+			m.AddResult("", "", nil)
+			rec.SetOnCall(func([]string, string) Result { return Result{} })
+			_ = m.CallsSnapshot()
+		})
+	}
+	wg.Wait()
+	assert.Len(t, m.CallsSnapshot(), 4)
+}
+
+func TestExecutor_CallsSnapshot(t *testing.T) {
+	var m Executor
+	m.AddResult("", "", nil)
+	_, _, _ = m.Run(t.Context(), "docker", "ps")
+
+	calls := m.CallsSnapshot()
+	calls[0].Name = "changed"
+
+	assert.Equal(t, []Call{{Name: "docker", Args: []string{"ps"}}}, m.CallsSnapshot())
 }
