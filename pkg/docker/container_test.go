@@ -426,6 +426,31 @@ func TestInspectContainers_Multiple(t *testing.T) {
 	assert.Equal(t, []string{"inspect", "sind-dev-controller", "sind-dev-worker-0", "--type", "container"}, m.Calls[0].Args)
 }
 
+// TestInspectContainers_Partial checks that the containers docker did
+// print come back with the error of one that is missing.
+func TestInspectContainers_Partial(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Id":"id-a","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`+"\n",
+		"Error: No such container: sind-dev-worker-0\n", exitError(t, 1, "Error: No such container: sind-dev-worker-0\n"))
+	c := NewClient(&m)
+
+	infos, err := c.InspectContainers(t.Context(), "sind-dev-controller", "sind-dev-worker-0")
+	require.Error(t, err)
+	assert.True(t, IsNotFound(err))
+	require.Len(t, infos, 1)
+	assert.Equal(t, ContainerName("sind-dev-controller"), infos[0].Name)
+}
+
+// TestInspectContainers_ErrorWithoutOutput checks that a failed inspect
+// that printed no JSON returns its own error, not the parse error.
+func TestInspectContainers_ErrorWithoutOutput(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-dev-worker-0\n", exitError(t, 1, "Error: No such container: sind-dev-worker-0\n"))
+	infos, err := NewClient(&m).InspectContainers(t.Context(), "sind-dev-worker-0")
+	assert.True(t, IsNotFound(err), "%v", err)
+	assert.Nil(t, infos)
+}
+
 func TestInspectContainers_Empty(t *testing.T) {
 	var m mock.Executor
 	c := NewClient(&m)

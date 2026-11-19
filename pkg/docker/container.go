@@ -289,6 +289,12 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 // network of the name, such as the monitoring stack's <realm>-<service>
 // volume when its container is missing. The flag follows the names, as
 // the docker CLI allows.
+//
+// When some of the containers cannot be inspected, e.g. one was removed
+// after it was listed, docker exits non-zero but still prints the others.
+// InspectContainers then returns those, in argument order, together with
+// the error (IsNotFound for a missing one), so callers that can do without
+// the missing ones may use them.
 func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) ([]*ContainerInfo, error) {
 	if len(names) == 0 {
 		return nil, nil
@@ -299,12 +305,12 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 		args = append(args, string(n))
 	}
 	args = append(args, "--type", "container")
-	stdout, _, err := c.run(ctx, args...)
-	if err != nil {
-		return nil, err
-	}
+	stdout, _, runErr := c.run(ctx, args...)
 	var results []inspectResult
 	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
+		if runErr != nil {
+			return nil, runErr
+		}
 		return nil, fmt.Errorf("parsing inspect output: %w", err)
 	}
 	infos := make([]*ContainerInfo, 0, len(results))
@@ -331,7 +337,7 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			DNS:        r.HostConfig.DNS,
 		})
 	}
-	return infos, nil
+	return infos, runErr
 }
 
 // ContainerListEntry holds summary information from docker ps. Networks are

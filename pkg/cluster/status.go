@@ -365,7 +365,9 @@ type Status struct {
 }
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
-// and volume health information.
+// and volume health information. A node whose container went away between
+// the listing and the inspect, as one being deleted, is left out, unless
+// all of them did.
 func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*Status, error) {
 	containers, err := clusterNodes(ctx, client, realm, clusterName)
 	if err != nil {
@@ -385,7 +387,8 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		names[i] = c.Name
 	}
 	infos, err := client.InspectContainers(ctx, names...)
-	if err != nil {
+	gone := docker.IsNotFound(err)
+	if err != nil && (!gone || len(infos) == 0) {
 		return nil, fmt.Errorf("inspecting cluster containers: %w", err)
 	}
 	for _, info := range infos {
@@ -393,11 +396,18 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
+	present := make([]docker.ContainerListEntry, 0, len(containers))
 	for _, c := range containers {
-		if _, ok := infoByName[c.Name]; !ok {
+		switch _, ok := infoByName[c.Name]; {
+		case ok:
+			present = append(present, c)
+		case gone:
+			sindlog.From(ctx).DebugContext(ctx, "leaving out a node whose container is gone", "container", string(c.Name), "err", err)
+		default:
 			return nil, fmt.Errorf("checking node %s: inspect returned no entry", strings.TrimPrefix(string(c.Name), prefix))
 		}
 	}
+	containers = present
 	nodes := make([]*NodeStatus, len(containers))
 	states := make([]docker.ContainerState, len(containers))
 

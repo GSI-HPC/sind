@@ -321,6 +321,29 @@ func TestGetNodes_InspectError(t *testing.T) {
 	assert.Equal(t, []string{"listing the nodes without their IPs: docker daemon busy"}, warned)
 }
 
+// TestGetNodes_InspectOneContainerGone verifies that the nodes whose
+// containers docker did inspect keep their IPs when another one went away
+// since the listing.
+func TestGetNodes_InspectOneContainerGone(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+	), "", nil)
+	m.AddResult(statusInspectJSON(t, "sind-dev-controller", "running", "172.18.0.2", nil),
+		testutil.NoSuchContainer("sind-dev-worker-0"), testutil.ExitCode1(t))
+	var warned []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
+
+	nodes, err := GetNodes(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	assert.Equal(t, "172.18.0.2", nodes[0].IP)
+	assert.Empty(t, nodes[1].IP)
+	assert.Empty(t, warned)
+}
+
 // TestGetNodes_InspectContainerGone verifies that a container that went away
 // between the listing and the inspect, as in a cluster being deleted, is no
 // warning: only a debug line says the IPs are missing.

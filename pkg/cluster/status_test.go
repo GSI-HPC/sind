@@ -1038,3 +1038,48 @@ func TestNodeStatus_JSONManaged(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"managed":false`)
 }
+
+// TestGetStatus_ContainerGone checks that a node whose container went away
+// between the listing and the inspect is left out, and the others are
+// reported.
+func TestGetStatus_ContainerGone(t *testing.T) {
+	var m mock.Executor
+	inner := statusOnCall(t, []testutil.PsEntry{
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+	}, func(string) (string, string) { return "running", "172.18.0.2" })
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: statusInspectJSON(t, "sind-dev-controller", "running", "172.18.0.2", nil),
+				Stderr: testutil.NoSuchContainer("sind-dev-worker-0"), Err: testutil.ExitCode1(t)}
+		}
+		return inner(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, status.Nodes, 1)
+	assert.Equal(t, "controller.dev", status.Nodes[0].Name)
+}
+
+// TestGetStatus_AllContainersGone checks that a cluster whose containers
+// all went away since the listing fails, rather than reporting no nodes.
+func TestGetStatus_AllContainersGone(t *testing.T) {
+	var m mock.Executor
+	inner := statusOnCall(t, []testutil.PsEntry{
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+	}, func(string) (string, string) { return "running", "172.18.0.2" })
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: "[]\n", Stderr: testutil.NoSuchContainer("sind-dev-controller"), Err: testutil.ExitCode1(t)}
+		}
+		return inner(args, stdin)
+	}
+
+	_, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+	require.ErrorContains(t, err, "inspecting cluster containers")
+	assert.True(t, docker.IsNotFound(err))
+}
