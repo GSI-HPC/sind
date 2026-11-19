@@ -240,12 +240,13 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeMunge))+":"+slurm.MungeDir+":ro")
 	}
 
-	// Data volume
+	// Data volume, with --mount, which takes a mount point with a colon
+	// that -v would split at.
 	dataMountPath := cmp.Or(cfg.DataMountPath, DefaultDataMountPath)
 	if cfg.DataHostPath != "" {
 		args = append(args, "--mount", bindMount(cfg.DataHostPath, dataMountPath))
 	} else {
-		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData))+":"+dataMountPath+":rw")
+		args = append(args, "--mount", docker.VolumeMount(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData), dataMountPath, "", false, false))
 	}
 
 	// Shared slurmctld state for a primary/backup controller pair. An empty

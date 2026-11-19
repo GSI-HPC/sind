@@ -1590,7 +1590,7 @@ Container mount flags:
 -v <realm>-<cluster>-config:/etc/slurm:rw     # controller
 -v <realm>-<cluster>-config:/etc/slurm:ro     # all others
 -v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes, not with identity clientIds
--v <realm>-<cluster>-data:/data:rw            # all nodes, data volume
+--mount type=volume,source=<realm>-<cluster>-data,target=/data  # all nodes, data volume
 --mount type=bind,source=/host/dir,target=/data  # all nodes, data on a host directory
 -v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 -v <realm>-<cluster>-home:/home:rw            # all nodes, users only
@@ -1619,7 +1619,7 @@ By default, `sind create cluster` bind-mounts the current working directory as `
 The `--data` flag controls the mount source:
 - `--data .` (default) — bind-mount the current working directory
 - `--data /path` — bind-mount a specific host directory
-- `--data volume` — use a Docker-managed volume (`<realm>-<cluster>-data`)
+- `--data volume` — use a Docker-managed volume (`<realm>-<cluster>-data`), mounted with `--mount` as the host directory is, so that a mount point with a colon, which `-v` would split at, works
 
 When a YAML config sets `storage.dataStorage.type` or `hostPath`, the config takes precedence over
 `--data`; a config that sets only `mountPath` keeps the source `--data` gives.

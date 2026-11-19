@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -225,7 +226,7 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 			volumes := testutil.ArgValues(args, "-v")
 			assert.Contains(t, volumes, tt.wantConf)
 			assert.Contains(t, volumes, "sind-dev-munge:/etc/munge:ro")
-			assert.Contains(t, volumes, "sind-dev-data:/data:rw")
+			assert.Contains(t, testutil.ArgValues(args, "--mount"), "type=volume,source=sind-dev-data,target=/data")
 		})
 	}
 }
@@ -273,8 +274,7 @@ func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
-	volumes := testutil.ArgValues(args, "-v")
-	assert.Contains(t, volumes, "sind-dev-data:/data:rw")
+	assert.Contains(t, testutil.ArgValues(args, "--mount"), "type=volume,source=sind-dev-data,target=/data")
 }
 
 func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
@@ -292,8 +292,28 @@ func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
 	// DataHostPath left empty — should use docker volume
 	args := BuildRunArgs(cfg)
 
-	volumes := testutil.ArgValues(args, "-v")
-	assert.Contains(t, volumes, "sind-dev-data:/shared:rw")
+	assert.Equal(t, []string{"type=volume,source=sind-dev-data,target=/shared"}, testutil.ArgValues(args, "--mount"))
+}
+
+// mountsBesideData returns the --mount values of args other than that of
+// cluster dev's data volume.
+func mountsBesideData(args []string) []string {
+	return slices.DeleteFunc(testutil.ArgValues(args, "--mount"), func(m string) bool {
+		return strings.HasPrefix(m, "type=volume,source=sind-dev-data,")
+	})
+}
+
+// TestBuildRunArgs_Mounts_VolumeColon checks that a data mount point with a
+// colon reaches Docker whole: -v would split it.
+func TestBuildRunArgs_Mounts_VolumeColon(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataMountPath = "/data:2024"
+	args := BuildRunArgs(cfg)
+
+	assert.Equal(t, []string{"type=volume,source=sind-dev-data,target=/data:2024"}, testutil.ArgValues(args, "--mount"))
+	for _, v := range testutil.ArgValues(args, "-v") {
+		assert.NotContains(t, v, "sind-dev-data")
+	}
 }
 
 func TestBuildRunArgs_DataMountPathLabel(t *testing.T) {
@@ -355,7 +375,7 @@ func TestBuildRunArgs_CVMFS(t *testing.T) {
 			cfg.CVMFS = tt.backend
 			args := BuildRunArgs(cfg)
 
-			assert.Equal(t, []string{tt.wantMount}, testutil.ArgValues(args, "--mount"))
+			assert.Equal(t, []string{tt.wantMount}, mountsBesideData(args))
 			assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"="+string(tt.backend))
 		})
 	}
@@ -364,7 +384,7 @@ func TestBuildRunArgs_CVMFS(t *testing.T) {
 func TestBuildRunArgs_NoCVMFS(t *testing.T) {
 	args := BuildRunArgs(defaultRunConfig())
 
-	assert.Empty(t, testutil.ArgValues(args, "--mount"))
+	assert.Empty(t, mountsBesideData(args))
 	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=")
 }
 

@@ -95,7 +95,7 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 -v sind-dev-config:/etc/slurm:rw      # controller
 -v sind-dev-config:/etc/slurm:ro      # all others
 -v sind-dev-munge:/etc/munge:ro       # all nodes, not with identity clientIds
--v sind-dev-data:/data:rw             # all nodes
+--mount type=volume,source=sind-dev-data,target=/data  # all nodes
 -v sind-dev-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 -v sind-dev-home:/home:rw             # all nodes, with users
 --tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size

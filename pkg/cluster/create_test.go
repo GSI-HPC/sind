@@ -508,7 +508,7 @@ func TestCreate_CVMFS(t *testing.T) {
 					probed = true
 				}
 				if a[0] == "create" && slices.Contains(a, "--hostname") {
-					assert.Equal(t, []string{tt.wantMount}, testutil.ArgValues(a, "--mount"))
+					assert.Equal(t, []string{tt.wantMount}, mountsBesideData(a))
 					assert.Contains(t, testutil.ArgValues(a, "--label"), tt.wantLabel)
 					mounted[testutil.ArgValues(a, "--name")[0]] = true
 				}
@@ -584,7 +584,7 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
 		assert.False(t, isCVMFSProbe(c.Args), "no CVMFS probe: %v", c.Args)
-		assert.Empty(t, testutil.ArgValues(c.Args, "--mount"))
+		assert.Empty(t, mountsBesideData(c.Args))
 	}
 }
 

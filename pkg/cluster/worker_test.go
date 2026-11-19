@@ -796,7 +796,7 @@ func TestWorkerAdd_InheritsCVMFS(t *testing.T) {
 
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
-	assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, testutil.ArgValues(args, "--mount"))
+	assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, mountsBesideData(args))
 	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=volume")
 }
 
