@@ -260,26 +260,33 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // removeClusterResources removes the cluster resources that res lists, and
 // with deregister first the nodes' DNS records and known_hosts entries, and
 // last, for a monitored cluster, its nodes from the realm's monitoring
-// stack and their journals (see forgetMonitoredNodes).
+// stack and their journals (see forgetMonitoredNodes), also when the
+// removal of its network or volumes fails: a retry finds no containers to
+// tell that the stack collected the cluster.
 func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *Resources, deregister bool) error {
 	log := sindlog.From(ctx)
 
-	// Remove DNS records and known_hosts entries before deleting containers.
-	// Failures are logged inside DeregisterMesh; the teardown continues.
 	// The realm's monitoring stack stays too: whether it collects the
-	// cluster is told by its containers, so before they go.
+	// cluster is told by its containers, so before they go, and before
+	// the mesh changes, so that a failed listing changes nothing.
 	monitored := false
 	if deregister {
-		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 		var err error
 		if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
 			return err
 		}
+		// Remove DNS records and known_hosts entries before deleting
+		// containers. Failures are logged inside DeregisterMesh; the
+		// teardown continues.
+		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 	}
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
 	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
 		return err
+	}
+	if monitored {
+		defer forgetMonitoredNodes(ctx, client, meshMgr, clusterName)
 	}
 
 	if res.NetworkExists {
@@ -289,14 +296,7 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	}
 
 	log.DebugContext(ctx, "removing volumes", "count", len(res.Volumes))
-	if err := DeleteVolumes(ctx, client, res.Volumes); err != nil {
-		return err
-	}
-
-	if monitored {
-		forgetMonitoredNodes(ctx, client, meshMgr, clusterName)
-	}
-	return nil
+	return DeleteVolumes(ctx, client, res.Volumes)
 }
 
 // DeleteContainers force-removes the given containers in parallel

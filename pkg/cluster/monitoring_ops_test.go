@@ -260,8 +260,23 @@ func TestDelete_Monitored(t *testing.T) {
 	assert.Equal(t, []string{"exec", "sind-alloy", "sh"}, last[:3])
 	assert.Equal(t, "/var/log/sind/dev", last[len(last)-1])
 
+	// A delete that fails after the containers are gone still takes the
+	// cluster out of the stack: a retry finds no containers to tell it by.
+	m = &mock.Executor{OnCall: failNth(t, "volume rm sind-dev-config", 1, stackFirst(f, base))}
+	client = docker.NewClient(m)
+	require.ErrorContains(t, Delete(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev"), "removing volume sind-dev-config")
+	last = m.Calls[len(m.Calls)-1].Args
+	assert.Equal(t, []string{"exec", "sind-alloy", "sh"}, last[:3])
+	assert.Equal(t, "/var/log/sind/dev", last[len(last)-1])
+
+	// A failed listing of the monitored nodes changes nothing, the mesh
+	// included.
 	f.fail["ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume="] = mock.Result{Err: testutil.ExitCode1(t)}
+	m = &mock.Executor{OnCall: stackFirst(f, base)}
+	client = docker.NewClient(m)
 	require.ErrorContains(t, Delete(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev"), "listing monitored nodes")
+	assert.Empty(t, meshUpdates(m))
+	assert.Zero(t, countCalls(m.Calls, "rm"))
 }
 
 // --- Status ---
