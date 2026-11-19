@@ -1269,7 +1269,7 @@ func TestEditDNSRecords_Errors(t *testing.T) {
 // so CoreDNS loads the Corefile it was given.
 func TestWriteDNSEntries_Cancelled(t *testing.T) {
 	f := newFake(t).withMesh(DefaultRealm, docker.StateRunning)
-	mgr := NewManager(docker.NewClient(ctxExecutor{&mock.Executor{OnCall: f.onCall}}), DefaultRealm)
+	mgr := NewManager(docker.NewClient(&mock.Executor{OnCall: f.onCall}), DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	cancel()
 
@@ -1283,7 +1283,7 @@ func TestWriteDNSEntries_Cancelled(t *testing.T) {
 // hold the rollback past RollbackTimeout of pkg/cluster.
 func TestWriteDNSEntries_RollbackDeadline(t *testing.T) {
 	f := newFake(t).withMesh(DefaultRealm, docker.StateRunning)
-	mgr := NewManager(docker.NewClient(ctxExecutor{&mock.Executor{OnCall: f.onCall}}), DefaultRealm)
+	mgr := NewManager(docker.NewClient(&mock.Executor{OnCall: f.onCall}), DefaultRealm)
 	ctx, cancel := context.WithDeadline(context.WithoutCancel(t.Context()), time.Now().Add(-time.Second))
 	defer cancel()
 

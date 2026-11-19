@@ -276,9 +276,9 @@ func TestClient_WaitingCallEndsWithContext(t *testing.T) {
 }
 
 func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
-	// With a slot free, the command runs and the executor reports the
-	// ended context, as it did before the bound.
-	var m mock.Executor
+	// With a slot free, the command reaches the executor, as it did
+	// before the bound; this one answers it although its context ended.
+	m := mock.Executor{IgnoreContext: true}
 	m.AddResult("27.0.0\n", "", nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

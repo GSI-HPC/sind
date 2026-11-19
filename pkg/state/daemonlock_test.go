@@ -752,7 +752,7 @@ func TestLockRealm_DaemonReleaseFails(t *testing.T) {
 // lock after ctx ended, as after Ctrl+C.
 func TestLockRealm_DaemonReleaseAfterCancel(t *testing.T) {
 	d := newFakeDaemon(t)
-	client := docker.NewClient(&ctxExecutor{Executor: &mock.Executor{OnCall: d.onCall}})
+	client := docker.NewClient(&mock.Executor{OnCall: d.onCall})
 	ctx, cancel := context.WithCancel(t.Context())
 	unlock, err := LockRealm(ctx, "sind", daemonOpts(t, client, t.TempDir(), &warnings{}))
 	require.NoError(t, err)
@@ -761,19 +761,6 @@ func TestLockRealm_DaemonReleaseAfterCancel(t *testing.T) {
 	unlock()
 
 	assert.Nil(t, d.network("sind-lock"))
-}
-
-// ctxExecutor fails every command run with an ended context, as the real
-// executor does when it kills docker.
-type ctxExecutor struct {
-	*mock.Executor
-}
-
-func (e *ctxExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.Run(ctx, name, args...)
 }
 
 // TestLockRealm_DaemonRemovedBeforeRelease checks that a lock removed by

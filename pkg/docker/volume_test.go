@@ -136,10 +136,14 @@ func TestRemoveVolume_InUseRetried(t *testing.T) {
 // TestRemoveVolume_CanceledWhileInUse checks that the retry stops when
 // the context ends.
 func TestRemoveVolume_CanceledWhileInUse(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", volumeInUse, &exec.ExitError{ProcessState: exitCode1(t)})
 	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+	defer cancel()
+	// The context ends during the first attempt, which finds the volume in
+	// use.
+	m := mock.Executor{OnCall: func([]string, string) mock.Result {
+		cancel()
+		return mock.Result{Stderr: volumeInUse, Err: &exec.ExitError{ProcessState: exitCode1(t)}}
+	}}
 
 	require.ErrorIs(t, NewClient(&m).RemoveVolume(ctx, testVolumeName), context.Canceled)
 	assert.Len(t, m.Calls, 1)

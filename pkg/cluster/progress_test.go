@@ -130,7 +130,7 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 		{"ok", t.Context(), "localhost ssh-ed25519 AAAA-hostkey\n", "call setup: ok\n  call docker exec [hidden]: ok\n"},
 		{"failed", t.Context(), "", "call setup: failed (target): setting up SSH: no ed25519 host key found\n  call docker exec [hidden]: ok\n"},
 		{"stopped by a sibling", stoppedBy(errors.New("node worker-1: image not found")), "",
-			"call setup: canceled (canceled): setting up SSH: no ed25519 host key found\n  call docker exec [hidden]: ok\n"},
+			"call setup: canceled (canceled): running the node setup: context canceled\n  call docker exec [hidden]: canceled (canceled): context canceled\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, w := progresstest.Watch(tc.ctx, t)
@@ -148,7 +148,9 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 // canceled, not failed, and the error is that of the node that failed.
 func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
+	// The docker calls are answered after the cancel too, so that every
+	// node gets as far as its wait, whichever ran first.
+	m := &mock.Executor{IgnoreContext: true, OnCall: nodesOnCall(t, func(args []string) (mock.Result, bool) {
 		switch {
 		case args[0] == "create" && strings.Contains(strings.Join(args, " "), "sind-dev-worker-0"):
 			return mock.Result{Err: errors.New("image not found")}, true
@@ -157,7 +159,8 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 			return mock.Result{Stdout: inspectJSON(t, args[1], "created", nil)}, true
 		}
 		return mock.Result{}, false
-	}, workerConfigs("worker-0", "worker-1", "worker-2")...)
+	})}
+	_, err := setupNodesOn(ctx, m, workerConfigs("worker-0", "worker-1", "worker-2")...)
 
 	require.EqualError(t, err, "node worker-0: creating container worker-0: image not found")
 	w.Finish()
@@ -212,7 +215,11 @@ func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	cfg := createCfg()
 	cfg.Pull = true
 
-	_, _, err := runCreate(ctx, t, cfg, false, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
+	// The checks' docker calls are answered after the failed pull cancelled
+	// them too, so that they create what the rollback removes.
+	m := createExecutor(t, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
+	m.IgnoreContext = true
+	_, err := runCreateOn(ctx, t, m, cfg, false)
 
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	w.Finish()
@@ -229,9 +236,13 @@ step rollback: ok
 // the preflight is not stopped by a pull.
 func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	_, _, err := runCreate(ctx, t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	// The checks' docker calls are answered after the failed inspection
+	// cancelled them too, so that they create what the rollback removes.
+	m := createExecutor(t, func(args []string, _ string) (mock.Result, bool) {
 		return mock.Result{Err: errors.New("docker daemon unavailable")}, isImageExists(args)
 	})
+	m.IgnoreContext = true
+	_, err := runCreateOn(ctx, t, m, createCfg(), false)
 
 	require.EqualError(t, err, "inspecting image img:1: docker daemon unavailable")
 	w.Finish()

@@ -233,17 +233,30 @@ func createCfg() *config.Cluster {
 // without one.
 func runCreate(ctx context.Context, t *testing.T, cfg *config.Cluster, freshMesh bool, override func([]string, string) (mock.Result, bool)) (*mock.Executor, *Cluster, error) {
 	t.Helper()
+	m := createExecutor(t, override)
+	cluster, err := runCreateOn(ctx, t, m, cfg, freshMesh)
+	return m, cluster, err
+}
+
+// createExecutor returns the executor of runCreate: happyOnCall with
+// override, with docker events.
+func createExecutor(t *testing.T, override func([]string, string) (mock.Result, bool)) *mock.Executor {
+	t.Helper()
 	pipes := &mock.Pipes{}
 	t.Cleanup(pipes.CloseAll)
-	m := &mock.Executor{OnCall: happyOnCall(t, override), OnStart: pipes.OnStart}
+	return &mock.Executor{OnCall: happyOnCall(t, override), OnStart: pipes.OnStart}
+}
+
+// runCreateOn is runCreate against m.
+func runCreateOn(ctx context.Context, t *testing.T, m *mock.Executor, cfg *config.Cluster, freshMesh bool) (*Cluster, error) {
+	t.Helper()
 	client := docker.NewClient(m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	if freshMesh {
 		_ = meshMgr.EnsureMeshNetwork(context.WithoutCancel(ctx))
 		require.True(t, meshMgr.Created())
 	}
-	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
-	return m, cluster, err
+	return Create(ctx, client, meshMgr, cfg, time.Millisecond)
 }
 
 // isSystemctlEnable reports whether args enable a unit on a node.
@@ -812,7 +825,7 @@ func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
 // deregistered from it first.
 func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
 	failed := false
-	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
+	m := createExecutor(t, func(args []string, stdin string) (mock.Result, bool) {
 		if failed && args[0] == "ps" && args[len(args)-1] == "label=sind.cluster=dev" {
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "a", Names: "sind-dev-controller",
 				State: "running", Image: "img", Labels: "sind.cluster=dev,sind.realm=sind"})}, true
@@ -821,6 +834,10 @@ func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
 		failed = failed || ok
 		return r, ok
 	})
+	// The registration's read of known_hosts is answered after the failed
+	// enable cancelled it too, so that it reads known_hosts once.
+	m.IgnoreContext = true
+	_, err := runCreateOn(t.Context(), t, m, createCfg(), true)
 
 	require.ErrorContains(t, err, "systemctl failed")
 	assert.True(t, meshRemoved(m))
@@ -1039,9 +1056,14 @@ func TestResolveInfra_Errors(t *testing.T) {
 func setupNodesWith(ctx context.Context, t *testing.T, override func([]string) (mock.Result, bool), configs ...RunConfig) (*mock.Executor, []nodeResult, error) {
 	t.Helper()
 	m := &mock.Executor{OnCall: nodesOnCall(t, override)}
-	client := docker.NewClient(m)
-	results, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	results, err := setupNodesOn(ctx, m, configs...)
 	return m, results, err
+}
+
+// setupNodesOn is setupNodesWith against m.
+func setupNodesOn(ctx context.Context, m *mock.Executor, configs ...RunConfig) ([]nodeResult, error) {
+	client := docker.NewClient(m)
+	return setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 }
 
 // controllerConfig is the run config of the controller of cluster dev.

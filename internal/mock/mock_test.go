@@ -404,3 +404,32 @@ func TestExecutor_AssertDone(t *testing.T) {
 	extra.AssertDone(&et)
 	assert.Equal(t, []string{"mock: unexpected call: docker rm -f c1"}, et.errors)
 }
+
+// TestExecutor_EndedContext checks that a call whose context is done fails
+// with its error and is not recorded, as OSExecutor starts no command
+// then, and that IgnoreContext answers it.
+func TestExecutor_EndedContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	var m Executor
+	m.AddResult("ok", "", nil)
+	_, _, err := m.Run(ctx, "docker", "ps")
+	require.ErrorIs(t, err, context.Canceled)
+	_, _, err = m.RunWithStdin(ctx, strings.NewReader("x"), "docker", "cp")
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = m.Start(ctx, "docker", "events")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, m.CallsSnapshot())
+
+	stdout, _, err := m.Run(t.Context(), "docker", "ps")
+	require.NoError(t, err)
+	assert.Equal(t, "ok", stdout, "the queued result is left for the next call")
+
+	ignoring := Executor{IgnoreContext: true}
+	ignoring.AddResult("ok", "", nil)
+	stdout, _, err = ignoring.Run(ctx, "docker", "ps")
+	require.NoError(t, err)
+	assert.Equal(t, "ok", stdout)
+	assert.Len(t, ignoring.Calls, 1)
+}

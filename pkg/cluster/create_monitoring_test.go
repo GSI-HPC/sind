@@ -129,7 +129,18 @@ func TestCreate_MonitoringPullFails(t *testing.T) {
 	f := newStackFake(t)
 	cfg := createCfg()
 	cfg.Pull = true
-	_, _, err := createMonitored(t, f, cfg, pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
+	cfg.Monitoring = true
+	pullFails := pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")})
+	m := createExecutor(t, func(args []string, stdin string) (mock.Result, bool) {
+		if r, ok := pullFails(args, stdin); ok {
+			return r, true
+		}
+		return f.handle(args, stdin)
+	})
+	// The journal volume is created after the failed pull cancelled its
+	// context too, so that the helper waits for the pull, and its failure.
+	m.IgnoreContext = true
+	_, err := runCreateOn(t.Context(), t, m, cfg, false)
 	require.ErrorContains(t, err, "manifest unknown")
 	assert.False(t, f.called("run --rm --name sind-dev-journal-helper"))
 }

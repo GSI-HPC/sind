@@ -272,7 +272,7 @@ func TestWriteKnownHosts_Detached(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &mock.Executor{}
 			m.AddResult("", "", nil)
-			mgr := NewManager(docker.NewClient(ctxExecutor{m}), DefaultRealm)
+			mgr := NewManager(docker.NewClient(m), DefaultRealm)
 
 			err := mgr.writeKnownHosts(tc.ctx, "h k\n")
 			if tc.err == nil {

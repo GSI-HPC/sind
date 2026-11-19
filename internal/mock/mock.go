@@ -53,11 +53,19 @@ type Executor struct {
 	// OnCall, if set, is called to produce a result for each invocation.
 	// The args slice contains the subcommand and its arguments
 	// (e.g. ["inspect", "sind-dns"]). Stdin is non-empty for RunWithStdin calls.
+	// It runs under the mock's lock, one call at a time, so it may change
+	// the test's variables without locking them; a test that must hold one
+	// call while others run wraps the executor and blocks outside the lock.
 	OnCall func(args []string, stdin string) Result
 
 	// OnStart, if set, is called to produce a StreamResult for Start calls.
 	// If nil, Start returns an error.
 	OnStart func(args []string) StreamResult
+
+	// IgnoreContext makes the mock answer a call whose context is done.
+	// Without it, such a call fails with the context's error and is not
+	// recorded, as OSExecutor does not start the command.
+	IgnoreContext bool
 
 	// NoTerminal makes the mock open no terminal for a command run
 	// cmdexec.WithTerminal, as OSExecutor where it cannot: the command
@@ -115,12 +123,24 @@ func (m *Executor) setOnCall(onCall func(args []string, stdin string) Result) {
 }
 
 func (m *Executor) record(ctx context.Context, name string, args []string, stdin string) (string, string, error) {
+	if err := m.contextErr(ctx); err != nil {
+		return "", "", err
+	}
 	stdout, stderr, err := m.dispatch(name, args, stdin)
 	if !m.NoTerminal {
 		stdout = onTerminal(ctx, stdout)
 	}
 	parseLines(ctx, stdout, stderr)
 	return stdout, stderr, err
+}
+
+// contextErr returns the error of ctx once it is done, unless
+// IgnoreContext is set.
+func (m *Executor) contextErr(ctx context.Context) error {
+	if m.IgnoreContext {
+		return nil
+	}
+	return ctx.Err()
 }
 
 // onTerminal returns stdout as OSExecutor returns what a command wrote to
@@ -254,7 +274,10 @@ func (p *Pipes) CloseAll() {
 }
 
 // Start implements cmdexec.Executor.
-func (m *Executor) Start(_ context.Context, name string, args ...string) (*cmdexec.Process, error) {
+func (m *Executor) Start(ctx context.Context, name string, args ...string) (*cmdexec.Process, error) {
+	if err := m.contextErr(ctx); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	m.Calls = append(m.Calls, Call{Name: name, Args: args})
 	m.mu.Unlock()

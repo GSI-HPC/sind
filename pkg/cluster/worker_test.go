@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
 	"slices"
@@ -1820,7 +1819,10 @@ func TestWorkerAdd_RollbackSkipsUncreatedWorkers(t *testing.T) {
 	}
 	pipes := &mock.Pipes{}
 	t.Cleanup(pipes.CloseAll)
-	m := &mock.Executor{OnCall: onCall, OnStart: pipes.OnStart}
+	// The docker create of worker-1 is answered after the failed create of
+	// worker-2 cancelled it too, so that the rollback has worker-1 to
+	// remove, whichever ran first.
+	m := &mock.Executor{IgnoreContext: true, OnCall: onCall, OnStart: pipes.OnStart}
 	client := docker.NewClient(m)
 	var logs strings.Builder
 	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
@@ -2012,31 +2014,11 @@ func TestWorkerAdd_RollbackWritesOriginalNodesConf(t *testing.T) {
 	assert.Equal(t, 1, countCalls(m.Calls, "exec", "sind-dev-controller", "cat", "/etc/slurm/sind-nodes.conf"), "read once, before the update")
 }
 
-// ctxExecutor fails a call whose context is done, as os/exec does, and
-// hands the others to Executor.
-type ctxExecutor struct {
-	mock.Executor
-}
-
-func (e *ctxExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.Run(ctx, name, args...)
-}
-
-func (e *ctxExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.RunWithStdin(ctx, stdin, name, args...)
-}
-
 func TestWriteNodesConfAndReconfigure_Cancelled(t *testing.T) {
 	// The --wait deadline or Ctrl+C does not stop the write of
 	// sind-nodes.conf, which replaces the file in one step; the reconfigure
 	// after it does stop.
-	var e ctxExecutor
+	var e mock.Executor
 	e.AddResult("", "", nil)
 	client := docker.NewClient(&e)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -2056,7 +2038,7 @@ func TestWriteNodesConfAndReconfigure_RollbackDeadline(t *testing.T) {
 	// Under a rollback whose deadline has passed, the write of
 	// sind-nodes.conf ends too, so a hung Docker daemon cannot hold the
 	// rollback past RollbackTimeout.
-	var e ctxExecutor
+	var e mock.Executor
 	client := docker.NewClient(&e)
 	ctx, cancel := context.WithDeadline(context.WithoutCancel(t.Context()), time.Now().Add(-time.Second))
 	defer cancel()

@@ -67,6 +67,12 @@ m := &mock.Executor{
 }
 ```
 
+`OnCall` runs under the mock's lock, one call at a time, so it may change the test's variables without locking them. A test that must hold one call while others run wraps the executor and blocks outside that lock.
+
+### Ended contexts
+
+As the real executor, the mock fails a call whose context is done with the context's error, and does not record it or use a queued result for it. A test that wants such calls answered, for example so that concurrent work gets equally far whichever goroutine ran first, sets `IgnoreContext: true`.
+
 ### Inspecting calls
 
 All calls are recorded and can be inspected:
