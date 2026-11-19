@@ -50,7 +50,7 @@ func TestCreate_PullsEachImageOnce(t *testing.T) {
 	cfg := createCfg()
 	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleWorker, Count: 2, Image: "other:2", CPUs: 1, Memory: "1g", TmpSize: "1g"})
 	cfg.Pull = true
-	m, _, err := runCreate(t.Context(), t, cfg, false, pullOnCall(mock.Result{}))
+	m, err := runCreate(t.Context(), t, cfg, false, pullOnCall(mock.Result{}))
 	require.NoError(t, err)
 
 	var pulls []string
@@ -77,7 +77,7 @@ func TestCreate_PullFails(t *testing.T) {
 	cfg := createCfg()
 	cfg.Pull = true
 	cfg.Storage.CVMFS = true
-	m, _, err := runCreate(t.Context(), t, cfg, false, pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
+	m, err := runCreate(t.Context(), t, cfg, false, pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	// The network and volumes may exist (and are rolled back), but nothing
 	// ran the image.
@@ -139,7 +139,7 @@ func TestCreate_PullsMissingImages(t *testing.T) {
 	// before any container runs one, so that no node's docker create pulls.
 	cfg := createCfg()
 	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleWorker, Count: 2, Image: "other:2", CPUs: 1, Memory: "1g", TmpSize: "1g"})
-	m, _, err := runCreate(t.Context(), t, cfg, false, imageExistsOnCall(t, "other:2"))
+	m, err := runCreate(t.Context(), t, cfg, false, imageExistsOnCall(t, "other:2"))
 	require.NoError(t, err)
 
 	var pulls []string
@@ -161,7 +161,7 @@ func TestCreate_PullsMissingImages(t *testing.T) {
 }
 
 func TestCreate_ImageInspectFails(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if isImageExists(args) {
 			return mock.Result{Stderr: "Cannot connect to the Docker daemon\n", Err: fmt.Errorf("exit status 1")}, true
 		}

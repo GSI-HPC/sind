@@ -228,14 +228,33 @@ func createCfg() *config.Cluster {
 }
 
 // runCreate runs Create of cfg under ctx against happyOnCall with override,
-// with docker events, and returns the executor and Create's result. With
+// with docker events, and returns the executor and Create's error. With
 // freshMesh the mesh manager creates the mesh network first, as in a realm
 // without one.
-func runCreate(ctx context.Context, t *testing.T, cfg *config.Cluster, freshMesh bool, override func([]string, string) (mock.Result, bool)) (*mock.Executor, *Cluster, error) {
+func runCreate(ctx context.Context, t *testing.T, cfg *config.Cluster, freshMesh bool, override func([]string, string) (mock.Result, bool)) (*mock.Executor, error) {
 	t.Helper()
 	m := createExecutor(t, override)
-	cluster, err := runCreateOn(ctx, t, m, cfg, freshMesh)
-	return m, cluster, err
+	err := runCreateOn(ctx, t, m, cfg, freshMesh)
+	return m, err
+}
+
+// createdNodes returns the node containers that the calls of m created,
+// sorted by name, with the labels of each.
+func createdNodes(m *mock.Executor) map[string]map[string]string {
+	nodes := map[string]map[string]string{}
+	for _, c := range m.CallsSnapshot() {
+		if c.Args[0] != "create" || !slices.Contains(c.Args, "--hostname") {
+			continue
+		}
+		name, _ := testutil.ArgValue(c.Args, "--name")
+		labels := map[string]string{}
+		for _, l := range testutil.ArgValues(c.Args, "--label") {
+			k, v, _ := strings.Cut(l, "=")
+			labels[k] = v
+		}
+		nodes[name] = labels
+	}
+	return nodes
 }
 
 // createExecutor returns the executor of runCreate: happyOnCall with
@@ -248,7 +267,7 @@ func createExecutor(t *testing.T, override func([]string, string) (mock.Result, 
 }
 
 // runCreateOn is runCreate against m.
-func runCreateOn(ctx context.Context, t *testing.T, m *mock.Executor, cfg *config.Cluster, freshMesh bool) (*Cluster, error) {
+func runCreateOn(ctx context.Context, t *testing.T, m *mock.Executor, cfg *config.Cluster, freshMesh bool) error {
 	t.Helper()
 	client := docker.NewClient(m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -365,20 +384,16 @@ func TestCreateResources_DataVolume(t *testing.T) {
 }
 
 func TestCreate_FullCluster(t *testing.T) {
-	_, cluster, err := runCreate(t.Context(), t, createCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, createCfg(), false, nil)
 
 	require.NoError(t, err)
-	require.NotNil(t, cluster)
-	assert.Equal(t, "dev", cluster.Name)
-	assert.Equal(t, "25.11.0", cluster.SlurmVersion)
-	assert.Equal(t, StateRunning, cluster.State)
-	require.Len(t, cluster.Nodes, 2)
-	assert.Equal(t, "controller", cluster.Nodes[0].Name)
-	assert.Equal(t, config.RoleController, cluster.Nodes[0].Role)
-	assert.Equal(t, "worker-0", cluster.Nodes[1].Name)
-	assert.Equal(t, config.RoleWorker, cluster.Nodes[1].Role)
-	assert.Equal(t, StateRunning, cluster.Nodes[0].State)
-	assert.Equal(t, StateRunning, cluster.Nodes[1].State)
+	nodes := createdNodes(m)
+	require.Len(t, nodes, 2)
+	controller, worker := nodes["sind-dev-controller"], nodes["sind-dev-worker-0"]
+	assert.Equal(t, "controller", controller[LabelRole])
+	assert.Equal(t, "worker", worker[LabelRole])
+	assert.Equal(t, "25.11.0", controller[LabelSlurmVersion])
+	assert.Equal(t, "25.11.0", worker[LabelSlurmVersion])
 }
 
 func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
@@ -396,7 +411,7 @@ func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, createCfg(), 0)
+	err := Create(ctx, client, meshMgr, createCfg(), 0)
 	require.NoError(t, err)
 	assert.Equal(t, probe.DefaultInterval, DefaultReadinessInterval)
 }
@@ -406,14 +421,14 @@ func TestCreate_InvalidConfig(t *testing.T) {
 	// creates anything instead of returning a cluster without nodes.
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev"}, time.Millisecond)
+	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev"}, time.Millisecond)
 	require.EqualError(t, err, "invalid cluster config: exactly one controller required, got 0")
 	assert.Empty(t, m.Calls)
 
 	// Validate guards the names the node scripts use unquoted.
 	cfg := createCfg()
 	cfg.Users = []config.User{{Name: "bad name", UID: 1000}}
-	_, err = Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	err = Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
 	require.ErrorContains(t, err, "invalid cluster config: ")
 	assert.Empty(t, m.Calls)
 }
@@ -423,7 +438,7 @@ func TestCreate_RealmMismatch(t *testing.T) {
 	client := docker.NewClient(&m)
 	cfg := createCfg()
 	cfg.Realm = "ci"
-	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
 	require.EqualError(t, err, `config realm "ci" differs from the mesh manager's realm "sind"`)
 	assert.Empty(t, m.Calls)
 }
@@ -434,7 +449,7 @@ func TestCreate_RealmMismatch(t *testing.T) {
 func TestCreate_InvalidRealm(t *testing.T) {
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	_, err := Create(t.Context(), client, mesh.NewManager(client, "CI"), createCfg(), time.Millisecond)
+	err := Create(t.Context(), client, mesh.NewManager(client, "CI"), createCfg(), time.Millisecond)
 	require.ErrorContains(t, err, `invalid realm name "CI"`)
 	assert.Empty(t, m.Calls)
 }
@@ -442,7 +457,7 @@ func TestCreate_InvalidRealm(t *testing.T) {
 func TestCreate_ConfigRealmMatches(t *testing.T) {
 	cfg := createCfg()
 	cfg.Realm = mesh.DefaultRealm
-	_, _, err := runCreate(t.Context(), t, cfg, false, nil)
+	_, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 }
 
@@ -457,13 +472,13 @@ func scontrolPing(out string) func([]string, string) (mock.Result, bool) {
 func TestCreate_BackupController(t *testing.T) {
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	m, cluster, err := runCreate(t.Context(), t, cfg, false,
+	m, err := runCreate(t.Context(), t, cfg, false,
 		scontrolPing("Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"))
 
 	require.NoError(t, err)
-	require.Len(t, cluster.Nodes, 3)
-	assert.Equal(t, "controller-backup", cluster.Nodes[1].Name)
-	assert.Equal(t, config.RoleController, cluster.Nodes[1].Role)
+	nodes := createdNodes(m)
+	require.Len(t, nodes, 3)
+	assert.Equal(t, "controller", nodes["sind-dev-controller-backup"][LabelRole])
 
 	// slurmctld is enabled on both controllers; each container mounts the
 	// shared state volume.
@@ -488,7 +503,7 @@ func TestCreate_BackupControllerNotReady(t *testing.T) {
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
 	cfg.Wait = 500 * time.Millisecond
-	_, _, err := runCreate(t.Context(), t, cfg, false,
+	_, err := runCreate(t.Context(), t, cfg, false,
 		scontrolPing("Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is DOWN\n"))
 
 	require.ErrorIs(t, err, ErrNotReady)
@@ -510,7 +525,7 @@ func TestCreate_CVMFS(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := createCfg()
 			cfg.Storage.CVMFS = true
-			m, _, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
+			m, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
 				return mock.Result{Stdout: tt.plugins}, args[0] == "plugin"
 			})
 			require.NoError(t, err)
@@ -554,7 +569,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 	// up whatever the other preparation branches created.
 	cfg := createCfg()
 	cfg.Storage.CVMFS = true
-	m, cluster, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
@@ -565,7 +580,6 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 	})
 
 	require.ErrorContains(t, err, "storage.cvmfs")
-	assert.Nil(t, cluster)
 	assertNoNodeCreated(t, m)
 }
 
@@ -573,13 +587,12 @@ func TestCreate_NoNsdelegate(t *testing.T) {
 	// A Docker host without nsdelegate fails creation before any node
 	// container, with the commands that enable it, and the rollback
 	// removes what the other preparation branches created.
-	m, cluster, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}, isNsdelegateProbe(args)
 	})
 
 	require.ErrorIs(t, err, ErrNoNsdelegate)
 	assert.Contains(t, err.Error(), "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
-	assert.Nil(t, cluster)
 	assertNoNodeCreated(t, m)
 	var probes [][]string
 	for _, c := range m.Calls {
@@ -594,7 +607,7 @@ func TestCreate_NoNsdelegate(t *testing.T) {
 func TestCreate_NoCVMFS(t *testing.T) {
 	// Without storage.cvmfs, sind neither looks for the plugin nor probes
 	// the host.
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
@@ -661,10 +674,9 @@ func TestCreate_Fails(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 			defer cancel()
 
-			_, cluster, err := runCreate(ctx, t, createCfg(), false, tt.override)
+			_, err := runCreate(ctx, t, createCfg(), false, tt.override)
 
 			require.ErrorContains(t, err, tt.wantErr)
-			assert.Nil(t, cluster)
 		})
 	}
 }
@@ -672,7 +684,7 @@ func TestCreate_Fails(t *testing.T) {
 func TestCreate_PreflightFailsWithoutCleanup(t *testing.T) {
 	// The preflight check fails before resourcesCreated=true: no cluster
 	// cleanup runs, so there are no network or volume rm calls.
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, preflightConflict)
+	m, err := runCreate(t.Context(), t, createCfg(), false, preflightConflict)
 
 	require.ErrorIs(t, err, ErrClusterExists)
 	for _, call := range m.Calls {
@@ -686,7 +698,7 @@ func TestCreate_PreflightFailsWithoutCleanup(t *testing.T) {
 func TestCreate_CleansUpOnFailure(t *testing.T) {
 	// When enableSlurm fails (after resources + nodes exist), cleanup runs,
 	// and keeps the mesh, which existed before.
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, failEnable)
+	m, err := runCreate(t.Context(), t, createCfg(), false, failEnable)
 
 	require.ErrorContains(t, err, "systemctl failed")
 	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
@@ -729,7 +741,7 @@ func TestCreate_RollbackRemovesTheCluster(t *testing.T) {
 			cfg := createCfg()
 			cfg.Wait = tt.wait
 
-			m, _, err := runCreate(t.Context(), t, cfg, false, realm.override(tt.override))
+			m, err := runCreate(t.Context(), t, cfg, false, realm.override(tt.override))
 
 			require.ErrorContains(t, err, tt.wantErr)
 			if tt.wait > 0 {
@@ -755,7 +767,7 @@ func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 		{"resolveInfra", dnsInspectFails, "inspecting DNS container: container not running"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			m, _, err := runCreate(t.Context(), t, createCfg(), true, tt.override)
+			m, err := runCreate(t.Context(), t, createCfg(), true, tt.override)
 
 			require.ErrorContains(t, err, tt.wantErr)
 			assert.True(t, meshRemoved(m), "mesh cleanup should remove mesh containers")
@@ -778,7 +790,7 @@ func isRealmListing(args []string) bool {
 // for an earlier cluster and then serves a create that fails: the mesh stays
 // for the earlier cluster.
 func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if isRealmListing(args) {
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "x", Names: "sind-first-controller",
 				State: "running", Image: "img", Labels: "sind.cluster=first,sind.realm=sind"})}, true
@@ -794,7 +806,7 @@ func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
 // exists: the preflight check fails, and the existing cluster keeps its
 // mesh.
 func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if isRealmListing(args) {
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "x", Names: "sind-dev-controller",
 				State: "running", Image: "img", Labels: "sind.cluster=dev,sind.realm=sind"})}, true
@@ -809,7 +821,7 @@ func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
 // TestCreate_KeepsMeshWhenUsageUnknown covers a rollback that cannot tell
 // whether clusters use the mesh: it keeps the mesh.
 func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 		if isRealmListing(args) {
 			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
 		}
@@ -837,7 +849,7 @@ func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
 	// The registration's read of known_hosts is answered after the failed
 	// enable cancelled it too, so that it reads known_hosts once.
 	m.IgnoreContext = true
-	_, err := runCreateOn(t.Context(), t, m, createCfg(), true)
+	err := runCreateOn(t.Context(), t, m, createCfg(), true)
 
 	require.ErrorContains(t, err, "systemctl failed")
 	assert.True(t, meshRemoved(m))
@@ -919,7 +931,7 @@ func TestCreate_CleanupErrors(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			inCleanup := false
-			_, _, err := runCreate(t.Context(), t, createCfg(), tt.fresh, func(args []string, stdin string) (mock.Result, bool) {
+			_, err := runCreate(t.Context(), t, createCfg(), tt.fresh, func(args []string, stdin string) (mock.Result, bool) {
 				if inCleanup && tt.cleanup(args) {
 					return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
 				}
@@ -950,10 +962,10 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	cfg := createCfg()
 	cfg.Nodes[1].Managed = new(false)
 	var slurmCmds []string
-	_, cluster, err := runCreate(t.Context(), t, cfg, false, enabledOn(&slurmCmds))
+	m, err := runCreate(t.Context(), t, cfg, false, enabledOn(&slurmCmds))
 
 	require.NoError(t, err)
-	require.Len(t, cluster.Nodes, 2)
+	require.Len(t, createdNodes(m), 2)
 	// Only controller should get slurm enabled, not unmanaged worker-0.
 	assert.Equal(t, []string{"sind-dev-controller"}, slurmCmds)
 }
@@ -969,11 +981,9 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 		},
 	}
 
-	m, cluster, err := runCreate(t.Context(), t, cfg, false, nil)
+	m, err := runCreate(t.Context(), t, cfg, false, nil)
 
 	require.NoError(t, err)
-	assert.Empty(t, cluster.SlurmVersion, "no version discovered")
-	require.Len(t, cluster.Nodes, 4)
 
 	var volumes, nodes []string
 	for _, c := range m.Calls {
@@ -1007,11 +1017,12 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 	cfg := createCfg()
 	cfg.Nodes = slices.Insert(cfg.Nodes, 1, config.Node{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"})
 	var slurmCmds []string
-	_, cluster, err := runCreate(t.Context(), t, cfg, false, enabledOn(&slurmCmds))
+	m, err := runCreate(t.Context(), t, cfg, false, enabledOn(&slurmCmds))
 
 	require.NoError(t, err)
-	require.Len(t, cluster.Nodes, 3)
-	assert.Equal(t, "submitter", cluster.Nodes[1].Name)
+	nodes := createdNodes(m)
+	require.Len(t, nodes, 3)
+	assert.Equal(t, "submitter", nodes["sind-dev-submitter"][LabelRole])
 	// The controller gets slurmctld and the worker slurmd; the submitter
 	// is skipped entirely.
 	slices.Sort(slurmCmds)
@@ -1156,7 +1167,7 @@ func TestRegisterNodes_DNSError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
+	err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
 	require.ErrorContains(t, err, "registering DNS")
 }
@@ -1200,7 +1211,7 @@ func TestRegisterNodes_KnownHostError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
+	err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
 	require.ErrorContains(t, err, "registering host key")
 }

@@ -114,7 +114,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── discovery.go Cluster/node discovery queries, VolumeType
   ├── external.go  External containers on the mesh: connect, disconnect, and their connection to new clusters
   ├── resources.go Resource creation helpers
-  ├── types.go     Shared types (Cluster, Node, State)
+  ├── types.go     Shared types (State)
   ├── ssh.go       ssh/enter/exec arg building and target selection
   ├── logs.go      Log command arg building
   ├── dns.go       Node DNS names and search domain

@@ -635,6 +635,7 @@ func TestGetStatus_Full(t *testing.T) {
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
+	assert.Equal(t, mesh.DefaultRealm, status.Realm)
 	assert.Equal(t, "dev", status.Name)
 	assert.Equal(t, "25.11.9", status.SlurmVersion)
 	assert.Equal(t, StateRunning, status.State)

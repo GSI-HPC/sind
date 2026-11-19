@@ -36,28 +36,30 @@ const restVersion = "v0.0.45"
 // (everything after kind, name and defaults). With an image of Slurm 25.11,
 // which has no slurmrestd, it checks that the create fails with the image
 // check and skips the rest of the test.
-func apiCluster(ctx context.Context, t *testing.T, c *docker.Client, name, body string) (meshMgr *mesh.Manager, realm string, result *Cluster) {
+func apiCluster(ctx context.Context, t *testing.T, c *docker.Client, name, body string) (meshMgr *mesh.Manager, realm string, nodes []*NodeSummary) {
 	t.Helper()
 	meshMgr, realm = testMesh(ctx, t, c, name, name)
 	version, err := slurm.DiscoverVersion(ctx, c, testutil.Image())
 	require.NoError(t, err)
 
-	result, err = Create(ctx, c, meshMgr, testConfig(t, name, body), probeInterval)
+	err = Create(ctx, c, meshMgr, testConfig(t, name, body), probeInterval)
 	if strings.HasPrefix(version, "25.") {
 		require.ErrorContains(t, err, "has no slurmrestd with its systemd unit, which the api node runs")
 		t.Skipf("Slurm %s images have no slurmrestd; the create failed as it should", version)
 	}
 	require.NoError(t, err)
-	return meshMgr, realm, result
+	nodes, err = GetNodes(ctx, c, realm, name)
+	require.NoError(t, err)
+	return meshMgr, realm, nodes
 }
 
 // apiURL returns the URL of a REST path on the cluster's api node, by the
 // node's address on the cluster network, which the Docker host reaches.
-func apiURL(t *testing.T, result *Cluster, path string) string {
+func apiURL(t *testing.T, nodes []*NodeSummary, path string) string {
 	t.Helper()
-	i := slices.IndexFunc(result.Nodes, func(n *Node) bool { return n.Role == config.RoleAPI })
+	i := slices.IndexFunc(nodes, func(n *NodeSummary) bool { return n.Role == config.RoleAPI })
 	require.NotEqual(t, -1, i, "api node missing")
-	return "http://" + result.Nodes[i].IP + ":" + slurm.SlurmrestdPort + path
+	return "http://" + nodes[i].IP + ":" + slurm.SlurmrestdPort + path
 }
 
 // restResponse is the part of slurmrestd's responses the tests read.

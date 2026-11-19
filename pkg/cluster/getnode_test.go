@@ -52,7 +52,7 @@ func TestGetNode(t *testing.T) {
 		Managed:   true,
 		FQDN:      "controller.dev.sind.sind",
 		IP:        "10.0.0.2",
-		Status:    StateRunning,
+		State:     StateRunning,
 		Services: ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true,
 			probe.ServiceSlurmctld: true},
 	}, node)

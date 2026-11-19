@@ -85,7 +85,7 @@ func neverReady(t *testing.T) func([]string, string) (mock.Result, bool) {
 func TestCreate_WaitLimit(t *testing.T) {
 	cfg := createCfg()
 	cfg.Wait = 500 * time.Millisecond
-	m, _, err := runCreate(t.Context(), t, cfg, false, neverReady(t))
+	m, err := runCreate(t.Context(), t, cfg, false, neverReady(t))
 
 	require.ErrorIs(t, err, ErrNotReady)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -101,7 +101,7 @@ func TestCreate_WaitLimitAfterNodes(t *testing.T) {
 	// The steps after the nodes are ready share the limit.
 	cfg := createCfg()
 	cfg.Wait = 500 * time.Millisecond
-	_, _, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is DOWN\n"}, true
 		}
@@ -117,7 +117,7 @@ func TestCreate_InterruptIsNotWaitLimit(t *testing.T) {
 	defer cancel()
 	cfg := createCfg()
 	cfg.Wait = time.Hour
-	_, _, err := runCreate(ctx, t, cfg, false, neverReady(t))
+	_, err := runCreate(ctx, t, cfg, false, neverReady(t))
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.NotErrorIs(t, err, ErrNotReady)
@@ -154,7 +154,7 @@ func TestCreate_WaitLimitExcludesContainerCreation(t *testing.T) {
 
 	cfg := createCfg()
 	cfg.Wait = time.Second
-	_, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
+	err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
 	require.NoError(t, err)
 }
 
@@ -176,7 +176,7 @@ func TestWorkerAdd_WaitLimit(t *testing.T) {
 func TestCreate_WaitLimitRegistration(t *testing.T) {
 	cfg := createCfg()
 	cfg.Wait = 500 * time.Millisecond
-	m, _, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, cfg, false, func(args []string, _ string) (mock.Result, bool) {
 		return mock.Result{Stdout: "worker-0|unknown*|0/0/2/2|2048|all*|none\n"}, isSinfo(args)
 	})
 
@@ -192,7 +192,7 @@ func TestCreate_WaitLimitRegistration(t *testing.T) {
 // A worker that registers after a few rounds lets the create pass.
 func TestCreate_WaitsForRegistration(t *testing.T) {
 	var rounds atomic.Int32
-	_, _, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if !isSinfo(args) || rounds.Add(1) > 2 {
 			return mock.Result{}, false
 		}

@@ -90,7 +90,7 @@ func configCopy(t *testing.T, calls []mock.Call) string {
 // and returns its calls and error.
 func createAPICluster(t *testing.T, cfg *config.Cluster, override func([]string, string) (mock.Result, bool)) ([]mock.Call, error) {
 	t.Helper()
-	m, _, err := runCreate(t.Context(), t, cfg, false, override)
+	m, err := runCreate(t.Context(), t, cfg, false, override)
 	return m.Calls, err
 }
 

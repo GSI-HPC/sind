@@ -219,7 +219,7 @@ func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	// them too, so that they create what the rollback removes.
 	m := createExecutor(t, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
 	m.IgnoreContext = true
-	_, err := runCreateOn(ctx, t, m, cfg, false)
+	err := runCreateOn(ctx, t, m, cfg, false)
 
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	w.Finish()
@@ -242,7 +242,7 @@ func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 		return mock.Result{Err: errors.New("docker daemon unavailable")}, isImageExists(args)
 	})
 	m.IgnoreContext = true
-	_, err := runCreateOn(ctx, t, m, createCfg(), false)
+	err := runCreateOn(ctx, t, m, createCfg(), false)
 
 	require.EqualError(t, err, "inspecting image img:1: docker daemon unavailable")
 	w.Finish()
@@ -259,7 +259,7 @@ func TestCreate_ReportsItsSteps(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	var registered atomic.Int32
 
-	_, _, err := runCreate(ctx, t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
+	_, err := runCreate(ctx, t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 
 	require.NoError(t, err)
 	w.Finish()

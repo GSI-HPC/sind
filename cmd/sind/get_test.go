@@ -956,7 +956,7 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.True(t, got.Managed, "no sind.managed label: created before it existed")
 	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
 	assert.Equal(t, "10.0.0.2", got.IP)
-	assert.Equal(t, cluster.StateRunning, got.Status)
+	assert.Equal(t, cluster.StateRunning, got.State)
 	assert.True(t, got.Services["munge"])
 	assert.True(t, got.Services["sshd"])
 	assert.True(t, got.Services["slurmctld"])

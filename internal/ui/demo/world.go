@@ -656,7 +656,7 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 // statusOf returns the status of a cluster, as the page of the cluster
 // shows it.
 func (w *World) statusOf(r *realm, c *clusterState, names mesh.Names) *cluster.Status {
-	st := &cluster.Status{Name: c.name, SlurmVersion: c.slurm, State: clusterStateOf(c), Monitoring: c.monitoring}
+	st := &cluster.Status{Realm: r.name, Name: c.name, SlurmVersion: c.slurm, State: clusterStateOf(c), Monitoring: c.monitoring}
 	pair := c.find(cluster.ControllerBackupShortName) != nil
 	for _, n := range c.nodes {
 		h := &cluster.NodeHealth{State: n.state, IP: n.ip, Services: cluster.ServiceHealth{}}

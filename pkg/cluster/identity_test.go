@@ -446,7 +446,7 @@ func collectIdentityCalls(calls []mock.Call) *identityCalls {
 // its calls.
 func createIdentityCluster(t *testing.T, cfg *config.Cluster) *identityCalls {
 	t.Helper()
-	m, _, err := runCreate(t.Context(), t, cfg, false, imageLabels(currentSindNodeLabels))
+	m, err := runCreate(t.Context(), t, cfg, false, imageLabels(currentSindNodeLabels))
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "img:1"), "image checked once")
 	return collectIdentityCalls(m.Calls)
@@ -466,7 +466,7 @@ func imageLabels(labels string) func([]string, string) (mock.Result, bool) {
 func TestCreate_IdentityOldImage(t *testing.T) {
 	// A cached sind-node image from before identity modes is refused
 	// before anything is created.
-	m, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
+	m, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
 
 	require.ErrorContains(t, err, "image img:1 is a sind-node image from before identity modes")
 	assert.Zero(t, countCalls(m.Calls, "create"), "no node")
@@ -503,7 +503,7 @@ func TestCreate_ClientIDs(t *testing.T) {
 }
 
 func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
-	_, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, func(args []string, stdin string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, func(args []string, stdin string) (mock.Result, bool) {
 		if _, steps, ok := setupCall(args); ok && steps["nss_slurm"] != "" {
 			return failedSetup(t, 1, "", "nss_slurm"), true
 		}

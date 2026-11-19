@@ -355,6 +355,7 @@ type NodeStatus struct {
 
 // Status holds the full status of a sind cluster.
 type Status struct {
+	Realm        string         `json:"realm"`
 	Name         string         `json:"name"`
 	SlurmVersion string         `json:"slurm_version"`
 	State        State          `json:"status"`
@@ -468,6 +469,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 
 	return &Status{
+		Realm:        realm,
 		Name:         clusterName,
 		SlurmVersion: slurmVersion,
 		State:        aggregateState(states),

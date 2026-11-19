@@ -98,7 +98,8 @@ func (o WorkerAddOptions) CheckNamed(name func(field string) string) error {
 
 // --- Exported functions ---
 
-// WorkerAdd adds worker nodes to an existing cluster.
+// WorkerAdd adds worker nodes to an existing cluster and returns them, in
+// the order of their names.
 //
 // The caller holds the realm lock (state.LockRealm) until WorkerAdd
 // returns.
@@ -129,7 +130,7 @@ func (o WorkerAddOptions) CheckNamed(name func(field string) string) error {
 // between readiness probe rounds, as for Create. As there, the writes of
 // the mesh DNS, known_hosts and sind-nodes.conf ignore the end of ctx and
 // may outlive it by up to RollbackTimeout.
-func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
+func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (added []*NodeSummary, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 	rd := &readiness{interval: readinessInterval, wait: opts.Wait}
@@ -371,12 +372,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// network, as in Create. The group has no shared context, so a failure
 	// on one side does not cancel the other halfway, such as in the middle
 	// of a CoreDNS restart; the rollback undoes both.
-	var nodes []*Node
 	var g errgroup.Group
 	g.Go(func() error {
-		var err error
-		nodes, err = registerNodes(readyCtx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
-		return err
+		return registerNodes(readyCtx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
 	})
 	if managed {
 		confUpdated = true
@@ -397,7 +395,25 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 
 	needsCleanup = false
-	return nodes, nil
+	return nodeSummaries(realm, opts.ClusterName, nodeConfigs, nodeResults), nil
+}
+
+// nodeSummaries returns the summaries of new nodes, which run, as GetNodes
+// would list them.
+func nodeSummaries(realm, clusterName string, nodeConfigs []RunConfig, results []nodeResult) []*NodeSummary {
+	netName := NetworkName(realm, clusterName)
+	nodes := make([]*NodeSummary, len(nodeConfigs))
+	for i, nc := range nodeConfigs {
+		nodes[i] = &NodeSummary{
+			Container: string(ContainerName(realm, clusterName, nc.ShortName)),
+			Cluster:   clusterName,
+			Role:      nc.Role,
+			FQDN:      DNSName(nc.ShortName, clusterName, realm),
+			IP:        results[i].info.IPs[netName],
+			State:     StateRunning,
+		}
+	}
+	return nodes
 }
 
 // checkWorkerSlurm checks the slurmd of image, the image of new managed

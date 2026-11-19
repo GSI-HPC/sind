@@ -105,9 +105,18 @@ type NodeSummary struct {
 	State     State       `json:"status"`
 }
 
+// ShortName returns the node's name in its cluster, such as "worker-0":
+// the first label of its DNS name.
+func (n *NodeSummary) ShortName() string {
+	short, _, _ := strings.Cut(n.FQDN, ".")
+	return short
+}
+
 // NodeDetail holds the full identity and health information for a single node
-// as reported by 'sind get node'. It extends NodeSummary with a per-service
-// health map. All readiness-checked services (munge, sshd, and on managed
+// as reported by 'sind get node'. It has the fields of NodeSummary, by the
+// same names, and adds Managed and a per-service health map; it does not
+// embed NodeSummary, so that Managed keeps its place in the JSON. All
+// readiness-checked services (munge, sshd, and on managed
 // nodes the role's Slurm service, or mariadb and slurmdbd on a db node) are
 // reported under Services.
 type NodeDetail struct {
@@ -117,7 +126,7 @@ type NodeDetail struct {
 	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see IsManaged)
 	FQDN      string        `json:"fqdn"`
 	IP        string        `json:"ip"`
-	Status    State         `json:"status"`
+	State     State         `json:"status"`
 	Services  ServiceHealth `json:"services"`
 	HA        *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
 	// Slurm is what slurmctld says about a managed worker, from a sinfo
@@ -160,7 +169,7 @@ func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, sho
 		Managed:   IsManaged(info.Labels),
 		FQDN:      DNSName(shortName, clusterName, realm),
 		IP:        health.IP,
-		Status:    health.State,
+		State:     health.State,
 		Services:  health.Services,
 		HA:        health.HA,
 	}

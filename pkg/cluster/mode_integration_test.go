@@ -24,6 +24,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// requireRunningNodes checks that the cluster has n nodes, all of them
+// running, and returns them.
+func requireRunningNodes(ctx context.Context, t *testing.T, c *docker.Client, realm, clusterName string, n int) []*NodeSummary {
+	t.Helper()
+	nodes, err := GetNodes(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	require.Len(t, nodes, n)
+	for _, node := range nodes {
+		assert.Equal(t, StateRunning, node.State, node.Container)
+	}
+	return nodes
+}
+
 func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
@@ -35,11 +48,8 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	cfg := testConfig(t, clusterName, "")
 
 	// Create.
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, clusterName, result.Name)
-	assert.Equal(t, StateRunning, result.State)
-	require.Len(t, result.Nodes, 2)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 2)
 
 	// GetClusters.
 	clusters, err := GetClusters(ctx, c, realm)
@@ -174,9 +184,7 @@ slurm:
     ConstrainCores=yes
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, StateRunning, result.State)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
 
 	// Verify settings via scontrol show config on the controller.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -226,9 +234,7 @@ slurm:
       TaskPlugin=task/cgroup,task/affinity
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, StateRunning, result.State)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
 
 	// Verify settings via scontrol show config on the controller.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -260,7 +266,7 @@ slurm:
 	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].Name)))
+	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].ShortName())))
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -300,9 +306,8 @@ slurm:
     SlurmctldTimeout=10
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	require.Len(t, result.Nodes, 3)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 3)
 
 	primary := ContainerName(realm, clusterName, "controller")
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -356,7 +361,7 @@ slurm:
 	require.Len(t, added, 1)
 	out, err = c.Exec(ctx, backup, "sinfo", "-h", "-N", "-o", "%N")
 	require.NoError(t, err)
-	assert.Contains(t, out, added[0].Name)
+	assert.Contains(t, out, added[0].ShortName())
 
 	// Recovery: the restarted primary takes control back.
 	require.NoError(t, PowerOn(ctx, c, meshMgr, clusterName, []string{"controller"}))
@@ -400,7 +405,7 @@ func TestClusterNamesAroundMesh(t *testing.T) {
 
 	// One create at a time: both rewrite the realm's Corefile.
 	for _, name := range clusters {
-		_, err := Create(ctx, c, meshMgr, testConfig(t, name, ""), probeInterval)
+		err := Create(ctx, c, meshMgr, testConfig(t, name, ""), probeInterval)
 		require.NoError(t, err, "creating %s", name)
 	}
 
@@ -462,10 +467,13 @@ nodes:
   - worker
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 5)
+	clusters, err := GetClusters(ctx, c, realm)
 	require.NoError(t, err)
-	assert.Empty(t, result.SlurmVersion)
-	require.Len(t, result.Nodes, 5)
+	i := slices.IndexFunc(clusters, func(s *Summary) bool { return s.Name == clusterName })
+	require.NotEqual(t, -1, i)
+	assert.Empty(t, clusters[i].SlurmVersion)
 
 	primary := ContainerName(realm, clusterName, "controller")
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -527,7 +535,7 @@ nodes:
 	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].Name))
+	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].ShortName()))
 	require.NoError(t, err)
 	assert.False(t, IsManaged(info.Labels))
 
@@ -556,7 +564,7 @@ PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP
 	// Removing a worker leaves the user's configuration alone.
 	conf, err := c.ReadFile(ctx, primary, slurm.ConfDir+"/slurm.conf")
 	require.NoError(t, err)
-	require.NoError(t, WorkerRemove(ctx, c, meshMgr, clusterName, []string{added[0].Name}))
+	require.NoError(t, WorkerRemove(ctx, c, meshMgr, clusterName, []string{added[0].ShortName()}))
 	after, err := c.ReadFile(ctx, primary, slurm.ConfDir+"/slurm.conf")
 	require.NoError(t, err)
 	assert.Equal(t, conf, after)
@@ -589,10 +597,8 @@ nodes:
   - worker
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, StateRunning, result.State)
-	require.Len(t, result.Nodes, 3)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 3)
 
 	// slurmdbd.conf includes the slurmdbd section's fragments. It has the
 	// ownership and mode slurmdbd insists on, and the fragments, which may
@@ -686,7 +692,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	// sind configures no accounting and starts nothing on the db node.
@@ -749,7 +755,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -806,7 +812,7 @@ nodes:
 	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	newWorker := ContainerName(realm, clusterName, added[0].ShortName())
 	out, err = c.Exec(ctx, newWorker, "id", "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out))
@@ -874,7 +880,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -964,7 +970,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -999,7 +1005,7 @@ nodes:
 	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	newWorker := ContainerName(realm, clusterName, added[0].ShortName())
 	assert.Equal(t, "2", lookupStatus(ctx, t, c, newWorker, "alice"))
 	_, err = c.Exec(ctx, newWorker, "grep", "-q", "^passwd: slurm ", "/etc/nsswitch.conf")
 	assert.NoError(t, err)
@@ -1034,7 +1040,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1120,7 +1126,7 @@ users:
   - munge
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.ErrorContains(t, err, ": adding users: exit status ")
 	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
 	assert.NotContains(t, err.Error(), setupStepMarker)

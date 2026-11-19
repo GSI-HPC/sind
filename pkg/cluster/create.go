@@ -270,7 +270,7 @@ type nodeResult struct {
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
 // does not discover the Slurm version and enables no Slurm daemon.
-func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (result *Cluster, retErr error) {
+func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 	rd := &readiness{interval: readinessInterval, wait: cfg.Wait}
@@ -336,13 +336,13 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}()
 
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid cluster config: %w", err)
+		return fmt.Errorf("invalid cluster config: %w", err)
 	}
 	if err := config.CheckName("realm", realm); err != nil {
-		return nil, err
+		return err
 	}
 	if cfg.Realm != "" && cfg.Realm != realm {
-		return nil, fmt.Errorf("config realm %q differs from the mesh manager's realm %q", cfg.Realm, realm)
+		return fmt.Errorf("config realm %q differs from the mesh manager's realm %q", cfg.Realm, realm)
 	}
 
 	var dnsIP, sshPubKey, slurmVersion string
@@ -431,7 +431,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		preflight.End(err)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion, cvmfs)
@@ -445,7 +445,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, cfg.Name, sshPubKey, nodeConfigs, rd, watcher)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
@@ -454,14 +454,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// Mesh DNS records are for SSH relay and host-side resolution only.
 	readyCtx, cancelReady := rd.context(ctx)
 	defer cancelReady()
-	var cluster *Cluster
 	g, gctx := errgroup.WithContext(readyCtx)
 	g.Go(func() error {
-		nodes, err := registerNodes(gctx, meshMgr, cfg.Name, nodeConfigs, nodeResults)
-		if err != nil {
+		if err := registerNodes(gctx, meshMgr, cfg.Name, nodeConfigs, nodeResults); err != nil {
 			return err
 		}
-		cluster = &Cluster{Name: cfg.Name, SlurmVersion: slurmVersion, State: StateRunning, Nodes: nodes}
 		log.DebugContext(gctx, "mesh registration complete")
 		return nil
 	})
@@ -502,17 +499,17 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return err
 	}
 	// The stack's DNS names go into the Corefile after the nodes': two
 	// read-modify-writes of it must not run at once.
 	if cfg.Monitoring {
 		if err := registerStackDNS(readyCtx, client, meshMgr); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return cluster, nil
+	return nil
 }
 
 // rollbackRemovesMesh reports whether a failed Create removes the mesh: only
@@ -774,14 +771,12 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 }
 
 // registerNodes registers DNS records and known_hosts entries for all nodes
-// in batch, and returns the resulting Node list. It is the progress step
-// "mesh registration".
-func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) (_ []*Node, err error) {
+// in batch. It is the progress step "mesh registration".
+func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) (err error) {
 	ctx, end := startStep(ctx, "mesh registration")
 	defer func() { end(err) }()
 	dnsRecords := make([]mesh.DNSRecord, len(nodeConfigs))
 	hostEntries := make([]mesh.KnownHostEntry, len(nodeConfigs))
-	nodes := make([]*Node, len(nodeConfigs))
 
 	for i, nc := range nodeConfigs {
 		nr := results[i]
@@ -790,13 +785,6 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 
 		dnsRecords[i] = mesh.DNSRecord{Hostname: dnsName, IP: nr.info.IPs[netName]}
 		hostEntries[i] = mesh.KnownHostEntry{Hostname: dnsName, HostKey: nr.hostKey}
-		nodes[i] = &Node{
-			Name:        nc.ShortName,
-			Role:        nc.Role,
-			ContainerID: nr.info.ID,
-			IP:          nr.info.IPs[netName],
-			State:       StateRunning,
-		}
 	}
 
 	// The Corefile and known_hosts live in different containers: update
@@ -817,11 +805,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 		return nil
 	})
 	_ = g.Wait() // the goroutines report through dnsErr and hostsErr
-	if err := errors.Join(dnsErr, hostsErr); err != nil {
-		return nil, err
-	}
-
-	return nodes, nil
+	return errors.Join(dnsErr, hostsErr)
 }
 
 // enableSlurm enables the Slurm daemon on each managed node with a Slurm

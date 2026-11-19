@@ -82,7 +82,7 @@ func TestCreate_RollbackIsAStep(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			run := func(ctx context.Context) error {
 				inCleanup := false
-				_, _, err := runCreate(ctx, t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
+				_, err := runCreate(ctx, t, createCfg(), true, func(args []string, stdin string) (mock.Result, bool) {
 					if tc.want != "" && inCleanup && args[0] == "rm" && args[len(args)-1] == "sind-dns" {
 						return mock.Result{Err: errors.New("docker daemon unavailable")}, true
 					}
@@ -118,7 +118,7 @@ func TestCreate_NoRollbackNoStep(t *testing.T) {
 	cfg := createCfg()
 	cfg.Name = ""
 
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
 
 	require.ErrorContains(t, err, "invalid cluster config")
 	assert.Empty(t, w.Finish())

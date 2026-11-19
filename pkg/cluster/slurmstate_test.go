@@ -26,7 +26,7 @@ func slurmStatus(primary bool) *Status {
 	node := func(name string, role config.Role, managed bool, state State) *NodeStatus {
 		return &NodeStatus{Name: name, Role: role, Managed: managed, Health: &NodeHealth{State: state}}
 	}
-	return &Status{Name: "dev", Nodes: []*NodeStatus{
+	return &Status{Realm: "sind", Name: "dev", Nodes: []*NodeStatus{
 		node("controller-backup.dev", config.RoleController, true, StateRunning),
 		node("controller.dev", config.RoleController, true, state),
 		node("worker-0.dev", config.RoleWorker, true, StateRunning),
@@ -38,18 +38,21 @@ func slurmStatus(primary bool) *Status {
 func TestAddSlurmStates(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
+		realm      string
 		primary    bool
 		controller string
 	}{
-		{"primary runs", true, "sind-dev-controller"},
-		{"backup in control", false, "sind-dev-controller-backup"},
+		{"primary runs", "sind", true, "sind-dev-controller"},
+		{"backup in control", "sind", false, "sind-dev-controller-backup"},
+		{"realm of the status", "ci", true, "ci-dev-controller"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var m mock.Executor
 			m.AddResult("worker-0|drained|0/0/2/2|2048|all*|maintenance\nworker-2|down*|0/0/2/2|2048|all*|Not responding\n", "", nil)
 			status := slurmStatus(tc.primary)
+			status.Realm = tc.realm
 
-			AddSlurmStates(t.Context(), docker.NewClient(&m), "sind", status)
+			AddSlurmStates(t.Context(), docker.NewClient(&m), status)
 
 			require.Len(t, m.Calls, 1)
 			assert.Equal(t, []string{"exec", tc.controller, "sinfo", "--noheader", "--Node", "--format=%N|%T|%C|%m|%P|%E", "--nodes=worker-0,worker-2"}, m.Calls[0].Args)
@@ -67,11 +70,11 @@ func TestAddSlurmStates_NothingToRead(t *testing.T) {
 
 	noWorkers := slurmStatus(true)
 	noWorkers.Nodes = noWorkers.Nodes[:2]
-	AddSlurmStates(t.Context(), client, "sind", noWorkers)
+	AddSlurmStates(t.Context(), client, noWorkers)
 
 	noController := slurmStatus(true)
 	noController.Nodes = noController.Nodes[2:]
-	AddSlurmStates(t.Context(), client, "sind", noController)
+	AddSlurmStates(t.Context(), client, noController)
 
 	assert.Empty(t, m.Calls, "no sinfo without a managed worker or a running controller")
 }
@@ -82,7 +85,7 @@ func TestAddSlurmStates_SinfoFails(t *testing.T) {
 		m.AddResult(out.Stdout, "", out.Err)
 		status := slurmStatus(true)
 
-		AddSlurmStates(t.Context(), docker.NewClient(&m), "sind", status)
+		AddSlurmStates(t.Context(), docker.NewClient(&m), status)
 
 		for _, n := range status.Nodes {
 			assert.Nil(t, n.Health.Slurm, n.Name)

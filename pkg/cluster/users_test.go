@@ -320,7 +320,7 @@ func collectUserCalls(calls []mock.Call) *userCalls {
 }
 
 func TestCreate_Users(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, usersCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, usersCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -343,14 +343,14 @@ func TestCreate_TaskAffinity(t *testing.T) {
 	// CAP_SYS_NICE; the controller does not.
 	cfg := createCfg()
 	cfg.Slurm.Main = config.Section{Content: "TaskPlugin=task/cgroup,task/affinity\n"}
-	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
+	m, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{"sind-dev-worker-0": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestCreate_NoUsers(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -366,7 +366,7 @@ func TestCreate_NoUsers(t *testing.T) {
 }
 
 func TestCreate_AddUsersFails(t *testing.T) {
-	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if container, steps, ok := setupCall(args); ok && container == "sind-dev-worker-0" && steps["users"] != "" {
 			return failedSetup(t, 1, "useradd: cannot lock /etc/passwd\n", "users"), true
 		}
@@ -377,7 +377,7 @@ func TestCreate_AddUsersFails(t *testing.T) {
 }
 
 func TestCreate_CreateHomesFails(t *testing.T) {
-	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 4 && args[4] == createHomesScript {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}, true
 		}

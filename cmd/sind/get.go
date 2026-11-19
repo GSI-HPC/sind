@@ -188,7 +188,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			row = append(row, formatHA(n.HA))
 		}
 		header = append(header, "FQDN", "IP", "STATUS")
-		row = append(row, n.FQDN, cell(n.IP), cell(n.Status))
+		row = append(row, n.FQDN, cell(n.IP), cell(n.State))
 		if managedWorker(n.Role, n.Managed) {
 			header = append(header, "SLURM")
 			row = append(row, formatSlurmState(n.Slurm))
@@ -464,7 +464,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 		if err != nil {
 			return nil, err
 		}
-		cluster.AddSlurmStates(ctx, client, realm, status)
+		cluster.AddSlurmStates(ctx, client, status)
 		return status, nil
 	}
 	return runGet(cmd, getStatus, printStatus)

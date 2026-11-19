@@ -132,7 +132,7 @@ func workerContainers(computes ...string) string {
 
 // addWorkers runs WorkerAdd with opts, within 10 seconds, against a mock
 // that onCall answers, with docker events, in the default realm.
-func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts WorkerAddOptions) (*mock.Executor, []*Node, error) {
+func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts WorkerAddOptions) (*mock.Executor, []*NodeSummary, error) {
 	t.Helper()
 	pipes := &mock.Pipes{}
 	t.Cleanup(pipes.CloseAll)
@@ -493,7 +493,10 @@ func TestWorkerAdd_Managed(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
+	assert.Equal(t, "sind-dev-worker-1", nodes[0].Container)
+	assert.Equal(t, "dev", nodes[0].Cluster)
+	assert.Equal(t, "worker-1.dev.sind.sind", nodes[0].FQDN)
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
@@ -865,7 +868,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
@@ -889,7 +892,7 @@ func TestWorkerAdd_UnmanagedCluster(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assertNoSlurmChanges(t, m.Calls)
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
@@ -1259,8 +1262,8 @@ func TestWorkerAdd_MultipleNodes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
-	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker-2", nodes[1].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
+	assert.Equal(t, "worker-2", nodes[1].ShortName())
 
 	// Both nodes appear in the sind-nodes.conf update.
 	writes := nodesConfWrites(m.Calls)
@@ -1638,7 +1641,7 @@ func TestWorkerAdd_DefaultCount(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
-		assert.Equal(t, "worker-1", nodes[0].Name)
+		assert.Equal(t, "worker-1", nodes[0].ShortName())
 	}
 }
 
@@ -1654,8 +1657,8 @@ func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
-	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker-2", nodes[1].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
+	assert.Equal(t, "worker-2", nodes[1].ShortName())
 
 	assertNoSlurmChanges(t, m.Calls)
 }
@@ -2271,7 +2274,7 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
