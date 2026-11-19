@@ -81,6 +81,11 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"merge of a list of strings", "kind: Cluster\nslurm:\n  cgroup: {<<: [{a: b}, c]}\n", "line 3: slurm.cgroup.<<: expected an object or a list of objects, got a string"},
 		{"merge of itself", "kind: Cluster\ndefaults: &d {<<: *d}\n", "line 2: defaults.<<: an object cannot merge itself"},
 		{"nested merge of itself", "kind: Cluster\nnodes:\n  - &a {role: worker, <<: {<<: *a}}\n", "line 3: nodes[0].<<: an object cannot merge itself"},
+		{"second document", "kind: Cluster\nname: a\n---\nkind: Cluster\nname: b\nbogus: 1\n", "line 3: a config holds one YAML document; remove the --- and what follows"},
+		{"third document", "kind: Cluster\n---\n# nothing\n--- {name: b}\n", "line 4: a config holds one YAML document"},
+		{"empty first document", "---\n---\nkind: Cluster\n", "line 2: a config holds one YAML document; remove the empty one before this line"},
+		{"null first document", "~\n--- {kind: Cluster}\n", "line 2: a config holds one YAML document; remove the empty one before this line"},
+		{"syntax of a second document", "kind: Cluster\n---\nname: [\n", "line 3: did not find expected node content"},
 		{"merged shorthand count", "kind: Cluster\nnodes:\n  - <<: {worker: x}\n", "line 3: nodes[0].worker: expected a whole number, got a string"},
 		{"count a string", "kind: Cluster\nnodes:\n  - role: worker\n    count: many\n", "nodes[0].count: expected a whole number, got a string"},
 	}
@@ -194,6 +199,13 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: [{role: worker, cpus: 1}, {cpus: 2, memory: 1g}]\n"))
 	require.NoError(t, err)
 	assert.Equal(t, Node{Role: RoleWorker, CPUs: 1, Memory: "1g"}, c.Nodes[0])
+
+	// An empty document after the config, as a closing --- leaves, is
+	// none.
+	for _, input := range []string{"kind: Cluster\n---\n", "kind: Cluster\n...\n", "kind: Cluster\n--- ~\n# end\n"} {
+		_, err = Parse([]byte(input))
+		require.NoError(t, err, input)
+	}
 
 	// An alias of a node is followed.
 	_, err = Parse([]byte("kind: Cluster\nnodes:\n  - &n {role: worker, cpu: 1}\n  - *n\n"))

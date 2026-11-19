@@ -20,15 +20,38 @@ import (
 // the first mistake with its line and key path, e.g. `line 7:
 // nodes[1].cpu: unknown key (valid: ...)`, and returns the document for
 // Parse to decode. The decoder reports neither, and names Go types.
+//
+// A config is one YAML document: a later one with content is an error, as
+// sind would ignore it, and so is one after an empty first one.
 func checkSyntax(data []byte) (*yaml.Node, error) {
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil && !errors.Is(err, io.EOF) {
-		return nil, syntaxError(data, err)
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var doc *yaml.Node
+	for empty := false; ; {
+		var next yaml.Node
+		err := dec.Decode(&next)
+		switch {
+		case errors.Is(err, io.EOF):
+			if doc == nil {
+				return nil, errors.New("empty configuration")
+			}
+			return doc, walk(reflect.TypeFor[Cluster](), doc.Content[0], "")
+		case err != nil:
+			return nil, syntaxError(data, err)
+		case isEmpty(&next):
+			empty = true
+		case doc != nil:
+			return nil, fmt.Errorf("line %d: a config holds one YAML document; remove the --- and what follows", next.Line)
+		case empty:
+			return nil, fmt.Errorf("line %d: a config holds one YAML document; remove the empty one before this line", next.Line)
+		default:
+			doc = &next
+		}
 	}
-	if doc.Kind == 0 || len(doc.Content) == 0 || doc.Content[0].Tag == "!!null" {
-		return nil, errors.New("empty configuration")
-	}
-	return &doc, walk(reflect.TypeFor[Cluster](), doc.Content[0], "")
+}
+
+// isEmpty reports whether a YAML document has no content, or only null.
+func isEmpty(doc *yaml.Node) bool {
+	return doc.Kind == 0 || len(doc.Content) == 0 || doc.Content[0].Tag == "!!null"
 }
 
 // parserProblems are the problems the YAML parser, rather than its

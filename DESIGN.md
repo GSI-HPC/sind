@@ -1285,6 +1285,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `monitoring` - requires a managed controller; `slurm.main` must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers` (the collector has no token), and with `PrivateData` it must set `MetricsParameters=ignore_private_data` (see Monitoring)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
+- the file holds one YAML document: a second one after `---` is an error, unless it is empty, and so is the config after an empty first one
 - the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`, unquoted; anchors, aliases and merge keys (`<<: *worker`) are followed, so an object, a node's `role` included, can take its keys from another
 
 An error names the config it is about, `config FILE:` or, read from stdin, `config <stdin>:`, and a mistake in its form (YAML syntax, an unknown or repeated key, a value of the wrong type, or a role, identity mode, admin level or storage type that is not one) also the line and key path: `config dev.yaml: line 7: nodes[1].Cpus: unknown key (valid: role, count, …); did you mean "cpus"? keys are case-sensitive`. A config without content, only comments or `null` is `config FILE: empty configuration`.
