@@ -110,17 +110,17 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 		nw.labels[LabelDNSIP] = dnsIP
 		dns.ip = dnsIP
 	}
-	f.volumes[string(mgr.SSHVolumeName())] = docker.Labels{
-		LabelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
+	f.volumes[string(mgr.sshVolumeName())] = docker.Labels{
+		labelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
 	}
 	sshFiles := map[string]string{
 		privateKeyPath: "-----BEGIN OPENSSH PRIVATE KEY-----\n", PublicKeyPath: "ssh-ed25519 AAAA\n", knownHostsPath: "",
 	}
-	f.volFiles[string(mgr.SSHVolumeName())] = sshFiles
+	f.volFiles[string(mgr.sshVolumeName())] = sshFiles
 	f.containers[string(mgr.DNSContainerName())] = dns
 	require.NoError(f.t, f.start(string(mgr.DNSContainerName())))
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
-		image: SSHImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dns.ips[mesh]},
+		image: sshImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dns.ips[mesh]},
 		files: sshFiles,
 	}
 	require.NoError(f.t, f.start(string(mgr.SSHContainerName())))

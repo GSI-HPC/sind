@@ -62,7 +62,7 @@ func TestMeshLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "DNS container")
 
-	exists, err = c.VolumeExists(ctx, mgr.SSHVolumeName())
+	exists, err = c.VolumeExists(ctx, mgr.sshVolumeName())
 	require.NoError(t, err)
 	assert.True(t, exists, "SSH volume")
 
@@ -84,7 +84,7 @@ func TestMeshLifecycle(t *testing.T) {
 	info, err := mgr.GetInfo(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, DNSImage, info.DNSImage)
-	assert.Equal(t, SSHImage(), info.SSHImage)
+	assert.Equal(t, sshImage(), info.SSHImage)
 	assert.NotEmpty(t, info.DNSIP)
 
 	// CleanupMesh removes everything.
@@ -216,7 +216,7 @@ func TestEnsureMesh(t *testing.T) {
 	assert.Empty(t, *got)
 
 	assert.Equal(t, docker.Labels{
-		LabelRealm: "sind", docker.ComposeProjectLabel: "sind-mesh", docker.ComposeVolumeLabel: "ssh-config",
+		labelRealm: "sind", docker.ComposeProjectLabel: "sind-mesh", docker.ComposeVolumeLabel: "ssh-config",
 	}, f.volumes["sind-ssh-config"])
 
 	// The mesh network pins the DNS address outside its ip-range.
@@ -239,7 +239,7 @@ func TestEnsureMesh(t *testing.T) {
 	relay := f.containers["sind-ssh"]
 	require.NotNil(t, relay)
 	assert.Equal(t, docker.StateRunning, relay.state)
-	assert.Equal(t, SSHImage(), relay.image)
+	assert.Equal(t, sshImage(), relay.image)
 	assert.Equal(t, "10.0.0.2", relay.ips["sind-mesh"], "relay has an address of the ip-range")
 	assert.Equal(t, []string{"10.0.255.254"}, relay.dns)
 	assert.Contains(t, relay.files["/root/.ssh/id_ed25519"], "OPENSSH PRIVATE KEY")
@@ -265,7 +265,7 @@ func TestEnsureMesh(t *testing.T) {
 	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
 	// The images the daemon does not have are pulled before the
 	// containers are created, which pull nothing.
-	assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + SSHImage()}, calls(m, "pull"))
+	assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + sshImage()}, calls(m, "pull"))
 	for _, create := range calls(m, "create") {
 		assert.NotContains(t, create, "--pull")
 	}
@@ -287,14 +287,14 @@ func TestEnsureMesh_InvalidRealm(t *testing.T) {
 func TestEnsureMesh_Pull(t *testing.T) {
 	for _, pull := range []bool{false, true} {
 		f, c, m := newFakeDocker(t)
-		f.images[DNSImage], f.images[SSHImage()] = true, true
+		f.images[DNSImage], f.images[sshImage()] = true, true
 		mgr := NewManager(c, DefaultRealm)
 		mgr.Pull = pull
 
 		require.NoError(t, mgr.EnsureMesh(t.Context()))
 
 		if pull {
-			assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + SSHImage()}, calls(m, "pull"))
+			assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + sshImage()}, calls(m, "pull"))
 		} else {
 			assert.Empty(t, calls(m, "pull"))
 		}
@@ -311,7 +311,7 @@ func TestEnsureMesh_Pull(t *testing.T) {
 func TestEnsureMesh_PullFails(t *testing.T) {
 	for _, tc := range []struct{ fail, want, container string }{
 		{"pull " + DNSImage, "pulling " + DNSImage + ": connection refused", "sind-dns"},
-		{"image inspect --format {{.Id}} " + SSHImage(), "inspecting image " + SSHImage() + ": connection refused", "sind-ssh"},
+		{"image inspect --format {{.Id}} " + sshImage(), "inspecting image " + sshImage() + ": connection refused", "sind-ssh"},
 	} {
 		f, c, m := newFakeDocker(t)
 		f.fail[tc.fail] = failure()
@@ -457,15 +457,15 @@ func TestEnsureMesh_ExistingVolumeKeepsKeys(t *testing.T) {
 func TestEnsureMesh_KeylessVolumeRepaired(t *testing.T) {
 	f, c, m := newFakeDocker(t)
 	f.addNetwork("sind-mesh")
-	f.fail["pull "+SSHImage()] = failure()
+	f.fail["pull "+sshImage()] = failure()
 	mgr := NewManager(c, DefaultRealm)
 
-	require.ErrorContains(t, mgr.EnsureMesh(t.Context()), "pulling "+SSHImage())
+	require.ErrorContains(t, mgr.EnsureMesh(t.Context()), "pulling "+sshImage())
 	assert.False(t, mgr.Created())
 	require.Contains(t, f.volumes, "sind-ssh-config")
 	assert.NotContains(t, f.containers, "sind-ssh")
 
-	delete(f.fail, "pull "+SSHImage())
+	delete(f.fail, "pull "+sshImage())
 	require.NoError(t, mgr.EnsureMesh(t.Context()))
 
 	require.Len(t, calls(m, "cp - sind-ssh:/root/.ssh"), 1)
@@ -508,7 +508,7 @@ func TestEnsureMesh_UnconfiguredDNSRepaired(t *testing.T) {
 // a-x-ssh-config is also the config volume of cluster x-ssh in realm a.
 func TestEnsureMesh_ForeignSSHVolume(t *testing.T) {
 	for name, labels := range map[string]docker.Labels{
-		"other realm":  {LabelRealm: "a", "sind.cluster": "x-ssh", docker.ComposeVolumeLabel: "config"},
+		"other realm":  {labelRealm: "a", "sind.cluster": "x-ssh", docker.ComposeVolumeLabel: "config"},
 		"other volume": {docker.ComposeVolumeLabel: "config"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -616,16 +616,16 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	assert.True(t, mgr.Created(), "Created() after creating mesh network")
 
 	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"network", "inspect", string(NetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "inspect", string(defaultNetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
 	assert.Equal(t, []string{
 		"network", "create",
 		"--label", "com.docker.compose.network=mesh",
 		"--label", "com.docker.compose.project=sind-mesh",
 		"--label", "sind.realm=" + DefaultRealm,
-		string(NetworkName),
+		string(defaultNetworkName),
 	}, m.Calls[1].Args)
-	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"network", "inspect", string(defaultNetworkName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "rm", string(defaultNetworkName)}, m.Calls[3].Args)
 	assert.Equal(t, []string{
 		"network", "create",
 		"--subnet", "192.168.16.0/20", "--gateway", "192.168.16.1", "--ip-range", "192.168.16.0/21",
@@ -633,7 +633,7 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 		"--label", "com.docker.compose.project=sind-mesh",
 		"--label", "sind.dns.ip=192.168.31.254",
 		"--label", "sind.realm=" + DefaultRealm,
-		string(NetworkName),
+		string(defaultNetworkName),
 	}, m.Calls[4].Args)
 }
 
@@ -889,7 +889,7 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 
 			// Only inspect, no create
 			require.Len(t, m.Calls, 1)
-			assert.Equal(t, []string{"network", "inspect", string(NetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+			assert.Equal(t, []string{"network", "inspect", string(defaultNetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
 		})
 	}
 }
@@ -1399,8 +1399,8 @@ func TestCustomRealm_ResourceNames(t *testing.T) {
 	assert.Equal(t, docker.NetworkName("testrealm-mesh"), mgr.NetworkName())
 	assert.Equal(t, docker.ContainerName("testrealm-dns"), mgr.DNSContainerName())
 	assert.Equal(t, docker.ContainerName("testrealm-ssh"), mgr.SSHContainerName())
-	assert.Equal(t, docker.VolumeName("testrealm-ssh-config"), mgr.SSHVolumeName())
-	assert.Equal(t, docker.ContainerName("testrealm-ssh-keygen"), mgr.SSHKeygenName())
+	assert.Equal(t, docker.VolumeName("testrealm-ssh-config"), mgr.sshVolumeName())
+	assert.Equal(t, docker.ContainerName("testrealm-ssh-keygen"), mgr.sshKeygenName())
 	assert.Equal(t, "testrealm-mesh", mgr.ComposeProject())
 }
 
@@ -1413,8 +1413,8 @@ func TestRealmNames(t *testing.T) {
 		ComposeProject: "testrealm-mesh",
 	}, RealmNames("testrealm"))
 	assert.Equal(t, Names{
-		Network: NetworkName, DNSContainer: DNSContainerName, SSHContainer: SSHContainerName,
-		SSHVolume: SSHVolumeName, ComposeProject: "sind-mesh",
+		Network: defaultNetworkName, DNSContainer: defaultDNSContainer, SSHContainer: defaultSSHContainer,
+		SSHVolume: defaultSSHVolume, ComposeProject: "sind-mesh",
 	}, RealmNames(DefaultRealm))
 }
 
@@ -1441,10 +1441,10 @@ func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
 	c := docker.NewClient(&mock.Executor{})
 	mgr := NewManager(c, DefaultRealm)
 
-	assert.Equal(t, NetworkName, mgr.NetworkName())
-	assert.Equal(t, DNSContainerName, mgr.DNSContainerName())
-	assert.Equal(t, SSHContainerName, mgr.SSHContainerName())
-	assert.Equal(t, SSHVolumeName, mgr.SSHVolumeName())
+	assert.Equal(t, defaultNetworkName, mgr.NetworkName())
+	assert.Equal(t, defaultDNSContainer, mgr.DNSContainerName())
+	assert.Equal(t, defaultSSHContainer, mgr.SSHContainerName())
+	assert.Equal(t, defaultSSHVolume, mgr.sshVolumeName())
 }
 
 // --- CleanupMesh ---
@@ -1471,9 +1471,9 @@ func TestCleanupMesh(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"rm -f -v sind-ssh-keygen", "rm -f -v sind-ssh", "rm -f -v sind-dns",
 	}, removed)
-	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "network=" + string(NetworkName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[4].Args)
-	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[5].Args)
+	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "network=" + string(defaultNetworkName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"network", "rm", string(defaultNetworkName)}, m.Calls[4].Args)
+	assert.Equal(t, []string{"volume", "rm", string(defaultSSHVolume)}, m.Calls[5].Args)
 }
 
 // TestCleanupMesh_ForeignContainer covers containers outside sind, such as
@@ -1483,15 +1483,15 @@ func TestCleanupMesh(t *testing.T) {
 func TestCleanupMesh_ForeignContainer(t *testing.T) {
 	f, c, m := newFakeDocker(t)
 	f.withMesh(DefaultRealm, docker.StateRunning)
-	f.containers["kind-control-plane"] = &fakeContainer{state: docker.StateCreated, networks: []string{"kind", string(NetworkName)}}
+	f.containers["kind-control-plane"] = &fakeContainer{state: docker.StateCreated, networks: []string{"kind", string(defaultNetworkName)}}
 	require.NoError(t, f.start("kind-control-plane"))
-	f.containers["kind-worker"] = &fakeContainer{state: docker.StateExited, networks: []string{"kind", string(NetworkName)}}
+	f.containers["kind-worker"] = &fakeContainer{state: docker.StateExited, networks: []string{"kind", string(defaultNetworkName)}}
 	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	assert.NotContains(t, f.networks, string(NetworkName))
+	assert.NotContains(t, f.networks, string(defaultNetworkName))
 	for _, name := range []string{"kind-control-plane", "kind-worker"} {
 		require.Contains(t, f.containers, name)
 		assert.Equal(t, []string{"kind"}, f.containers[name].networks, name)
@@ -1557,7 +1557,7 @@ func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
 		"com.docker.compose.network": "mesh",
 		"com.docker.compose.project": "myrealm-mesh",
 		LabelDNSIP:                   "10.0.255.254",
-		LabelRealm:                   "myrealm",
+		labelRealm:                   "myrealm",
 	}, f.networks["myrealm-mesh"].labels)
 }
 
@@ -1585,7 +1585,7 @@ func TestCustomRealm_EnsureMesh(t *testing.T) {
 	relay := m.Calls[indexOf(t, m, "create --name myrealm-ssh")].Args
 	vol, _ := testutil.ArgValue(relay, "-v")
 	assert.Equal(t, "myrealm-ssh-config:/root/.ssh", vol)
-	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, relay[len(relay)-3:])
+	assert.Equal(t, []string{sshImage(), "sleep", "infinity"}, relay[len(relay)-3:])
 }
 
 func TestCustomRealm_CleanupMesh(t *testing.T) {

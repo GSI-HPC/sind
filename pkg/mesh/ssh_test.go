@@ -103,9 +103,9 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, changed)
 	create := m.Calls[indexOf(t, m, "create")].Args
-	assert.Equal(t, []string{"create", "--name", string(SSHContainerName), "--network", string(NetworkName), "--dns", "10.0.0.2",
-		"-v", string(SSHVolumeName) + ":/root/.ssh"}, create[:9])
-	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, create[len(create)-3:])
+	assert.Equal(t, []string{"create", "--name", string(defaultSSHContainer), "--network", string(defaultNetworkName), "--dns", "10.0.0.2",
+		"-v", string(defaultSSHVolume) + ":/root/.ssh"}, create[:9])
+	assert.Equal(t, []string{sshImage(), "sleep", "infinity"}, create[len(create)-3:])
 	assert.Empty(t, calls(m, "cp -"), "no keys without writeKeys")
 	assert.Equal(t, []string{"start sind-ssh"}, calls(m, "start"))
 }
@@ -167,7 +167,7 @@ func TestEnsureSSH_KeyCheckError(t *testing.T) {
 }
 
 func TestSSHImage_DefaultNodeImage(t *testing.T) {
-	assert.Equal(t, config.DefaultImage, SSHImage())
+	assert.Equal(t, config.DefaultImage, sshImage())
 }
 
 // --- AddKnownHosts / RemoveKnownHosts ---
@@ -210,7 +210,7 @@ func TestEditKnownHosts(t *testing.T) {
 			// file over known_hosts, gets the path and the length.
 			args := m.Calls[1].Args
 			require.Len(t, args, 9)
-			assert.Equal(t, []string{"exec", "-i", string(SSHContainerName), "sh", "-c"}, args[:5])
+			assert.Equal(t, []string{"exec", "-i", string(defaultSSHContainer), "sh", "-c"}, args[:5])
 			assert.Contains(t, args[5], "mv -f")
 			assert.Equal(t, []string{"sh", knownHostsPath, strconv.Itoa(len(tt.want))}, args[6:])
 			assert.Equal(t, tt.want, m.Calls[1].Stdin)

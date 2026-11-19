@@ -25,11 +25,11 @@ import (
 // DefaultRealm is the realm name that produces the standard resource names.
 const DefaultRealm = "sind"
 
-// LabelRealm is the Docker label applied to mesh resources (network, volumes)
+// labelRealm is the Docker label applied to mesh resources (network, volumes)
 // so realm-scoped listings can filter by label rather than by name prefix.
 // pkg/cluster defines the same constant for cluster-scoped resources; keeping
 // it local here avoids a pkg/mesh → pkg/cluster import.
-const LabelRealm = "sind.realm"
+const labelRealm = "sind.realm"
 
 // LabelDNSIP is the label of a mesh network that records the address its
 // DNS container is pinned to (see EnsureMeshNetwork). Meshes created by
@@ -41,15 +41,6 @@ const LabelDNSIP = "sind.dns.ip"
 // mesh network again with its subnet pinned, when another network takes
 // the subnet in between, before it keeps one without.
 const meshSubnetAttempts = 5
-
-// Default-realm resource names. Production code uses RealmNames or the
-// Manager methods; these constants are used in tests as expected values for DefaultRealm.
-const (
-	NetworkName      docker.NetworkName   = "sind-mesh"
-	DNSContainerName docker.ContainerName = "sind-dns"
-	SSHContainerName docker.ContainerName = "sind-ssh"
-	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
-)
 
 // The Compose services of the mesh's containers, in the project
 // Names.ComposeProject. The monitoring stack's containers join that project
@@ -202,13 +193,13 @@ func (m *Manager) SSHContainerName() docker.ContainerName {
 	return RealmNames(m.Realm).SSHContainer
 }
 
-// SSHVolumeName returns the SSH volume name for this realm.
-func (m *Manager) SSHVolumeName() docker.VolumeName {
+// sshVolumeName returns the SSH volume name for this realm.
+func (m *Manager) sshVolumeName() docker.VolumeName {
 	return RealmNames(m.Realm).SSHVolume
 }
 
-// SSHKeygenName returns the temporary keygen container name for this realm.
-func (m *Manager) SSHKeygenName() docker.ContainerName {
+// sshKeygenName returns the temporary keygen container name for this realm.
+func (m *Manager) sshKeygenName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-ssh-keygen")
 }
 
@@ -448,7 +439,7 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		name docker.ContainerName
 		what string
 	}{
-		{m.SSHKeygenName(), "SSH keygen"},
+		{m.sshKeygenName(), "SSH keygen"},
 		{m.SSHContainerName(), "SSH"},
 		{m.DNSContainerName(), "DNS"},
 	} {
@@ -472,7 +463,7 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}
 
-	if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, m.SSHVolumeName())); err != nil {
+	if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, m.sshVolumeName())); err != nil {
 		return fmt.Errorf("removing SSH volume: %w", err)
 	}
 
@@ -537,7 +528,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 	log := sindlog.From(ctx)
 	name := m.NetworkName()
 	labels := docker.Labels{
-		LabelRealm:                 m.Realm,
+		labelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
@@ -872,7 +863,7 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 		DNSZone:      m.Realm + ".sind",
 		DNSImage:     dnsInfo.ImageRef,
 		SSHContainer: m.SSHContainerName(),
-		SSHVolume:    m.SSHVolumeName(),
+		SSHVolume:    m.sshVolumeName(),
 	}
 	if sshInfo != nil {
 		info.SSHImage = sshInfo.ImageRef
