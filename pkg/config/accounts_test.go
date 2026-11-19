@@ -203,6 +203,9 @@ func TestValidate_Accounts(t *testing.T) {
 			wantErr: `user "alice": coordinator and adminLevel need accounts: sacctmgr creates a Slurm user only with an account`},
 		{name: "admin level without accounts", users: []User{{Name: "alice", AdminLevel: AdminOperator}},
 			wantErr: `user "alice": coordinator and adminLevel need accounts`},
+		{name: "QOS of a new cluster", accounts: []Account{{Name: "physics", Limits: Limits{"QOS": "normal", "DefaultQOS": "normal"}}}},
+		{name: "QOS a new cluster lacks", accounts: []Account{{Name: "physics", Limits: Limits{"DefaultQOS": "high"}}},
+			wantErr: `account "physics": DefaultQOS=high names the QOS high, but a new cluster has only the QOS normal, and sind creates no QOS`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -220,6 +223,25 @@ func TestValidate_Accounts(t *testing.T) {
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
+}
+
+func TestValidateAll_EachQOS(t *testing.T) {
+	cfg := &Cluster{Kind: "Cluster", Name: DefaultClusterName, Nodes: []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}},
+		Accounts: []Account{{Name: "physics", Limits: Limits{"QOS": "high"}}, {Name: "theory", Limits: Limits{"DefaultQOS": "low"}}}}
+	cfg.ApplyDefaults()
+	errs := cfg.ValidateAll()
+	require.Len(t, errs, 2)
+	assert.ErrorContains(t, errs[0], `account "physics": QOS=high`)
+	assert.ErrorContains(t, errs[1], `account "theory": DefaultQOS=low`)
+}
+
+func TestCheckLimitQOS(t *testing.T) {
+	assert.NoError(t, CheckLimitQOS("MaxJobs", "high"))
+	assert.NoError(t, CheckLimitQOS("QOS", "normal"))
+	assert.NoError(t, CheckLimitQOS("qoslevel", "+Normal, "))
+	err := CheckLimitQOS("DefaultQOS", "normal,high")
+	require.Error(t, err)
+	assert.Equal(t, "DefaultQOS=normal,high names the QOS high, but a new cluster has only the QOS normal, and sind creates no QOS; remove the limit, or create the QOS after the cluster", err.Error())
 }
 
 func TestCluster_Warnings(t *testing.T) {

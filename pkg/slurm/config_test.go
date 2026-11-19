@@ -448,7 +448,7 @@ func TestGenerateSlurmConf_Metrics(t *testing.T) {
 
 func TestFixedParameters(t *testing.T) {
 	conf := GenerateSlurmConf("hpc", config.Section{Content: "ClusterName=prod\n"}, ConfOptions{})
-	for _, key := range FixedParameters {
+	for _, key := range config.FixedSlurmParameters() {
 		assert.Contains(t, conf, "\n"+key+"=", "sind writes %s whatever the main section sets", key)
 	}
 }

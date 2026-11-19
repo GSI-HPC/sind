@@ -95,6 +95,8 @@ type clusterPlan struct {
 	// final is cfg as sind takes it, after ApplyDefaults, once it is valid.
 	final   *config.Cluster
 	content string
+	// warns are the limit warnings of a valid config; the Slurm warnings
+	// come in buildCreateCluster.
 	warns   []string
 	planned []PlannedNode
 	data    clusterData
@@ -163,7 +165,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	}
 	cmd.Summary = fmt.Sprintf("%d containers, %d CPUs, %s of memory.", containers, cpus, MemoryLabel(memoryMB))
 	cmd.Containers, cmd.CPUs, cmd.MemoryMB = containers, cpus, memoryMB
-	cmd.Warns = append(append(plan.warns, slurmWarnings(cfg)...), cmd.Warns...)
+	cmd.Warns = append(append(plan.warns, cfg.SlurmWarnings()...), cmd.Warns...)
 	cmd.Problems = ps
 	if data.home {
 		cmd.Warns = append(cmd.Warns, fmt.Sprintf("%s is your home directory. Jobs write their output files there as root. Pick a scratch directory such as %s.",
@@ -194,7 +196,7 @@ func formPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 		cfg.Realm = realm
 	}
 	if image := strings.TrimSpace(f.Get("image")); image != "" {
-		if err := imageError(image); err == nil {
+		if err := config.CheckImage(image); err == nil {
 			cfg.Defaults.Image = image
 		} else {
 			ps.add("image", "Image", true, err)
@@ -246,8 +248,6 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	if parsed.Realm != "" && parsed.Realm != realm {
 		ps.add("realm", "Realm", false, fmt.Errorf("the YAML names realm %s, and this field %s; make them the same, or remove realm from the YAML", parsed.Realm, realm))
 	}
-	yamlImageProblems(parsed, &yps)
-	yamlQOSProblems(parsed, &yps)
 	parsed.ApplyDefaults()
 	var nps problems
 	checkClusterName(c, realm, parsed, &nps)
@@ -269,7 +269,7 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	before := len(yps)
 	p.planned = plannedOf(p.cfg.Nodes, &yps)
 	if len(errs) == 0 && len(yps) == before {
-		p.warns = parsed.Warnings()
+		p.warns = parsed.LimitWarnings()
 		if !nps.has("name") {
 			p.final = parsed
 		}
@@ -535,7 +535,9 @@ var parseConfig = config.Parse
 // renderConfig writes the config as YAML and checks it as sind create
 // cluster will: it parses it, applies the defaults and validates it. It
 // returns every error of the check, where sind stops at the first, or the
-// config as sind takes it. The warnings are those of sind. A name that is
+// config as sind takes it. The warnings are sind's of account limits
+// (config.Cluster.LimitWarnings), for a valid config; buildCreateCluster
+// adds those of the Slurm config whatever the errors. A name that is
 // wrong already is a problem of its own: the check puts a valid one in its
 // place, and returns no config.
 func renderConfig(cfg config.Cluster, badName bool) (content string, final *config.Cluster, warns []string, errs []error) {
@@ -558,7 +560,7 @@ func renderConfig(cfg config.Cluster, badName bool) (content string, final *conf
 		return content, nil, nil, errs
 	}
 	if badName {
-		return content, nil, parsed.Warnings(), nil
+		return content, nil, parsed.LimitWarnings(), nil
 	}
-	return content, parsed, parsed.Warnings(), nil
+	return content, parsed, parsed.LimitWarnings(), nil
 }

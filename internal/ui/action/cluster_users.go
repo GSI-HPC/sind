@@ -186,7 +186,7 @@ func accountLimits(f Form, key, name string, ps *problems) config.Limits {
 			ps.add(key+"-lk", "Limits of "+name, false, fmt.Errorf("%q is no limit that sacctmgr takes; pick one of the list, such as MaxJobs", k))
 			continue
 		}
-		if err := qosError(config.LimitKeys[i], v); err != nil {
+		if err := config.CheckLimitQOS(config.LimitKeys[i], v); err != nil {
 			ps.add(key+"-lk", "Limits of "+name, false, err)
 			continue
 		}

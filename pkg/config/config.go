@@ -232,6 +232,25 @@ type Slurm struct {
 	Slurmdbd  Section `yaml:"slurmdbd,omitempty"`
 }
 
+// slurmSection is a section of Slurm, with the file sind writes its lines
+// to.
+type slurmSection struct {
+	name, file string
+	section    Section
+}
+
+// sections returns the sections of s, in order.
+func (s *Slurm) sections() []slurmSection {
+	return []slurmSection{
+		{"main", "slurm.conf", s.Main},
+		{"cgroup", "cgroup.conf", s.Cgroup},
+		{"gres", "gres.conf", s.Gres},
+		{"topology", "topology.conf", s.Topology},
+		{"plugstack", "plugstack.conf", s.Plugstack},
+		{"slurmdbd", "slurmdbd.conf", s.Slurmdbd},
+	}
+}
+
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
 	Kind     string    `yaml:"kind"`
@@ -389,11 +408,17 @@ func (c *Cluster) ValidateAll() []error {
 		add(fmt.Errorf("at least one worker node required, got %d", roles[RoleWorker]))
 	}
 
+	for _, err := range c.imageErrors() {
+		add(err)
+	}
 	add(c.validateResources())
 	add(c.Storage.DataStorage.validate())
 	add(c.validateDataMountPath())
 	add(validateUsers(c.Users, c.Groups))
 	add(c.validateAccounts())
+	for _, err := range c.qosErrors() {
+		add(err)
+	}
 	add(c.Identity.validate(c.Managed(), c.Slurm.Main))
 	add(c.validateAPI())
 	add(c.validateSlurmdbd())
@@ -406,17 +431,7 @@ func (c *Cluster) ValidateAll() []error {
 		add(CheckSecurityOpts("securityOpt", n.SecurityOpt))
 	}
 
-	sections := []struct {
-		name    string
-		section Section
-	}{
-		{"main", c.Slurm.Main},
-		{"cgroup", c.Slurm.Cgroup},
-		{"gres", c.Slurm.Gres},
-		{"topology", c.Slurm.Topology},
-		{"plugstack", c.Slurm.Plugstack},
-		{"slurmdbd", c.Slurm.Slurmdbd},
-	}
+	sections := c.Slurm.sections()
 
 	if !c.Managed() {
 		for _, n := range c.Nodes {

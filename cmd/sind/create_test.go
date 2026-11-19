@@ -423,6 +423,30 @@ accounts:
 	assert.Contains(t, stderr, "Warning: Slurm does not enforce the accounts' limits (physics: MaxJobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it\n")
 }
 
+func TestCreateCluster_ChecksWhatFailsDuringCreate(t *testing.T) {
+	// A Slurm parameter that sind sets itself is a warning; an image
+	// reference that Docker refuses stops create before any docker call.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SIND_REALM", "")
+	dir := t.TempDir()
+	warned := filepath.Join(dir, "warned.yaml")
+	require.NoError(t, os.WriteFile(warned, []byte("kind: Cluster\nnodes: [controller, worker]\nslurm:\n  main: \"ClusterName=prod\\n\"\n"), 0o644))
+	refused := filepath.Join(dir, "refused.yaml")
+	require.NoError(t, os.WriteFile(refused, []byte("kind: Cluster\ndefaults:\n  image: Own/Node\nnodes: [controller, worker]\n"), 0o644))
+	m := &mock.Executor{OnCall: func([]string, string) mock.Result {
+		return mock.Result{Err: errors.New("no docker")}
+	}}
+
+	_, stderr, err := executeWithMock(m, "create", "cluster", "--config", warned)
+	require.Error(t, err)
+	assert.Contains(t, stderr, "Warning: The lines of slurm.conf set ClusterName, which sind sets itself.")
+
+	var none mock.Executor
+	_, _, err = executeWithMock(&none, "create", "cluster", "--config", refused)
+	require.ErrorContains(t, err, "image Own/Node: use lowercase letters, such as own/node")
+	assert.Empty(t, none.Calls)
+}
+
 func TestCreateCluster_EscapesConfigWarnings(t *testing.T) {
 	// The warning quotes slurm.main's AccountingStorageEnforce as the
 	// config gives it.
