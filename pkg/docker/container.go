@@ -389,10 +389,12 @@ func (c *Client) ReadFile(ctx context.Context, container ContainerName, path str
 	return c.Exec(ctx, container, "cat", path)
 }
 
-// WriteFile overwrites a file in a running container via docker exec.
+// WriteFile overwrites a file in a running container via docker exec. The
+// shell gets path as an argument, so that it takes a path with spaces or
+// shell syntax as it is.
 func (c *Client) WriteFile(ctx context.Context, container ContainerName, path, content string) error {
 	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
-		"sh", "-c", "cat > "+path)
+		"sh", "-c", `cat > "$1"`, "sh", path)
 }
 
 // ReplaceFile replaces a file in a running container via docker exec in

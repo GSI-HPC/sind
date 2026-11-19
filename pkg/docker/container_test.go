@@ -781,11 +781,12 @@ func TestWriteFile(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.WriteFile(t.Context(), testContainerName, "/tmp/out", "hello\n")
+	err := c.WriteFile(t.Context(), testContainerName, "/tmp/my out; rm -rf /", "hello\n")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat > /tmp/out"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", `cat > "$1"`, "sh", "/tmp/my out; rm -rf /"}, m.Calls[0].Args,
+		"the path is an argument of the shell, not a part of its script")
 	assert.Equal(t, "hello\n", m.Calls[0].Stdin)
 }
 
