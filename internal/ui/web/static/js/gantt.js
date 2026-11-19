@@ -208,12 +208,15 @@
   const view = { from: 0, to: 10, f0: 0, t0: 10, at: 0, zoom: null };
   function ease(p) { return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
   // goal is the range the axis should show at t: the zoomed step, the
-  // whole run once it ended, or else the nice horizon past the clock.
+  // whole run once it ended, or else the nice horizon past the clock, and
+  // after the last one the next whole hour. The goal stays the same from
+  // frame to frame until the clock passes 88 % of it, as range starts its
+  // ease anew whenever the goal changes.
   function goal(t) {
     if (view.zoom) return view.zoom;
     if (run.end != null) return [0, Math.max(10, run.end * 1.02)];
     const need = Math.max(t, 1) / 0.88;
-    return [0, nice.find(n => n >= need) || need * 1.2];
+    return [0, nice.find(n => n >= need) || Math.ceil(need / 3600) * 3600];
   }
   // range eases the shown range towards the goal and returns it.
   const shown = { a: 0, b: 10 };
