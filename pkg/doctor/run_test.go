@@ -94,6 +94,30 @@ func TestRun_DockerTooOld(t *testing.T) {
 	assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
 }
 
+// TestRun_DockerCLITooOld checks that a docker CLI before
+// MinDockerMajor fails the Docker Engine check, even with a new Engine.
+func TestRun_DockerCLITooOld(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"ServerVersion":"28.1.1","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"27.5.1"}}`, "", nil)
+
+	checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
+	require.Len(t, checks, 4)
+	assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusFailed,
+		Detail: "docker CLI 27.5.1 (requires >= 28.0)", Remediation: dockerCLIRemediation}, checks[0])
+}
+
+func TestRun_DockerCLIVersion(t *testing.T) {
+	for _, version := range []string{"28.0.0", "29.1.0", "dev", ""} {
+		t.Run(version, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(`{"ServerVersion":"28.1.1","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"`+version+`"}}`, "", nil)
+
+			checks := Run(context.Background(), hermeticDeps(t, &m, nil, validCgroupMounts))
+			assert.Equal(t, clidoctor.Check{Name: "Docker Engine", Status: clidoctor.StatusOK, Detail: "28.1.1 (>= 28.0)"}, checks[0])
+		})
+	}
+}
+
 func TestRun_UnparseableVersion(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("bogus"), "", nil)

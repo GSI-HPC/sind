@@ -49,6 +49,7 @@ func TestInfo(t *testing.T) {
 		KernelVersion:   "6.8.0-1017-azure",
 		MemTotal:        16766226432,
 		NCPU:            4,
+		ClientVersion:   "29.1.0",
 	}, info)
 	assert.False(t, info.DockerDesktop())
 	assert.Equal(t, []string{"info", "--format", "{{json .}}"}, m.Calls[0].Args)

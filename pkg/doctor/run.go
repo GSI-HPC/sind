@@ -41,6 +41,8 @@ func Run(ctx context.Context, d Deps) []clidoctor.Check {
 		engine.Detail, engine.Remediation = DockerUnreachable(err)
 	} else if vErr := CheckDockerVersion(info.ServerVersion); vErr != nil {
 		engine.Detail = vErr.Error()
+	} else if cErr := checkCLIVersion(info.ClientVersion); cErr != nil {
+		engine.Detail, engine.Remediation = cErr.Error(), dockerCLIRemediation
 	} else {
 		engine.Status = clidoctor.StatusOK
 		engine.Detail = fmt.Sprintf("%s (>= %d.0)", info.ServerVersion, MinDockerMajor)

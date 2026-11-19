@@ -331,6 +331,9 @@ func TestCheckDaemon(t *testing.T) {
 		{"Docker 28", `{"ServerVersion":"28.0.0","CgroupVersion":"2","SecurityOptions":[]}`, nil},
 		{"Docker 27", `{"ServerVersion":"27.5.1","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin"]}`, ErrDockerTooOld},
 		{"unparsable version", `{"ServerVersion":"dev","CgroupVersion":"2","SecurityOptions":[]}`, nil},
+		{"CLI 28", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"28.0.0"}}`, nil},
+		{"CLI 27", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"27.5.1"}}`, ErrDockerCLITooOld},
+		{"unparsable CLI version", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":[],"ClientInfo":{"Version":"dev"}}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -345,6 +348,10 @@ func TestCheckDaemon(t *testing.T) {
 			assert.Contains(t, err.Error(), "; run `sind doctor` for the fix")
 			if tt.wantErr == ErrCgroupV1 {
 				assert.Contains(t, err.Error(), "sind requires cgroup v2")
+				return
+			}
+			if tt.wantErr == ErrDockerCLITooOld {
+				assert.EqualError(t, err, "the docker CLI is too old: 27.5.1; sind requires a docker CLI 28.0 or later, which knows the network options of its nodes; run `sind doctor` for the fix")
 				return
 			}
 			if tt.wantErr == ErrDockerTooOld {

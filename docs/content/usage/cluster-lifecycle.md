@@ -94,7 +94,7 @@ Ctrl-C (SIGINT), SIGTERM, as sent by `timeout` or `docker stop`, or SIGHUP, as s
 
 ### Preflight checks
 
-Before it sets up the mesh or pulls an image, sind asks the Docker daemon whether it can start sind's nodes: a daemon in rootless mode or with `userns-remap` refuses their writable cgroups, one that runs containers on cgroup v1 cannot boot them, and a Docker Engine older than 28.0 refuses their options, so creation fails at once with an error that says so and points to `sind doctor` for the fix.
+Before it sets up the mesh or pulls an image, sind asks the Docker daemon whether it can start sind's nodes: a daemon in rootless mode or with `userns-remap` refuses their writable cgroups, one that runs containers on cgroup v1 cannot boot them, and a Docker Engine or docker CLI older than 28.0 refuses their options, so creation fails at once with an error that says so and points to `sind doctor` for the fix.
 
 Before creating resources, sind checks for conflicts — containers, networks, or volumes with matching names that already exist, and any container left from an earlier cluster of the name, such as a worker that `sind create worker` added. If conflicts are found, creation fails with an error; `sind delete cluster` removes what is left. It also checks that the nodes fit on the realm's mesh and on the cluster network: a Docker bridge network holds at most 1,023 containers, and the mesh holds the nodes of every cluster in the realm (see [Limits]({{< relref "/architecture/networking#limits" >}})).
 

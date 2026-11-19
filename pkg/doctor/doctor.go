@@ -95,6 +95,21 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
+// dockerCLIRemediation is shown for a docker CLI older than MinDockerMajor.
+const dockerCLIRemediation = "Install the docker CLI of the Engine's release (the docker-ce-cli package): https://docs.docker.com/engine/install/"
+
+// checkCLIVersion returns an error if the version of the docker CLI is
+// below MinDockerMajor: the CLI parses the gw-priority of sind's network
+// endpoints itself, and an older one refuses every node at docker create
+// even when the Engine is new enough. A version that does not parse, or
+// one that docker info lacks, passes.
+func checkCLIVersion(version string) error {
+	if major, _, err := ParseVersion(version); err == nil && major < MinDockerMajor {
+		return fmt.Errorf("docker CLI %s (requires >= %d.0)", version, MinDockerMajor)
+	}
+	return nil
+}
+
 // MinInotifyInstances is the fs.inotify.max_user_instances that 10 or
 // more nodes on the host need, in one cluster or in several. The systemd
 // and journald of every node take inotify instances of the host's root
