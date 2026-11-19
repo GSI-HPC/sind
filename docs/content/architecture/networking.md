@@ -71,7 +71,7 @@ loki.<realm>.sind       → Loki, port 3100
 
 sind writes the records when it creates or deletes nodes, and again when `sind power on`, `reboot` or `cycle` start nodes: Docker can give a node another address each time it starts. The records have a TTL of one second, so the host's resolver does not keep a node's old address. CoreDNS reloads its configuration in place on `SIGUSR1`, without dropping queries.
 
-The DNS container is lightweight — no systemd or sshd.
+The DNS container is lightweight — no systemd or sshd. It logs errors only, not each query, so `docker logs sind-dns` stays short.
 
 ### After a host reboot or a Docker daemon restart
 

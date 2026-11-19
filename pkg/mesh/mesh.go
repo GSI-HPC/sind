@@ -946,14 +946,16 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string, restart
 // generateCorefile builds a complete CoreDNS Corefile with the given host entries
 // inlined in the hosts block, after its ttl option. Each entry is an
 // "IP hostname" string. The zone is derived from the realm: "<realm>.sind".
+// It logs errors only, not each query (the log plugin), as the container
+// lives as long as the mesh, and Docker need not bound its log.
 func generateCorefile(realm string, entries []string) string {
 	var b strings.Builder
 	b.WriteString(realm + ".sind:53 {\n    hosts {\n        ttl " + hostsTTL + "\n")
 	for _, entry := range entries {
 		b.WriteString("        " + entry + "\n")
 	}
-	b.WriteString("        fallthrough\n    }\n    file " + zonefilePath + "\n    reload\n    log\n    errors\n}\n\n")
-	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n")
+	b.WriteString("        fallthrough\n    }\n    file " + zonefilePath + "\n    reload\n    errors\n}\n\n")
+	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    errors\n}\n")
 	return b.String()
 }
 

@@ -1328,6 +1328,8 @@ func TestGenerateCorefile_Empty(t *testing.T) {
 	assert.Contains(t, cf, "    hosts {\n        ttl 1\n        fallthrough\n    }\n    file /zone.db\n",
 		"the records have a TTL of a second, not the hosts plugin's hour")
 	assert.Contains(t, cf, "forward . /etc/resolv.conf")
+	assert.Equal(t, 2, strings.Count(cf, "    errors\n"), "both server blocks log errors")
+	assert.NotContains(t, cf, "    log\n", "no server block logs every query")
 }
 
 func TestGenerateCorefile_WithEntries(t *testing.T) {
