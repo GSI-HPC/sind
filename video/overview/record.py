@@ -221,7 +221,7 @@ def shot_sshconfig(s):
 def shot_forward(s):
     s.hidden("TOKEN=$(sind exec dev -- scontrol token username=root lifespan=900 | cut -d= -f2)")
     s.send("ssh -fN -L 8080:localhost:6820 api.dev")
-    s.send('curl -s -H "X-SLURM-USER-NAME: root" -H "X-SLURM-USER-TOKEN: $TOKEN" '
+    s.send('curl -s -H "X-SLURM-USER-NAME: root" -H @<(echo "X-SLURM-USER-TOKEN: $TOKEN") '
            "localhost:8080/slurm/v0.0.45/ping/ | jq -c '.pings[]'")
 
 
@@ -256,8 +256,8 @@ def shot_delworkers(s):
 
 
 def shot_rest(s):
-    s.send("TOKEN=$(sind exec dev -- scontrol token username=root | cut -d= -f2)")
-    s.send('curl -s -H "X-SLURM-USER-NAME: root" -H "X-SLURM-USER-TOKEN: $TOKEN" '
+    s.send("TOKEN=$(sind exec dev -- scontrol token username=root lifespan=600 | cut -d= -f2)")
+    s.send('curl -s -H "X-SLURM-USER-NAME: root" -H @<(echo "X-SLURM-USER-TOKEN: $TOKEN") '
            "http://api.dev.sind.sind:6820/slurm/v0.0.45/nodes/ | jq -r '.nodes[] | [.name, .state[0], .cpus] | @tsv'")
 
 
