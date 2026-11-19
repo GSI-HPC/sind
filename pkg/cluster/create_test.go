@@ -673,7 +673,7 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 	// and keeps the mesh, which existed before.
 	m, _, err := runCreate(t.Context(), t, createCfg(), false, failEnable)
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "systemctl failed")
 	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
 	// deleteClusterResources. Preflight calls ps twice, for conflicts and
 	// bridge ports, and createResources once, for the external containers
@@ -731,14 +731,18 @@ func TestCreate_RollbackRemovesTheCluster(t *testing.T) {
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 	// When the mesh was freshly created and Create fails, after the nodes
 	// or before the resources, the mesh is cleaned up too.
-	for name, override := range map[string]func([]string, string) (mock.Result, bool){
-		"enableSlurm":  failEnable,
-		"resolveInfra": dnsInspectFails,
+	for _, tt := range []struct {
+		name     string
+		override func([]string, string) (mock.Result, bool)
+		wantErr  string
+	}{
+		{"enableSlurm", failEnable, "systemctl failed"},
+		{"resolveInfra", dnsInspectFails, "inspecting DNS container: container not running"},
 	} {
-		t.Run(name, func(t *testing.T) {
-			m, _, err := runCreate(t.Context(), t, createCfg(), true, override)
+		t.Run(tt.name, func(t *testing.T) {
+			m, _, err := runCreate(t.Context(), t, createCfg(), true, tt.override)
 
-			require.Error(t, err)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.True(t, meshRemoved(m), "mesh cleanup should remove mesh containers")
 		})
 	}
@@ -767,7 +771,7 @@ func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
 		return failEnable(args, stdin)
 	})
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "systemctl failed")
 	assert.False(t, meshRemoved(m), "mesh kept for cluster first")
 }
 
@@ -783,7 +787,7 @@ func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
 		return preflightConflict(args, stdin)
 	})
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrClusterExists)
 	assert.False(t, meshRemoved(m), "mesh kept for the existing cluster dev")
 }
 
@@ -816,7 +820,7 @@ func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
 		return r, ok
 	})
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "systemctl failed")
 	assert.True(t, meshRemoved(m))
 	var reads int
 	for _, call := range m.Calls {

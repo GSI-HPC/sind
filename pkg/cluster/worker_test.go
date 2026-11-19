@@ -231,8 +231,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 		Count:       1,
 	})
 
-	require.Error(t, err)
-	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
+	require.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -849,8 +848,7 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 		TmpSize:     "1g",
 	})
 
-	require.Error(t, err)
-	assert.EqualError(t, err, `controller not found for cluster "dev"`)
+	require.EqualError(t, err, `controller not found for cluster "dev"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -1743,34 +1741,32 @@ func TestWorkerAdd_CreateNodeError(t *testing.T) {
 		return inner(args, stdin)
 	}
 
-	_, _, err := addWorkers(t, onCall, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
+	require.EqualError(t, err, "node worker-1: creating container worker-1: image not found")
+	assert.Zero(t, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "docker create made no container to roll back")
 }
 
 func TestWorkerAdd_SetupNodesError(t *testing.T) {
-	var m mock.Executor
+	// The setup of the new node fails: the error says so, and the node is
+	// rolled back.
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	onCall := func(args []string, stdin string) mock.Result {
 		if args[0] == "exec" && len(args) > 2 && args[2] == "sh" &&
-			strings.Contains(strings.Join(args, " "), "is-system-running") {
-			return mock.Result{Err: fmt.Errorf("container not running")}
+			strings.Contains(strings.Join(args, " "), "ssh-keyscan") {
+			return mock.Result{Err: errors.New("setup broke")}
 		}
 		return inner(args, stdin)
 	}
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
-	}, 50*time.Millisecond)
+	})
 
-	require.Error(t, err)
+	require.EqualError(t, err, "node worker-1: running the node setup: setup broke")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker is rolled back")
 }
 
 func TestWorkerAdd_RegisterNodesError(t *testing.T) {
@@ -1783,11 +1779,13 @@ func TestWorkerAdd_RegisterNodesError(t *testing.T) {
 		return inner(args, stdin)
 	}
 
-	_, _, err := addWorkers(t, onCall, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
+	// The rollback cannot read the Corefile either.
+	require.EqualError(t, err, "registering DNS: reading DNS Corefile: DNS container crashed\nrolling back: removing DNS records: reading DNS Corefile: DNS container crashed")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker is rolled back")
 }
 
 func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
@@ -1805,7 +1803,7 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "systemctl failed")
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "cleanup should remove the new worker container")
 }
 
@@ -1975,7 +1973,7 @@ func TestWorkerAdd_RollbackRemovesNodesFromConf(t *testing.T) {
 
 			m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-			require.Error(t, err)
+			require.ErrorContains(t, err, "boom")
 			writes := nodesConfWrites(m.Calls)
 			require.Len(t, writes, 2, "added, then removed")
 			assert.Contains(t, writes[0], "NodeName=worker-1")
