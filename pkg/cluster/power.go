@@ -339,7 +339,9 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	existing := make(map[docker.ContainerName]docker.ContainerListEntry, len(entries))
 	for _, e := range entries {
-		existing[e.Name] = e
+		if isNode(e.Labels) {
+			existing[e.Name] = e
+		}
 	}
 
 	shortNames = uniqueNames(shortNames)

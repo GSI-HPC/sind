@@ -25,7 +25,7 @@ toc: true
 | Munge helper (temporary, not with identity `clientIds`) | `<realm>-<cluster>-munge-helper` | `sind-dev-munge-helper` |
 | Journal helper (temporary, `monitoring` only) | `<realm>-<cluster>-journal-helper` | `sind-dev-journal-helper` |
 
-The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, and the realm's journal volume while it makes an empty journal directory for each node of a monitored cluster, using the controller's image, and are removed once they are done. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
+The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, and the realm's journal volume while it makes an empty journal directory for each node of a monitored cluster, using the controller's image, and are removed once they are done. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`). They carry no `sind.role`, which tells them from nodes: `sind get clusters`, `get cluster`, `get nodes`, `get node`, `get auth-key` and the power commands leave them out, so a cluster of which only a helper is left shows as `empty` with no nodes.
 
 With identity `clientIds` there is no munge volume: the authentication secret, `slurm.key`, is on the config volume (see [Slurm Configuration]({{< relref "/architecture/slurm-config#slurmkey" >}})).
 

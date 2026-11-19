@@ -44,7 +44,9 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 	byName := make(map[docker.ContainerName]docker.ContainerListEntry, len(containers))
 	for _, c := range containers {
-		byName[c.Name] = c
+		if isNode(c.Labels) {
+			byName[c.Name] = c
+		}
 	}
 	shortNames = uniqueNames(shortNames)
 	nodes := make([]docker.ContainerListEntry, len(shortNames))

@@ -82,6 +82,16 @@ func TestNodeServicesOfContainer_OtherCluster(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNodeNotFound)
 }
 
+func TestNodeServicesOfContainer_Helper(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Id":"x","Name":"/sind-dev-config-helper","State":{"Status":"created"},"Config":{"Labels":{"sind.realm":"sind","sind.cluster":"dev"}}}]`, "", nil)
+
+	_, err := NodeServices(t.Context(), docker.NewClient(&m), "sind", "dev", "config-helper")
+
+	require.EqualError(t, err, `node "config-helper" not found in cluster "dev"`)
+	assert.ErrorIs(t, err, ErrNodeNotFound)
+}
+
 func TestNodeServicesOfContainer_Error(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", testutil.NoSuchContainer("sind-dev-node"), testutil.ExitCode1(t))

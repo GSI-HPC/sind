@@ -730,6 +730,29 @@ func TestGetStatus_EmptyButClusterNetworkExists(t *testing.T) {
 	assert.Empty(t, status.Nodes)
 }
 
+// TestGetStatus_OnlyAHelper checks that a helper an interrupted create left
+// behind is no node of the status: the cluster is empty.
+func TestGetStatus_OnlyAHelper(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(helperEntry())}
+		case args[0] == "network" && args[1] == "inspect", args[0] == "inspect" && args[1] != "sind-dev-config-helper":
+			return mock.Result{Stdout: "[{}]\n"}
+		case args[0] == "volume" && args[1] == "ls":
+			return mock.Result{}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+
+	status, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, StateEmpty, status.State)
+	assert.Empty(t, status.Nodes)
+}
+
 // TestGetStatus_ClusterNotFound covers the typo/unknown-cluster case: no
 // containers exist AND the cluster network is absent. GetStatus must return
 // a clear error rather than synthesize a plausible-looking empty report.

@@ -106,6 +106,26 @@ func TestGetNode_OtherRealm(t *testing.T) {
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
+// TestGetNode_Helper checks that a helper container left behind, which has
+// the realm and cluster labels but no role, is not a node.
+func TestGetNode_Helper(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		switch args[0] {
+		case "inspect":
+			return mock.Result{Stdout: `[{"Id":"abc","Name":"/sind-dev-config-helper","State":{"Status":"created"},"Config":{"Labels":{"sind.realm":"sind","sind.cluster":"dev"}}}]`}
+		case "ps":
+			return mock.Result{Stdout: `{"Names":"sind-dev-config-helper","Labels":"sind.realm=sind,sind.cluster=dev"}` + "\n"}
+		}
+		return mock.Result{}
+	}}
+
+	node, err := GetNode(t.Context(), docker.NewClient(m), mesh.DefaultRealm, "dev", "config-helper")
+
+	require.EqualError(t, err, `node "config-helper" not found in cluster "dev"`)
+	assert.ErrorIs(t, err, ErrNodeNotFound)
+	assert.Nil(t, node)
+}
+
 func TestGetNode_ClusterNotFound(t *testing.T) {
 	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 		if args[0] == "inspect" {

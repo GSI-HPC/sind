@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -639,6 +640,23 @@ func TestPower_KillOffNode(t *testing.T) {
 
 	m = &mock.Executor{OnCall: powerOnCall(t, notRunning)}
 	require.NoError(t, PowerCut(t.Context(), docker.NewClient(m), mesh.DefaultRealm, "dev", []string{"worker-0"}))
+}
+
+// TestPower_Helper checks that a helper an interrupted create left behind
+// is no node a power command or its wait acts on.
+func TestPower_Helper(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: powerContainers() + testutil.NDJSON(helperEntry())}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}}
+	client := docker.NewClient(m)
+
+	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"config-helper"})
+	require.ErrorIs(t, err, ErrNodeNotFound)
+	err = WaitNodes(t.Context(), client, mesh.DefaultRealm, "dev", []string{"config-helper"}, 0, time.Millisecond)
+	require.ErrorIs(t, err, ErrNodeNotFound)
 }
 
 // --- Lifecycle ---
