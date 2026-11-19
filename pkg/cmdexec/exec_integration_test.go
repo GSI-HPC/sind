@@ -209,6 +209,29 @@ func TestOSExecutor_Terminal(t *testing.T) {
 	assert.Contains(t, parsed, "stderr err")
 }
 
+// A command that succeeds returns with its output at most outputWaitDelay
+// after it ended, although a process that it left behind holds the output.
+func TestOSExecutor_OutputHeldByAChild(t *testing.T) {
+	var e cmdexec.OSExecutor
+	start := time.Now()
+	stdout, _, err := e.Run(t.Context(), "sh", "-c", "sleep 8 & echo one")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", stdout)
+	assert.Less(t, time.Since(start), 6*time.Second)
+}
+
+// A context deadline bounds a command whose child holds its output open,
+// also without WithProcessGroup.
+func TestOSExecutor_DeadlineWithAChildLeft(t *testing.T) {
+	var e cmdexec.OSExecutor
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, _, err := e.Run(ctx, "sh", "-c", "sleep 8 & sleep 8")
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), 6*time.Second)
+}
+
 // A command run WithTerminal that cannot start fails as without one.
 func TestOSExecutor_TerminalNotStarted(t *testing.T) {
 	var e cmdexec.OSExecutor

@@ -6,6 +6,7 @@ package cmdexec
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,10 +39,11 @@ type Executor interface {
 // OSExecutor runs commands using os/exec.
 type OSExecutor struct{}
 
-// processGroupWaitDelay bounds how long a command run WithProcessGroup
-// waits, once its context ended or it exited, for the processes that hold
-// its output open, before its output is closed.
-const processGroupWaitDelay = 2 * time.Second
+// outputWaitDelay bounds how long a command waits, once its context ended
+// or it exited, for the processes that hold its output open, such as one
+// it started and left behind, before its output is closed. Without it, a
+// context deadline would not bound a command whose child outlives it.
+const outputWaitDelay = 2 * time.Second
 
 // inProcessGroup makes cmd run in a process group of its own, which the
 // end of its context kills whole (WithProcessGroup).
@@ -50,12 +52,12 @@ func inProcessGroup(cmd *exec.Cmd) {
 	cmd.Cancel = func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
-	cmd.WaitDelay = processGroupWaitDelay
 }
 
 func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = stdin
+	cmd.WaitDelay = outputWaitDelay
 	if env := Env(ctx); len(env) > 0 {
 		cmd.Env = env
 	}
@@ -96,6 +98,11 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 			started(cmd.Process.Pid)
 		}
 		err = cmd.Wait()
+		// The command succeeded, and a process it left behind held its
+		// output open for longer than outputWaitDelay.
+		if errors.Is(err, exec.ErrWaitDelay) {
+			err = nil
+		}
 	}
 	if term != nil {
 		term.wait()
@@ -177,12 +184,12 @@ func (t *terminal) started(ok bool) {
 }
 
 // wait waits for what the command wrote to have been read, at most
-// processGroupWaitDelay after the command ended, as a process it left
-// behind may hold the terminal, and closes the terminal.
+// outputWaitDelay after the command ended, as a process it left behind may
+// hold the terminal, and closes the terminal.
 func (t *terminal) wait() {
 	select {
 	case <-t.done:
-	case <-time.After(processGroupWaitDelay):
+	case <-time.After(outputWaitDelay):
 	}
 	_ = t.pty.Close()
 	<-t.done
