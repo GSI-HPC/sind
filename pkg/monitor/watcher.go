@@ -111,14 +111,17 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 	}
 	w.ctx = ctx
 
+	// The broadcast loop runs before the monitors, as a monitor that fails
+	// to start emits its error, which waits for the loop once internalCh
+	// is full.
+	w.wg.Go(func() { w.broadcastLoop(ctx) })
+
 	w.runMonitor(ctx, proc, "docker events", NewDockerMonitor(w.prefix).Run, Event{Kind: EventMonitorError})
 
 	// Start systemd monitors for pre-existing nodes.
 	for _, node := range nodes {
 		w.startSystemdMonitor(ctx, node)
 	}
-
-	w.wg.Go(func() { w.broadcastLoop(ctx) })
 
 	return nil
 }

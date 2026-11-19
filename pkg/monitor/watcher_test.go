@@ -407,3 +407,35 @@ func TestTakeOldest(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "a", ev.Detail)
 }
+
+// TestWatcher_StartManyFailingMonitors checks that Start returns when more
+// systemd monitors fail to start than internalCh holds: their errors go
+// through the broadcast loop.
+func TestWatcher_StartManyFailingMonitors(t *testing.T) {
+	pipes := &mock.Pipes{}
+	m := &mock.Executor{OnStart: func(args []string) mock.StreamResult {
+		if args[0] == "events" {
+			return pipes.OnStart(args)
+		}
+		return mock.StreamResult{Err: errors.New("busctl not available")}
+	}}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	nodes := make([]NodeTarget, 2*cap(w.internalCh))
+	for i := range nodes {
+		nodes[i] = NodeTarget{ShortName: fmt.Sprintf("worker-%d", i), Container: docker.ContainerName(fmt.Sprintf("sind-dev-worker-%d", i))}
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(func() {
+		cancel()
+		pipes.CloseAll()
+		w.Wait()
+	})
+	started := make(chan error, 1)
+	go func() { started <- w.Start(ctx, nodes) }()
+	select {
+	case err := <-started:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start blocked")
+	}
+}
