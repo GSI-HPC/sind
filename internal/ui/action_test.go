@@ -637,9 +637,9 @@ func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	body := w.Body.String()
-	assert.Contains(t, body, `<span class="act-rl"><span class="tok">sind</span> <span class="tok">create</span> <span class="tok">cluster \</span></span><span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">hpc.yaml</span></span></code>`)
+	assert.Contains(t, body, `<span class="act-rl"><span class="tok">sind</span> <span class="tok">create</span> <span class="tok">cluster \</span></span><span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">sind/</span><span class="tok">hpc.yaml</span></span></code>`)
 	assert.Contains(t, body, `<div class="act-tiles"><span class="act-tile controller" title="controller">controller</span><span class="act-tile worker" title="worker-0">worker-0</span><span class="act-tile worker" title="worker-1">worker-1</span></div>`)
-	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/hpc.yaml</span>`)
+	assert.Contains(t, body, `<span class="act-path">/state/sind/ui/configs/sind/hpc.yaml</span>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
 	assert.Contains(t, body, `<span class="err" id="act-err-name" hx-swap-oob="innerHTML"></span>`)
 	assert.Contains(t, body, `id="act-ok" aria-keyshortcuts="Control+Enter Meta+Enter" hx-swap-oob="true"><span class="act-okl">Create hpc</span><kbd`)
@@ -724,14 +724,14 @@ func TestActRun_SavesTheConfigFirst(t *testing.T) {
 	// A new cluster follows its run, and its draft goes.
 	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
 	assert.JSONEq(t, `{"act-started": {"url": "/tasks/task1", "follow": true}}`, w.Header().Get("HX-Trigger"))
-	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, slices.Collect(maps.Keys(f.saved)))
-	assert.Contains(t, f.saved["/state/sind/ui/configs/hpc.yaml"], "name: hpc\nrealm: ci\n")
+	assert.Equal(t, []string{"/state/sind/ui/configs/ci/hpc.yaml"}, slices.Collect(maps.Keys(f.saved)))
+	assert.Contains(t, f.saved["/state/sind/ui/configs/ci/hpc.yaml"], "name: hpc\nrealm: ci\n")
 	require.Len(t, f.starter.specs, 1)
-	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --wait 2m", f.starter.specs[0].Display)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/ci/hpc.yaml --wait 2m", f.starter.specs[0].Display)
 	assert.Equal(t, "ci", f.starter.specs[0].Realm)
 	assert.Equal(t, "hpc", f.starter.specs[0].Cluster)
-	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", f.starter.specs[0].ConfigPath)
-	assert.Equal(t, f.saved["/state/sind/ui/configs/hpc.yaml"], f.starter.specs[0].Config, "the task keeps the config it ran with")
+	assert.Equal(t, "/state/sind/ui/configs/ci/hpc.yaml", f.starter.specs[0].ConfigPath)
+	assert.Equal(t, f.saved["/state/sind/ui/configs/ci/hpc.yaml"], f.starter.specs[0].Config, "the task keeps the config it ran with")
 }
 
 func TestActRun_CreatesTheDataDirectoryFirst(t *testing.T) {
@@ -1384,7 +1384,7 @@ func TestActPreview_NewClusterYAML(t *testing.T) {
 	assert.NotContains(t, body, "data-act-yaml-edit")
 	assert.Contains(t, body, `</span><button type="button" class="btn sm" data-pg-copy-text="kind: Cluster`+"\nname: lab # mine\n"+`">Copy YAML</button></div>`)
 	assert.Contains(t, body, "The YAML that you edit, as it is.")
-	assert.Contains(t, body, `<span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">lab.yaml</span></span>`)
+	assert.Contains(t, body, `<span class="act-rl act-rlsub"><span class="tok">--config</span> <span class="tok">/</span><span class="tok">state/</span><span class="tok">sind/</span><span class="tok">ui/</span><span class="tok">configs/</span><span class="tok">sind/</span><span class="tok">lab.yaml</span></span>`)
 	assert.Contains(t, body, `<span class="pill ok">Ready</span>`)
 
 	body = f.post("/actions/create-cluster/preview", actForm("yaml_on", "1", "yaml", "kind: [")).Body.String()

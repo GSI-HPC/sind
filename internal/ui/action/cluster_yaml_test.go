@@ -22,7 +22,7 @@ func TestBuildCreateCluster_YAML(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cmd.Problems)
 
-	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/lab.yaml --pull --wait 0", cmd.Display)
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/sind/lab.yaml --pull --wait 0", cmd.Display)
 	assert.Contains(t, cmd.Config.Content, "name: lab # my lab\n", "the YAML as the user wrote it")
 	var shorts []string
 	for _, n := range cmd.Nodes {

@@ -42,16 +42,16 @@ func TestBuildCreateCluster_Minimal(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"sind", "create", "cluster", "--config", "/state/sind/ui/configs/hpc.yaml"}, cmd.Argv)
-	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)
+	assert.Equal(t, []string{"sind", "create", "cluster", "--config", "/state/sind/ui/configs/sind/hpc.yaml"}, cmd.Argv)
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/sind/hpc.yaml", cmd.Display)
 	require.NotNil(t, cmd.Config)
-	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", cmd.Config.Path)
+	assert.Equal(t, "/state/sind/ui/configs/sind/hpc.yaml", cmd.Config.Path)
 	assert.Equal(t, wantMinimalConfig, cmd.Config.Content)
 	assert.Equal(t, []PlannedNode{{"controller", "controller", "controller"}, {"worker-0", "worker", "w0"}, {"worker-1", "worker", "w0"}}, cmd.Nodes)
 	assert.Equal(t, "3 containers, 3 CPUs, 1.5 GiB of memory.", cmd.Summary)
 	assert.Empty(t, cmd.Warns)
 	assert.Empty(t, cmd.Notes, "the plan says below the command where the config goes")
-	assert.Equal(t, "/state/sind/ui/configs/hpc.yaml", cmd.Config.Path)
+	assert.Equal(t, "/state/sind/ui/configs/sind/hpc.yaml", cmd.Config.Path)
 }
 
 func TestBuildCreateCluster_Everything(t *testing.T) {
@@ -64,7 +64,7 @@ func TestBuildCreateCluster_Everything(t *testing.T) {
 	cmd, err := build(t, "create-cluster", f)
 	require.NoError(t, err)
 
-	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --pull --wait 10m", cmd.Display)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/ci/hpc.yaml --pull --wait 10m", cmd.Display)
 	assert.Equal(t, `kind: Cluster
 name: hpc
 realm: ci
@@ -99,7 +99,7 @@ monitoring: true
 }
 
 func TestBuildCreateCluster_Variants(t *testing.T) {
-	const cmdLine = "sind create cluster --config /state/sind/ui/configs/hpc.yaml"
+	const cmdLine = "sind create cluster --config /state/sind/ui/configs/sind/hpc.yaml"
 	const hostPath = "storage:\n  dataStorage:\n    type: hostPath\n    hostPath: /scratch/hpc\n"
 	for _, tc := range []struct {
 		name          string
@@ -136,7 +136,7 @@ func TestBuildCreateCluster_Wait(t *testing.T) {
 		cmd, err := build(t, "create-cluster", f)
 		require.NoError(t, err)
 		assert.Empty(t, cmd.Problems, wait)
-		assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml"+want, cmd.Display, wait)
+		assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/sind/hpc.yaml"+want, cmd.Display, wait)
 	}
 }
 
@@ -184,7 +184,7 @@ func TestBuildCreateCluster_Script(t *testing.T) {
 	tag := strings.TrimPrefix(lines[2], `(umask 077 && cat >"$cfg") <<'`)
 	tag = strings.TrimSuffix(tag, "'")
 	assert.Regexp(t, `^SIND_CONFIG_[0-9a-f]{16}$`, tag)
-	assert.Equal(t, `cfg="${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/hpc.yaml"
+	assert.Equal(t, `cfg="${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/sind/hpc.yaml"
 mkdir -p "$(dirname "$cfg")"
 (umask 077 && cat >"$cfg") <<'`+tag+`'
 `+cmd.Config.Content+tag+`
@@ -194,7 +194,7 @@ sind --realm sind create cluster hpc --config "$cfg" --pull --wait 0
 
 	cmd, err = build(t, "create-cluster", valid("realm", "ci", "name", "Bad"))
 	require.NoError(t, err)
-	assert.Contains(t, cmd.Script, "/configs/NAME.yaml\"\n")
+	assert.Contains(t, cmd.Script, "/configs/ci/NAME.yaml\"\n")
 	assert.True(t, strings.HasSuffix(cmd.Script, "\nsind --realm ci create cluster NAME --config \"$cfg\"\n"))
 }
 
@@ -357,7 +357,7 @@ func TestBuildCreateCluster_PlanTakesTheDefaultsOfWrongFields(t *testing.T) {
 	cmd, err := build(t, "create-cluster", f)
 	require.NoError(t, err)
 
-	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/hpc.yaml", cmd.Display)
+	assert.Equal(t, "sind create cluster --config /state/sind/ui/configs/sind/hpc.yaml", cmd.Display)
 	assert.Equal(t, `kind: Cluster
 name: hpc
 defaults:
@@ -380,14 +380,30 @@ nodes:
 	assert.Equal(t, []string{"image", "w0-count", "cpus", "memory", "u1-name", "wait"}, fields, "in the order of the dialog")
 }
 
+func TestBuildCreateCluster_SavesEachRealmApart(t *testing.T) {
+	sind, err := build(t, "create-cluster", valid())
+	require.NoError(t, err)
+	ci, err := build(t, "create-cluster", valid("realm", "ci"))
+	require.NoError(t, err)
+	assert.NotEqual(t, sind.Config.Path, ci.Config.Path, "a cluster of the same name in another realm keeps its config")
+	assert.Equal(t, "/state/sind/ui/configs/ci/hpc.yaml", ci.Config.Path)
+}
+
 func TestBuildCreateCluster_WrongNameKeepsThePlan(t *testing.T) {
 	cmd, err := build(t, "create-cluster", valid("name", "../x"))
 	require.NoError(t, err)
 
-	assert.Equal(t, "/state/sind/ui/configs/NAME.yaml", cmd.Config.Path, "never a path from a name sind refuses")
+	assert.Equal(t, "/state/sind/ui/configs/sind/NAME.yaml", cmd.Config.Path, "never a path from a name sind refuses")
 	assert.Contains(t, cmd.Config.Content, "name: ../x")
 	require.Len(t, cmd.Problems, 1)
 	assert.Equal(t, "name", cmd.Problems[0].Field)
+
+	cmd, err = build(t, "create-cluster", valid("realm", "../y"))
+	require.NoError(t, err)
+	assert.Equal(t, "/state/sind/ui/configs/REALM/hpc.yaml", cmd.Config.Path, "nor from a realm sind refuses")
+	assert.Contains(t, cmd.Script, "/configs/REALM/hpc.yaml\"\n")
+	require.Len(t, cmd.Problems, 1)
+	assert.Equal(t, "realm", cmd.Problems[0].Field)
 }
 
 func TestBuildCreateCluster_ConfigThatSindRefuses(t *testing.T) {

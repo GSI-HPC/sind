@@ -75,10 +75,10 @@ nodes:
 
 func TestSim_CreateCluster(t *testing.T) {
 	s, st := newSim(t)
-	require.NoError(t, s.SaveFile(ConfigDir+"/nightly.yaml", []byte(nightly)))
+	require.NoError(t, s.SaveFile(ConfigDir+"/ci/nightly.yaml", []byte(nightly)))
 
 	id, err := s.Start(run.Spec{Action: "create-cluster", Realm: "ci", Cluster: "nightly", Display: "sind create cluster",
-		Argv: []string{"sind", "create", "cluster", "--config", ConfigDir + "/nightly.yaml", "--data", "volume", "--pull"}})
+		Argv: []string{"sind", "create", "cluster", "--config", ConfigDir + "/ci/nightly.yaml", "--data", "volume", "--pull"}})
 	require.NoError(t, err)
 	task, ok := st.Snapshot().Task(id)
 	require.True(t, ok)

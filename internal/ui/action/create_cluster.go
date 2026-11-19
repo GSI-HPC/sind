@@ -43,8 +43,10 @@ const HostMemoryWarn = 80
 // leaves out.
 const DefaultWait = "5m"
 
-// ConfigPath returns where sind ui saves the config of the cluster name.
-func ConfigPath(dir, name string) string { return filepath.Join(dir, name+".yaml") }
+// ConfigPath returns where sind ui saves the config of the cluster name in
+// realm: a folder for each realm, as each realm can have a cluster of that
+// name.
+func ConfigPath(dir, realm, name string) string { return filepath.Join(dir, realm, name+".yaml") }
 
 // FreeName returns base, or else base-2, base-3 and so on: the first name
 // of a cluster that realm does not have.
@@ -108,10 +110,13 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	cfg, data, content := plan.cfg, plan.data, plan.content
 	pull := clusterPull(f, cfg.Defaults.Image, &ps)
 	wait := clusterWait(f, &ps)
-	file := cfg.Name
+	file, folder := cfg.Name, realm
+	// Never a path from a name that sind refuses, such as ../x.
 	if config.CheckName("cluster", file) != nil {
-		// Never a path from a name that sind refuses, such as ../x.
 		file = "NAME"
+	}
+	if config.CheckName("realm", folder) != nil {
+		folder = "REALM"
 	}
 	// The images go to a command of their own first: their notes come
 	// after those of the files.
@@ -135,9 +140,10 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if wait != DefaultWait {
 		flags = append(flags, "--wait", wait)
 	}
-	run := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", ConfigPath(c.ConfigDir, file)), flags...)...)
+	saved := ConfigPath(c.ConfigDir, folder, file)
+	run := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", saved), flags...)...)
 	cmd.Argv, cmd.Display = run.Argv, run.Display
-	cmd.Config = &File{Path: ConfigPath(c.ConfigDir, file), Content: content}
+	cmd.Config = &File{Path: saved, Content: content}
 	cmd.Nodes = plan.planned
 	if plan.final != nil {
 		cmd.After, cmd.SlurmConf = afterCreate(plan.final)
@@ -158,7 +164,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 	if data.mkdir {
 		cmd.Dirs = []string{data.dir}
 	}
-	cmd.Script = clusterScript(realm, file, content, cmd.Dirs, flags)
+	cmd.Script = clusterScript(realm, folder, file, content, cmd.Dirs, flags)
 	cmd.Images = images.Images
 	cmd.Notes = append(cmd.Notes, images.Notes...)
 	cmd.Warns = append(cmd.Warns, images.Warns...)
@@ -483,14 +489,15 @@ func mountPath(f Form, ps *problems) string {
 // clusterScript is the shell script that does what Create does: it writes
 // the config, readable by its owner alone, creates the directories and
 // runs the command. file is the name of the cluster, which names the config
-// file too. It always names the realm and the cluster, as SIND_REALM and
-// SIND_CLUSTER in the shell would else take the place of the config's.
-func clusterScript(realm, file, content string, dirs, flags []string) string {
+// file too, and folder the realm's folder of configs (ConfigPath). It
+// always names the realm and the cluster, as SIND_REALM and SIND_CLUSTER
+// in the shell would else take the place of the config's.
+func clusterScript(realm, folder, file, content string, dirs, flags []string) string {
 	sum := sha256.Sum256([]byte(content))
 	// The tag of the here-document: a line that the config cannot hold.
 	tag := "SIND_CONFIG_" + hex.EncodeToString(sum[:8])
 	var b strings.Builder
-	fmt.Fprintf(&b, "cfg=\"${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/%s.yaml\"\n", file)
+	fmt.Fprintf(&b, "cfg=\"${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/%s/%s.yaml\"\n", folder, file)
 	b.WriteString("mkdir -p \"$(dirname \"$cfg\")\"\n")
 	fmt.Fprintf(&b, "(umask 077 && cat >\"$cfg\") <<'%s'\n%s%s\n", tag, content, tag)
 	for _, d := range dirs {
