@@ -259,6 +259,24 @@ func TestJournals(t *testing.T) {
 	require.NoError(t, m.RemoveJournals(t.Context(), "dev"))
 	assert.Equal(t, []string{"sind-alloy", "sh", "-c", journalScript, "sh", "remove", "/var/log/sind/dev"}, f.execs[len(f.execs)-1])
 
+	// A name that is no host name label could name every cluster's
+	// directory: nothing runs.
+	before := len(f.execs)
+	for _, tc := range []struct {
+		cluster string
+		nodes   []string
+		want    string
+	}{
+		{"", nil, `removing journal directories: invalid cluster name "": it is empty`},
+		{"..", nil, `removing journal directories: invalid cluster name "..": '.' is not a letter, a digit or a hyphen`},
+		{"dev", []string{""}, `removing journal directories: invalid node name "": it is empty`},
+		{"dev", []string{"worker-0", "../x"}, `removing journal directories: invalid node name "../x": '.' is not a letter, a digit or a hyphen`},
+	} {
+		assert.EqualError(t, m.RemoveJournals(t.Context(), tc.cluster, tc.nodes...), tc.want)
+	}
+	assert.EqualError(t, m.ResetJournals(t.Context(), "dev", ".."), `resetting journal directories: invalid node name "..": '.' is not a letter, a digit or a hyphen`)
+	assert.Len(t, f.execs, before)
+
 	f.containers["sind-alloy"].state = docker.StateExited
 	err = m.ResetJournals(t.Context(), "dev", "worker-0")
 	require.ErrorContains(t, err, "resetting journal directories: ")

@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/GSI-HPC/sind/internal/hostname"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -315,8 +316,18 @@ done`
 
 // journalOp runs journalScript in the Alloy container on the directories of
 // nodes of a cluster in the journal volume, or on the cluster's directory
-// when nodes is empty.
+// when nodes is empty. The cluster and each node must be a host name label:
+// an empty name or ".." would name the journal directory of every cluster
+// of the realm.
 func (m *Manager) journalOp(ctx context.Context, op, cluster string, nodes []string) error {
+	if err := hostname.CheckLabel(cluster); err != nil {
+		return fmt.Errorf("invalid cluster name %q: %w", cluster, err)
+	}
+	for _, n := range nodes {
+		if err := hostname.CheckLabel(n); err != nil {
+			return fmt.Errorf("invalid node name %q: %w", n, err)
+		}
+	}
 	dirs := []string{path.Join(JournalDir, cluster)}
 	if len(nodes) > 0 {
 		dirs = dirs[:0]
@@ -331,7 +342,8 @@ func (m *Manager) journalOp(ctx context.Context, op, cluster string, nodes []str
 
 // ResetJournals empties the journal directories of nodes of a cluster,
 // creating them, so that a node's container can mount its directory and
-// shows no journal of an earlier node of its name.
+// shows no journal of an earlier node of its name. A cluster or node name
+// that is not a host name label is an error.
 func (m *Manager) ResetJournals(ctx context.Context, cluster string, nodes ...string) error {
 	if err := m.journalOp(ctx, "reset", cluster, nodes); err != nil {
 		return fmt.Errorf("resetting journal directories: %w", err)
@@ -340,7 +352,8 @@ func (m *Manager) ResetJournals(ctx context.Context, cluster string, nodes ...st
 }
 
 // RemoveJournals removes the journal directories of nodes of a cluster, or
-// the cluster's whole directory when no node is given.
+// the cluster's whole directory when no node is given. A cluster or node
+// name that is not a host name label is an error.
 func (m *Manager) RemoveJournals(ctx context.Context, cluster string, nodes ...string) error {
 	if err := m.journalOp(ctx, "remove", cluster, nodes); err != nil {
 		return fmt.Errorf("removing journal directories: %w", err)
