@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -88,6 +89,9 @@ func TestMain(m *testing.M) {
 	for _, name := range envvar.All {
 		_ = os.Unsetenv(name)
 	}
+	// The children that the tests start, sind and the fake docker, are
+	// this race-built binary, which sleeps a second as it exits.
+	_ = os.Setenv("GORACE", withoutExitSleep(os.Getenv("GORACE")))
 	// The state directory is one of the tests' own: the commands that report
 	// progress write the default activity log there, never in the
 	// developer's home.
@@ -100,6 +104,15 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = os.RemoveAll(state)
 	os.Exit(code)
+}
+
+// withoutExitSleep returns the GORACE options gorace with the race
+// runtime's sleep at exit set to 0, unless gorace sets it already.
+func withoutExitSleep(gorace string) string {
+	if strings.Contains(gorace, "atexit_sleep_ms=") {
+		return gorace
+	}
+	return strings.TrimSpace(gorace + " atexit_sleep_ms=0")
 }
 
 func fakeDocker() {
@@ -158,6 +171,23 @@ func child(t *testing.T, mode string, args ...string) (*exec.Cmd, string) {
 		fakeDockerEnv+"="+started,
 	)
 	return cmd, started
+}
+
+// TestChildrenExitWithoutTheRaceSleep checks that the children of the
+// tests exit without the second that the race runtime sleeps at exit:
+// cmd/sind starts about twenty of them, one after another.
+func TestChildrenExitWithoutTheRaceSleep(t *testing.T) {
+	cmd, _ := child(t, "main", "version")
+	i := slices.IndexFunc(cmd.Env, func(kv string) bool { return strings.HasPrefix(kv, "GORACE=") })
+	require.GreaterOrEqual(t, i, 0, "the children get no GORACE")
+	assert.Contains(t, cmd.Env[i], "atexit_sleep_ms=")
+	for gorace, want := range map[string]string{
+		"":                   "atexit_sleep_ms=0",
+		"halt_on_error=1":    "halt_on_error=1 atexit_sleep_ms=0",
+		"atexit_sleep_ms=50": "atexit_sleep_ms=50",
+	} {
+		assert.Equal(t, want, withoutExitSleep(gorace), gorace)
+	}
 }
 
 // waitFor waits for a process to end, killing it and failing the test if it

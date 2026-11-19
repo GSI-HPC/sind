@@ -11,6 +11,10 @@ CGO_ENABLED   ?= 0
 GOBUILD       ?= go build
 GOTEST        ?= go test
 
+# A race-built program sleeps a second as it exits (atexit_sleep_ms), every
+# test binary and every child that a test starts from it.
+export GORACE ?= atexit_sleep_ms=0
+
 # Sandbox for unit tests: blocks the host paths and service binaries the
 # doctor/mesh/docker/ssh code paths would otherwise read or exec, so a test
 # that forgets to inject a mock fs/executor trips a failure instead of
