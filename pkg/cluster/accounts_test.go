@@ -135,7 +135,7 @@ func TestAccountsScript_RunsEachCommand(t *testing.T) {
 
 func TestAccountsScript_StopsAtFirstFailure(t *testing.T) {
 	calls, stderr, err := runAccountsScript(t, accountsScript(wantAccountCommands), "theory")
-	require.Error(t, err)
+	require.EqualError(t, err, "exit status 1")
 	assert.Equal(t, "sacctmgr add account theory parent=physics:  Nothing new added.\n", stderr)
 	assert.Len(t, calls, 2, "stops at the first failure")
 }

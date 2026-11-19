@@ -741,8 +741,7 @@ func TestGetAuthKey_NoContainers(t *testing.T) {
 
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
-	require.Error(t, err)
-	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
+	require.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 

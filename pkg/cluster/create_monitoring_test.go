@@ -135,12 +135,15 @@ func TestCreate_MonitoringPullFails(t *testing.T) {
 }
 
 func TestCreate_MonitoringResourcesFail(t *testing.T) {
-	for _, prefix := range []string{"volume create", "run --rm --name sind-dev-journal-helper"} {
+	for prefix, want := range map[string]string{
+		"volume create": "creating journal volume: exit status 1",
+		"run --rm --name sind-dev-journal-helper": "making journal directories: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t)
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 			_, _, err := createMonitored(t, f, createCfg(), nil)
-			require.Error(t, err)
+			require.ErrorContains(t, err, want)
 			assert.Empty(t, f.containers)
 		})
 	}

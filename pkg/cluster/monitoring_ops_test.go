@@ -116,12 +116,16 @@ func TestWorkerAdd_MonitoredExplicitImage(t *testing.T) {
 }
 
 func TestWorkerAdd_MonitoredStackErrors(t *testing.T) {
-	for _, prefix := range []string{"network inspect sind-mesh", "inspect sind-grafana sind-prometheus sind-loki", "exec sind-alloy sh"} {
+	for prefix, want := range map[string]string{
+		"network inspect sind-mesh":                      "checking mesh network: exit status 1",
+		"inspect sind-grafana sind-prometheus sind-loki": "inspecting the monitoring stack: exit status 1",
+		"exec sind-alloy sh":                             "resetting journal directories: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t).withStack()
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 			m, err := addMonitoredWorker(t, f, nil)
-			require.Error(t, err)
+			require.ErrorContains(t, err, want)
 			_, created := createArgs(m.Calls, "sind-dev-worker-1")
 			assert.False(t, created)
 		})
@@ -163,7 +167,8 @@ func TestWorkerRemove_Monitored(t *testing.T) {
 	// The workers stay known to the stack while their containers do.
 	m = &mock.Executor{OnCall: failNth(t, "rm -f -v sind-dev-worker-1", 1, stackFirst(f, workerRemoveOnCall(t, nodesConf)))}
 	client = docker.NewClient(m)
-	require.Error(t, WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"}))
+	require.ErrorContains(t, WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"}),
+		"removing container sind-dev-worker-1")
 	assert.Zero(t, countCalls(m.Calls, "exec", "sind-alloy"))
 
 	// A failed listing of the monitored nodes changes nothing: the
@@ -237,12 +242,15 @@ func TestCleanupRealm(t *testing.T) {
 	assert.Less(t, slices.Index(removed(m), "sind-journal"), slices.Index(removed(m), "sind-mesh"),
 		"a cleanup cut short leaves no volume of the stack without the mesh")
 
-	for _, prefix := range []string{"ps -a --no-trunc --format json --filter label=com.docker.compose.project", "volume ls --format json --filter label=com.docker.compose.project"} {
+	for prefix, want := range map[string]string{
+		"ps -a --no-trunc --format json --filter label=com.docker.compose.project": "removing the monitoring stack: listing the monitoring containers",
+		"volume ls --format json --filter label=com.docker.compose.project":        "removing the monitoring stack's volumes: listing the monitoring volumes",
+	} {
 		f := newStackFake(t).withStack()
 		f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 		m := &mock.Executor{OnCall: stackFirst(f, realm.onCall)}
 		client := docker.NewClient(m)
-		require.Error(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)), prefix)
+		require.ErrorContains(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)), want, prefix)
 	}
 
 	// A failed removal of the volumes leaves the mesh, which a later
@@ -251,7 +259,7 @@ func TestCleanupRealm(t *testing.T) {
 	f.fail["volume rm sind-journal"] = mock.Result{Err: testutil.ExitCode1(t)}
 	m = &mock.Executor{OnCall: stackFirst(f, realm.onCall)}
 	client = docker.NewClient(m)
-	require.Error(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
+	require.ErrorContains(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)), "removing the monitoring stack's volumes: removing volume sind-journal")
 	assert.NotContains(t, removed(m), "sind-mesh")
 }
 

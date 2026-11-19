@@ -325,7 +325,7 @@ func TestPreflightCheck_ClientIDsSkipsMungeVolume(t *testing.T) {
 	m.OnCall = preflightOnCallLabels(t, map[string]string{"sind-dev-munge": `{"sind.realm":"other"}`})
 	client := docker.NewClient(&m)
 
-	require.Error(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()))
+	require.ErrorContains(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()), "conflicting resources already exist: volume sind-dev-munge")
 
 	cfg := minimalConfig()
 	cfg.Identity = config.Identity{Mode: config.IdentityClientIDs}

@@ -311,7 +311,7 @@ step slurm: ok
 
 			err := WorkerRemove(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"})
 
-			require.Error(t, err)
+			require.ErrorContains(t, err, "boom")
 			w.Finish()
 			assert.Equal(t, tc.want, testutil.WithoutCalls(w.Events()))
 		})

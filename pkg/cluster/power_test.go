@@ -615,7 +615,7 @@ func TestPower_Restart(t *testing.T) {
 
 			// Nodes that all fail to go down: no start, and no mesh call.
 			m, err = run(func(args []string) bool { return args[0] == op.docker }, "worker-0")
-			require.Error(t, err)
+			require.ErrorContains(t, err, op.verb+" sind-dev-worker-0: "+op.docker+" failed")
 			assert.Len(t, m.Calls, 2, "ps and "+op.docker)
 
 			_, err = run(func(args []string) bool { return args[0] == "start" }, "worker-0")

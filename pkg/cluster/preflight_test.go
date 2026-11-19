@@ -217,8 +217,8 @@ func TestPreflightCheck(t *testing.T) {
 				assert.Len(t, m.Calls, 3+len(AllVolumeTypes)) // network + volumes + 2 filtered ps
 				return
 			}
-			require.Error(t, err)
-			for _, s := range tt.want {
+			require.ErrorContains(t, err, tt.want[0])
+			for _, s := range tt.want[1:] {
 				assert.Contains(t, err.Error(), s)
 			}
 			for _, s := range tt.notWant {

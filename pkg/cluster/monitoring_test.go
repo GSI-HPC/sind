@@ -427,13 +427,16 @@ func TestAlloyConfig(t *testing.T) {
 }
 
 func TestAlloyConfig_Errors(t *testing.T) {
-	for _, prefix := range []string{"info", "ps"} {
+	for prefix, want := range map[string]string{
+		"info": "reading the cgroup driver: exit status 1",
+		"ps":   "listing monitored nodes: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t)
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 			client, _ := f.client()
 			_, err := alloyConfig(t.Context(), client, "sind")
-			require.Error(t, err)
+			require.EqualError(t, err, want)
 		})
 	}
 }
@@ -473,12 +476,13 @@ func TestEnsureMonitoring_Errors(t *testing.T) {
 		name, prefix string
 		stack        bool
 		created      bool
+		want         string
 	}{
-		{"exists", "container inspect sind-alloy", false, false},
-		{"pinned address", "network inspect sind-mesh", false, false},
-		{"alloy config", "info", false, false},
-		{"stack", "volume create", false, true},
-		{"sync", "cp - sind-alloy:", true, false},
+		{"exists", "container inspect sind-alloy", false, false, "checking the monitoring stack: exit status 1: boom"},
+		{"pinned address", "network inspect sind-mesh", false, false, "checking mesh network: exit status 1: boom"},
+		{"alloy config", "info", false, false, "reading the cgroup driver: exit status 1: boom"},
+		{"stack", "volume create", false, true, "creating prometheus volume: exit status 1: boom"},
+		{"sync", "cp - sind-alloy:", true, false, "writing Alloy configuration: exit status 1: boom"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -490,7 +494,7 @@ func TestEnsureMonitoring_Errors(t *testing.T) {
 			client, _ := f.client()
 			meshMgr, _ := stackMesh(client)
 			created, err := ensureMonitoring(t.Context(), client, meshMgr)
-			require.Error(t, err)
+			require.ErrorContains(t, err, tt.want)
 			assert.Equal(t, tt.created, created)
 		})
 	}
@@ -515,13 +519,16 @@ func TestRegisterStackDNS(t *testing.T) {
 }
 
 func TestRegisterStackDNS_Errors(t *testing.T) {
-	for _, prefix := range []string{"inspect sind-grafana", "cp - sind-dns:/"} {
+	for prefix, want := range map[string]string{
+		"inspect sind-grafana": "inspecting the monitoring stack: exit status 1",
+		"cp - sind-dns:/":      "registering the monitoring stack's DNS names: writing DNS Corefile: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t).withStack()
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 			client, _ := f.client()
 			meshMgr, _ := stackMesh(client)
-			require.Error(t, registerStackDNS(t.Context(), client, meshMgr))
+			require.EqualError(t, registerStackDNS(t.Context(), client, meshMgr), want)
 		})
 	}
 }
@@ -551,7 +558,7 @@ func TestStartMonitoring(t *testing.T) {
 		client, _ := f.client()
 		meshMgr, _ := stackMesh(client)
 		_, err := startMonitoring(t.Context(), client, meshMgr)
-		require.Error(t, err)
+		require.ErrorContains(t, err, "starting loki container: exit status 1")
 	})
 }
 
@@ -627,7 +634,7 @@ func TestClusterMonitored(t *testing.T) {
 	_, err = clusterMonitored(t.Context(), client, "sind", "dev")
 	require.ErrorContains(t, err, "listing monitored nodes")
 	_, err = otherMonitoredClusters(t.Context(), client, "sind", "dev")
-	require.Error(t, err)
+	require.ErrorContains(t, err, "listing monitored nodes")
 }
 
 func TestRemoveMonitoring(t *testing.T) {

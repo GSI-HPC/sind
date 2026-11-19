@@ -120,7 +120,7 @@ func TestCreate_NoRollbackNoStep(t *testing.T) {
 
 	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid cluster config")
 	assert.Empty(t, w.Finish())
 }
 

@@ -296,7 +296,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
 
 	err := enableSlurm(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", "sind-dev-controller", configs, time.Millisecond, nil)
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "enabling mariadb on db: mariadb failed")
 	w.Finish()
 	assert.Equal(t, `step slurm total=3 [fold]: failed (target): enabling mariadb on db: mariadb failed\nmariadb journal:\n
   target controller role=controller: canceled (canceled): not finished

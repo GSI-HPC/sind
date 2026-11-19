@@ -180,7 +180,7 @@ func TestWaitNodes_NotWaitLimit(t *testing.T) {
 		return mock.Result{Stdout: "starting\n"}, strings.Contains(strings.Join(args, " "), "is-system-running")
 	})}
 	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0"}, time.Hour, time.Millisecond)
-	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.NotErrorIs(t, err, ErrNotReady)
 
 	m = &mock.Executor{OnCall: waitOnCall(t, func(args []string) (mock.Result, bool) {

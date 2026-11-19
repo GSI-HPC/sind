@@ -250,8 +250,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
+	require.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 

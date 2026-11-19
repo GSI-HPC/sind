@@ -147,3 +147,5 @@ Tests use [testify](https://github.com/stretchr/testify):
 assert.Equal(t, "running", info.Status)
 require.NoError(t, err)
 ```
+
+A test of an error path names the error it expects, with `ErrorContains`, `ErrorIs` or `EqualError`. A bare `require.Error` also passes on the mock's "unexpected call" or on the test's own deadline; the linter rejects it in the tests of `pkg/cluster`.

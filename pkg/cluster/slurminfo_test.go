@@ -91,19 +91,22 @@ func TestGetSlurmInfoWithoutAController(t *testing.T) {
 
 func TestGetSlurmInfoErrors(t *testing.T) {
 	ok := "worker-0|idle|0/2/0/2|1024|all*|none\n"
-	for name, m := range map[string]*mock.Executor{
-		"listing fails": {OnCall: func([]string, string) mock.Result {
+	for name, tc := range map[string]struct {
+		m    *mock.Executor
+		want string
+	}{
+		"listing fails": {&mock.Executor{OnCall: func([]string, string) mock.Result {
 			return mock.Result{Stderr: "Cannot connect to the Docker daemon\n", Err: testutil.ExitCode1(t)}
-		}},
-		"no controller": {OnCall: func(args []string, _ string) mock.Result {
+		}}, "listing containers: Docker is not reachable: Cannot connect to the Docker daemon"},
+		"no controller": {&mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 			if args[0] == "ps" {
 				return mock.Result{Stdout: slurmInfoPs("exited", "")}
 			}
 			return mock.Result{Stderr: "Error response from daemon: container is not running\n", Err: testutil.ExitCode1(t)}
-		}},
-		"bad nodes":      slurmInfoExec(t, "garbage\n", "", nil),
-		"bad partitions": slurmInfoExec(t, ok, "garbage\n", nil),
-		"no partitions": {OnCall: func(args []string, _ string) mock.Result {
+		}}, "sinfo on the controller: exit status 1: Error response from daemon: container is not running"},
+		"bad nodes":      {slurmInfoExec(t, "garbage\n", "", nil), `sinfo node line "garbage": want 6 fields, got 1`},
+		"bad partitions": {slurmInfoExec(t, ok, "garbage\n", nil), `sinfo partition line "garbage": want 5 fields, got 1`},
+		"no partitions": {&mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 			if args[0] == "ps" {
 				return mock.Result{Stdout: slurmInfoPs("running", "")}
 			}
@@ -111,10 +114,10 @@ func TestGetSlurmInfoErrors(t *testing.T) {
 				return mock.Result{Stdout: ok}
 			}
 			return mock.Result{Stderr: "slurm_load_partitions: Unable to contact slurm controller\n", Err: testutil.ExitCode1(t)}
-		}},
+		}}, "sinfo on the controller: exit status 1: slurm_load_partitions: Unable to contact slurm controller"},
 	} {
-		info, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
-		assert.Error(t, err, name)
+		info, err := GetSlurmInfo(t.Context(), docker.NewClient(tc.m), "sind", "dev")
+		assert.ErrorContains(t, err, tc.want, name)
 		if name == "listing fails" || name == "no controller" {
 			assert.Nil(t, info, name)
 		}
@@ -132,7 +135,7 @@ func TestGetSlurmInfoKeepsTheFilesWhenSinfoFails(t *testing.T) {
 		}
 	}(m.OnCall)
 	info, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
-	require.Error(t, err)
+	require.ErrorContains(t, err, "slurm_load_node: Unable to contact slurm controller")
 	assert.Equal(t, &SlurmInfo{Files: []SlurmFile{{Path: slurm.SlurmConfPath, Content: "ClusterName=dev\n"}}}, info,
 		"cat reads the files without slurmctld")
 }

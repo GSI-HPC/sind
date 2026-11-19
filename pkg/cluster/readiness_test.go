@@ -119,7 +119,7 @@ func TestCreate_InterruptIsNotWaitLimit(t *testing.T) {
 	cfg.Wait = time.Hour
 	_, _, err := runCreate(ctx, t, cfg, false, neverReady(t))
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.NotErrorIs(t, err, ErrNotReady)
 }
 

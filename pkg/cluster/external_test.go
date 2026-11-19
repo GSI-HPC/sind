@@ -436,7 +436,7 @@ func TestConnectAndDisconnect_ReportAFailure(t *testing.T) {
 	names := []docker.ContainerName{"kind-control-plane", "kind-worker"}
 
 	ctx, w := progresstest.Watch(t.Context(), t)
-	require.Error(t, Connect(ctx, c, meshMgr, names...))
+	require.ErrorContains(t, Connect(ctx, c, meshMgr, names...), "connecting kind-control-plane to sind-ci-net: daemon unreachable")
 	w.Finish()
 	assert.Equal(t, `step connecting total=2 [fold]: failed (target): connecting kind-control-plane to sind-ci-net: daemon unreachable
   target kind-control-plane: failed (target): connecting {} to sind-ci-net: daemon unreachable
@@ -444,7 +444,7 @@ func TestConnectAndDisconnect_ReportAFailure(t *testing.T) {
 `, testutil.WithoutCalls(w.Events()))
 
 	ctx, w = progresstest.Watch(t.Context(), t)
-	require.Error(t, Disconnect(ctx, c, meshMgr, names...))
+	require.ErrorContains(t, Disconnect(ctx, c, meshMgr, names...), "disconnecting kind-control-plane from sind-mesh: daemon unreachable")
 	w.Finish()
 	assert.Equal(t, `step disconnecting total=2 [fold]: failed (target): disconnecting kind-control-plane from sind-mesh: daemon unreachable
   target kind-control-plane: failed (target): disconnecting {} from sind-mesh: daemon unreachable
@@ -462,7 +462,7 @@ func TestConnect_Interrupted(t *testing.T) {
 	f.fail["network connect"] = mock.Result{Err: fmt.Errorf("signal: killed")}
 	f.onConnect = cancel
 
-	require.Error(t, Connect(ctx, c, mesh.NewManager(c, "sind"), "kind-control-plane"))
+	require.ErrorContains(t, Connect(ctx, c, mesh.NewManager(c, "sind"), "kind-control-plane"), "signal: killed")
 	w.Finish()
 	assert.Equal(t, `step connecting total=1 [fold]: canceled (canceled): connecting kind-control-plane to sind-mesh: signal: killed
   target kind-control-plane: canceled (canceled): connecting {} to sind-mesh: signal: killed

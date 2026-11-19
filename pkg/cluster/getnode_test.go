@@ -170,7 +170,7 @@ func TestGetSSHConfig_NoStateDir(t *testing.T) {
 
 	_, err := GetSSHConfig(afero.NewMemMapFs(), "ci-42")
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "$HOME is not defined")
 }
 
 func TestStatus_NodeCounts(t *testing.T) {
