@@ -52,7 +52,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
 | Oldest Go | `go build` and `go vet` of `./pkg/...` with the Go of the `go` line of `go.mod` (not its `toolchain` line), the oldest a library caller may use |
 | Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |
-| Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-26.04-arm` for linux/arm64): raises `fs.inotify.max_user_instances`, `sind doctor` (its inotify check must pass too), builds that node image with `docker buildx bake` (BuildKit from `mirror.gcr.io`), pulls the Docker Hub images the tests run from `mirror.gcr.io`, then `make test-integration` |
+| Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-26.04-arm` for linux/arm64): raises `fs.inotify.max_user_instances`, `sind doctor` (its inotify check must pass too), builds that node image with `docker buildx bake` (BuildKit from `mirror.gcr.io`), pulls the Docker Hub images the tests run from `mirror.gcr.io`, then `make test-integration`, then fails when Docker still holds a container, network or volume with the `sind.realm` label |
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
 | Build | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
 
@@ -63,6 +63,9 @@ it fails on an incompatible change of a package under `pkg/`, or of go-clikit's
 `progress`, unless the PR has the `breaking-api` label. A PR that means the break gets
 the label from the maintainer, and its commits are marked `!` with `BREAKING CHANGE:`.
 
+- A leftover that the Integration Test job names after the tests passed is a test
+  without `t.Cleanup`, or a delete that leaves a resource behind: find which test made
+  it by the realm in its name (`it-<prefix>-<id>`), and fix the cause.
 - Integration Test fetches sources while building the image: the Slurm, UCX, PMIx,
   PRRTE and Open MPI tarballs, and a `git clone` of libjwt from github.com. A failure in
   that build step with a network error on any source fetch of the Dockerfile (e.g.

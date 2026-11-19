@@ -171,6 +171,8 @@ The tests of `cmd/sind` instead append `testID`, the eight hex digits of the tes
 
 This ensures tests can run concurrently without interfering with each other or with the user's sind clusters.
 
+Each test removes what it creates, also when it fails (`t.Cleanup`). After the integration tests have passed, CI lists the containers, networks and volumes that carry the `sind.realm` label and fails when there is one: a test without cleanup, or a `sind delete` that leaves a resource behind.
+
 ## Test assertions
 
 Tests use [testify](https://github.com/stretchr/testify):

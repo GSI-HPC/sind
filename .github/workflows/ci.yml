@@ -310,6 +310,22 @@ jobs:
           SIND_TEST_REQUIRE_DOCKER: "1"
           GOTEST: gotestsum --junitfile integration-tests.xml --
 
+      # A test removes what it made, and so does sind: after a suite that
+      # passed, Docker holds nothing with a sind label. A leftover is a
+      # test without cleanup, or a delete that leaves a resource behind.
+      - name: Check for leftover sind resources
+        run: |
+          left=$(
+            docker ps -a --filter label=sind.realm --format 'container {{.Names}}'
+            docker network ls --filter label=sind.realm --format 'network {{.Name}}'
+            docker volume ls --filter label=sind.realm --format 'volume {{.Name}}'
+          )
+          if [[ -n "$left" ]]; then
+            echo "::error::the integration tests left sind resources behind"
+            echo "$left"
+            exit 1
+          fi
+
       - name: Test report
         uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         if: always()
