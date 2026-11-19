@@ -129,7 +129,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{ex: newFakeExec(), st: store.New(), kill: &kill{}, refresh: make(chan string, 4)}
 	n := byte(0)
 	f.r = New(Config{
-		Exec: f.ex, Store: f.st, Binary: "/usr/bin/sind", ActivityLog: "/state/activity.jsonl",
+		Exec: f.ex, Store: f.st, Binary: "/usr/bin/sind",
 		Environ: func() []string {
 			return []string{"PATH=/bin", "SIND_REALM=ci", "SIND_PROGRESS=plain", "SIND_PROGRESS_LOG=/x", "TRACEPARENT=old", "TRACESTATE=s"}
 		},
@@ -196,8 +196,8 @@ func TestStart_RunsTheBinaryWithTheEnvironment(t *testing.T) {
 	assert.Equal(t, spec.Argv[1:], c.args)
 	assert.Equal(t, []string{
 		"PATH=/bin", "SIND_PROGRESS=none", "TRACEPARENT=00-" + wantTrace + "-" + wantSpan + "-01",
-		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl",
-	}, c.env)
+		"TRACESTATE=sind=ui",
+	}, c.env, "the child writes the default activity log, which it rotates")
 	assert.True(t, c.group, "the child runs in a process group of its own")
 	assert.True(t, c.orphanSafe, "the child must outlive sind ui and roll back")
 	f.ex.results <- result{}
@@ -426,7 +426,7 @@ func TestNew_Defaults(t *testing.T) {
 }
 
 func TestChildEnv(t *testing.T) {
-	got := childEnv([]string{"A=1", "SIND_REALM=x", "TRACESTATE=y", "B=2=3"}, "", "00-t-s-01")
+	got := childEnv([]string{"A=1", "SIND_REALM=x", "TRACESTATE=y", "B=2=3"}, "00-t-s-01")
 	assert.Equal(t, []string{"A=1", "B=2=3", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01", "TRACESTATE=sind=ui"}, got)
 }
 
@@ -438,7 +438,7 @@ func TestChildEnv_CommandLine(t *testing.T) {
 	for _, name := range envvar.CommandLine {
 		env = append(env, name+"=from-the-shell")
 	}
-	got := childEnv(env, "/state/activity.jsonl", "00-t-s-01")
+	got := childEnv(env, "00-t-s-01")
 	assert.Equal(t, []string{"SIND_MCP_TOKEN=kept", "SIND_PROGRESS=none", "TRACEPARENT=00-t-s-01",
-		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl"}, got)
+		"TRACESTATE=sind=ui"}, got)
 }

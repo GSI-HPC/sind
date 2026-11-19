@@ -51,12 +51,11 @@ type actState struct {
 
 // The seams of Setup; tests replace them.
 var (
-	actExecutable  = os.Executable
-	actStat        = os.Stat
-	actStateDir    = state.Dir
-	actActivityLog = activityLogForChildren
-	actHome        = os.UserHomeDir
-	actEnviron     = os.Environ
+	actExecutable = os.Executable
+	actStat       = os.Stat
+	actStateDir   = state.Dir
+	actHome       = os.UserHomeDir
+	actEnviron    = os.Environ
 )
 
 // actBinaryCheck returns the check that the file at exe is still the sind
@@ -79,16 +78,6 @@ func actBinaryCheck(exe string) (func() error, error) {
 // actGrace is how long sind ui, when it stops, waits for the commands it
 // started to roll back before it kills them.
 const actGrace = 60 * time.Second
-
-// activityLogForChildren returns the path of the default activity log, which
-// it makes ready as sind does for its own commands; where that fails, the
-// path alone.
-func activityLogForChildren() (string, error) {
-	if path, err := state.PrepareActivityLog(); err == nil {
-		return path, nil
-	}
-	return state.ActivityLogPath()
-}
 
 // actSaveFile writes data to path for its owner alone, creating the
 // directory for the owner alone too. A file that exists keeps its mode.
@@ -128,11 +117,10 @@ func actService() Service {
 			if err != nil {
 				return fmt.Errorf("finding the state directory: %w", err)
 			}
-			// Neither is needed to run a command: sind has its own defaults.
-			logPath, _ := actActivityLog()
+			// Not needed to run a command: sind has its own default.
 			home, _ := actHome()
 			r := run.New(run.Config{
-				Exec: env.Exec, Store: env.Store, Binary: exe, ActivityLog: logPath, Environ: actEnviron, Check: check,
+				Exec: env.Exec, Store: env.Store, Binary: exe, Environ: actEnviron, Check: check,
 				Refresh: func(realm string) {
 					if refresh, ok := env.Get(ColRefreshKey).(func(string)); ok {
 						refresh(realm)

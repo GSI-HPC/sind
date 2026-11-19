@@ -73,9 +73,6 @@ type Config struct {
 	Store *store.Store
 	// Binary is the sind executable, which runs in place of "sind".
 	Binary string
-	// ActivityLog is the event log that the child appends to; empty for the
-	// child's own default.
-	ActivityLog string
 	// Environ returns the environment the child's is made from; nil is
 	// none, which the caller sets to os.Environ.
 	Environ func() []string
@@ -152,7 +149,7 @@ func (r *Runner) Start(s Spec) (string, error) {
 	if r.cfg.Environ != nil {
 		environ = r.cfg.Environ()
 	}
-	env := childEnv(environ, r.cfg.ActivityLog, "00-"+trace+"-"+span+"-01")
+	env := childEnv(environ, "00-"+trace+"-"+span+"-01")
 	r.mu.Lock()
 	if r.closing {
 		r.mu.Unlock()
@@ -321,25 +318,23 @@ func (r *Runner) hex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// childEnv returns env for a sind child: no progress display, the event log
-// sind ui reads, the trace that tells the child's run with the tracestate
-// that marks it as a run of sind ui (store.UITraceState), and none of the
-// other variables that stand in for the command line (envvar.CommandLine),
-// such as SIND_REALM: the dialog's command names any realm but the default
-// one on its command line, and without a name must run in the default
-// realm, whatever the environment of sind ui says. The environment does not
-// change the command line, so what the dialog showed still holds.
-func childEnv(env []string, activityLog, traceparent string) []string {
-	out := make([]string, 0, len(env)+4)
+// childEnv returns env for a sind child: no progress display, the trace
+// that tells the child's run with the tracestate that marks it as a run of
+// sind ui (store.UITraceState), and none of the variables that stand in for
+// the command line (envvar.CommandLine), such as SIND_REALM: the dialog's
+// command names any realm but the default one on its command line, and
+// without a name must run in the default realm, whatever the environment of
+// sind ui says. The environment does not change the command line, so what
+// the dialog showed still holds. SIND_PROGRESS_LOG is one of them too, so
+// the child writes the default activity log, which sind ui reads, and moves
+// it aside at 8 MiB as a command in a terminal does.
+func childEnv(env []string, traceparent string) []string {
+	out := make([]string, 0, len(env)+3)
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
 		if !slices.Contains(envvar.CommandLine, name) && name != "TRACEPARENT" && name != "TRACESTATE" {
 			out = append(out, kv)
 		}
 	}
-	out = append(out, envvar.Progress+"=none", "TRACEPARENT="+traceparent, "TRACESTATE="+store.UITraceState)
-	if activityLog != "" {
-		out = append(out, envvar.ProgressLog+"="+activityLog)
-	}
-	return out
+	return append(out, envvar.Progress+"=none", "TRACEPARENT="+traceparent, "TRACESTATE="+store.UITraceState)
 }

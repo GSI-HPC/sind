@@ -1050,7 +1050,6 @@ func TestActService_Setup(t *testing.T) {
 	actSeams(t)
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
-	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
 	actHome = func() (string, error) { return "/home/ada", nil }
 	actEnviron = func() []string { return []string{"A=1"} }
 
@@ -1087,7 +1086,6 @@ func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 	actSeams(t)
 	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
-	actActivityLog = func() (string, error) { return "", errors.New("read-only home") }
 	actHome = func() (string, error) { return "", errors.New("no home") }
 
 	require.NoError(t, actService().Setup(cfg.Env))
@@ -1099,8 +1097,8 @@ func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
 // actSeams puts the seams of Setup back when the test ends. The executable
 // that a test names is a file of the test's own.
 func actSeams(t *testing.T) {
-	e, st, d, l, h, v := actExecutable, actStat, actStateDir, actActivityLog, actHome, actEnviron
-	t.Cleanup(func() { actExecutable, actStat, actStateDir, actActivityLog, actHome, actEnviron = e, st, d, l, h, v })
+	e, st, d, h, v := actExecutable, actStat, actStateDir, actHome, actEnviron
+	t.Cleanup(func() { actExecutable, actStat, actStateDir, actHome, actEnviron = e, st, d, h, v })
 	bin := filepath.Join(t.TempDir(), "sind")
 	require.NoError(t, os.WriteFile(bin, nil, 0o755))
 	actStat = func(string) (fs.FileInfo, error) { return os.Stat(bin) }
@@ -1135,7 +1133,6 @@ func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
 	actSeams(t)
 	actExecutable = func() (string, error) { return "/bin/sh", nil }
 	actStateDir = func() (string, error) { return "/state/sind", nil }
-	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
 	actHome = func() (string, error) { return "/home/ada", nil }
 	actEnviron = func() []string { return []string{"PATH=/bin"} }
 	refreshed := make(chan string, 2)
@@ -1178,27 +1175,6 @@ func TestActService_RunShutsTheRunnerDownWithTheServer(t *testing.T) {
 	cfg.Env.Put(actKey{}, nil)
 	actService().Run(ctx, cfg.Env)
 	assert.Len(t, starter.shutdown, 1)
-}
-
-func TestActActivityLog(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
-	path, err := activityLogForChildren()
-
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(dir, "sind", "activity.jsonl"), path)
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-
-	// A state directory that cannot be made still gives the path.
-	blocker := filepath.Join(dir, "file")
-	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
-	t.Setenv("XDG_STATE_HOME", blocker)
-	path, err = activityLogForChildren()
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(blocker, "sind", "activity.jsonl"), path)
 }
 
 func TestActMkdirAll(t *testing.T) {
