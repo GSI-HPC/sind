@@ -108,6 +108,15 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 		{"padded clusters in a range", "worker-0.dev1,worker-[0-1].dev01", "worker-0.dev1 and worker-0.dev01 differ only in zero padding"},
 		{"padded clusters in a difference", "worker-[0-3].dev1!worker-0.dev01", "worker-0.dev1 and worker-0.dev01 differ only in zero padding"},
 		{"padded clusters in brackets", "worker-0.dev[01-02]&worker-0.dev2", "worker-0.dev02 and worker-0.dev2 differ only in zero padding"},
+		// go-nodeset compares the names as written, so the operator would
+		// miss the node that the command takes worker-2 and
+		// worker-2.default for.
+		{"exclusion with the default cluster", "worker-[0-3]!worker-2.default",
+			"expanding nodes: worker-2 and worker-2.default are one node, but !, & and ^ compare names as written and take them for two; " +
+				"write its cluster the same way throughout the expression"},
+		{"exclusion without the default cluster", "worker-[0-3].default!worker-2", "worker-2.default and worker-2 are one node"},
+		{"intersection", "worker-2.default&worker-[0-3]", "worker-2.default and worker-2 are one node"},
+		{"symmetric difference with padding", "worker-[0-3]^worker-02.default", "worker-2 and worker-02.default are one node"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -141,6 +150,47 @@ func TestParseNodeArgs_ClusterFromEnv(t *testing.T) {
 	assert.False(t, cobratree.IsUsage(err), "the variable is not the command line")
 	_, err = parseNodeArgs("worker-1,Worker-2")
 	assert.True(t, cobratree.IsUsage(err), "a name that is not valid comes first")
+	_, err = parseNodeArgs("worker-[0-3]!worker-2.prod")
+	require.EqualError(t, err, `SIND_CLUSTER: invalid cluster name "Dev": it has uppercase letters`,
+		"an operator between names with and without a cluster needs the default cluster")
+	for _, expr := range []string{"Worker-[0-3]!worker-2.prod", "Worker-[0-3]!Worker-2.prod"} {
+		_, err = parseNodeArgs(expr)
+		assert.True(t, cobratree.IsUsage(err), "a name that is not valid comes first: %s", expr)
+	}
+}
+
+// TestParseNodeArgs_OperatorsAndTheDefaultCluster verifies that the
+// operators may mix names with and without a cluster as long as they name
+// no node of the default cluster both ways, and that a union may.
+func TestParseNodeArgs_OperatorsAndTheDefaultCluster(t *testing.T) {
+	t.Setenv("SIND_CLUSTER", "dev")
+	for expr, want := range map[string][]string{
+		"worker-[0-1]!worker-1.default":     {"worker-0.dev", "worker-1.dev"},
+		"worker-[0-1].prod^worker-1":        {"worker-0.prod", "worker-1.dev", "worker-1.prod"},
+		"worker-0,worker-0.dev":             {"worker-0.dev", "worker-0.dev"},
+		"worker-[0-1].dev!worker-1.dev":     {"worker-0.dev"},
+		"worker-[0-1]!worker-1":             {"worker-0.dev"},
+		"worker-[0-1]!worker-1,worker-1.ci": {"worker-0.dev", "worker-1.ci"},
+	} {
+		t.Run(expr, func(t *testing.T) {
+			targets, err := parseNodeArgs(expr)
+			require.NoError(t, err)
+			assert.ElementsMatch(t, want, targetNames(targets))
+		})
+	}
+	// The default cluster is the one SIND_CLUSTER names.
+	_, err := parseNodeArgs("worker-[0-3]!worker-[1-2].dev")
+	require.ErrorContains(t, err, "worker-1 and worker-1.dev are one node")
+	_, err = parseNodeArgs("worker-[0-3]!worker-[01-02].dev")
+	require.ErrorContains(t, err, "worker-1 and worker-01.dev are one node", "the short names' padding does not count")
+	_, err = parseNodeArgs("worker-2.dev&worker-[0-3]")
+	require.ErrorContains(t, err, "worker-2.dev and worker-2 are one node", "before the empty set")
+
+	// The clusters dev1 and dev01 are two.
+	t.Setenv("SIND_CLUSTER", "dev1")
+	targets, err := parseNodeArgs("worker-[0-3]!worker-2.dev01")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"worker-0.dev1", "worker-1.dev1", "worker-2.dev1", "worker-3.dev1"}, targetNames(targets))
 }
 
 // TestParseNodeArgs_QuotesTheTypedTerm verifies that the errors about a
@@ -207,6 +257,22 @@ func TestNodeTerms(t *testing.T) {
 func TestPaddingClash_SkipsATermThatDoesNotParse(t *testing.T) {
 	_, _, found := paddingClash("worker-[.dev1,worker-0.dev01")
 	assert.False(t, found)
+}
+
+// suffixClash skips a term that does not parse, as paddingClash does.
+func TestSuffixClash_SkipsATermThatDoesNotParse(t *testing.T) {
+	_, _, found, err := suffixClash("worker-[!worker-0.default")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+// An operator inside brackets is not one of the expression.
+func TestHasSetOperator(t *testing.T) {
+	assert.True(t, hasSetOperator("worker-[0-3]!worker-2"))
+	assert.True(t, hasSetOperator("a&b"))
+	assert.True(t, hasSetOperator("a^b"))
+	assert.False(t, hasSetOperator("worker-[0!1],worker-[2^3]"))
+	assert.False(t, hasSetOperator("worker-0 worker-1.dev"))
 }
 
 func TestNoGroups(t *testing.T) {
