@@ -17,12 +17,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// slurmInfoExec answers the commands of GetSlurmInfo on sind-dev-controller:
-// sinfo with nodes and partitions, and cat of the files in files.
+// slurmInfoPs lists the controllers of cluster dev with their states.
+func slurmInfoPs(primary, backup string) string {
+	entries := []testutil.PsEntry{{ID: "c1", Names: "sind-dev-controller", State: primary,
+		Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller"}}
+	if backup != "" {
+		entries = append(entries, testutil.PsEntry{ID: "c2", Names: "sind-dev-controller-backup", State: backup,
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller"})
+	}
+	return testutil.NDJSON(entries...)
+}
+
+// slurmInfoExec answers the commands of GetSlurmInfo: the listing of the
+// cluster's containers, and on sind-dev-controller sinfo with nodes and
+// partitions, and cat of the files in files.
 func slurmInfoExec(t *testing.T, nodes, partitions string, files map[string]string) *mock.Executor {
 	t.Helper()
+	return slurmInfoExecOn(t, "sind-dev-controller", slurmInfoPs("running", ""), nodes, partitions, files)
+}
+
+// slurmInfoExecOn is slurmInfoExec with the listing ps, which must lead
+// GetSlurmInfo to controller.
+func slurmInfoExecOn(t *testing.T, controller, ps, nodes, partitions string, files map[string]string) *mock.Executor {
+	t.Helper()
 	return &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
-		require.Equal(t, []string{"exec", "sind-dev-controller"}, args[:2])
+		if args[0] == "ps" {
+			assert.Equal(t, []string{"label=sind.realm=sind", "label=sind.cluster=dev"}, testutil.ArgValues(args, "--filter"))
+			return mock.Result{Stdout: ps}
+		}
+		require.Equal(t, []string{"exec", controller}, args[:2])
 		cmd := strings.Join(args[2:], " ")
 		switch {
 		case cmd == strings.Join(slurm.SinfoNodesCommand, " "):
@@ -50,23 +73,51 @@ func TestGetSlurmInfo(t *testing.T) {
 	}, info, "sind-nodes.conf could not be read")
 }
 
+func TestGetSlurmInfoAfterAFailover(t *testing.T) {
+	m := slurmInfoExecOn(t, "sind-dev-controller-backup", slurmInfoPs("exited", "running"),
+		"worker-0|idle|0/2/0/2|1024|all*|none\n", "all*|up|infinite|1|worker-0\n",
+		map[string]string{slurm.SlurmConfPath: "ClusterName=dev\n"})
+	info, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
+	require.NoError(t, err, "the backup is in control while the primary is stopped")
+	assert.Len(t, info.Nodes, 1)
+	assert.Len(t, info.Files, 1)
+}
+
+func TestGetSlurmInfoWithoutAController(t *testing.T) {
+	m := slurmInfoExecOn(t, "sind-dev-controller", "", "", "", nil)
+	_, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
+	require.NoError(t, err, "a listing without controllers tries the primary")
+}
+
 func TestGetSlurmInfoErrors(t *testing.T) {
 	ok := "worker-0|idle|0/2/0/2|1024|all*|none\n"
 	for name, m := range map[string]*mock.Executor{
-		"no controller": {OnCall: func([]string, string) mock.Result {
+		"listing fails": {OnCall: func([]string, string) mock.Result {
+			return mock.Result{Stderr: "Cannot connect to the Docker daemon\n", Err: testutil.ExitCode1(t)}
+		}},
+		"no controller": {OnCall: func(args []string, _ string) mock.Result {
+			if args[0] == "ps" {
+				return mock.Result{Stdout: slurmInfoPs("exited", "")}
+			}
 			return mock.Result{Stderr: "Error response from daemon: container is not running\n", Err: testutil.ExitCode1(t)}
 		}},
 		"bad nodes":      slurmInfoExec(t, "garbage\n", "", nil),
 		"bad partitions": slurmInfoExec(t, ok, "garbage\n", nil),
 		"no partitions": {OnCall: func(args []string, _ string) mock.Result {
+			if args[0] == "ps" {
+				return mock.Result{Stdout: slurmInfoPs("running", "")}
+			}
 			if strings.Contains(strings.Join(args, " "), "--Node") {
 				return mock.Result{Stdout: ok}
 			}
 			return mock.Result{Stderr: "slurm_load_partitions: Unable to contact slurm controller\n", Err: testutil.ExitCode1(t)}
 		}},
 	} {
-		_, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
+		info, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
 		assert.Error(t, err, name)
+		if name == "listing fails" || name == "no controller" {
+			assert.Nil(t, info, name)
+		}
 	}
 }
 
