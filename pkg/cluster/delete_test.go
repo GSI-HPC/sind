@@ -899,6 +899,41 @@ func TestDeleteAll_ClusterFails(t *testing.T) {
 	assert.Contains(t, meshUpdates(&m), "exec sind-ssh cat /root/.ssh/known_hosts")
 }
 
+// TestDeleteAll_ClusterFailsAfterContainers covers a cluster that fails
+// after its containers are gone, at its network: its nodes leave the mesh
+// too, as a later delete of it would find no containers to name them by.
+// One whose listing failed has no nodes to name.
+func TestDeleteAll_ClusterFailsAfterContainers(t *testing.T) {
+	f := &realmFake{t: t,
+		clusters: map[string][]string{"dev": {"controller"}, "test": {"controller"}, "prod": {"controller"}},
+		fail: func(args []string) bool {
+			return args[0] == "network" && args[1] == "rm" && args[2] == "sind-test-net" ||
+				args[0] == "ps" && args[len(args)-1] == "label=sind.cluster=prod"
+		},
+	}
+	var hosts string
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		switch strings.Join(args[:min(3, len(args))], " ") {
+		case "exec sind-ssh cat":
+			return mock.Result{Stdout: "controller.dev.sind.sind ssh-ed25519 A\ncontroller.test.sind.sind ssh-ed25519 B\n" +
+				"controller.prod.sind.sind ssh-ed25519 C\n"}
+		case "exec -i sind-ssh":
+			hosts = stdin
+			return mock.Result{}
+		}
+		return f.onCall(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.ErrorContains(t, err, "deleting cluster test")
+	require.ErrorContains(t, err, "deleting cluster prod")
+	assert.Contains(t, removed(&m), "sind-test-controller")
+	assert.Equal(t, "controller.prod.sind.sind ssh-ed25519 C\n", hosts)
+}
+
 func TestDeleteAll_ListError(t *testing.T) {
 	f := &realmFake{t: t,
 		clusters: map[string][]string{"dev": {"controller"}},

@@ -127,7 +127,10 @@ const deleteAllConcurrency = 4
 //
 // A cluster that fails to delete does not stop the others. The mesh then
 // stays for what is left, the clusters that were deleted are deregistered
-// from it, and DeleteAll returns the failures, joined. Once ctx has ended
+// from it, and so are the nodes of a cluster that failed after it listed
+// them, as Delete deregisters them before it removes any: a later delete
+// of that cluster would find no containers to name them by. DeleteAll
+// returns the failures, joined. Once ctx has ended
 // no further cluster is tried, and those left out fail with the context's
 // error, worded as "deleting cluster <name>: listing containers: <err>",
 // as when they were tried and failed at their first lookup; a panic while
@@ -184,7 +187,7 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if err != nil {
 		var hostnames []string
 		for i, d := range deleted {
-			if d.Err == nil {
+			if d.Value != nil {
 				hostnames = append(hostnames, meshHostnames(realm, names[i], d.Value.Containers)...)
 			}
 		}
