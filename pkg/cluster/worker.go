@@ -389,7 +389,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 // version, as slurmd may not be newer than slurmctld and sind labels every
 // node with the cluster's version. On a monitored cluster its slurmd must
 // serve the HTTP endpoint the stack probes (see
-// slurm.ImageInfo.MonitoringProblems), with plugins looked for in the
+// slurm.ImageInfo.Problems), with plugins looked for in the
 // PluginDir slurmConf sets.
 func checkWorkerSlurm(ctx context.Context, client *docker.Client, clusterName, image, version string, monitored bool, slurmConf config.Section) error {
 	if version == "" && !monitored {
@@ -412,7 +412,7 @@ func checkWorkerSlurm(ctx context.Context, client *docker.Client, clusterName, i
 	if !monitored {
 		return nil
 	}
-	if problems := info.MonitoringProblems(req); len(problems) > 0 {
+	if problems := info.Problems(); len(problems) > 0 {
 		return errorWith(ErrImageUnsupported, "image %s cannot serve monitoring: %s", image, strings.Join(problems, "; "))
 	}
 	return nil

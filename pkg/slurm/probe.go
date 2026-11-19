@@ -93,6 +93,10 @@ type ImageInfo struct {
 	// it has none; set only when the request asked for MariaDB. A path in
 	// it has no blanks, control or format characters.
 	MariaDBLogError string
+
+	// req is the request ProbeImage was given, which decides the checks of
+	// Problems.
+	req ProbeRequest
 }
 
 // ProbeImage runs one throwaway container of image, without a network and
@@ -132,7 +136,7 @@ var mariadbOptionPattern = regexp.MustCompile(`^--(skip-)?log[-_]error(=[^\s\p{C
 // the forms the script prints, with words and paths of the expected shapes,
 // so that nothing an image prints can reach sind's output unchecked.
 func parseProbe(stdout string, req ProbeRequest) (*ImageInfo, error) {
-	info := &ImageInfo{}
+	info := &ImageInfo{req: req}
 	daemons := map[string]bool{}
 	for line := range strings.Lines(stdout) {
 		line = strings.TrimSuffix(line, "\n")
@@ -215,12 +219,29 @@ var monitoringPlugins = []monitoringPlugin{
 // which only slurmctld needs.
 var openMetricsPlugin = monitoringPlugin{"metrics_openmetrics.so", "OpenMetrics plugin (metrics/openmetrics)", ""}
 
-// MonitoringProblems returns what keeps an image from serving the HTTP
-// endpoints the monitoring stack uses, one problem per entry, empty when
-// nothing does: a missing daemon, a Slurm older than MonitoringMinVersion,
-// no plugin directory, and each plugin type of which no loadable plugin
-// was found; slurmctld also needs the OpenMetrics plugin.
+// Problems returns what keeps an image from serving the HTTP endpoints
+// the monitoring stack uses for the daemons ProbeImage was asked about,
+// one problem per entry, empty when nothing does: a missing daemon, a
+// Slurm older than MonitoringMinVersion, no plugin directory, and each
+// plugin type of which no loadable plugin was found; slurmctld also needs
+// the OpenMetrics plugin. An ImageInfo that ProbeImage did not return
+// names no daemons, and so has none of the version and plugin checks
+// that daemons need.
+func (i *ImageInfo) Problems() []string {
+	return i.monitoringProblems(i.req)
+}
+
+// MonitoringProblems returns the problems of Problems for the daemons of
+// req, which must be the request ProbeImage was given.
+//
+// Deprecated: use Problems, which takes the request ProbeImage was given.
 func (i *ImageInfo) MonitoringProblems(req ProbeRequest) []string {
+	return i.monitoringProblems(req)
+}
+
+// monitoringProblems returns the problems of Problems for the daemons of
+// req.
+func (i *ImageInfo) monitoringProblems(req ProbeRequest) []string {
 	var problems []string
 	for _, d := range i.Missing {
 		problems = append(problems, "has no "+d)

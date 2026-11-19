@@ -39,7 +39,7 @@ func TestProbeImage(t *testing.T) {
 	assert.Equal(t, []string{"/usr/lib64/slurm"}, info.PluginDirs)
 	assert.Len(t, info.Plugins, 7)
 	assert.Equal(t, "--skip-log-error", info.MariaDBLogError)
-	assert.Empty(t, info.MonitoringProblems(req))
+	assert.Empty(t, info.Problems())
 	assert.Empty(t, info.MariaDBWarning())
 
 	require.Len(t, m.Calls, 1)
@@ -189,8 +189,30 @@ func TestMonitoringProblems(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.info.MonitoringProblems(tt.req))
+			tt.info.req = tt.req
+			assert.Equal(t, tt.want, tt.info.Problems())
 		})
 	}
+}
+
+func TestProbeImage_ProblemsOfItsRequest(t *testing.T) {
+	// Problems checks what the request of ProbeImage asked for: here the
+	// version, and the OpenMetrics plugin that slurmctld needs.
+	var m mock.Executor
+	m.AddResult("daemon slurmctld slurm 26.05.6\nplugindir /p\n"+
+		"plugin http_parser_llhttp_parser.so\nplugin url_parser_internal.so\nplugin tls_none.so\n"+
+		"plugin http_auth_local.so\nplugin data_parser_v0_0_44.so\n", "", nil)
+	m.AddResult("daemon slurmctld slurm 25.11.9\n", "", nil)
+	c := docker.NewClient(&m)
+	req := ProbeRequest{Daemons: []string{Slurmctld}}
+
+	info, err := ProbeImage(t.Context(), c, "img", req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Slurm has no OpenMetrics plugin (metrics/openmetrics) in /p"}, info.Problems())
+
+	info, err = ProbeImage(t.Context(), c, "img", req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Slurm 25.11.9 is older than 26.05, which monitoring needs"}, info.Problems())
 }
 
 func TestMariaDBWarning(t *testing.T) {
