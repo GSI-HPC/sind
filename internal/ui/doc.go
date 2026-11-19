@@ -64,7 +64,8 @@
 // service also puts two plain funcs in Env for other parts: ColRefreshKey
 // (func(realm string), read that realm again now) and ColDoctorKey (func(),
 // run the host checks again). A part that finds neither (nil) works without
-// them.
+// them. A page's Load reads them with View.Env, which looks in the Env of
+// the server that renders the page.
 //
 // Styles and scripts need no registration: web/static/css/*.css and
 // web/static/js/*.js are linked from the layout, in name order, after app.css

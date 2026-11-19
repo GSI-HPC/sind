@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/localweb"
@@ -79,6 +80,8 @@ type Server struct {
 	// sse.DefaultKeepAlive, the defaults of localweb/sse, which tests
 	// shorten.
 	coalesce, keepAlive time.Duration
+	// logsStreams counts the open log streams (logs_stream.go).
+	logsStreams atomic.Int32
 }
 
 // serverConfig configures a Server.
@@ -294,6 +297,7 @@ func (s *Server) newView(p Params) *View {
 	return &View{
 		Snap: s.env.Store.Snapshot(), Now: s.now(), Still: s.still, Params: p, Addr: s.env.Addr,
 		Asset: s.assets.URL, Vendor: s.vendor.URL, HTMXConfig: htmx.Config, Styles: s.styles, Scripts: s.scripts, reg: s.reg,
+		env: s.env,
 	}
 }
 

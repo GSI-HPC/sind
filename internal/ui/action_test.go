@@ -1136,7 +1136,7 @@ func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
 	actHome = func() (string, error) { return "/home/ada", nil }
 	actEnviron = func() []string { return []string{"PATH=/bin"} }
 	refreshed := make(chan string, 2)
-	cfg.Env.Put("collect.refresh", func(realm string) { refreshed <- realm })
+	cfg.Env.Put(ColRefreshKey, func(realm string) { refreshed <- realm })
 	cfg.Env.Exec = &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
 	require.NoError(t, actService().Setup(cfg.Env))
 
@@ -1152,7 +1152,7 @@ func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
 	assert.Eventually(t, func() bool { task, _ := st.Snapshot().Task(id); return task.Done() }, 5*time.Second, time.Millisecond)
 
 	// A collector that is not there is no reason to fail.
-	cfg.Env.Put("collect.refresh", nil)
+	cfg.Env.Put(ColRefreshKey, nil)
 	id, err = cfg.Env.Get(actKey{}).(*actState).starter.Start(run.Spec{Argv: []string{"sind", "x"}})
 	require.NoError(t, err)
 	assert.Eventually(t, func() bool { task, _ := st.Snapshot().Task(id); return task.Done() }, 5*time.Second, time.Millisecond)

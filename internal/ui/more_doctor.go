@@ -201,7 +201,7 @@ func moreDoctorCount(sn store.Snapshot, _ string, _ time.Time) NavCount {
 
 // moreDoctorLoad fills the data of the Doctor page.
 func moreDoctorLoad(v *View) error {
-	d := moreDoctorData{DockerErr: moreDockerDown(v.Snap.Docker), CanRecheck: moreEnvGet[func()](ColDoctorKey) != nil}
+	d := moreDoctorData{DockerErr: moreDockerDown(v.Snap.Docker), CanRecheck: viewEnv[func()](v, ColDoctorKey) != nil}
 	if r := v.Snap.Doctor; r != nil {
 		d.HasReport, d.Running = !r.Time.IsZero(), r.Running
 		if d.HasReport {

@@ -369,8 +369,7 @@ func TestMoreMonitoringInterval(t *testing.T) {
 
 	ts.srv.env.Put(ColMonitoringIntervalKey, nil)
 	assert.Equal(t, http.StatusNotFound, post("30s", true).Code)
-	moreEnv.Store(nil)
-	assert.Nil(t, moreEnvGet[moreInterval](ColMonitoringIntervalKey))
+	assert.NotContains(t, pgBody(t, ts, "/monitoring", http.StatusOK), "Read every")
 }
 
 func TestMoreDuration(t *testing.T) {
@@ -576,8 +575,10 @@ func TestMoreDoctorEmptyStates(t *testing.T) {
 	assert.NotContains(t, body, "/doctor/check")
 	assert.Contains(t, body, "No check has run yet.")
 	assert.NotContains(t, body, "Press Check again")
-	moreEnv.Store(nil)
-	assert.Nil(t, moreEnvGet[func()](ColDoctorKey))
+
+	// Each server reads its own Env: the second server, without the
+	// service, leaves the button of the first alone.
+	assert.Contains(t, pgBody(t, ts, "/doctor", http.StatusOK), "Check again")
 }
 
 func TestMoreDoctorCheck(t *testing.T) {
@@ -662,21 +663,6 @@ func TestMoreFragmentsAreLive(t *testing.T) {
 			assert.Equal(t, []string{p.Name}, p.Fragments)
 		}
 	}
-}
-
-func TestMoreServiceSetup(t *testing.T) {
-	t.Cleanup(func() { moreEnv.Store(nil) })
-	var setup func(*Env) error
-	for _, s := range defaultRegistry.services {
-		if s.Name == "more" {
-			setup = s.Setup
-		}
-	}
-	require.NotNil(t, setup)
-	env := &Env{}
-	env.Put(ColDoctorKey, func() {})
-	require.NoError(t, setup(env))
-	assert.NotNil(t, moreEnvGet[func()](ColDoctorKey))
 }
 
 func TestMoreHelpers(t *testing.T) {

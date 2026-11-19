@@ -45,12 +45,10 @@ const (
 	// logsBuffer is how many lines wait for a slow client before lines are
 	// skipped.
 	logsBuffer = 256
-	// logsMaxStreams is the most streams, and so children, at one time.
+	// logsMaxStreams is the most streams, and so children, of a server at
+	// one time.
 	logsMaxStreams = 16
 )
-
-// logsStreams counts the open streams.
-var logsStreams atomic.Int32
 
 // logsUnitRE is what a systemd unit name may look like. It starts with a
 // letter or digit, so that it is never read as an option of journalctl.
@@ -142,12 +140,12 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	if logsStreams.Add(1) > logsMaxStreams {
-		logsStreams.Add(-1)
+	if s.logsStreams.Add(1) > logsMaxStreams {
+		s.logsStreams.Add(-1)
 		http.Error(w, "too many log streams are open", http.StatusTooManyRequests)
 		return
 	}
-	defer logsStreams.Add(-1)
+	defer s.logsStreams.Add(-1)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

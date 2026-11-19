@@ -206,7 +206,7 @@ func TestLogsStreamStopsChildOnDisconnect(t *testing.T) {
 	ex, ct := trackedExecutor()
 	ts := logsServer(t, ex)
 	cancel, done := logsRun(ts, newLockedWriter(-1), "/logs/sind/dev?node=worker-0")
-	waitFor(t, "start", func() bool { return logsStreams.Load() == 1 })
+	waitFor(t, "start", func() bool { return ts.srv.logsStreams.Load() == 1 })
 	select {
 	case <-ct.closed:
 		t.Fatal("closed before the client left")
@@ -219,14 +219,14 @@ func TestLogsStreamStopsChildOnDisconnect(t *testing.T) {
 	default:
 		t.Fatal("the child was not stopped")
 	}
-	assert.Zero(t, logsStreams.Load())
+	assert.Zero(t, ts.srv.logsStreams.Load())
 }
 
 func TestLogsStreamStopsChildOnShutdown(t *testing.T) {
 	ex, ct := trackedExecutor()
 	ts := logsServer(t, ex)
 	_, done := logsRun(ts, newLockedWriter(-1), "/logs/sind/dev?node=worker-0&source=journal&unit=slurmd")
-	waitFor(t, "start", func() bool { return logsStreams.Load() == 1 })
+	waitFor(t, "start", func() bool { return ts.srv.logsStreams.Load() == 1 })
 	ts.cancel()
 	waitDone(t, done)
 	select {
@@ -345,7 +345,7 @@ func TestLogsStreamStartFailure(t *testing.T) {
 	}})
 	w := ts.get("/logs/sind/dev?node=worker-0")
 	assert.Equal(t, http.StatusBadGateway, w.Code)
-	assert.Zero(t, logsStreams.Load())
+	assert.Zero(t, ts.srv.logsStreams.Load())
 }
 
 func TestLogsStreamNoFlusher(t *testing.T) {
@@ -370,11 +370,20 @@ func TestLogsStreamLimit(t *testing.T) {
 	}
 	waitFor(t, "streams", func() bool { return pipes.Len() == logsMaxStreams })
 	assert.Equal(t, http.StatusTooManyRequests, ts.get("/logs/sind/dev?node=worker-0").Code)
+
+	// The limit is each server's own: another server still opens one.
+	ex2, pipes2 := pipeStarter()
+	ts2 := logsServer(t, ex2)
+	c2, d2 := logsRun(ts2, newLockedWriter(-1), "/logs/sind/dev?node=worker-0")
+	waitFor(t, "a stream of another server", func() bool { return pipes2.Len() == 1 })
+	c2()
+	waitDone(t, d2)
+
 	for i, c := range cancels {
 		c()
 		waitDone(t, dones[i])
 	}
-	assert.Zero(t, logsStreams.Load())
+	assert.Zero(t, ts.srv.logsStreams.Load())
 }
 
 func TestLogsRead(t *testing.T) {
