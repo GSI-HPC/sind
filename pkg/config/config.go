@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -504,6 +505,13 @@ func (c *Cluster) Managed() bool {
 	return true
 }
 
+// fragmentNamePattern is the names a fragment may have. sind includes a
+// fragment by a line "include <section>.conf.d/<name>.conf", which Slurm,
+// and ReadSlurmConf, read up to the first blank, cut at a "#" and in which
+// they put the cluster name for "%c"; plugstack.conf includes its
+// fragments by a glob, which skips a name that begins with a dot.
+var fragmentNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
+
 // validateSection checks that a Slurm config section is valid.
 func validateSection(sectionName string, s Section) error {
 	for _, name := range s.FragmentNames() {
@@ -511,8 +519,8 @@ func validateSection(sectionName string, s Section) error {
 		if name == "" {
 			return fmt.Errorf("slurm %s fragment name must not be empty", sectionName)
 		}
-		if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
-			return fmt.Errorf("slurm %s fragment name %q must be a plain filename without path separators", sectionName, name)
+		if !fragmentNamePattern.MatchString(name) {
+			return fmt.Errorf("slurm %s fragment name %q may hold only ASCII letters, digits, '_', '.' and '-', and must not begin with '.' or '-'", sectionName, name)
 		}
 		if content == "" {
 			return fmt.Errorf("slurm %s fragment %q must not be empty", sectionName, name)

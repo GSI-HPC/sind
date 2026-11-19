@@ -1227,7 +1227,7 @@ This produces:
 Standalone sections (`gres`, `topology`) are only created when configured. They require enabling in `slurm.conf` (e.g., `GresTypes=gpu`, `TopologyPlugin=topology/tree`) via the `main` section.
 
 Validation rules:
-- Fragment names must be plain filenames (no path separators)
+- Fragment names hold only ASCII letters, digits, `_`, `.` and `-`, and do not begin with `.` or `-`: Slurm reads an `include` path up to the first blank, cuts it at a `#` and replaces `%c` in it, and the glob of `plugstack.conf` skips a name that begins with a dot
 - Fragment names and content must not be empty
 
 ### Node Roles

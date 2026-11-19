@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1158,12 +1159,20 @@ func TestValidate_SlurmSections(t *testing.T) {
 		require.ErrorContains(t, cfg.Validate(), "must not be empty")
 	})
 
-	t.Run("fragment name with path separator", func(t *testing.T) {
-		cfg := base()
-		cfg.Slurm.Cgroup = Section{Fragments: map[string]string{
-			"../escape": "content",
-		}}
-		require.ErrorContains(t, cfg.Validate(), "plain filename")
+	t.Run("fragment names", func(t *testing.T) {
+		for _, name := range []string{
+			"../escape", `a\b`, "my site", "a#b", "%c", "a%cb", "tab\tname", ".hidden", "-x", ".", "..", "naïve", "a:b",
+		} {
+			cfg := base()
+			cfg.Slurm.Cgroup = Section{Fragments: map[string]string{name: "content"}}
+			require.EqualError(t, cfg.Validate(), fmt.Sprintf(
+				"slurm cgroup fragment name %q may hold only ASCII letters, digits, '_', '.' and '-', and must not begin with '.' or '-'", name), name)
+		}
+		for _, name := range []string{"scheduling", "00-site", "gpu.a100", "_x", "Site_1-b"} {
+			cfg := base()
+			cfg.Slurm.Main = Section{Fragments: map[string]string{name: "MaxJobCount=100\n"}}
+			require.NoError(t, cfg.Validate(), name)
+		}
 	})
 
 	t.Run("first bad fragment in name order", func(t *testing.T) {
