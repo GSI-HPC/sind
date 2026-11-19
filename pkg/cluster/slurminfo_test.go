@@ -84,9 +84,17 @@ func TestGetSlurmInfoAfterAFailover(t *testing.T) {
 }
 
 func TestGetSlurmInfoWithoutAController(t *testing.T) {
-	m := slurmInfoExecOn(t, "sind-dev-controller", "", "", "", nil)
+	ps := testutil.NDJSON(testutil.PsEntry{ID: "w0", Names: "sind-dev-worker-0", State: "running",
+		Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker"})
+	m := slurmInfoExecOn(t, "sind-dev-controller", ps, "", "", nil)
 	_, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
 	require.NoError(t, err, "a listing without controllers tries the primary")
+}
+
+func TestGetSlurmInfoClusterNotFound(t *testing.T) {
+	_, err := GetSlurmInfo(t.Context(), docker.NewClient(notFoundExecutor(t, mock.Result{})), "ci-42", "dev")
+	require.ErrorIs(t, err, ErrClusterNotFound)
+	assert.EqualError(t, err, `cluster "dev" not found in realm "ci-42"`)
 }
 
 func TestGetSlurmInfoErrors(t *testing.T) {

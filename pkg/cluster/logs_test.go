@@ -92,12 +92,25 @@ func TestNodeServicesOfContainer_Helper(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNodeNotFound)
 }
 
-func TestNodeServicesOfContainer_Error(t *testing.T) {
+// TestNodeServicesOfContainer_Missing checks that a node without a
+// container is a missing node, as for the other functions that take nodes.
+func TestNodeServicesOfContainer_Missing(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", testutil.NoSuchContainer("sind-dev-node"), testutil.ExitCode1(t))
 
 	_, err := NodeServices(t.Context(), docker.NewClient(&m), "sind", "dev", "node")
 
+	require.EqualError(t, err, `node "node" not found in cluster "dev"`)
+	assert.ErrorIs(t, err, ErrNodeNotFound)
+	assert.True(t, docker.IsNotFound(err), "docker's error stays wrapped")
+}
+
+func TestNodeServicesOfContainer_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Cannot connect to the Docker daemon\n", testutil.ExitCode1(t))
+
+	_, err := NodeServices(t.Context(), docker.NewClient(&m), "sind", "dev", "node")
+
 	require.ErrorContains(t, err, "inspecting container: ")
-	assert.True(t, docker.IsNotFound(err))
+	assert.NotErrorIs(t, err, ErrNodeNotFound)
 }

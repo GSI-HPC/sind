@@ -49,11 +49,16 @@ var errSlurmInfoTimeout = errors.New("sinfo timed out")
 // a slurmctld that does not answer, is an error; the
 // SlurmInfo then holds the files alone, which cat reads without slurmctld,
 // and is nil when there are none. A file that cannot be read is left out.
+// A cluster without containers and network fails with ErrClusterNotFound,
+// as in GetStatus.
 func GetSlurmInfo(ctx context.Context, client *docker.Client, realm, clusterName string) (*SlurmInfo, error) {
 	ctx, cancel := context.WithTimeoutCause(ctx, slurmInfoTimeout, errSlurmInfoTimeout)
 	defer cancel()
 	containers, err := clusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkClusterExists(ctx, client, realm, clusterName, containers); err != nil {
 		return nil, err
 	}
 	controller := ContainerName(realm, clusterName, slurm.ControllerHost)
