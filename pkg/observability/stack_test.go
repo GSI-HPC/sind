@@ -382,6 +382,56 @@ func TestStatus(t *testing.T) {
 	require.ErrorContains(t, err, "listing the monitoring containers: ")
 }
 
+func TestStatus_FindsGrafana(t *testing.T) {
+	// Status finds Grafana by its service, not by its place in Services.
+	saved := Services
+	Services = []Service{ServiceAlloy, ServiceLoki, ServicePrometheus, ServiceGrafana}
+	t.Cleanup(func() { Services = saved })
+	m, f := newTestManager(t)
+	_, err := m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+	f.containers["sind-alloy"].state = docker.StateExited
+
+	statuses, _, err := m.Status(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, ServiceGrafana, statuses[3].Service)
+	assert.True(t, statuses[3].Checked)
+	assert.True(t, statuses[3].Ready)
+	assert.False(t, statuses[0].Checked, "a stopped service is not probed")
+}
+
+func TestStatus_WithoutGrafana(t *testing.T) {
+	// Without Grafana in Services, Status probes nothing and does not panic.
+	saved := Services
+	Services = []Service{ServicePrometheus, ServiceLoki, ServiceAlloy}
+	t.Cleanup(func() { Services = saved })
+	m, _ := newTestManager(t)
+	_, err := m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+
+	statuses, found, err := m.Status(t.Context())
+	require.NoError(t, err)
+	assert.True(t, found)
+	require.Len(t, statuses, 3)
+	for _, st := range statuses {
+		assert.False(t, st.Checked, st.Service)
+	}
+}
+
+func TestWaitReady_GrafanaFirst(t *testing.T) {
+	saved := Services
+	Services = []Service{ServiceAlloy, ServiceLoki, ServicePrometheus, ServiceGrafana}
+	t.Cleanup(func() { Services = saved })
+	m, f := newTestManager(t)
+	_, err := m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+	f.execs = nil
+
+	require.NoError(t, m.WaitReady(t.Context()))
+	require.NotEmpty(t, f.execs)
+	assert.Equal(t, "http://sind-grafana:3000/api/health", f.execs[0][len(f.execs[0])-1])
+}
+
 func TestFingerprint(t *testing.T) {
 	a := NewManager(nil, "sind").Fingerprint()
 	assert.Len(t, a, 16)
@@ -390,6 +440,14 @@ func TestFingerprint(t *testing.T) {
 	pulled := NewManager(nil, "sind")
 	pulled.Pull = true
 	assert.Equal(t, a, pulled.Fingerprint(), "a pull alone recreates nothing")
+}
+
+func TestFingerprint_IgnoresTheOrderOfServices(t *testing.T) {
+	a := NewManager(nil, "sind").Fingerprint()
+	saved := Services
+	Services = []Service{ServiceAlloy, ServiceLoki, ServicePrometheus, ServiceGrafana}
+	t.Cleanup(func() { Services = saved })
+	assert.Equal(t, a, NewManager(nil, "sind").Fingerprint())
 }
 
 func TestURL(t *testing.T) {

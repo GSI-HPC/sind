@@ -109,7 +109,7 @@ func (m *Manager) createArgs(s Service, ip, fp string, pull bool) []string {
 // arguments, configuration or dashboards, has another one.
 func (m *Manager) Fingerprint() string {
 	h := sha256.New()
-	for _, s := range Services {
+	for _, s := range fingerprintOrder {
 		for _, a := range m.createArgs(s, "", "", false) {
 			_, _ = fmt.Fprintf(h, "%s\x00", a) // a hash never fails a write
 		}
@@ -120,6 +120,11 @@ func (m *Manager) Fingerprint() string {
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
+
+// fingerprintOrder is the order Fingerprint hashes the services in, the
+// order of Services when fingerprints came: a change would change the
+// fingerprint of every stack.
+var fingerprintOrder = []Service{ServiceGrafana, ServicePrometheus, ServiceLoki, ServiceAlloy}
 
 // startOrder is the order EnsureStack starts the services in: the stores
 // before Alloy, which writes to them, and Grafana, which reads them.
@@ -276,6 +281,10 @@ func (m *Manager) ServiceReady(ctx context.Context, s Service) error {
 	return nil
 }
 
+// readyOrder is the order WaitReady probes the services in: Grafana first,
+// as the others are probed through it.
+var readyOrder = []Service{ServiceGrafana, ServicePrometheus, ServiceLoki, ServiceAlloy}
+
 // WaitReady waits until every service of the stack is ready (see
 // ServiceReady), Grafana first, as the others are probed through it.
 func (m *Manager) WaitReady(ctx context.Context) error {
@@ -285,8 +294,8 @@ func (m *Manager) WaitReady(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	probes := make([]probe.Probe, 0, len(Services))
-	for _, s := range Services {
+	probes := make([]probe.Probe, 0, len(readyOrder))
+	for _, s := range readyOrder {
 		probes = append(probes, probe.Probe{
 			Name: string(s),
 			Check: func(ctx context.Context, _ *docker.Client, _ docker.ContainerName) error {
@@ -478,7 +487,8 @@ func (m *Manager) Status(ctx context.Context) ([]ServiceStatus, bool, error) {
 	if !found {
 		return statuses, false, nil
 	}
-	grafanaUp := statuses[0].State == docker.StateRunning
+	grafana := slices.IndexFunc(statuses, func(st ServiceStatus) bool { return st.Service == ServiceGrafana })
+	grafanaUp := grafana >= 0 && statuses[grafana].State == docker.StateRunning
 	g, gctx := errgroup.WithContext(ctx)
 	for i := range statuses {
 		if !grafanaUp || statuses[i].State != docker.StateRunning {

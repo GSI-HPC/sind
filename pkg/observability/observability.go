@@ -46,7 +46,8 @@ const (
 )
 
 // Services lists the stack's services in the order sind get monitoring
-// shows them.
+// shows them. sind depends on no order of it: EnsureStack, WaitReady and
+// Fingerprint keep orders of their own.
 var Services = []Service{ServiceGrafana, ServicePrometheus, ServiceLoki, ServiceAlloy}
 
 // Ports the services listen on, on the mesh network.
