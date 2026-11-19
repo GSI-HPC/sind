@@ -64,12 +64,12 @@ func nodesExample(command, node string) string {
 
 // clusterArg returns the cluster named by the argument of a command that
 // optionalCluster checks; without one, the cluster SIND_CLUSTER names, else
-// the default cluster (cluster.ResolveCluster).
+// the default cluster (envvar.ResolveCluster).
 func clusterArg(args []string) (string, error) {
 	if len(args) > 0 {
 		return args[0], nil
 	}
-	return cluster.ResolveCluster("")
+	return envvar.ResolveCluster("")
 }
 
 // nodeTarget is a resolved node with its short name and cluster.
@@ -139,12 +139,12 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 
 // withDefaultCluster gives the targets of the names without a cluster the
 // cluster that SIND_CLUSTER names, else the default cluster
-// (cluster.ResolveCluster), which it resolves only for them.
+// (envvar.ResolveCluster), which it resolves only for them.
 func withDefaultCluster(targets []nodeTarget) ([]nodeTarget, error) {
 	if !slices.ContainsFunc(targets, func(t nodeTarget) bool { return t.Cluster == "" }) {
 		return targets, nil
 	}
-	name, err := cluster.ResolveCluster("")
+	name, err := envvar.ResolveCluster("")
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +276,7 @@ func paddingClash(expr string) (first, second string, found bool) {
 // none. The short names match as go-nodeset matches them, without their
 // zero padding, the clusters as sind's do, byte for byte: worker-2.dev01 is
 // no node of the cluster dev1. It resolves the default cluster
-// (cluster.ResolveCluster) only for a short name that expr names both with
+// (envvar.ResolveCluster) only for a short name that expr names both with
 // and without a cluster.
 func suffixClash(expr string) (first, second string, found bool, err error) {
 	terms := nodeTerms(expr)
@@ -307,7 +307,7 @@ func suffixClash(expr string) (first, second string, found bool, err error) {
 					continue
 				}
 				if def == "" {
-					if def, err = cluster.ResolveCluster(""); err != nil {
+					if def, err = envvar.ResolveCluster(""); err != nil {
 						return "", "", false, err
 					}
 				}

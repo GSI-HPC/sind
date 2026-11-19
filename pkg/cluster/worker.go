@@ -48,34 +48,52 @@ type WorkerAddOptions struct {
 	SecurityOpt []string
 }
 
+// OptionError reports an option that a call cannot act on
+// (WorkerAddOptions.Check). Field is the option's field, such as "CPUs".
+type OptionError struct {
+	Field string
+	Err   error
+}
+
+// Error returns the cause, which names the option.
+func (e *OptionError) Error() string { return e.Err.Error() }
+
+// Unwrap returns the cause.
+func (e *OptionError) Unwrap() error { return e.Err }
+
 // Check reports the first option WorkerAdd cannot act on: a negative CPU
 // count, a memory or /tmp size sind cannot read, Pull without Image, an
 // unknown capability, a device path that is not absolute or an unknown
-// security option. It calls docker for none of them, so that the CLI can
-// reject them as usage errors before it takes the realm lock.
+// security option, as an *OptionError that names the option by its field,
+// such as WorkerAddOptions.CPUs. It calls docker for none of them, so that
+// a caller can reject them before it takes the realm lock.
 func (o WorkerAddOptions) Check() error {
-	if err := config.CheckCPUs("--cpus", o.CPUs); err != nil {
-		return err
+	return o.CheckNamed(func(field string) string { return "WorkerAddOptions." + field })
+}
+
+// CheckNamed is Check with the options named in its errors as name names
+// them: a command line names its flags.
+func (o WorkerAddOptions) CheckNamed(name func(field string) string) error {
+	fail := func(field string, err error) error {
+		if err == nil {
+			return nil
+		}
+		return &OptionError{Field: field, Err: err}
 	}
-	if err := config.CheckMemory("--memory", o.Memory); err != nil {
-		return err
-	}
-	if err := config.CheckTmpSize("--tmp-size", o.TmpSize); err != nil {
-		return err
-	}
+	var pullErr error
 	if o.Pull && o.Image == "" {
-		return errors.New("--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID")
+		pullErr = fmt.Errorf("%s needs %s: without one, new workers run the image of the cluster's newest worker, by ID", name("Pull"), name("Image"))
 	}
-	if err := config.CheckCapabilities("--cap-add", o.CapAdd); err != nil {
-		return err
-	}
-	if err := config.CheckCapabilities("--cap-drop", o.CapDrop); err != nil {
-		return err
-	}
-	if err := config.CheckDevices("--device", o.Devices); err != nil {
-		return err
-	}
-	return config.CheckSecurityOpts("--security-opt", o.SecurityOpt)
+	return cmp.Or(
+		fail("CPUs", config.CheckCPUs(name("CPUs"), o.CPUs)),
+		fail("Memory", config.CheckMemory(name("Memory"), o.Memory)),
+		fail("TmpSize", config.CheckTmpSize(name("TmpSize"), o.TmpSize)),
+		fail("Pull", pullErr),
+		fail("CapAdd", config.CheckCapabilities(name("CapAdd"), o.CapAdd)),
+		fail("CapDrop", config.CheckCapabilities(name("CapDrop"), o.CapDrop)),
+		fail("Devices", config.CheckDevices(name("Devices"), o.Devices)),
+		fail("SecurityOpt", config.CheckSecurityOpts(name("SecurityOpt"), o.SecurityOpt)),
+	)
 }
 
 // --- Exported functions ---
@@ -486,7 +504,7 @@ func clusterManaged(containers []docker.ContainerListEntry, realm, clusterName s
 // ErrNodesConfMissing; any other failure is returned as it is.
 func readNodesConf(ctx context.Context, client *docker.Client, controller docker.ContainerListEntry) (string, error) {
 	if controller.State != docker.StateRunning {
-		return "", fmt.Errorf("controller %s is not running (%s): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", controller.Name, controller.State)
+		return "", fmt.Errorf("controller %s is not running (%s): sind updates sind-nodes.conf and reconfigures Slurm through it; start or unfreeze it first", controller.Name, controller.State)
 	}
 	content, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
 	if err == nil {

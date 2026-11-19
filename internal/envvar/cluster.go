@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cluster
+package envvar
 
 import (
 	"fmt"
 
-	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
@@ -23,9 +22,9 @@ import (
 // SIND_CLUSTER must be a valid name (config.CheckName); an invalid one
 // fails with an error that names the variable.
 func ResolveCluster(configName string) (string, error) {
-	if env, ok := envvar.Lookup(envvar.Cluster); ok {
+	if env, ok := Lookup(Cluster); ok {
 		if err := config.CheckName("cluster", env); err != nil {
-			return "", fmt.Errorf("%s: %w", envvar.Cluster, err)
+			return "", fmt.Errorf("%s: %w", Cluster, err)
 		}
 		return env, nil
 	}

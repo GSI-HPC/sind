@@ -11,7 +11,7 @@ toc: true
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
   ├── root.go      Root command, persistent --realm, --progress, --progress-log and -v flags, TraverseChildren, the strict tree (go-clikit's cobratree)
-  ├── context.go   Dependency injection via context; --realm flag glue for cluster.ResolveRealm
+  ├── context.go   Dependency injection via context; --realm flag glue for envvar.ResolveRealm
   ├── exitcode.go  Exit statuses, the words of flag value errors and the usage line of argument errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
@@ -34,7 +34,7 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
 
-internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI, pkg/cluster and sind ui read them through it
+internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI and sind ui read them through it. ResolveRealm (--realm > SIND_REALM > config > default) and ResolveCluster (argument > SIND_CLUSTER > config > default)
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
@@ -99,8 +99,6 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── wait.go      WaitNodes: the --wait of the power commands that start nodes
   ├── ha.go        Controller pair (backup controller) position and control state
-  ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
-  ├── clustername.go Cluster resolution (ResolveCluster: argument > SIND_CLUSTER > config > default)
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
@@ -149,7 +147,6 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 ```
 cmd/sind → pkg/cluster → pkg/cmdexec
                        → internal/detach
-                       → internal/envvar
                        → internal/natsort
                        → pkg/config  → internal/hostname
                        → pkg/docker  → pkg/cmdexec

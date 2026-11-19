@@ -197,7 +197,7 @@ func TestReadNodesConf_ControllerNotRunning(t *testing.T) {
 
 	_, err := readNodesConf(t.Context(), client, controller)
 
-	require.EqualError(t, err, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first")
+	require.EqualError(t, err, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start or unfreeze it first")
 	assert.Empty(t, m.Calls, "no docker exec")
 }
 
@@ -811,10 +811,10 @@ func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
 		opts    WorkerAddOptions
 		wantErr string
 	}{
-		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
-		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
-		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in --device: host path must be absolute`},
-		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, `unknown security option "privileged" in --security-opt`},
+		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in WorkerAddOptions.CapAdd`},
+		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in WorkerAddOptions.CapDrop`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in WorkerAddOptions.Devices: host path must be absolute`},
+		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, `unknown security option "privileged" in WorkerAddOptions.SecurityOpt`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1014,7 +1014,7 @@ func TestWorkerRemove_NodeWithoutContainerNotInConf(t *testing.T) {
 		"stopped controller": {
 			conf: "NodeName=worker-3 CPUs=2 RealMemory=2048 State=UNKNOWN\n", state: "exited",
 			want: notFound + " (sind-nodes.conf could not be checked: controller sind-dev-controller is not running (exited): " +
-				"sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first)",
+				"sind updates sind-nodes.conf and reconfigures Slurm through it; start or unfreeze it first)",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -1421,14 +1421,19 @@ func TestWorkerAddOptions_Check(t *testing.T) {
 	tests := []struct {
 		name    string
 		opts    WorkerAddOptions
+		field   string
 		wantErr string
 	}{
-		{"valid", WorkerAddOptions{Image: "img:1", Pull: true, CPUs: 2, CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}}, ""},
-		{"negative cpus", WorkerAddOptions{CPUs: -1}, "--cpus must not be negative, got -1"},
-		{"pull without image", WorkerAddOptions{Pull: true}, "--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID"},
-		{"cap-add", WorkerAddOptions{CapAdd: []string{"NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
-		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
-		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in --device: host path must be absolute`},
+		{"valid", WorkerAddOptions{Image: "img:1", Pull: true, CPUs: 2, CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}}, "", ""},
+		{"negative cpus", WorkerAddOptions{CPUs: -1}, "CPUs", "WorkerAddOptions.CPUs must not be negative, got -1"},
+		{"memory", WorkerAddOptions{Memory: "bogus"}, "Memory", `invalid WorkerAddOptions.Memory "bogus": want a number with an optional unit b, k, m, g, t or p, e.g. 512m or 1.5g`},
+		{"tmp size", WorkerAddOptions{TmpSize: "1x"}, "TmpSize", `invalid WorkerAddOptions.TmpSize "1x": want a whole number with an optional unit k, m, g, t, p or e, or a percentage, e.g. 256m`},
+		{"pull without image", WorkerAddOptions{Pull: true}, "Pull", "WorkerAddOptions.Pull needs WorkerAddOptions.Image: without one, new workers run the image of the cluster's newest worker, by ID"},
+		{"cap-add", WorkerAddOptions{CapAdd: []string{"NOT_A_CAP"}}, "CapAdd", `unknown capability "NOT_A_CAP" in WorkerAddOptions.CapAdd`},
+		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, "CapDrop", `unknown capability "net_raw" in WorkerAddOptions.CapDrop`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, "Devices", `device "dev/fuse" in WorkerAddOptions.Devices: host path must be absolute`},
+		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, "SecurityOpt", `unknown security option "privileged" in WorkerAddOptions.SecurityOpt: want label=, apparmor=, seccomp=, no-new-privileges, writable-cgroups= or systempaths=`},
+		{"first in order", WorkerAddOptions{Memory: "bogus", Pull: true, CapAdd: []string{"NOT_A_CAP"}}, "Memory", `invalid WorkerAddOptions.Memory "bogus": want a number with an optional unit b, k, m, g, t or p, e.g. 512m or 1.5g`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1438,8 +1443,19 @@ func TestWorkerAddOptions_Check(t *testing.T) {
 				return
 			}
 			require.EqualError(t, err, tt.wantErr)
+			var optErr *OptionError
+			require.ErrorAs(t, err, &optErr)
+			assert.Equal(t, tt.field, optErr.Field)
+			assert.NotNil(t, errors.Unwrap(err))
 		})
 	}
+}
+
+// TestWorkerAddOptions_CheckNamed checks that a caller names the options
+// in the errors, as a command line names its flags.
+func TestWorkerAddOptions_CheckNamed(t *testing.T) {
+	err := WorkerAddOptions{Pull: true}.CheckNamed(func(field string) string { return "--" + strings.ToLower(field) })
+	assert.EqualError(t, err, "--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID")
 }
 
 func TestWorkerAdd_InfraError(t *testing.T) {
@@ -1538,8 +1554,8 @@ func TestWorkerAdd_InvalidResources(t *testing.T) {
 	for _, tt := range []struct {
 		memory, tmpSize, wantErr string
 	}{
-		{"bogus", "1g", `invalid --memory "bogus"`},
-		{"1.5g", "1.5g", `invalid --tmp-size "1.5g"`},
+		{"bogus", "1g", `invalid WorkerAddOptions.Memory "bogus"`},
+		{"1.5g", "1.5g", `invalid WorkerAddOptions.TmpSize "1.5g"`},
 	} {
 
 		m, _, err := addWorkers(t, nil, WorkerAddOptions{

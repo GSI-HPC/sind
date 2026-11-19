@@ -67,7 +67,21 @@ func checkCreateWorkerFlags(opts cluster.WorkerAddOptions) error {
 	if opts.Count < 1 {
 		return cobratree.Usagef("--count must be at least 1, got %d", opts.Count)
 	}
-	return cobratree.Usage(opts.Check())
+	return cobratree.Usage(opts.CheckNamed(func(field string) string { return workerFlags[field] }))
+}
+
+// workerFlags maps the fields of cluster.WorkerAddOptions that Check checks
+// to the flags of create worker that set them.
+var workerFlags = map[string]string{
+	"CPUs":        "--cpus",
+	"Memory":      "--memory",
+	"TmpSize":     "--tmp-size",
+	"Pull":        "--pull",
+	"Image":       "--image",
+	"CapAdd":      "--cap-add",
+	"CapDrop":     "--cap-drop",
+	"Devices":     "--device",
+	"SecurityOpt": "--security-opt",
 }
 
 // createWorkerOptions returns the options of create worker's flags, with a
@@ -116,6 +130,15 @@ func createWorkerOptions(cmd *cobra.Command, clusterName string) (cluster.Worker
 	}, nil
 }
 
+// withUnmanagedHint adds the flag that helps to the error of a cluster
+// without sind-nodes.conf (cluster.ErrNodesConfMissing).
+func withUnmanagedHint(err error) error {
+	if errors.Is(err, cluster.ErrNodesConfMissing) {
+		return fmt.Errorf("%w; use --unmanaged to add nodes without modifying Slurm config", err)
+	}
+	return err
+}
+
 func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	opts, err := createWorkerOptions(cmd, clusterName)
 	if err != nil {
@@ -127,7 +150,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 		if _, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval); err != nil {
-			return err
+			return withUnmanagedHint(err)
 		}
 		updateSSHExport(cmd, client, meshMgr)
 		return nil

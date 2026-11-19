@@ -21,8 +21,10 @@ var (
 	// cluster (power operations, WorkerRemove).
 	ErrNodeNotFound = errors.New("node not found")
 	// ErrNodesConfMissing reports that the controller has no
-	// sind-nodes.conf, so sind cannot add managed workers (WorkerAdd).
-	ErrNodesConfMissing = errors.New("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
+	// sind-nodes.conf, so sind cannot add managed workers (WorkerAdd);
+	// unmanaged ones (WorkerAddOptions.Unmanaged) leave the Slurm
+	// configuration alone.
+	ErrNodesConfMissing = errors.New("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration")
 	// ErrNotReady reports that the nodes or Slurm of a Create or WorkerAdd
 	// did not become ready within its wait limit (config.Cluster.Wait,
 	// WorkerAddOptions.Wait).

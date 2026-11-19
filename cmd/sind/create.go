@@ -212,7 +212,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	}
 
 	if name == "" {
-		if name, err = cluster.ResolveCluster(cfg.Name); err != nil {
+		if name, err = envvar.ResolveCluster(cfg.Name); err != nil {
 			return err
 		}
 	}

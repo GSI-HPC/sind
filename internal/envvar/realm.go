@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cluster
+package envvar
 
 import (
 	"fmt"
 
-	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
@@ -43,9 +42,9 @@ func ResolveRealm(flag *string, configRealm string) (string, error) {
 		}
 		return *flag, nil
 	}
-	if env, ok := envvar.Lookup(envvar.Realm); ok {
+	if env, ok := Lookup(Realm); ok {
 		if err := config.CheckName("realm", env); err != nil {
-			return "", fmt.Errorf("%s: %w", envvar.Realm, err)
+			return "", fmt.Errorf("%s: %w", Realm, err)
 		}
 		return env, nil
 	}
