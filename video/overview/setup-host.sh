@@ -48,17 +48,13 @@ sudo systemctl restart polkit
 sudo sysctl -w fs.inotify.max_user_instances=8192
 
 # Docker Hub rate-limits anonymous pulls per IP, which runners share: pull
-# the Docker Hub images of the scenario (the mesh's CoreDNS, the monitoring
-# stack and alpine for the connect shot) from Google's mirror, and tag them
-# with their Docker Hub names, as the integration tests do.
-dns=$(sed -n 's/^const DNSImage = "\(.*\)"$/\1/p' pkg/mesh/mesh.go)
-stack=$(sed -n 's/^\t[A-Za-z]*Image *= "\(.*\)"$/\1/p' internal/observability/observability.go)
-if [ -z "$dns" ] || [ "$(echo "$stack" | wc -w)" -ne 4 ]; then
-  echo "::error::image constants not found in pkg/mesh/mesh.go or internal/observability/observability.go"
-  exit 1
-fi
+# the Docker Hub images of the scenario (the mesh's CoreDNS and the
+# monitoring stack, which tools/images prints, and alpine for the connect
+# shot) from Google's mirror, and tag them with their Docker Hub names, as
+# the integration tests do.
+images=$(go run ./tools/images)
 # shellcheck disable=SC2086 # one word per image
-for image in "$dns" $stack alpine:3; do
+for image in $images alpine:3; do
   case "$image" in
     */*) path=$image ;;
     *) path=library/$image ;;

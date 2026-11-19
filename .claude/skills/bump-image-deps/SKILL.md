@@ -43,8 +43,9 @@ Grafana on the standard image (not `-slim`) and no variant suffix on any of them
 changes the stack's fingerprint, so existing stacks are recreated at the next monitored
 create. The monitoring integration test, `TestMonitoring` in
 `pkg/cluster/monitoring_integration_test.go`, is the real check (CI, as it needs Docker);
-`.github/workflows/ci.yml` reads the four `<Name>Image = "<image>"` lines with `sed`
-to pull the images from Google's mirror, so keep that form.
+`.github/workflows/ci.yml` pulls the images that `go run ./tools/images` prints from
+Google's mirror, and `.github/scripts/image-updates.sh` reads the four
+`<Name>Image = "<image>"` lines, so keep that form.
 Update the tag in `DESIGN.md` (the Monitoring Stack table),
 `docs/content/architecture/docker-resources.md` and the offline preload list in
 `docs/content/getting-started/installation.md`, and Grafana's also in the
