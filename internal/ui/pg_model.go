@@ -93,12 +93,7 @@ func pgShort(realm, name, container string) string {
 
 // pgArg returns a node's name as sind's commands take it: the short name,
 // and the cluster unless it is the default one.
-func pgArg(name, short string) string {
-	if name == config.DefaultClusterName {
-		return short
-	}
-	return short + "." + name
-}
+func pgArg(name, short string) string { return cluster.QualifiedNodeName(name, short) }
 
 // pgClusterArg returns the optional CLUSTER argument of a command: empty for
 // the default cluster, else a space and the name.

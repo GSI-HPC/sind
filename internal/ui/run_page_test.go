@@ -29,10 +29,14 @@ func TestRunFoldNodes(t *testing.T) {
 		"range and single": {[]string{"w1", "w2", "w3", "w7"}, "w[1-3,7]"},
 		"the same twice":   {[]string{"w2", "w2"}, "w2"},
 		"no number":        {[]string{"controller", "controller"}, "controller"},
-		"leading zero":     {[]string{"w01", "w02"}, "w0[1-2]"},
+		"leading zero":     {[]string{"w01", "w02"}, "w[01-02]"},
 		"zero":             {[]string{"w0", "w1"}, "w[0-1]"},
-		"mixed groups":     {[]string{"worker-1", "controller", "db-1", "worker-3"}, "worker-[1,3], controller, db-1"},
+		"mixed groups":     {[]string{"worker-1", "controller", "db-1", "worker-3"}, "controller,db-1,worker-[1,3]"},
 		"none":             {nil, ""},
+		// The cluster follows the set, as in the titles and the commands.
+		"one cluster":  {[]string{"worker-1.dev", "worker-0.dev"}, "worker-[0-1].dev"},
+		"two clusters": {[]string{"worker-0.dev1", "worker-0.dev2"}, "worker-0.dev1,worker-0.dev2"},
+		"an image":     {[]string{"ghcr.io/gsi-hpc/sind-node:26.05", "ghcr.io/gsi-hpc/sind-node:25.11"}, "ghcr.io/gsi-hpc/sind-node:26.05,ghcr.io/gsi-hpc/sind-node:25.11"},
 	} {
 		assert.Equal(t, tc.want, runFoldNodes(tc.names), name)
 	}
@@ -183,7 +187,7 @@ func TestRunStoppedPanel(t *testing.T) {
 	assert.Equal(t, "warn", p.Class)
 	assert.Equal(t, []runPlain{
 		{Text: "worker-[0-1] were waiting for munge at that time."}, {Text: "1 node had not started yet."},
-		{Text: "sind removed controller, worker-[0-1] again (rollback, 1.7s)."},
+		{Text: "sind removed controller,worker-[0-1] again (rollback, 1.7s)."},
 	}, p.Says)
 	assert.Empty(t, p.Notes)
 
@@ -214,7 +218,7 @@ func TestRunStoppedPanel(t *testing.T) {
 		return runSp("target", n, runStartedAt(0), runWith(func(s *store.Span) { s.Node = n }), runKids(runSp("wait", "ready", runStartedAt(0))))
 	}
 	two := runOf(9, "canceled", runSp("step", "nodes", runEndedAt(0, 9, "canceled"), runKids(wait("worker-0"), wait("worker-1"), wait("db"))))
-	assert.Equal(t, []string{"worker-[0-1], db were waiting for their containers at that time."}, runStoppedDoing(two))
+	assert.Equal(t, []string{"db,worker-[0-1] were waiting for their containers at that time."}, runStoppedDoing(two))
 }
 
 func TestRunRollbackNote(t *testing.T) {

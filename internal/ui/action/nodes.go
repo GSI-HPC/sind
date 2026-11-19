@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GSI-HPC/go-nodeset"
+	"github.com/GSI-HPC/sind/internal/ui/nodefold"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 )
@@ -61,13 +61,11 @@ func pickNodes(f Form, c Context, realm, clusterName, workersFor string) ([]clus
 
 // nodeWords returns the node arguments for the short names of nodes of the
 // cluster, as sind takes them: one folded set such as worker-[0-3].dev, or,
-// should folding not give back exactly these nodes, the plain names. The
-// nodes of the default cluster go without it, as one types them.
+// should folding not give back exactly these nodes, the plain names
+// (nodefold). The nodes of the default cluster go without it, as one types
+// them.
 func nodeWords(clusterName string, shorts []string) []string {
-	if clusterName == config.DefaultClusterName {
-		return foldNodes(shorts)
-	}
-	return namedNodeWords(clusterName, shorts)
+	return nodefold.Of(clusterName, shorts)
 }
 
 // namedNodeWords is nodeWords with the cluster in the arguments, the
@@ -78,28 +76,14 @@ func namedNodeWords(clusterName string, shorts []string) []string {
 	for i, s := range shorts {
 		names[i] = s + "." + clusterName
 	}
-	return foldNodes(names)
-}
-
-// foldNodes returns node names as one folded set, or the names themselves
-// should folding not give back exactly these nodes.
-func foldNodes(names []string) []string {
-	if set, err := nodeset.Parse(strings.Join(names, ",")); err == nil {
-		folded := set.String()
-		back, err := nodeset.Parse(folded)
-		want := slices.Sorted(slices.Values(names))
-		if err == nil && slices.Equal(slices.Sorted(slices.Values(back.Expand())), want) {
-			return []string{folded}
-		}
-	}
-	return names
+	return nodefold.Words(names)
 }
 
 // NodeSet folds the short names of nodes into one node set as sind takes
 // them, such as worker-[0-2], or joins them with commas where they do not
 // fold.
 func NodeSet(shorts []string) string {
-	return strings.Join(nodeWords(config.DefaultClusterName, shorts), ",")
+	return nodefold.Set(config.DefaultClusterName, shorts)
 }
 
 // nextWorkers returns the short names that new workers of a cluster with the

@@ -6,10 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/GSI-HPC/go-nodeset"
-
+	"github.com/GSI-HPC/sind/internal/ui/nodefold"
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/config"
 )
 
 // nodeCommand reports whether the command of the name works on nodes, so
@@ -58,19 +56,7 @@ func title(root store.Span) string {
 // FoldNodes writes the short names of nodes of the cluster as sind takes
 // them: one node set, such as worker-[0-2].dev, with the cluster but for
 // the default one, or the names one by one, joined by commas, where they
-// do not fold back to the same nodes.
+// do not fold back to the same nodes (nodefold).
 func FoldNodes(cluster string, shorts []string) string {
-	args := make([]string, len(shorts))
-	for i, s := range shorts {
-		args[i] = s
-		if cluster != config.DefaultClusterName {
-			args[i] += "." + cluster
-		}
-	}
-	joined := strings.Join(args, ",")
-	set, err := nodeset.Parse(joined)
-	if err != nil || !slices.Equal(slices.Sorted(slices.Values(set.Expand())), slices.Sorted(slices.Values(args))) {
-		return joined
-	}
-	return set.String()
+	return nodefold.Set(cluster, shorts)
 }

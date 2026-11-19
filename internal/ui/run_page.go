@@ -6,15 +6,14 @@ import (
 	"cmp"
 	"fmt"
 	"net/url"
-	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/activity"
+	"github.com/GSI-HPC/sind/internal/ui/nodefold"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/config"
 )
@@ -627,67 +626,10 @@ func runRollbackNote(run store.Run) string {
 	return ""
 }
 
-var runNameRE = regexp.MustCompile(`^(.*?)([1-9][0-9]*|0)$`)
-
-// runFoldNodes writes a set of node names the short way, as node sets do:
-// worker-[2,5] for worker-2 and worker-5, worker-[0-3] for four in a row
-// and worker-[0-1] for two. Names without a number at the end stay as they
-// are.
+// runFoldNodes writes the names of the targets of a run as node sets, as
+// the titles of the runs and the commands do (nodefold): worker-[2,5] for
+// worker-2 and worker-5, worker-[0-1].dev for two workers of dev. A name
+// that is no node's, such as an image's, stays as it is.
 func runFoldNodes(names []string) string {
-	type group struct {
-		prefix string
-		nums   []int
-		plain  bool
-	}
-	var groups []*group
-	index := map[string]*group{}
-	for _, name := range names {
-		m := runNameRE.FindStringSubmatch(name)
-		key, plain := name, true
-		var n int
-		if m != nil {
-			key, plain = m[1], false
-			n, _ = strconv.Atoi(m[2])
-		}
-		k := key
-		if plain {
-			k = "\x00" + key
-		}
-		g := index[k]
-		if g == nil {
-			g = &group{prefix: key, plain: plain}
-			index[k] = g
-			groups = append(groups, g)
-		}
-		if !plain {
-			g.nums = append(g.nums, n)
-		}
-	}
-	out := make([]string, 0, len(groups))
-	for _, g := range groups {
-		if g.plain {
-			out = append(out, g.prefix)
-			continue
-		}
-		sort.Ints(g.nums)
-		var parts []string
-		for i := 0; i < len(g.nums); {
-			j := i
-			for j+1 < len(g.nums) && g.nums[j+1] <= g.nums[j]+1 {
-				j++
-			}
-			if g.nums[j] > g.nums[i] {
-				parts = append(parts, fmt.Sprintf("%d-%d", g.nums[i], g.nums[j]))
-			} else {
-				parts = append(parts, strconv.Itoa(g.nums[i]))
-			}
-			i = j + 1
-		}
-		if len(parts) == 1 && !strings.ContainsAny(parts[0], "-") {
-			out = append(out, g.prefix+parts[0])
-			continue
-		}
-		out = append(out, g.prefix+"["+strings.Join(parts, ",")+"]")
-	}
-	return strings.Join(out, ", ")
+	return strings.Join(nodefold.Words(names), ",")
 }

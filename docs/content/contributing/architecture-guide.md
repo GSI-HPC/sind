@@ -52,6 +52,7 @@ internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fra
   ├── collect/     Collectors: Docker events, realms, clusters, statuses, lock, monitoring, doctor
   ├── activity/    Reads the activity log into runs (Tail, Reducer, Follow)
   ├── action/      The actions of the dialogs: forms to argv, validated against the snapshot
+  ├── nodefold/    Folds node names into node sets as sind takes them, for the commands, the titles of runs and the run pages
   ├── run/         Runs a dialog's command as a sind child process and stops it with SIGINT
   ├── demo/        --demo: made-up clusters and commands that write event logs in memory
   └── web/         Embedded templates, CSS and JavaScript (htmx comes from go-clikit's localweb/htmx)

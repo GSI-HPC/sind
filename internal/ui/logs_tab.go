@@ -104,9 +104,7 @@ func (v *View) LogsTab() *LogsTabView {
 	p := v.Params
 	realm, name := p.Get("realm"), p.Get("cluster")
 	d := &LogsTabView{Realm: realm, Cluster: name, Sind: pgSind(realm), Keep: logsKeep, Query: p.Get("q"), QueryMax: maxParamLen, Errors: p.Get("level") == "warn"}
-	if name != config.DefaultClusterName {
-		d.Suffix = "." + name
-	}
+	d.Suffix = cluster.NodeNameSuffix(name)
 	var units []string
 	for _, n := range v.Snap.ClusterNodes(realm, name) {
 		short := pgShort(realm, name, n.Container)

@@ -10,6 +10,7 @@
 package cluster
 
 import (
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
@@ -28,6 +29,23 @@ func NetworkName(realm, cluster string) docker.NetworkName {
 // shortName is the node's hostname, e.g. "controller", "db", "api", "submitter", "worker-0".
 func ContainerName(realm, cluster, shortName string) docker.ContainerName {
 	return docker.ContainerName(realm + "-" + cluster + "-" + shortName)
+}
+
+// NodeNameSuffix returns what follows the short name of a node of the
+// cluster where sind names it as its node arguments take it: "." and the
+// cluster, or nothing in the default cluster.
+func NodeNameSuffix(cluster string) string {
+	if cluster == config.DefaultClusterName {
+		return ""
+	}
+	return "." + cluster
+}
+
+// QualifiedNodeName returns the name of a node as sind's node arguments
+// take it: the short name, and the cluster unless it is the default one,
+// e.g. "worker-0" or "worker-0.dev".
+func QualifiedNodeName(cluster, shortName string) string {
+	return shortName + NodeNameSuffix(cluster)
 }
 
 // VolumeName returns the Docker volume name for a cluster resource.

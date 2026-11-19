@@ -5,7 +5,7 @@ package action
 import (
 	"strings"
 
-	"github.com/GSI-HPC/go-nodeset"
+	"github.com/GSI-HPC/sind/internal/ui/nodefold"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/slurm"
@@ -58,11 +58,7 @@ func afterCreate(cfg *config.Cluster) (steps []Step, slurmConf string) {
 var slurmConfFiles = cluster.SlurmConfFiles
 
 // foldNames writes the short names of nodes as one node set, such as
-// controller,submitter,worker-[0-3], or the names one by one.
+// controller,submitter,worker-[0-3], or the names one by one (nodefold).
 func foldNames(names []string) string {
-	set, err := nodeset.Parse(strings.Join(names, ","))
-	if err != nil {
-		return strings.Join(names, ", ")
-	}
-	return set.String()
+	return strings.Join(nodefold.Words(names), ",")
 }
