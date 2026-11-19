@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Sample is one series of the answer to an instant query: its labels,
@@ -33,14 +34,25 @@ type queryAnswer struct {
 
 // Query runs the PromQL instant query expr on the realm's Prometheus,
 // through Grafana's curl as ServiceReady does, and returns the series of
-// its answer, which must be a vector.
+// its answer, which must be a vector. A query that Prometheus refuses is an
+// error with its reason: Prometheus answers it with an HTTP error status
+// and a JSON body, which curl keeps without -f.
 func (m *Manager) Query(ctx context.Context, expr string) ([]Sample, error) {
-	out, err := m.curl(ctx, probeTimeout, "-G", "--data-urlencode", "query="+expr, m.URL(ServicePrometheus, "/api/v1/query"))
+	out, err := m.curlWith(ctx, "-sS", probeTimeout, "-w", "\n%{http_code}",
+		"-G", "--data-urlencode", "query="+expr, m.URL(ServicePrometheus, "/api/v1/query"))
 	if err != nil {
 		return nil, fmt.Errorf("querying Prometheus: %w", err)
 	}
+	// curl writes the status after the body, on a line of its own.
+	body, status := out, ""
+	if i := strings.LastIndexByte(out, '\n'); i >= 0 {
+		body, status = out[:i], out[i+1:]
+	}
 	var a queryAnswer
-	if err := json.Unmarshal([]byte(out), &a); err != nil {
+	if err := json.Unmarshal([]byte(body), &a); err != nil {
+		if status != "" && !strings.HasPrefix(status, "2") {
+			return nil, fmt.Errorf("querying Prometheus: it answered with HTTP status %s", status)
+		}
 		return nil, fmt.Errorf("reading the answer of Prometheus: %w", err)
 	}
 	if a.Status != "success" {

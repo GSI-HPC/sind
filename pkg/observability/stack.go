@@ -251,9 +251,15 @@ const (
 )
 
 // curl runs curl in the Grafana container, the one image of the four with
-// curl, which reaches the others by container name.
+// curl, which reaches the others by container name. An HTTP status of 400
+// or more is an error.
 func (m *Manager) curl(ctx context.Context, maxTime string, args ...string) (string, error) {
-	cmd := append([]string{"curl", "-fsS", "--max-time", maxTime}, args...)
+	return m.curlWith(ctx, "-fsS", maxTime, args...)
+}
+
+// curlWith is curl with the flags given, instead of -fsS.
+func (m *Manager) curlWith(ctx context.Context, flags, maxTime string, args ...string) (string, error) {
+	cmd := append([]string{"curl", flags, "--max-time", maxTime}, args...)
 	return m.Docker.Exec(ctx, ContainerName(m.Realm, ServiceGrafana), cmd...)
 }
 

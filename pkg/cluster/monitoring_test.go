@@ -276,7 +276,7 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 			return notFound("Error response from daemon: container " + args[1] + " is not running\n"), true
 		}
 		if strings.HasSuffix(joined, "/api/v1/query") {
-			return mock.Result{Stdout: f.query}, true
+			return mock.Result{Stdout: f.query + "\n200"}, true
 		}
 		return mock.Result{}, true
 	case "network":
@@ -758,7 +758,7 @@ func TestGetMonitoring(t *testing.T) {
 	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")
 	assert.Equal(t, []MonitoredCluster{{Name: "dev", Nodes: 1}, {Name: "prod", Nodes: 2, SlurmVersion: "26.05.6"}}, m.Clusters,
 		"an answer that is no JSON leaves the Slurm numbers out")
-	assert.True(t, f.called(`exec sind-grafana curl -fsS --max-time 5 -G --data-urlencode query=max by (cluster, __name__) `+
+	assert.True(t, f.called(`exec sind-grafana curl -sS --max-time 5 -w `+"\n%{http_code}"+` -G --data-urlencode query=max by (cluster, __name__) `+
 		`({__name__=~"slurm_jobs_pending|slurm_jobs_running|slurm_nodes|slurm_nodes_down|slurm_nodes_drain", realm="sind"}) `+
 		`http://sind-prometheus:9090/api/v1/query`))
 
