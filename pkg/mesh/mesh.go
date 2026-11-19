@@ -448,7 +448,8 @@ func (m *Manager) Created() bool {
 // the daemon (state.LockRealm with LockOptions.Client), such as a library
 // caller, can create the network between the check and the create.
 // Docker's "already exists" error then counts as an existing network, so
-// that the caller's failure handling never removes it.
+// that the caller's failure handling never removes it, and its labels are
+// read again for the address it pins the DNS container to.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	_, err := m.ensureMeshNetwork(ctx)
 	return err
@@ -481,7 +482,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 	for attempt := 1; ; attempt++ {
 		if _, err := m.Docker.CreateNetwork(ctx, name, labels); err != nil {
 			if docker.IsAlreadyExists(err) {
-				return "", nil
+				return m.concurrentMeshDNSIP(ctx)
 			}
 			return "", fmt.Errorf("creating mesh network: %w", err)
 		}
@@ -513,12 +514,25 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 			log.DebugContext(ctx, "mesh network created", "subnet", ipam.Subnet, "ip-range", ipam.IPRange, "dns", dnsIP)
 			return dnsIP, nil
 		case docker.IsAlreadyExists(err):
-			return "", nil
+			return m.concurrentMeshDNSIP(ctx)
 		case !isSubnetTaken(err):
 			return "", fmt.Errorf("creating mesh network: %w", err)
 		}
 		log.DebugContext(ctx, "mesh subnet taken meanwhile, trying another one", "subnet", ipam.Subnet, "error", err)
 	}
+}
+
+// concurrentMeshDNSIP returns the pinned DNS address of the mesh network
+// that another client created while createMeshNetwork created it, empty
+// for one without: the DNS container that EnsureMesh creates next must
+// have that address, which every node of the other client resolves
+// through.
+func (m *Manager) concurrentMeshDNSIP(ctx context.Context) (string, error) {
+	labels, _, err := m.Docker.NetworkLabels(ctx, m.NetworkName())
+	if err != nil {
+		return "", fmt.Errorf("checking mesh network: %w", err)
+	}
+	return labels[LabelDNSIP], nil
 }
 
 // pinnedLayout returns the IPAM configuration of a mesh network with the

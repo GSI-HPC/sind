@@ -750,6 +750,57 @@ func TestEnsureMeshNetwork_RecreatedConcurrently(t *testing.T) {
 	assert.False(t, mgr.Created(), "the other client created it")
 }
 
+// TestEnsureMeshNetwork_PinnedConcurrently covers another client of the
+// same daemon that creates the network with a pinned DNS address between
+// the check and the create, or while sind pins its subnet: the DNS
+// container gets that address.
+func TestEnsureMeshNetwork_PinnedConcurrently(t *testing.T) {
+	for _, race := range []string{"network create --label", "network create --subnet"} {
+		t.Run(race, func(t *testing.T) {
+			f, c, m := newFakeDocker(t)
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				if strings.HasPrefix(strings.Join(args, " "), race) && f.networks["sind-mesh"] == nil {
+					f.withPinnedMesh(DefaultRealm, docker.StateRunning)
+					delete(f.containers, "sind-dns")
+					delete(f.containers, "sind-ssh")
+				}
+				return f.onCall(args, stdin)
+			}
+			mgr := NewManager(c, DefaultRealm)
+
+			pinned, err := mgr.ensureMeshNetwork(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, f.networks["sind-mesh"].labels[LabelDNSIP], pinned)
+			assert.NotEmpty(t, pinned)
+			assert.False(t, mgr.Created(), "the other client created it")
+		})
+	}
+}
+
+// TestEnsureMeshNetwork_ConcurrentLabelsError covers the read of the labels
+// of a network that another client created meanwhile, which fails.
+func TestEnsureMeshNetwork_ConcurrentLabelsError(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	inspects := 0
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		joined := strings.Join(args, " ")
+		if joined == "network inspect sind-mesh --format {{json .Labels}}" {
+			if inspects++; inspects > 1 {
+				return failure()
+			}
+		}
+		if strings.HasPrefix(joined, "network create") {
+			f.addNetwork("sind-mesh")
+		}
+		return f.onCall(args, stdin)
+	}
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.ensureMeshNetwork(t.Context())
+	require.ErrorContains(t, err, "checking mesh network: connection refused")
+	assert.False(t, mgr.Created())
+}
+
 func TestPinnedLayout(t *testing.T) {
 	tests := []struct {
 		subnet, gateway string
