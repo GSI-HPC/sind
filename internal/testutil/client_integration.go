@@ -43,3 +43,7 @@ func NewClient(t *testing.T) (*docker.Client, *mock.Recorder) {
 	rec := mock.NewIntegrationRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }
+
+// SkipWithoutDocker does nothing in integration mode, where NewClient skips
+// a test when Docker is not there.
+func SkipWithoutDocker(*testing.T) {}

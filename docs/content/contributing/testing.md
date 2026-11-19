@@ -28,6 +28,8 @@ mode_unit_test.go         // build tag: !integration
 mode_integration_test.go  // build tag: integration
 ```
 
+A test that runs in both modes gets its client from `testutil.NewClient`: in unit mode a `mock.Recorder`, in integration mode the docker CLI. In unit mode it needs a fake that keeps state, such as the fake Docker of the `pkg/mesh` tests, so that it checks what the code does rather than replaying answers queued in the order the code asks for them. A test that has no such fake checks against Docker alone and starts with `testutil.SkipWithoutDocker(t)`; the unit tests of the same code check the commands and how their output is read.
+
 ## Mock executor
 
 The `mock.Executor` (from `internal/mock`) replaces real CLI calls in unit tests. It supports two dispatch modes:

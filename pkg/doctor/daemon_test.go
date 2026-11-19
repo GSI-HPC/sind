@@ -29,14 +29,9 @@ func kernelFs(t *testing.T, release string) afero.Fs {
 // TestLocateDaemonLifecycle asks a real daemon in integration mode, which
 // runs on the machine the tests run on, as on the CI runners.
 func TestLocateDaemonLifecycle(t *testing.T) {
+	testutil.SkipWithoutDocker(t)
 	c, rec := testutil.NewClient(t)
 	fs := afero.NewOsFs()
-	if !rec.IsIntegration() {
-		t.Setenv("DOCKER_HOST", "")
-		rec.AddResult(`{"ServerVersion":"29.1.0","CgroupVersion":"2","OperatingSystem":"Ubuntu 24.04.3 LTS","KernelVersion":"6.8.0-1017-azure"}`, "", nil)
-		rec.AddResult(defaultContext, "", nil)
-		fs = kernelFs(t, "6.8.0-1017-azure")
-	}
 
 	info, err := c.Info(t.Context())
 	require.NoError(t, err)

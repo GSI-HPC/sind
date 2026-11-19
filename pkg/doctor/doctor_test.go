@@ -187,15 +187,9 @@ func TestErrorLine(t *testing.T) {
 // runners mount with it.
 func TestProbeCgroupInfoLifecycle(t *testing.T) {
 	t.Parallel()
+	testutil.SkipWithoutDocker(t)
 	c, rec := testutil.NewClient(t)
-	wantNsd := true
-	if rec.IsIntegration() {
-		_, _, wantNsd = CgroupInfo(afero.NewOsFs())
-	} else {
-		rec.AddResult("overlay / overlay rw,relatime,lowerdir=/l,upperdir=/u,workdir=/w 0 0\n"+
-			"proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n"+
-			"cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n", "", nil)
-	}
+	_, _, wantNsd := CgroupInfo(afero.NewOsFs())
 
 	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), c, testutil.Image())
 	require.NoError(t, err)

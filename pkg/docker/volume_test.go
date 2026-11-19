@@ -19,20 +19,12 @@ const testVolumeName VolumeName = "sind-dev-config"
 
 func TestVolumeLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itVolumeName("vol")
 	n := string(name)
 
-	if !rec.IsIntegration() {
-		rec.AddResult(n+"\n", "", nil)                                                                                                      // create
-		rec.AddResult("[{}]\n", "", nil)                                                                                                    // exists → true
-		rec.AddResult(`{"Name":"`+n+`","Driver":"local","Mountpoint":"/var/lib/docker/volumes/`+n+`/_data","Scope":"local"}`+"\n", "", nil) // list
-		rec.AddResult("", "", nil)                                                                                                          // list no matches
-		rec.AddResult(n+"\n", "", nil)                                                                                                      // remove (ok)
-		rec.AddResult("", "Error response from daemon: get "+n+": no such volume\n", &exec.ExitError{ProcessState: exitCode1(t)})           // exists → false
-		rec.AddResult("", "Error: No such volume\n", fmt.Errorf("exit status 1"))                                                           // remove again (error)
-	}
 	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), name) })
 
 	// Create.
@@ -76,19 +68,12 @@ func TestVolumeLifecycle(t *testing.T) {
 // discovery relies on to find a cluster's volumes with one listing.
 func TestListVolumesNamePrefixLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	prefix := itName("pfx") + "-"
 	config, data := VolumeName(prefix+"config"), VolumeName(prefix+"data")
 
-	if !rec.IsIntegration() {
-		rec.AddResult(string(config)+"\n", "", nil) // create config
-		rec.AddResult(string(data)+"\n", "", nil)   // create data
-		rec.AddResult(`{"Name":"`+string(config)+`","Driver":"local","Labels":""}`+"\n"+
-			`{"Name":"`+string(data)+`","Driver":"local","Labels":""}`+"\n", "", nil) // list
-		rec.AddResult(string(config)+"\n", "", nil) // remove config (cleanup)
-		rec.AddResult(string(data)+"\n", "", nil)   // remove data (cleanup)
-	}
 	t.Cleanup(func() {
 		_ = c.RemoveVolume(context.Background(), config)
 		_ = c.RemoveVolume(context.Background(), data)

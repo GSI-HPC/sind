@@ -99,12 +99,9 @@ func TestParseVersion(t *testing.T) {
 
 func TestDiscoverVersionLifecycle(t *testing.T) {
 	t.Parallel()
+	testutil.SkipWithoutDocker(t)
 	c, rec := testutil.NewClient(t)
 	image := testutil.Image()
-
-	if !rec.IsIntegration() {
-		rec.AddResult("slurm 25.11.9\n", "", nil)
-	}
 
 	// The image may carry any supported Slurm release line.
 	version, err := DiscoverVersion(t.Context(), c, image)

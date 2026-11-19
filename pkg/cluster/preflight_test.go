@@ -398,11 +398,9 @@ func isNsdelegateProbe(args []string) bool {
 // the CI runners mount cgroup2 with nsdelegate.
 func TestCheckNsdelegateLifecycle(t *testing.T) {
 	t.Parallel()
+	testutil.SkipWithoutDocker(t)
 	c, rec := testutil.NewClient(t)
 	image := testutil.Image()
-	if !rec.IsIntegration() {
-		rec.AddResult(probeMounts, "", nil)
-	}
 
 	require.NoError(t, CheckNsdelegate(t.Context(), c, image))
 

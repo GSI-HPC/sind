@@ -17,12 +17,9 @@ const testImage = "ghcr.io/gsi-hpc/sind-node:25.11"
 
 func TestImageLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-
-	if !rec.IsIntegration() {
-		rec.AddResult("ephemeral-test\n", "", nil) // run ephemeral
-	}
 
 	stdout, err := c.RunEphemeral(ctx, "busybox:latest", "echo", "ephemeral-test")
 	require.NoError(t, err)

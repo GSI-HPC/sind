@@ -20,39 +20,11 @@ import (
 // --- Resource Lifecycle ---
 
 func TestClusterResourceLifecycle(t *testing.T) {
+	testutil.SkipWithoutDocker(t)
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	clusterName := "it-res"
 
-	if !rec.IsIntegration() {
-		// CreateClusterNetwork
-		rec.AddResult("net-id\n", "", nil)
-		// CreateClusterVolume × 3 (config, munge, data)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		// WriteClusterConfig (create helper, copy, remove helper)
-		rec.AddResult("helper-id\n", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		// WriteMungeKey (run helper, copy, chown, chmod, kill+remove helper)
-		rec.AddResult("helper-id\n", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		// Verify: network exists, volumes exist
-		rec.AddResult("[{}]\n", "", nil)
-		rec.AddResult("[{}]\n", "", nil)
-		rec.AddResult("[{}]\n", "", nil)
-		rec.AddResult("[{}]\n", "", nil)
-		// Cleanup: remove volumes, network
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult("", "", nil)
-	}
 	t.Cleanup(func() {
 		bg := context.Background()
 		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeConfig))
@@ -73,10 +45,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	}
 
 	// Write config.
-	helperImage := "busybox:latest"
-	if rec.IsIntegration() {
-		helperImage = testutil.Image()
-	}
+	helperImage := testutil.Image()
 	cfg := &config.Cluster{
 		Name: clusterName,
 		Nodes: []config.Node{

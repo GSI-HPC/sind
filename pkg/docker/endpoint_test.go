@@ -14,12 +14,8 @@ import (
 // TestEndpointLifecycle asks the docker CLI in integration mode, where the
 // tests run next to the daemon: on its own machine, through a unix socket.
 func TestEndpointLifecycle(t *testing.T) {
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
-	if !rec.IsIntegration() {
-		t.Setenv("DOCKER_HOST", "")
-		rec.AddResult(`{"Name":"default","Metadata":{},"Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock","SkipTLSVerify":false}},`+
-			`"TLSMaterial":{},"Storage":{"MetadataPath":"\u003cIN MEMORY\u003e","TLSPath":"\u003cIN MEMORY\u003e"}}`+"\n", "", nil)
-	}
 
 	ep, err := c.Endpoint(t.Context())
 	require.NoError(t, err)
