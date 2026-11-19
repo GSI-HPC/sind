@@ -45,6 +45,7 @@ var openBackup = func(name string, mode fs.FileMode) (io.WriteCloser, error) {
 
 // File is an editor configuration file loaded for editing.
 type File struct {
+	name string // the path Load was given, which Save writes through
 	path string // the file itself, after symbolic links
 	key  string // the member that holds the servers: mcpServers or servers
 
@@ -70,11 +71,12 @@ type Server struct {
 // loads as an empty configuration. A symbolic link is followed, so that
 // Save writes the file it points to rather than replacing the link.
 func Load(path, key string) (*File, error) {
+	name := path
 	path, err := resolve(path)
 	if err != nil {
 		return nil, err
 	}
-	f := &File{path: path, key: key, mode: 0o600, newline: "\n"}
+	f := &File{name: name, path: path, key: key, mode: 0o600, newline: "\n"}
 	var data []byte
 	info, err := os.Stat(path)
 	if err == nil {
@@ -140,24 +142,56 @@ func count(obj *hujson.Object, name string) int {
 	return n
 }
 
+// geteuid returns the user whose links resolve follows besides root's,
+// os.Geteuid. A test replaces it.
+var geteuid = os.Geteuid
+
 // resolve follows the symbolic links of path to the file they point to,
-// which need not exist.
+// which need not exist, as fsutil.WriteAtomic follows them. A relative
+// target is read against the directory the link is really in, as the
+// system reads it: behind a linked directory, ../x is beside the directory
+// the link leads to, not beside its name. A link that neither this user
+// nor root owns is refused with an error that matches fsutil.ErrUntrusted,
+// as fsutil.WriteAtomic refuses it, but before Save does anything at the
+// place it leads to: whoever made it would choose the file sind writes.
 func resolve(path string) (string, error) {
 	for range maxSymlinks {
-		target, err := os.Readlink(path)
-		// EINVAL says that path is no link.
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.EINVAL) {
+		info, err := os.Lstat(path)
+		if errors.Is(err, fs.ErrNotExist) || err == nil && info.Mode()&fs.ModeSymlink == 0 {
 			return path, nil
+		}
+		if err == nil {
+			err = trustedLink(info)
+		}
+		var target string
+		if err == nil {
+			target, err = linkTarget(path)
 		}
 		if err != nil {
 			return "", fmt.Errorf("reading %s: %w", path, err)
 		}
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(filepath.Dir(path), target)
-		}
 		path = target
 	}
 	return "", fmt.Errorf("reading %s: too many levels of symbolic links", path)
+}
+
+// trustedLink refuses a link, described by info, that neither this user
+// nor root owns.
+func trustedLink(info fs.FileInfo) error {
+	if uid, me := int(info.Sys().(*syscall.Stat_t).Uid), geteuid(); uid != 0 && uid != me {
+		return fmt.Errorf("the link is owned by uid %d, neither this user (uid %d) nor root: %w", uid, me, fsutil.ErrUntrusted)
+	}
+	return nil
+}
+
+// linkTarget returns the path the symbolic link path points to.
+func linkTarget(path string) (string, error) {
+	target, err := os.Readlink(path)
+	if err != nil || filepath.IsAbs(target) {
+		return target, err
+	}
+	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
+	return filepath.Join(dir, target), err
 }
 
 // Path returns the path of the file, after symbolic links.
@@ -389,7 +423,10 @@ func (f *File) indentUnit() string {
 // it, named after the time now, and returns the backup's path. The file is
 // replaced in one step, through a temporary file and a rename, and keeps
 // its permissions; a new file is readable by its owner alone, as its
-// entries can hold secrets in their environment.
+// entries can hold secrets in their environment. Save writes through the
+// path Load was given, with fsutil.WriteAtomic, which refuses a symbolic
+// link that neither this user nor root owns. A write that fails leaves the
+// file as it was, and removes the backup.
 func (f *File) Save(now time.Time) (backup string, err error) {
 	data := f.root.Pack()
 	if f.exists && bytes.Equal(data, f.orig) {
@@ -403,8 +440,11 @@ func (f *File) Save(now time.Time) (backup string, err error) {
 	} else if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
-	if err := fsutil.WriteAtomic(f.path, data, f.mode); err != nil {
-		return backup, fmt.Errorf("writing %s: %w", f.path, err)
+	if err := fsutil.WriteAtomic(f.name, data, f.mode); err != nil {
+		if backup != "" {
+			_ = os.Remove(backup)
+		}
+		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
 	f.exists, f.orig = true, data
 	return backup, nil

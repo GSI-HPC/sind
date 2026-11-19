@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/GSI-HPC/go-clikit/fsutil"
+
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 )
 
@@ -477,6 +479,90 @@ func TestLoad_FollowsSymlinks(t *testing.T) {
 	assert.Equal(t, filepath.Join(dir, "new.json"), f.Path())
 }
 
+// TestLoad_LinkBehindALinkedDirectory checks that a relative link is read
+// against the directory it is really in, as the system reads it: behind a
+// linked directory, ../x is beside the directory the link leads to.
+func TestLoad_LinkBehindALinkedDirectory(t *testing.T) {
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	user := filepath.Join(home, "dotfiles", "config", "Code", "User")
+	require.NoError(t, os.MkdirAll(user, 0o755))
+	require.NoError(t, os.Symlink("dotfiles/config", filepath.Join(home, ".config")))
+	require.NoError(t, os.Symlink("../../../shared/mcp.json", filepath.Join(user, "mcp.json")))
+	target := filepath.Join(home, "dotfiles", "shared", "mcp.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte(`{"servers": {"mine": {"command": "x"}}}`), 0o600))
+
+	f, err := mcpconfig.Load(filepath.Join(home, ".config", "Code", "User", "mcp.json"), "servers")
+	require.NoError(t, err)
+	assert.Equal(t, target, f.Path())
+	assert.Equal(t, []mcpconfig.Server{{Name: "mine", Command: "x"}}, f.Servers())
+	f.Set(sindEntry)
+	backup, err := f.Save(now)
+	require.NoError(t, err)
+	assert.Equal(t, target+".20261019-163005.bak", backup)
+	assert.Contains(t, read(t, target), `"mine"`)
+	assert.Contains(t, read(t, target), `"sind"`)
+	assert.NoDirExists(t, filepath.Join(home, "shared"), "nothing is written beside the link's name")
+}
+
+// TestLoad_UntrustedLink checks that Load refuses a symbolic link that
+// neither this user nor root owns, whose owner would choose the file Save
+// writes, before Save could make a directory or a backup where it leads.
+func TestLoad_UntrustedLink(t *testing.T) {
+	// untrust makes the link another user's: as root, by giving it away,
+	// else by taking Load for another user.
+	untrust := func(t *testing.T, link string) {
+		t.Helper()
+		if os.Geteuid() == 0 {
+			require.NoError(t, os.Lchown(link, 12345, 12345))
+			return
+		}
+		t.Cleanup(mcpconfig.Geteuid(os.Geteuid() + 1))
+	}
+
+	t.Run("to a file", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "target.json")
+		require.NoError(t, os.WriteFile(target, []byte("{}\n"), 0o600))
+		link := filepath.Join(dir, "c.json")
+		require.NoError(t, os.Symlink("target.json", link))
+		untrust(t, link)
+
+		_, err := mcpconfig.Load(link, "mcpServers")
+		require.ErrorIs(t, err, fsutil.ErrUntrusted)
+		require.ErrorContains(t, err, "reading "+link+": the link is owned by uid ")
+		assert.Equal(t, "{}\n", read(t, target), "the file is unchanged")
+		files, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		assert.Len(t, files, 2, "no backup is made")
+	})
+
+	t.Run("into a missing directory", func(t *testing.T) {
+		dir := t.TempDir()
+		link := filepath.Join(dir, "c.json")
+		require.NoError(t, os.Symlink(filepath.Join("target-dir", "sub", "mcp.json"), link))
+		untrust(t, link)
+
+		_, err := mcpconfig.Load(link, "mcpServers")
+		require.ErrorIs(t, err, fsutil.ErrUntrusted)
+		assert.NoDirExists(t, filepath.Join(dir, "target-dir"), "no directory is made")
+	})
+
+	t.Run("of root", func(t *testing.T) {
+		if os.Geteuid() != 0 {
+			t.Skip("only root can make a link of root")
+		}
+		t.Cleanup(mcpconfig.Geteuid(12345))
+		dir := t.TempDir()
+		link := filepath.Join(dir, "c.json")
+		require.NoError(t, os.Symlink("target.json", link))
+		f, err := mcpconfig.Load(link, "mcpServers")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "target.json"), f.Path())
+	})
+}
+
 func TestLoad_SymlinkErrors(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.Symlink("b", filepath.Join(dir, "a")))
@@ -612,8 +698,11 @@ func TestSave_Errors(t *testing.T) {
 				tt.setup(t, path)
 			}
 
-			_, err := f.Save(now)
+			backup, err := f.Save(now)
 			require.ErrorContains(t, err, fmt.Sprintf(tt.wantErr, path))
+			assert.Empty(t, backup)
+			backups, _ := filepath.Glob(path + ".*.bak")
+			assert.Empty(t, backups, "a failed save leaves no backup")
 			if tt.backup != nil {
 				assert.Equal(t, "{}\n", read(t, path), "the file is unchanged")
 			}
