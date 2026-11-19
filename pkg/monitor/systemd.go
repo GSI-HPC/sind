@@ -156,14 +156,15 @@ func dbusPathUnescape(s string) string {
 }
 
 // SystemdMonitorArgs returns the docker CLI arguments for streaming
-// systemd unit state changes from inside a container.
+// systemd unit state changes from inside a container. busctl ends with the
+// docker CLI (docker.TiedExecArgs), which Process.Close kills: it would
+// otherwise stay on the node's bus as a monitor until the node stops.
 func SystemdMonitorArgs(container docker.ContainerName) []string {
-	return []string{
-		"exec", string(container),
+	return docker.TiedExecArgs(container,
 		"busctl", "monitor",
 		"--watch-bind=yes",
 		"--json=short",
 		"--match", "type=signal,interface=org.freedesktop.DBus.Properties,member=PropertiesChanged,path_namespace=/org/freedesktop/systemd1",
 		"org.freedesktop.systemd1",
-	}
+	)
 }

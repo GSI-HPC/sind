@@ -494,3 +494,22 @@ func (c *Client) CopyFromContainer(ctx context.Context, container ContainerName,
 	}
 	return data, nil
 }
+
+// tiedExecScript runs its arguments, and kills them once the exec's
+// standard input ends: when the docker CLI that runs it ends or closes its
+// own standard input, as the daemon then closes the exec's. Their output
+// and status are the exec's. The shell gives an asynchronous list
+// /dev/null as its standard input, so the one that waits for the end reads
+// the exec's from fd 3.
+const tiedExecScript = `exec 3<&0; "$@" </dev/null 3<&- & p=$!; (cat <&3 >/dev/null; kill "$p") >/dev/null 2>&1 & wait "$p"`
+
+// TiedExecArgs returns the docker CLI arguments that run argv in container
+// for as long as the docker CLI runs: docker exec -i, with a shell that
+// kills argv once the exec's standard input ends. Docker has no other way
+// to stop a process that docker exec started: killing the CLI leaves it
+// running, and a follow of a log or bus would run until the container
+// stops. The CLI's standard input must stay open, without data, while the
+// command runs, as cmdexec.Start keeps it.
+func TiedExecArgs(container ContainerName, argv ...string) []string {
+	return append([]string{"exec", "-i", string(container), "sh", "-c", tiedExecScript, "sh"}, argv...)
+}

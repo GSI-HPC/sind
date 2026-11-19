@@ -18,6 +18,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
 // The log stream, GET /logs/{realm}/{cluster}?node=&source=&unit=&lines=,
@@ -82,18 +83,18 @@ type logsReq struct {
 }
 
 // logsArgs returns the docker arguments of a stream. Every value in them
-// is a name that the store knows, or a unit that passed logsUnitRE.
+// is a name that the store knows, or a unit that passed logsUnitRE. The
+// journalctl of a journal stream ends with the docker CLI
+// (docker.TiedExecArgs), which the end of the stream kills: it would
+// otherwise follow the journal, and hold an inotify instance, until the
+// node stops.
 func logsArgs(q logsReq) []string {
 	tail := q.tail
 	opts := cluster.LogOptions{Follow: true, Tail: &tail}
 	if q.src == logsDocker {
 		return cluster.ContainerLogArgs(q.realm, q.node, q.cluster, opts)
 	}
-	if q.unit != "" {
-		return cluster.ServiceLogArgs(q.realm, q.node, q.cluster, q.unit, opts)
-	}
-	return []string{"exec", string(cluster.ContainerName(q.realm, q.cluster, q.node)),
-		"journalctl", "--follow", "-n", fmt.Sprint(tail)}
+	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), cluster.ServiceLogCommand(q.unit, opts)...)
 }
 
 // logsCheck validates the request against the store.

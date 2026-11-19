@@ -5,6 +5,7 @@ package monitor
 import (
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,7 +108,7 @@ func TestDbusPathUnescape(t *testing.T) {
 
 func TestSystemdMonitorArgs(t *testing.T) {
 	args := SystemdMonitorArgs("sind-dev-controller")
-	assert.Equal(t, "exec", args[0])
-	assert.Equal(t, "sind-dev-controller", args[1])
-	assert.Equal(t, "busctl", args[2])
+	tied := docker.TiedExecArgs("sind-dev-controller")
+	require.Equal(t, tied, args[:len(tied)], "busctl ends with the docker CLI")
+	assert.Equal(t, []string{"busctl", "monitor"}, args[len(tied):len(tied)+2])
 }

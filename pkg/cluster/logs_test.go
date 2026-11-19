@@ -41,6 +41,11 @@ func TestLogArgs(t *testing.T) {
 	}
 }
 
+func TestServiceLogCommand(t *testing.T) {
+	assert.Equal(t, []string{"journalctl", "--follow", "-n", "5"}, ServiceLogCommand("", LogOptions{Follow: true, Tail: new(5)}), "every unit")
+	assert.Equal(t, []string{"journalctl", "-u", "slurmd"}, ServiceLogCommand("slurmd", LogOptions{}))
+}
+
 func TestNodeServicesOfContainer(t *testing.T) {
 	tests := []struct {
 		name   string

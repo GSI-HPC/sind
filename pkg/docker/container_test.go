@@ -4,6 +4,7 @@ package docker
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -1115,4 +1116,56 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/nonexistent")
 	assert.ErrorContains(t, err, "file not found in tar output")
 	assert.Nil(t, data)
+}
+
+func TestTiedExecArgs(t *testing.T) {
+	assert.Equal(t, []string{"exec", "-i", "sind-dev-worker-0", "sh", "-c", tiedExecScript, "sh", "journalctl", "--follow"},
+		TiedExecArgs("sind-dev-worker-0", "journalctl", "--follow"))
+}
+
+// TestTiedExecScript runs the shell of TiedExecArgs as the exec would: the
+// command ends with its standard input, and gives its own output and
+// status when it ends first.
+func TestTiedExecScript(t *testing.T) {
+	t.Run("standard input ends", func(t *testing.T) {
+		cmd := exec.Command("sh", "-c", tiedExecScript, "sh", "sh", "-c", "echo started; exec sleep 30")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		stdout, err := cmd.StdoutPipe()
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+		line, err := bufio.NewReader(stdout).ReadString('\n')
+		require.NoError(t, err)
+		assert.Equal(t, "started\n", line)
+
+		start := time.Now()
+		require.NoError(t, stdin.Close())
+		err = cmd.Wait()
+		assert.Less(t, time.Since(start), 5*time.Second, "the command is killed")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 128+15, exitErr.ExitCode(), "killed by SIGTERM")
+	})
+	t.Run("runs while standard input is open", func(t *testing.T) {
+		// The shell gives a background job /dev/null as its standard
+		// input: the tie must not read that and kill the command at once.
+		cmd := exec.Command("sh", "-c", tiedExecScript, "sh", "sh", "-c", "sleep 0.3; echo still running")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		defer func() { _ = stdin.Close() }()
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		assert.Equal(t, "still running\n", string(out))
+	})
+	t.Run("command ends first", func(t *testing.T) {
+		cmd := exec.Command("sh", "-c", tiedExecScript, "sh", "sh", "-c", "echo done; exit 3")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		defer func() { _ = stdin.Close() }()
+		out, err := cmd.Output()
+		assert.Equal(t, "done\n", string(out))
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 3, exitErr.ExitCode())
+	})
 }

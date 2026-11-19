@@ -21,8 +21,16 @@ type Process struct {
 // Start starts a command and returns a Process for reading its stdout, and
 // its stderr too under WithStderrMerged. The command is killed when ctx is
 // cancelled.
+//
+// The command's stdin is a pipe that stays open, without data, until the
+// command has ended, so that a docker exec -i whose command ends with its
+// stdin (docker.TiedExecArgs) runs as long as the docker CLI.
 func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	// Wait closes the pipe.
+	if _, err := cmd.StdinPipe(); err != nil {
+		return nil, err
+	}
 	if StderrMerged(ctx) {
 		r, w, err := os.Pipe()
 		if err != nil {

@@ -70,7 +70,12 @@ func (e *Exec) Start(ctx context.Context, name string, args ...string) (*cmdexec
 	journal := args[0] == "exec"
 	container, unit := args[len(args)-1], ""
 	if journal {
+		// The container is the first argument of exec that is no flag,
+		// as in docker.TiedExecArgs.
 		container = args[1]
+		if i := slices.IndexFunc(args[1:], func(a string) bool { return !strings.HasPrefix(a, "-") }); i >= 0 {
+			container = args[1+i]
+		}
 		if i := slices.Index(args, "-u"); i >= 0 && i+1 < len(args) {
 			unit = args[i+1]
 		}

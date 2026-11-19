@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,27 @@ func TestStart(t *testing.T) {
 	scanner := bufio.NewScanner(proc.Stdout)
 	require.True(t, scanner.Scan(), "expected output line")
 	assert.Equal(t, "hello", scanner.Text())
+}
+
+// A started command reads a stdin that stays open until Close.
+func TestStart_StdinStaysOpen(t *testing.T) {
+	proc, err := cmdexec.Start(t.Context(), "sh", "-c", "echo started; cat; echo stdin ended")
+	require.NoError(t, err)
+	lines := make(chan string, 2)
+	go func() {
+		scanner := bufio.NewScanner(proc.Stdout)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+		close(lines)
+	}()
+	assert.Equal(t, "started", <-lines)
+	select {
+	case line := <-lines:
+		t.Fatalf("got %q while the process runs", line)
+	case <-time.After(300 * time.Millisecond):
+	}
+	require.NoError(t, proc.Close())
 }
 
 func TestStart_ContextCancel(t *testing.T) {

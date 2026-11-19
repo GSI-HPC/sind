@@ -40,8 +40,17 @@ func ContainerLogArgs(realm, node, cluster string, opts LogOptions) []string {
 // unit name (e.g. "slurmctld", "slurmd"), and opts selects following and the
 // number of lines.
 func ServiceLogArgs(realm, node, cluster, service string, opts LogOptions) []string {
-	args := []string{"exec", string(ContainerName(realm, cluster, node)),
-		"journalctl", "-u", service}
+	return append([]string{"exec", string(ContainerName(realm, cluster, node))}, ServiceLogCommand(service, opts)...)
+}
+
+// ServiceLogCommand returns the journalctl command line of ServiceLogArgs,
+// which runs in the node: the journal of the unit service, all units for
+// an empty one, with opts.
+func ServiceLogCommand(service string, opts LogOptions) []string {
+	args := []string{"journalctl"}
+	if service != "" {
+		args = append(args, "-u", service)
+	}
 	if opts.Follow {
 		args = append(args, "--follow")
 	}

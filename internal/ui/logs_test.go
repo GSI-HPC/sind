@@ -23,6 +23,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -128,23 +129,25 @@ func waitDone(t *testing.T, done <-chan struct{}) {
 func TestLogsArgs(t *testing.T) {
 	assert.Equal(t, []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"},
 		logsArgs(logsReq{src: logsDocker, realm: "sind", cluster: "dev", node: "worker-0", tail: 200}))
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000"},
+	tied := docker.TiedExecArgs("sind-dev-worker-0")
+	assert.Equal(t, append(tied, "journalctl", "-u", "slurmd", "--follow", "-n", "1000"),
 		logsArgs(logsReq{src: logsJournal, realm: "sind", cluster: "dev", node: "worker-0", unit: "slurmd", tail: 1000}))
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "journalctl", "--follow", "-n", "5000"},
+	assert.Equal(t, append(tied, "journalctl", "--follow", "-n", "5000"),
 		logsArgs(logsReq{src: logsJournal, realm: "sind", cluster: "dev", node: "worker-0", tail: 5000}))
 }
 
 func TestLogsStreamArgvPerSource(t *testing.T) {
+	tied := func(ctr docker.ContainerName, argv ...string) []string { return docker.TiedExecArgs(ctr, argv...) }
 	cases := []struct {
 		query string
 		want  []string
 	}{
 		{"node=worker-0", []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"}},
 		{"node=worker-0&source=docker&unit=slurmd", []string{"logs", "--follow", "--tail", "200", "sind-dev-worker-0"}},
-		{"node=worker-0&source=journal&unit=slurmd", []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "200"}},
-		{"node=controller&source=journal", []string{"exec", "sind-dev-controller", "journalctl", "--follow", "-n", "200"}},
+		{"node=worker-0&source=journal&unit=slurmd", tied("sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "200")},
+		{"node=controller&source=journal", tied("sind-dev-controller", "journalctl", "--follow", "-n", "200")},
 		{"node=worker-0&lines=5000", []string{"logs", "--follow", "--tail", "5000", "sind-dev-worker-0"}},
-		{"node=worker-0&source=journal&unit=slurmd&lines=1000", []string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000"}},
+		{"node=worker-0&source=journal&unit=slurmd&lines=1000", tied("sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow", "-n", "1000")},
 	}
 	for _, c := range cases {
 		t.Run(c.query, func(t *testing.T) {
