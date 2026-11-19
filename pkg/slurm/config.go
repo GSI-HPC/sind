@@ -164,7 +164,7 @@ func TaskAffinity(main config.Section) bool {
 // listsTaskAffinity reports whether a TaskPlugin value lists task/affinity;
 // Slurm also takes a plugin name without its task/ prefix.
 func listsTaskAffinity(plugins string) bool {
-	return config.ListsValue(plugins, "task/affinity") || config.ListsValue(plugins, "affinity")
+	return config.ListsPlugin(plugins, "task/affinity")
 }
 
 // maxIncludeDepth bounds the nesting of include directives that

@@ -2,10 +2,7 @@
 
 package config
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // slurmdbdManagedKeys are slurmdbd.conf parameters that the accounting
 // setup on a managed db node depends on: slurmdbd runs there as the slurm
@@ -34,7 +31,7 @@ func (c *Cluster) validateSlurmdbd() error {
 	if c.Identity.Mode == IdentityClientIDs {
 		auth, info = "auth/slurm", "use_client_ids"
 	}
-	if value, ok := s.Parameter("AuthType"); ok && strings.TrimPrefix(value, "auth/") != strings.TrimPrefix(auth, "auth/") {
+	if value, ok := s.Parameter("AuthType"); ok && !IsPlugin(value, auth) {
 		return fmt.Errorf("slurm slurmdbd sets AuthType=%s: the cluster authenticates with %s", value, auth)
 	}
 	if value, ok := s.Parameter("AuthInfo"); ok && info != "" && !ListsValue(value, info) {

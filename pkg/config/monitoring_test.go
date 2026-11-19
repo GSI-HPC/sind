@@ -27,6 +27,8 @@ func TestValidate_Monitoring(t *testing.T) {
 	}{
 		{"defaults", "", ""},
 		{"MetricsType openmetrics", "MetricsType=metrics/openmetrics\n", ""},
+		{"MetricsType without its prefix", "MetricsType=openmetrics\n", ""},
+		{"MetricsType of another type", "MetricsType=auth/openmetrics\n", "slurm main sets MetricsType=auth/openmetrics: monitoring needs metrics/openmetrics"},
 		{"other MetricsType", "MetricsType=metrics/none\n", "slurm main sets MetricsType=metrics/none: monitoring needs metrics/openmetrics"},
 		{"CommunicationParameters without disable_http", "CommunicationParameters=block_null_hash\n", ""},
 		{

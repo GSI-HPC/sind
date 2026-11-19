@@ -84,7 +84,7 @@ AuthAltTypes=auth/jwt
 AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key
 ```
 
-On a [monitored]({{< relref "/guides/monitoring" >}}) cluster it also contains this parameter, unless the `main` section sets it, in which case it must be `metrics/openmetrics` (validation checks it):
+On a [monitored]({{< relref "/guides/monitoring" >}}) cluster it also contains this parameter, unless the `main` section sets it, in which case it must be `metrics/openmetrics`, with or without its `metrics/` prefix (validation checks it):
 
 ```
 MetricsType=metrics/openmetrics

@@ -55,7 +55,7 @@ The first monitored cluster of a realm creates the stack, and the next ones join
 
   Custom images need a few more things; see [Building Images]({{< relref "/container-images/building-images#with-monitoring" >}}).
 - **A managed cluster.** An [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}) is rejected, as sind writes no `slurm.conf` for it. Unmanaged workers, db and api nodes of a managed cluster are collected, without Slurm probes.
-- **Metrics without a token.** The [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}) must not set a `MetricsType` other than `metrics/openmetrics`, `CommunicationParameters=disable_http` or `MetricsAuthUsers`, and with `PrivateData` it must also set `MetricsParameters=ignore_private_data`. sind sets `MetricsType=metrics/openmetrics` itself.
+- **Metrics without a token.** The [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}) must not set a `MetricsType` other than `metrics/openmetrics` (or `openmetrics`), `CommunicationParameters=disable_http` or `MetricsAuthUsers`, and with `PrivateData` it must also set `MetricsParameters=ignore_private_data`. sind sets `MetricsType=metrics/openmetrics` itself.
 
 sind pulls the stack's four images with the node images when it creates the stack, so the first monitored create downloads them once; later ones reuse them.
 

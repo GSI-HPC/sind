@@ -77,11 +77,25 @@ func (m IdentityMode) SlurmParameters() []SlurmParameter {
 	}
 }
 
+// keptBy reports whether value, which slurm.main gives the parameter p,
+// keeps sind's: names its plugin, with or without the type prefix (AuthType,
+// CredType), or lists its flag, in any case for LaunchParameters.
+func (p SlurmParameter) keptBy(value string) bool {
+	switch p.Key {
+	case "AuthType", "CredType":
+		return IsPlugin(value, p.Value)
+	case "LaunchParameters":
+		return ListsFlag(value, p.Value)
+	}
+	return ListsValue(value, p.Value)
+}
+
 // validate checks the mode, empty for local, and that controllerUsers goes
 // with clientIds. Both modes other than local change the Slurm
 // configuration, which sind writes only for a managed cluster, and a
 // parameter of the mode (see SlurmParameters) that the main section sets
-// must list sind's value: sind writes no value of its own then.
+// must keep sind's value (see SlurmParameter.keptBy): sind writes no value
+// of its own then.
 func (i Identity) validate(managed bool, main Section) error {
 	switch i.Mode {
 	case "", IdentityLocal:
@@ -94,7 +108,7 @@ func (i Identity) validate(managed bool, main Section) error {
 		return fmt.Errorf("identity %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", i.Mode)
 	}
 	for _, p := range i.Mode.SlurmParameters() {
-		if value, ok := main.Parameter(p.Key); ok && !ListsValue(value, p.Value) {
+		if value, ok := main.Parameter(p.Key); ok && !p.keptBy(value) {
 			return fmt.Errorf("slurm main sets %s=%s: identity %s needs %s in it", p.Key, value, i.Mode, p.Value)
 		}
 	}
