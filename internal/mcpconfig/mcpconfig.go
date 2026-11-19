@@ -54,7 +54,12 @@ type File struct {
 	orig    []byte
 	root    hujson.Value
 	newline string // the file's line break: \r\n if it has one, else \n
+	bom     bool   // whether the file starts with a byte order mark
 }
+
+// bom is the byte order mark of UTF-8, which some editors write at the
+// start of a file, as VS Code's "UTF-8 with BOM" does.
+var bom = []byte("\xef\xbb\xbf")
 
 // Server is an entry of a configuration's server list.
 type Server struct {
@@ -68,8 +73,11 @@ type Server struct {
 
 // Load reads the configuration file at path, whose servers are the members
 // of the object key. A file that does not exist, or holds only whitespace,
-// loads as an empty configuration. A symbolic link is followed, so that
-// Save writes the file it points to rather than replacing the link.
+// loads as an empty configuration, and so does one that holds only
+// comments, which Save keeps before the object. A byte order mark at the
+// start is left out, and Save writes it back. A symbolic link is followed,
+// so that Save writes the file it points to rather than replacing the
+// link.
 func Load(path, key string) (*File, error) {
 	name := path
 	path, err := resolve(path)
@@ -90,8 +98,15 @@ func Load(path, key string) (*File, error) {
 	if bytes.Contains(data, []byte("\r\n")) {
 		f.newline = "\r\n"
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
+	data, f.bom = bytes.CutPrefix(data, bom)
+	switch {
+	case len(bytes.TrimSpace(data)) == 0:
 		data = []byte("{}\n")
+	case onlyComments(data):
+		if !bytes.HasSuffix(data, []byte("\n")) {
+			data = slices.Concat(data, []byte(f.newline))
+		}
+		data = slices.Concat(data, []byte("{}"+f.newline))
 	}
 	f.root, err = hujson.Parse(data)
 	if err != nil {
@@ -129,6 +144,32 @@ func duplicate(obj *hujson.Object) string {
 		seen[name] = true
 	}
 	return ""
+}
+
+// onlyComments reports whether data holds nothing but whitespace and
+// comments, which JSONC allows around the value.
+func onlyComments(data []byte) bool {
+	for {
+		data = bytes.TrimLeft(data, " \t\r\n")
+		switch {
+		case len(data) == 0:
+			return true
+		case bytes.HasPrefix(data, []byte("//")):
+			end := bytes.IndexByte(data, '\n')
+			if end < 0 {
+				return true
+			}
+			data = data[end+1:]
+		case bytes.HasPrefix(data, []byte("/*")):
+			end := bytes.Index(data[2:], []byte("*/"))
+			if end < 0 {
+				return false
+			}
+			data = data[2+end+2:]
+		default:
+			return false
+		}
+	}
 }
 
 // count returns how many members of obj are named name.
@@ -478,6 +519,9 @@ func (f *File) indentUnit() string {
 // file as it was, and removes the backup.
 func (f *File) Save(now time.Time) (backup string, err error) {
 	data := f.root.Pack()
+	if f.bom {
+		data = slices.Concat(bom, data)
+	}
 	if f.exists && bytes.Equal(data, f.orig) {
 		return "", nil
 	}

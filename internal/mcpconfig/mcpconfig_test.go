@@ -441,6 +441,56 @@ func TestLoad_Errors(t *testing.T) {
 	}
 }
 
+// TestLoad_ByteOrderMark checks that a file that starts with a byte order
+// mark loads, and keeps it.
+func TestLoad_ByteOrderMark(t *testing.T) {
+	path, f := load(t, new("\ufeff{\n  \"mcpServers\": {}\n}\n"), "mcpServers")
+	backup, err := f.Save(now)
+	require.NoError(t, err)
+	assert.Empty(t, backup, "an unchanged file is not written")
+
+	f.Set(sindEntry)
+	_, err = f.Save(now)
+	require.NoError(t, err)
+	assert.Equal(t, "\ufeff"+newServers, read(t, path))
+
+	// One with only whitespace after the mark is empty.
+	path, f = load(t, new("\ufeff\n"), "mcpServers")
+	f.Set(sindEntry)
+	_, err = f.Save(now)
+	require.NoError(t, err)
+	assert.Equal(t, "\ufeff"+newServers, read(t, path))
+}
+
+// TestLoad_OnlyComments checks that a file that holds only comments loads
+// as an empty configuration, and keeps its comments before the object.
+func TestLoad_OnlyComments(t *testing.T) {
+	for in, want := range map[string]string{
+		"// nothing yet\n":        "// nothing yet\n" + newServers,
+		"/* a */\n// b":           "/* a */\n// b\n" + newServers,
+		"\ufeff/* settings */\n":  "\ufeff/* settings */\n" + newServers,
+		"// one\r\n/* two */\r\n": "// one\r\n/* two */\r\n" + strings.ReplaceAll(newServers, "\n", "\r\n"),
+	} {
+		t.Run(in, func(t *testing.T) {
+			path, f := load(t, &in, "mcpServers")
+			assert.Empty(t, f.Servers())
+			f.Set(sindEntry)
+			_, err := f.Save(now)
+			require.NoError(t, err)
+			assert.Equal(t, want, read(t, path))
+		})
+	}
+
+	// A comment that does not end is still an error.
+	path := filepath.Join(t.TempDir(), "c.json")
+	require.NoError(t, os.WriteFile(path, []byte("// a\n/* b"), 0o644))
+	_, err := mcpconfig.Load(path, "mcpServers")
+	require.ErrorContains(t, err, "parsing "+path+": ")
+	require.NoError(t, os.WriteFile(path, []byte("// a\n1"), 0o644))
+	_, err = mcpconfig.Load(path, "mcpServers")
+	require.EqualError(t, err, "parsing "+path+": not a JSON object")
+}
+
 func TestLoad_ReadErrors(t *testing.T) {
 	dir := t.TempDir()
 	_, err := mcpconfig.Load(dir, "mcpServers")
