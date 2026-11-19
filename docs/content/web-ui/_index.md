@@ -29,7 +29,7 @@ sind ui: http://127.0.0.1:41873/?token=...
 Press Ctrl-C to stop.
 ```
 
-The UI runs until you press Ctrl-C in that terminal. Pressing Ctrl-C stops the server. Commands that the UI started are interrupted, and they roll back (see [Stop a run]({{< relref "/web-ui/runs#stop-a-run" >}})).
+The UI runs until you press Ctrl-C in that terminal. Pressing Ctrl-C stops the server. Commands that the UI started are interrupted, and they roll back (see [Stop a run]({{< relref "/web-ui/runs#stop-a-run" >}})). On Linux they also roll back when the UI ends in another way, for example when its terminal closes.
 
 Useful flags:
 

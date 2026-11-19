@@ -25,6 +25,11 @@ func TestInProcessGroup(t *testing.T) {
 	assert.True(t, InProcessGroup(WithProcessGroup(t.Context())))
 }
 
+func TestOrphanSafe(t *testing.T) {
+	assert.False(t, OrphanSafe(t.Context()))
+	assert.True(t, OrphanSafe(WithOrphanSafe(t.Context())))
+}
+
 func TestLineParser(t *testing.T) {
 	assert.Nil(t, LineParser(t.Context()))
 

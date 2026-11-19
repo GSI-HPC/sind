@@ -6,12 +6,17 @@ package cmdexec_test
 
 import (
 	"context"
+	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
@@ -209,4 +214,54 @@ func TestOSExecutor_TerminalNotStarted(t *testing.T) {
 	var e cmdexec.OSExecutor
 	_, _, err := e.Run(cmdexec.WithTerminal(t.Context()), "/nonexistent/sind-test")
 	require.Error(t, err)
+}
+
+// A command run WithOrphanSafe writes no pipe of this process: its standard
+// output goes nowhere, and its standard error to a file, which Run returns,
+// also in the ExitError.
+func TestOSExecutor_OrphanSafe(t *testing.T) {
+	var e cmdexec.OSExecutor
+	var pid int
+	ctx := cmdexec.WithStarted(cmdexec.WithOrphanSafe(cmdexec.WithProcessGroup(t.Context())), func(p int) { pid = p })
+	script := `echo out; if [ -p /dev/stderr ]; then echo pipe >&2; else echo file >&2; fi; exit 3`
+	stdout, stderr, err := e.Run(ctx, "sh", "-c", script)
+	assert.Positive(t, pid)
+	assert.Empty(t, stdout)
+	assert.Equal(t, "file\n", stderr)
+	ee, ok := errors.AsType[*cmdexec.ExitError](err)
+	require.True(t, ok, "err = %v", err)
+	assert.Equal(t, 3, ee.ExitCode())
+	assert.Equal(t, "file\n", ee.Stderr)
+
+	_, _, err = e.Run(cmdexec.WithOrphanSafe(t.Context()), "/nonexistent/sind-test")
+	require.Error(t, err)
+}
+
+// orphanParentEnv names the files of the helper process of
+// TestOSExecutor_OrphanSafeInterruptsOnParentDeath.
+const orphanParentEnv = "CMDEXEC_TEST_ORPHAN_DIR"
+
+// A command run WithOrphanSafe gets SIGINT when the process that ran it
+// dies, and can still write its standard error then.
+func TestOSExecutor_OrphanSafeInterruptsOnParentDeath(t *testing.T) {
+	if dir := os.Getenv(orphanParentEnv); dir != "" {
+		// The helper: run the command, and wait to be killed.
+		script := `trap 'echo stopping >&2; echo interrupted > "$0/out"; exit 130' INT; echo > "$0/ready"; while :; do sleep 0.1; done`
+		var e cmdexec.OSExecutor
+		_, _, _ = e.Run(cmdexec.WithOrphanSafe(context.Background()), "sh", "-c", script, dir)
+		return
+	}
+	dir := t.TempDir()
+	helper := exec.Command(os.Args[0], "-test.run=^TestOSExecutor_OrphanSafeInterruptsOnParentDeath$")
+	helper.Env = append(os.Environ(), orphanParentEnv+"="+dir)
+	require.NoError(t, helper.Start())
+	ready := filepath.Join(dir, "ready")
+	require.Eventually(t, func() bool { _, err := os.Stat(ready); return err == nil }, 10*time.Second, 20*time.Millisecond)
+	require.NoError(t, helper.Process.Signal(syscall.SIGKILL))
+	_ = helper.Wait()
+	out := filepath.Join(dir, "out")
+	assert.Eventually(t, func() bool {
+		b, err := os.ReadFile(out)
+		return err == nil && string(b) == "interrupted\n"
+	}, 10*time.Second, 20*time.Millisecond, "the command got no SIGINT when its parent died")
 }

@@ -4,7 +4,9 @@
 // keeps their tasks in the store while they run.
 //
 // A task's command is a child process of its own: the running sind binary,
-// in a process group of its own, with no input and no progress display. Its
+// in a process group of its own, with no input and no progress display.
+// It writes no pipe of sind ui (cmdexec.WithOrphanSafe), so it can go on
+// and roll back if sind ui dies, which sends it SIGINT on Linux. Its
 // progress comes from the activity log, where the child writes the same
 // events that make a terminal's progress display: the runner hands the child
 // a trace ID in TRACEPARENT, and the pages find the run with that trace.
@@ -122,7 +124,7 @@ func New(cfg Config) *Runner {
 			_, _ = rand.Read(b)
 		}
 	}
-	ctx, cancel := context.WithCancel(cmdexec.WithProcessGroup(context.Background()))
+	ctx, cancel := context.WithCancel(cmdexec.WithOrphanSafe(cmdexec.WithProcessGroup(context.Background())))
 	return &Runner{cfg: cfg, ctx: ctx, cancel: cancel, running: map[string]*child{}}
 }
 

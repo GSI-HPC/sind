@@ -25,6 +25,8 @@ type call struct {
 	name string
 	args []string
 	env  []string
+	// group and orphanSafe are the options of the context it ran with.
+	group, orphanSafe bool
 }
 
 // fakeExec is an executor whose commands end when the test says: a command
@@ -48,7 +50,7 @@ func newFakeExec() *fakeExec { return &fakeExec{pid: 4242, results: make(chan re
 
 func (f *fakeExec) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	f.mu.Lock()
-	f.calls = append(f.calls, call{name, args, cmdexec.Env(ctx)})
+	f.calls = append(f.calls, call{name, args, cmdexec.Env(ctx), cmdexec.InProcessGroup(ctx), cmdexec.OrphanSafe(ctx)})
 	f.mu.Unlock()
 	if f.noStart != nil {
 		return "", "", f.noStart
@@ -196,6 +198,8 @@ func TestStart_RunsTheBinaryWithTheEnvironment(t *testing.T) {
 		"PATH=/bin", "SIND_PROGRESS=none", "TRACEPARENT=00-" + wantTrace + "-" + wantSpan + "-01",
 		"TRACESTATE=sind=ui", "SIND_PROGRESS_LOG=/state/activity.jsonl",
 	}, c.env)
+	assert.True(t, c.group, "the child runs in a process group of its own")
+	assert.True(t, c.orphanSafe, "the child must outlive sind ui and roll back")
 	f.ex.results <- result{}
 	f.waitDone(t, id)
 }

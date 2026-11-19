@@ -6,9 +6,11 @@ package cmdexec
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -60,6 +62,9 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	if InProcessGroup(ctx) {
 		inProcessGroup(cmd)
 	}
+	if OrphanSafe(ctx) {
+		return runOrphanSafe(ctx, cmd)
+	}
 	var outBuf, errBuf bytes.Buffer
 	// Under a progress span that shows lines, such as the target of an
 	// image docker pulls, its display shows the newest line the command
@@ -96,6 +101,37 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 		term.wait()
 	}
 	return outBuf.String(), errBuf.String(), WrapExitError(err, errBuf.String())
+}
+
+// runOrphanSafe runs cmd as WithOrphanSafe describes: its standard output
+// goes to the null device and its standard error to a temporary file that
+// is unlinked at once, so that nothing is left of it once both processes
+// have ended. The goroutine keeps its thread until cmd ends, as the signal
+// of the parent's death (orphanSignal) comes when the thread that started
+// cmd ends.
+func runOrphanSafe(ctx context.Context, cmd *exec.Cmd) (string, string, error) {
+	f, err := os.CreateTemp("", "sind-stderr-")
+	if err != nil {
+		return "", "", fmt.Errorf("creating a file for the standard error of %s: %w", cmd.Path, err)
+	}
+	defer func() { _ = f.Close() }()
+	_ = os.Remove(f.Name())
+	cmd.Stdout, cmd.Stderr = nil, f
+	orphanSignal(cmd)
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	err = cmd.Start()
+	if err == nil {
+		if started := Started(ctx); started != nil {
+			started(cmd.Process.Pid)
+		}
+		err = cmd.Wait()
+	}
+	var errBuf bytes.Buffer
+	if _, serr := f.Seek(0, io.SeekStart); serr == nil {
+		_, _ = errBuf.ReadFrom(f)
+	}
+	return "", errBuf.String(), WrapExitError(err, errBuf.String())
 }
 
 // terminal is the pseudo-terminal of a command run WithTerminal: the

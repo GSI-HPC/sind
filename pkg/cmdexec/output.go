@@ -60,6 +60,27 @@ func InProcessGroup(ctx context.Context) bool {
 	return group
 }
 
+// orphanSafeKey is the context key of WithOrphanSafe.
+type orphanSafeKey struct{}
+
+// WithOrphanSafe returns ctx for a command that must not die with this
+// process, such as a sind that sind ui runs: once nobody reads a pipe, the
+// next write to it ends the writer with SIGPIPE, which can be before its
+// rollback. OSExecutor gives such a command no pipe: its standard output
+// goes to the null device, its standard error to an unlinked temporary
+// file, which Run returns when the command ends. On Linux the command also
+// gets SIGINT when this process dies, as Ctrl-C sends, so that it stops
+// and rolls back.
+func WithOrphanSafe(ctx context.Context) context.Context {
+	return context.WithValue(ctx, orphanSafeKey{}, true)
+}
+
+// OrphanSafe reports whether ctx is one WithOrphanSafe returned.
+func OrphanSafe(ctx context.Context) bool {
+	safe, _ := ctx.Value(orphanSafeKey{}).(bool)
+	return safe
+}
+
 // lineParserKey is the context key of WithLineParser.
 type lineParserKey struct{}
 
