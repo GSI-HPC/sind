@@ -1143,6 +1143,10 @@ func TestLogExtraPrivileges(t *testing.T) {
 		{"devices", RunConfig{ShortName: "worker-0", Devices: []string{"/dev/fuse"}}, "devices=[/dev/fuse]"},
 		{"securityOpt", RunConfig{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}}, "securityOpt=[apparmor=unconfined]"},
 		{"data host path", RunConfig{ShortName: "worker-0", DataHostPath: "/home/u/proj"}, "hostMounts=[/home/u/proj:/data]"},
+		{"task/affinity", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_ADMIN"}}, "capAdd=[SYS_NICE,SYS_ADMIN]"},
+		{"task/affinity and SYS_NICE", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapAdd: []string{"SYS_NICE"}}, "capAdd=[SYS_NICE]"},
+		{"task/affinity dropped", RunConfig{ShortName: "worker-0", Role: config.RoleWorker, TaskAffinity: true, CapDrop: []string{"ALL"}}, ""},
+		{"task/affinity on the controller", RunConfig{ShortName: "controller", Role: config.RoleController, TaskAffinity: true}, ""},
 		{"all", RunConfig{
 			ShortName:     "worker-0",
 			CapAdd:        []string{"SYS_ADMIN"},

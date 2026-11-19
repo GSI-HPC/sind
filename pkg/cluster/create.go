@@ -162,10 +162,15 @@ func (p *imagePull) wait(ctx context.Context) error {
 // logExtraPrivileges emits a notice, at info level, for each node that has
 // extra capabilities, devices or security options configured or bind-mounts
 // host directories (the data directory, the host's /cvmfs), making the
-// node's access to the host visible with -v.
+// node's access to the host visible with -v. The capabilities include the
+// one sind adds to a worker for task/affinity (addsTaskAffinityCapability).
 func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 	log := sindlog.From(ctx)
 	for _, cfg := range configs {
+		capAdd := cfg.CapAdd
+		if addsTaskAffinityCapability(cfg) && !slices.Contains(capAdd, TaskAffinityCapability) {
+			capAdd = append([]string{TaskAffinityCapability}, capAdd...)
+		}
 		var binds []string
 		if cfg.DataHostPath != "" {
 			mountPath := cfg.DataMountPath
@@ -182,7 +187,7 @@ func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 			name   string
 			values []string
 		}{
-			{"capAdd", cfg.CapAdd},
+			{"capAdd", capAdd},
 			{"devices", cfg.Devices},
 			{"securityOpt", cfg.SecurityOpt},
 			{"hostMounts", binds},

@@ -198,6 +198,13 @@ func getsTaskAffinityCapability(taskAffinity bool, capDrop []string) bool {
 	return taskAffinity && !slices.Contains(capDrop, TaskAffinityCapability) && !slices.Contains(capDrop, "ALL")
 }
 
+// addsTaskAffinityCapability reports whether BuildRunArgs adds
+// TaskAffinityCapability to the node of cfg: a worker that
+// getsTaskAffinityCapability.
+func addsTaskAffinityCapability(cfg RunConfig) bool {
+	return cfg.Role == config.RoleWorker && getsTaskAffinityCapability(cfg.TaskAffinity, cfg.CapDrop)
+}
+
 // BuildRunArgs returns the docker arguments for creating a node container.
 // The returned slice does not include "create" or "run -d" — the caller
 // passes these args to Client.CreateContainer or Client.RunContainer.
@@ -302,7 +309,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// Workers that bind tasks with task/affinity may set the CPU affinity of
 	// other users' processes, unless the node drops the capability: a
 	// --cap-drop does not undo a --cap-add.
-	if cfg.Role == config.RoleWorker && getsTaskAffinityCapability(cfg.TaskAffinity, cfg.CapDrop) {
+	if addsTaskAffinityCapability(cfg) {
 		args = append(args, "--cap-add", TaskAffinityCapability)
 	}
 

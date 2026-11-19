@@ -730,7 +730,7 @@ Before it creates a worker container, sind checks that the Docker host mounts cg
 
 `--count` must be at least 1 and `--cpus` must not be negative; `--image`, `--memory` and `--tmp-size` must not be given empty, which would quietly stand for the default. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container. Once it has found the cluster's controller, and before it starts a stopped mesh or creates a worker, sind refuses workers that would not fit on the realm's mesh or the cluster network (see Limits under Networking), with exit status 1.
 
-With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: a mutation writes nothing on success but, on a terminal, what its progress display leaves.
+With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). Its capabilities include the `SYS_NICE` that sind adds to a managed worker for `task/affinity`. It is not a warning: a mutation writes nothing on success but, on a terminal, what its progress display leaves.
 
 Examples:
 
