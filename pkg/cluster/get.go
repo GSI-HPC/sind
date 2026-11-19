@@ -190,7 +190,9 @@ func GetNodeNames(ctx context.Context, client *docker.Client, realm string, role
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
-	// Mesh containers carry the realm label but no cluster label.
+	// The mesh's and the monitoring stack's containers carry only the
+	// Compose labels of <realm>-mesh, so the list has none of them; a
+	// container of the realm without a cluster label is no node either.
 	containers = slices.DeleteFunc(containers, func(c docker.ContainerListEntry) bool {
 		return c.Labels[LabelCluster] == "" || len(roles) > 0 && !slices.Contains(roles, config.Role(c.Labels[LabelRole]))
 	})
