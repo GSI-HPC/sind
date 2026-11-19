@@ -58,9 +58,11 @@
   function bytes(n) {
     const u = ['B', 'kB', 'MB', 'GB', 'TB'];
     let i = 0;
-    while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+    // The unit and the decimal follow from the rounded value: 999600 is
+    // 1.0 MB, not 1000 kB.
+    while (Math.round(n) >= 1000 && i < u.length - 1) { n /= 1000; i++; }
     if (i === 0) return Math.max(Math.round(n), 0) + ' B';
-    return (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
+    return (Math.round(n * 10) < 100 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
   }
   function plural(n, noun) { return n + ' ' + noun + (n === 1 ? '' : 's'); }
   function tickLabel(v) {

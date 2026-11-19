@@ -24,6 +24,10 @@ func TestPgAgoAndClock(t *testing.T) {
 	assert.Equal(t, "0:00.0", pgClock(-time.Second))
 	assert.Equal(t, "1:05.5", pgClock(65*time.Second+500*time.Millisecond))
 	assert.Equal(t, "12:00.0", pgClock(12*time.Minute))
+	// The clock rounds before it splits off the minutes.
+	assert.Equal(t, "0:59.9", pgClock(59*time.Second+940*time.Millisecond))
+	assert.Equal(t, "1:00.0", pgClock(59*time.Second+960*time.Millisecond))
+	assert.Equal(t, "2:00.0", pgClock(119*time.Second+950*time.Millisecond))
 }
 
 func TestPgPlural(t *testing.T) {

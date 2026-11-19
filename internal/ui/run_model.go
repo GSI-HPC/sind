@@ -5,6 +5,7 @@ package ui
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -682,12 +683,14 @@ func runBytes(n int64) string {
 		return fmt.Sprintf("%d B", max(n, 0))
 	}
 	units := []string{"kB", "MB", "GB"}
+	// The unit and the decimal follow from the rounded value, so that
+	// 999,600 B reads 1.0 MB and 9,960 B reads 10 kB.
 	f, i := float64(n)/1000, 0
-	for f >= 1000 && i < len(units)-1 {
+	for math.Round(f) >= 1000 && i < len(units)-1 {
 		f /= 1000
 		i++
 	}
-	if f < 10 {
+	if math.Round(f*10) < 100 {
 		return fmt.Sprintf("%.1f %s", f, units[i])
 	}
 	return fmt.Sprintf("%.0f %s", f, units[i])

@@ -861,8 +861,10 @@ func pgAgo(t, now time.Time) string {
 }
 
 // pgClock formats a duration as m:ss.s, the clock of a running command.
+// It rounds before it splits off the minutes, so that 59.96 s reads 1:00.0
+// and not 0:60.0.
 func pgClock(d time.Duration) string {
-	d = max(d, 0)
+	d = max(d, 0).Round(100 * time.Millisecond)
 	m := int(d / time.Minute)
 	return fmt.Sprintf("%d:%04.1f", m, (d - time.Duration(m)*time.Minute).Seconds())
 }
