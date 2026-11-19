@@ -99,7 +99,7 @@ assert.Empty(t, d.Networks())
 
 ## Simulating missing resources
 
-The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr.
+The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr. An executor that runs no local process, or a test double that needs a code other than 1, returns `cmdexec.NewExitError(code, stderr)`, which the mock passes on unchanged.
 
 Docker exits 1 for many failures, so `docker.IsNotFound` and the in-use retry of `RemoveVolume` read docker's message, not only the exit code. Queue a real `*exec.ExitError` with exit code 1 together with the stderr docker prints:
 

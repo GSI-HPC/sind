@@ -79,7 +79,9 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 
 // Close kills the process (if still running), waits for it to exit and
 // closes Stdout, in either mode of Start. If the Process was created
-// without a command (e.g. in tests), Close just closes Stdout. The
+// without a command, as a test double or an Executor that runs no local
+// process creates it, Close just closes Stdout and returns its error, so
+// that Stdout's Close can end the command and report how it exited. The
 // "signal: killed" error from the intentional Kill is suppressed so normal
 // shutdown returns nil; a command that exited with a non-zero status by
 // itself, as a stream that failed, returns an *ExitError with what Start

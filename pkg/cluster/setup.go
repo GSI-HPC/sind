@@ -138,7 +138,7 @@ func runSetupSteps(ctx context.Context, client *docker.Client, container docker.
 	var exitErr *cmdexec.ExitError
 	if errors.As(err, &exitErr) {
 		if step, out, ok := failedStep(steps, exitErr.Stderr); ok {
-			return "", fmt.Errorf("%s: %w", step.what, &cmdexec.ExitError{Err: exitErr.Err, Stderr: out})
+			return "", fmt.Errorf("%s: %w", step.what, &cmdexec.ExitError{Code: exitErr.Code, Stderr: out, Err: exitErr.Err})
 		}
 	}
 	// docker exec failed itself, e.g. on a container that stopped.

@@ -413,3 +413,23 @@ func TestClient_TracesEveryCommand(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="stop `+string(testContainerName)+`"`), buf.String())
 	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="exec -i `+string(testContainerName)+` cat"`), buf.String())
 }
+
+// TestNewExitErrorRecognised checks that the error of an Executor that runs
+// no local process, made with cmdexec.NewExitError, is read as the docker
+// CLI's: a missing resource, and a non-zero exit of the command docker exec
+// ran.
+func TestNewExitErrorRecognised(t *testing.T) {
+	stderr := "Error response from daemon: No such container: sind-dev-controller\n"
+	var m mock.Executor
+	m.AddResult("", stderr, cmdexec.NewExitError(1, stderr))
+	m.AddResult("inactive\n", "", cmdexec.NewExitError(3, ""))
+	c := NewClient(&m)
+
+	_, err := c.InspectContainer(t.Context(), "sind-dev-controller")
+	assert.True(t, IsNotFound(err))
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+	require.NoError(t, err)
+	assert.Equal(t, "inactive\n", stdout)
+	m.AssertDone(t)
+}

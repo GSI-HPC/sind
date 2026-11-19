@@ -260,7 +260,8 @@ func failure(out string, err error) string {
 	case other != "" && ee.ExitCode() >= 0:
 		return other
 	}
-	return "sind " + ee.Err.String()
+	// The status alone, without the stderr the error carries.
+	return "sind " + (&cmdexec.ExitError{Code: ee.Code, Err: ee.Err}).Error()
 }
 
 // tail returns the end of stderr that a task keeps, escaped: from the start

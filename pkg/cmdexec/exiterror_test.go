@@ -48,3 +48,14 @@ func TestWrapExitError_OtherErrorsUnchanged(t *testing.T) {
 	wrapped := cmdexec.WrapExitError(exitError(t, 1), "first")
 	assert.Same(t, wrapped, cmdexec.WrapExitError(wrapped, "second"), "an ExitError is not wrapped twice")
 }
+
+// TestNewExitError checks that an Executor that runs no local process can
+// return the error of a command that failed: it carries its own exit code.
+func TestNewExitError(t *testing.T) {
+	err := cmdexec.NewExitError(3, "Error response from daemon: No such container: x\n")
+	assert.Equal(t, 3, err.ExitCode())
+	assert.EqualError(t, err, "exit status 3: Error response from daemon: No such container: x")
+	assert.NoError(t, errors.Unwrap(err))
+
+	assert.EqualError(t, cmdexec.NewExitError(1, ""), "exit status 1")
+}

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"os/exec"
 	"path"
 	"slices"
 	"strconv"
@@ -439,12 +438,12 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 	args := append([]string{"exec", string(container)}, command...)
 	stdout, stderr, err := c.run(ctx, args...)
 	// A docker CLI killed by a signal has no exit status of the command.
-	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
 	if !ok || exitErr.ExitCode() < 0 || ctx.Err() != nil || errors.Is(err, ErrUnreachable) || execFailed(stderr) {
 		return stdout, err
 	}
 	if msg, ok := execNotStarted(exitErr.ExitCode(), stdout); ok {
-		return "", &cmdexec.ExitError{Err: exitErr, Stderr: msg}
+		return "", &cmdexec.ExitError{Code: exitErr.Code, Stderr: msg, Err: exitErr.Err}
 	}
 	return stdout, nil
 }

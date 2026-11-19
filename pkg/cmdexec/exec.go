@@ -23,8 +23,9 @@ import (
 type Executor interface {
 	// Run executes the named command with the given arguments and returns
 	// the captured stdout and stderr. If the command exits with a non-zero
-	// status, the returned error is an *ExitError that carries stderr and
-	// wraps the *exec.ExitError.
+	// status, the returned error is an *ExitError that carries its exit
+	// code and stderr (NewExitError, or WrapExitError of an
+	// *exec.ExitError).
 	Run(ctx context.Context, name string, args ...string) (stdout string, stderr string, err error)
 
 	// RunWithStdin is like Run but pipes the given reader to the command's stdin.
@@ -32,7 +33,10 @@ type Executor interface {
 
 	// Start starts a long-lived command and returns a Process for reading
 	// its stdout incrementally. The command is killed when ctx is cancelled.
-	// The caller must call Process.Close to release resources.
+	// The caller must call Process.Close to release resources. An Executor
+	// that runs no local process returns a Process with only Stdout set,
+	// whose Close ends the command and returns an *ExitError for one that
+	// failed.
 	Start(ctx context.Context, name string, args ...string) (*Process, error)
 }
 
