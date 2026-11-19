@@ -162,7 +162,28 @@ func openTerminal(w io.Writer) *terminal {
 		_ = tty.Close()
 		return nil
 	}
+	if p, err = pollable(p); err != nil {
+		_ = tty.Close()
+		return nil
+	}
 	return &terminal{pty: p, tty: tty, out: NewTerminalLines(w), done: make(chan struct{})}
+}
+
+// pollable returns a non-blocking copy of f, which the runtime's poller
+// reads, and closes f. pty.Open and pty.Setsize call f.Fd(), which puts f
+// in blocking mode, where closing f does not end a read of it.
+func pollable(f *os.File) (*os.File, error) {
+	defer func() { _ = f.Close() }()
+	fd, err := syscall.Dup(int(f.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	syscall.CloseOnExec(fd)
+	if err := syscall.SetNonblock(fd, true); err != nil {
+		_ = syscall.Close(fd)
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), f.Name()), nil
 }
 
 // started lets go of the parent's end of the terminal once the command
@@ -185,7 +206,7 @@ func (t *terminal) started(ok bool) {
 
 // wait waits for what the command wrote to have been read, at most
 // outputWaitDelay after the command ended, as a process it left behind may
-// hold the terminal, and closes the terminal.
+// hold the terminal, and closes the terminal, which ends the read.
 func (t *terminal) wait() {
 	select {
 	case <-t.done:

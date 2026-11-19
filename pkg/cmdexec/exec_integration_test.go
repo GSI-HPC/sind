@@ -209,6 +209,17 @@ func TestOSExecutor_Terminal(t *testing.T) {
 	assert.Contains(t, parsed, "stderr err")
 }
 
+// A command run WithTerminal returns at most outputWaitDelay after it
+// ended, although a process that it left behind holds the terminal.
+func TestOSExecutor_TerminalHeldByAChild(t *testing.T) {
+	var e cmdexec.OSExecutor
+	start := time.Now()
+	stdout, _, err := e.Run(cmdexec.WithTerminal(t.Context()), "sh", "-c", "sleep 8 & echo one")
+	require.NoError(t, err)
+	assert.Equal(t, "one\n", stdout)
+	assert.Less(t, time.Since(start), 6*time.Second, "closing the terminal ends its read")
+}
+
 // A command that succeeds returns with its output at most outputWaitDelay
 // after it ended, although a process that it left behind holds the output.
 func TestOSExecutor_OutputHeldByAChild(t *testing.T) {
