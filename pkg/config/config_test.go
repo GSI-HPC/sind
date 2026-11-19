@@ -299,6 +299,9 @@ func TestValidate_DataStorage(t *testing.T) {
 		{name: "hostPath type without path", ds: DataStorage{Type: StorageHostPath}, wantErr: "storage.dataStorage.hostPath is required"},
 		{name: "relative mountPath", ds: DataStorage{MountPath: "data"}, wantErr: "storage.dataStorage.mountPath must be absolute"},
 		{name: "mountPath with a comma", ds: DataStorage{MountPath: "/data,2"}, wantErr: "storage.dataStorage.mountPath must not contain a comma"},
+		{name: "mountPath with a colon", ds: DataStorage{MountPath: "/da:ta"}, wantErr: `storage.dataStorage.mountPath must not contain a colon, got "/da:ta"`},
+		{name: "mountPath /", ds: DataStorage{MountPath: "/"}, wantErr: `storage.dataStorage.mountPath must not be /, got "/"`},
+		{name: "mountPath // ", ds: DataStorage{Type: StorageHostPath, HostPath: "/srv", MountPath: "//."}, wantErr: `storage.dataStorage.mountPath must not be /, got "//."`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

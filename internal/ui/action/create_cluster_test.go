@@ -333,6 +333,8 @@ func TestBuildCreateCluster_Problems(t *testing.T) {
 		{"mkdir", valid("mkdir", "yes"), "mkdir", "tick the box", true},
 		{"mount relative", valid("mount", "data"), "mount", "write a path in the nodes that starts with /", true},
 		{"mount comma", valid("mount", "/a,b"), "mount", "write a path in the nodes", true},
+		{"mount colon", valid("mount", "/a:b"), "mount", "write a path in the nodes", true},
+		{"mount root", valid("mount", "//"), "mount", "write a path in the nodes", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd, err := build(t, "create-cluster", tc.f)

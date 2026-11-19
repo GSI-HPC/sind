@@ -126,6 +126,14 @@ func (d DataStorage) validate() error {
 	if strings.Contains(d.MountPath, ",") {
 		return fmt.Errorf("storage.dataStorage.mountPath must not contain a comma, got %q", d.MountPath)
 	}
+	// The nodes mount the data volume with -v NAME:PATH:rw, which a colon
+	// would split, and Docker mounts nothing at /.
+	if strings.Contains(d.MountPath, ":") {
+		return fmt.Errorf("storage.dataStorage.mountPath must not contain a colon, got %q", d.MountPath)
+	}
+	if d.MountPath != "" && filepath.Clean(d.MountPath) == "/" {
+		return fmt.Errorf("storage.dataStorage.mountPath must not be /, got %q", d.MountPath)
+	}
 	return nil
 }
 

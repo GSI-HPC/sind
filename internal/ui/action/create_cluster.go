@@ -492,8 +492,8 @@ func mountPath(f Form, ps *problems) string {
 	switch {
 	case m == "":
 		return ""
-	case !plainText(m) || !path.IsAbs(m) || strings.Contains(m, ","):
-		ps.add("mount", "Mount path", true, errors.New("write a path in the nodes that starts with / and has no comma, such as /data"))
+	case !plainText(m) || !path.IsAbs(m) || strings.ContainsAny(m, ",:") || path.Clean(m) == "/":
+		ps.add("mount", "Mount path", true, errors.New("write a path in the nodes that starts with /, is not / and has no comma or colon, such as /data"))
 		return ""
 	}
 	return path.Clean(m)
