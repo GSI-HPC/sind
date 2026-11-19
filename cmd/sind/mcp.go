@@ -500,9 +500,10 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 //     activity log, as every command does, and nothing on its stderr;
 //   - SIND_LOG_TIMESTAMPS=false: the time an error line was written means
 //     nothing to the client, which gets the line with the call's result;
-//   - the root's Version, which ophis reports to MCP clients, only while
-//     the server runs: set on the root for good, it would give every sind
-//     command a --version flag.
+//   - the root's Version to the bare version, such as 0.17.0, which ophis
+//     reports to MCP clients as serverInfo.version. Otherwise the root's
+//     Version is the human line that `sind --version` prints, such as
+//     "sind 0.17.0 (abc1234)".
 func asMCPServer(cmd *cobra.Command) {
 	run := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
