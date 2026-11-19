@@ -213,8 +213,10 @@ func (f *File) servers() *hujson.Object {
 }
 
 // Servers returns the configured servers, in the order of the file. An
-// entry that is not an object, or whose fields have other types, is listed
-// by its name alone.
+// entry that is not an object is listed by its name alone, and a field of
+// an entry that has another type is left empty, without the others. A
+// variable of env whose value is no string has its JSON text, such as
+// 8080, as its value, so that a Set of the server keeps it.
 func (f *File) Servers() []Server {
 	obj := f.servers()
 	if obj == nil {
@@ -222,16 +224,63 @@ func (f *File) Servers() []Server {
 	}
 	servers := make([]Server, 0, len(obj.Members))
 	for _, m := range obj.Members {
-		s := Server{}
 		v := m.Value.Clone()
 		v.Standardize()
-		if json.Unmarshal(v.Pack(), &s) != nil {
-			s = Server{}
-		}
+		s := decodeServer(v.Pack())
 		s.Name = m.Name.Value.(hujson.Literal).String()
 		servers = append(servers, s)
 	}
 	return servers
+}
+
+// decodeServer decodes the entry data field by field, so that a field of
+// another type does not hide the others.
+func decodeServer(data []byte) Server {
+	fields := decode[map[string]json.RawMessage](data)
+	return Server{
+		Type:    decode[string](fields["type"]),
+		Command: decode[string](fields["command"]),
+		Args:    decode[[]string](fields["args"]),
+		URL:     decode[string](fields["url"]),
+		Env:     decodeEnv(fields["env"]),
+	}
+}
+
+// decodeEnv decodes the env of an entry: a variable whose value is no
+// string gets the value's JSON text.
+func decodeEnv(data json.RawMessage) map[string]string {
+	vars := decode[map[string]json.RawMessage](data)
+	if len(vars) == 0 {
+		return nil
+	}
+	env := make(map[string]string, len(vars))
+	for name, raw := range vars {
+		value, err := decodeValue[string](raw)
+		if err != nil {
+			var text bytes.Buffer
+			_ = json.Compact(&text, raw) // raw is valid JSON
+			value = text.String()
+		}
+		env[name] = value
+	}
+	return env
+}
+
+// decode returns data decoded as a T, or the zero T when data is missing
+// or is no T.
+func decode[T any](data []byte) T {
+	v, _ := decodeValue[T](data)
+	return v
+}
+
+// decodeValue decodes data as a T, all or nothing.
+func decodeValue[T any](data []byte) (T, error) {
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		var zero T
+		return zero, err
+	}
+	return v, nil
 }
 
 // Server returns the entry name, as Servers lists it, and whether there

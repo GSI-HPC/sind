@@ -398,6 +398,8 @@ func TestServers(t *testing.T) {
     "web": {"type": "http", "url": "https://example.com/mcp", /* auth */ "headers": {}},
     "bad": "not an object",
     "odd": {"args": "not a list"},
+    "mixed": {"type": 1, "command": "/bin/m", "args": ["a", 2], "env": {"SIND_REALM": "ci", "PORT": 8080, "ON": true, "L": [1, 2]}},
+    "envless": {"command": "/bin/e", "env": ["K=V"]},
   }
 }`), "mcpServers")
 	assert.Equal(t, []mcpconfig.Server{
@@ -405,6 +407,10 @@ func TestServers(t *testing.T) {
 		{Name: "web", Type: "http", URL: "https://example.com/mcp"},
 		{Name: "bad"},
 		{Name: "odd"},
+		// A field of another type is left out alone, and a variable that
+		// is no string has its JSON text.
+		{Name: "mixed", Command: "/bin/m", Env: map[string]string{"SIND_REALM": "ci", "PORT": "8080", "ON": "true", "L": "[1,2]"}},
+		{Name: "envless", Command: "/bin/e"},
 	}, f.Servers())
 	assert.Equal(t, path, f.Path())
 

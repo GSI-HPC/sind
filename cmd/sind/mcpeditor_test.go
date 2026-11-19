@@ -183,6 +183,22 @@ func TestMCPEnable_EmptyVariables(t *testing.T) {
 	assert.True(t, cobratree.IsUsage(err))
 }
 
+// TestMCPEnable_KeepsAnEnvironmentOfOtherTypes checks that an entry whose
+// fields enable cannot all read keeps its environment, with a value that
+// is no string as its JSON text.
+func TestMCPEnable_KeepsAnEnvironmentOfOtherTypes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"sind":{"type":"stdio","command":"/old/sind",`+
+		`"args":["mcp","start",1],"env":{"SIND_REALM":"ci","PORT":8080}}}}`), 0o600))
+
+	_, _, err := executeCommand("mcp", "cursor", "enable", "--config-path", path)
+	require.NoError(t, err)
+
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{"SIND_REALM": "ci", "PORT": "8080"}, servers["sind"]["env"])
+	assert.Equal(t, []any{"mcp", "start"}, servers["sind"]["args"])
+}
+
 // TestMCPEnable_RealmFromEnvironment checks that enable records the realm
 // in effect, which an exported SIND_REALM sets as --realm does, unless
 // --env names one.
