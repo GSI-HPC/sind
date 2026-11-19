@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
 // ContainerExists returns true if the given container exists (running or stopped).
@@ -436,10 +438,13 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 	stdout, stderr, err := c.run(ctx, args...)
 	// A docker CLI killed by a signal has no exit status of the command.
 	exitErr, ok := errors.AsType[*exec.ExitError](err)
-	if ok && exitErr.ExitCode() >= 0 && ctx.Err() == nil && !errors.Is(err, ErrUnreachable) && !execFailed(stderr) {
-		return stdout, nil
+	if !ok || exitErr.ExitCode() < 0 || ctx.Err() != nil || errors.Is(err, ErrUnreachable) || execFailed(stderr) {
+		return stdout, err
 	}
-	return stdout, err
+	if msg, ok := execNotStarted(exitErr.ExitCode(), stdout); ok {
+		return "", &cmdexec.ExitError{Err: exitErr, Stderr: msg}
+	}
+	return stdout, nil
 }
 
 // execFailed reports whether a non-zero exit of docker exec, given its
@@ -450,6 +455,20 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 // ErrUnreachable already (ClassifyUnreachable).
 func execFailed(stderr string) bool {
 	return strings.HasPrefix(strings.TrimSpace(stderr), "Error response from daemon:")
+}
+
+// execNotStarted returns the message with which the daemon reports that
+// the runtime could not start the command of an exec (it is missing in the
+// container, or a cgroup refuses it), given the docker CLI's exit code and
+// stdout, and whether there is one. The daemon writes that message to the
+// exec's standard output, and the docker CLI exits 126 or 127 with nothing
+// on stderr.
+func execNotStarted(code int, stdout string) (string, bool) {
+	stdout = strings.TrimSpace(stdout)
+	if (code == 126 || code == 127) && strings.HasPrefix(stdout, "OCI runtime exec failed:") {
+		return stdout, true
+	}
+	return "", false
 }
 
 // ExecWithStdin runs a command inside a container, piping stdin to it.

@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -774,6 +776,65 @@ func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
 
 			_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
 			require.ErrorContains(t, err, strings.TrimSpace(stderr))
+		})
+	}
+}
+
+// exitCode returns the *exec.ExitError of a command that exits with code.
+func exitCode(t *testing.T, code int) *exec.ExitError {
+	t.Helper()
+	err := exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run()
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	require.True(t, ok, "%v", err)
+	require.Equal(t, code, exitErr.ExitCode())
+	return exitErr
+}
+
+// TestExecAllowNonZero_NotStarted checks that a command the runtime cannot
+// start is a failed exec: the daemon writes why to the exec's stdout, and
+// the docker CLI exits 126 or 127 with nothing on stderr.
+func TestExecAllowNonZero_NotStarted(t *testing.T) {
+	for _, tt := range []struct {
+		code int
+		msg  string
+	}{
+		{126, "OCI runtime exec failed: exec failed: unable to start container process: error adding pid 4242 to cgroups: failed to write 4242: write /sys/fs/cgroup/system.slice/cgroup.procs: device or resource busy: unknown"},
+		{127, "OCI runtime exec failed: exec failed: unable to start container process: exec: \"systemctl\": executable file not found in $PATH: unknown"},
+	} {
+		t.Run(strconv.Itoa(tt.code), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(tt.msg+"\r\n", "", cmdexec.WrapExitError(exitCode(t, tt.code), ""))
+
+			stdout, err := NewClient(&m).ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+			assert.Empty(t, stdout)
+			exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+			require.True(t, ok, "%v", err)
+			assert.Equal(t, tt.code, exitErr.ExitCode())
+			assert.Equal(t, tt.msg, exitErr.Stderr)
+			assert.EqualError(t, err, "exit status "+strconv.Itoa(tt.code)+": "+tt.msg)
+		})
+	}
+}
+
+// TestExecAllowNonZero_InnerExit126 checks that the inner command's own
+// exit 126 or 127, or docker's message under another exit code, stays the
+// inner command's exit.
+func TestExecAllowNonZero_InnerExit126(t *testing.T) {
+	for _, tt := range []struct {
+		code   int
+		stdout string
+	}{
+		{126, "inactive\n"},
+		{127, ""},
+		{1, "OCI runtime exec failed: printed by the command\n"},
+	} {
+		t.Run(strconv.Itoa(tt.code), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(tt.stdout, "sh: 1: systemctl: not found\n", cmdexec.WrapExitError(exitCode(t, tt.code), "sh: 1: systemctl: not found\n"))
+
+			stdout, err := NewClient(&m).ExecAllowNonZero(t.Context(), testContainerName, "sh", "-c", "systemctl is-active munge")
+			require.NoError(t, err)
+			assert.Equal(t, tt.stdout, stdout)
 		})
 	}
 }
