@@ -74,6 +74,12 @@ const zonefilePath = "/zone.db"
 // node about to be created.
 const zonefile = "@ 0 IN SOA ns hostmaster 1 7200 1800 86400 0\n"
 
+// hostsTTL is the TTL, in seconds, of the records of the hosts block, the
+// least the hosts plugin takes (its default is an hour). A node can get
+// another address on each start, and the host's resolver caches an answer
+// for its TTL.
+const hostsTTL = "1"
+
 // dnsFiles returns the DNS container's configuration files, for docker cp
 // into its root, with the given host entries in the Corefile.
 func dnsFiles(realm string, entries []string) docker.FileContents {
@@ -938,11 +944,11 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string, restart
 }
 
 // generateCorefile builds a complete CoreDNS Corefile with the given host entries
-// inlined in the hosts block. Each entry is an "IP hostname" string.
-// The zone is derived from the realm: "<realm>.sind".
+// inlined in the hosts block, after its ttl option. Each entry is an
+// "IP hostname" string. The zone is derived from the realm: "<realm>.sind".
 func generateCorefile(realm string, entries []string) string {
 	var b strings.Builder
-	b.WriteString(realm + ".sind:53 {\n    hosts {\n")
+	b.WriteString(realm + ".sind:53 {\n    hosts {\n        ttl " + hostsTTL + "\n")
 	for _, entry := range entries {
 		b.WriteString("        " + entry + "\n")
 	}
@@ -951,8 +957,9 @@ func generateCorefile(realm string, entries []string) string {
 	return b.String()
 }
 
-// parseEntries extracts host entries from a Corefile's hosts block.
-// Each returned string is an "IP hostname" line.
+// parseEntries extracts host entries from a Corefile's hosts block: the
+// lines that start with an IP address, not the options such as ttl. Each
+// returned string is an "IP hostname" line.
 func parseEntries(corefile string) []string {
 	var entries []string
 	inHosts := false
@@ -966,11 +973,20 @@ func parseEntries(corefile string) []string {
 			inHosts = false
 			continue
 		}
-		if inHosts && trimmed != "" {
+		if inHosts && isEntry(trimmed) {
 			entries = append(entries, trimmed)
 		}
 	}
 	return entries
+}
+
+// isEntry reports whether a line of the hosts block is a host entry, whose
+// first field is an IP address.
+func isEntry(line string) bool {
+	addr, _, _ := strings.Cut(line, " ")
+	addr, _, _ = strings.Cut(addr, "\t")
+	_, err := netip.ParseAddr(addr)
+	return err == nil
 }
 
 // withoutNames returns lines without the blank ones and those whose field i

@@ -1325,8 +1325,8 @@ func TestAddDNSRecords_DNSStoppedStartError(t *testing.T) {
 func TestGenerateCorefile_Empty(t *testing.T) {
 	cf := generateCorefile(DefaultRealm, nil)
 	assert.Contains(t, cf, "sind.sind:53")
-	assert.Contains(t, cf, "hosts {")
-	assert.Contains(t, cf, "        fallthrough\n    }\n    file /zone.db\n")
+	assert.Contains(t, cf, "    hosts {\n        ttl 1\n        fallthrough\n    }\n    file /zone.db\n",
+		"the records have a TTL of a second, not the hosts plugin's hour")
 	assert.Contains(t, cf, "forward . /etc/resolv.conf")
 }
 
@@ -1359,6 +1359,17 @@ func TestParseEntries_Roundtrip(t *testing.T) {
 	cf := generateCorefile(DefaultRealm, original)
 	parsed := parseEntries(cf)
 	assert.Equal(t, original, parsed)
+}
+
+// TestParseEntries_Options covers the options of the hosts block, which are
+// no entries, and a Corefile of an earlier sind, which has no ttl.
+func TestParseEntries_Options(t *testing.T) {
+	cf := "sind.sind:53 {\n    hosts {\n        ttl 5\n        172.18.0.2 controller.dev.sind.sind\n" +
+		"        no_reverse\n        fd00::3\tworker-0.dev.sind.sind\n        fallthrough\n    }\n}\n"
+	assert.Equal(t, []string{"172.18.0.2 controller.dev.sind.sind", "fd00::3\tworker-0.dev.sind.sind"}, parseEntries(cf))
+
+	cf = "sind.sind:53 {\n    hosts {\n        172.18.0.2 controller.dev.sind.sind\n        fallthrough\n    }\n}\n"
+	assert.Equal(t, []string{"172.18.0.2 controller.dev.sind.sind"}, parseEntries(cf))
 }
 
 func TestParseEntries_NoHostsBlock(t *testing.T) {
