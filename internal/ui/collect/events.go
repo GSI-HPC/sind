@@ -12,11 +12,14 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
-	"github.com/GSI-HPC/sind/pkg/state"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
 // The defaults of Events.
@@ -38,15 +41,18 @@ const (
 )
 
 // EventsArgs are the arguments of the docker command that streams the
-// events of sind's containers and networks.
+// events of containers and networks that change what sind ui shows. It
+// filters by the actions of stateActions but not by the label sind.realm:
+// the daemon matches a label filter against the attributes of an event,
+// and a network event has none of the network's labels, only its name and
+// type, so that filter would drop every network event. parseEvent finds
+// the realm of an event instead.
 func EventsArgs() []string {
-	return []string{
-		"events",
-		"--filter", "label=" + cluster.LabelRealm,
-		"--filter", "type=container",
-		"--filter", "type=network",
-		"--format", "{{json .}}",
+	args := []string{"events", "--filter", "type=container", "--filter", "type=network"}
+	for _, action := range slices.Sorted(maps.Keys(stateActions)) {
+		args = append(args, "--filter", "event="+action)
 	}
+	return append(args, "--format", "{{json .}}")
 }
 
 // Events streams `docker events` for sind's containers and networks and
@@ -58,10 +64,27 @@ type Events struct {
 	Exec cmdexec.Executor
 	Bus  *Bus
 	Log  *slog.Logger
+	// Realms returns the realms that sind ui knows, by which the event of
+	// a cluster's network <realm>-<cluster>-net finds its realm; nil knows
+	// none, and such an event is dropped.
+	Realms func() []string
 
 	// Debounce, BackoffMin, BackoffMax and Stable replace the defaults
 	// (200 ms, 1 s, 30 s, 30 s) when set.
 	Debounce, BackoffMin, BackoffMax, Stable time.Duration
+}
+
+// StoreRealms returns, for the Realms of Events, the names of the realms
+// that st lists.
+func StoreRealms(st *store.Store) func() []string {
+	return func() []string {
+		realms := st.Snapshot().Realms
+		names := make([]string, len(realms))
+		for i, r := range realms {
+			names[i] = r.Name
+		}
+		return names
+	}
 }
 
 // Run streams until ctx ends.
@@ -115,7 +138,7 @@ func (e *Events) stream(ctx context.Context) error {
 	go func() {
 		defer close(done)
 		defer close(in)
-		readErr = readEvents(ctx, proc.Stdout, in)
+		readErr = readEvents(ctx, proc.Stdout, e.Realms, in)
 	}()
 	defer func() {
 		_ = proc.Close()
@@ -177,44 +200,80 @@ var stateActions = map[string]bool{
 	"connect": true, "disconnect": true,
 }
 
-// parseEvent turns a line of the stream into an Event; false for a line
-// that is not one of a sind realm, or of an action that changes nothing.
-func parseEvent(line []byte) (Event, bool) {
+// parseEvent turns a line of the stream into the Events it means; none for
+// a line that is not one of a sind realm, or of an action that changes
+// nothing. A container names its realm by its label sind.realm, or, for the
+// DNS, the SSH relay and the monitoring stack, by its Compose project
+// <realm>-mesh. A network event carries only the network's name: <realm>-lock
+// is the realm lock, <realm>-mesh the mesh, and <realm>-<cluster>-net the
+// network of a cluster in one of realms, whose names can hold a hyphen, so a
+// name can fit more than one.
+func parseEvent(line []byte, realms []string) []Event {
 	var de dockerEvent
-	if json.Unmarshal(line, &de) != nil {
-		return Event{}, false
+	if json.Unmarshal(line, &de) != nil || !stateActions[de.Action] {
+		return nil
 	}
 	attrs := de.Actor.Attributes
-	realm := attrs[cluster.LabelRealm]
-	if realm == "" || !stateActions[de.Action] {
-		return Event{}, false
-	}
-	ev := Event{Kind: KindChange, Realm: realm, Cluster: attrs[cluster.LabelCluster]}
 	switch de.Type {
 	case "container":
-	case "network":
-		if attrs["name"] == string(state.LockNetworkName(realm)) {
-			ev.Kind, ev.Cluster = KindLock, ""
+		realm := attrs[cluster.LabelRealm]
+		if realm == "" {
+			realm = meshRealm(attrs[docker.ComposeProjectLabel])
 		}
-	default:
-		return Event{}, false
+		if realm == "" {
+			return nil
+		}
+		return []Event{{Kind: KindChange, Realm: realm, Cluster: attrs[cluster.LabelCluster]}}
+	case "network":
+		name := attrs["name"]
+		if realm, ok := strings.CutSuffix(name, "-lock"); ok && validRealm(realm) {
+			return []Event{{Kind: KindLock, Realm: realm}}
+		}
+		if realm := meshRealm(name); realm != "" {
+			return []Event{{Kind: KindChange, Realm: realm}}
+		}
+		var out []Event
+		for _, realm := range realms {
+			if cl, ok := strings.CutPrefix(name, realm+"-"); ok {
+				if cl, ok = strings.CutSuffix(cl, "-net"); ok && cl != "" {
+					out = append(out, Event{Kind: KindChange, Realm: realm, Cluster: cl})
+				}
+			}
+		}
+		return out
 	}
-	return ev, true
+	return nil
 }
 
-// readEvents parses the lines of r into out until r ends or ctx does.
-func readEvents(ctx context.Context, r io.Reader, out chan<- Event) error {
+// meshRealm returns the realm of the mesh network or Compose project
+// <realm>-mesh; empty for another name.
+func meshRealm(name string) string {
+	if realm, ok := strings.CutSuffix(name, "-mesh"); ok && validRealm(realm) {
+		return realm
+	}
+	return ""
+}
+
+// validRealm reports whether realm may be the name of a realm, which leaves
+// out most networks and Compose projects of others that end alike.
+func validRealm(realm string) bool { return config.CheckName("realm", realm) == nil }
+
+// readEvents parses the lines of r into out until r ends or ctx does;
+// realms, when not nil, returns the realms that sind ui knows.
+func readEvents(ctx context.Context, r io.Reader, realms func() []string, out chan<- Event) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64<<10), maxEventLine)
 	for sc.Scan() {
-		ev, ok := parseEvent(sc.Bytes())
-		if !ok {
-			continue
+		var known []string
+		if realms != nil {
+			known = realms()
 		}
-		select {
-		case out <- ev:
-		case <-ctx.Done():
-			return ctx.Err()
+		for _, ev := range parseEvent(sc.Bytes(), known) {
+			select {
+			case out <- ev:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 	return sc.Err()

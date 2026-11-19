@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,15 +17,26 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/localweb/sse"
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEventsArgs(t *testing.T) {
-	assert.Equal(t, []string{
-		"events", "--filter", "label=sind.realm", "--filter", "type=container", "--filter", "type=network",
-		"--format", "{{json .}}",
-	}, EventsArgs())
+	args := EventsArgs()
+	assert.Equal(t, []string{"events", "--filter", "type=container", "--filter", "type=network"}, args[:5])
+	assert.Equal(t, []string{"--format", "{{json .}}"}, args[len(args)-2:])
+	assert.NotContains(t, args, "label=sind.realm", "network events carry no labels")
+	var actions []string
+	for i := 5; i < len(args)-2; i += 2 {
+		assert.Equal(t, "--filter", args[i])
+		action, ok := strings.CutPrefix(args[i+1], "event=")
+		require.True(t, ok, args[i+1])
+		actions = append(actions, action)
+	}
+	assert.ElementsMatch(t, slices.Collect(maps.Keys(stateActions)), actions)
+	assert.True(t, slices.IsSorted(actions))
 }
 
 func line(typ, action string, attrs map[string]string) string {
@@ -34,32 +47,49 @@ func line(typ, action string, attrs map[string]string) string {
 	return fmt.Sprintf(`{"Type":%q,"Action":%q,"Actor":{"ID":"x","Attributes":{%s"image":"img"}},"time":1}`+"\n", typ, action, b.String())
 }
 
+// The attributes are the ones Docker sends: a container's labels, and only
+// the name and type of a network (and the container, for a connect).
 func TestParseEvent(t *testing.T) {
+	realms := []string{"sind", "ci", "a-b"}
 	for _, tc := range []struct {
 		name string
 		line string
-		want Event
-		ok   bool
+		want []Event
 	}{
 		{"container start", line("container", "start", map[string]string{"sind.realm": "sind", "sind.cluster": "dev"}),
-			Event{Kind: KindChange, Realm: "sind", Cluster: "dev"}, true},
-		{"mesh container", line("container", "die", map[string]string{"sind.realm": "sind"}),
-			Event{Kind: KindChange, Realm: "sind"}, true},
-		{"cluster network", line("network", "connect", map[string]string{"sind.realm": "sind", "sind.cluster": "dev", "name": "sind-dev-net"}),
-			Event{Kind: KindChange, Realm: "sind", Cluster: "dev"}, true},
-		{"lock", line("network", "create", map[string]string{"sind.realm": "ci", "name": "ci-lock", "sind.cluster": "x"}),
-			Event{Kind: KindLock, Realm: "ci"}, true},
-		{"exec", line("container", "exec_create: sh", map[string]string{"sind.realm": "sind"}), Event{}, false},
-		{"no realm", line("container", "start", nil), Event{}, false},
-		{"other type", line("volume", "create", map[string]string{"sind.realm": "sind"}), Event{}, false},
-		{"not json", "garbage\n", Event{}, false},
+			[]Event{{Kind: KindChange, Realm: "sind", Cluster: "dev"}}},
+		{"mesh container", line("container", "die", map[string]string{"com.docker.compose.project": "ci-mesh", "com.docker.compose.service": "dns"}),
+			[]Event{{Kind: KindChange, Realm: "ci"}}},
+		{"other compose project", line("container", "die", map[string]string{"com.docker.compose.project": "web"}), nil},
+		{"cluster network", line("network", "connect", map[string]string{"name": "sind-dev-net", "type": "bridge", "container": "abc"}),
+			[]Event{{Kind: KindChange, Realm: "sind", Cluster: "dev"}}},
+		{"cluster network of two realms", line("network", "destroy", map[string]string{"name": "a-b-c-net", "type": "bridge"}),
+			[]Event{{Kind: KindChange, Realm: "a-b", Cluster: "c"}}},
+		{"network of no known realm", line("network", "create", map[string]string{"name": "x-y-net", "type": "bridge"}), nil},
+		{"mesh network", line("network", "disconnect", map[string]string{"name": "sind-mesh", "type": "bridge", "container": "abc"}),
+			[]Event{{Kind: KindChange, Realm: "sind"}}},
+		{"lock", line("network", "create", map[string]string{"name": "ci-lock", "type": "null"}),
+			[]Event{{Kind: KindLock, Realm: "ci"}}},
+		{"lock of a new realm", line("network", "destroy", map[string]string{"name": "new-lock", "type": "null"}),
+			[]Event{{Kind: KindLock, Realm: "new"}}},
+		{"not a realm", line("network", "create", map[string]string{"name": "Big_lock", "type": "bridge"}), nil},
+		{"exec", line("container", "exec_create: sh", map[string]string{"sind.realm": "sind"}), nil},
+		{"no realm", line("container", "start", nil), nil},
+		{"other type", line("volume", "create", map[string]string{"sind.realm": "sind"}), nil},
+		{"not json", "garbage\n", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ev, ok := parseEvent([]byte(tc.line))
-			assert.Equal(t, tc.ok, ok)
-			assert.Equal(t, tc.want, ev)
+			assert.Equal(t, tc.want, parseEvent([]byte(tc.line), realms))
 		})
 	}
+}
+
+func TestStoreRealms(t *testing.T) {
+	st := store.New()
+	realms := StoreRealms(st)
+	assert.Empty(t, realms())
+	st.SetRealms([]cluster.RealmSummary{{Name: "a"}, {Name: "b"}})
+	assert.Equal(t, []string{"a", "b"}, realms())
 }
 
 // eventsFixture runs Events on a mock executor with short timings.
@@ -110,6 +140,7 @@ func (f *eventsFixture) take(t *testing.T) []Event {
 
 func TestEventsDebouncesAndPublishes(t *testing.T) {
 	f := newEventsFixture(t)
+	f.ev.Realms = func() []string { return []string{"sind"} }
 	start(t, f.ev.Run)
 	waitFor(t, "stream started", func() bool { return f.pipes.Len() == 1 })
 
@@ -118,15 +149,17 @@ func TestEventsDebouncesAndPublishes(t *testing.T) {
 			f.pipes.Write(0, line("container", "start", map[string]string{"sind.realm": "sind", "sind.cluster": "dev"}))
 		}
 		f.pipes.Write(0, line("container", "exec_start: x", map[string]string{"sind.realm": "sind"}))
-		f.pipes.Write(0, line("network", "create", map[string]string{"sind.realm": "sind", "name": "sind-lock"}))
+		f.pipes.Write(0, line("network", "create", map[string]string{"name": "sind-lock", "type": "null"}))
+		f.pipes.Write(0, line("network", "destroy", map[string]string{"name": "sind-web-net", "type": "bridge"}))
 	}()
 	var got []Event
-	for len(got) < 2 {
+	for len(got) < 3 {
 		got = append(got, f.take(t)...)
 	}
 	assert.ElementsMatch(t, []Event{
 		{Kind: KindChange, Realm: "sind", Cluster: "dev"},
 		{Kind: KindLock, Realm: "sind"},
+		{Kind: KindChange, Realm: "sind", Cluster: "web"},
 	}, got)
 	require.Len(t, f.exec.Calls, 1)
 	assert.Equal(t, "docker", f.exec.Calls[0].Name)
@@ -232,7 +265,7 @@ func TestReadEventsStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	out := make(chan Event) // nobody reads
 	done := make(chan error, 1)
-	go func() { done <- readEvents(ctx, pr, out) }()
+	go func() { done <- readEvents(ctx, pr, nil, out) }()
 	_, _ = pw.Write([]byte(line("container", "start", map[string]string{"sind.realm": "sind"})))
 	time.Sleep(20 * time.Millisecond)
 	cancel()
