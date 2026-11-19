@@ -372,5 +372,18 @@ func IsFileNotFound(err error) bool {
 	return strings.Contains(msg, "could not find the file") || strings.Contains(msg, "no such container:path")
 }
 
+// IsNotRunning reports whether err is the docker CLI's error for a
+// command that needs a running container, such as docker kill, on one that
+// does not run: "container x is not running". It takes the
+// *cmdexec.ExitError and its stderr, as IsNotFound does.
+func IsNotRunning(err error) bool {
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	return ok && exitErr.ExitCode() == 1 && notRunning.MatchString(strings.ToLower(exitErr.Stderr))
+}
+
+// notRunning matches docker's message for a container that does not run,
+// lowercased.
+var notRunning = regexp.MustCompile(`\bcontainer \S+ is not running\b`)
+
 // notFound matches docker's messages for a missing resource, lowercased.
 var notFound = regexp.MustCompile(`no such (container|image|object|volume|network)|\bnetwork \S+ not found\b`)

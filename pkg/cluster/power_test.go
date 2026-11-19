@@ -623,6 +623,24 @@ func TestPower_Restart(t *testing.T) {
 	}
 }
 
+// TestPower_KillOffNode checks that cut and cycle count a node that does
+// not run as killed, as shutdown and reboot count it stopped: cycle starts
+// it, and neither fails.
+func TestPower_KillOffNode(t *testing.T) {
+	notRunning := func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Stderr: "Error response from daemon: cannot kill container: " + args[1] + ": container c2 is not running\n",
+			Err: testutil.ExitCode1(t)}, args[0] == "kill" && args[1] == "sind-dev-worker-0"
+	}
+
+	m := &mock.Executor{OnCall: powerOnCall(t, notRunning)}
+	client := docker.NewClient(m)
+	require.NoError(t, PowerCycle(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"}))
+	assert.ElementsMatch(t, []string{"start=sind-dev-worker-0", "start=sind-dev-worker-1"}, powerOps(m)[2:])
+
+	m = &mock.Executor{OnCall: powerOnCall(t, notRunning)}
+	require.NoError(t, PowerCut(t.Context(), docker.NewClient(m), mesh.DefaultRealm, "dev", []string{"worker-0"}))
+}
+
 // --- Lifecycle ---
 
 func TestPowerLifecycle(t *testing.T) {

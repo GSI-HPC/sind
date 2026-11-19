@@ -40,9 +40,22 @@ func PowerShutdown(ctx context.Context, client *docker.Client, realm, clusterNam
 	return forEachTarget(ctx, client, realm, clusterName, shortNames, "stopping", client.StopContainer)
 }
 
-// PowerCut immediately kills the specified nodes (docker kill).
+// PowerCut immediately kills the specified nodes (docker kill). A node that
+// does not run counts as killed, as PowerShutdown counts it stopped.
 func PowerCut(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
-	return forEachTarget(ctx, client, realm, clusterName, shortNames, "killing", client.KillContainer)
+	return forEachTarget(ctx, client, realm, clusterName, shortNames, "killing", killer(client))
+}
+
+// killer returns an op that kills a node's container (docker kill), and
+// counts one that does not run as killed: docker stop of a container that
+// does not run succeeds, while docker kill fails.
+func killer(client *docker.Client) func(context.Context, docker.ContainerName) error {
+	return func(ctx context.Context, name docker.ContainerName) error {
+		if err := client.KillContainer(ctx, name); err != nil && !docker.IsNotRunning(err) {
+			return err
+		}
+		return nil
+	}
 }
 
 // PowerOn starts the specified stopped nodes (docker start). It first starts
@@ -69,9 +82,10 @@ func PowerReboot(ctx context.Context, client *docker.Client, meshMgr *mesh.Manag
 }
 
 // PowerCycle hard-restarts the specified nodes: it kills them all (docker
-// kill), then starts them as PowerOn does.
+// kill), then starts them as PowerOn does. A node that does not run is
+// started, as PowerReboot starts it.
 func PowerCycle(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
-	return powerRestart(ctx, client, meshMgr, clusterName, shortNames, "killing", client.KillContainer)
+	return powerRestart(ctx, client, meshMgr, clusterName, shortNames, "killing", killer(client))
 }
 
 // PowerFreeze suspends all processes in the specified nodes (docker pause).

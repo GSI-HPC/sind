@@ -66,6 +66,20 @@ func TestIsNotFound_OtherExit1(t *testing.T) {
 	}
 }
 
+func TestIsNotRunning(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: Cannot kill container: sind-dev-worker-0: Container abc is not running\n",
+		"Error response from daemon: cannot kill container: sind-dev-worker-0: container abc is not running\n",
+	} {
+		err := exitError(t, 1, stderr)
+		assert.True(t, IsNotRunning(err), stderr)
+		assert.True(t, IsNotRunning(fmt.Errorf("kill: %w", err)), stderr)
+	}
+	assert.False(t, IsNotRunning(exitError(t, 1, "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running\n")))
+	assert.False(t, IsNotRunning(exitError(t, 2, "Error response from daemon: container abc is not running\n")))
+	assert.False(t, IsNotRunning(nil))
+}
+
 func TestIsNotFound_OtherExitCode(t *testing.T) {
 	assert.False(t, IsNotFound(exitError(t, 2, "Error: No such container: x\n")))
 }
