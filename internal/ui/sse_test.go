@@ -268,3 +268,51 @@ func readEvent(t *testing.T, r *localwebtest.Reader) sseEvent {
 	require.NoError(t, err)
 	return sseEvent{e.Name, e.Data}
 }
+
+// The fragments of a Share load once for each render of the stream, and a
+// Load that fails fails them all.
+func TestEventsLoadAShareOnce(t *testing.T) {
+	ts := newTestServer(t)
+	var loads int
+	var fail error
+	load := func(v *View) error {
+		loads++
+		v.Data = 7
+		return fail
+	}
+	frags := []Fragment{
+		{Name: "count", Topics: []store.Topic{store.TopicTasks}, Load: load, Share: "x"},
+		{Name: "runs", Prefixes: []string{"run"}, Load: load, Share: "x"},
+		ts.srv.reg.fragments["rail"],
+	}
+	v := ts.srv.newView(Params{})
+	events, err := ts.srv.renderEvents(frags, v, nil)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	assert.Equal(t, sseEvent{"count", "tasks=7"}, sseEvent{events[0].Name, events[0].Data})
+	assert.Equal(t, 1, loads, "one Load for the two fragments of the Share")
+
+	loads, fail = 0, assert.AnError
+	events, err = ts.srv.renderEvents(frags, v, []store.Topic{store.TopicTasks, store.RunTopic("x")})
+	require.NoError(t, err)
+	require.Len(t, events, 1, "both fail, and the rail goes on")
+	assert.Equal(t, "rail", events[0].Name)
+	assert.Equal(t, 1, loads)
+
+	_, err = ts.srv.renderEvents(frags, v, nil)
+	assert.ErrorIs(t, err, assert.AnError)
+}
+
+// The fragments of each page share its Load.
+func TestPageFragmentsShareTheirLoad(t *testing.T) {
+	for share, frags := range map[string][]Fragment{
+		"page-overview": pgOverviewFragments(), "page-clusters": pgPageFragments(pgClustersPage, pgListTopics),
+		"pg-cluster": pgClusterFragments(), "pg-node": pgNodeFragments(),
+		"dock": {tasksFragment("tasks"), tasksFragment("tasks-menu")},
+	} {
+		require.NotEmpty(t, frags)
+		for _, f := range frags {
+			assert.Equal(t, share, f.Share, f.Name)
+		}
+	}
+}

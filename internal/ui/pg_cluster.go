@@ -72,14 +72,14 @@ func pgClusterFragments() []Fragment {
 	load := func(v *View) (err error) { v.Data, err = pgLoadCluster(v); return }
 	return []Fragment{
 		{
-			Name: "pg-cluster-head", Params: params, Watch: pgClusterWatch, Load: load,
+			Name: "pg-cluster-head", Params: params, Watch: pgClusterWatch, Load: load, Share: "pg-cluster",
 		},
 		{
 			// The Logs tab reads its own keys too, so that the body that a
 			// stream sends first is the one that the page holds.
 			Name: "pg-cluster-body", Params: append(slices.Clone(params), logsTabParams...),
 			Watch: func(p Params) []store.Topic { return pgClusterTopics(p, p.Get("tab")) },
-			Load:  load,
+			Load:  load, Share: "pg-cluster",
 		},
 	}
 }

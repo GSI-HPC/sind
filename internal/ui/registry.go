@@ -133,6 +133,10 @@ type Fragment struct {
 	Params []string
 	// Load fills v.Data from v.Snap and v.Params.
 	Load func(v *View) error
+	// Share names the Load that the fragment shares with others, such as
+	// the fragments of one page: a stream runs it once for all the
+	// fragments of a Share that it renders at a time. Empty shares none.
+	Share string
 }
 
 // depends reports whether a change of any topic in changed makes f stale.

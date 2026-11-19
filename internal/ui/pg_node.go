@@ -44,7 +44,7 @@ func pgNodeFragments() []Fragment {
 	params := []string{"realm", "cluster", "node", "tab"}
 	load := func(v *View) error { v.Data = pgLoadNode(v); return nil }
 	return []Fragment{
-		{Name: "pg-node-head", Params: params, Watch: pgClusterWatch, Load: load},
+		{Name: "pg-node-head", Params: params, Watch: pgClusterWatch, Load: load, Share: "pg-node"},
 		{
 			// The Logs tab keeps no topic, as a new render of it would end
 			// the stream that it holds, and reads its own keys.
@@ -55,7 +55,7 @@ func pgNodeFragments() []Fragment {
 				}
 				return pgClusterWatch(p)
 			},
-			Load: load,
+			Load: load, Share: "pg-node",
 		},
 	}
 }

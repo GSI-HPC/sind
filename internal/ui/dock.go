@@ -45,6 +45,7 @@ func tasksFragment(name string) Fragment {
 		Prefixes: []string{"run/"},
 		Params:   []string{"run", "task"},
 		Load:     func(v *View) error { v.Data = dockLoad(v); return nil },
+		Share:    "dock",
 	}
 }
 

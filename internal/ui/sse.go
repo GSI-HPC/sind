@@ -43,17 +43,19 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 
 // renderEvents renders the fragments of a stream from the current snapshot:
 // all of them when changed is nil, else those that depend on a topic in
-// changed. A fragment that fails to render after the first time is skipped
-// and logged, so that the others go on.
+// changed. The fragments of a Share load once. A fragment that fails to
+// render after the first time is skipped and logged, so that the others go
+// on.
 func (s *Server) renderEvents(frags []Fragment, v *View, changed []store.Topic) ([]sse.Event, error) {
 	fv := *v
 	fv.Snap, fv.Now = s.env.Store.Snapshot(), s.now()
 	var events []sse.Event
+	loads := map[string]fragmentLoad{}
 	for _, f := range frags {
 		if changed != nil && !f.depends(changed, v.Params) {
 			continue
 		}
-		html, err := s.renderFragment(f, &fv)
+		html, err := s.renderLoaded(f, loadFragment(f, &fv, loads))
 		switch {
 		case err == nil:
 			events = append(events, sse.Event{Name: f.Name, Data: html})
@@ -127,9 +129,33 @@ func (s *Server) eventsRequest(r *http.Request) ([]Fragment, *View, error) {
 
 // renderFragment renders f from a copy of v.
 func (s *Server) renderFragment(f Fragment, v *View) (string, error) {
-	fv := *v
-	if err := f.Load(&fv); err != nil {
-		return "", err
+	return s.renderLoaded(f, loadFragment(f, v, nil))
+}
+
+// fragmentLoad is a view as the Load of a fragment filled it, or its error.
+type fragmentLoad struct {
+	view *View
+	err  error
+}
+
+// loadFragment runs the Load of f on a copy of v, once for the fragments
+// of its Share that loads holds the loads of. loads may be nil.
+func loadFragment(f Fragment, v *View, loads map[string]fragmentLoad) fragmentLoad {
+	if l, ok := loads[f.Share]; ok && f.Share != "" {
+		return l
 	}
-	return s.tmpl.Render(f.Name, &fv)
+	fv := *v
+	l := fragmentLoad{view: &fv, err: f.Load(&fv)}
+	if f.Share != "" && loads != nil {
+		loads[f.Share] = l
+	}
+	return l
+}
+
+// renderLoaded renders f from the view that its Load filled.
+func (s *Server) renderLoaded(f Fragment, l fragmentLoad) (string, error) {
+	if l.err != nil {
+		return "", l.err
+	}
+	return s.tmpl.Render(f.Name, l.view)
 }

@@ -51,11 +51,12 @@ var pgNodesPage = Page{
 var pgListTopics = []string{"realms", "clusters/", "nodes/", "status/", "monitoring/", "docker", "run"}
 
 // pgPageFragments returns the fragments of a page, which all read its
-// Params, show what it loads and depend on the topics of the prefixes.
+// Params, show what it loads, once for all of them, and depend on the
+// topics of the prefixes.
 func pgPageFragments(p Page, prefixes []string) []Fragment {
 	var out []Fragment
 	for _, name := range p.Fragments {
-		out = append(out, Fragment{Name: name, Params: p.Params, Prefixes: prefixes, Load: p.Load})
+		out = append(out, Fragment{Name: name, Params: p.Params, Prefixes: prefixes, Load: p.Load, Share: "page-" + p.Name})
 	}
 	return out
 }
