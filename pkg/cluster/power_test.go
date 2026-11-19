@@ -655,7 +655,7 @@ func TestPower_Helper(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"config-helper"})
 	require.ErrorIs(t, err, ErrNodeNotFound)
-	err = WaitNodes(t.Context(), client, mesh.DefaultRealm, "dev", []string{"config-helper"}, 0, time.Millisecond)
+	err = WaitNodes(t.Context(), client, mesh.DefaultRealm, "dev", []string{"config-helper"}, WaitOptions{Interval: time.Millisecond})
 	require.ErrorIs(t, err, ErrNodeNotFound)
 }
 

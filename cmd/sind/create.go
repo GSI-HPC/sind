@@ -291,7 +291,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	err = cluster.Create(ctx, client, meshMgr, cfg, cluster.DefaultReadinessInterval)
+	err = cluster.Create(ctx, client, meshMgr, cfg, cluster.CreateOptions{})
 	if err != nil {
 		return err
 	}

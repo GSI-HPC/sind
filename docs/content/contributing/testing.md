@@ -132,7 +132,7 @@ The `progress/progresstest` package of [go-clikit](https://github.com/GSI-HPC/go
 ```go
 ctx, w := progresstest.Watch(t.Context(), t)
 
-_, err := WorkerAdd(ctx, client, meshMgr, WorkerAddOptions{ClusterName: "dev", Count: 2}, interval)
+_, err := WorkerAdd(ctx, client, meshMgr, WorkerAddOptions{ClusterName: "dev", Count: 2, Interval: interval})
 
 require.NoError(t, err)
 w.Finish()

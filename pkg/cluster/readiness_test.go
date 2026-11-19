@@ -154,7 +154,7 @@ func TestCreate_WaitLimitExcludesContainerCreation(t *testing.T) {
 
 	cfg := createCfg()
 	cfg.Wait = time.Second
-	err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
+	err := Create(t.Context(), client, meshMgr, cfg, CreateOptions{Interval: time.Millisecond})
 	require.NoError(t, err)
 }
 

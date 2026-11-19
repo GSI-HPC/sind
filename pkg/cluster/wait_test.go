@@ -73,7 +73,7 @@ func TestWaitNodes(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	m := &mock.Executor{OnCall: waitOnCall(t, nil)}
 
-	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"controller", "db", "worker-0", "worker-1"}, time.Minute, time.Millisecond)
+	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"controller", "db", "worker-0", "worker-1"}, WaitOptions{Wait: time.Minute, Interval: time.Millisecond})
 
 	require.NoError(t, err)
 	w.Finish()
@@ -102,7 +102,7 @@ func TestWaitNodes_Twice(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	m := &mock.Executor{OnCall: waitOnCall(t, nil)}
 
-	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0", "worker-0"}, time.Minute, time.Millisecond)
+	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0", "worker-0"}, WaitOptions{Wait: time.Minute, Interval: time.Millisecond})
 
 	require.NoError(t, err)
 	w.Finish()
@@ -118,21 +118,29 @@ func TestWaitNodes_Twice(t *testing.T) {
 	}
 }
 
+// TestWaitNodes_ZeroOptions checks that the zero WaitOptions wait without
+// a limit, probing every DefaultReadinessInterval: the nodes are ready at
+// the first round.
+func TestWaitNodes_ZeroOptions(t *testing.T) {
+	m := &mock.Executor{OnCall: waitOnCall(t, nil)}
+	require.NoError(t, WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"controller"}, WaitOptions{}))
+}
+
 func TestWaitNodes_NoNodes(t *testing.T) {
 	var m mock.Executor
-	require.NoError(t, WaitNodes(t.Context(), docker.NewClient(&m), "sind", "dev", nil, 0, 0))
+	require.NoError(t, WaitNodes(t.Context(), docker.NewClient(&m), "sind", "dev", nil, WaitOptions{}))
 	assert.Empty(t, m.Calls)
 }
 
 func TestWaitNodes_NotFound(t *testing.T) {
 	m := &mock.Executor{OnCall: waitOnCall(t, nil)}
-	err := WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-9"}, 0, time.Millisecond)
+	err := WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-9"}, WaitOptions{Interval: time.Millisecond})
 	require.ErrorIs(t, err, ErrNodeNotFound)
 
 	m = &mock.Executor{OnCall: waitOnCall(t, func(args []string) (mock.Result, bool) {
 		return mock.Result{Err: errors.New("daemon down")}, args[0] == "ps"
 	})}
-	err = WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0"}, 0, time.Millisecond)
+	err = WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0"}, WaitOptions{Interval: time.Millisecond})
 	require.ErrorContains(t, err, "daemon down")
 }
 
@@ -143,13 +151,13 @@ func TestWaitNodes_NoController(t *testing.T) {
 		return mock.Result{Stdout: waitContainers("exited")}, args[0] == "ps"
 	})}
 
-	err := WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0", "worker-1"}, 0, time.Millisecond)
+	err := WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0", "worker-1"}, WaitOptions{Interval: time.Millisecond})
 
 	require.EqualError(t, err, `no controller of cluster "dev" runs: the workers worker-0 cannot register with slurmctld`)
 	assert.Len(t, m.Calls, 1)
 
 	// Unmanaged workers need none.
-	require.NoError(t, WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-1"}, 0, time.Millisecond))
+	require.NoError(t, WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-1"}, WaitOptions{Interval: time.Millisecond}))
 }
 
 func TestWaitNodes_WaitLimit(t *testing.T) {
@@ -163,7 +171,7 @@ func TestWaitNodes_WaitLimit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := &mock.Executor{OnCall: waitOnCall(t, handle)}
-			err := WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0"}, 100*time.Millisecond, time.Millisecond)
+			err := WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0"}, WaitOptions{Wait: 100 * time.Millisecond, Interval: time.Millisecond})
 
 			require.ErrorIs(t, err, ErrNotReady)
 			assert.ErrorContains(t, err, `nodes of cluster "dev" not ready within 100ms: `)
@@ -179,14 +187,14 @@ func TestWaitNodes_NotWaitLimit(t *testing.T) {
 	m := &mock.Executor{OnCall: waitOnCall(t, func(args []string) (mock.Result, bool) {
 		return mock.Result{Stdout: "starting\n"}, strings.Contains(strings.Join(args, " "), "is-system-running")
 	})}
-	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0"}, time.Hour, time.Millisecond)
+	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0"}, WaitOptions{Wait: time.Hour, Interval: time.Millisecond})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.NotErrorIs(t, err, ErrNotReady)
 
 	m = &mock.Executor{OnCall: waitOnCall(t, func(args []string) (mock.Result, bool) {
 		return mock.Result{Stdout: "worker-0|inval|0/0/2/2|2048|all*|Low RealMemory\n"}, isSinfo(args)
 	})}
-	err = WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0"}, 0, time.Millisecond)
+	err = WaitNodes(t.Context(), docker.NewClient(m), "sind", "dev", []string{"worker-0"}, WaitOptions{Interval: time.Millisecond})
 	require.EqualError(t, err, "workers' registration with slurmctld: probe registered: slurmctld rejected the registration of worker-0 (inval: Low RealMemory)")
 }
 

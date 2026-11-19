@@ -83,7 +83,7 @@ func TestMonitoring(t *testing.T) {
 
 	cfg := testConfig(t, name, "monitoring: true\nnodes: [controller, db, worker]\n")
 
-	err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	err = Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	if strings.HasPrefix(version, "25.") {
 		require.ErrorIs(t, err, ErrImageUnsupported)
 		nodes, lerr := c.ListContainers(ctx, "label="+LabelRealm+"="+realm, "label="+LabelCluster+"="+name)

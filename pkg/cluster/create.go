@@ -203,8 +203,17 @@ func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 }
 
 // DefaultReadinessInterval is the delay between readiness probe rounds
-// that Create and WorkerAdd use for a readinessInterval of zero or less.
+// that Create, WorkerAdd and WaitNodes use for an Interval of zero or
+// less.
 const DefaultReadinessInterval = probe.DefaultInterval
+
+// CreateOptions holds the options of Create that are not part of the
+// cluster's config.
+type CreateOptions struct {
+	// Interval is the delay between readiness probe rounds; zero or less
+	// is DefaultReadinessInterval.
+	Interval time.Duration
+}
 
 // inspectResult is the result of a docker inspect run in a goroutine.
 type inspectResult struct {
@@ -232,7 +241,7 @@ type nodeResult struct {
 // deadline controls the overall timeout, except for the writes of the mesh
 // DNS, known_hosts and sind-nodes.conf, which ignore it so that they are
 // not cut short, and may outlive it by up to RollbackTimeout;
-// readinessInterval controls the polling interval for readiness probes, and
+// opts.Interval controls the polling interval for readiness probes, and
 // zero or less means DefaultReadinessInterval. cfg.Wait, when positive,
 // limits how long Create waits for the nodes and Slurm to become ready,
 // counted for each node from when its container has started, so that image
@@ -270,10 +279,10 @@ type nodeResult struct {
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
 // does not discover the Slurm version and enables no Slurm daemon.
-func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (retErr error) {
+func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, opts CreateOptions) (retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
-	rd := &readiness{interval: readinessInterval, wait: cfg.Wait}
+	rd := &readiness{interval: opts.Interval, wait: cfg.Wait}
 
 	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(NodeShortNames(cfg.Nodes)))
 
@@ -465,7 +474,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	if cfg.Managed() {
 		g.Go(func() error {
 			controller := ContainerName(realm, cfg.Name, string(config.RoleController))
-			if err := enableSlurm(gctx, client, realm, cfg.Name, controller, nodeConfigs, readinessInterval, watcher); err != nil {
+			if err := enableSlurm(gctx, client, realm, cfg.Name, controller, nodeConfigs, opts.Interval, watcher); err != nil {
 				return err
 			}
 			log.InfoContext(gctx, "slurm services enabled")
@@ -473,7 +482,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 				return nil
 			}
 			actx, end := startStep(gctx, "accounts")
-			err := createSlurmAccounts(actx, client, realm, cfg, readinessInterval, watcher)
+			err := createSlurmAccounts(actx, client, realm, cfg, opts.Interval, watcher)
 			end(err)
 			if err != nil {
 				return err

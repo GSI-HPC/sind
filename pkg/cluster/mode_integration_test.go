@@ -48,7 +48,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	cfg := testConfig(t, clusterName, "")
 
 	// Create.
-	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 	requireRunningNodes(ctx, t, c, realm, clusterName, 2)
 
 	// GetClusters.
@@ -184,7 +184,7 @@ slurm:
     ConstrainCores=yes
 `)
 
-	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 
 	// Verify settings via scontrol show config on the controller.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -234,7 +234,7 @@ slurm:
       TaskPlugin=task/cgroup,task/affinity
 `)
 
-	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 
 	// Verify settings via scontrol show config on the controller.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -263,7 +263,7 @@ slurm:
 
 	// A worker added later gets it too: sind reads the TaskPlugin from the
 	// fragment slurm.conf includes.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
 	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].ShortName())))
@@ -306,7 +306,7 @@ slurm:
     SlurmctldTimeout=10
 `)
 
-	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 	requireRunningNodes(ctx, t, c, realm, clusterName, 3)
 
 	primary := ContainerName(realm, clusterName, "controller")
@@ -356,7 +356,7 @@ slurm:
 	assert.Equal(t, jobID, strings.TrimSpace(out))
 
 	// Managed worker add goes through the backup while the primary is down.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
 	out, err = c.Exec(ctx, backup, "sinfo", "-h", "-N", "-o", "%N")
@@ -405,7 +405,7 @@ func TestClusterNamesAroundMesh(t *testing.T) {
 
 	// One create at a time: both rewrite the realm's Corefile.
 	for _, name := range clusters {
-		err := Create(ctx, c, meshMgr, testConfig(t, name, ""), probeInterval)
+		err := Create(ctx, c, meshMgr, testConfig(t, name, ""), CreateOptions{Interval: probeInterval})
 		require.NoError(t, err, "creating %s", name)
 	}
 
@@ -467,7 +467,7 @@ nodes:
   - worker
 `)
 
-	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 	requireRunningNodes(ctx, t, c, realm, clusterName, 5)
 	clusters, err := GetClusters(ctx, c, realm)
 	require.NoError(t, err)
@@ -532,7 +532,7 @@ nodes:
 	}
 
 	// Workers added later are unmanaged too.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
 	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].ShortName()))
@@ -597,7 +597,7 @@ nodes:
   - worker
 `)
 
-	require.NoError(t, Create(ctx, c, meshMgr, cfg, probeInterval))
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 	requireRunningNodes(ctx, t, c, realm, clusterName, 3)
 
 	// slurmdbd.conf includes the slurmdbd section's fragments. It has the
@@ -692,7 +692,7 @@ nodes:
   - worker
 `)
 
-	err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	// sind configures no accounting and starts nothing on the db node.
@@ -755,7 +755,7 @@ nodes:
   - worker
 `)
 
-	err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -809,7 +809,7 @@ nodes:
 	assert.Contains(t, status.Mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume, OK: true})
 
 	// Workers added later get the users, groups and the shared homes.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
 	newWorker := ContainerName(realm, clusterName, added[0].ShortName())
@@ -880,7 +880,7 @@ nodes:
   - worker
 `)
 
-	err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -970,7 +970,7 @@ nodes:
   - worker
 `)
 
-	err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1002,7 +1002,7 @@ nodes:
 	assert.ErrorContains(t, err, "Permission denied", "SSH as alice to a worker")
 
 	// Workers added later resolve users the same way.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
 	newWorker := ContainerName(realm, clusterName, added[0].ShortName())
@@ -1040,7 +1040,7 @@ nodes:
   - worker
 `)
 
-	err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1126,7 +1126,7 @@ users:
   - munge
 `)
 
-	err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.ErrorContains(t, err, ": adding users: exit status ")
 	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
 	assert.NotContains(t, err.Error(), setupStepMarker)

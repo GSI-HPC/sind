@@ -140,7 +140,10 @@ func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts Wo
 	client := docker.NewClient(m)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	nodes, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), opts, time.Millisecond)
+	if opts.Interval == 0 {
+		opts.Interval = time.Millisecond
+	}
+	nodes, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), opts)
 	return m, nodes, err
 }
 
@@ -239,7 +242,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 func TestWorkerAdd_InvalidRealm(t *testing.T) {
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, "a.b"), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, "a.b"), WorkerAddOptions{ClusterName: "dev", Count: 1, Interval: time.Millisecond})
 	require.ErrorContains(t, err, `invalid realm name "a.b"`)
 	assert.Empty(t, m.Calls)
 }
@@ -1846,7 +1849,7 @@ func TestWorkerAdd_RollbackSkipsUncreatedWorkers(t *testing.T) {
 	var logs strings.Builder
 	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2, Interval: time.Millisecond})
 
 	require.ErrorContains(t, err, "creating container worker-2")
 	assert.NotContains(t, logs.String(), "already gone")
@@ -2270,7 +2273,8 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 		CPUs:        2,
 		Memory:      "2g",
 		TmpSize:     "1g",
-	}, time.Millisecond)
+		Interval:    time.Millisecond,
+	})
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)

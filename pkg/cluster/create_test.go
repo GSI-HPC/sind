@@ -275,7 +275,7 @@ func runCreateOn(ctx context.Context, t *testing.T, m *mock.Executor, cfg *confi
 		_ = meshMgr.EnsureMeshNetwork(context.WithoutCancel(ctx))
 		require.True(t, meshMgr.Created())
 	}
-	return Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	return Create(ctx, client, meshMgr, cfg, CreateOptions{Interval: time.Millisecond})
 }
 
 // isSystemctlEnable reports whether args enable a unit on a node.
@@ -411,7 +411,7 @@ func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	err := Create(ctx, client, meshMgr, createCfg(), 0)
+	err := Create(ctx, client, meshMgr, createCfg(), CreateOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, probe.DefaultInterval, DefaultReadinessInterval)
 }
@@ -421,14 +421,14 @@ func TestCreate_InvalidConfig(t *testing.T) {
 	// creates anything instead of returning a cluster without nodes.
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev"}, time.Millisecond)
+	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev"}, CreateOptions{Interval: time.Millisecond})
 	require.EqualError(t, err, "invalid cluster config: exactly one controller required, got 0")
 	assert.Empty(t, m.Calls)
 
 	// Validate guards the names the node scripts use unquoted.
 	cfg := createCfg()
 	cfg.Users = []config.User{{Name: "bad name", UID: 1000}}
-	err = Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	err = Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, CreateOptions{Interval: time.Millisecond})
 	require.ErrorContains(t, err, "invalid cluster config: ")
 	assert.Empty(t, m.Calls)
 }
@@ -438,7 +438,7 @@ func TestCreate_RealmMismatch(t *testing.T) {
 	client := docker.NewClient(&m)
 	cfg := createCfg()
 	cfg.Realm = "ci"
-	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, CreateOptions{Interval: time.Millisecond})
 	require.EqualError(t, err, `config realm "ci" differs from the mesh manager's realm "sind"`)
 	assert.Empty(t, m.Calls)
 }
@@ -449,7 +449,7 @@ func TestCreate_RealmMismatch(t *testing.T) {
 func TestCreate_InvalidRealm(t *testing.T) {
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	err := Create(t.Context(), client, mesh.NewManager(client, "CI"), createCfg(), time.Millisecond)
+	err := Create(t.Context(), client, mesh.NewManager(client, "CI"), createCfg(), CreateOptions{Interval: time.Millisecond})
 	require.ErrorContains(t, err, `invalid realm name "CI"`)
 	assert.Empty(t, m.Calls)
 }

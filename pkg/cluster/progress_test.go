@@ -326,7 +326,7 @@ func TestWorkerAdd_ReportsItsSteps(t *testing.T) {
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2, Interval: time.Millisecond})
 
 	require.NoError(t, err)
 	w.Finish()

@@ -149,7 +149,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	}
 
 	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
-		if _, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval); err != nil {
+		if _, err := cluster.WorkerAdd(ctx, client, meshMgr, opts); err != nil {
 			return withUnmanagedHint(err)
 		}
 		updateSSHExport(cmd, client, meshMgr)

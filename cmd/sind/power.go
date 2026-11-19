@@ -127,7 +127,7 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc, locked bool) er
 		err := fn(ctx, client, meshMgr, g.Cluster, g.ShortNames)
 		started = started || err == nil
 		if err == nil && waits {
-			err = cluster.WaitNodes(ctx, client, realm, g.Cluster, g.ShortNames, wait, cluster.DefaultReadinessInterval)
+			err = cluster.WaitNodes(ctx, client, realm, g.Cluster, g.ShortNames, cluster.WaitOptions{Wait: wait})
 		}
 		errs = append(errs, err)
 	}

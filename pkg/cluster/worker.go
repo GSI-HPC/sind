@@ -41,7 +41,10 @@ type WorkerAddOptions struct {
 	Pull        bool // pull Image first; needs Image
 	// Wait, when positive, limits how long WorkerAdd waits for the new
 	// workers to become ready, counted as for Create's config.Cluster.Wait.
-	Wait        time.Duration
+	Wait time.Duration
+	// Interval is the delay between readiness probe rounds; zero or less
+	// is DefaultReadinessInterval.
+	Interval    time.Duration
 	CapAdd      []string
 	CapDrop     []string
 	Devices     []string
@@ -126,14 +129,13 @@ func (o WorkerAddOptions) CheckNamed(name func(field string) string) error {
 // For unmanaged workers (Unmanaged=true), the Slurm steps are skipped.
 // Workers added to an unmanaged cluster are always unmanaged. A failure
 // after the first container exists removes the new containers, mesh
-// entries and NodeName lines again. readinessInterval is the delay
-// between readiness probe rounds, as for Create. As there, the writes of
+// entries and NodeName lines again. As there, the writes of
 // the mesh DNS, known_hosts and sind-nodes.conf ignore the end of ctx and
 // may outlive it by up to RollbackTimeout.
-func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (added []*NodeSummary, retErr error) {
+func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions) (added []*NodeSummary, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
-	rd := &readiness{interval: readinessInterval, wait: opts.Wait}
+	rd := &readiness{interval: opts.Interval, wait: opts.Wait}
 
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
@@ -382,7 +384,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			if err := updateNodesConf(readyCtx, client, controllerName, nodesConf, slurmConf, nodeConfigs); err != nil {
 				return err
 			}
-			return enableSlurm(readyCtx, client, realm, opts.ClusterName, controllerName, nodeConfigs, readinessInterval, watcher)
+			return enableSlurm(readyCtx, client, realm, opts.ClusterName, controllerName, nodeConfigs, opts.Interval, watcher)
 		})
 	}
 	if err := g.Wait(); err != nil {

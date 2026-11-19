@@ -118,7 +118,7 @@ func TestCreate_NoRollbackNoStep(t *testing.T) {
 	cfg := createCfg()
 	cfg.Name = ""
 
-	err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, CreateOptions{Interval: time.Millisecond})
 
 	require.ErrorContains(t, err, "invalid cluster config")
 	assert.Empty(t, w.Finish())
@@ -155,7 +155,7 @@ func TestWorkerAdd_RollbackIsAStep(t *testing.T) {
 					return base(args, stdin)
 				}
 				client := docker.NewClient(&m)
-				_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+				_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Interval: time.Millisecond})
 				return err
 			}
 
