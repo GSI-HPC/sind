@@ -5,6 +5,7 @@ package state
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -157,12 +158,14 @@ func TestLockRealm_Errors(t *testing.T) {
 		assert.ErrorContains(t, err, "acquiring lock")
 	})
 
-	t.Run("blocking flock fails", func(t *testing.T) {
+	t.Run("flock fails while waiting", func(t *testing.T) {
+		calls := 0
 		_, err := LockRealm(t.Context(), "ci-42", &LockOptions{
-			Dir:    t.TempDir(),
-			OnWait: func(*LockHolder) {},
-			flock: func(_ int, how int) error {
-				if how&unix.LOCK_NB != 0 {
+			Dir:       t.TempDir(),
+			OnWait:    func(*LockHolder) {},
+			pollFirst: time.Millisecond,
+			flock: func(int, int) error {
+				if calls++; calls == 1 {
 					return unix.EWOULDBLOCK
 				}
 				return unix.EINTR
@@ -171,4 +174,69 @@ func TestLockRealm_Errors(t *testing.T) {
 		require.ErrorIs(t, err, unix.EINTR)
 		assert.ErrorContains(t, err, "acquiring lock")
 	})
+}
+
+// TestLockRealm_PollsTheFileLock checks that a wait for the file lock
+// tries again at growing intervals and never blocks in flock(2), which
+// would not end when ctx does.
+func TestLockRealm_PollsTheFileLock(t *testing.T) {
+	var calls []time.Time
+	waits := 0
+	ctx, cancel := context.WithCancel(t.Context())
+	_, err := LockRealm(ctx, "ci-42", &LockOptions{
+		Dir:       t.TempDir(),
+		OnWait:    func(*LockHolder) { waits++ },
+		pollFirst: 5 * time.Millisecond,
+		pollMax:   20 * time.Millisecond,
+		flock: func(_ int, how int) error {
+			assert.Equal(t, unix.LOCK_EX|unix.LOCK_NB, how, "never a blocking flock")
+			if calls = append(calls, time.Now()); len(calls) == 6 {
+				cancel()
+			}
+			return unix.EWOULDBLOCK
+		},
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, waits, "OnWait is called once")
+	require.Len(t, calls, 6)
+	assert.GreaterOrEqual(t, calls[2].Sub(calls[1]), 10*time.Millisecond, "the interval doubles")
+	assert.Less(t, calls[5].Sub(calls[4]), 200*time.Millisecond, "up to pollMax")
+}
+
+// TestLockRealm_UnlockTwice checks that a second call of the unlock
+// function does not release the lock of a later holder, which likely has
+// the same file descriptor number.
+func TestLockRealm_UnlockTwice(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(fmt.Sprintf("daemon=%v", daemon), func(t *testing.T) {
+			dir := t.TempDir()
+			d := newFakeDaemon(t)
+			opts := func() *LockOptions {
+				o := &LockOptions{Dir: dir, pollFirst: time.Millisecond}
+				if daemon {
+					o.Client = d.client()
+				}
+				return o
+			}
+			unlock1, err := LockRealm(t.Context(), "twice", opts())
+			require.NoError(t, err)
+			unlock1()
+			unlock2, err := LockRealm(t.Context(), "twice", opts())
+			require.NoError(t, err)
+			defer unlock2()
+
+			unlock1()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+			defer cancel()
+			o := opts()
+			o.Client = nil
+			waited := false
+			o.OnWait = func(*LockHolder) { waited = true }
+			_, err = LockRealm(ctx, "twice", o)
+			require.ErrorIs(t, err, context.DeadlineExceeded, "the second holder keeps the lock")
+			assert.True(t, waited)
+			assert.Equal(t, daemon, d.network("twice-lock") != nil, "and its daemon lock")
+		})
+	}
 }

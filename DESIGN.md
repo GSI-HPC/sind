@@ -2365,7 +2365,7 @@ Mutating operations acquire a per-realm lock to prevent concurrent modifications
 
 2. The daemon lock: the network `<realm>-lock` on the Docker daemon, which exists while a command holds the lock. The realm's resources live on the daemon, which several clients can share: users of one host, CI jobs that share the host's Docker socket, containers that mount it, shells with another `XDG_STATE_HOME`. Each of them has a file lock of its own; they meet at the daemon.
 
-The file lock stays as the fast path: commands of one user wait for each other in the kernel, and only one of them at a time polls the daemon.
+The file lock stays as the fast path: commands of one user wait for each other without a call to the daemon, and only one of them at a time polls the daemon.
 
 ### Protected operations
 
@@ -2409,11 +2409,11 @@ Alternatives that were rejected:
 ### Behavior
 
 - Each part is attempted non-blocking first; if both are free, the operation proceeds immediately, without a notice
-- If another operation holds the file lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`
+- If another operation holds the file lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and tries again (`LOCK_NB`) at intervals that double from 100 ms to 2 s until it has the lock: waiting is a state the user may have to act on, so it is not left to `-v`. It never blocks in `flock(2)`, as closing the file does not end a blocked `flock`: a wait that the context ends would keep its goroutine and thread until the holder lets go, and then take the lock on a file that nobody uses
 - If another client holds the daemon lock, the warning names it from the lock's labels, e.g. `Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)`, with the time the daemon created the lock in local time. sind tries again at intervals that double from 100 ms to 2 s; waiting clients take a freed lock in no particular order. What the warnings quote of the labels is escaped, as another client wrote it
 - The waits have no timeout; context cancellation (e.g., Ctrl+C, SIGTERM) ends them
 - The wait is also the progress wait `realm lock`, from the first wait until sind takes the lock or gives up, whose message names the holder of the daemon lock once it is known: on a terminal, the progress display shows it below the `Warning:` line, which stays
-- Lock is released when the operation completes, success or failure, after the rollback of a failed `create cluster`, and after Ctrl+C or SIGTERM: sind removes the daemon lock by its network ID, so that it never removes another client's lock, with a context that the interrupt does not cancel, for at most 30 s, and then releases the file lock. If the removal fails, sind warns `Warning: releasing the realm lock: <error>; remove it with: docker network rm <realm>-lock`
+- Lock is released when the operation completes, success or failure, after the rollback of a failed `create cluster`, and after Ctrl+C or SIGTERM: sind removes the daemon lock by its network ID, so that it never removes another client's lock, with a context that the interrupt does not cancel, for at most 30 s, and then releases the file lock by closing the file. A second call of `state.LockRealm`'s unlock function does nothing, so that it cannot release a lock that another caller has taken since on the same file descriptor number. If the removal fails, sind warns `Warning: releasing the realm lock: <error>; remove it with: docker network rm <realm>-lock`
 
 ### Stale daemon locks
 
