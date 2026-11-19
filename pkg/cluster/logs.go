@@ -63,11 +63,15 @@ func ServiceLogCommand(service string, opts LogOptions) []string {
 // NodeServices returns the systemd units of a node whose journal
 // ServiceLogArgs shows, by name: those get node checks on it, which depend
 // on its role and on whether sind manages Slurm on it. It inspects the
-// node's container, for shell completion.
+// node's container, for shell completion; a container whose labels name
+// another realm or cluster is not the node (see ownedBy).
 func NodeServices(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) ([]string, error) {
 	info, err := client.InspectContainer(ctx, ContainerName(realm, clusterName, shortName))
 	if err != nil {
 		return nil, fmt.Errorf("inspecting container: %w", err)
+	}
+	if !ownedBy(info.Labels, realm, clusterName) {
+		return nil, errorWith(ErrNodeNotFound, "node %q not found in cluster %q", shortName, clusterName)
 	}
 	services := nodeServices(config.Role(info.Labels[LabelRole]), info.Labels)
 	names := make([]string, len(services))

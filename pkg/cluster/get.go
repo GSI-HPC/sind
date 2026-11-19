@@ -121,13 +121,16 @@ type NodeDetail struct {
 
 // GetNode returns the identity and health of one node, for 'sind get node',
 // with what slurmctld says about a managed worker (NodeDetail.Slurm).
-// A node that does not exist fails with what CheckNode reports for a
-// cluster without containers in the realm (ErrClusterNotFound), and
-// otherwise with a "not found" error naming the node and its cluster.
+// A node that does not exist, or whose container's labels name another
+// realm or cluster, fails with what CheckNode reports for a cluster
+// without containers in the realm (ErrClusterNotFound), and otherwise
+// with a "not found" error naming the node and its cluster.
 func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) (*NodeDetail, error) {
 	containerName := ContainerName(realm, clusterName, shortName)
 	info, err := client.InspectContainer(ctx, containerName)
-	if docker.IsNotFound(err) {
+	// Realm and cluster join with a hyphen in the name, so another realm's
+	// node can have this one's name (see ownedBy).
+	if docker.IsNotFound(err) || err == nil && !ownedBy(info.Labels, realm, clusterName) {
 		// Tell a missing cluster from a missing node, as logs and ssh do.
 		if err := CheckNode(ctx, client, realm, clusterName, shortName); err != nil {
 			return nil, err

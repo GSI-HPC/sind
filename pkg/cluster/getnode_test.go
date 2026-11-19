@@ -90,6 +90,22 @@ func TestGetNode_NotFoundRace(t *testing.T) {
 	require.EqualError(t, err, `node "ghost" not found in cluster "dev"`)
 }
 
+// TestGetNode_OtherRealm checks that a container of another realm whose
+// name joins to the node's, ci-42/dev for ci/42-dev, is not the node.
+func TestGetNode_OtherRealm(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: `[{"Id":"abc","Name":"/ci-42-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.realm":"ci-42","sind.cluster":"dev","sind.role":"controller"}}}]`}
+		}
+		return mock.Result{}
+	}}
+
+	_, err := GetNode(t.Context(), docker.NewClient(m), "ci", "42-dev", "controller")
+
+	require.EqualError(t, err, `cluster "42-dev" not found in realm "ci"`)
+	assert.ErrorIs(t, err, ErrClusterNotFound)
+}
+
 func TestGetNode_ClusterNotFound(t *testing.T) {
 	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 		if args[0] == "inspect" {
