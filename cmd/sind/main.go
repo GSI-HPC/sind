@@ -23,7 +23,7 @@ func main() {
 	os.Exit(code)
 }
 
-// interruptContext returns a context that the first SIGINT or SIGTERM
+// interruptContext returns a context that the first of interruptSignals
 // cancels, so that the work in progress stops and deferred cleanup (e.g.
 // Create rollback) runs; `timeout` and `docker stop` send SIGTERM.
 //
@@ -34,7 +34,7 @@ func main() {
 // context itself, means nothing that waits on the context can see it end
 // while the handler would still swallow a second signal.
 func interruptContext() (context.Context, context.CancelFunc) {
-	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(context.Background(), interruptSignals()...)
 	ctx, cancel := context.WithCancelCause(context.Background())
 	context.AfterFunc(sigCtx, func() {
 		stop()
@@ -44,6 +44,18 @@ func interruptContext() (context.Context, context.CancelFunc) {
 		stop()
 		cancel(nil)
 	}
+}
+
+// interruptSignals are the signals that interrupt a command: SIGINT,
+// SIGTERM, and SIGHUP, which a terminal or an SSH session that goes away
+// sends, unless sind started with SIGHUP ignored, as nohup starts it: a
+// handler would end the ignoring.
+func interruptSignals() []os.Signal {
+	sigs := []os.Signal{os.Interrupt, syscall.SIGTERM}
+	if !signal.Ignored(syscall.SIGHUP) {
+		sigs = append(sigs, syscall.SIGHUP)
+	}
+	return sigs
 }
 
 // run executes the command tree with args and returns the process exit

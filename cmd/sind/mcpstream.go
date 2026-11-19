@@ -54,7 +54,8 @@ const mcpSessionTimeout = 30 * time.Minute
 // no hook for authentication, so the stream is sind's: an HTTP server
 // whose MCP server forwards each tool call to ophis's server (mcpStreamHandler).
 //
-// It stops cleanly, exiting 0, when the context ends (SIGINT or SIGTERM).
+// It stops cleanly, exiting 0, when the context ends (SIGINT, SIGTERM or
+// SIGHUP).
 func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) error {
 	ctx := cmd.Context()
 	host, _ := cmd.Flags().GetString("host")
