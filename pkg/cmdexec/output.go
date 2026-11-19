@@ -4,6 +4,7 @@ package cmdexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 )
@@ -58,6 +59,24 @@ func WithProcessGroup(ctx context.Context) context.Context {
 func InProcessGroup(ctx context.Context) bool {
 	group, _ := ctx.Value(processGroupKey{}).(bool)
 	return group
+}
+
+// stopGraceKey is the context key of WithStopGrace.
+type stopGraceKey struct{}
+
+// WithStopGrace returns ctx for a command run WithProcessGroup that stops
+// on SIGTERM itself, with what it started, such as sind, which rolls back
+// what it began. When ctx ends, OSExecutor sends SIGTERM to the command
+// alone, and kills its process group only once grace has passed. Without
+// it, the end of ctx kills the group at once.
+func WithStopGrace(ctx context.Context, grace time.Duration) context.Context {
+	return context.WithValue(ctx, stopGraceKey{}, grace)
+}
+
+// StopGrace returns the grace of WithStopGrace, zero without one.
+func StopGrace(ctx context.Context) time.Duration {
+	grace, _ := ctx.Value(stopGraceKey{}).(time.Duration)
+	return grace
 }
 
 // orphanSafeKey is the context key of WithOrphanSafe.

@@ -36,7 +36,8 @@ import (
 // it names (fakeDockerSignals), like a docker exec whose command failed.
 // fakeDockerArgsEnv names a file the fake docker writes its arguments to,
 // one per line, before anything else. fakeDockerPSEnv makes it answer
-// `docker ps` at once, with the output it holds.
+// `docker ps` at once, with the output it holds, and fakeDockerNoNetworksEnv
+// `docker network inspect` at once, with a network not found.
 //
 // Adapted from GSI-HPC/clusterctl cmd/clusterctl/signal_test.go.
 const (
@@ -45,6 +46,8 @@ const (
 	fakeDockerExitEnv = "SIND_TEST_DOCKER_EXIT"
 	fakeDockerArgsEnv = "SIND_TEST_DOCKER_ARGS"
 	fakeDockerPSEnv   = "SIND_TEST_DOCKER_PS"
+
+	fakeDockerNoNetworksEnv = "SIND_TEST_DOCKER_NO_NETWORKS"
 )
 
 // fakeDockerSignals are the signals fakeDockerExitEnv can name.
@@ -103,6 +106,10 @@ func fakeDocker() {
 	if ps := os.Getenv(fakeDockerPSEnv); ps != "" && len(os.Args) > 1 && os.Args[1] == "ps" {
 		fmt.Print(ps)
 		os.Exit(0)
+	}
+	if os.Getenv(fakeDockerNoNetworksEnv) != "" && len(os.Args) > 2 && os.Args[1] == "network" && os.Args[2] == "inspect" {
+		fmt.Fprintln(os.Stderr, "Error response from daemon: network "+os.Args[len(os.Args)-1]+" not found")
+		os.Exit(1)
 	}
 	if exit := os.Getenv(fakeDockerExitEnv); exit != "" {
 		if sig, ok := fakeDockerSignals[exit]; ok {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -576,12 +577,14 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 	assert.NoError(t, stop(), "a stopped stream exits 0")
 }
 
-// TestRefuseFlagArgs_RunsToCompletion checks that the tools that change
-// state keep running when their call is cancelled, and the others do not.
-func TestRefuseFlagArgs_RunsToCompletion(t *testing.T) {
-	var cancelable bool
+// TestRefuseFlagArgs_StopsWithGrace checks that a cancelled call of a tool
+// that changes state stops its process with SIGTERM and a grace, as an
+// interrupt, and of the others kills it at once; both see the cancel.
+func TestRefuseFlagArgs_StopsWithGrace(t *testing.T) {
+	var graceful bool
 	run := func(ctx context.Context, _ *mcp.CallToolRequest, _ ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
-		cancelable = ctx.Done() != nil
+		assert.NotNil(t, ctx.Done(), "the call's cancel reaches the tool")
+		graceful = cmdexec.StopGrace(ctx) == mcpStopGrace
 		return nil, ophis.ToolOutput{}, nil
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -602,7 +605,7 @@ func TestRefuseFlagArgs_RunsToCompletion(t *testing.T) {
 		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tool}}
 		_, _, err := refuseFlagArgs(nil)(ctx, req, ophis.ToolInput{}, run)
 		require.NoError(t, err, tool)
-		assert.Equal(t, !want, cancelable, tool)
+		assert.Equal(t, want, graceful, tool)
 	}
 }
 
@@ -959,6 +962,43 @@ func TestMCPExecute_CancelKillsDocker(t *testing.T) {
 				"docker is still running")
 		})
 	}
+}
+
+// TestMCPExecute_CancelInterruptsAChange checks that a cancelled call of a
+// tool that changes state interrupts its sind process, as SIGTERM would:
+// sind stops the docker command it waits for, cleans up and exits 130,
+// rather than going on after the call was cancelled or being killed
+// without cleanup.
+func TestMCPExecute_CancelInterruptsAChange(t *testing.T) {
+	started := mcpToolProcesses(t)
+	// The cleanup of the realm lock that the interrupt stopped finds no
+	// lock.
+	t.Setenv(fakeDockerNoNetworksEnv, "1")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan ophis.ToolOutput, 1)
+	go func() {
+		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "sind_delete_cluster"}}
+		_, out, _ := refuseFlagArgs(nil)(ctx, req, ophis.ToolInput{Args: []string{"default"}}, mcpExecute)
+		done <- out
+	}()
+
+	var pid int
+	require.Eventually(t, func() bool {
+		data, _ := os.ReadFile(started)
+		pid, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+		return pid > 0
+	}, 10*time.Second, 20*time.Millisecond, "docker was never started")
+	cancel()
+
+	select {
+	case out := <-done:
+		assert.Equal(t, exitInterrupted, out.ExitCode, out.StdErr)
+		assert.Contains(t, out.StdErr, "interrupted")
+	case <-time.After(10 * time.Second):
+		t.Fatal("the cancelled call did not end")
+	}
+	assert.False(t, processRunning(pid), "docker is still running")
 }
 
 // processRunning reports whether the process pid exists and is no zombie.

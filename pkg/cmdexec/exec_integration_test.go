@@ -243,6 +243,36 @@ func TestOSExecutor_DeadlineWithAChildLeft(t *testing.T) {
 	assert.Less(t, time.Since(start), 6*time.Second)
 }
 
+// A command run WithStopGrace gets SIGTERM when its context ends, and its
+// process group is killed once the grace has passed.
+func TestOSExecutor_StopGrace(t *testing.T) {
+	for _, tc := range []struct {
+		name, script, stdout string
+		code                 int
+	}{
+		{"stops on SIGTERM", `trap 'echo stopping; exit 3' TERM; echo started; sleep 30 & wait`, "started\nstopping\n", 3},
+		{"ignores SIGTERM", `trap '' TERM; echo started; sleep 30`, "started\n", -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			ctx = cmdexec.WithStopGrace(cmdexec.WithProcessGroup(ctx), time.Second)
+			ctx = cmdexec.WithStarted(ctx, func(int) { time.AfterFunc(300*time.Millisecond, cancel) })
+			var e cmdexec.OSExecutor
+			start := time.Now()
+			stdout, _, err := e.Run(ctx, "sh", "-c", tc.script)
+			elapsed := time.Since(start)
+
+			var exitErr *exec.ExitError
+			require.ErrorAs(t, err, &exitErr)
+			assert.Equal(t, tc.code, exitErr.ExitCode(), "%v", err)
+			assert.Equal(t, tc.stdout, stdout)
+			assert.Greater(t, elapsed, time.Second, "the group is killed only after the grace")
+			assert.Less(t, elapsed, 5*time.Second)
+		})
+	}
+}
+
 // A command run WithTerminal that cannot start fails as without one.
 func TestOSExecutor_TerminalNotStarted(t *testing.T) {
 	var e cmdexec.OSExecutor

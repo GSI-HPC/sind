@@ -4,6 +4,7 @@ package cmdexec
 
 import (
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,11 @@ func TestStdoutIsData(t *testing.T) {
 func TestStderrMerged(t *testing.T) {
 	assert.False(t, StderrMerged(t.Context()))
 	assert.True(t, StderrMerged(WithStderrMerged(t.Context())))
+}
+
+func TestStopGrace(t *testing.T) {
+	assert.Zero(t, StopGrace(t.Context()))
+	assert.Equal(t, time.Minute, StopGrace(WithStopGrace(t.Context(), time.Minute)))
 }
 
 func TestInProcessGroup(t *testing.T) {

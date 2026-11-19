@@ -46,11 +46,30 @@ type OSExecutor struct{}
 const outputWaitDelay = 2 * time.Second
 
 // inProcessGroup makes cmd run in a process group of its own, which the
-// end of its context kills whole (WithProcessGroup).
-func inProcessGroup(cmd *exec.Cmd) {
+// end of its context kills whole (WithProcessGroup), or with a grace
+// (WithStopGrace), stops with SIGTERM and kills whole once grace has
+// passed. The caller calls done once cmd.Wait has returned.
+func inProcessGroup(cmd *exec.Cmd, grace time.Duration) (done func()) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
+	killGroup := func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.Cancel = killGroup
+	if grace <= 0 {
+		return func() {}
+	}
+	// Wait returns only after Cancel, if exec called it, has returned, so
+	// done reads kill after it was set.
+	var kill *time.Timer
+	cmd.Cancel = func() error {
+		kill = time.AfterFunc(grace, func() { _ = killGroup() })
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
+	cmd.WaitDelay = grace + outputWaitDelay
+	return func() {
+		if kill != nil {
+			kill.Stop()
+		}
 	}
 }
 
@@ -62,7 +81,8 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 		cmd.Env = env
 	}
 	if InProcessGroup(ctx) {
-		inProcessGroup(cmd)
+		done := inProcessGroup(cmd, StopGrace(ctx))
+		defer done()
 	}
 	if OrphanSafe(ctx) {
 		return runOrphanSafe(ctx, cmd)

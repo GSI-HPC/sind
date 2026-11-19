@@ -198,8 +198,8 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 		defer close(served)
 		_ = start.RunE(start, nil)
 	}()
-	// A tool call that runs to completion after its client is gone
-	// (mcpRunsToCompletion) must not hold up the shutdown of the stream.
+	// A tool call that rolls back after its client is gone
+	// (mcpChangesState) must not hold up the shutdown of the stream.
 	stopInner := func() {
 		cancel()
 		select {
