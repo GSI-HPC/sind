@@ -73,9 +73,9 @@ type Probe struct {
 	Name  string
 	Check Func
 	// Unit is the systemd unit whose state the check follows, as busctl
-	// names it ("munge.service"), or empty. A wait with events does not run
-	// a check that has passed again until an event of its unit arrives (see
-	// UntilReadyWithEvents).
+	// names it ("munge.service"), or empty. A wait with events that has had
+	// a unit event of the container does not run a check that has passed
+	// again until an event of its unit arrives (see UntilReadyWithEvents).
 	Unit string
 }
 
@@ -158,7 +158,11 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 //
 //   - an event of its unit (Probe.Unit) runs it again: a unit that became
 //     active again, or one that failed, which a unit probe reports as a
-//     TerminalError;
+//     TerminalError. A unit probe that passed before the wait had any unit
+//     event of the container runs again in every round: systemd sends unit
+//     events only while a D-Bus client of the node has subscribed to them,
+//     which the systemd monitor does not do, so until one has come the
+//     monitor's silence tells nothing;
 //   - another event of the container (start, oom, pause, unpause) runs
 //     every passed probe again;
 //   - a full events buffer runs every passed probe again, as the watcher
@@ -280,6 +284,10 @@ type progress struct {
 	// trusted is whether the events tell the wait about changes: they come
 	// on a buffered channel, and no monitor has stopped.
 	trusted bool
+	// unitEvents is whether a unit event of the container has come, which
+	// shows that systemd sends them (see UntilReadyWithEvents); until then
+	// a passed unit probe is not skipped.
+	unitEvents bool
 	// died is the error of the wait once a die event of its container has
 	// come, which ends it before the next round.
 	died error
@@ -298,7 +306,7 @@ func newProgress(probes []Probe, events <-chan monitor.Event) *progress {
 // pass records that probe i passed: later rounds skip it, if the events
 // can tell when it changes.
 func (p *progress) pass(i int) {
-	p.passed[i] = p.trusted
+	p.passed[i] = p.trusted && (p.probes[i].Unit == "" || p.unitEvents)
 }
 
 // distrust makes every later round run every probe: the events no longer
@@ -367,6 +375,7 @@ func (p *progress) changed(ev monitor.Event) {
 	case ev.Kind == monitor.EventMonitorError:
 		p.distrust()
 	case ev.Unit != "":
+		p.unitEvents = true
 		for i, probe := range p.probes {
 			if probe.Unit == ev.Unit {
 				p.passed[i] = false

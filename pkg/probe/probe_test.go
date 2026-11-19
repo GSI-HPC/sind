@@ -973,13 +973,15 @@ func TestUntilReady_RunsEveryProbeEachRound(t *testing.T) {
 
 func TestUntilReadyWithEvents_UnitEventRerunsItsProbe(t *testing.T) {
 	// munge is still starting; an event of sshd.service runs the passed
-	// sshd probe again, one of another unit runs none.
+	// sshd probe again, one of another unit runs it again too, as sshd
+	// passed before the wait had a unit event (see
+	// TestUntilReadyWithEvents_UnitProbesRunUntilAUnitEvent).
 	for _, tt := range []struct {
 		unit string
 		want []string
 	}{
 		{"sshd.service", []string{"container", "systemd", "sshd", "munge", "sshd", "munge"}},
-		{"multi-user.target", []string{"container", "systemd", "sshd", "munge", "munge"}},
+		{"multi-user.target", []string{"container", "systemd", "sshd", "munge", "sshd", "munge"}},
 	} {
 		t.Run(tt.unit, func(t *testing.T) {
 			var m mock.Executor
@@ -987,9 +989,7 @@ func TestUntilReadyWithEvents_UnitEventRerunsItsProbe(t *testing.T) {
 			m.AddResult("running\n", "", nil)
 			m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
 			m.AddResult("activating\n", "", nil)
-			if tt.unit == "sshd.service" {
-				m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
-			}
+			m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
 			m.AddResult("active\n", "", nil)
 			c := docker.NewClient(&m)
 
@@ -997,6 +997,47 @@ func TestUntilReadyWithEvents_UnitEventRerunsItsProbe(t *testing.T) {
 			events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer, Unit: tt.unit}
 			// A long interval: only the event starts the second round.
 			err := UntilReadyWithEvents(t.Context(), c, testContainer, baseProbes, time.Minute, events)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, probeCalls(m.Calls))
+		})
+	}
+}
+
+// TestUntilReadyWithEvents_UnitProbesRunUntilAUnitEvent checks that a
+// unit probe that passed is skipped only once the wait has had a unit
+// event of the container: systemd sends none while no D-Bus client has
+// subscribed, and the monitor's silence then tells nothing.
+func TestUntilReadyWithEvents_UnitProbesRunUntilAUnitEvent(t *testing.T) {
+	probes := []Probe{ForService(ServiceMunge), ForService(ServiceSSHD)}
+	for _, tt := range []struct {
+		name   string
+		events []monitor.Event
+		want   []string
+	}{
+		{"no unit event", nil, []string{"munge", "sshd", "munge", "sshd", "munge", "sshd"}},
+		{"another container's unit event", []monitor.Event{{Kind: monitor.EventUnitActive, Container: "sind-dev-worker-0", Unit: "x.service"}},
+			[]string{"munge", "sshd", "munge", "sshd", "munge", "sshd"}},
+		{"a unit event", []monitor.Event{{Kind: monitor.EventUnitActive, Container: testContainer, Unit: "x.service"}},
+			[]string{"munge", "sshd", "munge", "sshd", "sshd"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			for range 2 {
+				m.AddResult("active\n", "", nil)
+				m.AddResult("", "", fmt.Errorf("connection refused"))
+			}
+			if tt.events == nil || tt.events[0].Container != testContainer {
+				m.AddResult("active\n", "", nil)
+			}
+			m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
+			c := docker.NewClient(&m)
+
+			events := make(chan monitor.Event, 64)
+			for _, ev := range tt.events {
+				events <- ev
+			}
+			err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Millisecond, events)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, probeCalls(m.Calls))
@@ -1132,6 +1173,7 @@ func TestProgress_TakeQueued(t *testing.T) {
 	probes := []Probe{{Name: "container", Check: ContainerRunning}, munge}
 	passedAll := func() *progress {
 		p := newProgress(probes, make(chan monitor.Event, 1))
+		p.unitEvents = true // as after a unit event
 		p.pass(0)
 		p.pass(1)
 		return p
