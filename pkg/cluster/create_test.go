@@ -682,6 +682,52 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 	assert.False(t, meshRemoved(m), "mesh cleanup should not run when mesh was pre-existing")
 }
 
+// TestCreate_RollbackRemovesTheCluster fails Create at steps after
+// createResources has begun, against a realm that keeps what Create makes,
+// and checks that the rollback leaves nothing of the cluster: no container,
+// network, volume, or SSH relay on its network.
+func TestCreate_RollbackRemovesTheCluster(t *testing.T) {
+	resources := []string{"network sind-dev-net", "volume sind-dev-config", "volume sind-dev-munge", "volume sind-dev-data"}
+	nodes := []string{"container sind-dev-controller", "container sind-dev-worker-0"}
+	for _, tt := range []struct {
+		name     string
+		override func([]string, string) (mock.Result, bool)
+		wait     time.Duration // cfg.Wait; a positive one expects ErrNotReady
+		wantErr  string
+		made     []string
+	}{
+		{"node creation", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: errors.New("image not found")}, args[0] == "create" && slices.Contains(args, "--hostname")
+		}, 0, "image not found", resources},
+		{"node not running", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Stdout: inspectJSON(t, args[1], "created", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})},
+				args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-")
+		}, 200 * time.Millisecond, "last probe error: probe container:", append(resources, nodes...)},
+		{"mesh registration", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: errors.New("dns container stopped")},
+				args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns")
+		}, 0, "dns container stopped", append(resources, nodes...)},
+		{"enable slurm", failEnable, 0, "systemctl failed", append(resources, nodes...)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			realm := newRealmState(t)
+			cfg := createCfg()
+			cfg.Wait = tt.wait
+
+			m, _, err := runCreate(t.Context(), t, cfg, false, realm.override(tt.override))
+
+			require.ErrorContains(t, err, tt.wantErr)
+			if tt.wait > 0 {
+				require.ErrorIs(t, err, ErrNotReady)
+			}
+			assert.NotContains(t, err.Error(), "rolling back")
+			assert.Subset(t, realm.made, tt.made, "Create made them before it failed")
+			assert.Empty(t, realm.of(mesh.DefaultRealm, "dev"), "left behind by the rollback")
+			assert.Equal(t, 1, countCalls(m.Calls, "network", "disconnect", "sind-dev-net", "sind-ssh"), "the SSH relay leaves the cluster network")
+		})
+	}
+}
+
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 	// When the mesh was freshly created and Create fails, after the nodes
 	// or before the resources, the mesh is cleaned up too.

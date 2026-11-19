@@ -1125,6 +1125,14 @@ users:
 	require.ErrorContains(t, err, ": adding users: exit status ")
 	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
 	assert.NotContains(t, err.Error(), setupStepMarker)
+	assert.NotContains(t, err.Error(), "rolling back")
+
+	// The rollback removed the cluster's nodes, network and volumes.
+	res, err := ListClusterResources(ctx, c, meshMgr.Realm, clusterName)
+	require.NoError(t, err)
+	assert.Empty(t, res.Containers)
+	assert.False(t, res.NetworkExists)
+	assert.Empty(t, res.Volumes)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -1180,12 +1188,45 @@ func testMesh(ctx context.Context, t *testing.T, c *docker.Client, prefix string
 	t.Cleanup(func() {
 		bg := context.Background()
 		for _, name := range clusters {
-			_ = Delete(bg, c, meshMgr, name)
+			if err := Delete(bg, c, meshMgr, name); err != nil {
+				t.Errorf("deleting cluster %s: %v", name, err)
+			}
 		}
-		_ = meshMgr.CleanupMesh(bg)
+		if err := meshMgr.CleanupMesh(bg); err != nil {
+			t.Errorf("removing the mesh: %v", err)
+		}
+		assertRealmEmpty(t, c, meshMgr)
 	})
 	require.NoError(t, meshMgr.EnsureMesh(ctx))
 	return meshMgr, realm
+}
+
+// assertRealmEmpty checks that no container, network or volume of the
+// realm of meshMgr is left: none labelled with the realm, and no container
+// of its monitoring stack.
+func assertRealmEmpty(t *testing.T, c *docker.Client, meshMgr *mesh.Manager) {
+	t.Helper()
+	ctx := context.Background()
+	realm := "label=" + LabelRealm + "=" + meshMgr.Realm
+	var left []string
+	for _, filter := range []string{realm, "label=" + docker.ComposeProjectLabel + "=" + meshMgr.ComposeProject()} {
+		containers, err := c.ListContainers(ctx, filter)
+		require.NoError(t, err)
+		for _, e := range containers {
+			left = append(left, "container "+string(e.Name))
+		}
+	}
+	networks, err := c.ListNetworks(ctx, realm)
+	require.NoError(t, err)
+	for _, e := range networks {
+		left = append(left, "network "+string(e.Name))
+	}
+	volumes, err := c.ListVolumes(ctx, realm)
+	require.NoError(t, err)
+	for _, e := range volumes {
+		left = append(left, "volume "+string(e.Name))
+	}
+	assert.Empty(t, left, "realm %s is left with resources", meshMgr.Realm)
 }
 
 // testConfig returns the validated config of cluster name on testutil.Image(),
