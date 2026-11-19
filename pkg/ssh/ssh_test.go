@@ -60,6 +60,21 @@ func TestHostKey_MalformedThenValid(t *testing.T) {
 	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
 }
 
+func TestHostKeyFromFile(t *testing.T) {
+	key, err := HostKeyFromFile("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest root@worker-0\n")
+	require.NoError(t, err)
+	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
+
+	for name, content := range map[string]string{
+		"empty":     "",
+		"no key":    "ssh-ed25519\n",
+		"other key": "ssh-rsa AAAAB3NzaC1yc2E root@worker-0\n",
+	} {
+		_, err := HostKeyFromFile(content)
+		assert.EqualError(t, err, "no ed25519 host key found", name)
+	}
+}
+
 // --- GenerateSSHConfig ---
 
 func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {

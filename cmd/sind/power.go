@@ -25,6 +25,35 @@ func withRealm(fn func(ctx context.Context, client *docker.Client, realm, cluste
 	}
 }
 
+// powerCommand is a subcommand of sind power.
+type powerCommand struct {
+	use        string
+	aliases    []string
+	suggestFor []string
+	short      string
+	fn         powerFunc
+	// locked: the command starts nodes, which updates the realm's mesh (it
+	// starts a stopped mesh, rewrites the nodes' DNS records and adds host
+	// keys that known_hosts lacks), so it holds the realm lock, and
+	// updates the SSH config export.
+	locked bool
+	// waits: the command starts nodes, and takes --wait.
+	waits bool
+}
+
+// powerCommands are the subcommands of sind power. off is the verb users
+// guess first; without an alias cobra suggests the opposite action, "on".
+// The docker verbs that the help names get a suggestion.
+var powerCommands = []powerCommand{
+	{"shutdown NODES", []string{"off"}, []string{"stop"}, "Gracefully shut down nodes (docker stop; alias: off)", withRealm(cluster.PowerShutdown), false, false},
+	{"cut NODES", nil, []string{"kill"}, "Hard power off nodes (docker kill)", withRealm(cluster.PowerCut), false, false},
+	{"on NODES", nil, []string{"start"}, "Power on nodes (docker start)", cluster.PowerOn, true, true},
+	{"reboot NODES", nil, []string{"restart"}, "Gracefully reboot nodes (shutdown, then on)", cluster.PowerReboot, true, true},
+	{"cycle NODES", nil, nil, "Hard power cycle nodes (cut, then on)", cluster.PowerCycle, true, true},
+	{"freeze NODES", nil, []string{"pause"}, "Simulate unresponsive nodes (docker pause)", withRealm(cluster.PowerFreeze), false, false},
+	{"unfreeze NODES", nil, []string{"unpause", "resume"}, "Resume frozen nodes (docker unpause)", withRealm(cluster.PowerUnfreeze), false, true},
+}
+
 func newPowerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "power",
@@ -33,31 +62,7 @@ func newPowerCommand() *cobra.Command {
 		ValidArgsFunction: completeAliases,
 	}
 
-	// Commands that start nodes update the realm's mesh (it starts a
-	// stopped mesh, and rewrites the nodes' DNS records), so they hold the
-	// realm lock.
-	cmds := []struct {
-		use        string
-		aliases    []string
-		suggestFor []string
-		short      string
-		fn         powerFunc
-		locked     bool
-		// waits: the command starts nodes, and takes --wait.
-		waits bool
-	}{
-		// off is the verb users guess first; without an alias cobra
-		// suggests the opposite action, "on". The docker verbs that the
-		// help names get a suggestion.
-		{"shutdown NODES", []string{"off"}, []string{"stop"}, "Gracefully shut down nodes (docker stop; alias: off)", withRealm(cluster.PowerShutdown), false, false},
-		{"cut NODES", nil, []string{"kill"}, "Hard power off nodes (docker kill)", withRealm(cluster.PowerCut), false, false},
-		{"on NODES", nil, []string{"start"}, "Power on nodes (docker start)", cluster.PowerOn, true, true},
-		{"reboot NODES", nil, []string{"restart"}, "Gracefully reboot nodes (shutdown, then on)", cluster.PowerReboot, true, true},
-		{"cycle NODES", nil, nil, "Hard power cycle nodes (cut, then on)", cluster.PowerCycle, true, true},
-		{"freeze NODES", nil, []string{"pause"}, "Simulate unresponsive nodes (docker pause)", withRealm(cluster.PowerFreeze), false, false},
-		{"unfreeze NODES", nil, []string{"unpause", "resume"}, "Resume frozen nodes (docker unpause)", withRealm(cluster.PowerUnfreeze), false, true},
-	}
-	for _, c := range cmds {
+	for _, c := range powerCommands {
 		fn, locked := c.fn, c.locked
 		sub := &cobra.Command{
 			Use:               c.use,
@@ -113,14 +118,21 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc, locked bool) er
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
 	// A cluster that fails does not keep the others from their power
-	// action.
+	// action. The SSH config export follows once the nodes of a cluster
+	// started: a command that started none, as for a node that does not
+	// exist, leaves it alone, also when the mesh does not run.
 	var errs []error
+	started := false
 	for _, g := range groupByCluster(targets) {
 		err := fn(ctx, client, meshMgr, g.Cluster, g.ShortNames)
+		started = started || err == nil
 		if err == nil && waits {
 			err = cluster.WaitNodes(ctx, client, realm, g.Cluster, g.ShortNames, wait, cluster.DefaultReadinessInterval)
 		}
 		errs = append(errs, err)
+	}
+	if locked && started {
+		updateSSHExport(cmd, client, meshMgr)
 	}
 	return errors.Join(errs...)
 }

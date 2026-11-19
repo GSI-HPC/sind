@@ -29,6 +29,21 @@ const InjectKeyScript = `mkdir -p /root/.ssh
 printf '%s\n' "$1" >> ` + authorizedKeysPath + `
 ssh-keyscan -t ed25519 localhost`
 
+// HostKeyFile is where sshd keeps a node's ed25519 host public key, which
+// the node generates on its first boot, in authorized_keys format with a
+// comment: "ssh-ed25519 AAAA... root@host".
+const HostKeyFile = "/etc/ssh/ssh_host_ed25519_key.pub"
+
+// HostKeyFromFile returns the key of HostKeyFile's content, in
+// "ssh-ed25519 AAAA..." format, without the comment.
+func HostKeyFromFile(content string) (string, error) {
+	fields := strings.Fields(content)
+	if len(fields) < 2 || fields[0] != "ssh-ed25519" {
+		return "", fmt.Errorf("no ed25519 host key found")
+	}
+	return fields[0] + " " + fields[1], nil
+}
+
 // HostKey returns the ed25519 host public key in the output of
 // InjectKeyScript, in "ssh-ed25519 AAAA..." format (without the hostname
 // prefix). It skips ssh-keyscan's comment lines.

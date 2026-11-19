@@ -11,7 +11,10 @@ import (
 	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/ssh"
+	"golang.org/x/sync/errgroup"
 )
 
 // powerConcurrency bounds the docker calls a power command runs at once.
@@ -46,6 +49,8 @@ func PowerCut(ctx context.Context, client *docker.Client, realm, clusterName str
 // the realm's mesh DNS and SSH relay if they are stopped, as after a host
 // reboot, and afterwards points the started nodes' mesh DNS records at their
 // addresses: Docker can give a node another address each time it starts.
+// It adds the host keys of started nodes that the relay's known_hosts
+// lacks (see addMissingHostKeys).
 // A stopped monitoring stack of the realm starts with the nodes; one that
 // cannot start or get ready fails the call when the cluster is monitored,
 // and is a warning (meshMgr.Warn) when it is not.
@@ -123,6 +128,7 @@ func powerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 		containers[i] = t.container
 	}
 	dnsErr := refreshDNSRecords(ctx, client, meshMgr, clusterName, containers, dnsIP)
+	addMissingHostKeys(ctx, client, meshMgr, clusterName, containers)
 	// The Corefile takes one change at a time: the stack's names after
 	// the nodes'.
 	var stackErr error
@@ -174,6 +180,73 @@ func refreshDNSRecords(ctx context.Context, client *docker.Client, meshMgr *mesh
 		return fmt.Errorf("updating DNS records: %w", err)
 	}
 	return nil
+}
+
+// addMissingHostKeys adds the host keys of the given running nodes that the
+// relay's known_hosts has no line of. Only the creates collect host keys
+// otherwise, and sind v0.8 to v0.12 rewrote known_hosts in place, so that a
+// write cut short could lose the keys of nodes that still run, which
+// sind ssh NODE CMD and the exported SSH config then refuse. A node's key
+// is read from its sshd's key file (ssh.HostKeyFile), which needs no
+// running sshd, unlike the ssh-keyscan of the node's setup: a node that
+// was just started may not run it yet. The power command is done by then,
+// so failures are warnings (meshMgr.Warn).
+func addMissingHostKeys(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerName) {
+	if len(containers) == 0 {
+		return
+	}
+	realm := meshMgr.Realm
+	prefix := ContainerPrefix(realm, clusterName)
+	byHost := make(map[string]docker.ContainerName, len(containers))
+	hostnames := make([]string, len(containers))
+	for i, c := range containers {
+		hostnames[i] = DNSName(strings.TrimPrefix(string(c), prefix), clusterName, realm)
+		byHost[hostnames[i]] = c
+	}
+	warn := func(err error) {
+		meshMgr.Warn(ctx, fmt.Sprintf("not adding the host keys that known_hosts lacks: %v", err))
+	}
+	missing, err := meshMgr.MissingKnownHosts(ctx, hostnames)
+	if err != nil {
+		warn(err)
+		return
+	}
+	if len(missing) == 0 {
+		return
+	}
+	// A node whose key cannot be read does not keep the others out.
+	keys := make([]string, len(missing))
+	errs := make([]error, len(missing))
+	var g errgroup.Group
+	g.SetLimit(powerConcurrency)
+	for i, h := range missing {
+		g.Go(func() error {
+			out, err := client.ReadFile(ctx, byHost[h], ssh.HostKeyFile)
+			if err == nil {
+				keys[i], err = ssh.HostKeyFromFile(out)
+			}
+			if err != nil {
+				errs[i] = fmt.Errorf("reading the host key of %s: %w", byHost[h], err)
+			}
+			return nil
+		})
+	}
+	_ = g.Wait() // the goroutines report through errs
+	var entries []mesh.KnownHostEntry
+	for i, h := range missing {
+		if errs[i] == nil {
+			entries = append(entries, mesh.KnownHostEntry{Hostname: h, HostKey: keys[i]})
+		}
+	}
+	if len(entries) > 0 {
+		sindlog.From(ctx).InfoContext(ctx, "adding host keys that known_hosts lacks", "nodes", len(entries))
+		if err := meshMgr.AddKnownHosts(ctx, entries); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		warn(err)
+	}
 }
 
 // forEachContainer applies op to the container of every target in

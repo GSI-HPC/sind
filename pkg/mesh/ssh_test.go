@@ -218,6 +218,21 @@ func TestEditKnownHosts(t *testing.T) {
 	}
 }
 
+func TestMissingKnownHosts(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("a.dev.sind.sind ssh-ed25519 A\n\nc.dev.sind.sind ssh-ed25519 C\n", "", nil)
+	missing, err := NewManager(docker.NewClient(&m), DefaultRealm).MissingKnownHosts(t.Context(),
+		[]string{"a.dev.sind.sind", "b.dev.sind.sind", "c.dev.sind.sind", "d.dev.sind.sind"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.dev.sind.sind", "d.dev.sind.sind"}, missing)
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", knownHostsPath}, m.Calls[0].Args)
+
+	m = mock.Executor{}
+	m.AddResult("", "", fmt.Errorf("container stopped"))
+	_, err = NewManager(docker.NewClient(&m), DefaultRealm).MissingKnownHosts(t.Context(), []string{"a"})
+	require.EqualError(t, err, "reading known_hosts: container stopped")
+}
+
 func TestEditKnownHosts_Errors(t *testing.T) {
 	for _, edit := range []func(*Manager) error{addHosts(KnownHostEntry{"h", "k"}), removeHosts("h")} {
 		var m mock.Executor

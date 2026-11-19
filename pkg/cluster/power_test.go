@@ -184,9 +184,14 @@ func powerOnCall(t *testing.T, handle func(args []string, stdin string) (mock.Re
 	}
 }
 
+// powerKnownHosts is the relay's known_hosts in the power tests, with the
+// keys of every node of cluster dev.
+const powerKnownHosts = "controller.dev.sind.sind ssh-ed25519 A\nworker-0.dev.sind.sind ssh-ed25519 B\nworker-1.dev.sind.sind ssh-ed25519 C\n"
+
 // meshCall answers the mesh's calls for a running mesh whose DNS container
 // has 10.0.9.2, and whose Corefile has corefile: the inspects, the Corefile
-// read and write, and the reload. The written Corefile goes to written.
+// read and write, the reload, and the read of known_hosts, which has
+// powerKnownHosts. The written Corefile goes to written.
 func meshCall(t *testing.T, corefile []string, written *string) func(args []string, stdin string) (mock.Result, bool) {
 	t.Helper()
 	return func(args []string, stdin string) (mock.Result, bool) {
@@ -202,6 +207,8 @@ func meshCall(t *testing.T, corefile []string, written *string) func(args []stri
 			return mock.Result{}, true
 		case args[0] == "kill" && args[1] == "-s":
 			return mock.Result{}, true
+		case strings.Join(args, " ") == "exec sind-ssh cat /root/.ssh/known_hosts":
+			return mock.Result{Stdout: powerKnownHosts}, true
 		}
 		return mock.Result{}, false
 	}
@@ -332,6 +339,104 @@ func TestPower_On_RecordsUnchanged(t *testing.T) {
 
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "-", c.Args[1], "no Corefile write: %v", c.Args)
+	}
+}
+
+// TestPower_On_MissingHostKeys covers started nodes whose host keys the
+// relay's known_hosts lacks, as a write of an earlier sind cut short leaves
+// it: their keys are read from the nodes and added. A node whose key
+// cannot be read is a warning, and does not keep the other out.
+func TestPower_On_MissingHostKeys(t *testing.T) {
+	for name, tc := range map[string]struct {
+		worker1 mock.Result
+		want    string
+		warning string
+	}{
+		"both": {
+			worker1: mock.Result{Stdout: "ssh-ed25519 KEY1 root@worker-1\n"},
+			want:    "controller.dev.sind.sind ssh-ed25519 A\nworker-0.dev.sind.sind ssh-ed25519 KEY0\nworker-1.dev.sind.sind ssh-ed25519 KEY1\n",
+		},
+		"one unreadable": {
+			worker1: mock.Result{Stderr: "cat: no such file\n", Err: testutil.ExitCode1(t)},
+			want:    "controller.dev.sind.sind ssh-ed25519 A\nworker-0.dev.sind.sind ssh-ed25519 KEY0\n",
+			warning: "not adding the host keys that known_hosts lacks: reading the host key of sind-dev-worker-1: ",
+		},
+		"one not ed25519": {
+			worker1: mock.Result{Stdout: "ssh-rsa AAAA root@worker-1\n"},
+			want:    "controller.dev.sind.sind ssh-ed25519 A\nworker-0.dev.sind.sind ssh-ed25519 KEY0\n",
+			warning: "reading the host key of sind-dev-worker-1: no ed25519 host key found",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var written, hosts string
+			var m mock.Executor
+			m.OnCall = powerOnCall(t, func(args []string, stdin string) (mock.Result, bool) {
+				switch strings.Join(args, " ") {
+				case "inspect sind-dev-worker-0 sind-dev-worker-1 --type container":
+					return mock.Result{Stdout: startedNodesJSON("10.0.9.2")}, true
+				case "exec sind-ssh cat /root/.ssh/known_hosts":
+					return mock.Result{Stdout: "controller.dev.sind.sind ssh-ed25519 A\n"}, true
+				case "exec sind-dev-worker-0 cat /etc/ssh/ssh_host_ed25519_key.pub":
+					return mock.Result{Stdout: "ssh-ed25519 KEY0 root@worker-0\n"}, true
+				case "exec sind-dev-worker-1 cat /etc/ssh/ssh_host_ed25519_key.pub":
+					return tc.worker1, true
+				}
+				if args[0] == "exec" && args[1] == "-i" && args[2] == "sind-ssh" {
+					hosts = stdin
+					return mock.Result{}, true
+				}
+				return meshCall(t, nil, &written)(args, stdin)
+			})
+			client := docker.NewClient(&m)
+			mgr := mesh.NewManager(client, mesh.DefaultRealm)
+			var warned []string
+			mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+
+			require.NoError(t, PowerOn(t.Context(), client, mgr, "dev", []string{"worker-0", "worker-1"}))
+			assert.Equal(t, tc.want, hosts)
+			if tc.warning == "" {
+				assert.Empty(t, warned)
+			} else {
+				require.Len(t, warned, 1)
+				assert.Contains(t, warned[0], tc.warning)
+			}
+		})
+	}
+}
+
+// TestPower_On_KnownHostsErrors covers a known_hosts that cannot be read or
+// written: a warning, and the command succeeds.
+func TestPower_On_KnownHostsErrors(t *testing.T) {
+	for name, fail := range map[string]func(args []string) bool{
+		"read":  func(a []string) bool { return strings.Join(a, " ") == "exec sind-ssh cat /root/.ssh/known_hosts" },
+		"write": func(a []string) bool { return a[0] == "exec" && a[1] == "-i" && a[2] == "sind-ssh" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var written string
+			var m mock.Executor
+			m.OnCall = powerOnCall(t, func(args []string, stdin string) (mock.Result, bool) {
+				switch {
+				case fail(args):
+					return mock.Result{Err: fmt.Errorf("relay gone")}, true
+				case args[0] == "inspect" && args[1] == "sind-dev-worker-0":
+					return mock.Result{Stdout: startedNodesJSON("10.0.9.2")}, true
+				case strings.Join(args, " ") == "exec sind-ssh cat /root/.ssh/known_hosts":
+					return mock.Result{}, true
+				case strings.HasSuffix(strings.Join(args, " "), "cat /etc/ssh/ssh_host_ed25519_key.pub"):
+					return mock.Result{Stdout: "ssh-ed25519 KEY root@node\n"}, true
+				}
+				return meshCall(t, nil, &written)(args, stdin)
+			})
+			client := docker.NewClient(&m)
+			mgr := mesh.NewManager(client, mesh.DefaultRealm)
+			var warned []string
+			mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+
+			require.NoError(t, PowerOn(t.Context(), client, mgr, "dev", []string{"worker-0"}))
+			require.Len(t, warned, 1)
+			assert.Contains(t, warned[0], "not adding the host keys that known_hosts lacks: ")
+			assert.Contains(t, warned[0], "relay gone")
+		})
 	}
 }
 

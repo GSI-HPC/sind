@@ -215,6 +215,28 @@ type KnownHostEntry struct {
 	HostKey  string
 }
 
+// MissingKnownHosts returns those of hostnames that known_hosts has no
+// line of, in their order.
+func (m *Manager) MissingKnownHosts(ctx context.Context, hostnames []string) ([]string, error) {
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading known_hosts: %w", err)
+	}
+	known := make(map[string]bool)
+	for line := range strings.SplitSeq(content, "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			known[fields[0]] = true
+		}
+	}
+	var missing []string
+	for _, h := range hostnames {
+		if !known[h] {
+			missing = append(missing, h)
+		}
+	}
+	return missing, nil
+}
+
 // AddKnownHosts adds host key entries to the known_hosts file. Existing
 // entries for the same hostnames are replaced, making the operation
 // idempotent on retry.
