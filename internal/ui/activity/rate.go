@@ -3,7 +3,6 @@
 package activity
 
 import (
-	"bytes"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
@@ -32,12 +31,8 @@ type rates map[spanKey][]sample
 
 // take notes the amount of the span of a line of the log, if it works in
 // bytes and the amount changed.
-func (r rates) take(b []byte) {
-	if !bytes.Contains(b, []byte(`"bytes"`)) {
-		return
-	}
-	l, err := eventlog.Decode(b)
-	if err != nil || l.Event.Unit != progress.UnitBytes {
+func (r rates) take(l eventlog.Line) {
+	if l.Event.Unit != progress.UnitBytes {
 		return
 	}
 	e := l.Event

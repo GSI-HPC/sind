@@ -3,7 +3,6 @@
 package activity
 
 import (
-	"bytes"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress/eventlog"
@@ -26,12 +25,8 @@ type history map[spanKey][]store.Sample
 
 // take notes the amount and the size of the span of a line of the log, if
 // it works in a unit.
-func (h history) take(b []byte) {
-	if !bytes.Contains(b, []byte(`"unit"`)) {
-		return
-	}
-	l, err := eventlog.Decode(b)
-	if err != nil || l.Event.Unit == 0 {
+func (h history) take(l eventlog.Line) {
+	if l.Event.Unit == 0 {
 		return
 	}
 	e := l.Event
