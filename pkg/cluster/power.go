@@ -284,9 +284,24 @@ func forEachContainer(ctx context.Context, targets []powerTarget, verb string, o
 	return done, err
 }
 
+// uniqueNames returns names without repeats, each at its first place, as
+// a node named twice is acted on once.
+func uniqueNames(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	unique := make([]string, 0, len(names))
+	for _, name := range names {
+		if !seen[name] {
+			seen[name] = true
+			unique = append(unique, name)
+		}
+	}
+	return unique
+}
+
 // resolveTargets validates that all shortNames exist in the cluster and returns
 // their Docker container names, with their names (see powerTarget) and
-// roles. Returns nil without error for empty shortNames.
+// roles, once for a name given twice. Returns nil without error for empty
+// shortNames.
 func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) ([]powerTarget, error) {
 	if len(shortNames) == 0 {
 		return nil, nil
@@ -306,6 +321,7 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 	if clusterName != config.DefaultClusterName {
 		suffix = "." + clusterName
 	}
+	shortNames = uniqueNames(shortNames)
 	targets := make([]powerTarget, 0, len(shortNames))
 	for _, name := range shortNames {
 		cn := ContainerName(realm, clusterName, name)

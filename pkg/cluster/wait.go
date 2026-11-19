@@ -17,13 +17,13 @@ import (
 )
 
 // WaitNodes waits until nodes of a cluster that exist, by their short
-// names, are ready, as Create and WorkerAdd wait for the nodes they make:
-// each node's container runs, systemd has booted, and the node's services
-// are ready (sshd, munge but with identity clientIds, and where sind
-// manages Slurm the node's Slurm daemon, see nodeServices); then
-// slurmctld has the registration of each managed worker among nodes, as
-// sinfo on the controller in control tells (probe.WorkersRegistered). The
-// power commands that start nodes call it with --wait.
+// names, each once, are ready, as Create and WorkerAdd wait for the nodes
+// they make: each node's container runs, systemd has booted, and the
+// node's services are ready (sshd, munge but with identity clientIds, and
+// where sind manages Slurm the node's Slurm daemon, see nodeServices);
+// then slurmctld has the registration of each managed worker among nodes,
+// as sinfo on the controller in control tells (probe.WorkersRegistered).
+// The power commands that start nodes call it with --wait.
 //
 // wait bounds the whole wait; zero or less sets no limit. When the limit
 // ends it, the error wraps ErrNotReady. A container that exits, or a unit
@@ -45,6 +45,7 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 	for _, c := range containers {
 		byName[c.Name] = c
 	}
+	shortNames = uniqueNames(shortNames)
 	nodes := make([]docker.ContainerListEntry, len(shortNames))
 	var workers []string
 	for i, name := range shortNames {

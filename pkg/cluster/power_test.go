@@ -146,6 +146,16 @@ func TestPower_ContainerOps(t *testing.T) {
 			}
 			assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-controller"}, done)
 
+			m, err = run(opResult(mock.Result{}), "worker-0", "worker-0")
+			require.NoError(t, err)
+			var twice int
+			for _, c := range m.Calls {
+				if c.Args[0] == op.docker {
+					twice++
+				}
+			}
+			assert.Equal(t, 1, twice, "a node named twice is acted on once")
+
 			_, err = run(opResult(mock.Result{Err: fmt.Errorf("docker failed")}), "worker-0")
 			assert.EqualError(t, err, op.verb+" sind-dev-worker-0: docker failed")
 

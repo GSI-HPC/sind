@@ -98,6 +98,26 @@ func TestWaitNodes(t *testing.T) {
 	assert.Equal(t, "--nodes=worker-0", sinfo[0][len(sinfo[0])-1])
 }
 
+func TestWaitNodes_Twice(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	m := &mock.Executor{OnCall: waitOnCall(t, nil)}
+
+	err := WaitNodes(ctx, docker.NewClient(m), "sind", "dev", []string{"worker-0", "worker-0"}, time.Minute, time.Millisecond)
+
+	require.NoError(t, err)
+	w.Finish()
+	assert.Equal(t, `step readiness total=1 [fold]: ok
+  target worker-0 role=worker: ok
+    wait ready: ok
+  wait ready: ok
+`, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""), "a node named twice is waited for once")
+	for _, c := range m.Calls {
+		if isSinfo(c.Args) {
+			assert.Equal(t, "--nodes=worker-0", c.Args[len(c.Args)-1])
+		}
+	}
+}
+
 func TestWaitNodes_NoNodes(t *testing.T) {
 	var m mock.Executor
 	require.NoError(t, WaitNodes(t.Context(), docker.NewClient(&m), "sind", "dev", nil, 0, 0))
