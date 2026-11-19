@@ -285,6 +285,44 @@ func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	return created
 }
 
+// TestCreateResources_NetworkExists covers another create, in a realm whose
+// names give the same resource names, that made the cluster network after
+// the preflight check: the create fails as for an existing cluster before
+// it creates a volume, which docker volume create would hand over.
+func TestCreateResources_NetworkExists(t *testing.T) {
+	m := &mock.Executor{OnCall: happyOnCall(t, func(args []string, _ string) (mock.Result, bool) {
+		if len(args) > 1 && args[0] == "network" && args[1] == "create" {
+			return mock.Result{Stderr: "Error response from daemon: network with name sind-dev-net already exists\n", Err: testutil.ExitCode1(t)}, true
+		}
+		return mock.Result{}, false
+	})}
+	client := docker.NewClient(m)
+
+	err := createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), t.Context(), nil, client, nil, false))
+
+	require.ErrorIs(t, err, ErrClusterExists)
+	assert.EqualError(t, err, "creating cluster network: network sind-dev-net already exists")
+	assert.Zero(t, countCalls(m.Calls, "volume", "create"))
+}
+
+// TestCreateResources_NetworkError covers another failure of the network:
+// no volume is created either.
+func TestCreateResources_NetworkError(t *testing.T) {
+	m := &mock.Executor{OnCall: happyOnCall(t, func(args []string, _ string) (mock.Result, bool) {
+		if len(args) > 1 && args[0] == "network" && args[1] == "create" {
+			return mock.Result{Err: errors.New("daemon gone")}, true
+		}
+		return mock.Result{}, false
+	})}
+	client := docker.NewClient(m)
+
+	err := createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), t.Context(), nil, client, nil, false))
+
+	require.EqualError(t, err, "creating cluster network: daemon gone")
+	assert.NotErrorIs(t, err, ErrClusterExists)
+	assert.Zero(t, countCalls(m.Calls, "volume", "create"))
+}
+
 func TestCreateResources_DataVolume(t *testing.T) {
 	tests := []struct {
 		name       string

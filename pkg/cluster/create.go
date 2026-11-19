@@ -606,17 +606,25 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // On a monitored cluster it also creates the realm's journal volume, and
 // makes the nodes' directories in it (resetClusterJournals).
 //
-//	(network → relay connect → external containers connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
+// The network comes first: docker network create of a name that exists
+// fails, while docker volume create of one succeeds and hands over the
+// existing volume. Two creates whose realm and cluster names give the
+// same resource names (ci + 42-dev, ci-42 + dev) take different realm
+// locks, so both can pass PreflightCheck; the network decides which one
+// gets the names before either writes into a volume, and the other fails
+// with ErrClusterExists.
+//
+//	network → (relay connect → external containers connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
 func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, pull *imagePull) error {
 	realm := meshMgr.Realm
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 
+	if err := CreateClusterNetwork(ctx, client, realm, cfg.Name); err != nil {
+		return err
+	}
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		if err := CreateClusterNetwork(gctx, client, realm, cfg.Name); err != nil {
-			return err
-		}
 		if err := client.ConnectNetwork(gctx, NetworkName(realm, cfg.Name), meshMgr.SSHContainerName()); err != nil {
 			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
 		}

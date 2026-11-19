@@ -14,6 +14,8 @@ import (
 )
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
+// A network of that name that exists already, as another create made it,
+// fails with ErrClusterExists: unlike a volume, a network is created once.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	labels := docker.Labels{
 		LabelRealm:                 realm,
@@ -21,7 +23,11 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
 		docker.ComposeNetworkLabel: "net",
 	}
-	_, err := client.CreateNetwork(ctx, NetworkName(realm, clusterName), labels)
+	name := NetworkName(realm, clusterName)
+	_, err := client.CreateNetwork(ctx, name, labels)
+	if docker.IsAlreadyExists(err) {
+		return errorWith(ErrClusterExists, "creating cluster network: network %s already exists", name)
+	}
 	if err != nil {
 		return fmt.Errorf("creating cluster network: %w", err)
 	}
