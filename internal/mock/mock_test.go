@@ -367,3 +367,40 @@ func TestExecutor_CallsSnapshot(t *testing.T) {
 
 	assert.Equal(t, []Call{{Name: "docker", Args: []string{"ps"}}}, m.CallsSnapshot())
 }
+
+// errorsT records what AssertDone reports.
+type errorsT struct {
+	testing.TB
+	errors []string
+}
+
+func (e *errorsT) Helper() {}
+
+func (e *errorsT) Errorf(format string, args ...any) {
+	e.errors = append(e.errors, fmt.Sprintf(format, args...))
+}
+
+func TestExecutor_AssertDone(t *testing.T) {
+	var done Executor
+	done.AddResult("", "", nil)
+	_, _, _ = done.Run(t.Context(), "docker", "ps")
+	var et errorsT
+	done.AssertDone(&et)
+	assert.Empty(t, et.errors)
+
+	var unused Executor
+	unused.AddResult("", "", nil)
+	unused.AddResult("", "", nil)
+	_, _, _ = unused.Run(t.Context(), "docker", "ps")
+	et = errorsT{}
+	unused.AssertDone(&et)
+	assert.Equal(t, []string{"mock: 1 of 2 queued results were not used"}, et.errors)
+
+	var extra Executor
+	extra.AddResult("", "", nil)
+	_, _, _ = extra.Run(t.Context(), "docker", "ps")
+	_, _, _ = extra.Run(t.Context(), "docker", "rm", "-f", "c1")
+	et = errorsT{}
+	extra.AssertDone(&et)
+	assert.Equal(t, []string{"mock: unexpected call: docker rm -f c1"}, et.errors)
+}

@@ -50,6 +50,8 @@ m.AddResult("", "", nil)                  // second call returns this
 client := docker.NewClient(m)
 ```
 
+A call after the queue ran out gets the error `mock: unexpected call`, which code that ignores errors on purpose, such as a cleanup, takes for an answer. `m.AssertDone(t)` fails the test for such a call, and for a queued result that no call used.
+
 ### Dispatcher mode
 
 Use `OnCall` for concurrent tests or when result dispatch depends on the command:

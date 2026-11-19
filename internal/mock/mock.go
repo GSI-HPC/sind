@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -67,6 +68,8 @@ type Executor struct {
 	Calls   []Call
 	results []Result
 	idx     int
+	// unexpected holds the calls that came after the queue ran out.
+	unexpected []Call
 }
 
 // Ensure Executor implements cmdexec.Executor.
@@ -78,6 +81,22 @@ func (m *Executor) AddResult(stdout, stderr string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.results = append(m.results, Result{Stdout: stdout, Stderr: stderr, Err: err})
+}
+
+// AssertDone fails t unless every result queued with AddResult was used
+// and no call came after the queue ran out: code that ignores an error on
+// purpose, such as a cleanup, takes the error of an unexpected call for
+// an answer.
+func (m *Executor) AssertDone(t testing.TB) {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if left := len(m.results) - m.idx; left > 0 {
+		t.Errorf("mock: %d of %d queued results were not used", left, len(m.results))
+	}
+	for _, c := range m.unexpected {
+		t.Errorf("mock: unexpected call: %s %s", c.Name, strings.Join(c.Args, " "))
+	}
 }
 
 // CallsSnapshot returns a copy of the calls recorded so far, which a test
@@ -136,6 +155,7 @@ func (m *Executor) dispatch(name string, args []string, stdin string) (string, s
 	}
 
 	if m.idx >= len(m.results) {
+		m.unexpected = append(m.unexpected, m.Calls[len(m.Calls)-1])
 		return "", "", fmt.Errorf("mock: unexpected call #%d: %s %v", len(m.Calls), name, args)
 	}
 	r := m.results[m.idx]
