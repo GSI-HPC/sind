@@ -154,7 +154,7 @@ func buildCreateCluster(f Form, c Context) (Command, error) {
 		flags = append(flags, "--wait", wait)
 	}
 	saved := ConfigPath(c.ConfigDir, folder, file)
-	run := NewCommand(append(sindArgv(realm, "create", "cluster", "--config", saved), flags...)...)
+	run := NewCommand(append(SindArgv(realm, "create", "cluster", "--config", saved), flags...)...)
 	cmd.Argv, cmd.Display = run.Argv, run.Display
 	cmd.Config = &File{Path: saved, Content: content}
 	cmd.Nodes = plan.planned

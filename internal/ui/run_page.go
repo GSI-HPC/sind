@@ -17,7 +17,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/activity"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 func init() { registerRun(defaultRegistry) }
@@ -286,7 +285,7 @@ func runHeadNoTask(rc runCtx, h *runHead) {
 	if run.Title == "" {
 		return
 	}
-	h.Command = &pgCmd{Label: "What the event log names", Text: action.Quote(sindArgvOf(e.realm, runLogWords(run)...))}
+	h.Command = &pgCmd{Label: "What the event log names", Text: action.Quote(action.SindArgv(e.realm, runLogWords(run)...))}
 	h.CmdNote = "Its flags and config are not in the log."
 	if runSource(rc.Snap, run) == runFromUI {
 		h.CmdNote = "sind ui no longer keeps its form, and the log has no flags or config."
@@ -409,16 +408,6 @@ func runNamedBy(r store.Run, line string) bool {
 		}
 	}
 	return true
-}
-
-// sindArgvOf is the command line of sind in realm, which names a realm
-// other than the default one; an empty realm is the default one.
-func sindArgvOf(realm string, words ...string) []string {
-	argv := []string{"sind"}
-	if realm != "" && realm != mesh.DefaultRealm {
-		argv = append(argv, "--realm", realm)
-	}
-	return append(argv, words...)
 }
 
 // runTimedOut reports whether a run failed as a node ran out of time.

@@ -338,14 +338,38 @@ func register(as ...Action) {
 // formCluster is the Cluster of actions whose field "cluster" names it.
 func formCluster(f Form) string { return strings.TrimSpace(f.Get("cluster")) }
 
-// sindArgv starts the command line of sind in realm: --realm names any realm
-// but the default one, as the default needs no flag.
-func sindArgv(realm string, words ...string) []string {
+// SindArgv is the command line of sind in realm, with words after it:
+// --realm names any realm but the default one, as the default needs no
+// flag. An empty realm is the default one. It is the one place that
+// builds such a line; SplitRealm reads it back.
+func SindArgv(realm string, words ...string) []string {
 	argv := []string{"sind"}
-	if realm != mesh.DefaultRealm {
+	if realm != "" && realm != mesh.DefaultRealm {
 		argv = append(argv, "--realm", realm)
 	}
 	return append(argv, words...)
+}
+
+// SplitRealm reads a sind command line, argv[0] being sind: the realm
+// that --realm R or --realm=R names before the first word, else the
+// default realm, and the words after it.
+func SplitRealm(argv []string) (realm string, rest []string) {
+	realm = mesh.DefaultRealm
+	if len(argv) == 0 {
+		return realm, nil
+	}
+	rest = argv[1:]
+	for len(rest) > 0 {
+		if r, ok := strings.CutPrefix(rest[0], "--realm="); ok {
+			realm, rest = r, rest[1:]
+			continue
+		}
+		if rest[0] != "--realm" || len(rest) < 2 {
+			break
+		}
+		realm, rest = rest[1], rest[2:]
+	}
+	return realm, rest
 }
 
 // checkRealm returns the realm of the form once it is a valid name.

@@ -63,7 +63,7 @@ func buildRestartService(f Form, c Context) (Command, error) {
 		return Command{}, fmt.Errorf("unit: sind checks no service %s on %s; it checks %s", unit, short, strings.Join(slices.Sorted(maps.Keys(services)), ", "))
 	}
 	arg := nodeWords(cl.Name, []string{short})[0]
-	cmd := NewCommand(sindArgv(realm, "ssh", arg, "--", "systemctl", "restart", unit)...)
+	cmd := NewCommand(SindArgv(realm, "ssh", arg, "--", "systemctl", "restart", unit)...)
 	cmd.OK = "Restart " + unit
 	cmd.Notes = append(cmd.Notes, "systemd stops "+unit+" and starts it again. The other processes of "+short+" go on. sind ui probes the node again within seconds.")
 	if up {

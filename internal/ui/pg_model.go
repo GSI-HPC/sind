@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -110,12 +110,7 @@ func pgClusterArg(name string) string {
 }
 
 // pgSind returns "sind", or "sind --realm R" in any realm but the default.
-func pgSind(realm string) string {
-	if realm == "" || realm == mesh.DefaultRealm {
-		return "sind"
-	}
-	return "sind --realm " + realm
-}
+func pgSind(realm string) string { return strings.Join(action.SindArgv(realm), " ") }
 
 // pgStateClass returns the class of the pill of a node's state.
 func pgStateClass(s cluster.State) string {

@@ -143,10 +143,8 @@ type actRunLine struct {
 // on a line of its own, as a shell script writes a long command.
 func (p actPreview) RunLines() []actRunLine {
 	argv := p.Cmd.Argv
-	i := 1
-	for i+1 < len(argv) && argv[i] == "--realm" {
-		i += 2
-	}
+	_, words := action.SplitRealm(argv)
+	i := len(argv) - len(words)
 	groups := [][]string{argv[:i]}
 	j := i
 	for j < len(argv) && !strings.HasPrefix(argv[j], "-") {
