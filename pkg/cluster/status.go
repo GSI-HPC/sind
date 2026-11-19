@@ -124,19 +124,18 @@ func (h *NetworkHealth) StackHealth() []*bool {
 // host reboot they exist but are stopped. The stack's services count as
 // healthy when they are ready.
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
-	// nil Docker client: only realm-derived names are needed here.
-	meshMgr := mesh.NewManager(nil, realm)
+	names := mesh.RealmNames(realm)
 	clusterNet := NetworkName(realm, clusterName)
 
 	health := &NetworkHealth{
-		MeshName:    string(meshMgr.NetworkName()),
-		DNSName:     string(meshMgr.DNSContainerName()),
-		SSHName:     string(meshMgr.SSHContainerName()),
+		MeshName:    string(names.Network),
+		DNSName:     string(names.DNSContainer),
+		SSHName:     string(names.SSHContainer),
 		ClusterName: string(clusterNet),
 	}
 
 	// One inspect per resource: missing → not exists, any other error → propagate.
-	if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
+	if info, err := client.InspectNetwork(ctx, names.Network); err == nil {
 		health.Mesh = true
 		health.MeshDriver = info.Driver
 		health.MeshSubnet = info.Subnet
@@ -145,13 +144,13 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 
-	if info, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
+	if info, err := client.InspectContainer(ctx, names.DNSContainer); err == nil {
 		health.DNS = info.Status == docker.StateRunning
 	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
 	}
 
-	if info, err := client.InspectContainer(ctx, meshMgr.SSHContainerName()); err == nil {
+	if info, err := client.InspectContainer(ctx, names.SSHContainer); err == nil {
 		health.SSH = info.Status == docker.StateRunning
 	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking SSH container: %w", err)

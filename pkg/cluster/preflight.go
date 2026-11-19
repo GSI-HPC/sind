@@ -235,15 +235,15 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 // container and the relay where the network lacks them, as when this
 // create makes the mesh or the cluster network.
 func checkBridgePorts(ctx context.Context, client *docker.Client, realm, clusterName string, nodes int) error {
-	meshMgr := mesh.NewManager(nil, realm)
+	names := mesh.RealmNames(realm)
 	networks := []struct {
 		name  docker.NetworkName
 		needs []docker.ContainerName // the containers the network has to hold besides the nodes
 		hint  string
 	}{
-		{meshMgr.NetworkName(), []docker.ContainerName{meshMgr.DNSContainerName(), meshMgr.SSHContainerName()},
+		{names.Network, []docker.ContainerName{names.DNSContainer, names.SSHContainer},
 			"the realm's mesh holds the nodes of all its clusters, while another realm (--realm) has a mesh of its own"},
-		{NetworkName(realm, clusterName), []docker.ContainerName{meshMgr.SSHContainerName()},
+		{NetworkName(realm, clusterName), []docker.ContainerName{names.SSHContainer},
 			"the cluster network holds the cluster's nodes and the SSH relay"},
 	}
 	entries, err := client.ListContainers(ctx,

@@ -51,13 +51,13 @@ func NewManager(dc *docker.Client, realm string) *Manager {
 
 // network is the realm's mesh network, which the stack runs on.
 func (m *Manager) network() docker.NetworkName {
-	return docker.NetworkName(m.Realm + "-mesh")
+	return mesh.RealmNames(m.Realm).Network
 }
 
 // composeProject is the Compose project of the realm's mesh, which the
 // stack's containers and volumes join.
 func (m *Manager) composeProject() string {
-	return m.Realm + "-mesh"
+	return mesh.RealmNames(m.Realm).ComposeProject
 }
 
 // createArgs returns the docker create arguments of a service's container:

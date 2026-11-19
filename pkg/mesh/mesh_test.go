@@ -1393,6 +1393,39 @@ func TestCustomRealm_ResourceNames(t *testing.T) {
 	assert.Equal(t, "testrealm-mesh", mgr.ComposeProject())
 }
 
+func TestRealmNames(t *testing.T) {
+	assert.Equal(t, Names{
+		Network:        "testrealm-mesh",
+		DNSContainer:   "testrealm-dns",
+		SSHContainer:   "testrealm-ssh",
+		SSHVolume:      "testrealm-ssh-config",
+		ComposeProject: "testrealm-mesh",
+	}, RealmNames("testrealm"))
+	assert.Equal(t, Names{
+		Network: NetworkName, DNSContainer: DNSContainerName, SSHContainer: SSHContainerName,
+		SSHVolume: SSHVolumeName, ComposeProject: "sind-mesh",
+	}, RealmNames(DefaultRealm))
+}
+
+func TestProjectRealm(t *testing.T) {
+	for _, tt := range []struct {
+		name, realm string
+		ok          bool
+	}{
+		{"sind-mesh", "sind", true},
+		{"ci-2-mesh", "ci-2", true},
+		{RealmNames("dev").ComposeProject, "dev", true},
+		{"CI-mesh", "", false}, // no valid realm
+		{"-mesh", "", false},
+		{"sind-dev-net", "", false},
+		{"", "", false},
+	} {
+		realm, ok := ProjectRealm(tt.name)
+		assert.Equal(t, tt.ok, ok, tt.name)
+		assert.Equal(t, tt.realm, realm, tt.name)
+	}
+}
+
 func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
 	c := docker.NewClient(&mock.Executor{})
 	mgr := NewManager(c, DefaultRealm)

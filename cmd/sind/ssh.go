@@ -89,7 +89,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target.Cluster, target.ShortName); err != nil {
 		return err
 	}
-	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
+	sshContainer := mesh.RealmNames(realm).SSHContainer
 	dockerArgs := cluster.BuildSSHArgs(sshContainer, target.ShortName, target.Cluster, realm, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)

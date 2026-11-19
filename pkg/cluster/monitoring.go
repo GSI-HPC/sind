@@ -277,7 +277,7 @@ func removeMonitoringVolumes(ctx context.Context, client *docker.Client, realm s
 func createJournalVolume(ctx context.Context, client *docker.Client, realm string) error {
 	labels := docker.Labels{
 		LabelRealm:                 realm,
-		docker.ComposeProjectLabel: realm + "-mesh",
+		docker.ComposeProjectLabel: mesh.RealmNames(realm).ComposeProject,
 		docker.ComposeVolumeLabel:  "journal",
 	}
 	if err := client.CreateVolume(ctx, observability.JournalVolume(realm), labels); err != nil {

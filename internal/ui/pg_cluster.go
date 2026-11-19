@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -344,9 +345,9 @@ func pgNodesTab(d *pgClusterView) {
 // first probe.
 func pgNetworkTab(d *pgClusterView, sn store.Snapshot) {
 	mine := string(cluster.NetworkName(d.Realm, d.Name))
-	mesh := d.Realm + "-mesh"
+	meshNet := string(mesh.RealmNames(d.Realm).Network)
 	for _, n := range sn.Networks[d.Realm] {
-		if n.Name == mine || n.Name == mesh {
+		if n.Name == mine || n.Name == meshNet {
 			d.Networks = append(d.Networks, pgNetRow{n.Name, n.Driver, n.Subnet, n.Gateway, n.Name == mine})
 		}
 	}

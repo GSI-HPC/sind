@@ -20,6 +20,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 // The defaults of Events.
@@ -248,10 +249,8 @@ func parseEvent(line []byte, realms []string) []Event {
 // meshRealm returns the realm of the mesh network or Compose project
 // <realm>-mesh; empty for another name.
 func meshRealm(name string) string {
-	if realm, ok := strings.CutSuffix(name, "-mesh"); ok && validRealm(realm) {
-		return realm
-	}
-	return ""
+	realm, _ := mesh.ProjectRealm(name)
+	return realm
 }
 
 // validRealm reports whether realm may be the name of a realm, which leaves

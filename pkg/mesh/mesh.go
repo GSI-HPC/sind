@@ -16,6 +16,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"golang.org/x/sync/errgroup"
@@ -41,8 +42,8 @@ const LabelDNSIP = "sind.dns.ip"
 // the subnet in between, before it keeps one without.
 const meshSubnetAttempts = 5
 
-// Default-realm resource names. Production code uses Manager methods;
-// these constants are used in tests as expected values for DefaultRealm.
+// Default-realm resource names. Production code uses RealmNames or the
+// Manager methods; these constants are used in tests as expected values for DefaultRealm.
 const (
 	NetworkName      docker.NetworkName   = "sind-mesh"
 	DNSContainerName docker.ContainerName = "sind-dns"
@@ -138,24 +139,58 @@ func NewHostManager(docker *docker.Client, realm string) *Manager {
 	return m
 }
 
+// Names are the names of a realm's mesh resources.
+type Names struct {
+	Network      docker.NetworkName   // the mesh network, <realm>-mesh
+	DNSContainer docker.ContainerName // the DNS container, <realm>-dns
+	SSHContainer docker.ContainerName // the SSH relay, <realm>-ssh
+	SSHVolume    docker.VolumeName    // the relay's volume, <realm>-ssh-config
+	// ComposeProject is the Docker Compose project, <realm>-mesh, of the
+	// mesh's containers and volumes and of the monitoring stack's.
+	ComposeProject string
+}
+
+// RealmNames returns the names of realm's mesh resources, for a caller that
+// needs a name and no Manager.
+func RealmNames(realm string) Names {
+	return Names{
+		Network:        docker.NetworkName(realm + "-mesh"),
+		DNSContainer:   docker.ContainerName(realm + "-dns"),
+		SSHContainer:   docker.ContainerName(realm + "-ssh"),
+		SSHVolume:      docker.VolumeName(realm + "-ssh-config"),
+		ComposeProject: realm + "-mesh",
+	}
+}
+
+// ProjectRealm returns the realm whose mesh Compose project, or mesh
+// network, is named name, <realm>-mesh; false when name is no such name
+// of a valid realm.
+func ProjectRealm(name string) (string, bool) {
+	realm, ok := strings.CutSuffix(name, "-mesh")
+	if !ok || config.CheckName("realm", realm) != nil {
+		return "", false
+	}
+	return realm, true
+}
+
 // NetworkName returns the mesh network name for this realm.
 func (m *Manager) NetworkName() docker.NetworkName {
-	return docker.NetworkName(m.Realm + "-mesh")
+	return RealmNames(m.Realm).Network
 }
 
 // DNSContainerName returns the DNS container name for this realm.
 func (m *Manager) DNSContainerName() docker.ContainerName {
-	return docker.ContainerName(m.Realm + "-dns")
+	return RealmNames(m.Realm).DNSContainer
 }
 
 // SSHContainerName returns the SSH container name for this realm.
 func (m *Manager) SSHContainerName() docker.ContainerName {
-	return docker.ContainerName(m.Realm + "-ssh")
+	return RealmNames(m.Realm).SSHContainer
 }
 
 // SSHVolumeName returns the SSH volume name for this realm.
 func (m *Manager) SSHVolumeName() docker.VolumeName {
-	return docker.VolumeName(m.Realm + "-ssh-config")
+	return RealmNames(m.Realm).SSHVolume
 }
 
 // SSHKeygenName returns the temporary keygen container name for this realm.
@@ -165,7 +200,7 @@ func (m *Manager) SSHKeygenName() docker.ContainerName {
 
 // ComposeProject returns the Docker Compose project name for this realm's mesh.
 func (m *Manager) ComposeProject() string {
-	return m.Realm + "-mesh"
+	return RealmNames(m.Realm).ComposeProject
 }
 
 // EnsureMesh creates the global infrastructure resources (mesh network, DNS,

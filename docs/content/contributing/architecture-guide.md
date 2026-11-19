@@ -124,7 +124,7 @@ pkg/config/        YAML configuration parsing and validation
 pkg/doctor/        Host prerequisite checks (Docker version, the daemon's mode, where the daemon runs,
                    cgroupv2 and the nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
 pkg/log/           Context-based structured logging (slog)
-pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
+pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS) and the names of its resources (RealmNames)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
                    configuration, Alloy config generation, dashboards
