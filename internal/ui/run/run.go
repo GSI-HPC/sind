@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -228,21 +229,38 @@ func outcome(err error) (int, string) {
 	return exit, store.TaskFailed
 }
 
-// failure says in one line why a command failed: the error line sind
-// printed if it printed one, else how the process ended.
+// logLine matches a line that sind's logger writes, "15:04:05.000 ERRO
+// msg", without the time when SIND_LOG_TIMESTAMPS is false: its level and
+// its message.
+var logLine = regexp.MustCompile(`^(?:\d\d:\d\d:\d\d\.\d{3} )?(ERRO|WARN|INFO|DEBU|TRAC)(?: (.*))?$`)
+
+// failure says in one line why a command failed: the error that sind
+// printed last; for a command that exited, else the last line that is not
+// one of sind's log lines or warnings, as a command that sind ssh or exec
+// ran writes; else how the process ended.
 func failure(out string, err error) string {
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	other := ""
 	for i := len(lines) - 1; i >= 0; i-- {
-		if msg, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), "Error:"); ok {
-			if msg = strings.TrimSpace(msg); msg != "" {
+		line := strings.TrimSpace(lines[i])
+		if m := logLine.FindStringSubmatch(line); m != nil {
+			if msg := strings.TrimSpace(strings.TrimPrefix(m[2], "interrupted: ")); m[1] == "ERRO" && msg != "" {
 				return msg
 			}
+			continue
+		}
+		if other == "" && line != "" && !strings.HasPrefix(line, "Warning:") {
+			other = line
 		}
 	}
-	if ee, ok := errors.AsType[*cmdexec.ExitError](err); ok {
-		return "sind " + ee.Err.String()
+	ee, ok := errors.AsType[*cmdexec.ExitError](err)
+	switch {
+	case !ok:
+		return err.Error()
+	case other != "" && ee.ExitCode() >= 0:
+		return other
 	}
-	return err.Error()
+	return "sind " + ee.Err.String()
 }
 
 // tail returns the end of stderr that a task keeps, escaped: from the start

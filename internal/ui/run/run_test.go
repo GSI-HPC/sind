@@ -236,14 +236,31 @@ func TestTask_Outcomes(t *testing.T) {
 	}{
 		{"ok", func(*testing.T) result { return result{stderr: "warning\n"} }, store.TaskOK, 0, ""},
 		{"failed", func(t *testing.T) result {
-			out := "Warning: x\nError: no such cluster dev\n"
+			out := "Warning: x\n00:44:20.743 ERRO config /nonexistent: no such file or directory\n"
 			return result{stderr: out, err: exitErr(t, "1", out)}
-		}, store.TaskFailed, 1, "no such cluster dev"},
+		}, store.TaskFailed, 1, "config /nonexistent: no such file or directory"},
+		{"failed, without timestamps", func(t *testing.T) result {
+			out := "ERRO cluster \"dev\" not found in realm \"sind\"\n12:00:00.001 WARN later\n"
+			return result{stderr: out, err: exitErr(t, "1", out)}
+		}, store.TaskFailed, 1, `cluster "dev" not found in realm "sind"`},
+		{"interrupted, failed", func(t *testing.T) result {
+			out := "12:00:00.000 ERRO interrupted: setting up nodes: context canceled\n"
+			return result{stderr: out, err: exitErr(t, "1", out)}
+		}, store.TaskFailed, 1, "setting up nodes: context canceled"},
 		{"failed without an error line", func(t *testing.T) result {
-			return result{stderr: "boom\n", err: exitErr(t, "2", "boom\n")}
-		}, store.TaskFailed, 2, "sind exit status 2"},
+			out := "systemctl: unit not found\nWarning: x\n12:00:00.000 INFO done\n\n"
+			return result{stderr: out, err: exitErr(t, "2", out)}
+		}, store.TaskFailed, 2, "systemctl: unit not found"},
+		{"killed", func(t *testing.T) result {
+			out := "pulling image\n"
+			err := exec.Command("/bin/sh", "-c", "kill -9 $$").Run()
+			var ee *exec.ExitError
+			require.ErrorAs(t, err, &ee)
+			return result{stderr: out, err: cmdexec.WrapExitError(ee, out)}
+		}, store.TaskFailed, -1, "sind signal: killed"},
 		{"empty error line", func(t *testing.T) result {
-			return result{stderr: "Error:\n", err: exitErr(t, "3", "Error:\n")}
+			out := "Warning: y\n12:00:00.000 ERRO\n"
+			return result{stderr: out, err: exitErr(t, "3", out)}
 		}, store.TaskFailed, 3, "sind exit status 3"},
 		{"canceled", func(t *testing.T) result {
 			return result{stderr: "interrupted\n", err: exitErr(t, "130", "interrupted\n")}

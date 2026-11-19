@@ -180,7 +180,8 @@ func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, 
 			t.Status, t.Exit = store.TaskCanceled, run.ExitInterrupted
 		default:
 			t.Status, t.Exit, t.Err = store.TaskFailed, 1, err.Error()
-			t.Output = "Error: " + err.Error() + "\n"
+			// As sind writes it: a timestamp, the level and the error.
+			t.Output = end.Format("15:04:05.000") + " ERRO " + err.Error() + "\n"
 		}
 	})
 }

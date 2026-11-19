@@ -85,7 +85,7 @@ func TestRunDockTaskWithRun(t *testing.T) {
 
 func TestRunDockTaskEnded(t *testing.T) {
 	failed := runFixture(t, "create-failed.jsonl", -1)[0]
-	task := store.Task{ID: "t", Display: "d", Trace: failed.Trace, Start: runAt(0), End: failed.End, Status: store.TaskFailed, Err: "node worker-1: timed out\nmore", Output: "Error: node worker-1: timed out\nmore"}
+	task := store.Task{ID: "t", Display: "d", Trace: failed.Trace, Start: runAt(0), End: failed.End, Status: store.TaskFailed, Err: "node worker-1: timed out\nmore", Output: "12:00:00.000 ERRO node worker-1: timed out\nmore"}
 	d := runDockOf(store.Snapshot{Runs: []store.Run{failed}, Tasks: []store.Task{task}}, runAt(900))
 	require.Len(t, d.Ended, 1)
 	c := d.Ended[0]

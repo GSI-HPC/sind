@@ -146,7 +146,7 @@ func TestSim_CreateCluster_PullFails(t *testing.T) {
 	assert.Equal(t, store.TaskFailed, task.Status)
 	assert.Equal(t, 1, task.Exit)
 	assert.Contains(t, task.Err, "pull access denied for example.org/none")
-	assert.Contains(t, task.Output, "Error: pulling")
+	assert.Contains(t, task.Output, " ERRO pulling")
 	_, ok := st.Snapshot().Cluster("sind", "bad")
 	assert.False(t, ok)
 	r, _ := st.Snapshot().RunOfTrace(task.Trace)
