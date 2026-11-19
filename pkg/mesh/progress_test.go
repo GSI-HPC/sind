@@ -37,7 +37,7 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
   target dns,relay amount=2000000 size=2000000 unit=bytes [hidden,show-lines]: ok
   target network,volume [hidden,show-lines]: ok
 `},
-		{"new, the images there", func(f *fakeDocker) { f.images[DNSImage], f.images[sshImage()] = true, true }, `step mesh total=4 [hidden,fold,show-lines]: ok
+		{"new, the images there", func(f *fakeDocker) { f.images[dnsImage], f.images[sshImage()] = true, true }, `step mesh total=4 [hidden,fold,show-lines]: ok
   target dns,network,relay,volume [hidden,show-lines]: ok
 `},
 		{"in place", func(f *fakeDocker) { f.withPinnedMesh(DefaultRealm, docker.StateRunning) }, `step mesh total=4 [hidden,fold,show-lines]: ok

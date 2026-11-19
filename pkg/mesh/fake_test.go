@@ -100,7 +100,7 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 	mesh := string(mgr.NetworkName())
 	nw := f.addNetwork(mesh)
 	dns := &fakeContainer{
-		image: DNSImage, state: docker.StateCreated, networks: []string{mesh},
+		image: dnsImage, state: docker.StateCreated, networks: []string{mesh},
 		files: map[string]string{corefilePath: generateCorefile(realm, nil)},
 	}
 	if pinned {

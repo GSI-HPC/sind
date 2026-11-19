@@ -18,7 +18,7 @@ func TestWrite(t *testing.T) {
 	var b strings.Builder
 	require.NoError(t, write(&b))
 	lines := strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
-	assert.Equal(t, mesh.DNSImage, lines[0])
+	assert.Equal(t, mesh.DNSImage(), lines[0])
 	assert.Equal(t, observability.Images(), lines[1:])
 	assert.Len(t, lines, 5, "CoreDNS and the four of the monitoring stack")
 }

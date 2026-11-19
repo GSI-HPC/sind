@@ -24,7 +24,7 @@ func main() {
 
 // images returns the pinned images, the mesh's first.
 func images() []string {
-	return append([]string{mesh.DNSImage}, observability.Images()...)
+	return append([]string{mesh.DNSImage()}, observability.Images()...)
 }
 
 // write prints the images to w, one per line.

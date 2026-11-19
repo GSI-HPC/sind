@@ -55,9 +55,13 @@ func composeLabelFlags(project, service string) []string {
 	return docker.SortedLabelFlags(docker.ComposeLabels(project, service, 1))
 }
 
-// DNSImage is the container image used for the mesh DNS server, a pinned
+// dnsImage is the container image of the mesh DNS server, a pinned
 // CoreDNS release.
-const DNSImage = "coredns/coredns:1.15.0"
+const dnsImage = "coredns/coredns:1.15.0"
+
+// DNSImage returns the container image of the mesh DNS server, a CoreDNS
+// release that sind pins and bumps by hand.
+func DNSImage() string { return dnsImage }
 
 // corefilePath is the path to the Corefile inside the DNS container.
 const corefilePath = "/Corefile"
@@ -676,8 +680,8 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 		args = append(args, "--ip", pinnedIP)
 	}
 	args = append(args, composeLabelFlags(m.ComposeProject(), ComposeServiceDNS)...)
-	args = append(args, DNSImage)
-	if err := m.pullFor(ctx, DNSImage); err != nil {
+	args = append(args, dnsImage)
+	if err := m.pullFor(ctx, dnsImage); err != nil {
 		return nil, err
 	}
 	if _, err := m.Docker.CreateContainer(ctx, args...); err != nil {

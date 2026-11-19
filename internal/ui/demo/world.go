@@ -585,7 +585,7 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 	st.SetMesh(r.name, store.Mesh{
 		Info: &mesh.Info{
 			Network: names.Network, DNSContainer: names.DNSContainer, DNSIP: fmt.Sprintf("172.%d.255.254", r.net),
-			DNSZone: r.name + ".sind", DNSImage: mesh.DNSImage,
+			DNSZone: r.name + ".sind", DNSImage: mesh.DNSImage(),
 			SSHContainer: names.SSHContainer, SSHVolume: names.SSHVolume, SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
 		},
 		Records:     records,

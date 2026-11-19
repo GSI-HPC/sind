@@ -83,7 +83,7 @@ func TestMeshLifecycle(t *testing.T) {
 	// The info reports the images the containers run.
 	info, err := mgr.GetInfo(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, DNSImage, info.DNSImage)
+	assert.Equal(t, dnsImage, info.DNSImage)
 	assert.Equal(t, sshImage(), info.SSHImage)
 	assert.NotEmpty(t, info.DNSIP)
 
@@ -229,7 +229,7 @@ func TestEnsureMesh(t *testing.T) {
 	dns := f.containers["sind-dns"]
 	require.NotNil(t, dns)
 	assert.Equal(t, docker.StateRunning, dns.state)
-	assert.Equal(t, DNSImage, dns.image)
+	assert.Equal(t, dnsImage, dns.image)
 	assert.Equal(t, "10.0.255.254", dns.ips["sind-mesh"], "DNS has the pinned address")
 	assert.Contains(t, dns.files[corefilePath], "hosts {")
 	assert.Equal(t, zonefile, dns.files[zonefilePath])
@@ -265,7 +265,7 @@ func TestEnsureMesh(t *testing.T) {
 	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
 	// The images the daemon does not have are pulled before the
 	// containers are created, which pull nothing.
-	assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + sshImage()}, calls(m, "pull"))
+	assert.ElementsMatch(t, []string{"pull " + dnsImage, "pull " + sshImage()}, calls(m, "pull"))
 	for _, create := range calls(m, "create") {
 		assert.NotContains(t, create, "--pull")
 	}
@@ -287,14 +287,14 @@ func TestEnsureMesh_InvalidRealm(t *testing.T) {
 func TestEnsureMesh_Pull(t *testing.T) {
 	for _, pull := range []bool{false, true} {
 		f, c, m := newFakeDocker(t)
-		f.images[DNSImage], f.images[sshImage()] = true, true
+		f.images[dnsImage], f.images[sshImage()] = true, true
 		mgr := NewManager(c, DefaultRealm)
 		mgr.Pull = pull
 
 		require.NoError(t, mgr.EnsureMesh(t.Context()))
 
 		if pull {
-			assert.ElementsMatch(t, []string{"pull " + DNSImage, "pull " + sshImage()}, calls(m, "pull"))
+			assert.ElementsMatch(t, []string{"pull " + dnsImage, "pull " + sshImage()}, calls(m, "pull"))
 		} else {
 			assert.Empty(t, calls(m, "pull"))
 		}
@@ -310,7 +310,7 @@ func TestEnsureMesh_Pull(t *testing.T) {
 // part, and no container is created.
 func TestEnsureMesh_PullFails(t *testing.T) {
 	for _, tc := range []struct{ fail, want, container string }{
-		{"pull " + DNSImage, "pulling " + DNSImage + ": connection refused", "sind-dns"},
+		{"pull " + dnsImage, "pulling " + dnsImage + ": connection refused", "sind-dns"},
 		{"image inspect --format {{.Id}} " + sshImage(), "inspecting image " + sshImage() + ": connection refused", "sind-ssh"},
 	} {
 		f, c, m := newFakeDocker(t)
@@ -1635,7 +1635,7 @@ func TestGetInfo(t *testing.T) {
 	assert.Equal(t, docker.ContainerName("sind-dns"), info.DNSContainer)
 	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "sind.sind", info.DNSZone)
-	assert.Equal(t, DNSImage, info.DNSImage)
+	assert.Equal(t, dnsImage, info.DNSImage)
 	assert.Equal(t, docker.ContainerName("sind-ssh"), info.SSHContainer)
 	assert.Equal(t, docker.VolumeName("sind-ssh-config"), info.SSHVolume)
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest-old", info.SSHImage, "the image the relay runs")
@@ -1927,4 +1927,9 @@ func TestNewHostManager(t *testing.T) {
 	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: sindlog.LevelTrace})))
 	le.Log(ctx, "docker ps")
 	assert.Contains(t, buf.String(), "docker ps")
+}
+
+func TestDNSImage(t *testing.T) {
+	assert.Equal(t, dnsImage, DNSImage())
+	assert.True(t, strings.HasPrefix(DNSImage(), "coredns/coredns:"), DNSImage())
 }

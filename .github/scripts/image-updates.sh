@@ -145,7 +145,7 @@ check ompi open-mpi/ompi v 2 yes "$(arg OMPI)"
 check libjwt benmcollins/libjwt v 1 no "$(arg LIBJWT)"
 
 image() { pins "$1" "s|^[[:space:]]*$2 += \"$3:([^\"]+)\"\$|\\1|p"; }
-check coredns coredns/coredns v 1 yes "$(image pkg/mesh/mesh.go 'const DNSImage' coredns/coredns)"
+check coredns coredns/coredns v 1 yes "$(image pkg/mesh/mesh.go 'const dnsImage' coredns/coredns)"
 check alloy grafana/alloy v 1 yes "$(image internal/observability/observability.go AlloyImage grafana/alloy)"
 check prometheus prometheus/prometheus v 1 yes "$(image internal/observability/observability.go PrometheusImage prom/prometheus)"
 check loki grafana/loki v 1 yes "$(image internal/observability/observability.go LokiImage grafana/loki)"

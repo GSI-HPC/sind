@@ -29,7 +29,7 @@ image-updates.sh ──► rows? ──no──► report "up to date", stop
 | UCX, PMIx, PRRTE | `ARG <NAME>_VERSION`, `Dockerfile` | major version |
 | Open MPI | `ARG OMPI_VERSION`, `Dockerfile` | series `X.Y` (5.0) |
 | libjwt | `ARG LIBJWT_VERSION`, `Dockerfile` | major, never reported: stays on 1.x |
-| CoreDNS | `DNSImage`, `pkg/mesh/mesh.go` | major version |
+| CoreDNS | `dnsImage`, `pkg/mesh/mesh.go` | major version |
 | Alloy, Prometheus, Loki, Grafana | `<Name>Image`, `internal/observability/observability.go` | major version |
 
 Not checked: the Rocky Linux base image (a floating major tag, rebuilt weekly by the

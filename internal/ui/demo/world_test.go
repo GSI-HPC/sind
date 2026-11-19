@@ -87,7 +87,7 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, store.Outside{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "sind-mesh"}}, ciOut[1],
 		"a container on the mesh of another realm is on its network")
 	assert.Equal(t, docker.NetworkName("sind-mesh"), m.Info.Network)
-	assert.Equal(t, mesh.DNSImage, m.Info.DNSImage)
+	assert.Equal(t, mesh.DNSImage(), m.Info.DNSImage)
 	assert.Equal(t, imageNew, m.Info.SSHImage)
 	assert.Len(t, m.Records, 11+2+3)
 	ci := sn.Meshes["ci"]

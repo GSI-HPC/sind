@@ -1541,7 +1541,7 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
-The mesh images do not follow `defaults.image`: the relay needs the `ssh` client of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
+The mesh images do not follow `defaults.image`: the relay needs the `ssh` client of sind's own node image, which custom images need not have. CoreDNS is pinned to a release (`mesh.DNSImage()`); bump `dnsImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
 
 ### Monitoring Stack
 

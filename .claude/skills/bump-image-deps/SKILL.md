@@ -25,7 +25,7 @@ default of sind built from that release (its binaries, `go install`, library cal
 | Open MPI | `OMPI_VERSION` | `https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-${V}.tar.bz2` |
 | libjwt | `LIBJWT_VERSION`, `LIBJWT_COMMIT` | tag `v${V}` of `https://github.com/benmcollins/libjwt.git`; `LIBJWT_COMMIT` is the commit it points to (`git ls-remote https://github.com/benmcollins/libjwt 'v${V}^{}'`). Stay on 1.x: Slurm's auth/slurm uses the 1.x API, which libjwt 3 dropped |
 
-The realm mesh's DNS image is not part of the node image: `DNSImage` in
+The realm mesh's DNS image is not part of the node image: `dnsImage` in
 `pkg/mesh/mesh.go` pins `coredns/coredns:<version>`. Bump it on its own, check the
 release notes for Corefile or `SIGUSR1` reload changes, and update the tag in
 `DESIGN.md`, `docs/content/architecture/docker-resources.md` and
