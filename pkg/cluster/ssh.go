@@ -8,26 +8,36 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
-// BuildSSHArgs builds the docker CLI arguments for running SSH through the
-// sind-ssh relay container. The returned args are suitable for passing to
-// docker directly (e.g. "docker exec -i -t sind-ssh ssh ...").
-//
-// node is the short name (e.g. "worker-0"), cluster is the cluster name,
-// isTTY controls whether -t is added to docker exec, sshOptions are passed
-// through to SSH before the target, and command is the optional remote command.
+// SSHCommand is an ssh session on a node, run by BuildSSHArgs.
+type SSHCommand struct {
+	// Realm, Cluster and Node name the node; Node is its short name
+	// (e.g. "worker-0").
+	Realm, Cluster, Node string
+	// TTY adds -t to docker exec.
+	TTY bool
+	// Options are passed to ssh before the target.
+	Options []string
+	// Command is the remote command, if any.
+	Command []string
+}
+
+// BuildSSHArgs builds the docker CLI arguments for running ssh through the
+// SSH relay container of the realm. The returned args are suitable for
+// passing to docker directly (e.g. "docker exec -i -t sind-ssh ssh ...").
 // A "--" ends ssh's options before the target, as ssh reads a word after the
-// target that starts with "-" as an option, so command may start with one.
-func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string, isTTY bool, sshOptions, command []string) []string {
+// target that starts with "-" as an option, so the command may start with one.
+func BuildSSHArgs(c SSHCommand) []string {
 	args := []string{"exec", "-i"}
-	if isTTY {
+	if c.TTY {
 		args = append(args, "-t")
 	}
-	args = append(args, string(sshContainer), "ssh")
-	args = append(args, sshOptions...)
-	args = append(args, "--", DNSName(node, cluster, realm))
-	args = append(args, command...)
+	args = append(args, string(mesh.RealmNames(c.Realm).SSHContainer), "ssh")
+	args = append(args, c.Options...)
+	args = append(args, "--", DNSName(c.Node, c.Cluster, c.Realm))
+	args = append(args, c.Command...)
 	return args
 }
 

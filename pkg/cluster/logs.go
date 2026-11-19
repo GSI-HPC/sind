@@ -21,9 +21,9 @@ type LogOptions struct {
 }
 
 // ContainerLogArgs builds docker CLI arguments for streaming container logs.
-// node is the short name (e.g. "controller", "worker-0"), cluster is the
-// cluster name, and opts selects following and the number of lines.
-func ContainerLogArgs(realm, node, cluster string, opts LogOptions) []string {
+// cluster is the cluster name, node the short name (e.g. "controller",
+// "worker-0"), and opts selects following and the number of lines.
+func ContainerLogArgs(realm, cluster, node string, opts LogOptions) []string {
 	args := []string{"logs"}
 	if opts.Follow {
 		args = append(args, "--follow")
@@ -36,10 +36,10 @@ func ContainerLogArgs(realm, node, cluster string, opts LogOptions) []string {
 }
 
 // ServiceLogArgs builds docker CLI arguments for streaming service journal logs.
-// node is the short name, cluster is the cluster name, service is the systemd
-// unit name (e.g. "slurmctld", "slurmd"), and opts selects following and the
+// cluster is the cluster name, node the short name, service the systemd unit
+// name (e.g. "slurmctld", "slurmd"), and opts selects following and the
 // number of lines.
-func ServiceLogArgs(realm, node, cluster, service string, opts LogOptions) []string {
+func ServiceLogArgs(realm, cluster, node, service string, opts LogOptions) []string {
 	return append([]string{"exec", string(ContainerName(realm, cluster, node))}, ServiceLogCommand(service, opts)...)
 }
 

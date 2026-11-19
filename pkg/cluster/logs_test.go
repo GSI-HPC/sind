@@ -32,9 +32,9 @@ func TestLogArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ContainerLogArgs(mesh.DefaultRealm, tt.node, "dev", tt.opts)
+			got := ContainerLogArgs(mesh.DefaultRealm, "dev", tt.node, tt.opts)
 			if tt.service != "" {
-				got = ServiceLogArgs(mesh.DefaultRealm, tt.node, "dev", tt.service, tt.opts)
+				got = ServiceLogArgs(mesh.DefaultRealm, "dev", tt.node, tt.service, tt.opts)
 			}
 			assert.Equal(t, tt.want, got)
 		})

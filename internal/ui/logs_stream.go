@@ -90,7 +90,7 @@ func logsArgs(q logsReq) []string {
 	tail := q.tail
 	opts := cluster.LogOptions{Follow: true, Tail: &tail}
 	if q.src == logsDocker {
-		return cluster.ContainerLogArgs(q.realm, q.node, q.cluster, opts)
+		return cluster.ContainerLogArgs(q.realm, q.cluster, q.node, opts)
 	}
 	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), cluster.ServiceLogCommand(q.unit, opts)...)
 }

@@ -59,9 +59,9 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	}
 	var dockerArgs []string
 	if len(args) == 2 {
-		dockerArgs = cluster.ServiceLogArgs(realm, node.ShortName, node.Cluster, args[1], opts)
+		dockerArgs = cluster.ServiceLogArgs(realm, node.Cluster, node.ShortName, args[1], opts)
 	} else {
-		dockerArgs = cluster.ContainerLogArgs(realm, node.ShortName, node.Cluster, opts)
+		dockerArgs = cluster.ContainerLogArgs(realm, node.Cluster, node.ShortName, opts)
 	}
 
 	return dockerExec(cmd, dockerArgs)

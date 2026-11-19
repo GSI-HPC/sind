@@ -41,9 +41,17 @@ func TestBuildSSHArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, BuildSSHArgs(mesh.SSHContainerName, tt.node, tt.cluster, mesh.DefaultRealm, tt.tty, tt.opts, tt.command))
+			assert.Equal(t, tt.want, BuildSSHArgs(SSHCommand{
+				Realm: mesh.DefaultRealm, Cluster: tt.cluster, Node: tt.node,
+				TTY: tt.tty, Options: tt.opts, Command: tt.command,
+			}))
 		})
 	}
+}
+
+func TestBuildSSHArgs_RealmRelay(t *testing.T) {
+	got := BuildSSHArgs(SSHCommand{Realm: "ci", Cluster: "dev", Node: "worker-0"})
+	assert.Equal(t, []string{"exec", "-i", "ci-ssh", "ssh", "--", "worker-0.dev.ci.sind"}, got)
 }
 
 func TestBuildContainerExecArgs(t *testing.T) {
