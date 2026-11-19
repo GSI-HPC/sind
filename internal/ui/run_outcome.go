@@ -90,7 +90,8 @@ func runCreated(rc runCtx) *runOutcome {
 		o.Title = e.cluster + " is ready for jobs, " + strings.TrimPrefix(d.Ready.Verdict, "yes, ")
 	case "ok":
 	default:
-		// Not probed yet, or a command works on it again.
+		// Not probed yet, a command works on it again, or sind does not
+		// manage Slurm on it.
 		o.Title = e.cluster + " was created"
 	}
 	return o

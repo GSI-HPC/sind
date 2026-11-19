@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/slurm"
@@ -149,13 +150,18 @@ func pgReadyOf(d *pgClusterView) *pgReady {
 	}
 	r.Checked = true
 	ctl := pgControllerCheck(d)
-	workers, took, of := pgWorkersCheck(d)
+	// An unmanaged controller makes the whole cluster unmanaged: sind
+	// leaves Slurm to the user, and checks it on no node.
+	unmanaged := ctl.State == "none"
+	workers, took, of := pgWorkersCheck(d, unmanaged)
 	r.Took, r.Of = took, of
 	r.Checks = []pgReadyCheck{ctl, workers, pgAccountingCheck(d)}
 	if files, ok := pgFilesCheck(d); ok {
 		r.Checks = append(r.Checks, files)
 	}
 	switch {
+	case unmanaged:
+		r.Verdict, r.Class = pgReadyUnmanaged, ""
 	case ctl.State == "bad" || workers.State == "bad":
 		r.Verdict, r.Class = "no", "bad"
 	case workers.State == "warn":
@@ -247,13 +253,26 @@ func pgControllerCheck(d *pgClusterView) pgReadyCheck {
 	return c
 }
 
+// pgNoManagedWorker is the title of the check of the workers when a
+// cluster has workers but sind manages none of them.
+const pgNoManagedWorker = "No managed worker"
+
+// pgReadyUnmanaged is the verdict of an unmanaged cluster.
+const pgReadyUnmanaged = "not checked: sind does not manage Slurm"
+
 // pgWorkersCheck counts the managed workers that take jobs: they run,
-// slurmd is up, and Slurm schedules on them.
-func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
+// slurmd is up, and Slurm schedules on them. In an unmanaged cluster it
+// checks none.
+func pgWorkersCheck(d *pgClusterView, unmanaged bool) (c pgReadyCheck, took, of int) {
 	var why []string
 	var broken []pgNode
+	var others []string
 	for _, n := range d.Cluster.Nodes {
-		if n.Role != config.RoleWorker || !n.Managed {
+		if n.Role != config.RoleWorker {
+			continue
+		}
+		if !n.Managed {
+			others = append(others, n.Short)
 			continue
 		}
 		of++
@@ -264,10 +283,20 @@ func pgWorkersCheck(d *pgClusterView) (c pgReadyCheck, took, of int) {
 		}
 		took++
 	}
+	add := []pgAction{pgDialogAction("Add workers…", "sm ghost", "create-worker", "realm", d.Realm, "cluster", d.Name)}
 	switch {
+	case of == 0 && len(others) == 0:
+		return pgReadyCheck{State: "bad", Title: "No worker", Detail: "Slurm runs jobs on workers. Add one.", Actions: add}, 0, 0
+	case of == 0 && unmanaged:
+		return pgReadyCheck{State: "none", Title: "Workers", Detail: "sind does not manage Slurm on the workers, so it does not check slurmd."}, 0, 0
 	case of == 0:
-		return pgReadyCheck{State: "bad", Title: "No worker", Detail: "Slurm runs jobs on workers. Add one.",
-			Actions: []pgAction{pgDialogAction("Add workers…", "sm ghost", "create-worker", "realm", d.Realm, "cluster", d.Name)}}, 0, 0
+		// sind puts only managed workers in slurm.conf.
+		are := " is"
+		if len(others) > 1 {
+			are = " are"
+		}
+		return pgReadyCheck{State: "bad", Title: pgNoManagedWorker,
+			Detail: "Slurm runs jobs on the workers that sind manages, and " + action.NodeSet(others) + are + " not managed. Add a managed one.", Actions: add}, 0, 0
 	case took == of && of == 1:
 		return pgReadyCheck{State: "ok", Title: "The worker takes jobs"}, took, of
 	case took == of:

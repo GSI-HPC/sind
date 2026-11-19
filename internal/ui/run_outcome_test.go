@@ -101,6 +101,28 @@ func TestRunOutcomeOfACreateThatCannotRunJobs(t *testing.T) {
 	assert.Equal(t, "dev was created, but it cannot run jobs", o.Title)
 }
 
+func TestRunOutcomeOfACreateOfAnUnmanagedCluster(t *testing.T) {
+	st := outcomeStore(false)
+	sn := st.Snapshot()
+	s := *sn.Status("sind", "dev")
+	var nodes []*cluster.NodeStatus
+	for _, n := range s.Nodes {
+		if n != nil {
+			c := *n
+			c.Managed = false
+			nodes = append(nodes, &c)
+		}
+	}
+	s.Nodes = nodes
+	st.SetStatus("sind", "dev", &s)
+	o := runOutcomeOf(runCtx{Run: createdRun(t, "dev"), Found: true, Snap: st.Snapshot(), Now: runAt(60)})
+	require.NotNil(t, o)
+	assert.Equal(t, "ok", o.Class)
+	assert.Equal(t, "✓", o.Mark)
+	assert.Equal(t, "dev was created", o.Title, "sind checks no Slurm on it, so it says nothing of jobs")
+	assert.Equal(t, pgReadyUnmanaged, o.Ready.Verdict)
+}
+
 func TestRunOutcomeNone(t *testing.T) {
 	snap := outcomeStore(true).Snapshot()
 	at := func(run store.Run) *runOutcome {

@@ -171,6 +171,35 @@ func TestPgReadyWorkers(t *testing.T) {
 	assert.Equal(t, "no", r.Verdict)
 	assert.Equal(t, "No worker", r.Checks[1].Title)
 	assert.Equal(t, "/dialogs/create-worker?cluster=dev&realm=sind", r.Checks[1].Actions[0].URL)
+
+	// Workers, but none that sind manages, so none in slurm.conf.
+	unmanaged2 := readyNode("worker-5", config.RoleWorker)
+	unmanaged2.Managed = false
+	r = pgReadyOf(readyView(ctl, unmanaged))
+	assert.Equal(t, "no", r.Verdict)
+	assert.Equal(t, "No managed worker", r.Checks[1].Title)
+	assert.Equal(t, "Slurm runs jobs on the workers that sind manages, and worker-4 is not managed. Add a managed one.", r.Checks[1].Detail)
+	assert.Equal(t, "/dialogs/create-worker?cluster=dev&realm=sind", r.Checks[1].Actions[0].URL)
+	r = pgReadyOf(readyView(ctl, unmanaged, unmanaged2))
+	assert.Equal(t, "Slurm runs jobs on the workers that sind manages, and worker-[4-5] are not managed. Add a managed one.", r.Checks[1].Detail)
+}
+
+func TestPgReadyUnmanagedCluster(t *testing.T) {
+	// An unmanaged controller makes every node unmanaged: sind checks no
+	// Slurm, and has no verdict on it.
+	ctl := readyNode("controller", config.RoleController)
+	w0, w1 := readyNode("worker-0", config.RoleWorker), readyNode("worker-1", config.RoleWorker)
+	ctl.Managed, w0.Managed, w1.Managed = false, false, false
+	r := pgReadyOf(readyView(ctl, w0, w1))
+	assert.Equal(t, pgReadyUnmanaged, r.Verdict)
+	assert.Empty(t, r.Class)
+	assert.Equal(t, pgReadyCheck{State: "none", Title: "Workers", Detail: "sind does not manage Slurm on the workers, so it does not check slurmd."}, r.Checks[1])
+	assert.Zero(t, r.Of)
+
+	// Without a worker, the check still says that it has none.
+	r = pgReadyOf(readyView(ctl))
+	assert.Equal(t, pgReadyUnmanaged, r.Verdict)
+	assert.Equal(t, "No worker", r.Checks[1].Title)
 }
 
 func TestPgReadyController(t *testing.T) {
