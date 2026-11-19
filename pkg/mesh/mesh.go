@@ -99,6 +99,12 @@ func dnsFiles(realm string, entries []string) docker.FileContents {
 }
 
 // Manager handles global infrastructure resources shared across all clusters.
+// Its changes of a mesh file, the Corefile (AddDNSRecords) or the relay's
+// known_hosts (AddKnownHosts), are read-modify-writes: two changes of the
+// same file must not run at once, while changes of different files may, as
+// Create runs AddDNSRecords and AddKnownHosts together. Other sind
+// processes change the files too: callers hold the realm lock
+// (state.LockRealm) while they change the realm.
 type Manager struct {
 	Docker  *docker.Client
 	Exec    cmdexec.Executor // executor for non-docker system commands (systemctl, resolvectl, etc.)

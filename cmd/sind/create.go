@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +19,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
 )
 
@@ -270,29 +268,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	meshMgr := meshMgrFrom(ctx, client, realm)
 	meshMgr.Pull = pull
-	if err := meshMgr.EnsureMesh(ctx); err != nil {
-		err = fmt.Errorf("setting up mesh: %w", err)
-		if meshMgr.Created() {
-			// The cleanup is the progress step "rollback", and its
-			// failure is joined to the error, as cluster.Create's are.
-			// Like theirs, it runs on after an interrupt, for at most
-			// cluster.RollbackTimeout.
-			sindlog.From(ctx).WarnContext(ctx, "cleaning up partial resources, please wait")
-			rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cluster.RollbackTimeout)
-			defer cancel()
-			cleanupCtx, rollback := progress.Start(rollbackCtx, progress.KindStep, "rollback")
-			if cleanupErr := meshMgr.CleanupMesh(cleanupCtx); cleanupErr != nil {
-				rollback.End(rollbackFailed{cleanupErr})
-				err = errors.Join(err, fmt.Errorf("rolling back: removing the mesh: %w", cleanupErr))
-			} else {
-				rollback.End(nil)
-			}
-		}
-		return err
-	}
-
-	err = cluster.Create(ctx, client, meshMgr, cfg, cluster.CreateOptions{})
-	if err != nil {
+	if err := cluster.CreateInRealm(ctx, client, meshMgr, cfg, cluster.CreateOptions{}); err != nil {
 		return err
 	}
 

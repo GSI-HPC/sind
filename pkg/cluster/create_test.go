@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
+
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -417,11 +419,10 @@ func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
 }
 
 func TestCreate_InvalidConfig(t *testing.T) {
-	// Without ApplyDefaults the config has no nodes; Create fails before it
-	// creates anything instead of returning a cluster without nodes.
+	// An invalid config fails before Create creates anything.
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev"}, CreateOptions{Interval: time.Millisecond})
+	err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev", Nodes: []config.Node{{Role: config.RoleWorker}}}, CreateOptions{Interval: time.Millisecond})
 	require.EqualError(t, err, "invalid cluster config: exactly one controller required, got 0")
 	assert.Empty(t, m.Calls)
 
@@ -1560,4 +1561,89 @@ func TestEnableService_FailureCarriesJournal(t *testing.T) {
 	assert.Equal(t,
 		[]string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "-n", "20", "--no-pager", "-o", "cat"},
 		m.Calls[1].Args)
+}
+
+// TestCreateInRealm checks that CreateInRealm sets up the realm's mesh
+// before it creates the cluster.
+func TestCreateInRealm(t *testing.T) {
+	m := createExecutor(t, func(args []string, _ string) (mock.Result, bool) {
+		if strings.Join(args, " ") == "network inspect sind-mesh --format {{json .Labels}}" {
+			return mock.Result{Stdout: `{"sind.realm":"sind"}` + "\n"}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	require.NoError(t, CreateInRealm(t.Context(), client, meshMgr, createCfg(), CreateOptions{Interval: time.Millisecond}))
+	assert.Len(t, createdNodes(m), 2)
+	calls := m.CallsSnapshot()
+	first := slices.IndexFunc(calls, func(c mock.Call) bool { return c.Args[0] == "create" && slices.Contains(c.Args, "--hostname") })
+	require.NotEqual(t, -1, first)
+	assert.True(t, slices.ContainsFunc(calls[:first], func(c mock.Call) bool {
+		return strings.Join(c.Args, " ") == "network inspect sind-mesh --format {{json .Labels}}"
+	}), "the mesh is seen to before the nodes")
+}
+
+// TestCreateInRealm_MeshFails checks that CreateInRealm removes a mesh it
+// made when its setup fails, as the progress step "rollback", joins a
+// failure of that removal to the error, and leaves alone a mesh it did not
+// make; it creates no node either way.
+func TestCreateInRealm_MeshFails(t *testing.T) {
+	const failed = "setting up mesh: inspecting mesh network: exit status 1: Error: No such object"
+	for _, tc := range []struct {
+		name     string
+		override func([]string, string) (mock.Result, bool)
+		err      string
+		rollback string
+	}{
+		// happyOnCall finds no mesh network, creates it and then cannot
+		// inspect it.
+		{"removed", nil, failed, "step rollback: ok\n"},
+		{"left", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: errors.New("daemon gone")}, strings.Join(args, " ") == "network rm sind-mesh"
+		}, failed + "\nrolling back: removing the mesh: removing mesh network: daemon gone", "step rollback: failed (target): removing mesh network: daemon gone\n"},
+		{"not made", func(args []string, _ string) (mock.Result, bool) {
+			return mock.Result{Err: errors.New("daemon gone")}, strings.Join(args, " ") == "network inspect sind-mesh --format {{json .Labels}}"
+		}, "setting up mesh: checking mesh network: daemon gone", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, w := progresstest.Watch(t.Context(), t)
+			m := createExecutor(t, tc.override)
+			client := docker.NewClient(m)
+			meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+			err := CreateInRealm(ctx, client, meshMgr, createCfg(), CreateOptions{Interval: time.Millisecond})
+			require.EqualError(t, err, tc.err)
+			w.Finish()
+			tree := testutil.WithoutCalls(w.Events())
+			if tc.rollback == "" {
+				assert.NotContains(t, tree, "rollback")
+			} else {
+				assert.True(t, strings.HasSuffix(tree, tc.rollback), tree)
+			}
+			assertNoNodeCreated(t, m)
+		})
+	}
+}
+
+// TestCreate_AppliesDefaults checks that Create gives a config the
+// defaults that it leaves out, rather than nodes without an image or
+// limits.
+func TestCreate_AppliesDefaults(t *testing.T) {
+	cfg := &config.Cluster{Kind: "Cluster", Name: "dev", Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker}}}
+	m, err := runCreate(t.Context(), t, cfg, false, nil)
+	require.NoError(t, err)
+
+	var created int
+	for _, c := range m.CallsSnapshot() {
+		if c.Args[0] != "create" || !slices.Contains(c.Args, "--hostname") {
+			continue
+		}
+		created++
+		memory, _ := testutil.ArgValue(c.Args, "--memory")
+		assert.Equal(t, config.DefaultMemory, memory)
+		assert.Contains(t, c.Args, config.DefaultImage)
+	}
+	assert.Equal(t, 2, created)
 }

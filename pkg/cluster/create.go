@@ -227,15 +227,48 @@ type nodeResult struct {
 	hostKey string
 }
 
-// Create orchestrates the full cluster creation flow.
+// CreateInRealm creates the cluster of cfg in the realm of meshMgr with
+// the step that Create needs first: it sets up the realm's mesh
+// (mesh.Manager.EnsureMesh, which pulls its images with meshMgr.Pull) and,
+// when that fails, removes a mesh it made, as the progress step
+// "rollback", on a context that ignores the end of ctx and that
+// RollbackTimeout bounds; a failure of that removal is joined to the
+// error. Then it runs Create, whose rollback removes the mesh as well when
+// this call made it and no other cluster uses it.
+//
+// The caller checks the daemon with CheckDaemon, so that an unsupported
+// one fails before anything is pulled, and holds the realm lock
+// (state.LockRealm, with client as LockOptions.Client) until
+// CreateInRealm returns: a mesh.Manager is not safe for concurrent use,
+// and the lock is what keeps two commands from changing the realm's mesh
+// at once.
+func CreateInRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, opts CreateOptions) error {
+	if err := meshMgr.EnsureMesh(ctx); err != nil {
+		err = fmt.Errorf("setting up mesh: %w", err)
+		if !meshMgr.Created() {
+			return err
+		}
+		sindlog.From(ctx).WarnContext(ctx, "cleaning up partial resources, please wait")
+		cleanupCtx, endRollback := startRollback(ctx)
+		cleanupErr := meshMgr.CleanupMesh(cleanupCtx)
+		endRollback(cleanupErr)
+		if cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("rolling back: removing the mesh: %w", cleanupErr))
+		}
+		return err
+	}
+	return Create(ctx, client, meshMgr, cfg, opts)
+}
+
+// Create orchestrates the full cluster creation flow, in a realm whose
+// mesh exists: CreateInRealm sets it up first.
 //
 // The caller holds the realm lock (state.LockRealm) from before
 // mesh.Manager.EnsureMesh until Create returns, and checks the daemon with
 // CheckDaemon before either.
 //
-// The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
-// before calling Create, and apply the config's defaults
-// (config.Cluster.ApplyDefaults). Create validates the config first, and
+// Create applies the config's defaults (config.Cluster.ApplyDefaults) to
+// cfg and validates it first, and
 // refuses a meshMgr.Realm, the realm it creates the cluster in, that
 // config.CheckName refuses, and a config realm other than it. The context
 // deadline controls the overall timeout, except for the writes of the mesh
@@ -344,6 +377,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		}
 	}()
 
+	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid cluster config: %w", err)
 	}
