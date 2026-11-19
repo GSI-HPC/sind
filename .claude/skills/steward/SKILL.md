@@ -52,6 +52,13 @@ CI runs for every pull request and every push to `main` and `next`.
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
 | Build | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
 
+The API workflow (`.github/workflows/api.yml`) runs for pull requests, also when a label
+or the base branch changes. Its job API Compatibility runs `.github/scripts/api-check.sh`
+against the base the PR merges onto (the first parent of its merge commit):
+it fails on an incompatible change of a package under `pkg/`, or of go-clikit's
+`progress`, unless the PR has the `breaking-api` label. A PR that means the break gets
+the label from the maintainer, and its commits are marked `!` with `BREAKING CHANGE:`.
+
 - Integration Test fetches sources while building the image: the Slurm, UCX, PMIx,
   PRRTE and Open MPI tarballs, and a `git clone` of libjwt from github.com. A failure in
   that build step with a network error on any source fetch of the Dockerfile (e.g.

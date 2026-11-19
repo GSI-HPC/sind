@@ -25,6 +25,7 @@ The project uses [Conventional Commits](https://www.conventionalcommits.org/):
 - **Context-free messages** — state what the commit does, not the development story
 - **No narrative** — avoid "I tried X, then Y"; state the result
 - **Bullet lists** in the body, not prose paragraphs
+- **Breaking changes** — a commit that changes a package under `pkg/` incompatibly is marked `<type>(<scope>)!:` and has a `BREAKING CHANGE:` footer that says what changed
 
 ### Examples
 
@@ -108,3 +109,4 @@ The docs are a Hugo site in `docs/`. A page that tells how to do a task shows it
 - Include tests for new functionality
 - Ensure `make lint`, `make test` and `make check-coverage` pass, and `make lint-docs` when you change `docs/content/`
 - Follow the commit message conventions above
+- A PR that changes a package under `pkg/` incompatibly needs the `breaking-api` label, which the maintainer sets; without it the API Compatibility check fails. See [Dual use]({{< relref "/architecture/overview#dual-use" >}}) for the stability of the public API

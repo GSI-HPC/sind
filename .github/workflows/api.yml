@@ -1,0 +1,44 @@
+name: API
+
+# The public Go API (pkg/, and go-clikit's progress package, which is part
+# of it) of a pull request against its base. A label change runs it again,
+# as the breaking-api label allows incompatible changes; it has a workflow
+# of its own so that a label change does not run the rest of CI. An edit
+# runs it again too, as a change of the base branch is one; it is not
+# skipped for other edits, as a skipped check would pass the pull request.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API Compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install apidiff
+        run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250620022241-b7579e27df2b
+
+      # The checkout is the merge commit of the pull request, which GitHub
+      # makes on the current tip of the base branch: its first parent is the
+      # base it merges onto. The event's base.sha is not updated when the
+      # base branch moves on.
+      - name: Compare the API with the base
+        run: .github/scripts/api-check.sh "$(git rev-parse HEAD^1)"
+        env:
+          SIND_API_BREAK: ${{ contains(github.event.pull_request.labels.*.name, 'breaking-api') }}
