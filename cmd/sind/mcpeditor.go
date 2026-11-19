@@ -3,10 +3,12 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 // mcpServerName is the name `sind mcp <editor> enable` registers sind's
@@ -246,12 +249,8 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	if f.logLevel != "" {
 		entry.Args = append(entry.Args, "--log-level", f.logLevel)
 	}
-	for _, v := range []struct{ name, kind string }{{envvar.Realm, "realm"}, {envvar.Cluster, "cluster"}} {
-		if env, ok := f.env[v.name]; ok {
-			if err := config.CheckName(v.kind, env); err != nil {
-				return mcpconfig.Server{}, cobratree.Usagef("--env %s: %w", v.name, err)
-			}
-		}
+	if err := checkMCPEnv(f.env); err != nil {
+		return mcpconfig.Server{}, err
 	}
 	if len(f.env) > 0 {
 		entry.Env = f.env
@@ -265,7 +264,9 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 		if err != nil {
 			return mcpconfig.Server{}, err
 		}
-		if env, ok := f.env[envvar.Realm]; ok && env != realm {
+		// An empty --env SIND_REALM, unset for the tools, names the
+		// default realm.
+		if env, ok := f.env[envvar.Realm]; ok && cmp.Or(env, mesh.DefaultRealm) != realm {
 			return mcpconfig.Server{}, cobratree.Usagef("--realm %s and --env %s=%s name different realms", realm, envvar.Realm, env)
 		}
 		if entry.Env == nil {
@@ -274,6 +275,49 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 		entry.Env[envvar.Realm] = realm
 	}
 	return entry, nil
+}
+
+// mcpEnvChecks check the values of the variables that the tools of the
+// server read in place of a flag or an argument, as those commands check
+// them; a value they would refuse would fail every tool call that reads it.
+// mcp start sets the variables of the progress display for its tools
+// itself.
+var mcpEnvChecks = map[string]func(string) error{
+	envvar.Realm:   func(v string) error { return config.CheckName("realm", v) },
+	envvar.Cluster: func(v string) error { return config.CheckName("cluster", v) },
+	envvar.Output:  checkOutputEnv,
+	envvar.Wait: func(v string) error {
+		_, err := parseWaitEnv(v)
+		return err
+	},
+	envvar.Pull: func(v string) error {
+		_, err := parsePullEnv(v)
+		return err
+	},
+	envvar.Verbose: func(v string) error {
+		if _, ok := parseVerboseEnv(v); !ok {
+			return invalidEnvValue(envvar.Verbose, v, verboseWant)
+		}
+		return nil
+	},
+}
+
+// checkMCPEnv checks the values of --env that the tools read (mcpEnvChecks),
+// in the order of their names, and returns the first that fails as a usage
+// error. An empty value is not checked: the tools take it as unset
+// (envvar.Lookup), so it clears a variable that enable keeps.
+func checkMCPEnv(env map[string]string) error {
+	for _, name := range slices.Sorted(maps.Keys(env)) {
+		if env[name] == "" {
+			continue
+		}
+		if check, ok := mcpEnvChecks[name]; ok {
+			if err := check(env[name]); err != nil {
+				return cobratree.Usagef("--env %s: %w", name, err)
+			}
+		}
+	}
+	return nil
 }
 
 func runMCPDisable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {

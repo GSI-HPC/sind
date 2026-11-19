@@ -114,10 +114,20 @@ func verbosity(cmd *cobra.Command) (v int, note string) {
 	if !ok {
 		return 0, ""
 	}
-	if v, err := strconv.Atoi(env); err == nil && v >= 0 {
+	if v, ok := parseVerboseEnv(env); ok {
 		return v, ""
 	}
-	return 0, fmt.Sprintf("sind: %s is %q; it takes a number, such as 2 for -vv; it is ignored", envvar.Verbose, env)
+	return 0, fmt.Sprintf("sind: %s is %q; it takes %s; it is ignored", envvar.Verbose, env, verboseWant)
+}
+
+// verboseWant is what SIND_VERBOSE takes.
+const verboseWant = "a number, such as 2 for -vv"
+
+// parseVerboseEnv reads a value of SIND_VERBOSE, a number that is not
+// negative, and reports whether it is one.
+func parseVerboseEnv(value string) (int, bool) {
+	v, err := strconv.Atoi(value)
+	return v, err == nil && v >= 0
 }
 
 // checkRealmFlag rejects an invalid --realm before any command runs, as a

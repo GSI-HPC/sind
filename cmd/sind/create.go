@@ -62,14 +62,24 @@ func waitSetting(cmd *cobra.Command) (time.Duration, bool, error) {
 	if !ok {
 		return 0, false, nil
 	}
-	wait, err := time.ParseDuration(env)
-	switch {
-	case err != nil:
-		return 0, false, invalidEnvValue(envvar.Wait, env, "a duration with a unit, such as 90s, 5m or 1h30m")
-	case wait < 0:
-		return 0, false, fmt.Errorf("%s must not be negative, got %s", envvar.Wait, env)
+	wait, err := parseWaitEnv(env)
+	if err != nil {
+		return 0, false, err
 	}
 	return wait, true, nil
+}
+
+// parseWaitEnv reads a value of SIND_WAIT: a duration that is not
+// negative. Its errors name the variable.
+func parseWaitEnv(value string) (time.Duration, error) {
+	wait, err := time.ParseDuration(value)
+	switch {
+	case err != nil:
+		return 0, invalidEnvValue(envvar.Wait, value, "a duration with a unit, such as 90s, 5m or 1h30m")
+	case wait < 0:
+		return 0, fmt.Errorf("%s must not be negative, got %s", envvar.Wait, value)
+	}
+	return wait, nil
 }
 
 // addPullFlag adds --pull to a create command, with usage, which it ends
@@ -90,9 +100,15 @@ func pullFlag(cmd *cobra.Command) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	pull, err := strconv.ParseBool(env)
+	return parsePullEnv(env)
+}
+
+// parsePullEnv reads a value of SIND_PULL: a boolean, as strconv.ParseBool
+// reads one. Its error names the variable.
+func parsePullEnv(value string) (bool, error) {
+	pull, err := strconv.ParseBool(value)
 	if err != nil {
-		return false, invalidEnvValue(envvar.Pull, env, "true or false")
+		return false, invalidEnvValue(envvar.Pull, value, "true or false")
 	}
 	return pull, nil
 }

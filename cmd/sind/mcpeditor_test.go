@@ -117,6 +117,21 @@ func TestMCPEnable_Environment(t *testing.T) {
 	assert.Equal(t, []any{"mcp", "start"}, servers["sind"]["args"])
 }
 
+// TestMCPEnable_ToolVariables checks that enable writes the variables the
+// tools read when their values are ones the tools take.
+func TestMCPEnable_ToolVariables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	_, _, err := executeCommand("mcp", "cursor", "enable", "--config-path", path,
+		"--env", "SIND_PULL=true", "--env", "SIND_WAIT=5m", "--env", "SIND_OUTPUT=json", "--env", "SIND_VERBOSE=2",
+		"--env", "SIND_CLUSTER=dev", "--env", "SIND_PROGRESS=bogus")
+	require.NoError(t, err)
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{
+		"SIND_PULL": "true", "SIND_WAIT": "5m", "SIND_OUTPUT": "json", "SIND_VERBOSE": "2",
+		"SIND_CLUSTER": "dev", "SIND_PROGRESS": "bogus",
+	}, servers["sind"]["env"], "mcp start sets SIND_PROGRESS for its tools")
+}
+
 // TestMCPEnable_KeepsTheEntrysSettings checks that enable, run again as
 // after sind moved, keeps the realm and environment of the entry and the
 // settings sind does not write.
@@ -138,6 +153,34 @@ func TestMCPEnable_KeepsTheEntrysSettings(t *testing.T) {
 		"disabled":    true,
 		"autoApprove": []any{"sind_get_clusters"},
 	}, servers["sind"])
+}
+
+// TestMCPEnable_EmptyVariables checks that enable writes an empty --env
+// value unchecked, as the tools take it as unset, so that it clears a
+// variable the entry keeps.
+func TestMCPEnable_EmptyVariables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"sind":{"command":"/old/sind","args":["mcp","start"],`+
+		`"env":{"SIND_WAIT":"5m","SIND_CLUSTER":"dev"}}}}`), 0o600))
+
+	_, _, err := executeCommand("mcp", "cursor", "enable", "--config-path", path,
+		"--env", "SIND_WAIT=", "--env", "SIND_PULL=", "--env", "SIND_OUTPUT=", "--env", "SIND_VERBOSE=",
+		"--env", "SIND_CLUSTER=", "--env", "SIND_REALM=")
+	require.NoError(t, err)
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{
+		"SIND_WAIT": "", "SIND_PULL": "", "SIND_OUTPUT": "", "SIND_VERBOSE": "",
+		"SIND_CLUSTER": "", "SIND_REALM": "",
+	}, servers["sind"]["env"])
+
+	// An empty SIND_REALM names the default realm.
+	_, _, err = executeCommand("--realm", "sind", "mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=")
+	require.NoError(t, err)
+	servers, _ = readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, "sind", servers["sind"]["env"].(map[string]any)["SIND_REALM"])
+	_, _, err = executeCommand("--realm", "ci", "mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=")
+	require.ErrorContains(t, err, "--realm ci and --env SIND_REALM= name different realms")
+	assert.True(t, cobratree.IsUsage(err))
 }
 
 // TestMCPEnable_RealmFromEnvironment checks that enable records the realm
@@ -188,6 +231,32 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 		{
 			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_CLUSTER=Dev"},
 			`--env SIND_CLUSTER: invalid cluster name "Dev"`,
+		},
+		// The values the tools would refuse, failing every call.
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_PULL=maybe"},
+			`--env SIND_PULL: invalid SIND_PULL value "maybe": want true or false`,
+		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_WAIT=5"},
+			`--env SIND_WAIT: invalid SIND_WAIT value "5": want a duration with a unit`,
+		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_WAIT=-1m"},
+			"--env SIND_WAIT: SIND_WAIT must not be negative, got -1m",
+		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_OUTPUT=yaml"},
+			`--env SIND_OUTPUT: invalid SIND_OUTPUT value "yaml": want human or json`,
+		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_VERBOSE=high"},
+			`--env SIND_VERBOSE: invalid SIND_VERBOSE value "high": want a number, such as 2 for -vv`,
+		},
+		{
+			// The first variable, by name, that fails.
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_WAIT=x", "--env", "SIND_PULL=x"},
+			"--env SIND_PULL: ",
 		},
 		{
 			[]string{"mcp", "cursor", "enable", "--config-path", path, "--log-level", "bogus"},
