@@ -162,7 +162,8 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 //   - another event of the container (start, oom, pause, unpause) runs
 //     every passed probe again;
 //   - a full events buffer runs every passed probe again, as the watcher
-//     drops the events a full subscriber has no room for;
+//     drops the events a full subscriber has no room for (a monitor error
+//     takes the place of the oldest one instead);
 //   - from a monitor error on (monitor.EventMonitorError of the container
 //     or of the whole watcher), once events is closed, and for an
 //     unbuffered events channel, every round runs every probe, as in

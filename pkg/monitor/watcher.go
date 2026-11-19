@@ -60,8 +60,10 @@ func (s subscriber) wants(ev Event) bool {
 }
 
 // Subscribe returns a channel that receives a copy of every event.
-// The channel is closed when the Watcher stops. The caller should
-// drain the channel to avoid blocking the broadcast loop.
+// The channel is closed when the Watcher stops. The caller should drain
+// the channel: the broadcast loop drops an event that a full channel has
+// no room for, and for a monitor error, which a subscriber must not miss,
+// the oldest event the channel holds instead.
 func (w *Watcher) Subscribe() <-chan Event {
 	return w.SubscribeTo("")
 }
@@ -232,13 +234,36 @@ func (w *Watcher) broadcastLoop(ctx context.Context) {
 				select {
 				case sub.ch <- ev:
 				default:
-					// Subscriber is full — drop event to avoid blocking.
-					log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", ev.Kind, "node", ev.Node)
+					if ev.Kind != EventMonitorError {
+						// Subscriber is full — drop event to avoid blocking.
+						log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", ev.Kind, "node", ev.Node)
+						continue
+					}
+					// After a monitor error, the subscriber must stop
+					// trusting the events: drop the oldest one to make
+					// room. Only this loop sends, under w.mu, so the send
+					// then cannot block.
+					if old, ok := takeOldest(sub.ch); ok {
+						log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", old.Kind, "node", old.Node)
+					}
+					sub.ch <- ev
 				}
 			}
 			w.mu.Unlock()
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// takeOldest takes the oldest event of ch without waiting, and reports
+// whether there was one: a subscriber may have taken them all since ch was
+// full.
+func takeOldest(ch chan Event) (Event, bool) {
+	select {
+	case ev := <-ch:
+		return ev, true
+	default:
+		return Event{}, false
 	}
 }
