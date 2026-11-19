@@ -722,8 +722,8 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			if _, err := CreateNode(tctx, client, meshMgr, nc); err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
-			// The wait limit counts from here, after the image pull
-			// that docker create may have made.
+			// The wait limit counts from here, once the container has
+			// started.
 			nctx, cancel := rd.nodeContext(tctx)
 			defer cancel()
 
