@@ -137,11 +137,9 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 }
 
 // Wait blocks until all monitor goroutines have exited and closes
-// all remaining subscriber channels. Any Unsubscribe calls must complete
-// before Wait runs; otherwise a concurrent Unsubscribe would double-close
-// the channel Wait is iterating. Callers using the usual
-// defer watcher.Wait() / defer watcher.Unsubscribe(ch) pattern get this
-// ordering for free (deferred calls run LIFO).
+// all remaining subscriber channels. Wait and Unsubscribe may run in either
+// order, or at the same time: each takes the watcher's lock and removes the
+// channels it closes, so each channel is closed once.
 func (w *Watcher) Wait() {
 	w.wg.Wait()
 	w.mu.Lock()

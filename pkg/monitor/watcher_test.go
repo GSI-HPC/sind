@@ -159,6 +159,27 @@ func TestWatcher_Unsubscribe(t *testing.T) {
 	assert.False(t, ok, "sub1 should be closed after Unsubscribe")
 }
 
+func TestWatcher_UnsubscribeAndWait(t *testing.T) {
+	// Wait and Unsubscribe may run in either order, and at the same time:
+	// each channel is closed once.
+	m := &mock.Executor{}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	before, during, after := w.Subscribe(), w.Subscribe(), w.Subscribe()
+	w.Unsubscribe(before)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Unsubscribe(during)
+	}()
+	w.Wait()
+	<-done
+	w.Unsubscribe(after)
+	for _, ch := range []<-chan Event{before, during, after} {
+		_, ok := <-ch
+		assert.False(t, ok)
+	}
+}
+
 func TestWatcher_UnsubscribeNonexistent(_ *testing.T) {
 	m := &mock.Executor{}
 	w := NewWatcher(m, "sind-dev-", "dev")

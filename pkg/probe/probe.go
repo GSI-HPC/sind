@@ -673,11 +673,13 @@ func failedUnit(ctx context.Context, client *docker.Client, name docker.Containe
 }
 
 // Snapshot returns a one-shot readiness snapshot of the given services on a
-// running node, fusing the systemd-based checks (munge, sshd, slurmd,
-// mariadb, slurmdbd) into a single docker exec. slurmctld is checked with
-// scontrol ping instead, because "slurmctld is active" is weaker than
-// "slurmctld answers RPCs" — the unit can be active during startup while RPCs
-// still fail.
+// running node, fusing the checks of every service but slurmctld (munge,
+// sshd, slurmd, mariadb, slurmdbd, sackd, slurmrestd) into a single
+// systemctl is-active in one docker exec. A service passes when its unit
+// is active: slurmrestd's port is not checked, as SlurmrestdReady does.
+// slurmctld is checked with scontrol ping instead, because "slurmctld is
+// active" is weaker than "slurmctld answers RPCs" — the unit can be active
+// during startup while RPCs still fail.
 //
 // Snapshot is intended for status-query call sites such as cluster.GetStatus.
 // Unlike the individual *Ready probes, it does not surface per-probe errors;
