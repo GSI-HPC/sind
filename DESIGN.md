@@ -166,6 +166,8 @@ The operations report their progress as go-clikit spans on the context they are 
 
 sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.io/)'s approach of favoring simplicity and compatibility.
 
+The library compiles only part of them: the packages under `pkg/` build with go-clikit, go-nodeset, `creack/pty`, afero, `go.yaml.in/yaml/v3` and `golang.org/x/crypto`, `sync`, `sys` and `text` (`go list -deps ./pkg/...`); cobra, ophis, the MCP SDK, lipgloss, termenv and `charmbracelet/log` are the CLI's and in no library caller's binary. The CLI and the library share one module, though, so every requirement of `go.mod`, the CLI's and the tests' (testify) included, joins the module graph of a caller and takes part in its minimal version selection: a caller that requires one of these modules too builds with at least sind's version of it. A module of its own for the CLI would end that, at the cost of a second module to tag and of `go install` paths that change; sind keeps one module.
+
 | Dependency | Purpose |
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
