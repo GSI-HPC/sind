@@ -112,6 +112,7 @@ func TestRunSummary(t *testing.T) {
 	s := runSummaryOf(runCtxOf(run, runAt(25)))
 	assert.Equal(t, runGanttOf(runCtxOf(run, runAt(25))).JSON(), s.Data)
 	assert.Equal(t, "▸ nodes 0/3 · sind ui", s.DocTitle)
+	assert.True(t, s.Live, "a run that goes on keeps its stream in a hidden tab")
 	assert.Equal(t, "r:"+run.ID, s.SayKey)
 	assert.Equal(t, runRunning, s.SayState)
 	assert.Equal(t, "create cluster: started.", s.Say)
@@ -126,6 +127,7 @@ func TestRunSummary(t *testing.T) {
 
 	done := runSummaryOf(runCtxOf(runFixture(t, "create-canceled.jsonl", -1)[0], runAt(25)))
 	assert.Equal(t, "~ create cluster · sind ui", done.DocTitle)
+	assert.False(t, done.Live, "an ended run lets the stream of a hidden tab go")
 	assert.Equal(t, "create cluster: stopped.", done.Say)
 
 	bare := runSummaryOf(runCtxOf(runOf(0, ""), runAt(5)))

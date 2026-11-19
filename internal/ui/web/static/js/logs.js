@@ -277,6 +277,22 @@
       following = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
     });
     window.addEventListener('pagehide', stop);
+    // A tab that is hidden for a moment lets its streams go (app.js). The
+    // stream sends its last lines again when it opens, so the panel starts
+    // anew with them when the tab is shown.
+    let slept = false;
+    document.addEventListener('sind:sleep', () => {
+      if (!es || !root.isConnected) return;
+      stop();
+      slept = true;
+      setState('Paused while the tab is hidden');
+    });
+    document.addEventListener('sind:wake', () => {
+      if (!slept || !root.isConnected) return;
+      slept = false;
+      clear();
+      start();
+    });
 
     // The tab can be swapped out of the page: stop when the root leaves.
     new MutationObserver(() => { if (!root.isConnected) stop(); })

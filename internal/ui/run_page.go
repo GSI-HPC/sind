@@ -488,6 +488,9 @@ type runSummary struct {
 	Data string
 	// DocTitle is what run.js puts in the browser tab.
 	DocTitle string
+	// Live says that the run goes on: the page keeps its stream while its
+	// tab is hidden (app.js), so that the tab's title follows the run.
+	Live bool
 	// SayKey, SayState and Say are what run.js announces when the state
 	// of the run changes, as for a command of the dock; SaySince is when the
 	// run started, in milliseconds since 1970, so that a page opened just
@@ -516,6 +519,7 @@ func runSummaryOf(rc runCtx) *runSummary {
 		s.SaySince = origin.UnixMilli()
 	}
 	s.DocTitle = runDocTitle(run)
+	s.Live = !run.Done()
 	return s
 }
 
