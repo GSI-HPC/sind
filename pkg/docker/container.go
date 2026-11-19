@@ -152,6 +152,20 @@ type HostConfig struct {
 	SecurityOpt []string          `json:"SecurityOpt"`
 	DNS         []string          `json:"Dns"`    // --dns
 	Mounts      []HostMount       `json:"Mounts"` // --mount, as given; docker inspect's top-level Mounts hide a volume's subpath
+	// MaskedPaths and ReadonlyPaths are the paths of /proc and /sys that
+	// the container masks or mounts read-only; nil when docker reports
+	// none (null).
+	MaskedPaths   []string `json:"MaskedPaths"`
+	ReadonlyPaths []string `json:"ReadonlyPaths"`
+}
+
+// SystemPathsUnconfined reports whether the container was created with
+// --security-opt systempaths=unconfined. The docker CLI does not pass
+// that option on to the daemon, which does not record it in SecurityOpt:
+// the CLI sets MaskedPaths and ReadonlyPaths to empty lists instead, which
+// docker inspect reports as [], unlike null.
+func (h HostConfig) SystemPathsUnconfined() bool {
+	return h.MaskedPaths != nil && len(h.MaskedPaths) == 0 && h.ReadonlyPaths != nil && len(h.ReadonlyPaths) == 0
 }
 
 // HostMount is a mount given with --mount, as the container's host

@@ -2419,11 +2419,27 @@ func TestExtraSecurityOpts(t *testing.T) {
 	var warned []string
 	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
-	extra := extraSecurityOpts(ctx, "sind-dev-worker-0", []string{
+	extra := extraSecurityOpts(ctx, "sind-dev-worker-0", docker.HostConfig{SecurityOpt: []string{
 		"writable-cgroups=true", "label=disable", "apparmor=unconfined", `seccomp={"defaultAction":"SCMP_ACT_ALLOW"}`, "seccomp=unconfined",
-	})
+	}})
 
 	assert.Equal(t, []string{"apparmor=unconfined", "seccomp=unconfined"}, extra)
 	assert.Equal(t, []string{"not inheriting the seccomp profile of sind-dev-worker-0: pass it with --security-opt seccomp=FILE"}, warned)
 	assert.Equal(t, []string{"writable-cgroups=true", "label=disable"}, nodeSecurityOpts())
+}
+
+func TestExtraSecurityOpts_SystemPaths(t *testing.T) {
+	// The docker CLI turns systempaths=unconfined into empty masked and
+	// read-only paths, which docker inspect reports as [].
+	opts := func(paths string, securityOpt ...string) []string {
+		var inspect struct{ HostConfig docker.HostConfig }
+		require.NoError(t, json.Unmarshal([]byte(`{"HostConfig":{"SecurityOpt":["label=disable"],"MaskedPaths":`+paths+`,"ReadonlyPaths":`+paths+`}}`), &inspect))
+		inspect.HostConfig.SecurityOpt = append(inspect.HostConfig.SecurityOpt, securityOpt...)
+		return extraSecurityOpts(t.Context(), "sind-dev-worker-0", inspect.HostConfig)
+	}
+
+	assert.Equal(t, []string{"systempaths=unconfined"}, opts(`[]`))
+	assert.Empty(t, opts(`null`), "docker reports no paths")
+	assert.Empty(t, opts(`["/proc/kcore"]`), "the default masks")
+	assert.Equal(t, []string{"systempaths=unconfined"}, opts(`[]`, "systempaths=unconfined"), "once, should docker report it")
 }

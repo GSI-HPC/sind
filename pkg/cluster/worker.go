@@ -752,7 +752,7 @@ func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallba
 		CapAdd:      capabilityNames(hc.CapAdd, own...),
 		CapDrop:     capDrop,
 		Devices:     deviceArgs(hc.Devices),
-		SecurityOpt: extraSecurityOpts(ctx, info.Name, hc.SecurityOpt),
+		SecurityOpt: extraSecurityOpts(ctx, info.Name, hc),
 	}
 	if cpus := int(hc.NanoCPUs / 1e9); cpus > 0 {
 		shape.CPUs = cpus
@@ -842,13 +842,19 @@ func deviceArgs(devices []docker.DeviceMapping) []string {
 }
 
 // extraSecurityOpts returns a container's security options other than the
-// ones BuildRunArgs gives every node. A seccomp profile is left out with a
-// warning: docker reports its content, which the docker CLI cannot take
-// back, as it reads a profile from a file.
-func extraSecurityOpts(ctx context.Context, container docker.ContainerName, opts []string) []string {
+// ones BuildRunArgs gives every node, from its host configuration. A
+// seccomp profile is left out with a warning: docker reports its content,
+// which the docker CLI cannot take back, as it reads a profile from a
+// file. systempaths=unconfined, which the docker CLI does not pass on to
+// the daemon, is read from the container's masked and read-only paths
+// (docker.HostConfig.SystemPathsUnconfined).
+func extraSecurityOpts(ctx context.Context, container docker.ContainerName, hc docker.HostConfig) []string {
 	own := nodeSecurityOpts()
 	var extra []string
-	for _, opt := range opts {
+	if hc.SystemPathsUnconfined() && !slices.Contains(hc.SecurityOpt, systemPathsUnconfined) {
+		extra = append(extra, systemPathsUnconfined)
+	}
+	for _, opt := range hc.SecurityOpt {
 		switch {
 		case slices.Contains(own, opt):
 		case strings.HasPrefix(opt, "seccomp={"):
@@ -859,6 +865,9 @@ func extraSecurityOpts(ctx context.Context, container docker.ContainerName, opts
 	}
 	return extra
 }
+
+// systemPathsUnconfined is the security option that unmasks /proc and /sys.
+const systemPathsUnconfined = "systempaths=unconfined"
 
 // nodeSecurityOpts returns the security options BuildRunArgs gives every
 // node.

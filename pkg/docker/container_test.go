@@ -326,7 +326,9 @@ func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
     "CapDrop": null,
     "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
     "SecurityOpt": ["writable-cgroups=true", "label=disable"],
-    "Mounts": [{"Type": "volume", "Source": "sind-journal", "Target": "/var/log/journal", "VolumeOptions": {"Subpath": "dev/worker-0"}}]
+    "Mounts": [{"Type": "volume", "Source": "sind-journal", "Target": "/var/log/journal", "VolumeOptions": {"Subpath": "dev/worker-0"}}],
+    "MaskedPaths": [],
+    "ReadonlyPaths": []
   },
   "NetworkSettings": {"Networks": {}}
 }]`, "", nil)
@@ -347,7 +349,17 @@ func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
 			Type: MountVolume, Source: "sind-journal", Target: "/var/log/journal",
 			VolumeOptions: VolumeOptions{Subpath: "dev/worker-0"},
 		}},
+		MaskedPaths:   []string{},
+		ReadonlyPaths: []string{},
 	}, info.HostConfig)
+	assert.True(t, info.HostConfig.SystemPathsUnconfined(), "systempaths=unconfined")
+}
+
+func TestHostConfig_SystemPathsUnconfined(t *testing.T) {
+	assert.False(t, HostConfig{}.SystemPathsUnconfined(), "no paths reported")
+	assert.False(t, HostConfig{MaskedPaths: []string{}}.SystemPathsUnconfined(), "read-only paths not reported")
+	assert.False(t, HostConfig{MaskedPaths: []string{}, ReadonlyPaths: []string{"/proc/bus"}}.SystemPathsUnconfined())
+	assert.True(t, HostConfig{MaskedPaths: []string{}, ReadonlyPaths: []string{}}.SystemPathsUnconfined())
 }
 
 func TestInspectContainer_Error(t *testing.T) {
