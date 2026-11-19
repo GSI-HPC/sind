@@ -32,7 +32,8 @@ type pgFiles struct {
 
 // pgFilesOf returns where the files are with the data mount m, whose
 // cluster has the node container, which a copy into a volume goes
-// through. A volume that is missing (m.OK false) has nothing to copy to.
+// through. A volume that is missing (m.OK false) has nothing to copy to,
+// and without a container nothing takes the copy.
 func pgFilesOf(m cluster.MountPoint, container string) pgFiles {
 	node := cmp.Or(m.Path, cluster.DefaultDataMountPath)
 	f := pgFiles{Host: pgText(m.Source), Node: pgText(node)}
@@ -48,6 +49,9 @@ func pgFilesOf(m cluster.MountPoint, container string) pgFiles {
 	case !m.OK:
 		f.Kind = "Docker volume"
 		f.Text = pgText("Docker has no volume " + m.Source + ", so " + node + " is empty in the nodes.")
+	case container == "":
+		f.Kind = "Docker volume"
+		f.Text = pgText("The volume " + m.Source + " is " + node + " in every node, but the cluster has no submitter or controller that a job script could be copied in through.")
 	default:
 		f.Kind = "Docker volume"
 		f.Text = pgText("The volume " + m.Source + " is " + node + " in every node. Jobs read scripts from it and write their output to it.")

@@ -19,6 +19,9 @@ func TestPgFilesOf(t *testing.T) {
 	assert.Equal(t, pgFiles{Kind: "Docker volume", Host: "v", Node: "/data/", Text: "Docker has no volume v, so /data/ is empty in the nodes."}, f)
 	f = pgFilesOf(cluster.MountPoint{Type: config.StorageVolume, Source: "v", Path: "/data/", OK: true}, "c")
 	assert.Equal(t, pgText("docker cp job.sh c:/data/"), f.Copy)
+	// Without a submitter or a controller, nothing takes the copy.
+	f = pgFilesOf(cluster.MountPoint{Type: config.StorageVolume, Source: "v", Path: "/data/", OK: true}, "")
+	assert.Equal(t, pgFiles{Kind: "Docker volume", Host: "v", Node: "/data/", Text: "The volume v is /data/ in every node, but the cluster has no submitter or controller that a job script could be copied in through."}, f)
 
 	assert.Equal(t, "s", pgFilesNode([]pgNode{{Role: config.RoleWorker, Container: "w"}, {Role: config.RoleController, Container: "c"}, {Role: config.RoleSubmitter, Container: "s"}}))
 	assert.Equal(t, "c", pgFilesNode([]pgNode{{Role: config.RoleController, Container: "c"}, {Role: config.RoleController, Container: "c2"}}))
