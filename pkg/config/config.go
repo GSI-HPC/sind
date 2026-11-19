@@ -169,6 +169,9 @@ type Storage struct {
 // Section represents a Slurm config file section that can be either:
 //   - a string (content appended directly to the config file)
 //   - a map of fragment name → content (creates a .conf.d/ directory)
+//
+// Only one of the two forms may be set: sind writes only the fragments of
+// a section that has them, and Validate refuses a section with both.
 type Section struct {
 	Content   string            // string form
 	Fragments map[string]string // map form
@@ -514,6 +517,9 @@ var fragmentNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
 
 // validateSection checks that a Slurm config section is valid.
 func validateSection(sectionName string, s Section) error {
+	if s.Content != "" && s.IsMap() {
+		return fmt.Errorf("slurm %s has both content and fragments: a section is a string or a map of fragments", sectionName)
+	}
 	for _, name := range s.FragmentNames() {
 		content := s.Fragments[name]
 		if name == "" {

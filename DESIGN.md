@@ -1229,6 +1229,7 @@ Standalone sections (`gres`, `topology`) are only created when configured. They 
 Validation rules:
 - Fragment names hold only ASCII letters, digits, `_`, `.` and `-`, and do not begin with `.` or `-`: Slurm reads an `include` path up to the first blank, cuts it at a `#` and replaces `%c` in it, and the glob of `plugstack.conf` skips a name that begins with a dot
 - Fragment names and content must not be empty
+- A section built in code (`config.Section`) sets its content or its fragments, not both
 
 ### Node Roles
 

@@ -1175,6 +1175,12 @@ func TestValidate_SlurmSections(t *testing.T) {
 		}
 	})
 
+	t.Run("both forms", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Topology = Section{Content: "SwitchName=s0 Nodes=worker-0\n", Fragments: map[string]string{"a": "SwitchName=s1\n"}}
+		require.EqualError(t, cfg.Validate(), "slurm topology has both content and fragments: a section is a string or a map of fragments")
+	})
+
 	t.Run("first bad fragment in name order", func(t *testing.T) {
 		cfg := base()
 		cfg.Slurm.Main = Section{Fragments: map[string]string{
