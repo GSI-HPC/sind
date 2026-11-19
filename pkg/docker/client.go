@@ -306,7 +306,8 @@ const DoctorHint = "; run `sind doctor` for the fix"
 // why in docker's own words, and points to `sind doctor`, which names the
 // fix; it leaves out the exit status. It matches ErrUnreachable and
 // unwraps to the command's error, an *exec.Error for a missing CLI or an
-// *cmdexec.ExitError.
+// *cmdexec.ExitError, or, from Info, to a plain error with the entry of
+// docker info's ServerErrors that says so.
 type UnreachableError struct {
 	Err    error
 	Reason string // why, such as "docker CLI not found in PATH"
@@ -343,13 +344,23 @@ func classifyUnreachable(err error) error {
 	if !ok {
 		return err
 	}
-	for line := range strings.SplitSeq(exitErr.Stderr, "\n") {
-		line = strings.TrimSpace(line)
-		if unreachable.MatchString(strings.ToLower(line)) {
-			return &UnreachableError{Err: err, Reason: strings.TrimPrefix(line, "docker: ")}
-		}
+	if reason, ok := unreachableReason(exitErr.Stderr); ok {
+		return &UnreachableError{Err: err, Reason: reason}
 	}
 	return err
+}
+
+// unreachableReason returns the first line of msg that says the docker CLI
+// could not reach the daemon, without docker's "docker: " prefix, and
+// whether there is one.
+func unreachableReason(msg string) (string, bool) {
+	for line := range strings.SplitSeq(msg, "\n") {
+		line = strings.TrimSpace(line)
+		if unreachable.MatchString(strings.ToLower(line)) {
+			return strings.TrimPrefix(line, "docker: "), true
+		}
+	}
+	return "", false
 }
 
 // IsAlreadyExists reports whether err is docker's error for a network name

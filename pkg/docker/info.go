@@ -44,8 +44,10 @@ type DaemonInfo struct {
 // Info runs `docker info` and returns what it says about the daemon.
 //
 // With --format the docker CLI reports a daemon it cannot reach in the
-// output's ServerErrors, and may still exit 0; Info returns the first of
-// them as its error.
+// output's ServerErrors, and may still exit 0 (up to Docker 28.0). Info
+// returns the first entry that says that the daemon could not be reached
+// as an *UnreachableError, as a failed command would, and else the first
+// entry as a plain error.
 func (c *Client) Info(ctx context.Context) (*DaemonInfo, error) {
 	stdout, _, err := c.run(ctx, "info", "--format", "{{json .}}")
 	if err != nil {
@@ -57,6 +59,11 @@ func (c *Client) Info(ctx context.Context) (*DaemonInfo, error) {
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &out); err != nil {
 		return nil, fmt.Errorf("parsing docker info: %w", err)
+	}
+	for _, msg := range out.ServerErrors {
+		if reason, ok := unreachableReason(msg); ok {
+			return nil, &UnreachableError{Err: errors.New(msg), Reason: reason}
+		}
 	}
 	if len(out.ServerErrors) > 0 {
 		return nil, errors.New(out.ServerErrors[0])

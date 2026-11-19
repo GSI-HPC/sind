@@ -59,12 +59,15 @@ func DockerUnreachable(err error) (detail, remediation string) {
 }
 
 // ErrorLine returns the first line of what a failed command wrote to
-// stderr, or of err's message when it wrote nothing: the line that says
-// what went wrong, for the detail of a check.
+// stderr, or else of the reason of a *docker.UnreachableError (as from
+// docker info's ServerErrors), or else of err's message: the line that
+// says what went wrong, for the detail of a check.
 func ErrorLine(err error) string {
 	msg := err.Error()
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
 		msg = exitErr.Stderr
+	} else if unreachable, ok := errors.AsType[*docker.UnreachableError](err); ok {
+		msg = unreachable.Reason
 	}
 	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
 	return strings.TrimSpace(msg)

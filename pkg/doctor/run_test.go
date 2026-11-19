@@ -103,17 +103,28 @@ func TestRun_UnparseableVersion(t *testing.T) {
 	assert.Contains(t, checks[0].Detail, "unable to parse")
 }
 
+// TestRun_DockerNotReachable checks the Docker Engine check of a daemon
+// the docker CLI cannot reach, whether it exits 1 or, before Docker 28.1,
+// exits 0 and reports it in docker info's ServerErrors.
 func TestRun_DockerNotReachable(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n", testutil.ExitCode1(t))
+	const msg = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+	for name, result := range map[string]mock.Result{
+		"exit status":   {Stderr: msg + "\n", Err: testutil.ExitCode1(t)},
+		"server errors": {Stdout: `{"ServerErrors":["` + msg + `"],"ClientInfo":{"Version":"28.0.4"}}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(result.Stdout, result.Stderr, result.Err)
 
-	checks := Run(context.Background(), hermeticDeps(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
-	assert.Equal(t, []clidoctor.Check{
-		{Name: "Docker Engine", Status: clidoctor.StatusFailed,
-			Detail:      "not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
-			Remediation: "Start the Docker daemon:\n\nsudo systemctl start docker"},
-		{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
-	}, checks)
+			checks := Run(context.Background(), hermeticDeps(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
+			assert.Equal(t, []clidoctor.Check{
+				{Name: "Docker Engine", Status: clidoctor.StatusFailed,
+					Detail:      "not reachable: " + msg,
+					Remediation: dockerStartRemediation},
+				{Name: "cgroupv2", Status: clidoctor.StatusFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
+			}, checks)
+		})
+	}
 }
 
 func TestRun_CgroupMounts(t *testing.T) {
