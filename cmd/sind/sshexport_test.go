@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -12,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,4 +127,26 @@ func TestSyncSSHExport_ExportError(t *testing.T) {
 	exists, err := afero.Exists(fs, filepath.Join(dir, "ssh_config"))
 	require.NoError(t, err)
 	assert.True(t, exists)
+}
+
+// --- updateSSHExport ---
+
+// TestUpdateSSHExport_UsesContextFs checks that the export after a command
+// writes to the file system of the command's context (fsFrom).
+func TestUpdateSSHExport_UsesContextFs(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/xdg/state")
+	m := &mock.Executor{}
+	m.AddResult("PRIVATE-KEY\x00controller.default.sind.sind ssh-ed25519 AAAA\n", "", nil)
+	client := docker.NewClient(m)
+	fs := afero.NewMemMapFs()
+	var stderr strings.Builder
+	cmd := &cobra.Command{}
+	cmd.SetErr(&stderr)
+	cmd.SetContext(withFs(t.Context(), fs))
+
+	updateSSHExport(cmd, client, mesh.NewManager(client, "sind"))
+	assert.Empty(t, stderr.String())
+	data, err := afero.ReadFile(fs, "/xdg/state/sind/sind/id_ed25519")
+	require.NoError(t, err)
+	assert.Equal(t, "PRIVATE-KEY", string(data))
 }

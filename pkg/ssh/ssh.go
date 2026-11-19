@@ -6,12 +6,17 @@ package ssh
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	iofs "io/fs"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/hostname"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 )
 
@@ -110,18 +115,19 @@ Host %[1]s
 `
 
 // GenerateSSHConfig returns the SSH config that lets the user's ssh reach
-// the realm's nodes through its SSH relay container, with the private key
-// and known_hosts in dir. hosts are the nodes' DNS names; a name in it that
-// is not a node's DNS name in the realm, <node>.<cluster>.<realm>.sind, is
-// left out. For the default realm, it includes hostname canonicalization
+// the realm's nodes through its SSH relay container (mesh.RealmNames),
+// with the private key and known_hosts in dir (KeyFile, KnownHostsFile).
+// hosts are the nodes' DNS names; a name in it that is not a node's DNS
+// name in the realm, <node>.<cluster>.<realm>.sind, is left out. For the default realm, it includes hostname canonicalization
 // directives that enable short-name SSH access (e.g. "ssh controller").
-func GenerateSSHConfig(sshContainer docker.ContainerName, dir, realm string, hosts []string) string {
+func GenerateSSHConfig(dir, realm string, hosts []string) string {
+	sshContainer := mesh.RealmNames(realm).SSHContainer
 	var config strings.Builder
 	if realm == defaultRealm {
 		fmt.Fprintf(&config, sshCanonicalTemplate, realm)
 	}
 	fmt.Fprintf(&config, sshRealmTemplate, realm,
-		configPath(filepath.Join(dir, "id_ed25519")), configPath(filepath.Join(dir, "known_hosts")))
+		configPath(filepath.Join(dir, KeyFile)), configPath(filepath.Join(dir, KnownHostsFile)))
 	seen := make(map[string]bool, len(hosts))
 	for _, host := range hosts {
 		if seen[host] || !isNodeHost(host, realm) {
@@ -186,12 +192,39 @@ func knownHostNames(knownHosts string) []string {
 // separated by a NUL byte, which neither file contains.
 const readExportScript = `cat /root/.ssh/id_ed25519 && printf '\0' && cat /root/.ssh/known_hosts`
 
-// ExportConfig exports SSH configuration to the given directory by reading
-// the private key and known_hosts from the SSH relay container, in one
-// docker exec, and writing ssh_config, id_ed25519, and known_hosts to dir.
+// The files of the SSH config export, in the directory that ExportConfig
+// writes.
+const (
+	// ConfigFile is the ssh_config that a user's ssh includes.
+	ConfigFile = "ssh_config"
+	// KeyFile is the realm's private key, which ConfigFile names.
+	KeyFile = "id_ed25519"
+	// KnownHostsFile holds the nodes' host keys, which ConfigFile names.
+	KnownHostsFile = "known_hosts"
+)
+
+// ExportFiles returns the files of the export, in the order ExportConfig
+// replaces them: the key and the host keys before the ssh_config that
+// names their hosts.
+func ExportFiles() []string {
+	return []string{KeyFile, KnownHostsFile, ConfigFile}
+}
+
+// ExportConfig exports the SSH configuration of realm to dir: it reads the
+// private key and known_hosts from the realm's SSH relay container
+// (mesh.RealmNames), in one docker exec, and writes id_ed25519,
+// known_hosts and ssh_config to dir. Each file is written to a temporary
+// file in dir and renamed into place, in the order of ExportFiles, so that
+// a reader never sees a truncated file or Host blocks before their keys.
 // When the relay container does not exist, the error satisfies
-// docker.IsNotFound and dir is left as it is.
-func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir, realm string, sshContainer docker.ContainerName) error {
+// docker.IsNotFound and dir is left as it is; RemoveExport then removes the
+// export of a realm without clusters.
+//
+// The sind CLI runs it after every command that changes the realm's
+// clusters; pkg/cluster does not, so a library caller that keeps an export
+// runs it itself.
+func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir, realm string) error {
+	sshContainer := mesh.RealmNames(realm).SSHContainer
 	out, err := client.Exec(ctx, sshContainer, "sh", "-c", readExportScript)
 	if err != nil {
 		return fmt.Errorf("reading private key and known_hosts: %w", err)
@@ -204,18 +237,57 @@ func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir, 
 	if err := fs.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("creating directory %s: %w", dir, err)
 	}
-
-	if err := afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte(GenerateSSHConfig(sshContainer, dir, realm, knownHostNames(knownHosts))), 0644); err != nil {
-		return fmt.Errorf("writing ssh_config: %w", err)
+	files := map[string]struct {
+		data []byte
+		perm os.FileMode
+	}{
+		KeyFile:        {[]byte(privKey), 0600},
+		KnownHostsFile: {[]byte(knownHosts), 0644},
+		ConfigFile:     {[]byte(GenerateSSHConfig(dir, realm, knownHostNames(knownHosts))), 0644},
 	}
-
-	if err := afero.WriteFile(fs, filepath.Join(dir, "id_ed25519"), []byte(privKey), 0600); err != nil {
-		return fmt.Errorf("writing id_ed25519: %w", err)
+	for _, name := range ExportFiles() {
+		f := files[name]
+		if err := replaceFile(fs, dir, name, f.data, f.perm); err != nil {
+			return fmt.Errorf("writing %s: %w", name, err)
+		}
 	}
+	return nil
+}
 
-	if err := afero.WriteFile(fs, filepath.Join(dir, "known_hosts"), []byte(knownHosts), 0644); err != nil {
-		return fmt.Errorf("writing known_hosts: %w", err)
+// replaceFile replaces dir/name with a file of data and perm: it writes a
+// temporary file in dir and renames it into place, so that the file is
+// either the old or the new one, never a part.
+func replaceFile(fs afero.Fs, dir, name string, data []byte, perm os.FileMode) error {
+	f, err := afero.TempFile(fs, dir, "."+name+"-*")
+	if err != nil {
+		return err
 	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	err = errors.Join(err, f.Close())
+	if err == nil {
+		err = fs.Chmod(tmp, perm)
+	}
+	if err == nil {
+		err = fs.Rename(tmp, filepath.Join(dir, name))
+	}
+	if err != nil {
+		_ = fs.Remove(tmp)
+	}
+	return err
+}
 
+// RemoveExport removes the files of the export from dir, and dir itself
+// if that leaves it empty. Files that do not exist are no error. It removes
+// them in the reverse order of ExportFiles, ssh_config first, so that a
+// reader never sees Host blocks whose key or host keys are gone.
+func RemoveExport(fs afero.Fs, dir string) error {
+	for _, name := range slices.Backward(ExportFiles()) {
+		if err := fs.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, iofs.ErrNotExist) {
+			return fmt.Errorf("removing %s: %w", name, err)
+		}
+	}
+	// A directory that holds other files, such as the realm's lock, stays.
+	_ = fs.Remove(dir)
 	return nil
 }

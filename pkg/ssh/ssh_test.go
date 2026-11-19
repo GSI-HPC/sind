@@ -3,8 +3,10 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,7 +80,7 @@ func TestHostKeyFromFile(t *testing.T) {
 // --- GenerateSSHConfig ---
 
 func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind", "sind",
+	config := GenerateSSHConfig("/home/user/.sind", "sind",
 		[]string{"controller.default.sind.sind", "worker-0.dev.sind.sind"})
 
 	assert.Equal(t, `Host controller controller.* controller-backup controller-backup.* db db.* api api.* submitter submitter.* worker-*
@@ -101,7 +103,7 @@ Host worker-0.dev.sind.sind
 }
 
 func TestGenerateSSHConfig_NamedRealm(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), "/home/user/.sind", "ci42",
+	config := GenerateSSHConfig("/home/user/.sind", "ci42",
 		[]string{"controller.dev.ci42.sind"})
 
 	assert.Equal(t, `Host *.ci42.sind
@@ -117,7 +119,7 @@ Host controller.dev.ci42.sind
 }
 
 func TestGenerateSSHConfig_NoNodes(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), "/home/user/.sind", "ci42", nil)
+	config := GenerateSSHConfig("/home/user/.sind", "ci42", nil)
 
 	assert.Contains(t, config, "Host *.ci42.sind\n")
 	assert.NotContains(t, config, "ProxyCommand")
@@ -127,7 +129,7 @@ func TestGenerateSSHConfig_NoNodes(t *testing.T) {
 // space, a % token, a double quote or a backslash in it stays one argument
 // of each option, with ssh's token expansion and quoting escaped.
 func TestGenerateSSHConfig_QuotedPaths(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), `/home/John Doe/50%d/a"b\c`, "ci42", nil)
+	config := GenerateSSHConfig(`/home/John Doe/50%d/a"b\c`, "ci42", nil)
 
 	assert.Contains(t, config, `
     IdentityFile "/home/John Doe/50%%d/a\"b\\c/id_ed25519"
@@ -141,7 +143,7 @@ func TestGenerateSSHConfig_QuotedPaths(t *testing.T) {
 // from a git submodule URL ran as a command in the user's shell and in the
 // relay's bash (CVE-2023-51385).
 func TestGenerateSSHConfig_OnlyNodeNames(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind", "sind", []string{
+	config := GenerateSSHConfig("/home/user/.sind", "sind", []string{
 		"worker-0.dev.sind.sind",
 		"worker-0.dev.sind.sind",
 		"x'$(touch p)'.sind.sind",
@@ -187,7 +189,7 @@ func TestExportConfig(t *testing.T) {
 
 	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind")
 	require.NoError(t, err)
 
 	// Verify ssh_config was written with correct paths, and with a
@@ -222,7 +224,7 @@ func TestExportConfig_EmptyKnownHosts(t *testing.T) {
 	c := docker.NewClient(&m)
 	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind")
 	require.NoError(t, err)
 
 	knownHosts, err := afero.ReadFile(fs, testExportDir+"/known_hosts")
@@ -234,7 +236,7 @@ func TestExportConfig_FilePermissions(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind")
 	require.NoError(t, err)
 
 	// Private key must be 0600 (owner read/write only).
@@ -258,7 +260,7 @@ func TestExportConfig_ReadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind")
 	assert.ErrorContains(t, err, "reading private key and known_hosts")
 	assert.False(t, docker.IsNotFound(err))
 
@@ -276,7 +278,7 @@ func TestExportConfig_NoRelay(t *testing.T) {
 	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
-	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind")
 	require.Error(t, err)
 	assert.True(t, docker.IsNotFound(err))
 }
@@ -286,7 +288,7 @@ func TestExportConfig_NoSeparator(t *testing.T) {
 	m.AddResult("PRIVATE-KEY-DATA", "", nil)
 	c := docker.NewClient(&m)
 
-	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind")
 	assert.EqualError(t, err, "reading private key and known_hosts: sind-ssh printed no separator")
 }
 
@@ -294,29 +296,163 @@ func TestExportConfig_MkdirError(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := afero.NewReadOnlyFs(afero.NewMemMapFs())
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind")
 	assert.ErrorContains(t, err, "creating directory")
 }
 
-// errFs wraps an afero.Fs and fails OpenFile on a specific path.
+// errFs wraps an afero.Fs and fails one operation, op, on the files whose
+// path contains errOn, and records the targets of its renames.
 type errFs struct {
 	afero.Fs
-	errOn string
+	op, errOn string
+	renamed   []string
+}
+
+var errInjected = errors.New("permission denied")
+
+func (f *errFs) fails(op, name string) bool {
+	return f.op == op && strings.Contains(name, f.errOn)
 }
 
 func (f *errFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
-	if name == f.errOn {
-		return nil, fmt.Errorf("permission denied")
+	if f.fails("open", name) {
+		return nil, errInjected
 	}
-	return f.Fs.OpenFile(name, flag, perm)
+	file, err := f.Fs.OpenFile(name, flag, perm)
+	if err == nil && f.fails("write", name) {
+		return failingFile{file}, nil
+	}
+	return file, err
 }
 
-func TestExportConfig_WriteErrors(t *testing.T) {
-	for _, name := range []string{"ssh_config", "id_ed25519", "known_hosts"} {
-		_, c := exportDockerMock()
-		fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/" + name}
-
-		err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
-		assert.ErrorContains(t, err, "writing "+name)
+func (f *errFs) Chmod(name string, mode os.FileMode) error {
+	if f.fails("chmod", name) {
+		return errInjected
 	}
+	return f.Fs.Chmod(name, mode)
+}
+
+func (f *errFs) Rename(oldname, newname string) error {
+	if f.fails("rename", newname) {
+		return errInjected
+	}
+	f.renamed = append(f.renamed, filepath.Base(newname))
+	return f.Fs.Rename(oldname, newname)
+}
+
+func (f *errFs) Remove(name string) error {
+	if f.fails("remove", name) {
+		return errInjected
+	}
+	return f.Fs.Remove(name)
+}
+
+// failingFile is a file whose writes fail.
+type failingFile struct{ afero.File }
+
+func (failingFile) Write([]byte) (int, error) { return 0, errInjected }
+
+// TestExportConfig_WriteErrors checks that a file that cannot be written
+// fails the export, keeps the file it would replace, and leaves no
+// temporary file behind.
+func TestExportConfig_WriteErrors(t *testing.T) {
+	for _, name := range ExportFiles() {
+		for _, op := range []string{"open", "write", "chmod", "rename"} {
+			t.Run(name+"/"+op, func(t *testing.T) {
+				_, c := exportDockerMock()
+				base := afero.NewMemMapFs()
+				require.NoError(t, afero.WriteFile(base, testExportDir+"/"+name, []byte("old"), 0644))
+				fs := &errFs{Fs: base, op: op, errOn: name}
+
+				err := ExportConfig(t.Context(), c, fs, testExportDir, "sind")
+				require.ErrorIs(t, err, errInjected)
+				assert.ErrorContains(t, err, "writing "+name)
+
+				data, err := afero.ReadFile(base, testExportDir+"/"+name)
+				require.NoError(t, err)
+				assert.Equal(t, "old", string(data), "the old file stays whole")
+				entries, err := afero.ReadDir(base, testExportDir)
+				require.NoError(t, err)
+				for _, e := range entries {
+					assert.False(t, strings.HasPrefix(e.Name(), "."), "temporary file %s left behind", e.Name())
+				}
+			})
+		}
+	}
+}
+
+// TestExportConfig_ReplacesInOrder checks that the export renames each file
+// into place, the key and known_hosts before the ssh_config that names
+// their hosts, and replaces files that exist.
+func TestExportConfig_ReplacesInOrder(t *testing.T) {
+	_, c := exportDockerMock()
+	base := afero.NewMemMapFs()
+	for _, name := range ExportFiles() {
+		require.NoError(t, afero.WriteFile(base, testExportDir+"/"+name, []byte("old"), 0600))
+	}
+	fs := &errFs{Fs: base}
+
+	require.NoError(t, ExportConfig(t.Context(), c, fs, testExportDir, "sind"))
+	assert.Equal(t, []string{"id_ed25519", "known_hosts", "ssh_config"}, fs.renamed)
+	data, err := afero.ReadFile(base, testExportDir+"/known_hosts")
+	require.NoError(t, err)
+	assert.Equal(t, "known-hosts-data\n", string(data))
+	info, err := base.Stat(testExportDir + "/ssh_config")
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0644), info.Mode().Perm(), "the mode of the new file")
+}
+
+// TestExportConfig_RealmRelay checks that the export reads from the relay
+// container of its realm.
+func TestExportConfig_RealmRelay(t *testing.T) {
+	m, c := exportDockerMock()
+	require.NoError(t, ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "ci"))
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "ci-ssh"}, m.Calls[0].Args[:2])
+}
+
+// --- RemoveExport ---
+
+func TestRemoveExport(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	for _, name := range ExportFiles() {
+		require.NoError(t, afero.WriteFile(fs, testExportDir+"/"+name, []byte("x"), 0600))
+	}
+	require.NoError(t, RemoveExport(fs, testExportDir))
+	exists, err := afero.DirExists(fs, testExportDir)
+	require.NoError(t, err)
+	assert.False(t, exists, "the empty directory is removed")
+
+	// Missing files are no error, and a directory with other files stays.
+	require.NoError(t, afero.WriteFile(fs, testExportDir+"/lock", nil, 0600))
+	require.NoError(t, RemoveExport(fs, testExportDir))
+	exists, err = afero.Exists(fs, testExportDir+"/lock")
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
+func TestRemoveExport_Error(t *testing.T) {
+	base := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(base, testExportDir+"/known_hosts", nil, 0600))
+	fs := &errFs{Fs: base, op: "remove", errOn: "known_hosts"}
+	err := RemoveExport(fs, testExportDir)
+	require.ErrorIs(t, err, errInjected)
+	assert.ErrorContains(t, err, "removing known_hosts")
+}
+
+// TestRemoveExport_ConfigFirst checks that RemoveExport removes ssh_config
+// before the key and the host keys it names.
+func TestRemoveExport_ConfigFirst(t *testing.T) {
+	base := afero.NewMemMapFs()
+	for _, name := range ExportFiles() {
+		require.NoError(t, afero.WriteFile(base, testExportDir+"/"+name, []byte("x"), 0600))
+	}
+	fs := &errFs{Fs: base, op: "remove", errOn: KnownHostsFile}
+	require.ErrorIs(t, RemoveExport(fs, testExportDir), errInjected)
+	config, err := afero.Exists(base, testExportDir+"/"+ConfigFile)
+	require.NoError(t, err)
+	assert.False(t, config, "ssh_config goes first")
+	key, err := afero.Exists(base, testExportDir+"/"+KeyFile)
+	require.NoError(t, err)
+	assert.True(t, key, "the key goes last")
 }

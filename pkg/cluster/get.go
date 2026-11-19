@@ -17,6 +17,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/slurm"
+	"github.com/GSI-HPC/sind/pkg/ssh"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 )
@@ -515,14 +516,14 @@ type SSHConfig struct {
 
 // GetSSHConfig returns the path of the realm's ssh_config in the state
 // directory and whether the file exists in fs. The path is also right before
-// the file exists, for an Include; sind writes the file when a cluster is
-// created in the realm.
+// the file exists, for an Include; ssh.ExportConfig writes the file, which
+// the sind CLI runs after every command that changes the realm's clusters.
 func GetSSHConfig(fs afero.Fs, realm string) (*SSHConfig, error) {
 	dir, err := state.RealmDir(realm)
 	if err != nil {
 		return nil, err
 	}
-	p := filepath.Join(dir, "ssh_config")
+	p := filepath.Join(dir, ssh.ConfigFile)
 	exists, _ := afero.Exists(fs, p)
 	return &SSHConfig{Path: p, Exists: exists}, nil
 }

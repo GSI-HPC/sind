@@ -12,7 +12,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +36,7 @@ func inLockedRealm(cmd *cobra.Command, op func(ctx context.Context, client *dock
 // up to date after a change to its clusters; a failure is a warning.
 func updateSSHExport(cmd *cobra.Command, client *docker.Client, meshMgr *mesh.Manager) {
 	if dir, err := state.RealmDir(meshMgr.Realm); err == nil {
-		if err := syncSSHExport(cmd.Context(), client, meshMgr, afero.NewOsFs(), dir); err != nil {
+		if err := syncSSHExport(cmd.Context(), client, meshMgr, fsFrom(cmd.Context()), dir); err != nil {
 			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(err.Error()))
 		}
 	}
