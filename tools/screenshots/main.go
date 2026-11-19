@@ -34,8 +34,13 @@ func main() {
 }
 
 // epoch is the time a still demo stands at (demo.Epoch of internal/ui/demo,
-// which this module cannot import): the page's clock is set to it.
+// which this module cannot import): the page's clock is set to it. A test
+// of internal/ui checks that the two agree.
 const epoch = "2026-10-21T09:15:00Z"
+
+// urlPrefix starts the line in which sind ui prints its URL (urlLine of
+// internal/ui, which a test there checks against this one).
+const urlPrefix = "sind ui: "
 
 func run(args []string) error {
 	var o options
@@ -127,7 +132,7 @@ func uiArgs(port int) []string {
 
 // urlOf returns the address in the line sind ui prints for it.
 func urlOf(line string) (string, bool) {
-	_, url, ok := strings.Cut(line, "sind ui: ")
+	_, url, ok := strings.Cut(line, urlPrefix)
 	return url, ok
 }
 

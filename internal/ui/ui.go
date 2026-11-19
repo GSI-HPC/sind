@@ -25,6 +25,11 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
+// urlLine starts the line on stderr that gives the URL of sind ui. The
+// screenshot tool (tools/screenshots) finds the URL after it, and a test
+// checks that it looks for the same text.
+const urlLine = "sind ui: "
+
 // Options configure Run.
 type Options struct {
 	// Port to listen on; 0 picks a free one.
@@ -172,7 +177,7 @@ func Run(ctx context.Context, o Options) error {
 		}
 		defer func() { _ = inst.Retire(ctx) }()
 	}
-	_, _ = fmt.Fprintf(o.Stderr, "sind ui: %s\nPress Ctrl-C to stop.\n", url)
+	_, _ = fmt.Fprintf(o.Stderr, "%s%s\nPress Ctrl-C to stop.\n", urlLine, url)
 	if o.Demo {
 		_, _ = fmt.Fprintln(o.Stderr, "Demo: made-up clusters; nothing touches Docker.")
 	}
