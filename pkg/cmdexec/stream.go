@@ -56,10 +56,11 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	return &Process{Stdout: stdout, cmd: cmd}, nil
 }
 
-// Close kills the process (if still running) and waits for it to exit.
-// If the Process was created without a command (e.g. in tests), Close
-// just closes Stdout. The "signal: killed" error from the intentional
-// Kill is suppressed so normal shutdown returns nil.
+// Close kills the process (if still running), waits for it to exit and
+// closes Stdout, in either mode of Start. If the Process was created
+// without a command (e.g. in tests), Close just closes Stdout. The
+// "signal: killed" error from the intentional Kill is suppressed so normal
+// shutdown returns nil.
 func (p *Process) Close() error {
 	if p.cmd == nil {
 		return p.Stdout.Close()
@@ -71,6 +72,9 @@ func (p *Process) Close() error {
 		}
 	}
 	err := p.cmd.Wait()
+	// Wait closes the pipe of StdoutPipe, but not the one Start made under
+	// WithStderrMerged, which would stay open until a finalizer ran.
+	_ = p.Stdout.Close()
 	if killed && isKillSignalError(err) {
 		return nil
 	}

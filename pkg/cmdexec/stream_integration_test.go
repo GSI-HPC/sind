@@ -7,6 +7,8 @@ package cmdexec_test
 import (
 	"bufio"
 	"context"
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -104,4 +106,26 @@ func TestStart_StderrMerged(t *testing.T) {
 func TestStart_StderrMergedNotFound(t *testing.T) {
 	_, err := cmdexec.Start(cmdexec.WithStderrMerged(t.Context()), "/nonexistent/command")
 	assert.Error(t, err)
+}
+
+// Close releases Stdout in both modes of Start: a read after Close fails
+// as on a closed file, also under WithStderrMerged, whose pipe Wait does
+// not close.
+func TestProcess_Close_ClosesStdout(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		ctx  context.Context
+	}{
+		{"pipe", t.Context()},
+		{"merged", cmdexec.WithStderrMerged(t.Context())},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			proc, err := cmdexec.Start(tt.ctx, "sleep", "60")
+			require.NoError(t, err)
+			require.NoError(t, proc.Close())
+			_, err = proc.Stdout.Read(make([]byte, 1))
+			assert.ErrorIs(t, err, os.ErrClosed)
+			assert.NotErrorIs(t, err, io.EOF)
+		})
+	}
 }
