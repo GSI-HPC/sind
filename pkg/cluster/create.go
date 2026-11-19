@@ -440,8 +440,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// Start event watcher before creating nodes so it captures all
 	// container start events. If the watcher fails to start, fall back
 	// to poll-only mode.
-	prefix := ContainerPrefix(realm, cfg.Name)
-	watcher, stopWatcher := startWatcher(ctx, client, prefix, cfg.Name)
+	watcher, stopWatcher := startWatcher(ctx, client, realm, cfg.Name)
 	defer stopWatcher()
 
 	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, cfg.Name, sshPubKey, nodeConfigs, rd, watcher)
@@ -973,13 +972,14 @@ func enableService(ctx context.Context, client *docker.Client, name docker.Conta
 	return nil
 }
 
-// startWatcher creates and starts an event watcher for the given cluster.
+// startWatcher creates and starts an event watcher for the given cluster of
+// realm.
 // If the watcher fails to start (e.g. docker events unavailable), nil is
 // returned and the caller falls back to poll-only mode. The returned stop
 // function cancels the watcher and waits for its goroutines to exit.
-func startWatcher(ctx context.Context, client *docker.Client, containerPrefix, clusterName string) (w *monitor.Watcher, stop func()) {
+func startWatcher(ctx context.Context, client *docker.Client, realm, clusterName string) (w *monitor.Watcher, stop func()) {
 	watchCtx, cancel := context.WithCancel(ctx)
-	w = monitor.NewWatcher(client.Executor, containerPrefix, clusterName)
+	w = monitor.NewRealmWatcher(client.Executor, realm, ContainerPrefix(realm, clusterName), clusterName)
 	if err := w.Start(watchCtx, nil); err != nil {
 		cancel()
 		sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "event watcher not available, using poll-only mode", "err", err)

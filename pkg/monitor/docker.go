@@ -87,15 +87,27 @@ func (m *DockerMonitor) extractShortName(containerName string) (string, bool) {
 }
 
 // DockerEventsArgs returns the docker CLI arguments for streaming container
-// events for the given cluster. Only the actions in dockerActionMap are
-// asked for: every docker exec of the readiness probes would otherwise
-// send exec_create, exec_start and exec_die events to parse and drop.
+// events for the clusters of the given name, of every realm
+// (DockerRealmEventsArgs). Only the actions in dockerActionMap are asked
+// for: every docker exec of the readiness probes would otherwise send
+// exec_create, exec_start and exec_die events to parse and drop.
 func DockerEventsArgs(clusterName string) []string {
+	return DockerRealmEventsArgs("", clusterName)
+}
+
+// DockerRealmEventsArgs is DockerEventsArgs for the cluster of one realm,
+// or of every realm when realm is empty. The daemon requires both label
+// filters to match, so the events of a same-named cluster of another realm
+// do not reach the stream.
+func DockerRealmEventsArgs(realm, clusterName string) []string {
 	args := []string{
 		"events",
 		"--filter", "type=container",
-		"--filter", "label=sind.cluster=" + clusterName,
 	}
+	if realm != "" {
+		args = append(args, "--filter", "label=sind.realm="+realm)
+	}
+	args = append(args, "--filter", "label=sind.cluster="+clusterName)
 	for _, action := range slices.Sorted(maps.Keys(dockerActionMap)) {
 		args = append(args, "--filter", "event="+action)
 	}

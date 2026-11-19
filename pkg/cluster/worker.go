@@ -337,8 +337,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}()
 
 	// Start event watcher before creating nodes.
-	prefix := ContainerPrefix(realm, opts.ClusterName)
-	watcher, stopWatcher := startWatcher(ctx, client, prefix, opts.ClusterName)
+	watcher, stopWatcher := startWatcher(ctx, client, realm, opts.ClusterName)
 	defer stopWatcher()
 
 	// Create nodes, start systemd monitors, and wait for readiness.

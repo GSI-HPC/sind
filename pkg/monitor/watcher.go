@@ -18,6 +18,7 @@ import (
 // and broadcasts events to subscribers.
 type Watcher struct {
 	executor    cmdexec.Executor
+	realm       string
 	clusterName string
 	prefix      string
 
@@ -35,9 +36,18 @@ type Watcher struct {
 
 // NewWatcher creates a Watcher for the given cluster. The executor is used
 // to start long-lived streaming processes (docker events, busctl monitor).
+// Its docker events stream asks for the events of the clusters of that
+// name in every realm; NewRealmWatcher asks for those of one realm.
 func NewWatcher(executor cmdexec.Executor, containerPrefix, clusterName string) *Watcher {
+	return NewRealmWatcher(executor, "", containerPrefix, clusterName)
+}
+
+// NewRealmWatcher is NewWatcher for the cluster of one realm, or of every
+// realm when realm is empty.
+func NewRealmWatcher(executor cmdexec.Executor, realm, containerPrefix, clusterName string) *Watcher {
 	return &Watcher{
 		executor:    executor,
+		realm:       realm,
 		clusterName: clusterName,
 		prefix:      containerPrefix,
 		internalCh:  make(chan Event, 64),
@@ -103,7 +113,7 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 	log := sindlog.From(ctx)
 
 	// Start docker events monitor.
-	dockerArgs := DockerEventsArgs(w.clusterName)
+	dockerArgs := DockerRealmEventsArgs(w.realm, w.clusterName)
 	proc, err := w.executor.Start(ctx, "docker", dockerArgs...)
 	if err != nil {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start docker events monitor", "err", err)

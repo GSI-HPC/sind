@@ -1334,11 +1334,13 @@ func TestStartWatcher_Success(t *testing.T) {
 	m := &mock.Executor{OnStart: pipes.OnStart}
 	client := docker.NewClient(m)
 
-	w, stop := startWatcher(t.Context(), client, "sind-dev-", "dev")
+	w, stop := startWatcher(t.Context(), client, "sind", "dev")
 	assert.NotNil(t, w)
 	// Close pipe writers to unblock scanner reads before stopping.
 	pipes.CloseAll()
 	stop()
+	require.NotEmpty(t, m.Calls)
+	assert.Equal(t, monitor.DockerRealmEventsArgs("sind", "dev"), m.Calls[0].Args, "the stream asks for the realm's cluster only")
 }
 
 func TestStartWatcher_Fallback(t *testing.T) {
@@ -1351,7 +1353,7 @@ func TestStartWatcher_Fallback(t *testing.T) {
 	}
 	client := docker.NewClient(m)
 
-	w, stop := startWatcher(t.Context(), client, "sind-dev-", "dev")
+	w, stop := startWatcher(t.Context(), client, "sind", "dev")
 	defer stop()
 	assert.Nil(t, w)
 }
@@ -1426,7 +1428,7 @@ func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
 			defer cancel()
 			var watcher *monitor.Watcher
 			if tt.watch {
-				w, stop := startWatcher(ctx, client, "sind-dev-", "dev")
+				w, stop := startWatcher(ctx, client, "sind", "dev")
 				require.NotNil(t, w)
 				defer func() {
 					cancel()
