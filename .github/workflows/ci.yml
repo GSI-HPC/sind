@@ -146,6 +146,29 @@ jobs:
       - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
+  # The go line of go.mod is the oldest Go a library caller may build sind
+  # with; the toolchain line, which the other jobs use, does not reach
+  # them. Build and vet the public packages, tests included, with it.
+  oldest-go:
+    name: Oldest Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build and vet pkg/ with the go line of go.mod
+        run: |
+          GOTOOLCHAIN=go$(sed -n 's/^go //p' go.mod)
+          export GOTOOLCHAIN
+          go version
+          go build ./pkg/...
+          go vet ./pkg/...
+
   image-targets:
     name: Image Targets
     runs-on: ubuntu-latest
