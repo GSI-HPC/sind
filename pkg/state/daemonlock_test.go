@@ -133,26 +133,45 @@ func (d *fakeDaemon) onCall(args []string, _ string) mock.Result {
 	return mock.Result{Err: fmt.Errorf("fake daemon: unexpected call %v", args)}
 }
 
-// fakeProc returns a stand-in for /proc with a boot ID and a PID namespace.
+// fakeProc returns a stand-in for /proc with a boot ID, a PID namespace,
+// and this process as self, which started at testStart.
 func fakeProc(t *testing.T, bootID, pidNS string) string {
 	t.Helper()
 	root := t.TempDir()
 	random := filepath.Join(root, "sys", "kernel", "random")
 	require.NoError(t, os.MkdirAll(random, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(random, "boot_id"), []byte(bootID+"\n"), 0o644))
-	ns := filepath.Join(root, "self", "ns")
+	procStat(t, root, os.Getpid(), testStart)
+	ns := filepath.Join(root, strconv.Itoa(os.Getpid()), "ns")
 	require.NoError(t, os.MkdirAll(ns, 0o755))
 	require.NoError(t, os.Symlink(pidNS, filepath.Join(ns, "pid")))
+	require.NoError(t, os.Symlink(strconv.Itoa(os.Getpid()), filepath.Join(root, "self")))
 	return root
+}
+
+// procStat writes the stat file of process pid into the fake /proc root,
+// with the start time start in field 22, and a command name with the
+// parentheses and spaces that the parsing must skip.
+func procStat(t *testing.T, root string, pid int, start string) {
+	t.Helper()
+	dir := filepath.Join(root, strconv.Itoa(pid))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	stat := strconv.Itoa(pid) + " (sind (x) 1) S 1 2 2 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 9 0 " + start + " 1000 200 18446744073709551615\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o644))
 }
 
 const (
 	testBootID = "6b1f3a52-0b7a-4d43-9a43-0c2f7f6e3d11"
 	testPIDNS  = "pid:[4026531836]"
+	// testStart is the start time of this process in the fake /proc,
+	// testHolderStart that of the holders of holderLabels.
+	testStart       = "618810"
+	testHolderStart = "500100"
 )
 
 // holderLabels returns the labels of a lock that a process with the given
-// host and PID holds, in the fake /proc's boot and PID namespace.
+// host and PID holds, in the fake /proc's boot and PID namespace, which
+// started at testHolderStart.
 func holderLabels(host string, pid int) docker.Labels {
 	return docker.Labels{
 		labelRealm:       "sind",
@@ -162,6 +181,7 @@ func holderLabels(host string, pid int) docker.Labels {
 		labelLockPID:     strconv.Itoa(pid),
 		labelLockBootID:  testBootID,
 		labelLockPIDNS:   testPIDNS,
+		labelLockStart:   testHolderStart,
 	}
 }
 
@@ -231,6 +251,7 @@ func TestLockRealm_DaemonAcquireRelease(t *testing.T) {
 		labelLockPID:     strconv.Itoa(os.Getpid()),
 		labelLockBootID:  testBootID,
 		labelLockPIDNS:   testPIDNS,
+		labelLockStart:   testStart,
 	}, n.labels)
 
 	unlock()
@@ -366,7 +387,9 @@ func TestLockRealm_DaemonLiveHolderHere(t *testing.T) {
 	host, _ := os.Hostname()
 	d.add("sind-lock", holderLabels(host, 4242))
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	proc := fakeProc(t, testBootID, testPIDNS)
+	procStat(t, proc, 4242, testHolderStart)
+	opts := daemonOpts(t, d.client(), proc, &w)
 	opts.alive = func(int) bool { return true }
 	opts.hintAfter = time.Millisecond
 
@@ -390,6 +413,107 @@ func TestLockRealm_DaemonLiveHolderHere(t *testing.T) {
 	require.Len(t, w.waits(), 1)
 	assert.Equal(t, 4242, w.waits()[0].PID)
 	assert.Empty(t, w.warnings())
+}
+
+// TestLockRealm_DaemonReusedPID checks that a lock whose holder's PID
+// another process has taken since, or this one, is taken over: the process
+// with the PID started at another time than the holder.
+func TestLockRealm_DaemonReusedPID(t *testing.T) {
+	host, _ := os.Hostname()
+	for name, pid := range map[string]int{"another process": 4242, "this process": os.Getpid()} {
+		t.Run(name, func(t *testing.T) {
+			d := newFakeDaemon(t)
+			d.add("sind-lock", holderLabels(host, pid))
+			var w warnings
+			proc := fakeProc(t, testBootID, testPIDNS)
+			procStat(t, proc, 4242, "999999")
+			opts := daemonOpts(t, d.client(), proc, &w)
+			opts.alive = func(int) bool { return true }
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			unlock, err := LockRealm(ctx, "sind", opts)
+			require.NoError(t, err)
+			defer unlock()
+
+			assert.Empty(t, w.waits(), "a lock whose holder is gone is no wait")
+			require.Len(t, w.warnings(), 1)
+			assert.Contains(t, w.warnings()[0], fmt.Sprintf("removing the realm lock of sind create cluster dev (pid %d on %s", pid, host))
+			assert.Equal(t, strconv.Itoa(os.Getpid()), d.network("sind-lock").labels[labelLockPID])
+		})
+	}
+}
+
+// TestLockRealm_DaemonUnsureHolderHere checks that a holder on this host
+// whose PID is taken, but which cannot be told from a later process of that
+// PID, keeps its lock, and that a client that waits for it long enough is
+// told how to remove it.
+func TestLockRealm_DaemonUnsureHolderHere(t *testing.T) {
+	host, _ := os.Hostname()
+	earlier := holderLabels(host, 4242)
+	delete(earlier, labelLockStart)
+	d := newFakeDaemon(t)
+	d.add("sind-lock", earlier)
+	var w warnings
+	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts.alive = func(int) bool { return true }
+	opts.hintAfter = 20 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	_, err := LockRealm(ctx, "sind", opts)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.NotNil(t, d.network("sind-lock"), "the lock stays")
+	require.Len(t, w.warnings(), 1, "the hint is given once")
+	assert.Contains(t, w.warnings()[0], "the realm lock is still held by sind create cluster dev (pid 4242 on "+host)
+}
+
+func TestHolderRuns(t *testing.T) {
+	host, _ := os.Hostname()
+	proc := fakeProc(t, testBootID, testPIDNS)
+	procStat(t, proc, 4242, testHolderStart)
+	me := self(proc)
+	// A /proc whose self is another PID gives this process no start time.
+	noStart := me
+	noStart.start = ""
+	holder := func(pid int, start string) *LockHolder {
+		h := holderOf(&docker.NetworkMeta{Labels: holderLabels(host, pid)})
+		h.start = start
+		return h
+	}
+	alive := func(int) bool { return true }
+	dead := func(int) bool { return false }
+
+	for name, tt := range map[string]struct {
+		me         process
+		h          *LockHolder
+		alive      func(int) bool
+		runs, sure bool
+	}{
+		"elsewhere":                     {me, holder(4242, testHolderStart), nil, true, false},
+		"same start":                    {me, holder(4242, testHolderStart), alive, true, true},
+		"other start":                   {me, holder(4242, "1"), alive, false, true},
+		"PID free":                      {me, holder(4242, testHolderStart), dead, false, true},
+		"earlier sind":                  {me, holder(4242, ""), alive, true, false},
+		"stat hidden":                   {me, holder(4343, testHolderStart), alive, true, false},
+		"no start of its own":           {noStart, holder(4242, testHolderStart), alive, true, false},
+		"another goroutine of this one": {me, holder(os.Getpid(), testStart), nil, true, true},
+		"own PID, other start":          {me, holder(os.Getpid(), "1"), nil, false, true},
+		"own PID, earlier sind":         {me, holder(os.Getpid(), ""), nil, false, true},
+		"own PID, no start of its own":  {noStart, holder(os.Getpid(), ""), nil, true, false},
+	} {
+		if name == "elsewhere" {
+			tt.h.Host = "ci-runner-7"
+		}
+		o := &LockOptions{procRoot: proc, alive: tt.alive}
+		if tt.alive == nil {
+			o.alive = func(int) bool { t.Errorf("%s: checked a PID it need not check", name); return true }
+		}
+		runs, sure := o.holderRuns(tt.me, tt.h)
+		assert.Equal(t, tt.runs, runs, name+": runs")
+		assert.Equal(t, tt.sure, sure, name+": sure")
+	}
 }
 
 // TestLockRealm_DaemonHolderElsewhere checks that a lock held from another
@@ -705,7 +829,7 @@ func TestHolderOf(t *testing.T) {
 	h := holderOf(&docker.NetworkMeta{ID: "net-id", Created: since, Labels: holderLabels("box", 42)})
 	assert.Equal(t, &LockHolder{
 		Command: "sind create cluster dev", Host: "box", PID: 42, Since: since,
-		id: "net-id", token: "other-token", bootID: testBootID, pidNS: testPIDNS,
+		id: "net-id", token: "other-token", bootID: testBootID, pidNS: testPIDNS, start: testHolderStart,
 	}, h)
 
 	h = holderOf(&docker.NetworkMeta{Labels: docker.Labels{labelLockPID: "x"}})
@@ -715,11 +839,37 @@ func TestHolderOf(t *testing.T) {
 func TestSelf(t *testing.T) {
 	host, _ := os.Hostname()
 	p := self(fakeProc(t, testBootID, testPIDNS))
-	assert.Equal(t, process{host: host, bootID: testBootID, pidNS: testPIDNS, pid: os.Getpid()}, p)
+	assert.Equal(t, process{host: host, bootID: testBootID, pidNS: testPIDNS, pid: os.Getpid(), start: testStart}, p)
 
 	// What cannot be read stays empty.
 	p = self(t.TempDir())
 	assert.Equal(t, process{host: host, pid: os.Getpid()}, p)
+
+	// A /proc of another PID namespace, whose self is another PID, gives no
+	// start time, as its PIDs are not the ones this process signals.
+	proc := t.TempDir()
+	procStat(t, proc, os.Getpid(), testStart)
+	require.NoError(t, os.Symlink("7", filepath.Join(proc, "self")))
+	assert.Empty(t, self(proc).start)
+
+	p = self("/proc")
+	assert.NotEmpty(t, p.start, "the start time of this process")
+	assert.Equal(t, p.start, startTime("/proc", os.Getpid()))
+}
+
+func TestStartTime(t *testing.T) {
+	proc := t.TempDir()
+	procStat(t, proc, 42, "123456")
+	assert.Equal(t, "123456", startTime(proc, 42))
+
+	assert.Empty(t, startTime(proc, 43), "no such process")
+	for name, stat := range map[string]string{
+		"no command name": "42 S 1 2 2 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 9 0 123456\n",
+		"too few fields":  "42 (sind) S 1 2 2 0\n",
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(proc, "42", "stat"), []byte(stat), 0o644))
+		assert.Empty(t, startTime(proc, 42), name)
+	}
 }
 
 func TestProcessSees(t *testing.T) {

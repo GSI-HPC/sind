@@ -38,9 +38,9 @@ type LockOptions struct {
 	OnWait func(holder *LockHolder)
 	// OnWarning, when set, receives the warnings meant for the user: a
 	// daemon lock whose holder no longer runs, which LockRealm removes; a
-	// holder that LockRealm cannot check and that keeps the lock for long,
-	// with the command that removes the lock; and a lock that the unlock
-	// function could not remove. LockRealm reports them through the
+	// holder that LockRealm cannot tell for sure still runs and that keeps
+	// the lock for long, with the command that removes the lock; and a lock
+	// that the unlock function could not remove. LockRealm reports them through the
 	// context (sindlog.Warn) instead when it is nil.
 	OnWarning func(msg string)
 
@@ -105,14 +105,16 @@ func (o *LockOptions) withDefaults() LockOptions {
 // holds the file lock, it calls opts.OnWait, and when another client holds
 // the daemon lock, it calls opts.OnWait with the holder, and again with
 // each new holder; then it tries again, at intervals that grow to two
-// seconds. Callers take a freed lock in no particular order. A holder that runs on
-// this host, in this PID namespace and since this boot, but no longer
-// exists, was killed before it could release the lock: LockRealm removes
-// its lock and says so through opts.OnWarning. Whether a holder elsewhere
-// still runs it cannot tell, so it leaves that lock alone, and once that
-// holder has had it for a minute of the wait, names the command that
-// removes it, through opts.OnWarning. The
-// waits have no timeout; when ctx ends, LockRealm returns ctx.Err().
+// seconds. Callers take a freed lock in no particular order. A holder that
+// ran on this host, in this PID namespace and since this boot, but whose
+// PID is free, or taken by a process that started at another time, was
+// killed before it could release the lock: LockRealm removes its lock and
+// says so through opts.OnWarning. Whether a holder elsewhere still runs it
+// cannot tell, nor whether a holder of an earlier sind, which records no
+// start time, is the process that has its PID now. It leaves such a lock
+// alone, and once that holder has had it for a minute of the wait, names
+// the command that removes it, through opts.OnWarning. The waits have no
+// timeout; when ctx ends, LockRealm returns ctx.Err().
 //
 // The returned function removes the daemon lock, without ctx, so that it
 // works after Ctrl+C as well, and then releases the file lock. A second

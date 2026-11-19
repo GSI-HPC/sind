@@ -67,7 +67,7 @@ The images do not follow `defaults.image`. sind pins each of them and pulls them
 
 While a sind command creates or deletes clusters or workers, connects or disconnects containers, or powers nodes on, it holds the realm's lock on the Docker daemon: this network, which it creates when it takes the lock and removes when it releases it (see [Advisory locking]({{< relref "/configuration/realms#advisory-locking" >}})). Docker refuses a second network of the same name, so only one command at a time holds it. A configuration-only network (`docker network create --config-only`) has the driver `null`: it takes no subnet from the address pools, has no bridge device, and no container joins it.
 
-Besides `sind.realm`, its labels name the command that holds it (`sind.lock.command`, `sind.lock.host`, `sind.lock.pid`), let sind tell whether a holder on the same host still runs (`sind.lock.boot-id`, `sind.lock.pid-ns`), and mark one acquisition (`sind.lock.token`). `sind get networks` does not list it.
+Besides `sind.realm`, its labels name the command that holds it (`sind.lock.command`, `sind.lock.host`, `sind.lock.pid`), let sind tell whether a holder on the same host still runs (`sind.lock.boot-id`, `sind.lock.pid-ns`, and `sind.lock.start`, the start time that tells the holder from a later process of its PID), and mark one acquisition (`sind.lock.token`). `sind get networks` does not list it.
 
 ## Volume mounts
 
