@@ -186,10 +186,27 @@ func TestPower_On_Monitoring(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, f.containers["sind-grafana"].state)
 	assert.Contains(t, written, "grafana.sind.sind")
 
+	// A stack that does not start fails the command of a monitored
+	// cluster, and of one that sind cannot tell.
+	f.nodes = []docker.ContainerListEntry{monitoredNode("dev", "worker-0", "worker")}
 	f.stopped()
 	f.fail["start sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
 	require.ErrorContains(t, err, "starting the monitoring stack")
+
+	f.fail["ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume="] = mock.Result{Err: testutil.ExitCode1(t)}
+	err = PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
+	require.ErrorContains(t, err, "starting the monitoring stack")
+	delete(f.fail, "ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume=")
+
+	// For a cluster that the stack does not collect, it is a warning.
+	f.nodes = []docker.ContainerListEntry{monitoredNode("prod", "worker-0", "worker")}
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	var warned []string
+	mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+	require.NoError(t, PowerOn(t.Context(), client, mgr, "dev", []string{"worker-0"}))
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], `starting the monitoring stack of realm "sind": starting loki container: `)
 }
 
 // --- Delete ---

@@ -46,7 +46,9 @@ func PowerCut(ctx context.Context, client *docker.Client, realm, clusterName str
 // the realm's mesh DNS and SSH relay if they are stopped, as after a host
 // reboot, and afterwards points the started nodes' mesh DNS records at their
 // addresses: Docker can give a node another address each time it starts.
-// A stopped monitoring stack of the realm starts with the nodes.
+// A stopped monitoring stack of the realm starts with the nodes; one that
+// cannot start or get ready fails the call when the cluster is monitored,
+// and is a warning (meshMgr.Warn) when it is not.
 func PowerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	targets, err := resolveTargets(ctx, client, meshMgr.Realm, clusterName, shortNames)
 	if err != nil {
@@ -125,9 +127,23 @@ func powerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 	// the nodes'.
 	var stackErr error
 	if _, err := startMonitoring(ctx, client, meshMgr); err != nil {
-		stackErr = fmt.Errorf("starting the monitoring stack: %w", err)
+		stackErr = stackFailure(ctx, client, meshMgr, clusterName, err)
 	}
 	return errors.Join(startErr, dnsErr, stackErr)
+}
+
+// stackFailure returns the error of a power command whose start of the
+// realm's monitoring stack failed with err, for a monitored cluster. The
+// stack is the realm's, so for a cluster that it does not collect, which
+// a stack left partial by an interrupted create cannot keep from running,
+// the failure is a warning (meshMgr.Warn), and stackFailure returns nil.
+// When sind cannot tell, it returns the error.
+func stackFailure(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, err error) error {
+	if monitored, lerr := clusterMonitored(ctx, client, meshMgr.Realm, clusterName); lerr == nil && !monitored {
+		meshMgr.Warn(ctx, fmt.Sprintf("starting the monitoring stack of realm %q: %v", meshMgr.Realm, err))
+		return nil
+	}
+	return fmt.Errorf("starting the monitoring stack: %w", err)
 }
 
 // refreshDNSRecords points the mesh DNS records of the given running nodes
