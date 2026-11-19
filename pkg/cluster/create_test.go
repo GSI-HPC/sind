@@ -470,13 +470,15 @@ func TestCreate_BackupController(t *testing.T) {
 }
 
 func TestCreate_BackupControllerNotReady(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-	defer cancel()
+	// The wait limit counts from the start of the nodes, so the steps
+	// before them do not take from it, however slow the test runs.
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	_, _, err := runCreate(ctx, t, cfg, false,
+	cfg.Wait = 500 * time.Millisecond
+	_, _, err := runCreate(t.Context(), t, cfg, false,
 		scontrolPing("Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is DOWN\n"))
 
+	require.ErrorIs(t, err, ErrNotReady)
 	require.ErrorContains(t, err, "controller-backup is DOWN")
 }
 

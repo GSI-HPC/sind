@@ -195,10 +195,13 @@ func TestSindDockerUnreachableAndRecovers(t *testing.T) {
 	assert.Equal(t, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?", d.Err)
 	assert.Empty(t, f.st.Snapshot().Realms)
 
-	// Retries come slowly: the retry interval, not a busy loop.
-	n := f.fake.count("ps")
+	// Retries come slowly: the retry interval, not a busy loop. However
+	// long the sleep takes, it holds at most one retry more than whole
+	// intervals.
+	n, slept := f.fake.count("ps"), time.Now()
 	time.Sleep(25 * time.Millisecond)
-	assert.LessOrEqual(t, f.fake.count("ps")-n, 1)
+	retries := f.fake.count("ps") - n
+	assert.LessOrEqual(t, retries, int(time.Since(slept)/f.sind.Retry)+1)
 
 	f.fake.set(func() { f.fake.down = false })
 	waitFor(t, "recovered", func() bool { return f.st.Snapshot().Docker.Err == "" && len(f.st.Snapshot().Clusters["sind"]) == 1 })

@@ -52,13 +52,14 @@ func TestLockRealm(t *testing.T) {
 			unlock2()
 		}()
 
-		// Second lock should not be acquired while first is held.
+		// The second lock waits, and says so once, while the first is held.
+		require.Eventually(t, func() bool { return waited.Load() > 0 }, 5*time.Second, time.Millisecond, "OnWait is called before blocking")
 		select {
 		case <-acquired:
 			t.Fatal("second lock acquired while first is held")
 		case <-time.After(100 * time.Millisecond):
 		}
-		assert.Equal(t, int32(1), waited.Load(), "OnWait is called once before blocking")
+		assert.Equal(t, int32(1), waited.Load(), "OnWait is called once")
 
 		unlock1()
 
