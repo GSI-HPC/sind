@@ -14,6 +14,10 @@ Development follows test-driven development:
 3. Refactor
 4. Commit
 
+## Unit-test sandbox
+
+`make test` runs the unit tests in a firejail sandbox, so that a test that forgets to inject a mock fails instead of touching the host. The sandbox blocks `systemctl`, `resolvectl`, the polkit tools, `ssh` and `docker` in `/bin` and `/usr/bin`, and `/run/systemd`. A `docker` found elsewhere on `PATH` reaches no daemon either: the sandbox blocks the daemon sockets in `/run`, in `$XDG_RUNTIME_DIR` (rootless Docker) and in `~/.docker/desktop` (Docker Desktop), removes `DOCKER_HOST` and `DOCKER_CONTEXT`, and points `DOCKER_CONFIG` at no config, so that no context stored in `~/.docker/config.json`, such as Colima's, Podman's or a remote daemon's, is current.
+
 ## Dual-mode tests
 
 Tests run in two modes, controlled by build tags:

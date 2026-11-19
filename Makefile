@@ -19,8 +19,18 @@ export GORACE ?= atexit_sleep_ms=0
 # doctor/mesh/docker/ssh code paths would otherwise read or exec, so a test
 # that forgets to inject a mock fs/executor trips a failure instead of
 # silently touching the runner. /bin/* and /usr/bin/* are both listed for
-# split-/usr portability; firejail ignores missing paths.
+# split-/usr portability; firejail ignores missing paths. A docker CLI found
+# elsewhere on PATH reaches no daemon either: the daemon sockets, rootful,
+# rootless and Docker Desktop's, are blocked, DOCKER_HOST and DOCKER_CONTEXT,
+# which could name another, are removed, and DOCKER_CONFIG points at no
+# config, so that no stored context (Colima, Podman, a remote daemon) is
+# current.
+RUNTIME_DIR   := $(or $(XDG_RUNTIME_DIR),/run/user/$(shell id -u))
 FIREJAIL_TEST := firejail --quiet --noprofile \
+	--rmenv=DOCKER_HOST --rmenv=DOCKER_CONTEXT --env=DOCKER_CONFIG=/nonexistent \
+	--blacklist=/run/docker.sock --blacklist=/var/run/docker.sock \
+	--blacklist=$(RUNTIME_DIR)/docker.sock \
+	--blacklist=$(HOME)/.docker/desktop/docker.sock \
 	--blacklist=/run/systemd \
 	--blacklist=/bin/systemctl --blacklist=/usr/bin/systemctl \
 	--blacklist=/bin/pkcheck --blacklist=/usr/bin/pkcheck \
