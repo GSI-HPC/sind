@@ -499,6 +499,11 @@ func clusterScript(realm, folder, file, content string, dirs, flags []string) st
 	var b strings.Builder
 	fmt.Fprintf(&b, "cfg=\"${XDG_STATE_HOME:-$HOME/.local/state}/sind/ui/configs/%s/%s.yaml\"\n", folder, file)
 	b.WriteString("mkdir -p \"$(dirname \"$cfg\")\"\n")
+	// The YAML of the editor can end without a newline; the tag stands on
+	// a line of its own all the same.
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
 	fmt.Fprintf(&b, "(umask 077 && cat >\"$cfg\") <<'%s'\n%s%s\n", tag, content, tag)
 	for _, d := range dirs {
 		fmt.Fprintf(&b, "mkdir -p %s\n", quoteWord(d))

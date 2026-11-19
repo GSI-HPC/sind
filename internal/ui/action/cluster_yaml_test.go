@@ -33,6 +33,15 @@ func TestBuildCreateCluster_YAML(t *testing.T) {
 	assert.Equal(t, []string{"/scratch/missing-lab"}, cmd.Dirs, "a missing directory is created")
 }
 
+func TestBuildCreateCluster_YAMLWithoutFinalNewline(t *testing.T) {
+	cmd, err := build(t, "create-cluster", yamlForm("kind: Cluster\nname: lab"))
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Cluster\nname: lab", cmd.Config.Content, "the file as the user wrote it")
+	lines := strings.Split(cmd.Script, "\n")
+	tag := strings.TrimSuffix(strings.TrimPrefix(lines[2], `(umask 077 && cat >"$cfg") <<'`), "'")
+	assert.Equal(t, []string{"kind: Cluster", "name: lab", tag}, lines[3:6], "the tag ends the here-document on a line of its own")
+}
+
 func TestBuildCreateCluster_YAMLLineEnds(t *testing.T) {
 	cmd, err := build(t, "create-cluster", yamlForm("kind: Cluster\r\nname: lab\r\n"))
 	require.NoError(t, err)
