@@ -1631,13 +1631,13 @@ func TestGetInfo(t *testing.T) {
 
 	info, err := mgr.GetInfo(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "sind-mesh", info.Network)
-	assert.Equal(t, "sind-dns", info.DNSContainer)
+	assert.Equal(t, docker.NetworkName("sind-mesh"), info.Network)
+	assert.Equal(t, docker.ContainerName("sind-dns"), info.DNSContainer)
 	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "sind.sind", info.DNSZone)
 	assert.Equal(t, DNSImage, info.DNSImage)
-	assert.Equal(t, "sind-ssh", info.SSHContainer)
-	assert.Equal(t, "sind-ssh-config", info.SSHVolume)
+	assert.Equal(t, docker.ContainerName("sind-ssh"), info.SSHContainer)
+	assert.Equal(t, docker.VolumeName("sind-ssh-config"), info.SSHVolume)
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest-old", info.SSHImage, "the image the relay runs")
 }
 
@@ -1648,8 +1648,8 @@ func TestGetInfo_CustomRealm(t *testing.T) {
 
 	info, err := mgr.GetInfo(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "ci-mesh", info.Network)
-	assert.Equal(t, "ci-dns", info.DNSContainer)
+	assert.Equal(t, docker.NetworkName("ci-mesh"), info.Network)
+	assert.Equal(t, docker.ContainerName("ci-dns"), info.DNSContainer)
 	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "ci.sind", info.DNSZone)
 }

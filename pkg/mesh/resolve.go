@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -53,11 +54,11 @@ const bridgeIDPrefixLen = 12
 
 // findBridgeInterface returns the Linux bridge interface name for a Docker
 // network ID. Docker names bridges "br-" + first 12 chars of the network ID.
-func findBridgeInterface(networkID string) (string, error) {
+func findBridgeInterface(networkID docker.NetworkID) (string, error) {
 	if len(networkID) < bridgeIDPrefixLen {
 		return "", fmt.Errorf("network ID too short: %q", networkID)
 	}
-	name := "br-" + networkID[:bridgeIDPrefixLen]
+	name := "br-" + string(networkID[:bridgeIDPrefixLen])
 	if _, err := os.Stat(filepath.Join(sysClassNet, name)); err != nil {
 		return "", fmt.Errorf("bridge interface %s not found: %w", name, err)
 	}

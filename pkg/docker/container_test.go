@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -1039,7 +1040,7 @@ func TestCopyFilesToContainer(t *testing.T) {
 
 	files := map[string]File{
 		"munge.key": {Content: []byte("secret"), Mode: 0600},
-		"config":    {Content: []byte("data"), Mode: 0644},
+		"config":    {Content: []byte("data"), Mode: fs.FileMode(0644)},
 	}
 	err := c.CopyFilesToContainer(t.Context(), testContainerName, "/etc", files)
 	require.NoError(t, err)

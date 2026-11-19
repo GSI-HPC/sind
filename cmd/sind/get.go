@@ -372,13 +372,13 @@ func runGetMesh(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, fromMesh((*mesh.Manager).GetInfo), func(cmd *cobra.Command, info *mesh.Info, _ string) error {
 		t := newTable("PROPERTY", "VALUE")
 		for _, row := range [][2]string{
-			{"network", info.Network},
-			{"dns-container", info.DNSContainer},
+			{"network", string(info.Network)},
+			{"dns-container", string(info.DNSContainer)},
 			{"dns-ip", info.DNSIP},
 			{"dns-zone", info.DNSZone},
 			{"dns-image", info.DNSImage},
-			{"ssh-container", info.SSHContainer},
-			{"ssh-volume", info.SSHVolume},
+			{"ssh-container", string(info.SSHContainer)},
+			{"ssh-volume", string(info.SSHVolume)},
 			{"ssh-image", info.SSHImage},
 		} {
 			t.Add(row[0], cell(row[1]))

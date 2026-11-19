@@ -813,14 +813,14 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 
 // Info holds information about the mesh infrastructure for a realm.
 type Info struct {
-	Network      string `json:"network"`
-	DNSContainer string `json:"dns_container"`
-	DNSIP        string `json:"dns_ip"`
-	DNSZone      string `json:"dns_zone"`
-	DNSImage     string `json:"dns_image"`
-	SSHContainer string `json:"ssh_container"`
-	SSHVolume    string `json:"ssh_volume"`
-	SSHImage     string `json:"ssh_image"`
+	Network      docker.NetworkName   `json:"network"`
+	DNSContainer docker.ContainerName `json:"dns_container"`
+	DNSIP        string               `json:"dns_ip"`
+	DNSZone      string               `json:"dns_zone"`
+	DNSImage     string               `json:"dns_image"`
+	SSHContainer docker.ContainerName `json:"ssh_container"`
+	SSHVolume    docker.VolumeName    `json:"ssh_volume"`
+	SSHImage     string               `json:"ssh_image"`
 }
 
 // requireMeshContainer returns an error if the given mesh container does not
@@ -860,13 +860,13 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	}
 
 	info := &Info{
-		Network:      string(netName),
-		DNSContainer: string(dnsName),
+		Network:      netName,
+		DNSContainer: dnsName,
 		DNSIP:        dnsInfo.IPs[netName],
 		DNSZone:      m.Realm + ".sind",
 		DNSImage:     dnsInfo.ImageRef,
-		SSHContainer: string(m.SSHContainerName()),
-		SSHVolume:    string(m.SSHVolumeName()),
+		SSHContainer: m.SSHContainerName(),
+		SSHVolume:    m.SSHVolumeName(),
 	}
 	if sshInfo != nil {
 		info.SSHImage = sshInfo.ImageRef

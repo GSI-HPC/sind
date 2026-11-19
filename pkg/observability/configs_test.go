@@ -3,6 +3,7 @@
 package observability
 
 import (
+	"io/fs"
 	"maps"
 	"slices"
 	"testing"
@@ -46,7 +47,7 @@ func TestServiceFiles(t *testing.T) {
 			dir, files := serviceFiles("dev", tt.s, "// config\n")
 			assert.Equal(t, tt.dir, dir)
 			for name, f := range files {
-				assert.Equal(t, int64(0o644), f.Mode, name)
+				assert.Equal(t, fs.FileMode(0o644), f.Mode, name)
 			}
 			if tt.names != nil {
 				require.Len(t, files, 1)

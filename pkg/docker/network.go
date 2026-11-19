@@ -200,7 +200,7 @@ func (c *Client) DisconnectAll(ctx context.Context, name NetworkName) error {
 // Gateway and IPRange are those of its first IPAM configuration; IPRange is
 // empty unless the user configured one.
 type NetworkInfo struct {
-	ID      string
+	ID      NetworkID
 	Name    NetworkName
 	Driver  string
 	Subnet  string
@@ -262,7 +262,7 @@ func (c *Client) InspectNetworks(ctx context.Context, names ...NetworkName) ([]*
 	}
 	infos := make([]*NetworkInfo, 0, len(results))
 	for _, r := range results {
-		info := &NetworkInfo{ID: r.ID, Name: NetworkName(r.Name), Driver: r.Driver, Labels: r.Labels}
+		info := &NetworkInfo{ID: NetworkID(r.ID), Name: NetworkName(r.Name), Driver: r.Driver, Labels: r.Labels}
 		if len(r.IPAM.Config) > 0 {
 			info.Subnet = r.IPAM.Config[0].Subnet
 			info.Gateway = r.IPAM.Config[0].Gateway

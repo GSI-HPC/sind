@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"path"
 	"slices"
@@ -515,7 +516,7 @@ type FileContents map[string][]byte
 // File represents a file to copy into a container with explicit permissions.
 type File struct {
 	Content []byte
-	Mode    int64 // e.g. 0644, 0600
+	Mode    fs.FileMode // permission bits, e.g. 0644, 0600
 }
 
 // CopyFilesToContainer writes files into a container directory via docker cp.
@@ -544,7 +545,7 @@ func buildFilesTar(w io.Writer, files map[string]File) error {
 			}
 		}
 		f := files[name]
-		if err := tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: f.Mode}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: int64(f.Mode.Perm())}); err != nil {
 			return fmt.Errorf("writing tar header for %s: %w", name, err)
 		}
 		if _, err := tw.Write(f.Content); err != nil {

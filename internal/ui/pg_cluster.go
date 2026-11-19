@@ -417,8 +417,8 @@ func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
 	}
 	if m.Info != nil {
 		rows = append(rows,
-			pgNameRow{Label: "DNS server", Value: m.Info.DNSIP, Note: "The container " + m.Info.DNSContainer + " on the mesh network.", Copy: true},
-			pgNameRow{Label: "SSH relay", Value: m.Info.SSHContainer, Note: "sind ssh goes through it.", Copy: true},
+			pgNameRow{Label: "DNS server", Value: m.Info.DNSIP, Note: "The container " + string(m.Info.DNSContainer) + " on the mesh network.", Copy: true},
+			pgNameRow{Label: "SSH relay", Value: string(m.Info.SSHContainer), Note: "sind ssh goes through it.", Copy: true},
 		)
 	}
 	munge := pgNameRow{Label: "munge key", Value: slurm.MungeKeyPath, Copy: true,

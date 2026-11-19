@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -84,12 +86,12 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, []string{"gitlab-runner", "kind-control-plane", "my-app", "postgres-test"}, names(ciOut))
 	assert.Equal(t, store.Outside{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "sind-mesh"}}, ciOut[1],
 		"a container on the mesh of another realm is on its network")
-	assert.Equal(t, "sind-mesh", m.Info.Network)
+	assert.Equal(t, docker.NetworkName("sind-mesh"), m.Info.Network)
 	assert.Equal(t, mesh.DNSImage, m.Info.DNSImage)
 	assert.Equal(t, imageNew, m.Info.SSHImage)
 	assert.Len(t, m.Records, 11+2+3)
 	ci := sn.Meshes["ci"]
-	assert.Equal(t, "ci-mesh", ci.Info.Network)
+	assert.Equal(t, docker.NetworkName("ci-mesh"), ci.Info.Network)
 
 	status := sn.Status("sind", "dev")
 	require.NotNil(t, status)

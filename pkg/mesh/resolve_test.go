@@ -99,7 +99,7 @@ func TestDnsPolkitAuthorized_SecondFails(t *testing.T) {
 func TestFindBridgeInterface(t *testing.T) {
 	bridgeName := "br-abcdef012345"
 	fakeBridges(t, bridgeName)
-	networkID := "abcdef012345extra"
+	networkID := docker.NetworkID("abcdef012345extra")
 
 	iface, err := findBridgeInterface(networkID)
 	require.NoError(t, err)
