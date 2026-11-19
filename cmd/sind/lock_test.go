@@ -235,3 +235,67 @@ func TestStderrFrom(t *testing.T) {
 	var buf bytes.Buffer
 	assert.Equal(t, &buf, stderrFrom(withStderr(context.Background(), &buf)))
 }
+
+// TestMutatingCommandsTakeTheRealmLock runs each command that changes a
+// realm while another sind command holds the realm's lock, and checks that
+// it waits for the lock before any docker call that is not the lock's,
+// other than the daemon check of create cluster. The command is
+// interrupted while it waits. The realm is not the default one, so that a
+// command that locks the default realm fails.
+func TestMutatingCommandsTakeTheRealmLock(t *testing.T) {
+	const daemonInfo = "info --format {{json .}}"
+	const realm, lockNet = "ci", "ci-lock"
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, tt := range []struct {
+		args   []string
+		before []string // the docker calls the command makes before the lock
+	}{
+		{[]string{"create", "cluster"}, []string{daemonInfo}},
+		{[]string{"create", "worker"}, nil},
+		{[]string{"delete", "cluster"}, nil},
+		{[]string{"delete", "cluster", "--all"}, nil},
+		{[]string{"delete", "realm"}, nil},
+		{[]string{"delete", "worker", "worker-0"}, nil},
+		{[]string{"connect", "container", "ext"}, nil},
+		{[]string{"disconnect", "container", "ext"}, nil},
+		{[]string{"power", "on", "worker-0"}, nil},
+		{[]string{"power", "reboot", "worker-0"}, nil},
+		{[]string{"power", "cycle", "worker-0"}, nil},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			d := newLockDaemon(t)
+			d.add(lockNet, map[string]string{
+				"sind.lock.token":   "x",
+				"sind.lock.command": "sind create cluster",
+				"sind.lock.host":    "elsewhere",
+				"sind.lock.pid":     "7",
+			})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var others []string
+			lockCalls := 0
+			ctx = withClient(ctx, docker.NewClient(&mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+				if args[0] != "network" || args[len(args)-1] != lockNet && args[len(args)-3] != lockNet {
+					joined := strings.Join(args, " ")
+					others = append(others, joined)
+					if joined == daemonInfo {
+						return mock.Result{Stdout: `{"ServerVersion":"28.0.0","CgroupVersion":"2"}` + "\n"}
+					}
+					return mock.Result{Err: fmt.Errorf("unexpected docker call %v", args)}
+				}
+				if lockCalls++; lockCalls == 4 {
+					cancel()
+				}
+				return d.onCall(args, stdin)
+			}}))
+			var stderr bytes.Buffer
+
+			code := run(ctx, append([]string{"--realm", realm}, tt.args...), &stderr)
+
+			assert.Equal(t, exitInterrupted, code, stderr.String())
+			assert.Contains(t, stderr.String(), `Warning: waiting for another sind command in realm "ci" to finish: sind create cluster (pid 7 on elsewhere`)
+			assert.Contains(t, stderr.String(), "interrupted: taking the realm lock on the Docker daemon: context canceled")
+			assert.Equal(t, tt.before, others)
+		})
+	}
+}
