@@ -20,11 +20,12 @@ import (
 // MinDockerMajor is the minimum required Docker Engine major version.
 const MinDockerMajor = 28
 
+// dockerInstallRemediation is shown when there is no docker CLI.
+var dockerInstallRemediation = fmt.Sprintf("Install Docker Engine %d or later: https://docs.docker.com/engine/install/", MinDockerMajor)
+
 // The remediations for the common reasons the docker CLI cannot reach the
 // daemon.
 const (
-	dockerInstallRemediation = "Install Docker Engine 28 or later: https://docs.docker.com/engine/install/"
-
 	dockerPermissionRemediation = "Add your user to the docker group, then log in again (or run newgrp docker):\n" +
 		"\n" +
 		"sudo usermod -aG docker $USER"

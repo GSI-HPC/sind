@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -271,6 +272,15 @@ func TestRun_DaemonCgroupV1(t *testing.T) {
 	require.Len(t, checks, 4)
 	assert.Equal(t, clidoctor.Check{Name: "cgroupv2", Status: clidoctor.StatusFailed,
 		Detail: "Docker runs containers on cgroup v1 (sind requires cgroupv2)", Remediation: unifiedRemediation}, checks[3])
+}
+
+// TestRemediationsNameTheMinimums checks that the fixes ask for the values
+// the checks compare with.
+func TestRemediationsNameTheMinimums(t *testing.T) {
+	limit := strconv.Itoa(MinInotifyInstances)
+	assert.Equal(t, 2, strings.Count(inotifyRemediation, "fs.inotify.max_user_instances="+limit+"\n")+
+		strings.Count(inotifyRemediation, "fs.inotify.max_user_instances="+limit+" |"), inotifyRemediation)
+	assert.True(t, strings.HasPrefix(dockerInstallRemediation, "Install Docker Engine "+strconv.Itoa(MinDockerMajor)+" or later: "))
 }
 
 // TestRun_Inotify checks the advisory inotify check: a warning below the
