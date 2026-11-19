@@ -139,6 +139,8 @@ func TestDocURL(t *testing.T) {
 func TestUIDocURL(t *testing.T) {
 	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/?via=ui", UIDocURL("usage/progress"))
 	assert.Equal(t, "https://gsi-hpc.github.io/sind/usage/progress/?via=ui#event-log", UIDocURL("usage/progress#event-log"))
+	assert.Empty(t, UIDocURL(""), "no page")
+	assert.Empty(t, DocURL(""), "no page")
 }
 
 func TestLookups(t *testing.T) {
@@ -290,6 +292,7 @@ func TestTextWithoutRelatedWords(t *testing.T) {
 	require.True(t, ok)
 	assert.NotContains(t, text, "Related")
 	assert.NotContains(t, text, "In a terminal")
+	assert.Equal(t, "A (word)\n\nS\n", text, "a word without a doc page links none")
 }
 
 func TestText(t *testing.T) {

@@ -111,7 +111,11 @@ func (h *Help) related(b *strings.Builder, ids []string) {
 	b.WriteString("Related: " + strings.Join(ids, ", ") + "\n\n")
 }
 
+// more links the doc page doc, unless there is none.
 func more(b *strings.Builder, doc string) {
+	if doc == "" {
+		return
+	}
 	fmt.Fprintf(b, "More in the docs: %s\n", DocURL(doc))
 }
 
