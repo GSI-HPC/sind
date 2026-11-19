@@ -25,7 +25,7 @@ var lineKeys = []string{"DownNodes", "FrontendName", "NodeName", "NodeSet", "Par
 // is \), a line may hold several pairs, and a value may be quoted. A line
 // continued with a trailing backslash is not joined to the next.
 func LinePairs(line string) [][2]string {
-	line = unescape(stripComment(line))
+	line = unescape(StripComment(line))
 	var pairs [][2]string
 	for {
 		m := keyValuePattern.FindStringSubmatch(line)
@@ -37,9 +37,9 @@ func LinePairs(line string) [][2]string {
 	}
 }
 
-// stripComment cuts a slurm.conf-style line at its comment: a # that an
+// StripComment cuts a slurm.conf-style line at its comment: a # that an
 // even number of backslashes precedes.
-func stripComment(line string) string {
+func StripComment(line string) string {
 	backslashes := 0
 	for i := range len(line) {
 		switch {
