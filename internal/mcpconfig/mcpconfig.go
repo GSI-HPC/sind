@@ -100,7 +100,7 @@ func Load(path, key string) (*File, error) {
 	}
 	// An editor reads the last of two members of the same name, while
 	// Set and Remove would change the first.
-	if duplicate(f.object()) == key {
+	if count(f.object(), key) > 1 {
 		return nil, fmt.Errorf("parsing %s: %q is defined more than once", path, key)
 	}
 	if m := member(f.object(), key); m != nil {
@@ -127,6 +127,17 @@ func duplicate(obj *hujson.Object) string {
 		seen[name] = true
 	}
 	return ""
+}
+
+// count returns how many members of obj are named name.
+func count(obj *hujson.Object, name string) int {
+	n := 0
+	for i := range obj.Members {
+		if obj.Members[i].Name.Value.(hujson.Literal).String() == name {
+			n++
+		}
+	}
+	return n
 }
 
 // resolve follows the symbolic links of path to the file they point to,

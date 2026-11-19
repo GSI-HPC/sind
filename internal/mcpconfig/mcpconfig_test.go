@@ -419,6 +419,9 @@ func TestLoad_Errors(t *testing.T) {
 		{"servers not an object", `{"mcpServers": []}`, `"mcpServers" is not an object`},
 		{"duplicate server", `{"mcpServers": {"sind": {}, "a": {}, "sind": {}}}`, `server "sind" is defined more than once in "mcpServers"`},
 		{"duplicate servers", `{"mcpServers": {}, "x": 1, "mcpServers": {}}`, `"mcpServers" is defined more than once`},
+		// Another name defined twice before does not hide it.
+		{"duplicate servers after another duplicate", `{"a": 1, "a": 2, "mcpServers": {"old": {}}, "mcpServers": {"new": {}}}`,
+			`"mcpServers" is defined more than once`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
