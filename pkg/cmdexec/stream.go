@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+
+	"github.com/GSI-HPC/sind/internal/execopt"
 )
 
 // streamStderrHalf is half of what a Process keeps of its command's
@@ -23,10 +25,10 @@ type Process struct {
 	cmd    *exec.Cmd
 	stdin  io.Closer
 	// stderr keeps the head and the tail of the command's standard error,
-	// outside WithStderrMerged.
+	// outside execopt.WithStderrMerged.
 	stderr *headTail
 	// group is set for a command in a process group of its own
-	// (WithProcessGroup), which Close kills whole; groupDone ends what
+	// (execopt.WithProcessGroup), which Close kills whole; groupDone ends what
 	// inProcessGroup started once the command has ended.
 	group     bool
 	groupDone func()
@@ -35,29 +37,28 @@ type Process struct {
 	closeErr  error
 }
 
-// Start starts a command and returns a Process for reading its stdout, and
-// its stderr too under WithStderrMerged. The command is killed when ctx is
-// cancelled. Outside WithStderrMerged, the Process keeps the first and the
-// last 2 KiB of the command's stderr for the *ExitError of Close, which
+// Start starts a command and returns a Process for reading its stdout, and its
+// stderr too under execopt.WithStderrMerged. The command is killed when ctx is
+// cancelled. Outside execopt.WithStderrMerged, the Process keeps the first and
+// the last 2 KiB of the command's stderr for the *ExitError of Close, which
 // says why a stream that failed ended.
 //
 // The command's stdin is a pipe that stays open, without data, until the
-// command has ended or Close kills it, so that a docker exec -i whose
-// command ends with its stdin (docker.TiedExecArgs) runs as long as the
-// docker CLI.
+// command has ended or Close kills it, so that a docker exec -i whose command
+// ends with its stdin (docker.TiedExecArgs) runs as long as the docker CLI.
 //
 // As OSExecutor.Run does, Start runs the command with the environment of
-// WithEnv, and in a process group of its own under WithProcessGroup, which
-// the end of ctx and Close kill whole.
+// execopt.WithEnv, and in a process group of its own under
+// execopt.WithProcessGroup, which the end of ctx and Close kill whole.
 func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	if env := Env(ctx); len(env) > 0 {
+	if env := execopt.Env(ctx); len(env) > 0 {
 		cmd.Env = env
 	}
 	p := &Process{cmd: cmd, groupDone: func() {}}
-	if InProcessGroup(ctx) {
+	if execopt.InProcessGroup(ctx) {
 		p.group = true
-		p.groupDone = inProcessGroup(cmd, StopGrace(ctx))
+		p.groupDone = inProcessGroup(cmd, execopt.StopGrace(ctx))
 	}
 	// Close closes the pipe, and so does Wait.
 	stdin, err := cmd.StdinPipe()
@@ -65,7 +66,7 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 		return nil, err
 	}
 	p.stdin = stdin
-	if StderrMerged(ctx) {
+	if execopt.StderrMerged(ctx) {
 		r, w, err := os.Pipe()
 		if err != nil {
 			return nil, err
@@ -86,7 +87,7 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	}
 	// Wait waits for the copy of stderr, which a process the command left
 	// behind may hold open: at most outputWaitDelay, or the grace of
-	// WithStopGrace on top of it.
+	// execopt.WithStopGrace on top of it.
 	p.stderr = &headTail{half: streamStderrHalf}
 	cmd.Stderr = p.stderr
 	cmd.WaitDelay = max(cmd.WaitDelay, outputWaitDelay)
@@ -135,7 +136,7 @@ func (p *Process) close() error {
 		err = nil // it exited 0; a process it left behind held stderr
 	}
 	// Wait closes the pipe of StdoutPipe, but not the one Start made under
-	// WithStderrMerged, which would stay open until a finalizer ran.
+	// execopt.WithStderrMerged, which would stay open until a finalizer ran.
 	_ = p.Stdout.Close()
 	if killed && isKillSignalError(err) {
 		return nil

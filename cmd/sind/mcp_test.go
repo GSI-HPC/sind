@@ -22,7 +22,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/envvar"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -587,7 +587,7 @@ func TestRefuseFlagArgs_StopsWithGrace(t *testing.T) {
 	var graceful bool
 	run := func(ctx context.Context, _ *mcp.CallToolRequest, _ ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
 		assert.NotNil(t, ctx.Done(), "the call's cancel reaches the tool")
-		graceful = cmdexec.StopGrace(ctx) == mcpStopGrace
+		graceful = execopt.StopGrace(ctx) == mcpStopGrace
 		return nil, ophis.ToolOutput{}, nil
 	}
 	ctx, cancel := context.WithCancel(t.Context())

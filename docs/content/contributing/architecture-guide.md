@@ -37,6 +37,10 @@ internal/envvar/   The names of the SIND_* environment variables and Lookup, whi
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and internal/ssh's ssh_config host names
 
+internal/execopt/  The options that sind's packages give cmdexec.OSExecutor in the context of a call
+  ├── execopt.go   WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup, WithStopGrace, WithOrphanSafe, WithStarted, WithEnv and WithOutputLimit for the commands of the CLI and sind ui
+  └── terminal.go  WithTerminal: a command's stdout is a pseudo-terminal, as docker pull writes its byte counts only there; TerminalLines turns what it draws there into plain lines
+
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
 internal/detach/   The context of a write that must not be cut short (mesh DNS, known_hosts, sind-nodes.conf): it ignores the caller's cancellation and deadline, but ends with the rollback it runs under
@@ -66,9 +70,8 @@ internal/testutil/ Shared test helpers
   └── prereq/      Check: sind's prerequisites on the host (Docker version, cgroup v2 with nsdelegate), for the tests that create clusters
 
 pkg/cmdexec/       Command executor abstraction
-  ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
-  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup: a cancel kills the command's process group
-  ├── terminal.go  WithTerminal: a command's stdout is a pseudo-terminal, as docker pull writes its byte counts only there; TerminalLines turns what it draws there into plain lines
+  ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call, and follows the options of internal/execopt)
+  ├── limit.go     The head and tail of a command's output that Run keeps under execopt.WithOutputLimit
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)

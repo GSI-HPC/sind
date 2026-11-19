@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,14 +37,14 @@ func TestEndpoint_DockerHost(t *testing.T) {
 }
 
 // TestEndpoint_EnvFromContext checks that Endpoint reads DOCKER_HOST from
-// the environment that cmdexec.WithEnv gives the client's docker commands,
+// the environment that execopt.WithEnv gives the client's docker commands,
 // which replaces the process's own.
 func TestEndpoint_EnvFromContext(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://process-host:2376")
 	var m mock.Executor
 	c := NewClient(&m)
 
-	ctx := cmdexec.WithEnv(t.Context(), []string{"PATH=/usr/bin", "DOCKER_HOST=tcp://old:2376", "DOCKER_HOST=ssh://ci@build-host"})
+	ctx := execopt.WithEnv(t.Context(), []string{"PATH=/usr/bin", "DOCKER_HOST=tcp://old:2376", "DOCKER_HOST=ssh://ci@build-host"})
 	ep, err := c.Endpoint(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, Endpoint{Host: "ssh://ci@build-host"}, ep, "the last entry wins")
@@ -53,7 +53,7 @@ func TestEndpoint_EnvFromContext(t *testing.T) {
 	// An environment without DOCKER_HOST asks the docker CLI, as that is
 	// what it gets.
 	m.AddResult(`{"Name":"default","Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}`+"\n", "", nil)
-	ep, err = c.Endpoint(cmdexec.WithEnv(t.Context(), []string{"PATH=/usr/bin"}))
+	ep, err = c.Endpoint(execopt.WithEnv(t.Context(), []string{"PATH=/usr/bin"}))
 	require.NoError(t, err)
 	assert.Equal(t, Endpoint{Host: "unix:///var/run/docker.sock", Context: "default"}, ep)
 	m.AssertDone(t)

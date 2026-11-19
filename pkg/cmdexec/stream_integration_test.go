@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,7 +94,7 @@ func TestOSExecutor_Start(t *testing.T) {
 }
 
 func TestStart_StderrMerged(t *testing.T) {
-	ctx := cmdexec.WithStderrMerged(t.Context())
+	ctx := execopt.WithStderrMerged(t.Context())
 	proc, err := cmdexec.Start(ctx, "sh", "-c", "echo out; echo err >&2")
 	require.NoError(t, err)
 	defer func() { _ = proc.Close() }()
@@ -107,20 +108,20 @@ func TestStart_StderrMerged(t *testing.T) {
 }
 
 func TestStart_StderrMergedNotFound(t *testing.T) {
-	_, err := cmdexec.Start(cmdexec.WithStderrMerged(t.Context()), "/nonexistent/command")
+	_, err := cmdexec.Start(execopt.WithStderrMerged(t.Context()), "/nonexistent/command")
 	assert.Error(t, err)
 }
 
-// Close releases Stdout in both modes of Start: a read after Close fails
-// as on a closed file, also under WithStderrMerged, whose pipe Wait does
-// not close.
+// Close releases Stdout in both modes of Start: a read after Close fails as on
+// a closed file, also under execopt.WithStderrMerged, whose pipe Wait does not
+// close.
 func TestProcess_Close_ClosesStdout(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		ctx  context.Context
 	}{
 		{"pipe", t.Context()},
-		{"merged", cmdexec.WithStderrMerged(t.Context())},
+		{"merged", execopt.WithStderrMerged(t.Context())},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			proc, err := cmdexec.Start(tt.ctx, "sleep", "60")
@@ -183,9 +184,9 @@ func TestProcess_Close_LeftBehindHoldsStderr(t *testing.T) {
 }
 
 // TestStart_Env checks that Start runs the command with the environment
-// of WithEnv, as Run does.
+// of execopt.WithEnv, as Run does.
 func TestStart_Env(t *testing.T) {
-	ctx := cmdexec.WithEnv(t.Context(), []string{"SIND_TEST_START_ENV=from-ctx"})
+	ctx := execopt.WithEnv(t.Context(), []string{"SIND_TEST_START_ENV=from-ctx"})
 	proc, err := cmdexec.Start(ctx, "sh", "-c", "echo $SIND_TEST_START_ENV")
 	require.NoError(t, err)
 	defer func() { _ = proc.Close() }()
@@ -196,10 +197,10 @@ func TestStart_Env(t *testing.T) {
 }
 
 // TestStart_ProcessGroup checks that Close kills the whole process group
-// of a command started WithProcessGroup, as the end of its context does
+// of a command started execopt.WithProcessGroup, as the end of its context does
 // for Run: a process the command started ends with it.
 func TestStart_ProcessGroup(t *testing.T) {
-	ctx := cmdexec.WithProcessGroup(t.Context())
+	ctx := execopt.WithProcessGroup(t.Context())
 	proc, err := cmdexec.Start(ctx, "sh", "-c", "sleep 60 & echo $!; wait")
 	require.NoError(t, err)
 	scanner := bufio.NewScanner(proc.Stdout)

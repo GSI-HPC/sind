@@ -8,7 +8,7 @@ import (
 )
 
 // orphanSignal has the kernel send cmd SIGINT when the thread that started
-// it ends, which it does when this process dies (WithOrphanSafe).
+// it ends, which it does when this process dies (execopt.WithOrphanSafe).
 func orphanSignal(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}

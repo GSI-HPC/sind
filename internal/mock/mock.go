@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
@@ -68,7 +69,7 @@ type Executor struct {
 	IgnoreContext bool
 
 	// NoTerminal makes the mock open no terminal for a command run
-	// cmdexec.WithTerminal, as OSExecutor where it cannot: the command
+	// execopt.WithTerminal, as OSExecutor where it cannot: the command
 	// writes to a pipe.
 	NoTerminal bool
 
@@ -144,19 +145,19 @@ func (m *Executor) contextErr(ctx context.Context) error {
 }
 
 // onTerminal returns stdout as OSExecutor returns what a command wrote to
-// the terminal of cmdexec.WithTerminal: in plain lines, the one that did
+// the terminal of execopt.WithTerminal: in plain lines, the one that did
 // not end included, after it called the function of
-// cmdexec.WithTerminalOpened. Without a terminal, or when stdout is data, it
+// execopt.WithTerminalOpened. Without a terminal, or when stdout is data, it
 // is stdout itself.
 func onTerminal(ctx context.Context, stdout string) string {
-	if !cmdexec.Terminal(ctx) || cmdexec.StdoutIsData(ctx) {
+	if !execopt.Terminal(ctx) || execopt.StdoutIsData(ctx) {
 		return stdout
 	}
-	if opened := cmdexec.TerminalOpened(ctx); opened != nil {
+	if opened := execopt.TerminalOpened(ctx); opened != nil {
 		opened()
 	}
 	var b strings.Builder
-	tl := cmdexec.NewTerminalLines(&b)
+	tl := execopt.NewTerminalLines(&b)
 	_, _ = tl.Write([]byte(stdout))
 	_ = tl.Flush()
 	return b.String()
@@ -184,12 +185,12 @@ func (m *Executor) dispatch(name string, args []string, stdin string) (string, s
 }
 
 // parseLines hands the lines of a result to the line parser ctx carries
-// (cmdexec.WithLineParser), as OSExecutor does while the command runs: the
+// (execopt.WithLineParser), as OSExecutor does while the command runs: the
 // lines of standard output, unless ctx says it is data, then those of
 // standard error, each without its line break; a last line without one is
 // left out.
 func parseLines(ctx context.Context, stdout, stderr string) {
-	parse := cmdexec.LineParser(ctx)
+	parse := execopt.LineParser(ctx)
 	if parse == nil {
 		return
 	}
@@ -203,7 +204,7 @@ func parseLines(ctx context.Context, stdout, stderr string) {
 			text = rest
 		}
 	}
-	if !cmdexec.StdoutIsData(ctx) {
+	if !execopt.StdoutIsData(ctx) {
 		feed(progress.StreamStdout, stdout)
 	}
 	feed(progress.StreamStderr, stderr)

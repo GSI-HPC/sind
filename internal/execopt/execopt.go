@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cmdexec
+// Package execopt holds the options that sind's packages give
+// cmdexec.OSExecutor in the context of a call. They are internal: an
+// Executor of a library caller may ignore them (see cmdexec.Executor).
+package execopt
 
 import (
 	"context"
@@ -154,4 +157,22 @@ func WithStarted(ctx context.Context, started func(pid int)) context.Context {
 func Started(ctx context.Context) func(pid int) {
 	started, _ := ctx.Value(startedKey{}).(func(pid int))
 	return started
+}
+
+// outputLimitKey is the context key of WithOutputLimit.
+type outputLimitKey struct{}
+
+// WithOutputLimit returns ctx for a command whose standard output and
+// standard error OSExecutor.Run keeps to about n bytes each, such as one
+// whose output a server returns: the first and the last n/2 bytes, with a
+// line between them that says how many bytes it left out. Without it, Run
+// keeps all of it.
+func WithOutputLimit(ctx context.Context, n int) context.Context {
+	return context.WithValue(ctx, outputLimitKey{}, n)
+}
+
+// OutputLimit returns the limit of WithOutputLimit, zero without one.
+func OutputLimit(ctx context.Context) int {
+	n, _ := ctx.Value(outputLimitKey{}).(int)
+	return n
 }

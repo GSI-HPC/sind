@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cmdexec
+package execopt
 
 import (
 	"testing"
@@ -60,4 +60,9 @@ func TestStarted(t *testing.T) {
 	require.NotNil(t, started)
 	started(42)
 	assert.Equal(t, 42, pid)
+}
+
+func TestOutputLimit(t *testing.T) {
+	assert.Zero(t, OutputLimit(t.Context()))
+	assert.Equal(t, 64, OutputLimit(WithOutputLimit(t.Context(), 64)))
 }

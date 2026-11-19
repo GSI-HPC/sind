@@ -14,9 +14,9 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/display"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -228,7 +228,7 @@ func (e *teeingExecutor) Run(ctx context.Context, name string, args ...string) (
 	if strings.HasPrefix(joined, "create --name sind-ssh ") {
 		stdout = strings.Repeat("0123456789abcdef", 4) + "\n"
 	}
-	if !cmdexec.StdoutIsData(ctx) {
+	if !execopt.StdoutIsData(ctx) {
 		_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStdout, nil), stdout)
 	}
 	_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStderr, nil), stderr)

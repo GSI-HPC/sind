@@ -5,7 +5,7 @@
 //
 // A task's command is a child process of its own: the running sind binary,
 // in a process group of its own, with no input and no progress display.
-// It writes no pipe of sind ui (cmdexec.WithOrphanSafe), so it can go on
+// It writes no pipe of sind ui (execopt.WithOrphanSafe), so it can go on
 // and roll back if sind ui dies, which sends it SIGINT on Linux. Its
 // progress comes from the activity log, where the child writes the same
 // events that make a terminal's progress display: the runner hands the child
@@ -30,6 +30,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/termtext"
 
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
@@ -126,7 +127,7 @@ func New(cfg Config) *Runner {
 			_, _ = rand.Read(b)
 		}
 	}
-	ctx, cancel := context.WithCancel(cmdexec.WithOrphanSafe(cmdexec.WithProcessGroup(context.Background())))
+	ctx, cancel := context.WithCancel(execopt.WithOrphanSafe(execopt.WithProcessGroup(context.Background())))
 	return &Runner{cfg: cfg, ctx: ctx, cancel: cancel, running: map[string]*child{}}
 }
 
@@ -175,7 +176,7 @@ func (r *Runner) Start(s Spec) (string, error) {
 			close(started)
 		})
 	}
-	ctx := cmdexec.WithStarted(cmdexec.WithEnv(r.ctx, env), onStart)
+	ctx := execopt.WithStarted(execopt.WithEnv(r.ctx, env), onStart)
 
 	done := make(chan struct{})
 	go func() {

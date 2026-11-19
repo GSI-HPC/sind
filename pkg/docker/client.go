@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
@@ -156,7 +157,7 @@ func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...stri
 // those of its standard error, and of its standard output only for docker
 // pull, which writes its status there. Every other command writes data
 // there, a container's ID, a name or the JSON of inspect, which is no line
-// for a row that shows what a pull does (cmdexec.WithStdoutAsData).
+// for a row that shows what a pull does (execopt.WithStdoutAsData).
 //
 // Every docker command, with stdin or without, is logged at LevelTrace
 // before it runs.
@@ -173,7 +174,7 @@ func (c *Client) call(ctx context.Context, args []string, exec func(context.Cont
 	span.Run()
 	runCtx := ctx
 	if name != "docker pull" && name != "docker image pull" {
-		runCtx = cmdexec.WithStdoutAsData(ctx)
+		runCtx = execopt.WithStdoutAsData(ctx)
 	}
 	stdout, stderr, err := exec(runCtx)
 	err = ClassifyUnreachable(err)

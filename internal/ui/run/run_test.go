@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +51,7 @@ func newFakeExec() *fakeExec { return &fakeExec{pid: 4242, results: make(chan re
 
 func (f *fakeExec) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	f.mu.Lock()
-	f.calls = append(f.calls, call{name, args, cmdexec.Env(ctx), cmdexec.InProcessGroup(ctx), cmdexec.OrphanSafe(ctx)})
+	f.calls = append(f.calls, call{name, args, execopt.Env(ctx), execopt.InProcessGroup(ctx), execopt.OrphanSafe(ctx)})
 	f.mu.Unlock()
 	if f.noStart != nil {
 		return "", "", f.noStart
@@ -58,7 +59,7 @@ func (f *fakeExec) Run(ctx context.Context, name string, args ...string) (string
 	if f.gate != nil {
 		<-f.gate
 	}
-	if started := cmdexec.Started(ctx); started != nil {
+	if started := execopt.Started(ctx); started != nil {
 		started(f.pid)
 		started(f.pid) // reported again: harmless
 	}

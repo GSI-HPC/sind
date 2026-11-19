@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/execopt"
 )
 
 // Endpoint is the address at which the docker CLI reaches the daemon.
@@ -35,7 +35,7 @@ func (e Endpoint) UnixSocket() bool {
 // Without DOCKER_HOST it runs `docker context inspect`, which resolves the
 // context without contacting the daemon. DOCKER_HOST is read from the
 // environment that the client's docker commands get: that of
-// cmdexec.WithEnv, else the process's own.
+// execopt.WithEnv, else the process's own.
 func (c *Client) Endpoint(ctx context.Context) (Endpoint, error) {
 	if host := dockerHost(ctx); host != "" {
 		return Endpoint{Host: host}, nil
@@ -61,10 +61,10 @@ func (c *Client) Endpoint(ctx context.Context) (Endpoint, error) {
 }
 
 // dockerHost returns DOCKER_HOST of the environment that a docker command
-// run with ctx gets: the whole environment of cmdexec.WithEnv, where the
+// run with ctx gets: the whole environment of execopt.WithEnv, where the
 // last entry of a name wins, as in os/exec, else the process's own.
 func dockerHost(ctx context.Context) string {
-	env := cmdexec.Env(ctx)
+	env := execopt.Env(ctx)
 	if len(env) == 0 {
 		return os.Getenv("DOCKER_HOST")
 	}

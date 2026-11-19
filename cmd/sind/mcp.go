@@ -16,6 +16,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -246,7 +247,7 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 		}
 		in.Flags = emptyListsAsNone(in.Flags)
 		if mcpChangesState(req.Params.Name) {
-			ctx = cmdexec.WithStopGrace(ctx, mcpStopGrace)
+			ctx = execopt.WithStopGrace(ctx, mcpStopGrace)
 		}
 		run = failedAsError(run)
 		if next == nil {
@@ -270,23 +271,23 @@ func inProcessGroup(mw ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 // output of sind_exec or of sind_logs without tail has no other bound.
 const mcpOutputLimit = 2 << 20
 
-// mcpExecute runs a tool call as ophis does, the sind binary with the
-// call's command path, flags and arguments (mcpToolArgs), but in a process
-// group of its own (cmdexec.WithProcessGroup), and with at most about
-// mcpOutputLimit of each stream (cmdexec.WithOutputLimit). ophis kills only the sind
-// process when the call's context ends, and the docker exec or docker logs
-// it started would go on, holding its output open: the cancelled call
-// would answer only when that docker command ended, if ever. Killing the
-// group ends both, and the call answers at once.
+// mcpExecute runs a tool call as ophis does, the sind binary with the call's
+// command path, flags and arguments (mcpToolArgs), but in a process group of
+// its own (execopt.WithProcessGroup), and with at most about mcpOutputLimit of
+// each stream (execopt.WithOutputLimit). ophis kills only the sind process when
+// the call's context ends, and the docker exec or docker logs it started would
+// go on, holding its output open: the cancelled call would answer only when
+// that docker command ended, if ever. Killing the group ends both, and the call
+// answers at once.
 //
-// A call that came with a progress token gets the progress of the process
-// as progress notifications (withToolProgress).
+// A call that came with a progress token gets the progress of the process as
+// progress notifications (withToolProgress).
 func mcpExecute(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, ophis.ToolOutput{}, fmt.Errorf("locating the sind binary: %w", err)
 	}
-	ctx = cmdexec.WithOutputLimit(cmdexec.WithProcessGroup(ctx), mcpOutputLimit)
+	ctx = execopt.WithOutputLimit(execopt.WithProcessGroup(ctx), mcpOutputLimit)
 	ctx, endProgress := withToolProgress(ctx, req)
 	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(ctx, exe, mcpToolArgs(req.Params.Name, in)...)
@@ -376,7 +377,7 @@ const mcpStopGrace = cluster.RollbackTimeout + time.Minute
 
 // mcpChangesState reports whether the tool changes state, so that a call
 // that is cancelled, or whose client disconnects, stops it as an interrupt
-// does (cmdexec.WithStopGrace): SIGTERM to its sind process, which stops
+// does (execopt.WithStopGrace): SIGTERM to its sind process, which stops
 // waiting for the realm lock or a pull at once and rolls back a create
 // that has begun, and SIGKILL to its process group only after
 // mcpStopGrace. The SIGKILL that mcpExecute sends at once otherwise would
