@@ -166,6 +166,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// inspect reports them, a map. docker ps joins all labels with commas,
 	// so it cannot return a value with a comma in it.
 	labels := infra.controller.Labels
+	if err := checkSettingLabels(ctx, client, infra.controller); err != nil {
+		return nil, err
+	}
 
 	// sind wrote no Slurm configuration for an unmanaged cluster to add
 	// workers to.
@@ -541,6 +544,29 @@ func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAdd
 	}
 	if version != clusterVersion {
 		return fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", opts.Image, version, opts.ClusterName, clusterVersion)
+	}
+	return nil
+}
+
+// settingLabels are the labels of the controller that give new workers
+// their data and CVMFS mounts, users and identity mode.
+var settingLabels = []string{LabelDataHostPath, LabelDataMountPath, LabelCVMFS, LabelUsers, LabelGroups, LabelIdentity}
+
+// checkSettingLabels refuses a setting label of the controller that can
+// come from its image rather than from sind. Docker merges an image's
+// labels into its containers', and sind before v0.11.0 left out the labels
+// it had nothing to record, so on its nodes an image's label shows
+// through. A label that is not empty and has the image's value can be the
+// image's.
+func checkSettingLabels(ctx context.Context, client *docker.Client, controller *docker.ContainerInfo) error {
+	image, _, err := client.InspectImage(ctx, controller.Image)
+	if err != nil {
+		return fmt.Errorf("reading the labels of the controller's image: %w", err)
+	}
+	for _, key := range settingLabels {
+		if v := controller.Labels[key]; v != "" && image.Labels[key] == v {
+			return fmt.Errorf("controller label %s=%q can come from its image %s, not from sind: refusing to give it to new workers", key, v, controller.Image)
+		}
 	}
 	return nil
 }

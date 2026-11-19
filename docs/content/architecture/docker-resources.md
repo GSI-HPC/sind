@@ -151,7 +151,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.identity` | `clientIds` | The identity mode: `local`, `nssSlurm` or `clientIds` |
 | `sind.monitoring` | `true` | Whether the node's cluster is [monitored]({{< relref "/guides/monitoring" >}}): `true` or `false`. For listings and filters only: sind tells a monitored node by its mount of the realm's journal volume, which an image cannot forge |
 
-Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image.
+Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image. Nodes of sind before v0.11.0 lack some of them, so there a label of the image shows through: `sind create worker` refuses a data, CVMFS, users, groups or identity label of the controller that is not empty and has the image's value.
 
 A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network, the SSH volume, the monitoring stack's volumes and the realm lock carry `sind.realm` only. The monitoring stack's containers carry no `sind.realm`, so that they do not count as a cluster of the realm, only the Compose labels and `sind.observability.version`, a fingerprint of their images, configuration and dashboards. `sind get networks` and `sind get volumes` find resources by these labels, leaving out the realm lock. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
 

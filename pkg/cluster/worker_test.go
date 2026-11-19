@@ -6,8 +6,10 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -717,6 +719,52 @@ func TestWorkerAdd_RelativeDataHostPath(t *testing.T) {
 
 	require.EqualError(t, err, `controller label sind.data.hostpath="sind-other-munge" is not an absolute path: refusing to bind-mount it into new workers`)
 	assert.Zero(t, countCalls(m.Calls, "create"))
+}
+
+// TestWorkerAdd_SettingLabelsOfTheImage checks that new workers get no
+// setting from a label of the controller's image: on a node of sind
+// before v0.11.0, which left out the labels it had nothing to record, the
+// image's label shows through.
+func TestWorkerAdd_SettingLabelsOfTheImage(t *testing.T) {
+	imageInspect := []string{"image", "inspect", "--format", `{"id":{{json .Id}},"labels":{{json .Config.Labels}}}`, testControllerImageID}
+	for _, tt := range []struct {
+		name        string
+		controller  docker.Labels
+		image       mock.Result
+		wantErr     string
+		wantCreated bool
+	}{
+		{"shows through", docker.Labels{LabelDataHostPath: "/"},
+			mock.Result{Stdout: `{"id":"` + testControllerImageID + `","labels":{"sind.data.hostpath":"/"}}`},
+			`controller label sind.data.hostpath="/" can come from its image ` + testControllerImageID + `, not from sind: refusing to give it to new workers`, false},
+		{"set by sind", docker.Labels{LabelDataHostPath: "", LabelUsers: "alice:1000:1000"},
+			mock.Result{Stdout: `{"id":"` + testControllerImageID + `","labels":{"sind.data.hostpath":"/","sind.users":"root:0:0"}}`},
+			"", true},
+		{"image of no labels", docker.Labels{LabelDataHostPath: "/srv"},
+			mock.Result{Stdout: `{"id":"` + testControllerImageID + `","labels":null}`}, "", true},
+		{"inspect error", nil, mock.Result{Err: errors.New("daemon gone")},
+			"reading the labels of the controller's image: daemon gone", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			labels := testControllerLabels()
+			maps.Copy(labels, tt.controller)
+			base := withController(t, workerAddOnCall(t), labels)
+			m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
+				if slices.Equal(args, imageInspect) {
+					return tt.image
+				}
+				return base(args, stdin)
+			}, WorkerAddOptions{ClusterName: "dev", Count: 1})
+
+			assert.Equal(t, 1, countCalls(m.Calls, imageInspect...))
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantCreated, countCalls(m.Calls, "create") > 0)
+		})
+	}
 }
 
 func TestWorkerAdd_InheritsCVMFS(t *testing.T) {

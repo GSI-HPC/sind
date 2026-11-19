@@ -554,7 +554,9 @@ func TestWorkerAdd_IdentityImage(t *testing.T) {
 			tt.opts.ClusterName, tt.opts.Count = "dev", 1
 
 			m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
-				if args[0] == "image" {
+				// The image's labels, not the check of the controller's
+				// setting labels (InspectImage).
+				if args[0] == "image" && args[2] != "--format" {
 					return tt.result
 				}
 				return base(args, stdin)
