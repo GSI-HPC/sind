@@ -790,6 +790,34 @@ func TestExecAllowNonZero_InnerStderr(t *testing.T) {
 	assert.Equal(t, "failed\n", stdout)
 }
 
+// TestExecAllowNonZero_KilledCLI checks that a docker CLI killed by a
+// signal, as the end of ctx kills it, is a failed exec, not the inner
+// command's exit with no output.
+func TestExecAllowNonZero_KilledCLI(t *testing.T) {
+	err := exec.Command("sh", "-c", "kill -KILL $$").Run()
+	killed, ok := errors.AsType[*exec.ExitError](err)
+	require.True(t, ok, "%v", err)
+	require.Equal(t, -1, killed.ExitCode())
+
+	var m mock.Executor
+	m.AddResult("", "", killed)
+	_, err = NewClient(&m).ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+	assert.ErrorContains(t, err, "signal: killed")
+}
+
+// TestExecAllowNonZero_ContextEnded checks that a non-zero exit after ctx
+// ended is a failed exec: the output may be cut short.
+func TestExecAllowNonZero_ContextEnded(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	var m mock.Executor
+	m.OnCall = func([]string, string) mock.Result {
+		cancel()
+		return mock.Result{Stdout: "act", Err: &exec.ExitError{ProcessState: exitCode1(t)}}
+	}
+	_, err := NewClient(&m).ExecAllowNonZero(ctx, testContainerName, "systemctl", "is-active", "munge")
+	assert.Error(t, err)
+}
+
 func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
