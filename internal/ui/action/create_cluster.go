@@ -244,13 +244,17 @@ func yamlPlan(f Form, c Context, realm string, ps *problems) clusterPlan {
 	for _, err := range errs {
 		yps.add("", "Config", false, err)
 	}
-	if len(errs) == 0 {
+	// A config of more workers than a plan holds has no final config: what
+	// comes after the create, its Slurm files among them, would name every
+	// worker, and a preview comes with each key.
+	before := len(yps)
+	p.planned = plannedOf(p.cfg.Nodes, &yps)
+	if len(errs) == 0 && len(yps) == before {
 		p.warns = parsed.Warnings()
 		if !nps.has("name") {
 			p.final = parsed
 		}
 	}
-	p.planned = plannedOf(p.cfg.Nodes, &yps)
 	if ds := p.cfg.Storage.DataStorage; ds.UsesHostPath() && path.IsAbs(ds.HostPath) {
 		p.data.dir = path.Clean(ds.HostPath)
 		checkDir(c, &p.data, true, &yps)

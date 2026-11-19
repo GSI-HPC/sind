@@ -84,4 +84,17 @@ func TestBuildCreateCluster_YAMLManyWorkers(t *testing.T) {
 	assert.Len(t, cmd.Nodes, 1+maxPlanned)
 	require.Len(t, cmd.Problems, 1)
 	assert.Equal(t, Problem{Field: "yaml", Label: "Workers", Text: "a cluster here has at most 16384 workers"}, cmd.Problems[0])
+	assert.Empty(t, cmd.SlurmConf, "no Slurm files that name every worker")
+	assert.Empty(t, cmd.After)
+}
+
+// A count of a million workers builds no node of it.
+func TestBuildCreateCluster_YAMLAMillionWorkers(t *testing.T) {
+	var cmd Command
+	allocs := testing.AllocsPerRun(1, func() {
+		cmd, _ = build(t, "create-cluster", yamlForm("kind: Cluster\nname: lab\nnodes: [controller, worker: 1000000]\n"))
+	})
+	assert.Len(t, cmd.Nodes, 1+maxPlanned)
+	assert.Empty(t, cmd.SlurmConf)
+	assert.Less(t, allocs, 500000.0)
 }
