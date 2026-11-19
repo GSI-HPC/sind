@@ -92,17 +92,22 @@ func TestRunUsual(t *testing.T) {
 		r.ID = id
 		return r
 	}
+	// The run starts after the earlier ones.
 	run := runOf(0, "", runSp("step", "nodes", runStartedAt(0)))
+	run.Start = run.Start.Add(time.Minute)
+	// A run that started after it is no earlier run, however new.
+	newer := earlier("newer", 62, 1, false)
+	newer.Start = run.Start.Add(time.Second)
 	failed := earlier("failed", 1, 1, false)
 	failed.Status = store.StatusFailed
 	other := earlier("other", 1, 1, false)
 	other.Title = "delete cluster dev"
 	runs := []store.Run{
-		run, failed, other, runOf(0, ""), earlier("pulled", 1, 1, true),
+		newer, run, failed, other, runOf(0, ""), earlier("pulled", 1, 1, true),
 		earlier("a", 30, 20, false), earlier("b", 10, 6, false), earlier("c", 20, 12, false),
 		earlier("d", 40, 30, false), earlier("e", 50, 40, false), earlier("f", 1, 1, false),
 	}
-	runs[3].ID = "going"
+	runs[4].ID = "going"
 
 	usual, total, n := runUsual(store.Snapshot{Runs: runs}, run)
 	assert.Equal(t, 5, n, "the newest five that count")
@@ -111,6 +116,7 @@ func TestRunUsual(t *testing.T) {
 
 	// A run that pulls counts only the runs that pulled.
 	pulling := runOf(0, "", runSp("step", "pull images", runStartedAt(0)))
+	pulling.Start = run.Start
 	usual, total, n = runUsual(store.Snapshot{Runs: runs}, pulling)
 	assert.Equal(t, 1, n)
 	assert.Equal(t, int64(1000), total)
@@ -124,6 +130,7 @@ func TestRunUsual(t *testing.T) {
 	// Runs of one command count however their titles name the nodes:
 	// each create worker makes new ones.
 	cur := runOf(0, "", runSp("step", "nodes", runStartedAt(0)))
+	cur.Start = run.Start
 	cur.Title, cur.Command = "create worker worker-3.legacy", "create worker legacy"
 	prev := earlier("prev", 8, 8, false)
 	prev.Title, prev.Command = "create worker worker-2.legacy", "create worker legacy"
