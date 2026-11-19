@@ -22,7 +22,9 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    at 100%. Install the tool with
    `go install github.com/vladopajic/go-test-coverage/v2@latest`.
 5. If `docs/content/` changed: `make lint-docs`, which the Docs Lint job of CI runs
-   too.
+   too. If a workflow or a shell script changed: `make lint-ci` (actionlint,
+   `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`, and shellcheck,
+   `pip install shellcheck-py`).
 6. If the CLI surface, output format, config schema or labels changed: `DESIGN.md` and
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,
@@ -43,6 +45,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Job | Runs |
 |-----|------|
 | Lint | golangci-lint |
+| Workflow Lint | `make lint-ci`: actionlint on the workflows, with shellcheck on their `run` steps, and shellcheck on every `*.sh` |
 | Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
 | Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |

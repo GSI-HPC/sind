@@ -42,6 +42,28 @@ jobs:
           version: v2.15.0
           args: --build-tags integration
 
+  # actionlint on the workflows, with shellcheck on their run steps, and
+  # shellcheck on the scripts of the repository. The image and the nightly
+  # workflows do not run for a pull request, so this is their only check
+  # before the merge.
+  lint-ci:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Lint the workflows and the shell scripts
+        run: make lint-ci
+
   # markdownlint-cli2 on docs/content, at the version that the Makefile
   # pins and with the rules of .markdownlint.json, on the runner's Node.
   lint-docs:
