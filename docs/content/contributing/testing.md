@@ -25,12 +25,11 @@ Tests run in two modes, controlled by build tags:
 - **Unit tests** (default) — use mock executors, no Docker required
 - **Integration tests** (`-tags integration`) — run against real Docker
 
-Each package that needs both modes has two files:
+Three patterns provide the two modes:
 
-```
-mode_unit_test.go         // build tag: !integration
-mode_integration_test.go  // build tag: integration
-```
+- **Shared dual-mode client.** `testutil.NewClient(t)` returns a `docker.Client` and a `mock.Recorder`. In unit mode (`internal/testutil/client.go`, `!integration`) the recorder holds a mock executor; in integration mode (`client_integration.go`, `integration`) it runs the real `docker`, and its `AddResult` and `SetOnCall` do nothing. The same test then runs in both modes and checks `rec.IsIntegration()` where the two differ. Most dual-mode tests use it, in `pkg/cluster`, `pkg/mesh`, `pkg/doctor`, `pkg/state` and `pkg/slurm`. Its two variants are ordinary files of `internal/testutil`, not test files, so that every package can import them.
+- **Package-local pairs.** A package whose dual-mode tests need helpers of their own keeps them in two files, `mode_unit_test.go` (`!integration`) and `mode_integration_test.go` (`integration`). `pkg/docker` has its own `newTestClient` there, as `internal/testutil` imports `pkg/docker`; `cmd/sind` has its command runners there, whose unit variants skip the test or panic.
+- **Integration-only files.** Tests that only make sense against Docker, such as those that create clusters, sit in files with the `integration` tag alone, as `pkg/cluster/mode_integration_test.go`, `api_integration_test.go` and `monitoring_integration_test.go`, and `cmd/sind/mpi_test.go` and `quickstart_test.go`. `pkg/cluster` has no `mode_unit_test.go`.
 
 A test that runs in both modes gets its client from `testutil.NewClient`: in unit mode a `mock.Recorder`, in integration mode the docker CLI. In unit mode it needs a fake that keeps state, such as the fake Docker of the `pkg/mesh` tests, so that it checks what the code does rather than replaying answers queued in the order the code asks for them. A test that has no such fake checks against Docker alone and starts with `testutil.SkipWithoutDocker(t)`; the unit tests of the same code check the commands and how their output is read.
 
@@ -148,11 +147,13 @@ When the host fails such a check, the test is skipped, so that `make test-integr
 
 ## Integration test isolation
 
-Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test gets a random realm from `testutil.Realm`, which appends eight random hex digits to a prefix:
+Integration tests use unique realms to avoid resource conflicts when running in parallel. The tests of the packages get a random realm from `testutil.Realm`, which appends eight random hex digits to a prefix:
 
 ```go
 realm := testutil.Realm("it-cluster") // e.g. it-cluster-3f9a0c1e
 ```
+
+The tests of `cmd/sind` instead append `testID`, the eight hex digits of the test process (`itest.RunID`), to a prefix of their own, such as `"it-e2e-" + testID`; each test has its own prefix. `pkg/docker` names its containers, networks and volumes the same way (`itName`).
 
 This ensures tests can run concurrently without interfering with each other or with the user's sind clusters.
 
