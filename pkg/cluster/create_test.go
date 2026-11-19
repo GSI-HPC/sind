@@ -1187,7 +1187,7 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 	// first and in order; slurmctld and slurmd follow in either order.
 	require.GreaterOrEqual(t, len(m.Calls), 4)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "mariadb"}, m.Calls[0].Args)
-	assert.Equal(t, "mysql", m.Calls[1].Args[2])
+	assert.Equal(t, []string{"exec", "-i", "sind-dev-db", "mysql"}, m.Calls[1].Args)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "slurmdbd"}, m.Calls[2].Args)
 	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "is-active", "slurmdbd"}, m.Calls[3].Args)
 	var enabled []string
