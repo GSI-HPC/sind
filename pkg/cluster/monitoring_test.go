@@ -15,7 +15,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -185,7 +184,7 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 			return isStackContainer(name)
 		case "start", "rm", "exec":
 			return isStackContainer(args[len(args)-1]) || len(args) > 1 && isStackContainer(args[1]) ||
-				args[0] == "exec" && len(args) > 2 && args[len(args)-2] == probe.SlurmctldPort
+				args[0] == "exec" && len(args) > 2 && args[len(args)-2] == slurm.SlurmctldPort
 		case "cp":
 			name, _, _ := strings.Cut(args[len(args)-1], ":")
 			return isStackContainer(name)
@@ -269,7 +268,7 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 		delete(f.containers, name)
 		return mock.Result{}, true
 	case "exec":
-		if args[len(args)-2] == probe.SlurmctldPort {
+		if args[len(args)-2] == slurm.SlurmctldPort {
 			return mock.Result{Stdout: "HTTP/1.1 200 OK\r\n"}, true
 		}
 		if c := f.containers[args[1]]; c == nil || c.state != docker.StateRunning {

@@ -23,6 +23,17 @@ const (
 	SlurmdbdConfPath = ConfDir + "/" + SlurmdbdConfFile
 )
 
+// The TCP ports of the Slurm daemons: Slurm's defaults, which sind leaves
+// as they are. Slurm 26.05 and later also serve HTTP on the ports of
+// slurmctld and slurmd, which tell it from RPCs by a connection's first
+// bytes. slurmrestd listens on SLURMRESTD_LISTEN of the unit Slurm ships.
+const (
+	SlurmctldPort  = "6817"
+	SlurmdPort     = "6818"
+	SlurmdbdPort   = "6819"
+	SlurmrestdPort = "6820"
+)
+
 // Accounting: the db node's hostname and the MariaDB database and user
 // slurmdbd stores accounting data in.
 const (

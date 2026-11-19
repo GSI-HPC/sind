@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // SlurmctldPort is slurmctld's RPC port, on which Slurm 26.05 and later
-// also serve HTTP: the daemon tells the two apart by a connection's first
-// bytes.
-const SlurmctldPort = "6817"
+// also serve HTTP.
+//
+// Deprecated: use slurm.SlurmctldPort.
+const SlurmctldPort = slurm.SlurmctldPort
 
 // httpStatusScript sends a GET request for the path $2 to port $1 of the
 // node and prints the status line of the answer, waiting at most two
@@ -42,13 +44,13 @@ func HTTPStatus(ctx context.Context, client *docker.Client, name docker.Containe
 }
 
 // SlurmctldHTTP returns a check that slurmctld on the node answers path on
-// SlurmctldPort with a 2xx status: the monitoring stack scrapes it there.
+// slurm.SlurmctldPort with a 2xx status: the monitoring stack scrapes it there.
 // An image whose Slurm has no HTTP parser, or a CommunicationParameters
 // with disable_http, keep slurmctld from serving HTTP, which it then only
 // logs at debug level.
 func SlurmctldHTTP(path string) Func {
 	return func(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-		line, ok, err := HTTPStatus(ctx, client, name, SlurmctldPort, path)
+		line, ok, err := HTTPStatus(ctx, client, name, slurm.SlurmctldPort, path)
 		if ok {
 			return nil
 		}
@@ -57,6 +59,6 @@ func SlurmctldHTTP(path string) Func {
 			got = err.Error()
 		}
 		return fmt.Errorf("slurmctld serves no HTTP on port %s (%s for GET %s); check CommunicationParameters, or raise SlurmctldDebug to see why the http_parser plugin did not load",
-			SlurmctldPort, got, path)
+			slurm.SlurmctldPort, got, path)
 	}
 }

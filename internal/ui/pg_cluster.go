@@ -461,7 +461,7 @@ func pgConnectTab(d *pgClusterView, sn store.Snapshot) {
 		)
 	}
 	if api != nil {
-		d.API = "http://" + api.FQDN + ":6820"
+		d.API = "http://" + api.FQDN + ":" + slurm.SlurmrestdPort
 	}
 	if m := pgDataMount(d.Status); m != nil {
 		f := pgFilesOf(*m, pgFilesNode(d.Cluster.Nodes))

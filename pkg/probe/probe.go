@@ -608,20 +608,21 @@ func nodeStateText(n slurm.NodeInfo) string {
 	return n.Name + " (" + n.State + ": " + n.Reason + ")"
 }
 
-// SlurmrestdPort is the TCP port slurmrestd listens on: SLURMRESTD_LISTEN
-// of the unit Slurm ships, Slurm's default port for it.
-const SlurmrestdPort = "6820"
+// SlurmrestdPort is the TCP port slurmrestd listens on.
+//
+// Deprecated: use slurm.SlurmrestdPort.
+const SlurmrestdPort = slurm.SlurmrestdPort
 
 // SlurmrestdReady verifies that the slurmrestd service is active and
-// accepts connections on SlurmrestdPort. The unit is of type simple, so it
+// accepts connections on slurm.SlurmrestdPort. The unit is of type simple, so it
 // is active as soon as slurmrestd started, before it listens. A failed unit
 // is a TerminalError (see UnitActive).
 func SlurmrestdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	if err := UnitActive(ctx, client, name, string(ServiceSlurmrestd)); err != nil {
 		return err
 	}
-	if _, err := client.Exec(ctx, name, "bash", "-c", "exec 3<>/dev/tcp/localhost/"+SlurmrestdPort); err != nil {
-		return fmt.Errorf("slurmrestd not listening on port %s: %w", SlurmrestdPort, err)
+	if _, err := client.Exec(ctx, name, "bash", "-c", "exec 3<>/dev/tcp/localhost/"+slurm.SlurmrestdPort); err != nil {
+		return fmt.Errorf("slurmrestd not listening on port %s: %w", slurm.SlurmrestdPort, err)
 	}
 	return nil
 }
