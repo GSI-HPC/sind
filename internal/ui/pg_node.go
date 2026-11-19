@@ -467,14 +467,8 @@ func pgNamesNode(title string, n pgNode) bool {
 		return false
 	}
 	for _, w := range words[2:] {
-		set, err := nodeset.Parse(w)
-		if err != nil {
-			continue
-		}
-		for _, name := range set.Expand() {
-			if name == n.Arg || name == n.Short+"."+n.Cluster {
-				return true
-			}
+		if set, err := nodeset.Parse(w); err == nil && (set.Contains(n.Arg) || set.Contains(n.Short+"."+n.Cluster)) {
+			return true
 		}
 	}
 	return false

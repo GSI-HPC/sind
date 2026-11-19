@@ -229,6 +229,18 @@ func TestJumpVerbs(t *testing.T) {
 	assert.Contains(t, jumpLines(sn, jumpContext{Realm: "sind"}, "reboot worker-0")[0], "Reboot worker-0.dev…")
 }
 
+// A typed node set is not expanded: four parts of a million hosts each
+// cost no more than a lookup of the nodes that sind ui knows.
+func TestJumpTargetOf_HugeNodeSet(t *testing.T) {
+	nodes := []pgNode{{Realm: "sind", Cluster: "dev", Short: "a7", Arg: "a7.dev"}, {Realm: "sind", Cluster: "dev", Short: "x", Arg: "x.dev"}}
+	words := []string{"a[1-999999].dev,b[1-999999],c[1-999999],d[1-999999]"}
+	allocs := testing.AllocsPerRun(1, func() { jumpTargetOf(nodes, nil, jumpContext{}, words) })
+	assert.Less(t, allocs, 1000.0)
+	got := jumpTargetOf(nodes, nil, jumpContext{}, words)
+	require.Len(t, got.Groups, 1)
+	assert.Equal(t, []pgNode{nodes[0]}, got.Groups[0])
+}
+
 func TestJumpVerbMiss(t *testing.T) {
 	ts := helpServer(t)
 	fixtureStore(ts.st)

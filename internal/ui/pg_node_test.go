@@ -352,6 +352,8 @@ func TestPgNodeActs(t *testing.T) {
 	assert.True(t, pgNamesNode("power reboot worker-4", pgNode{Short: "worker-4", Arg: "worker-4", Cluster: "default"}))
 	assert.True(t, pgNamesNode("power reboot worker-4.dev", pgNode{Short: "worker-4", Arg: "worker-4", Cluster: "dev"}))
 	assert.False(t, pgNamesNode("power reboot", n))
+	assert.True(t, pgNamesNode("power reboot worker-[1-999999].dev", pgNode{Short: "worker-4", Arg: "worker-4", Cluster: "dev"}), "a large set is looked up, not expanded")
+	assert.False(t, pgNamesNode("power reboot worker-[1-3].dev", pgNode{Short: "worker-4", Arg: "worker-4", Cluster: "dev"}))
 }
 
 func TestPgChangeRows(t *testing.T) {
