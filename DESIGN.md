@@ -477,7 +477,7 @@ NAME/CLUSTER defaults to `SIND_CLUSTER`, else `default`, if omitted, except for 
 
 `--monitoring` collects the cluster's metrics and logs in the realm's monitoring stack (see Monitoring). It is ORed into the config's `monitoring` key before validation: either turns monitoring on, and `--monitoring=false` does not turn off a config's `monitoring: true`. With an unmanaged config it fails like the key does, with exit status 1, as the conflict is with the config file.
 
-`sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist, or if the nodes would not fit on the realm's mesh or the cluster network, Docker bridge networks of at most 1,023 containers (see Limits under Networking).
+`sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist, or if the nodes would not fit on the realm's mesh or the cluster network, Docker bridge networks of at most 1,023 containers (see Limits under Networking). The conflicts are what the rollback of a failed create would remove, so that a create neither adopts nor removes what it did not make: every container with the cluster's `sind.realm` and `sind.cluster` labels, whatever its name, such as a worker that `sind create worker` added or a helper container, the network, and a volume of each type, also of a type the config does not use when its labels name the cluster or are missing.
 
 `sind delete cluster` is idempotent and robust:
 - Deleting a non-existent cluster is not an error

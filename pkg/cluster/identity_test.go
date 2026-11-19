@@ -316,9 +316,13 @@ func TestCreateResources_ClientIDs(t *testing.T) {
 	assert.Contains(t, createdVolumes(t, createCfg()), "sind-dev-munge")
 }
 
+// TestPreflightCheck_ClientIDsSkipsMungeVolume covers a munge volume of
+// that name of another realm: identity clientIds creates no munge volume,
+// so it is not in the way. One of the cluster's own would be removed by a
+// rollback, and is.
 func TestPreflightCheck_ClientIDsSkipsMungeVolume(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-munge": true})
+	m.OnCall = preflightOnCallLabels(t, map[string]string{"sind-dev-munge": `{"sind.realm":"other"}`})
 	client := docker.NewClient(&m)
 
 	require.Error(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()))
@@ -326,6 +330,9 @@ func TestPreflightCheck_ClientIDsSkipsMungeVolume(t *testing.T) {
 	cfg := minimalConfig()
 	cfg.Identity = config.Identity{Mode: config.IdentityClientIDs}
 	require.NoError(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg))
+
+	m.OnCall = preflightOnCallLabels(t, map[string]string{"sind-dev-munge": `{"sind.realm":"sind","sind.cluster":"dev"}`})
+	require.ErrorContains(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg), "volume sind-dev-munge")
 }
 
 func TestWriteClusterConfig_ClientIDs(t *testing.T) {

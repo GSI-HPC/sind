@@ -164,7 +164,8 @@ func TestCreate_MonitoringRollback(t *testing.T) {
 			f.fail["inspect sind-grafana sind-prometheus sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
 			_, _, err := createMonitored(t, f, createCfg(), func(args []string, _ string) (mock.Result, bool) {
 				// The mesh is in use by the other cluster, so it stays.
-				if tt.other && args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && !slices.Contains(args, "label=sind.role") {
+				if tt.other && args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && !slices.Contains(args, "label=sind.role") &&
+					!slices.Contains(args, "label=sind.cluster=dev") {
 					return mock.Result{Stdout: testutil.NDJSON(map[string]string{"Names": "sind-prod-controller", "Labels": "sind.cluster=prod"})}, true
 				}
 				return mock.Result{}, false

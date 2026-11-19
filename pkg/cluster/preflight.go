@@ -136,6 +136,15 @@ func NodeShortNames(nodes []config.Node) []string {
 // realm's mesh and the cluster network have room for the nodes
 // (checkBridgePorts).
 //
+// Its conflicts are what a failed Create's rollback removes
+// (ListClusterResources), so that a create neither adopts nor removes what
+// it did not make: every container with the cluster's realm and name
+// labels, under whatever name, such as a worker that sind create worker
+// added or a helper container, and a volume of each type, of those the
+// config does not use too when the cluster owns it. A volume of a type the
+// config uses conflicts whoever owns it, as docker volume create would
+// hand it over.
+//
 // Container existence is checked with a single `docker ps` filtered by the
 // cluster's realm + name labels; this keeps the call count constant regardless
 // of node count.
@@ -168,16 +177,16 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		})
 	})
 
-	// Check the volumes this cluster will create.
+	// Check the volumes this cluster will create, and those of the other
+	// types that it owns, which the rollback would remove.
 	for _, vtype := range AllVolumeTypes {
-		if vtype == VolumeState && !cfg.HasBackupController() || vtype == VolumeHome && len(cfg.Users) == 0 ||
-			vtype == VolumeMunge && cfg.Identity.Mode == config.IdentityClientIDs {
-			continue
-		}
+		unused := vtype == VolumeState && !cfg.HasBackupController() || vtype == VolumeHome && len(cfg.Users) == 0 ||
+			vtype == VolumeMunge && cfg.Identity.Mode == config.IdentityClientIDs
 		volName := VolumeName(realm, cfg.Name, vtype)
 		g.Go(func() error {
 			return check(gctx, "volume", string(volName), func(ctx context.Context) (bool, error) {
-				return client.VolumeExists(ctx, volName)
+				labels, exists, err := client.VolumeLabels(ctx, volName)
+				return exists && (!unused || ownedBy(labels, realm, cfg.Name)), err
 			})
 		})
 	}
@@ -190,17 +199,10 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		if err != nil {
 			return fmt.Errorf("listing cluster containers: %w", err)
 		}
-		existing := make(map[docker.ContainerName]struct{}, len(entries))
+		mu.Lock()
+		defer mu.Unlock()
 		for _, e := range entries {
-			existing[e.Name] = struct{}{}
-		}
-		for _, shortName := range NodeShortNames(cfg.Nodes) {
-			name := ContainerName(realm, cfg.Name, shortName)
-			if _, ok := existing[name]; ok {
-				mu.Lock()
-				conflicts = append(conflicts, "container "+string(name))
-				mu.Unlock()
-			}
+			conflicts = append(conflicts, "container "+string(e.Name))
 		}
 		return nil
 	})

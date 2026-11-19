@@ -116,11 +116,24 @@ func TestNodeShortNames(t *testing.T) {
 
 // preflightOnCall returns an OnCall handler for PreflightCheck dispatch:
 //   - Network/volume inspects return "exists" when the queried name is a key
-//     in existing, and "not found" otherwise.
+//     in existing, without labels, and "not found" otherwise.
 //   - The filtered `docker ps` call returns NDJSON rows for every name in
 //     existingContainers (simulating containers that already exist with the
 //     cluster's realm+name labels).
 func preflightOnCall(t *testing.T, existing map[string]bool, existingContainers ...string) func([]string, string) mock.Result {
+	t.Helper()
+	labels := make(map[string]string, len(existing))
+	for name, ok := range existing {
+		if ok {
+			labels[name] = ""
+		}
+	}
+	return preflightOnCallLabels(t, labels, existingContainers...)
+}
+
+// preflightOnCallLabels is preflightOnCall with the labels of each
+// existing resource, as JSON.
+func preflightOnCallLabels(t *testing.T, existing map[string]string, existingContainers ...string) func([]string, string) mock.Result {
 	t.Helper()
 	notFound := testutil.ExitCode1(t)
 	return func(args []string, _ string) mock.Result {
@@ -132,12 +145,21 @@ func preflightOnCall(t *testing.T, existing map[string]bool, existingContainers 
 			}
 			return mock.Result{Stdout: strings.Join(lines, "\n")}
 		}
-		name := args[len(args)-1]
-		if existing[name] {
-			return mock.Result{}
+		if labels, ok := existing[preflightSubject(args)]; ok {
+			return mock.Result{Stdout: labels}
 		}
 		return mock.Result{Stderr: "Error: No such object\n", Err: notFound}
 	}
+}
+
+// preflightSubject returns the name of the resource that a docker call of
+// PreflightCheck asks about: the volume of a label inspect, else the last
+// argument.
+func preflightSubject(args []string) string {
+	if len(args) > 2 && args[0] == "volume" && args[1] == "inspect" {
+		return args[2]
+	}
+	return args[len(args)-1]
 }
 
 func TestPreflightCheck(t *testing.T) {
@@ -165,6 +187,12 @@ func TestPreflightCheck(t *testing.T) {
 			want: []string{"network sind-dev-net", "container sind-dev-controller", "container sind-dev-worker-0"}},
 		{name: "multi compute", workers: 3, containers: []string{"sind-dev-worker-0", "sind-dev-worker-2"},
 			want: []string{"container sind-dev-worker-0", "container sind-dev-worker-2"}, notWant: []string{"worker-1"}},
+		// The rollback would remove every container with the cluster's
+		// labels, and a create would adopt them.
+		{name: "other containers", containers: []string{"sind-dev-worker-7", "sind-dev-journal-helper"},
+			want: []string{"container sind-dev-journal-helper", "container sind-dev-worker-7"}},
+		{name: "unused owned volume", existing: map[string]bool{"sind-dev-home": true},
+			want: []string{"volume sind-dev-home"}},
 		{name: "network check error", fail: "sind-dev-net", want: []string{"checking network sind-dev-net: "}},
 		{name: "volume check error", fail: "sind-dev-config", want: []string{"checking volume sind-dev-config: "}},
 		{name: "container list error", fail: "label=sind.cluster=dev", want: []string{"listing cluster containers: "}},
@@ -173,7 +201,7 @@ func TestPreflightCheck(t *testing.T) {
 			base := preflightOnCall(t, tt.existing, tt.containers...)
 			var m mock.Executor
 			m.OnCall = func(args []string, stdin string) mock.Result {
-				if args[len(args)-1] == tt.fail {
+				if preflightSubject(args) == tt.fail {
 					return mock.Result{Err: errors.New("docker daemon not running")}
 				}
 				return base(args, stdin)
@@ -186,7 +214,7 @@ func TestPreflightCheck(t *testing.T) {
 
 			if tt.want == nil {
 				require.NoError(t, err)
-				assert.Len(t, m.Calls, 6) // network + 3 volumes + 2 filtered ps
+				assert.Len(t, m.Calls, 3+len(AllVolumeTypes)) // network + volumes + 2 filtered ps
 				return
 			}
 			require.Error(t, err)
