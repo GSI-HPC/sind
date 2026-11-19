@@ -473,7 +473,7 @@ func TestInspectContainer_NeverStarted(t *testing.T) {
 
 func TestLogs(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("line1\nline2\nline3\n", "", nil)
+	m.AddResult("2026-11-19T16:00:00.1Z line1\n2026-11-19T16:00:00.2Z line2\n2026-11-19T16:00:00.3Z line3\n", "", nil)
 	c := NewClient(&m)
 
 	logs, err := c.Logs(t.Context(), testContainerName, 3)
@@ -481,7 +481,38 @@ func TestLogs(t *testing.T) {
 	assert.Equal(t, "line1\nline2\nline3\n", logs)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"logs", "--tail", "3", string(testContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"logs", "--timestamps", "--tail", "3", string(testContainerName)}, m.Calls[0].Args)
+}
+
+// TestLogs_Stderr checks that Logs keeps what the container wrote to its
+// standard error, which docker logs writes to its own, in the order of the
+// lines' times.
+func TestLogs_Stderr(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(
+		"2026-11-19T16:00:00.100000000Z booting\n2026-11-19T16:00:00.3Z exec /sbin/init\n2026-11-19T16:00:01Z same time",
+		"2026-11-19T16:00:00.2Z sh: 1: /etc/sind/setup: not found\n2026-11-19T16:00:01Z on stderr\n2026-11-19T16:00:02Z last\n", nil)
+	c := NewClient(&m)
+
+	logs, err := c.Logs(t.Context(), testContainerName, 6)
+	require.NoError(t, err)
+	assert.Equal(t, "booting\nsh: 1: /etc/sind/setup: not found\nexec /sbin/init\nsame time\non stderr\nlast\n", logs)
+}
+
+// TestLogs_NoTimestamps checks that lines without a time are kept as they
+// are, those of standard output first, and before the lines of the other
+// stream with a time.
+func TestLogs_NoTimestamps(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("out\n", "err\nlonger line\n", nil)
+	m.AddResult("2026-11-19T16:00:00Z out\n", "no time on stderr\n", nil)
+	c := NewClient(&m)
+	logs, err := c.Logs(t.Context(), testContainerName, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "out\nerr\nlonger line\n", logs)
+	logs, err = c.Logs(t.Context(), testContainerName, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "no time on stderr\nout\n", logs)
 }
 
 func TestLogs_Error(t *testing.T) {

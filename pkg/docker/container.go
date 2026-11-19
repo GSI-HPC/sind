@@ -81,9 +81,62 @@ func (c *Client) UnpauseContainer(ctx context.Context, name ContainerName) error
 	return c.do(ctx, "unpause", string(name))
 }
 
-// Logs returns the last n lines of a container's log output.
+// Logs returns the last n lines of a container's log output: what it
+// wrote to its standard output and to its standard error, in the order it
+// wrote them. docker logs writes the two to its own standard output and
+// standard error, each line after the time it was logged (--timestamps),
+// by which Logs merges them; it returns the lines without the times.
 func (c *Client) Logs(ctx context.Context, name ContainerName, n int) (string, error) {
-	return c.output(ctx, "logs", "--tail", fmt.Sprintf("%d", n), string(name))
+	stdout, stderr, err := c.run(ctx, "logs", "--timestamps", "--tail", strconv.Itoa(n), string(name))
+	if err != nil {
+		return "", err
+	}
+	return mergeLogs(logLines(stdout), logLines(stderr)), nil
+}
+
+// logLine is a line of docker logs --timestamps: the time it was logged,
+// zero when the line has none, and the line without it.
+type logLine struct {
+	at   time.Time
+	text string
+}
+
+// logLines splits the output of docker logs --timestamps into its lines,
+// each ending with a newline.
+func logLines(out string) []logLine {
+	var lines []logLine
+	for line := range strings.Lines(out) {
+		if !strings.HasSuffix(line, "\n") {
+			line += "\n"
+		}
+		l := logLine{text: line}
+		if ts, text, ok := strings.Cut(line, " "); ok {
+			if at, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+				l = logLine{at: at, text: text}
+			}
+		}
+		lines = append(lines, l)
+	}
+	return lines
+}
+
+// mergeLogs joins the lines of a container's standard output and standard
+// error in the order of their times, keeping the order of each stream. A
+// line without a time comes before any line of the other stream with one;
+// of two lines logged at the same time, or both without one, the one of
+// standard output comes first.
+func mergeLogs(stdout, stderr []logLine) string {
+	var b strings.Builder
+	for len(stdout) > 0 || len(stderr) > 0 {
+		if len(stderr) == 0 || len(stdout) > 0 && !stderr[0].at.Before(stdout[0].at) {
+			b.WriteString(stdout[0].text)
+			stdout = stdout[1:]
+			continue
+		}
+		b.WriteString(stderr[0].text)
+		stderr = stderr[1:]
+	}
+	return b.String()
 }
 
 // ContainerState represents the state of a Docker container.

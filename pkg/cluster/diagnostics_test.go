@@ -78,5 +78,5 @@ func TestLogClusterDiagnostics_InspectsEachContainer(t *testing.T) {
 		calls = append(calls, strings.Join(call.Args[:2], " "))
 	}
 	assert.ElementsMatch(t, []string{"ps -a", "inspect sind-dev-controller", "inspect sind-dev-worker-0",
-		"logs --tail", "logs --tail"}, calls, "list + 2*(inspect + logs)")
+		"logs --timestamps", "logs --timestamps"}, calls, "list + 2*(inspect + logs)")
 }
