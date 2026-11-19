@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/internal/testutil/prereq"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
@@ -65,7 +66,7 @@ func TestMonitoring(t *testing.T) {
 	t.Parallel()
 	c, _ := testutil.NewClient(t)
 	ctx := t.Context()
-	checkPrerequisites(t, c)
+	prereq.Check(t, c)
 
 	version, err := slurm.DiscoverVersion(ctx, c, testutil.Image())
 	require.NoError(t, err)

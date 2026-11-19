@@ -140,6 +140,12 @@ step slurm total=2 [fold]: ok
 
 The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets every `SIND_*` variable that sind reads (`envvar.All`) and points `XDG_STATE_HOME` at a temporary directory, so that a developer's own settings reach no test and no test writes the activity log into a real home; a test of the log gives itself a directory with `t.Setenv("XDG_STATE_HOME", t.TempDir())`.
 
+## Integration test prerequisites
+
+An integration test that needs Docker gets its client from `testutil.NewClient` (`newTestClient` in `pkg/docker`), which checks with `docker info`, once per test process, that `docker` reaches a daemon (`itest.RequireDocker`). A test that creates clusters also calls `prereq.Check`, which checks the Docker version and that cgroup v2 is mounted with `nsdelegate`.
+
+When the host fails such a check, the test is skipped, so that `make test-integration` runs on a machine without Docker. With `SIND_TEST_REQUIRE_DOCKER` set, as CI sets it, the test fails instead: a runner change or a daemon that does not answer cannot pass the job with the tests skipped. A test that skips for a reason of its own, such as a Slurm release without slurmrestd, still skips.
+
 ## Integration test isolation
 
 Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test gets a random realm from `testutil.Realm`, which appends eight random hex digits to a prefix:

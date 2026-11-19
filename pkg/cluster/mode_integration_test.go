@@ -14,13 +14,12 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/internal/testutil/prereq"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1182,7 +1181,7 @@ func waitInControl(t *testing.T, c *docker.Client, realm, clusterName, shortName
 // named after prefix, which goes when the test ends, with the clusters.
 func testMesh(ctx context.Context, t *testing.T, c *docker.Client, prefix string, clusters ...string) (*mesh.Manager, string) {
 	t.Helper()
-	checkPrerequisites(t, c)
+	prereq.Check(t, c)
 	realm := testutil.Realm(prefix)
 	meshMgr := mesh.NewManager(c, realm)
 	t.Cleanup(func() {
@@ -1238,21 +1237,4 @@ func testConfig(t *testing.T, name, body string) *config.Cluster {
 	cfg.ApplyDefaults()
 	require.NoError(t, cfg.Validate())
 	return cfg
-}
-
-func checkPrerequisites(t *testing.T, c *docker.Client) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	info, err := c.Info(ctx)
-	if err != nil {
-		t.Skipf("cannot query Docker version: %v", err)
-	}
-	if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
-		t.Skipf("%v", vErr)
-	}
-	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())
-	if !hasNsd {
-		t.Skip("host cgroup mount lacks nsdelegate")
-	}
 }

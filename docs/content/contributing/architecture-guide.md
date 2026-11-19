@@ -60,7 +60,9 @@ internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fra
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE), TarModes, WithoutCalls
   ├── client.go    NewClient, Realm (unit test variants)
-  └── client_integration.go NewClient, Realm (integration test variants)
+  ├── client_integration.go NewClient, Realm (integration test variants)
+  ├── itest/       What every package's integration tests share, pkg/docker's too: RequireDocker (docker info, once per process), Unavailable (skip, or fail under SIND_TEST_REQUIRE_DOCKER), RunID
+  └── prereq/      Check: sind's prerequisites on the host (Docker version, cgroup v2 with nsdelegate), for the tests that create clusters
 
 pkg/cmdexec/       Command executor abstraction
   ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)

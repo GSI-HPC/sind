@@ -3,23 +3,14 @@
 package docker
 
 import (
-	"crypto/rand"
-	"fmt"
+	"github.com/GSI-HPC/sind/internal/testutil/itest"
 )
 
 const testContainerName ContainerName = "sind-dev-controller"
 
-// testID is a per-process random suffix so parallel integration test
-// runs don't collide on Docker resource names.
-var testID = func() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("%x", b)
-}()
-
 // itName returns a unique Docker resource name for integration tests.
 func itName(base string) string {
-	return "sind-it-" + base + "-" + testID
+	return "sind-it-" + base + "-" + itest.RunID
 }
 
 func itContainerName(base string) ContainerName { return ContainerName(itName(base)) }

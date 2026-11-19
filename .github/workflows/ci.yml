@@ -195,9 +195,10 @@ jobs:
           sysctl fs.inotify.max_user_instances
           sudo sysctl -w fs.inotify.max_user_instances=8192
 
-      # The integration tests skip when the host lacks sind's prerequisites;
-      # fail here instead so a runner change cannot turn this job green.
-      # inotify is only a warning for sind, but the tests need it to pass.
+      # The integration tests fail when the host lacks sind's prerequisites,
+      # under SIND_TEST_REQUIRE_DOCKER; fail here first, with sind's own
+      # words. inotify is only a warning for sind, but the tests need it to
+      # pass.
       - name: Check prerequisites
         run: |
           go run ./cmd/sind doctor
@@ -270,6 +271,7 @@ jobs:
         run: make test-integration
         env:
           SIND_TEST_IMAGE: local/sind-node:ci
+          SIND_TEST_REQUIRE_DOCKER: "1"
           GOTEST: gotestsum --junitfile integration-tests.xml --
 
       - name: Test report
