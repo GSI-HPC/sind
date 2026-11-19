@@ -100,7 +100,7 @@ func TestParseVersion(t *testing.T) {
 func TestDiscoverVersionLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
-	image := "ghcr.io/gsi-hpc/sind-node:latest"
+	image := testutil.Image()
 
 	if !rec.IsIntegration() {
 		rec.AddResult("slurm 25.11.9\n", "", nil)

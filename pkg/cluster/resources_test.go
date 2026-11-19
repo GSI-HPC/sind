@@ -75,7 +75,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	// Write config.
 	helperImage := "busybox:latest"
 	if rec.IsIntegration() {
-		helperImage = "ghcr.io/gsi-hpc/sind-node:latest"
+		helperImage = testutil.Image()
 	}
 	cfg := &config.Cluster{
 		Name: clusterName,
