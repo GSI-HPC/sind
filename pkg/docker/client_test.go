@@ -289,7 +289,7 @@ func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
 
 func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
 	e := newBlockingExecutor()
-	c := &Client{Executor: e, Command: "docker"}
+	c := &Client{Executor: e}
 	var wg sync.WaitGroup
 	for range MaxConcurrentCalls + 1 {
 		wg.Go(func() { _, _, _ = c.run(t.Context(), "version") })
@@ -431,5 +431,39 @@ func TestNewExitErrorRecognised(t *testing.T) {
 	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
 	require.NoError(t, err)
 	assert.Equal(t, "inactive\n", stdout)
+	m.AssertDone(t)
+}
+
+// TestClient_Command checks that a Client runs the docker CLI that
+// WithCommand names, for its commands and its streams, and "docker" without
+// it, also as a Client literal.
+func TestClient_Command(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("27.0.0\n", "", nil)
+	m.AddResult("27.0.0\n", "", nil)
+	m.AddResult("27.0.0\n", "", nil)
+	m.OnStart = func([]string) mock.StreamResult {
+		return mock.StreamResult{Reader: io.NopCloser(strings.NewReader(""))}
+	}
+
+	custom := NewClient(&m, WithCommand("/opt/docker/bin/docker"))
+	assert.Equal(t, "/opt/docker/bin/docker", custom.Command())
+	_, _, err := custom.run(t.Context(), "version")
+	require.NoError(t, err)
+	proc, err := custom.Start(t.Context(), "events")
+	require.NoError(t, err)
+	require.NoError(t, proc.Close())
+
+	for _, c := range []*Client{NewClient(&m), {Executor: &m}} {
+		assert.Equal(t, "docker", c.Command())
+		_, _, err := c.run(t.Context(), "version")
+		require.NoError(t, err)
+	}
+	names := make([]string, 0, len(m.Calls))
+	for _, call := range m.Calls {
+		names = append(names, call.Name)
+	}
+	assert.Equal(t, []string{"/opt/docker/bin/docker", "/opt/docker/bin/docker", "docker", "docker"}, names,
+		"version and events with WithCommand, then version twice without")
 	m.AssertDone(t)
 }

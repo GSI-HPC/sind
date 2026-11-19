@@ -1459,7 +1459,7 @@ func TestWaitReady_WithWatcher(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
-	w := monitor.NewWatcher(m, "sind-dev-", "dev")
+	w := monitor.NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	require.NoError(t, w.Start(ctx, nil))
 
 	probes := []probe.Probe{{Name: "container", Check: probe.ContainerRunning}}

@@ -17,7 +17,7 @@ import (
 // It manages the lifecycle of docker events and per-node systemd monitors,
 // and broadcasts events to subscribers.
 type Watcher struct {
-	executor    cmdexec.Executor
+	client      *docker.Client
 	realm       string
 	clusterName string
 	prefix      string
@@ -34,19 +34,20 @@ type Watcher struct {
 	wg sync.WaitGroup
 }
 
-// NewWatcher creates a Watcher for the given cluster. The executor is used
-// to start long-lived streaming processes (docker events, busctl monitor).
-// Its docker events stream asks for the events of the clusters of that
-// name in every realm; NewRealmWatcher asks for those of one realm.
-func NewWatcher(executor cmdexec.Executor, containerPrefix, clusterName string) *Watcher {
-	return NewRealmWatcher(executor, "", containerPrefix, clusterName)
+// NewWatcher creates a Watcher for the given cluster. The client starts
+// its long-lived streams (docker events, busctl monitor through docker
+// exec), with the client's docker command (docker.Client.Start). Its
+// docker events stream asks for the events of the clusters of that name in
+// every realm; NewRealmWatcher asks for those of one realm.
+func NewWatcher(client *docker.Client, containerPrefix, clusterName string) *Watcher {
+	return NewRealmWatcher(client, "", containerPrefix, clusterName)
 }
 
 // NewRealmWatcher is NewWatcher for the cluster of one realm, or of every
 // realm when realm is empty.
-func NewRealmWatcher(executor cmdexec.Executor, realm, containerPrefix, clusterName string) *Watcher {
+func NewRealmWatcher(client *docker.Client, realm, containerPrefix, clusterName string) *Watcher {
 	return &Watcher{
-		executor:    executor,
+		client:      client,
 		realm:       realm,
 		clusterName: clusterName,
 		prefix:      containerPrefix,
@@ -114,7 +115,7 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 
 	// Start docker events monitor.
 	dockerArgs := DockerRealmEventsArgs(w.realm, w.clusterName)
-	proc, err := w.executor.Start(ctx, "docker", dockerArgs...)
+	proc, err := w.client.Start(ctx, dockerArgs...)
 	if err != nil {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start docker events monitor", "err", err)
 		return err
@@ -168,7 +169,7 @@ func (w *Watcher) AddNodes(nodes []NodeTarget) {
 func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 	log := sindlog.From(ctx)
 	args := SystemdMonitorArgs(node.Container)
-	proc, err := w.executor.Start(ctx, "docker", args...)
+	proc, err := w.client.Start(ctx, args...)
 	if err != nil {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start systemd monitor", "node", node.ShortName, "err", err)
 		w.emit(ctx, Event{

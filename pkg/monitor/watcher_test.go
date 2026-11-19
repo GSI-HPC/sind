@@ -37,7 +37,7 @@ func startWatcher(t *testing.T, nodes ...NodeTarget) (*Watcher, *mock.Pipes) {
 	t.Helper()
 	pipes := &mock.Pipes{}
 	ctx, cancel := context.WithCancel(t.Context())
-	w := NewWatcher(&mock.Executor{OnStart: pipes.OnStart}, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(&mock.Executor{OnStart: pipes.OnStart}), "sind-dev-", "dev")
 	require.NoError(t, w.Start(ctx, nodes), "Start")
 	t.Cleanup(func() {
 		cancel()
@@ -97,7 +97,7 @@ func TestWatcher_AddNodes(t *testing.T) {
 
 func TestWatcher_AddNodesBeforeStart(t *testing.T) {
 	m := &mock.Executor{}
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	w.AddNodes([]NodeTarget{controller})
 	assert.Empty(t, m.Calls)
 }
@@ -110,7 +110,7 @@ func TestWatcher_AddNodesStopsWithWatcher(t *testing.T) {
 
 	m := &mock.Executor{OnStart: pipes.OnStart}
 	ctx, cancel := context.WithCancel(t.Context())
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	require.NoError(t, w.Start(ctx, nil))
 	w.AddNodes([]NodeTarget{controller})
 	require.Equal(t, 2, pipes.Len())
@@ -163,7 +163,7 @@ func TestWatcher_UnsubscribeAndWait(t *testing.T) {
 	// Wait and Unsubscribe may run in either order, and at the same time:
 	// each channel is closed once.
 	m := &mock.Executor{}
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	before, during, after := w.Subscribe(), w.Subscribe(), w.Subscribe()
 	w.Unsubscribe(before)
 	done := make(chan struct{})
@@ -182,7 +182,7 @@ func TestWatcher_UnsubscribeAndWait(t *testing.T) {
 
 func TestWatcher_UnsubscribeNonexistent(_ *testing.T) {
 	m := &mock.Executor{}
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	other := make(chan Event)
 	w.Unsubscribe(other)
 }
@@ -215,7 +215,7 @@ func TestWatcher_SystemdMonitorStartFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	sub := w.Subscribe()
 
 	require.NoError(t, w.Start(ctx, []NodeTarget{controller}), "Start")
@@ -280,7 +280,7 @@ func TestWatcher_DockerMonitorStartFailure(t *testing.T) {
 		},
 	}
 
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	err := w.Start(t.Context(), nil)
 	require.Error(t, err)
 }
@@ -291,7 +291,7 @@ func TestWatcher_WaitClosesSubscribers(t *testing.T) {
 	m := &mock.Executor{OnStart: pipes.OnStart}
 	ctx, cancel := context.WithCancel(t.Context())
 
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	sub := w.Subscribe()
 
 	err := w.Start(ctx, nil)
@@ -308,7 +308,7 @@ func TestWatcher_WaitClosesSubscribers(t *testing.T) {
 // TestWatcher_Emit_SendsWhenChannelHasRoom covers the normal path: emit
 // delivers the event via internalCh when the buffer is not full.
 func TestWatcher_Emit_SendsWhenChannelHasRoom(t *testing.T) {
-	w := NewWatcher(&mock.Executor{}, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(&mock.Executor{}), "sind-dev-", "dev")
 
 	w.emit(t.Context(), Event{Kind: EventMonitorError, Detail: "boom"})
 
@@ -325,7 +325,7 @@ func TestWatcher_Emit_SendsWhenChannelHasRoom(t *testing.T) {
 // the internal channel is full and the context is cancelled, emit returns
 // via the ctx.Done() branch rather than blocking forever.
 func TestWatcher_Emit_CtxDoneWhenChannelFull(t *testing.T) {
-	w := NewWatcher(&mock.Executor{}, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(&mock.Executor{}), "sind-dev-", "dev")
 
 	for range cap(w.internalCh) {
 		w.internalCh <- Event{}
@@ -368,7 +368,7 @@ func TestWatcher_MonitorStreamExitError(t *testing.T) {
 	m := &mock.Executor{OnStart: func([]string) mock.StreamResult {
 		return mock.StreamResult{Reader: failedStream{Reader: strings.NewReader(""), err: unreachable}}
 	}}
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	sub := w.Subscribe()
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, w.Start(ctx, nil))
@@ -440,7 +440,7 @@ func TestWatcher_StartManyFailingMonitors(t *testing.T) {
 		}
 		return mock.StreamResult{Err: errors.New("busctl not available")}
 	}}
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w := NewWatcher(docker.NewClient(m), "sind-dev-", "dev")
 	nodes := make([]NodeTarget, 2*cap(w.internalCh))
 	for i := range nodes {
 		nodes[i] = NodeTarget{ShortName: fmt.Sprintf("worker-%d", i), Container: docker.ContainerName(fmt.Sprintf("sind-dev-worker-%d", i))}
@@ -458,5 +458,23 @@ func TestWatcher_StartManyFailingMonitors(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("Start blocked")
+	}
+}
+
+// TestWatcher_ClientCommand checks that the watcher starts its streams with
+// the docker command of its client.
+func TestWatcher_ClientCommand(t *testing.T) {
+	pipes := &mock.Pipes{}
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	w := NewWatcher(docker.NewClient(m, docker.WithCommand("/opt/bin/docker")), "sind-dev-", "dev")
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, w.Start(ctx, []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}))
+	cancel()
+	pipes.CloseAll()
+	w.Wait()
+	calls := m.CallsSnapshot()
+	require.Len(t, calls, 2)
+	for _, c := range calls {
+		assert.Equal(t, "/opt/bin/docker", c.Name, c.Args)
 	}
 }

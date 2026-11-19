@@ -151,7 +151,7 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	// What the container or journalctl writes to its standard error is
 	// part of the log.
-	proc, err := s.env.Exec.Start(cmdexec.WithStderrMerged(ctx), "docker", logsArgs(q)...)
+	proc, err := docker.NewClient(s.env.Exec).Start(cmdexec.WithStderrMerged(ctx), logsArgs(q)...)
 	if err != nil {
 		s.log.Error("starting the log stream", "node", q.node, "err", err)
 		http.Error(w, "could not start the log stream", http.StatusBadGateway)

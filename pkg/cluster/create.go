@@ -979,7 +979,7 @@ func enableService(ctx context.Context, client *docker.Client, name docker.Conta
 // function cancels the watcher and waits for its goroutines to exit.
 func startWatcher(ctx context.Context, client *docker.Client, realm, clusterName string) (w *monitor.Watcher, stop func()) {
 	watchCtx, cancel := context.WithCancel(ctx)
-	w = monitor.NewRealmWatcher(client.Executor, realm, ContainerPrefix(realm, clusterName), clusterName)
+	w = monitor.NewRealmWatcher(client, realm, ContainerPrefix(realm, clusterName), clusterName)
 	if err := w.Start(watchCtx, nil); err != nil {
 		cancel()
 		sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "event watcher not available, using poll-only mode", "err", err)

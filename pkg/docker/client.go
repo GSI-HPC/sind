@@ -47,21 +47,53 @@ type Labels map[string]string
 // the bound cannot deadlock.
 const MaxConcurrentCalls = 16
 
-// Client provides operations against the Docker CLI.
+// Client provides operations against the Docker CLI. Make one with
+// NewClient. A Client literal with only Executor set runs "docker", without
+// the bound of MaxConcurrentCalls.
 type Client struct {
 	Executor cmdexec.Executor
-	Command  string // docker executable path (default: "docker")
 
+	// command is the docker executable (WithCommand); empty is "docker".
+	command string
 	// slots bounds the docker commands that run at once (see
 	// MaxConcurrentCalls). A Client not made by NewClient has none and
 	// runs them unbounded.
 	slots chan struct{}
 }
 
+// ClientOption sets an option of a Client that NewClient makes.
+type ClientOption func(*Client)
+
+// WithCommand makes the Client run the docker CLI at path, or found by
+// that name in PATH, instead of "docker", for its commands and its streams
+// (Start).
+func WithCommand(path string) ClientOption {
+	return func(c *Client) { c.command = path }
+}
+
 // NewClient returns a Client that runs docker commands through the given
 // executor, at most MaxConcurrentCalls at once.
-func NewClient(executor cmdexec.Executor) *Client {
-	return &Client{Executor: executor, Command: "docker", slots: make(chan struct{}, MaxConcurrentCalls)}
+func NewClient(executor cmdexec.Executor, opts ...ClientOption) *Client {
+	c := &Client{Executor: executor, slots: make(chan struct{}, MaxConcurrentCalls)}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// Command returns the docker executable the Client runs.
+func (c *Client) Command() string {
+	if c.command == "" {
+		return "docker"
+	}
+	return c.command
+}
+
+// Start starts the long-lived docker command args, such as docker events,
+// through the Client's executor (cmdexec.Executor.Start). Streams do not
+// count towards MaxConcurrentCalls.
+func (c *Client) Start(ctx context.Context, args ...string) (*cmdexec.Process, error) {
+	return c.Executor.Start(ctx, c.Command(), args...)
 }
 
 // acquire takes a slot for a docker command and returns the function that
@@ -88,7 +120,7 @@ func (c *Client) acquire(ctx context.Context) (release func(), err error) {
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
 	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
-		return c.Executor.Run(ctx, c.Command, args...)
+		return c.Executor.Run(ctx, c.Command(), args...)
 	})
 }
 
@@ -110,7 +142,7 @@ func (c *Client) output(ctx context.Context, args ...string) (string, error) {
 
 func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
-		return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
+		return c.Executor.RunWithStdin(ctx, stdin, c.Command(), args...)
 	})
 }
 

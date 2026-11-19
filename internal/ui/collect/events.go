@@ -17,7 +17,6 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -62,9 +61,10 @@ func EventsArgs() []string {
 // BackoffMax, and tells the collectors to read everything again, as events
 // were missed meanwhile.
 type Events struct {
-	Exec cmdexec.Executor
-	Bus  *Bus
-	Log  *slog.Logger
+	// Docker starts the stream (docker.Client.Start), with its command.
+	Docker *docker.Client
+	Bus    *Bus
+	Log    *slog.Logger
 	// Realms returns the realms that sind ui knows, by which the event of
 	// a cluster's network <realm>-<cluster>-net finds its realm; nil knows
 	// none, and such an event is dropped.
@@ -126,7 +126,7 @@ var errStreamEnded = errors.New("stream ended")
 // ends, which it reports as an error, or ctx does. The error of a stream
 // whose docker command failed says why, in docker's words.
 func (e *Events) stream(ctx context.Context) error {
-	proc, err := e.Exec.Start(ctx, "docker", EventsArgs()...)
+	proc, err := e.Docker.Start(ctx, EventsArgs()...)
 	if err != nil {
 		return err
 	}
