@@ -143,6 +143,8 @@ For managed workers, sind removes them from `sind-nodes.conf` and reconfigures s
 
 Deleting a managed worker needs a running controller: with the controller stopped or frozen, `sind delete worker` fails and removes nothing, as the node would otherwise stay in Slurm's configuration without a container. Unmanaged workers can be deleted at any time.
 
+A worker that `sind-nodes.conf` still defines but whose container is gone (left by a failed `sind create worker` that could not restore the file, or by a container removed outside sind) is deleted too: sind removes it from `sind-nodes.conf` and the mesh, and warns that it had no container. Any other name without a container fails with `node not found`, and nothing is deleted. So does a name without a container while sind cannot read `sind-nodes.conf`, as with a stopped controller: the error says why.
+
 ```bash
 # Remove a single worker
 sind delete worker worker-2
