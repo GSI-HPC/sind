@@ -612,6 +612,17 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 	assert.Contains(t, err.Error(), "probe systemd")
 }
 
+func TestUntilReady_SkipsProbeWithoutCheck(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	probes := []Probe{ForService(ServiceMariadb), {Name: "container", Check: ContainerRunning}}
+	require.NoError(t, UntilReady(t.Context(), c, testContainer, probes, time.Millisecond))
+	assert.Len(t, m.Calls, 1)
+	assert.Equal(t, "mariadb", probes[0].Name, "the caller's probes stay")
+}
+
 func TestUntilReady_EmptyProbes(t *testing.T) {
 	var m mock.Executor
 	c := docker.NewClient(&m)

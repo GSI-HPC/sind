@@ -114,16 +114,15 @@ func managedWorkerLabels(labels docker.Labels) bool {
 
 // nodeProbes returns the readiness probes of a node that exists, from its
 // role and labels: its container and systemd, then the services that sind
-// checks on it (nodeServices) and waits for.
+// checks on it (nodeServices). UntilReady skips those that sind does not
+// wait for, which have no check.
 func nodeProbes(role config.Role, labels docker.Labels) []probe.Probe {
 	probes := []probe.Probe{
 		{Name: "container", Check: probe.ContainerRunning},
 		{Name: "systemd", Check: probe.SystemdReady},
 	}
 	for _, svc := range nodeServices(role, labels) {
-		if p := probe.ForService(svc); p.Check != nil {
-			probes = append(probes, p)
-		}
+		probes = append(probes, probe.ForService(svc))
 	}
 	return probes
 }

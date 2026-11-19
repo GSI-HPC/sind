@@ -200,7 +200,7 @@ func TestNodeProbes(t *testing.T) {
 	}
 	assert.Equal(t, []string{"container", "systemd", "munge", "sshd", "slurmd"}, names(nodeProbes(config.RoleWorker, docker.Labels{})))
 	assert.Equal(t, []string{"container", "systemd", "munge", "sshd"}, names(nodeProbes(config.RoleWorker, docker.Labels{LabelManaged: "false"})))
-	assert.Equal(t, []string{"container", "systemd", "munge", "sshd", "slurmdbd"}, names(nodeProbes(config.RoleDB, docker.Labels{})))
+	assert.Equal(t, []string{"container", "systemd", "munge", "sshd", "mariadb", "slurmdbd"}, names(nodeProbes(config.RoleDB, docker.Labels{})))
 	assert.Equal(t, []string{"container", "systemd", "sshd", "sackd"}, names(nodeProbes(config.RoleSubmitter, docker.Labels{LabelIdentity: string(config.IdentityClientIDs)})))
 	assert.True(t, slices.ContainsFunc(nodeProbes(config.RoleController, docker.Labels{}), func(p probe.Probe) bool { return p.Name == "slurmctld" }))
 }

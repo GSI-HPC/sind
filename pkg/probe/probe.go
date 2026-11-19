@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -102,7 +103,7 @@ func unitReady(svc Service) Func {
 
 // ForService returns the readiness probe for a service, which follows the
 // service's systemd unit. A service sind does not wait for (mariadb) gets
-// a probe without a check.
+// a probe without a check, which UntilReady and UntilReadyWithEvents skip.
 func ForService(svc Service) Probe {
 	check, ok := serviceChecks[svc]
 	if !ok {
@@ -140,7 +141,9 @@ const DefaultInterval = 500 * time.Millisecond
 // killed call; a probe after it, which the round reached as that one
 // passed, with its own error. A wait that its deadline ended reads "timed
 // out" and wraps context.DeadlineExceeded. The error does not name the
-// node, which the caller knows by a better name than the container's.
+// node, which the caller knows by a better name than the container's. A
+// probe without a Check, as ForService returns for a service that sind
+// does not wait for, is skipped.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
@@ -193,6 +196,7 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 	ctx, wait := spans.Start(ctx, spans.KindWait, "ready", bound...)
 	defer func() { wait.End(err) }()
 	log := sindlog.From(ctx)
+	probes = slices.DeleteFunc(slices.Clone(probes), func(p Probe) bool { return p.Check == nil })
 	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
 
