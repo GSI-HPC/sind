@@ -3,10 +3,14 @@
 package config
 
 import (
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestParse_SyntaxErrors(t *testing.T) {
@@ -180,10 +184,53 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: {role: worker, cpus: 1}\n    cpus: 2\n"))
 	require.NoError(t, err)
 	assert.Equal(t, 2, c.Nodes[0].CPUs)
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: {role: worker, cpus: x}\n    cpus: 2\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 2, c.Nodes[0].CPUs)
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: {worker: 2}\n    worker: 3\n"))
+	require.NoError(t, err)
+	assert.Equal(t, Node{Role: RoleWorker, Count: 3}, c.Nodes[0])
+	// Of two merged objects, the one named first gives the key.
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: [{role: worker, cpus: 1}, {cpus: 2, memory: 1g}]\n"))
+	require.NoError(t, err)
+	assert.Equal(t, Node{Role: RoleWorker, CPUs: 1, Memory: "1g"}, c.Nodes[0])
 
 	// An alias of a node is followed.
 	_, err = Parse([]byte("kind: Cluster\nnodes:\n  - &n {role: worker, cpu: 1}\n  - *n\n"))
 	require.ErrorContains(t, err, "nodes[0].cpu: unknown key")
 	_, err = Parse([]byte("kind: Cluster\nname: &n x\nrealm: *n\n"))
 	require.NoError(t, err)
+}
+
+func TestParse_MergeChain(t *testing.T) {
+	// Each object merges the one before twice: followed naively, the
+	// merges of the last one name 2^40 objects. The decoder refuses the
+	// document; checkSyntax must not take that long first.
+	var b strings.Builder
+	b.WriteString("kind: Cluster\nnodes: [controller, &a0 {role: worker}")
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&b, ", &a%d {<<: [*a%d, *a%d]}", i, i-1, i-1)
+	}
+	b.WriteString("]\n")
+	done := make(chan error, 1)
+	go func() {
+		_, err := Parse([]byte(b.String()))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "excessive aliasing")
+	case <-time.After(30 * time.Second):
+		t.Fatal("Parse of a chain of merges did not end")
+	}
+}
+
+func TestPairsOf_MergeOfNoObject(t *testing.T) {
+	// checkSyntax refuses the merge of a string; pairsOf takes no keys
+	// from it.
+	var n yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("{<<: [x], worker: 1}"), &n))
+	pairs := pairsOf(n.Content[0])
+	require.Len(t, pairs, 2)
+	assert.Equal(t, "worker", pairs[0].Value)
 }

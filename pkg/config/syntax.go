@@ -223,7 +223,7 @@ func walk(t reflect.Type, n *yaml.Node, path string) error {
 		if n.Kind != yaml.MappingNode {
 			return errorAt(n, path, "expected an object, got %s", describe(n))
 		}
-		if err := checkKeys(n, path, nil); err != nil {
+		if err := checkKeys(n, path); err != nil {
 			return err
 		}
 		pairs := pairsOf(n)
@@ -288,7 +288,7 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 	if n.Kind != yaml.MappingNode {
 		return errorAt(n, path, "expected an object, got %s", describe(n))
 	}
-	if err := checkKeys(n, path, nil); err != nil {
+	if err := checkKeys(n, path); err != nil {
 		return err
 	}
 	if t == reflect.TypeFor[Node]() && !hasKey(n, "role") {
@@ -380,9 +380,16 @@ func mergeSources(value *yaml.Node) []*yaml.Node {
 
 // checkKeys checks that mapping n, and each object its merge keys name,
 // has no key twice, that the merge keys name objects or lists of objects,
-// and that no object merges itself; outer holds the objects whose merges
-// are being checked.
-func checkKeys(n *yaml.Node, path string, outer []*yaml.Node) error {
+// and that no object merges itself. It checks each object once, however
+// often the merges name it.
+func checkKeys(n *yaml.Node, path string) error {
+	return checkMerged(n, path, nil, make(map[*yaml.Node]bool))
+}
+
+// checkMerged is checkKeys for mapping n; outer holds the objects whose
+// merges are being checked, and checked those checked already.
+func checkMerged(n *yaml.Node, path string, outer []*yaml.Node, checked map[*yaml.Node]bool) error {
+	checked[n] = true
 	outer = append(outer, n)
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		key := n.Content[i]
@@ -401,8 +408,10 @@ func checkKeys(n *yaml.Node, path string, outer []*yaml.Node) error {
 				return errorAt(src, join(path, "<<"), "expected an object or a list of objects, got %s", describe(src))
 			case slices.Contains(outer, src):
 				return errorAt(n.Content[i], join(path, "<<"), "an object cannot merge itself")
+			case checked[src]:
+				continue
 			}
-			if err := checkKeys(src, path, outer); err != nil {
+			if err := checkMerged(src, path, outer, checked); err != nil {
 				return err
 			}
 		}
@@ -411,20 +420,38 @@ func checkKeys(n *yaml.Node, path string, outer []*yaml.Node) error {
 }
 
 // pairsOf returns the keys and values of mapping n, alternating: its own,
-// then those of the objects its merge keys name, which checkKeys has
-// checked.
+// then those of the objects its merge keys name, in order, each with the
+// objects it merges in turn. A key that comes again is left out, as the
+// decoder takes the first: n's own over a merged one, and of two merged
+// objects the one named first. Each object counts once, however often
+// the merges name it, so the result has each key once.
 func pairsOf(n *yaml.Node) []*yaml.Node {
-	var pairs, merged []*yaml.Node
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if !isMerge(n.Content[i]) {
-			pairs = append(pairs, n.Content[i], n.Content[i+1])
-			continue
+	var pairs []*yaml.Node
+	keys := make(map[string]bool)
+	seen := make(map[*yaml.Node]bool)
+	var add func(m *yaml.Node)
+	add = func(m *yaml.Node) {
+		if m.Kind != yaml.MappingNode || seen[m] {
+			return
 		}
-		for _, src := range mergeSources(n.Content[i+1]) {
-			merged = append(merged, pairsOf(resolve(src))...)
+		seen[m] = true
+		var sources []*yaml.Node
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			key := m.Content[i]
+			switch {
+			case isMerge(key):
+				sources = append(sources, mergeSources(m.Content[i+1])...)
+			case !keys[key.Value]:
+				keys[key.Value] = true
+				pairs = append(pairs, key, m.Content[i+1])
+			}
+		}
+		for _, src := range sources {
+			add(resolve(src))
 		}
 	}
-	return append(pairs, merged...)
+	add(n)
+	return pairs
 }
 
 // hasKey reports whether mapping n has the key name, itself or by a merge.
