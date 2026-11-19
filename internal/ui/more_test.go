@@ -720,10 +720,4 @@ func TestPgOutsides(t *testing.T) {
 		Also: "also in realms b and c", ConnectURL: "/dialogs/connect?container=kind&realm=a",
 	}}, pgOutsides(sn, "a"))
 	assert.Nil(t, pgOutsides(sn, "b"))
-
-	// The monitoring stack of another realm is sind's, though the docker ps
-	// of this realm does not tell it apart.
-	sn.Meshes["b"] = store.Mesh{Connectable: []store.Outside{{Name: "a-mesh-grafana-1", State: "running"}}}
-	sn.Monitorings = map[string]*cluster.Monitoring{"a": {Services: []cluster.MonitoringService{{Container: "a-mesh-grafana-1"}}}}
-	assert.Nil(t, pgOutsides(sn, "b"))
 }

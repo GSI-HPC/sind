@@ -95,7 +95,7 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (
 			"--dns", dnsIP,
 			"-v", string(m.SSHVolumeName()) + ":/root/.ssh",
 		}
-		sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), "ssh")...)
+		sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), ComposeServiceSSH)...)
 		sshArgs = append(sshArgs, SSHImage(), "sleep", "infinity")
 		if err := m.pullFor(ctx, SSHImage()); err != nil {
 			return false, err

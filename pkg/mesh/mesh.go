@@ -51,6 +51,14 @@ const (
 	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
 )
 
+// The Compose services of the mesh's containers, in the project
+// Names.ComposeProject. The monitoring stack's containers join that project
+// too, as the services of pkg/observability.
+const (
+	ComposeServiceDNS = "dns"
+	ComposeServiceSSH = "ssh"
+)
+
 // composeLabelFlags returns sorted --label flags for a mesh container.
 func composeLabelFlags(project, service string) []string {
 	return docker.SortedLabelFlags(docker.ComposeLabels(project, service, 1))
@@ -663,7 +671,7 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 	if pinnedIP != "" {
 		args = append(args, "--ip", pinnedIP)
 	}
-	args = append(args, composeLabelFlags(m.ComposeProject(), "dns")...)
+	args = append(args, composeLabelFlags(m.ComposeProject(), ComposeServiceDNS)...)
 	args = append(args, DNSImage)
 	if err := m.pullFor(ctx, DNSImage); err != nil {
 		return nil, err
