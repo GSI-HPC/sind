@@ -12,7 +12,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Add workers without a cluster asks for it first: the clusters by realm,
@@ -29,7 +28,7 @@ func TestActDialog_AddWorkersPicksTheCluster(t *testing.T) {
 	f.st.SetClusters("ci", []cluster.Summary{{Name: "pr"}})
 	f.st.SetNodes("ci", []cluster.NodeSummary{ciNode("controller", config.RoleController), ciNode("worker-0", config.RoleWorker)})
 	f.st.SetSlurm("sind", "default", &store.Slurm{})
-	f.st.SetSlurm("ci", "pr", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{{Name: "worker-0", State: "idle", CPUs: 2, MemoryMB: 1024}}}})
+	f.st.SetSlurm("ci", "pr", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []cluster.SlurmNode{{Name: "worker-0", State: "idle", CPUs: 2, MemoryMB: 1024}}}})
 
 	f.st.SetRuns([]store.Run{{ID: "x", Title: "create cluster dev"}})
 	w := f.get("/dialogs/create-worker?realm=ci")
@@ -57,7 +56,7 @@ func TestActDialog_AddWorkersPicksTheCluster(t *testing.T) {
 	f.st.SetRealms([]cluster.RealmSummary{{Name: "ci", Clusters: 1}})
 	f.st.SetClusters("sind", nil)
 	f.st.SetNodes("ci", []cluster.NodeSummary{ciNode("worker-0", config.RoleWorker), ciNode("worker-1", config.RoleWorker)})
-	f.st.SetSlurm("ci", "pr", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{{Name: "worker-1", State: "idle", CPUs: 1, MemoryMB: 512}}}})
+	f.st.SetSlurm("ci", "pr", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []cluster.SlurmNode{{Name: "worker-1", State: "idle", CPUs: 1, MemoryMB: 512}}}})
 	body = f.get("/dialogs/create-worker?realm=ci&cluster=pr").Body.String()
 	assert.NotContains(t, body, "Change…")
 	assert.Contains(t, body, "realm ci · 2 workers, 1 CPU and 512 MB each")

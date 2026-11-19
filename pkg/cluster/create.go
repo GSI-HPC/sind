@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/monitor"
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/probe"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
 )
 

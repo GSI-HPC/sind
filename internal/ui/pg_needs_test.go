@@ -11,7 +11,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +45,7 @@ func TestPgNodeNeed(t *testing.T) {
 	assert.Equal(t, "Logs of munge", pgNodeNeed(sn, n, nil).Actions[0].Label)
 	// A node that runs and that Slurm sends no jobs.
 	n.Services = []pgSvc{{"slurmd", true}}
-	n.Slurm = &slurm.NodeInfo{Name: "w", State: "drained", Reason: "disk check"}
+	n.Slurm = &cluster.SlurmNode{Name: "w", State: "drained", Reason: "disk check"}
 	need = pgNodeNeed(sn, n, nil)
 	assert.Equal(t, pgNeed{Sev: "warn", Kind: pgNeedSlurm, Label: "Slurm", Title: "is drained in Slurm", Detail: "Slurm sends it no new jobs. Reason: disk check."},
 		pgNeed{Sev: need.Sev, Kind: need.Kind, Label: need.Label, Title: need.Title, Detail: need.Detail})
@@ -74,7 +73,7 @@ func TestPgNodeEffect(t *testing.T) {
 	elsewhere.Cluster = "hpc"
 	nodes := []pgNode{w0, w1, w2, unmanaged, elsewhere}
 	assert.Equal(t, "Takes no jobs. dev runs jobs on 2 of 3 workers.", pgNodeEffect(w0, nodes))
-	w1.Slurm = &slurm.NodeInfo{State: "draining"}
+	w1.Slurm = &cluster.SlurmNode{State: "draining"}
 	assert.Equal(t, "Takes no new jobs, and ends the ones it runs. dev runs jobs on 2 of 3 workers.", pgNodeEffect(w1, nodes),
 		"what Slurm says of the worker itself")
 

@@ -13,13 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/internal/testutil/prereq"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -528,7 +527,7 @@ nodes:
 	for _, n := range status.Nodes {
 		assert.False(t, n.Managed, n.Name)
 		assert.Nil(t, n.Health.HA, n.Name)
-		assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, n.Health.Services, n.Name)
+		assert.Equal(t, ServiceHealth{"munge": true, "sshd": true}, n.Health.Services, n.Name)
 	}
 
 	// Workers added later are unmanaged too.
@@ -668,8 +667,8 @@ nodes:
 	}
 	require.NotNil(t, dbNode, "db node missing from status")
 	assert.Equal(t, ServiceHealth{
-		probe.ServiceMunge: true, probe.ServiceSSHD: true,
-		probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true,
+		"munge": true, "sshd": true,
+		"mariadb": true, "slurmdbd": true,
 	}, dbNode.Health.Services)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
@@ -726,7 +725,7 @@ nodes:
 	}
 	require.NotNil(t, dbNode, "db node missing from status")
 	assert.False(t, dbNode.Managed)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, dbNode.Health.Services)
+	assert.Equal(t, ServiceHealth{"munge": true, "sshd": true}, dbNode.Health.Services)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -1093,9 +1092,9 @@ nodes:
 	status, err := GetStatus(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	for _, n := range status.Nodes {
-		assert.NotContains(t, n.Health.Services, probe.ServiceMunge, n.Name)
+		assert.NotContains(t, n.Health.Services, "munge", n.Name)
 		if n.Role == config.RoleSubmitter {
-			assert.Equal(t, ServiceHealth{probe.ServiceSSHD: true, probe.ServiceSackd: true}, n.Health.Services)
+			assert.Equal(t, ServiceHealth{"sshd": true, "sackd": true}, n.Health.Services)
 		}
 	}
 	for _, m := range status.Mounts {

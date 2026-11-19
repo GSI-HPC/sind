@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -231,7 +231,7 @@ func TestPgOverviewSaysWhatIsWrongWithoutANode(t *testing.T) {
 	run := func(svc ...string) *cluster.NodeHealth {
 		h := cluster.ServiceHealth{}
 		for _, s := range svc {
-			h[pgProbe(s)] = true
+			h[s] = true
 		}
 		return &cluster.NodeHealth{State: cluster.StateRunning, Services: h}
 	}
@@ -385,7 +385,7 @@ func TestPgRail(t *testing.T) {
 	// Slurm sends a worker of hpc no jobs: it needs a look too, in the
 	// rail, the realm row, the row and the pill of hpc, which runs; the worker of the
 	// same name in dev is fine.
-	ts.st.SetSlurm("sind", "hpc", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{{Name: "worker-1", State: "drained", Reason: "memory errors"}}}})
+	ts.st.SetSlurm("sind", "hpc", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []cluster.SlurmNode{{Name: "worker-1", State: "drained", Reason: "memory errors"}}}})
 	body = pgBody(t, ts, "/", 200)
 	assert.Contains(t, body, `<span aria-hidden="true">3<span class="u"> need a look</span></span><span class="vh">, 3 nodes need a look in all realms</span>`)
 	assert.Contains(t, body, `<span class="pill bad">2 nodes need a look</span>`, "the realm row of sind")

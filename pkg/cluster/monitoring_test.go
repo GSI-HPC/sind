@@ -10,12 +10,12 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -758,7 +758,7 @@ func TestGetMonitoring(t *testing.T) {
 	assert.Equal(t, "sind", m.Realm)
 	require.Len(t, m.Services, 4)
 	assert.Equal(t, MonitoringService{
-		Name: observability.ServiceGrafana, Container: "sind-grafana", Interface: observability.InterfaceWebUI, IP: f.containers["sind-grafana"].ip,
+		Name: "grafana", Container: "sind-grafana", Interface: "web UI", IP: f.containers["sind-grafana"].ip,
 		URL: "http://grafana.sind.sind:3000", State: docker.StateRunning, Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")

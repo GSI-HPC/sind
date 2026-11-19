@@ -23,7 +23,7 @@ func outcomeStore(good bool) *store.Store {
 		svc := func(names ...string) cluster.ServiceHealth {
 			h := cluster.ServiceHealth{}
 			for _, n := range names {
-				h[pgProbe(n)] = true
+				h[n] = true
 			}
 			return h
 		}

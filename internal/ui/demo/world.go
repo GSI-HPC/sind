@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // World is the Docker host of the demo: realms, clusters and nodes. The
@@ -637,7 +637,7 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 			url = fmt.Sprintf("http://%s:%d", ip, port)
 		}
 		return cluster.MonitoringService{
-			Name: s, Container: observability.ContainerName(r.name, s), Image: s.Image(), Interface: s.Interface(), IP: ip, URL: url,
+			Name: string(s), Container: observability.ContainerName(r.name, s), Image: s.Image(), Interface: string(s.Interface()), IP: ip, URL: url,
 			State: "running", Ready: true, Checked: true,
 		}
 	}
@@ -661,7 +661,7 @@ func (w *World) statusOf(r *realm, c *clusterState, names mesh.Names) *cluster.S
 	for _, n := range c.nodes {
 		h := &cluster.NodeHealth{State: n.state, IP: n.ip, Services: cluster.ServiceHealth{}}
 		for _, s := range services(n.role) {
-			h.Services[s] = n.up[s]
+			h.Services[string(s)] = n.up[s]
 		}
 		if pair && n.role == config.RoleController {
 			h.HA = &cluster.HAStatus{Position: "primary", InControl: n.state == cluster.StateRunning}

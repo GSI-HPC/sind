@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/GSI-HPC/sind/internal/doctor"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"golang.org/x/sync/errgroup"
 )
@@ -27,9 +27,9 @@ var (
 	ErrUsernsRemap = errors.New("the Docker daemon runs with userns-remap")
 	// ErrCgroupV1 is a daemon that runs containers on cgroup v1.
 	ErrCgroupV1 = errors.New("the Docker daemon runs containers on cgroup v1")
-	// ErrDockerTooOld is a Docker Engine older than doctor.MinDockerMajor.
+	// ErrDockerTooOld is a Docker Engine older than 28.0.
 	ErrDockerTooOld = errors.New("the Docker Engine is too old")
-	// ErrDockerCLITooOld is a docker CLI older than doctor.MinDockerMajor.
+	// ErrDockerCLITooOld is a docker CLI older than 28.0.
 	ErrDockerCLITooOld = errors.New("the docker CLI is too old")
 	// ErrNoNsdelegate is a Docker host whose cgroup2 hierarchy is mounted
 	// without nsdelegate (CheckNsdelegate).
@@ -63,12 +63,11 @@ func CheckDaemon(ctx context.Context, client *docker.Client) error {
 // and only at `docker start`: after the images are pulled and the
 // cluster's network and volumes created. A node's entrypoint and systemd
 // need cgroup v2; on cgroup v1 the node never becomes ready. Docker
-// Engines before doctor.MinDockerMajor know neither writable-cgroups nor
-// the gw-priority of the nodes' network endpoints, and refuse every node
-// at `docker create`; so does a docker CLI before doctor.MinDockerMajor,
-// which parses the gw-priority itself. A version that does not parse, or
-// a CLI version that docker info lacks, passes, as `sind doctor` reports
-// it.
+// Engines before 28.0 know neither writable-cgroups nor the gw-priority of
+// the nodes' network endpoints, and refuse every node at `docker create`;
+// so does a docker CLI before 28.0, which parses the gw-priority itself. A
+// version that does not parse, or a CLI version that docker info lacks,
+// passes, as `sind doctor` reports it.
 func DaemonSupport(info *docker.DaemonInfo) error {
 	const need = "sind needs a rootful Docker daemon without userns-remap, because Docker refuses the writable cgroups of sind's nodes otherwise"
 	switch {

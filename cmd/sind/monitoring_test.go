@@ -10,9 +10,9 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/observability"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,7 +115,7 @@ dev   2      26.05.6
 	require.NoError(t, json.Unmarshal([]byte(stdout), &m))
 	assert.Equal(t, "sind", m.Realm)
 	assert.Equal(t, cluster.MonitoringService{
-		Name: observability.ServiceGrafana, Container: "sind-grafana", Image: "img-sind-grafana", Interface: observability.InterfaceWebUI,
+		Name: "grafana", Container: "sind-grafana", Image: "img-sind-grafana", Interface: "web UI",
 		IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, []cluster.MonitoredCluster{{Name: "dev", Nodes: 2, SlurmVersion: "26.05.6"}}, m.Clusters)

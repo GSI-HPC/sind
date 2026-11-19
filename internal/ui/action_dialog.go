@@ -972,7 +972,7 @@ func (d *actDialog) ServiceNodes() []actNodeOpt {
 		label := short
 		for _, svc := range slices.Sorted(maps.Keys(s.Health.Services)) {
 			if !s.Health.Services[svc] {
-				label += " · " + string(svc) + " " + pgUnitWord(d.Snap, d.Realm, d.Cluster, short, string(svc))
+				label += " · " + svc + " " + pgUnitWord(d.Snap, d.Realm, d.Cluster, short, svc)
 			}
 		}
 		out = append(out, actNodeOpt{short, label})

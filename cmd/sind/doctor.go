@@ -8,7 +8,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cliout"
 	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
-	"github.com/GSI-HPC/sind/pkg/doctor"
+	"github.com/GSI-HPC/sind/internal/doctor"
 	"github.com/spf13/cobra"
 )
 

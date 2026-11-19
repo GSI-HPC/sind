@@ -9,7 +9,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -284,7 +283,7 @@ func TestPgSlurmIssue(t *testing.T) {
 	n := pgNode{Short: "worker-5", Role: config.RoleWorker, State: cluster.StateRunning, Services: []pgSvc{{"slurmd", true}}}
 	_, ok := n.SlurmIssue()
 	assert.False(t, ok, "sinfo did not list it")
-	n.Slurm = &slurm.NodeInfo{Name: "worker-5", State: "mixed"}
+	n.Slurm = &cluster.SlurmNode{Name: "worker-5", State: "mixed"}
 	assert.Empty(t, n.Issues(), "it takes jobs")
 	assert.False(t, n.Problem())
 
@@ -340,7 +339,7 @@ func TestPgSlurmIssue(t *testing.T) {
 	// While a command works on the cluster, a drained worker, or one with a
 	// service down, needs no look yet, but it does not say that it takes
 	// jobs either.
-	w.Busy, w.Slurm = true, &slurm.NodeInfo{State: "drained"}
+	w.Busy, w.Slurm = true, &cluster.SlurmNode{State: "drained"}
 	assert.Equal(t, pgPill{"running", "ok"}, w.HeadPill(), "a busy worker with slurmd down")
 	w.Services = []pgSvc{{"munge", true}, {"slurmd", true}}
 	assert.Equal(t, pgPill{"running", "ok"}, w.HeadPill(), "a busy worker that Slurm drained")

@@ -7,8 +7,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/slurm"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 )
 
 // What the pages show of what Slurm says (store.Slurm): the state of each
@@ -78,7 +79,7 @@ type pgSlurmView struct {
 	// not answer.
 	Read       bool
 	Err        string
-	Partitions []slurm.PartitionInfo
+	Partitions []cluster.SlurmPartition
 	// Nodes are the cluster's nodes that sinfo lists.
 	Nodes []pgNode
 	Files []pgSlurmFile

@@ -7,7 +7,6 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,10 +23,10 @@ func TestBuildRestartService(t *testing.T) {
 		node("default", "worker-0", config.RoleWorker),
 	})
 	health := func(slurmd bool) *cluster.NodeHealth {
-		return &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{probe.ServiceSlurmd: slurmd, probe.ServiceMunge: true}}
+		return &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{"slurmd": slurmd, "munge": true}}
 	}
 	noSSH := health(true)
-	noSSH.Services[probe.ServiceSSHD] = false
+	noSSH.Services["sshd"] = false
 	s.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{
 		nil, {Name: "controller.dev"}, {Name: "worker-0.dev", Health: health(false)}, {Name: "worker-3.dev"},
 		{Name: "worker-5.dev", Health: noSSH},

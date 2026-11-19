@@ -17,7 +17,6 @@ cmd/sind/          CLI commands (cobra)
   ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
-  ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json; SIND_OUTPUT)
   ├── progress.go  Progress of create, delete, connect, disconnect and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
@@ -36,7 +35,7 @@ internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) i
 
 internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI and sind ui read them through it. ResolveRealm (--realm > SIND_REALM > config > default) and ResolveCluster (argument > SIND_CLUSTER > config > default)
 
-internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
+internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and internal/ssh's ssh_config host names
 
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
@@ -121,21 +120,22 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── naming.go    Resource naming conventions
   ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan), joinFailures, WithPanicLog
   ├── rollback.go  The rollback step of a failed Create or WorkerAdd
+  ├── sshexport.go ExportSSHConfig: the realm's SSH config export in the state directory (internal/ssh)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, the daemon's mode, where the daemon runs,
+internal/doctor/   Host prerequisite checks (Docker version, the daemon's mode, where the daemon runs,
                    cgroupv2 and the nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS) and the names of its resources (RealmNames)
-pkg/monitor/       Event-driven Docker and systemd watchers for readiness
-pkg/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
+internal/monitor/  Event-driven Docker and systemd watchers for readiness
+internal/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
                    configuration, Alloy config generation, dashboards
-pkg/probe/         Node readiness probes
-pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
+internal/probe/    Node readiness probes
+internal/slurm/    Slurm and slurmdbd config generation, sind-nodes.conf editing, version
                    discovery and image probe (ProbeImage), sinfo parsing, munge key, slurm.key
                    and jwt_hs256.key generation, sacctmgr account commands
-pkg/ssh/           SSH key injection, host key collection, ssh_config export (ExportConfig, RemoveExport, ExportFiles)
+internal/ssh/      SSH key injection, host key collection, ssh_config export (ExportConfig, RemoveExport, ExportFiles)
 pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock
                    network on the daemon) that library callers of Create, CreateInRealm, Delete,
                    DeleteAll, WorkerAdd, WorkerRemove, Connect, Disconnect, PowerOn, PowerReboot
@@ -148,53 +148,53 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 cmd/sind → pkg/cluster → pkg/cmdexec
                        → internal/detach
                        → internal/natsort
-                       → pkg/config  → internal/hostname
-                       → pkg/docker  → pkg/cmdexec
-                                     → pkg/log
-                       → pkg/doctor  → pkg/docker
-                                     → pkg/cmdexec
-                                     → pkg/config
-                                     → pkg/log
-                                     → pkg/mesh
+                       → pkg/config → internal/hostname
+                       → pkg/docker → pkg/cmdexec
+                                    → pkg/log
+                       → internal/doctor → pkg/docker
+                                         → pkg/cmdexec
+                                         → pkg/config
+                                         → pkg/log
+                                         → pkg/mesh
                        → pkg/log
-                       → pkg/mesh    → pkg/docker
-                                     → pkg/cmdexec
-                                     → pkg/config
-                                     → pkg/log
-                                     → internal/detach
-                                     → internal/natsort
-                       → pkg/monitor → pkg/docker
-                                     → pkg/cmdexec
-                                     → pkg/log
-                       → pkg/observability → pkg/config
-                                           → pkg/docker
-                                           → pkg/log
-                                           → pkg/mesh
-                                           → pkg/probe
-                       → pkg/probe   → pkg/docker
-                                     → pkg/config
-                                     → pkg/log
-                                     → pkg/monitor
-                       → pkg/slurm   → pkg/docker
-                                     → pkg/config
-                       → pkg/ssh     → pkg/docker
-                                     → pkg/mesh
-                                     → internal/hostname
-                       → pkg/state   → pkg/docker
-                                     → pkg/log
-         → pkg/doctor
-         → pkg/observability
+                       → pkg/mesh → pkg/docker
+                                  → pkg/cmdexec
+                                  → pkg/config
+                                  → pkg/log
+                                  → internal/detach
+                                  → internal/natsort
+                       → internal/monitor → pkg/docker
+                                          → pkg/cmdexec
+                                          → pkg/log
+                       → internal/observability → pkg/config
+                                                → pkg/docker
+                                                → pkg/log
+                                                → pkg/mesh
+                                                → internal/probe
+                       → internal/probe → pkg/docker
+                                        → pkg/config
+                                        → pkg/log
+                                        → internal/monitor
+                       → internal/slurm → pkg/docker
+                                        → pkg/config
+                       → internal/ssh → pkg/docker
+                                      → pkg/mesh
+                                      → internal/hostname
+                       → pkg/state → pkg/docker
+                                   → pkg/log
+         → internal/doctor
+         → internal/observability
          → pkg/state
          → github.com/GSI-HPC/go-clikit/cobratree
          → github.com/GSI-HPC/go-clikit/termtext
          → github.com/GSI-HPC/go-nodeset
 ```
 
-`cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh` and `pkg/ssh` directly, and `internal/envvar`, `internal/help`, `internal/mcpconfig`, `internal/ui` (`sind ui`) and `internal/ui/collect` (the bounds of its `--monitoring-interval`).
+`cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh` and `internal/ssh` directly, and `internal/envvar`, `internal/help`, `internal/mcpconfig`, `internal/ui` (`sind ui`) and `internal/ui/collect` (the bounds of its `--monitoring-interval`).
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks (`doctor.Run`) directly from `cmd/sind` (no cluster orchestration; `cmd/sind/doctor.go` only writes the result with go-clikit's `doctor` package, whose `Check` is the type of the checks); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock`, `internal/fakedocker` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), writes files whole (editor configurations, the MCP stream's token, the configs of `sind ui`) with its `fsutil` package, and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `internal/doctor` runs host prerequisite checks (`doctor.Run`) directly from `cmd/sind` (no cluster orchestration; `cmd/sind/doctor.go` only writes the result with go-clikit's `doctor` package, whose `Check` is the type of the checks); `pkg/cluster` uses its nsdelegate probe in the create preflight. `internal/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock`, `internal/fakedocker` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), writes files whole (editor configurations, the MCP stream's token, the configs of `sind ui`) with its `fsutil` package, and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
-The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
+The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `internal/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
 ## Adding a new CLI command
 

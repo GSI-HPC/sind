@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,8 +67,8 @@ func TestGetSlurmInfo(t *testing.T) {
 	info, err := GetSlurmInfo(t.Context(), docker.NewClient(m), "sind", "dev")
 	require.NoError(t, err)
 	assert.Equal(t, &SlurmInfo{
-		Nodes:      []slurm.NodeInfo{{Name: "worker-0", State: "idle", CPUs: 2, MemoryMB: 1024, Partitions: []string{"all"}}},
-		Partitions: []slurm.PartitionInfo{{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: 1, NodeList: "worker-0"}},
+		Nodes:      []SlurmNode{{Name: "worker-0", State: "idle", CPUs: 2, MemoryMB: 1024, Partitions: []string{"all"}}},
+		Partitions: []SlurmPartition{{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: 1, NodeList: "worker-0"}},
 		Files:      []SlurmFile{{Path: slurm.SlurmConfPath, Content: "ClusterName=dev\n"}},
 	}, info, "sind-nodes.conf could not be read")
 }

@@ -190,7 +190,7 @@ func moreTopoMesh(sn store.Snapshot, realm string) (string, []moreTopoItem) {
 	}
 	if mon := sn.Monitorings[realm]; mon != nil {
 		for _, s := range mon.Services {
-			it := moreTopoItem{Name: string(s.Container), Kind: string(s.Name), Addr: s.IP, Href: "/monitoring" + q}
+			it := moreTopoItem{Name: string(s.Container), Kind: s.Name, Addr: s.IP, Href: "/monitoring" + q}
 			it.Pill, it.State = moreServiceState(s)
 			items = append(items, it)
 		}

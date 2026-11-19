@@ -16,7 +16,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The frame of every dialog: its name and description, the dialog itself,
@@ -339,7 +338,7 @@ func TestActDialog_PowerPickerShowsSlurm(t *testing.T) {
 		{Name: "worker-0.dev", Role: config.RoleWorker, Managed: true, Health: &cluster.NodeHealth{State: cluster.StateRunning}},
 		{Name: "worker-1.dev", Role: config.RoleWorker, Managed: true, Health: &cluster.NodeHealth{State: cluster.StateRunning}},
 	}})
-	f.st.SetSlurm("sind", "dev", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{
+	f.st.SetSlurm("sind", "dev", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []cluster.SlurmNode{
 		{Name: "worker-0", State: "idle"}, {Name: "worker-1", State: "drained", Reason: "memory errors"},
 	}}})
 	body := f.get("/dialogs/power?cluster=dev").Body.String()

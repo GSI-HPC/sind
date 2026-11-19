@@ -8,7 +8,7 @@
 // configuration from the nodes it is given; pkg/cluster decides which
 // nodes those are and when the stack is created, synced and removed.
 //
-// It is not called monitor: pkg/monitor is the Docker and systemd event
+// It is not called monitor: internal/monitor is the Docker and systemd event
 // watcher of the readiness probes.
 package observability
 

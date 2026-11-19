@@ -19,7 +19,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.22)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 - llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
-- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.22, Prometheus 3.16, Loki 3.7 and Grafana 13.3, pinned in `pkg/observability`
+- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.22, Prometheus 3.16, Loki 3.7 and Grafana 13.3, pinned in `internal/observability`
 
 ## Overview
 
@@ -1556,7 +1556,7 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
-The names have two parts, so they never equal a cluster's `<realm>-<cluster>-<type>` resources, and no cluster name has to be reserved. A service's container and its data volume share a name, so sind inspects containers with `docker inspect --type container` (`docker.Client.InspectContainers`), which never returns the volume of a missing container. The images are pinned constants in `pkg/observability` (`GrafanaImage`, `PrometheusImage`, `LokiImage`, `AlloyImage`), each bumped on its own by hand; they do not follow `defaults.image`. Grafana must be the standard image: its Prometheus and Loki datasources ship only in the standard image's bundled plugins, which the `-slim` image would download at start, and it is the only one of the four with `curl`, which sind runs there to reach the others. A create that makes the stack pulls its images in Phase 2 with the node images; an existing stack keeps its containers, and their images, until it is removed or recreated (see Monitoring).
+The names have two parts, so they never equal a cluster's `<realm>-<cluster>-<type>` resources, and no cluster name has to be reserved. A service's container and its data volume share a name, so sind inspects containers with `docker inspect --type container` (`docker.Client.InspectContainers`), which never returns the volume of a missing container. The images are pinned constants in `internal/observability` (`GrafanaImage`, `PrometheusImage`, `LokiImage`, `AlloyImage`), each bumped on its own by hand; they do not follow `defaults.image`. Grafana must be the standard image: its Prometheus and Loki datasources ship only in the standard image's bundled plugins, which the `-slim` image would download at start, and it is the only one of the four with `curl`, which sind runs there to reach the others. A create that makes the stack pulls its images in Phase 2 with the node images; an existing stack keeps its containers, and their images, until it is removed or recreated (see Monitoring).
 
 ### Realm Lock
 
@@ -1958,11 +1958,11 @@ scp file.txt controller.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the host
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted, also after a `delete cluster` or `delete worker` that fails partway, and after a `power on`, `reboot` or `cycle` that started nodes, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. `ssh.ExportConfig` replaces each file through a temporary file in the directory and a rename, `id_ed25519` and `known_hosts` before `ssh_config` (`ssh.ExportFiles`), so that a concurrent `ssh` never reads a truncated file or a `Host` block before its key; `ssh.RemoveExport` removes them. pkg/cluster does not export: a library caller that keeps an export runs `ssh.ExportConfig` itself. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
+sind updates these files automatically when clusters or nodes are created/deleted, also after a `delete cluster` or `delete worker` that fails partway, and after a `power on`, `reboot` or `cycle` that started nodes, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. `ssh.ExportConfig` replaces each file through a temporary file in the directory and a rename, `id_ed25519` and `known_hosts` before `ssh_config` (`ssh.ExportFiles`), so that a concurrent `ssh` never reads a truncated file or a `Host` block before its key; `ssh.RemoveExport` removes them. The operations of pkg/cluster do not export: a library caller that keeps an export runs `cluster.ExportSSHConfig` itself, which also removes the files when the relay container is gone. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
 
 ## Monitoring
 
-`monitoring: true` in the cluster config, or `sind create cluster --monitoring`, collects a managed cluster's Slurm metrics, its nodes' resource use and their journals into a monitoring stack that belongs to the realm: Grafana Alloy collects, Prometheus stores the metrics, Loki the logs, and Grafana shows them, as four containers on the realm's mesh network (`pkg/observability`). The first monitored cluster creates the stack, the realm's last cluster takes it along with the mesh, and the monitored clusters of a realm share it. Clusters without the setting get no extra mounts, an unchanged `slurm.conf`, and in a realm without a stack no extra docker calls; in a realm with one they are not collected.
+`monitoring: true` in the cluster config, or `sind create cluster --monitoring`, collects a managed cluster's Slurm metrics, its nodes' resource use and their journals into a monitoring stack that belongs to the realm: Grafana Alloy collects, Prometheus stores the metrics, Loki the logs, and Grafana shows them, as four containers on the realm's mesh network (`internal/observability`). The first monitored cluster creates the stack, the realm's last cluster takes it along with the mesh, and the monitored clusters of a realm share it. Clusters without the setting get no extra mounts, an unchanged `slurm.conf`, and in a realm without a stack no extra docker calls; in a realm with one they are not collected.
 
 The setting is fixed for the cluster's life, like `managed`: the journal mounts and `slurm.conf` are made when the nodes are created. `sind create worker` takes it from the cluster, which is monitored when its controller mounts the realm's journal volume, and has no flag of its own. A config with `monitoring` fails to parse in sind versions before the key, as unknown keys are errors.
 
@@ -2097,7 +2097,7 @@ Each stack container carries `sind.observability.version`, a fingerprint of the 
 
 ### Dashboards
 
-The dashboards are generated in `pkg/observability` for sind's labels and versioned with sind, provisioned into the folder `sind`. Each has a realm and a cluster variable; the logs dashboard filters further.
+The dashboards are generated in `internal/observability` for sind's labels and versioned with sind, provisioned into the folder `sind`. Each has a realm and a cluster variable; the logs dashboard filters further.
 
 | Dashboard | Built from | Shows |
 |-----------|------------|-------|

@@ -12,12 +12,12 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -391,15 +391,15 @@ const ServiceMissing docker.ContainerState = "missing"
 
 // MonitoringService is a service of the realm's monitoring stack.
 type MonitoringService struct {
-	Name      observability.Service   `json:"name"`
-	Container docker.ContainerName    `json:"container"`
-	Image     string                  `json:"image"`
-	Interface observability.Interface `json:"interface"` // what its port serves: a web UI, an API or both
-	IP        string                  `json:"ip"`        // on the mesh, empty while stopped
-	URL       string                  `json:"url"`       // by mesh DNS name; by IP for Alloy, which has none
-	State     docker.ContainerState   `json:"status"`    // the container's state, or ServiceMissing
-	Ready     bool                    `json:"ready"`
-	Checked   bool                    `json:"checked"` // whether Ready was checked, which needs Grafana running
+	Name      string                `json:"name"` // grafana, prometheus, loki or alloy
+	Container docker.ContainerName  `json:"container"`
+	Image     string                `json:"image"`
+	Interface string                `json:"interface"` // what its port serves: "web UI", "API" or "web UI + API"
+	IP        string                `json:"ip"`        // on the mesh, empty while stopped
+	URL       string                `json:"url"`       // by mesh DNS name; by IP for Alloy, which has none
+	State     docker.ContainerState `json:"status"`    // the container's state, or ServiceMissing
+	Ready     bool                  `json:"ready"`
+	Checked   bool                  `json:"checked"` // whether Ready was checked, which needs Grafana running
 }
 
 // MonitoredCluster is a cluster the realm's monitoring stack collects.
@@ -489,7 +489,7 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 	}
 	m := &Monitoring{Realm: realm, Services: make([]MonitoringService, len(statuses)), Clusters: []MonitoredCluster{}}
 	for i, st := range statuses {
-		svc := MonitoringService{Name: st.Service, Container: st.Container, Image: st.Image, Interface: st.Service.Interface(), IP: st.IP, State: cmp.Or(st.State, ServiceMissing), Ready: st.Ready, Checked: st.Checked}
+		svc := MonitoringService{Name: string(st.Service), Container: st.Container, Image: st.Image, Interface: string(st.Service.Interface()), IP: st.IP, State: cmp.Or(st.State, ServiceMissing), Ready: st.Ready, Checked: st.Checked}
 		switch {
 		case st.DNSName != "":
 			svc.URL = "http://" + st.DNSName + ":" + st.Port
@@ -512,7 +512,7 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 	}
 	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return natsort.Compare(a.Name, b.Name) })
 	running := func(s observability.Service) bool {
-		return slices.ContainsFunc(m.Services, func(ms MonitoringService) bool { return ms.Name == s && ms.State == docker.StateRunning })
+		return slices.ContainsFunc(m.Services, func(ms MonitoringService) bool { return ms.Name == string(s) && ms.State == docker.StateRunning })
 	}
 	if len(m.Clusters) > 0 && running(observability.ServiceGrafana) && running(observability.ServicePrometheus) {
 		addSlurmCounts(ctx, stack, m)

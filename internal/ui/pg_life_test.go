@@ -10,7 +10,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -301,7 +300,7 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 
 	// Slurm reports the new node down until its slurmd registers: the
 	// Slurm column waits for the create, as the Services column does.
-	ts.st.SetSlurm("ci", "nightly", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{{Name: "worker-0", State: "down", Reason: "Not responding"}}}})
+	ts.st.SetSlurm("ci", "nightly", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []cluster.SlurmNode{{Name: "worker-0", State: "down", Reason: "Not responding"}}}})
 	body = pgBody(t, ts, "/clusters/ci/nightly?tab=nodes", 200)
 	assert.Contains(t, body, `<td data-label="Slurm"><span class="faint">–</span></td>`)
 	assert.NotContains(t, body, "Not responding")
@@ -341,7 +340,7 @@ func TestPgPagesWhileACommandCreatesACluster(t *testing.T) {
 	assert.NotContains(t, body, "Not responding")
 	ts.st.SetStatus("ci", "nightly", &cluster.Status{Name: "nightly", Nodes: []*cluster.NodeStatus{{
 		Name: "worker-0.nightly", Role: config.RoleWorker, Managed: true,
-		Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{pgProbe("munge"): true, pgProbe("slurmd"): false}},
+		Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{"munge": true, "slurmd": false}},
 	}}})
 	body = pgBody(t, ts, "/nodes/ci/nightly/worker-0", 200)
 	assert.Contains(t, body, `<span data-word="munge">munge</span></span><span class="pill ok">active</span>`)

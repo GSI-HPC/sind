@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// update rewrites the golden files: go test ./pkg/observability -update.
+// update rewrites the golden files: go test ./internal/observability -update.
 var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
 // golden compares got with testdata/name, or writes it there with -update.

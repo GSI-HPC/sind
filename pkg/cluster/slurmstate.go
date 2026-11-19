@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // SlurmNodeState is what slurmctld says about a managed worker, as sinfo

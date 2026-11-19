@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"golang.org/x/sync/errgroup"
 )
 

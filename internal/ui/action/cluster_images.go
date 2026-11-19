@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // ImageFacts is what sind ui knows of an image: whether Docker has it,

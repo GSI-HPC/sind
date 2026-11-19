@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // nssSlurmCheck succeeds when glibc finds the nss_slurm module, which

@@ -12,10 +12,10 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/doctor"
 	"github.com/GSI-HPC/go-clikit/localweb/page"
+	"github.com/GSI-HPC/sind/internal/observability"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/observability"
 )
 
 // moreInterval is the interval at which the monitoring stacks are read;
@@ -88,6 +88,8 @@ type moreMonService struct {
 	cluster.MonitoringService
 	// Pill is the colour class and Text the words of the state.
 	Pill, Text string
+	// WebUI is set when the service's port serves a web UI.
+	WebUI bool
 	// Open is set when the service has a page to open in a new tab.
 	Open bool
 	// Explore is the address of Grafana's Explore page, set for a service
@@ -189,7 +191,7 @@ func moreServiceAddr(s cluster.MonitoringService) string {
 	if s.IP == "" || strings.Contains(s.URL, "//"+s.IP+":") {
 		return ""
 	}
-	return s.IP + ":" + s.Name.Port()
+	return s.IP + ":" + observability.Service(s.Name).Port()
 }
 
 // moreServiceOpens reports whether a browser can open a service's URL: it
@@ -237,18 +239,19 @@ func moreMonitoringLoad(v *View) error {
 		}
 		explore := ""
 		for _, s := range m.Services {
-			if s.Name == observability.ServiceGrafana && moreServiceOpens(s) {
+			if observability.Service(s.Name) == observability.ServiceGrafana && moreServiceOpens(s) {
 				explore = s.URL + "/explore"
 			}
 		}
 		for _, s := range m.Services {
 			ms := moreMonService{MonitoringService: s, Addr: moreServiceAddr(s)}
 			ms.Pill, ms.Text = moreServiceState(s)
-			ms.Open = s.Name != observability.ServiceAlloy && s.Interface.HasWebUI() && moreServiceOpens(s)
-			if !s.Interface.HasWebUI() {
+			ms.WebUI = observability.Interface(s.Interface).HasWebUI()
+			ms.Open = observability.Service(s.Name) != observability.ServiceAlloy && ms.WebUI && moreServiceOpens(s)
+			if !ms.WebUI {
 				ms.Explore = explore
 			}
-			if s.Name == observability.ServiceGrafana && ms.Addr != "" && d.Forward == "" {
+			if observability.Service(s.Name) == observability.ServiceGrafana && ms.Addr != "" && d.Forward == "" {
 				d.Forward = ms.Addr
 			}
 			r.Services = append(r.Services, ms)

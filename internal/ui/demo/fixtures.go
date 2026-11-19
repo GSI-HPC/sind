@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // Home is the home directory of the demo's user.

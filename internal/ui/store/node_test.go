@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,7 +92,7 @@ func TestChangesOfTheServices(t *testing.T) {
 		return &cluster.Status{Name: "dev", Nodes: []*cluster.NodeStatus{
 			nil,
 			{Name: "db.dev"},
-			{Name: "worker-4.dev", Health: &cluster.NodeHealth{State: state, Services: cluster.ServiceHealth{probe.ServiceMunge: true, probe.ServiceSlurmd: slurmd}}},
+			{Name: "worker-4.dev", Health: &cluster.NodeHealth{State: state, Services: cluster.ServiceHealth{"munge": true, "slurmd": slurmd}}},
 		}}
 	}
 	s.SetStatus("r", "dev", status(true, cluster.StateRunning))
@@ -107,7 +105,7 @@ func TestChangesOfTheServices(t *testing.T) {
 	s.SetStatus("r", "dev", status(true, cluster.StateRunning))
 	// A new service and a node new in the status are no change.
 	s.SetStatus("r", "dev", &cluster.Status{Name: "dev", Nodes: []*cluster.NodeStatus{
-		{Name: "worker-4.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{probe.ServiceMunge: true, probe.ServiceSlurmd: true, probe.ServiceSSHD: false}}},
+		{Name: "worker-4.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{"munge": true, "slurmd": true, "sshd": false}}},
 		{Name: "worker-5.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning}},
 	}})
 	assert.Equal(t, []Change{
@@ -122,16 +120,16 @@ func TestChangesInSlurm(t *testing.T) {
 	s := New()
 	at := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
 	s.SetClock(clockAt(&at))
-	info := func(nodes ...slurm.NodeInfo) *Slurm { return &Slurm{Info: &cluster.SlurmInfo{Nodes: nodes}} }
-	s.SetSlurm("r", "dev", info(slurm.NodeInfo{Name: "worker-5", State: "idle"}))
-	s.SetSlurm("r", "dev", info(slurm.NodeInfo{Name: "worker-5", State: "idle"}))
+	info := func(nodes ...cluster.SlurmNode) *Slurm { return &Slurm{Info: &cluster.SlurmInfo{Nodes: nodes}} }
+	s.SetSlurm("r", "dev", info(cluster.SlurmNode{Name: "worker-5", State: "idle"}))
+	s.SetSlurm("r", "dev", info(cluster.SlurmNode{Name: "worker-5", State: "idle"}))
 	s.SetSlurm("r", "dev", &Slurm{Err: "sinfo: boom"})
-	s.SetSlurm("r", "dev", info(slurm.NodeInfo{Name: "worker-5", State: "idle"}))
+	s.SetSlurm("r", "dev", info(cluster.SlurmNode{Name: "worker-5", State: "idle"}))
 	assert.Empty(t, s.Snapshot().NodeChanges, "sinfo that did not answer is no change")
 
-	s.SetSlurm("r", "dev", info(slurm.NodeInfo{Name: "worker-5", State: "drained", Reason: "memory errors"}, slurm.NodeInfo{Name: "worker-6", State: "idle"}))
-	s.SetSlurm("r", "dev", info(slurm.NodeInfo{Name: "worker-5", State: "drained", Reason: "memory errors"}, slurm.NodeInfo{Name: "worker-6", State: "idle", CPUs: 2}))
-	s.SetSlurm("r", "dev", info(slurm.NodeInfo{Name: "worker-5", State: "idle"}, slurm.NodeInfo{Name: "worker-6", State: "idle"}))
+	s.SetSlurm("r", "dev", info(cluster.SlurmNode{Name: "worker-5", State: "drained", Reason: "memory errors"}, cluster.SlurmNode{Name: "worker-6", State: "idle"}))
+	s.SetSlurm("r", "dev", info(cluster.SlurmNode{Name: "worker-5", State: "drained", Reason: "memory errors"}, cluster.SlurmNode{Name: "worker-6", State: "idle", CPUs: 2}))
+	s.SetSlurm("r", "dev", info(cluster.SlurmNode{Name: "worker-5", State: "idle"}, cluster.SlurmNode{Name: "worker-6", State: "idle"}))
 	assert.Equal(t, []Change{
 		{At: at, Source: SourceSlurm, Subject: "Slurm", State: "idle", OK: true},
 		{At: at, Source: SourceSlurm, Subject: "Slurm", State: "drained", Reason: "memory errors"},

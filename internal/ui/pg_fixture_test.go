@@ -12,8 +12,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/stretchr/testify/require"
 )
@@ -131,11 +129,11 @@ func pgFillStatus(st *store.Store) {
 	svc := func(ok ...string) cluster.ServiceHealth {
 		h := cluster.ServiceHealth{}
 		for _, s := range ok {
-			h[pgProbe(s)] = true
+			h[s] = true
 		}
 		return h
 	}
-	down := func(h cluster.ServiceHealth, name string) cluster.ServiceHealth { h[pgProbe(name)] = false; return h }
+	down := func(h cluster.ServiceHealth, name string) cluster.ServiceHealth { h[name] = false; return h }
 	node := func(name string, role config.Role, h *cluster.NodeHealth) *cluster.NodeStatus {
 		return &cluster.NodeStatus{Name: name + ".dev", Role: role, Managed: true, Health: h}
 	}
@@ -177,23 +175,21 @@ func pgBody(t *testing.T, ts *testServer, target string, status int) string {
 	return w.Body.String()
 }
 
-func pgProbe(s string) probe.Service { return probe.Service(s) }
-
 // pgFillSlurm puts what Slurm says about the cluster sind/dev in the store:
 // a busy, a drained, a down and an idle worker, two partitions and the
 // config files.
 func pgFillSlurm(st *store.Store) {
-	node := func(name, state, reason string, alloc, mem int, parts ...string) slurm.NodeInfo {
-		return slurm.NodeInfo{Name: name, State: state, Reason: reason, CPUs: 2, AllocCPUs: alloc, MemoryMB: mem, Partitions: parts}
+	node := func(name, state, reason string, alloc, mem int, parts ...string) cluster.SlurmNode {
+		return cluster.SlurmNode{Name: name, State: state, Reason: reason, CPUs: 2, AllocCPUs: alloc, MemoryMB: mem, Partitions: parts}
 	}
 	st.SetSlurm("sind", "dev", &store.Slurm{Info: &cluster.SlurmInfo{
-		Nodes: []slurm.NodeInfo{
+		Nodes: []cluster.SlurmNode{
 			node("worker-0", "mixed", "", 1, 1024, "all", "debug"),
 			node("worker-1", "drained", "disk check", 0, 1024, "all"),
 			node("worker-2", "idle", "", 0, 1024, "all"),
 			node("worker-3", "down*", "Not responding", 0, 512, "all"),
 		},
-		Partitions: []slurm.PartitionInfo{
+		Partitions: []cluster.SlurmPartition{
 			{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: 4, NodeList: "worker-[0-3]"},
 			{Name: "debug", State: "down", TimeLimit: "30:00", Nodes: 1, NodeList: "worker-0"},
 		},

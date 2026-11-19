@@ -16,10 +16,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/GSI-HPC/sind/internal/hostname"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // labelRealm is the realm label of the stack's volumes, as pkg/mesh and

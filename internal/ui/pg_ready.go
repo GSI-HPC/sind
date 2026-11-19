@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The "Ready for jobs" card of a cluster's Summary: a verdict on whether

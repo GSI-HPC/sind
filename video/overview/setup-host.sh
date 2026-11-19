@@ -49,9 +49,9 @@ sudo sysctl -w fs.inotify.max_user_instances=8192
 # stack and alpine for the connect shot) from Google's mirror, and tag them
 # with their Docker Hub names, as the integration tests do.
 dns=$(sed -n 's/^const DNSImage = "\(.*\)"$/\1/p' pkg/mesh/mesh.go)
-stack=$(sed -n 's/^\t[A-Za-z]*Image *= "\(.*\)"$/\1/p' pkg/observability/observability.go)
+stack=$(sed -n 's/^\t[A-Za-z]*Image *= "\(.*\)"$/\1/p' internal/observability/observability.go)
 if [ -z "$dns" ] || [ "$(echo "$stack" | wc -w)" -ne 4 ]; then
-  echo "::error::image constants not found in pkg/mesh/mesh.go or pkg/observability/observability.go"
+  echo "::error::image constants not found in pkg/mesh/mesh.go or internal/observability/observability.go"
   exit 1
 fi
 # shellcheck disable=SC2086 # one word per image

@@ -12,7 +12,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,8 +52,8 @@ func TestGetNode(t *testing.T) {
 		FQDN:      "controller.dev.sind.sind",
 		IP:        "10.0.0.2",
 		State:     StateRunning,
-		Services: ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true,
-			probe.ServiceSlurmctld: true},
+		Services: ServiceHealth{"munge": true, "sshd": true,
+			"slurmctld": true},
 	}, node)
 }
 

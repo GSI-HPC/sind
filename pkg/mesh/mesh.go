@@ -53,7 +53,7 @@ const (
 
 // The Compose services of the mesh's containers, in the project
 // Names.ComposeProject. The monitoring stack's containers join that project
-// too, as the services of pkg/observability.
+// too, as the services of the monitoring stack.
 const (
 	ComposeServiceDNS = "dns"
 	ComposeServiceSSH = "ssh"

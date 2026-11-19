@@ -12,11 +12,11 @@ import (
 	"time"
 
 	spans "github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/monitor"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Service identifies a per-node readiness check. The string value is the

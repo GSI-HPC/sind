@@ -31,11 +31,11 @@ release notes for Corefile or `SIGUSR1` reload changes, and update the tag in
 `docs/content/getting-started/installation.md`.
 
 The monitoring stack's images are not part of the node image either: `GrafanaImage`,
-`PrometheusImage`, `LokiImage` and `AlloyImage` in `pkg/observability/observability.go`
+`PrometheusImage`, `LokiImage` and `AlloyImage` in `internal/observability/observability.go`
 pin `grafana/grafana`, `prom/prometheus`, `grafana/loki` and `grafana/alloy`. Bump each
 one on its own, in a commit of its own, and read its release notes for changes to what
 sind generates or relies on: Alloy's configuration syntax and components
-(`pkg/observability/alloy.go`, golden file `testdata/sind.alloy`), Prometheus's flags and
+(`internal/observability/alloy.go`, golden file `testdata/sind.alloy`), Prometheus's flags and
 remote-write receiver, Loki's configuration, and Grafana's environment variables,
 provisioning, bundled datasource plugins, anonymous access and dashboard JSON. Keep
 Grafana on the standard image (not `-slim`) and no variant suffix on any of them. A bump
@@ -53,7 +53,7 @@ update the series under "Supported Versions" in `DESIGN.md`, which a grep for th
 tag does not find.
 
 sind discovers the Slurm version from the image at runtime (`slurmctld -V` in an
-ephemeral container, see `pkg/slurm/version.go`), so a bump needs no Go code changes,
+ephemeral container, see `internal/slurm/version.go`), so a bump needs no Go code changes,
 only the files below. With Docker, `docker run --rm <new image> slurmctld -V` must print
 `slurm <X.Y.Z>`.
 
@@ -65,7 +65,7 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
    Bump each entry within its release line. Add a release line only when an issue
    asks for it: insert it as the first entry, since that one becomes `latest` (and, at
    the next sind release, `vX.Y.Z`, the release binaries' default image), and
-   review the generated `slurm.conf` and `cgroup.conf` (`pkg/slurm/config.go`) and the
+   review the generated `slurm.conf` and `cgroup.conf` (`internal/slurm/config.go`) and the
    Dockerfile's `configure` flags against its `RELEASE_NOTES.md`. Dropping a line
    removes its entry; its published tags stay but are no longer rebuilt. Adding or
    dropping a line also updates the release lines listed in `README.md` and under
@@ -107,7 +107,7 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
      The grep is the list. For Slurm it finds `DESIGN.md`, pages under `docs/content/`,
      the terminal output of the quickstart episode (`video/episodes/quickstart/index.html`;
      then `npm run episode -- check quickstart` in `video/`), the web UI's demo
-     (`internal/ui/demo/`) and tests in `cmd/sind`, `pkg/cluster`, `pkg/slurm` and
+     (`internal/ui/demo/`) and tests in `cmd/sind`, `pkg/cluster`, `internal/slurm` and
      `internal/ui`. For Slurm, grep for the release line too (e.g.
      `grep -rnE '26\.05\.[0-9]+' --exclude-dir=.git .`): it finds a version that an
      earlier bump left behind, which the grep for the old version misses.

@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/observability"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 

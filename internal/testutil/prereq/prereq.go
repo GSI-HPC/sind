@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/doctor"
 	"github.com/GSI-HPC/sind/internal/testutil/itest"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/spf13/afero"
 )
 

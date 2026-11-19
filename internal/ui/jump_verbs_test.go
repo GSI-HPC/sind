@@ -14,7 +14,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // jumpLines returns the entries of the jump box for q, without help and
@@ -187,7 +186,7 @@ func TestJumpVerbs(t *testing.T) {
 	}
 
 	// A node lists its Slurm reason.
-	ts.st.SetSlurm("sind", "hpc", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []slurm.NodeInfo{{Name: "worker-1", State: "drained", Reason: "memory errors"}}}})
+	ts.st.SetSlurm("sind", "hpc", &store.Slurm{Info: &cluster.SlurmInfo{Nodes: []cluster.SlurmNode{{Name: "worker-1", State: "drained", Reason: "memory errors"}}}})
 	assert.Contains(t, jumpLines(ts.st.Snapshot(), jumpContext{}, "worker-1.hpc"), "Nodes | worker-1.hpc | running · memory errors |  | /nodes/sind/hpc/worker-1 |   | ")
 	// A cluster that a command creates has no More.
 	ts.st.SetRuns([]store.Run{{ID: "c", Title: "create cluster hpc", Start: pgNow.Add(-1)}})

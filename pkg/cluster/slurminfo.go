@@ -8,20 +8,48 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // SlurmInfo is what Slurm itself says about a cluster: its nodes and
 // partitions as sinfo reports them on the controller, and the Slurm config
 // files that sind wrote.
 type SlurmInfo struct {
-	Nodes      []slurm.NodeInfo      `json:"nodes"`
-	Partitions []slurm.PartitionInfo `json:"partitions"`
+	Nodes      []SlurmNode      `json:"nodes"`
+	Partitions []SlurmPartition `json:"partitions"`
 	// Files are slurm.conf and sind-nodes.conf, the ones of them that the
 	// controller could read. slurmdbd.conf holds a password and is not
 	// read.
 	Files []SlurmFile `json:"files"`
+}
+
+// SlurmNode is a node as sinfo reports it.
+type SlurmNode struct {
+	Name string `json:"name"`
+	// State is sinfo's long state, such as idle, allocated, mixed,
+	// drained or down; a "*" at its end means that the node does not
+	// answer.
+	State string `json:"state"`
+	// Reason is why the node is down or drained, empty for none.
+	Reason    string `json:"reason,omitempty"`
+	CPUs      int    `json:"cpus"`
+	AllocCPUs int    `json:"alloc_cpus"`
+	MemoryMB  int    `json:"memory_mb"`
+	// Partitions are the partitions of the node, in sinfo's order.
+	Partitions []string `json:"partitions"`
+}
+
+// SlurmPartition is a partition as sinfo reports it.
+type SlurmPartition struct {
+	Name    string `json:"name"`
+	Default bool   `json:"default"`
+	// State is the availability: up, down, drain or inact.
+	State     string `json:"state"`
+	TimeLimit string `json:"time_limit"`
+	Nodes     int    `json:"nodes"`
+	// NodeList is the nodes as a host list, such as worker-[0-3].
+	NodeList string `json:"node_list"`
 }
 
 // SlurmFile is a config file of the config volume.
@@ -91,12 +119,24 @@ func readSinfo(ctx context.Context, client *docker.Client, controller docker.Con
 	if err != nil {
 		return fmt.Errorf("sinfo on the controller: %w", err)
 	}
-	if info.Nodes, err = slurm.ParseSinfoNodes(out); err != nil {
+	nodes, err := slurm.ParseSinfoNodes(out)
+	if err != nil {
 		return err
+	}
+	info.Nodes = make([]SlurmNode, len(nodes))
+	for i, n := range nodes {
+		info.Nodes[i] = SlurmNode(n)
 	}
 	if out, err = client.Exec(ctx, controller, slurm.SinfoPartitionsCommand...); err != nil {
 		return fmt.Errorf("sinfo on the controller: %w", err)
 	}
-	info.Partitions, err = slurm.ParseSinfoPartitions(out)
-	return err
+	partitions, err := slurm.ParseSinfoPartitions(out)
+	if err != nil {
+		return err
+	}
+	info.Partitions = make([]SlurmPartition, len(partitions))
+	for i, p := range partitions {
+		info.Partitions[i] = SlurmPartition(p)
+	}
+	return nil
 }

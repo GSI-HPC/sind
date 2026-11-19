@@ -11,9 +11,9 @@
 package cluster
 
 import (
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // ControllerBackupShortName is the hostname of the backup controller created

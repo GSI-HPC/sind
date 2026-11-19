@@ -2,7 +2,7 @@
 
 // Package monitor provides event-driven monitoring of Docker containers
 // and systemd services inside them. It complements the poll-based probes
-// in pkg/probe by pushing state transitions through channels.
+// in internal/probe by pushing state transitions through channels.
 package monitor
 
 import (

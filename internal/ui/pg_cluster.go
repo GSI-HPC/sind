@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // pgClusterPage is the page of one cluster, template pg_cluster.tmpl. Its

@@ -9,6 +9,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
@@ -35,10 +36,8 @@ func inLockedRealm(cmd *cobra.Command, op func(ctx context.Context, client *dock
 // updateSSHExport brings the SSH config export of the mesh manager's realm
 // up to date after a change to its clusters; a failure is a warning.
 func updateSSHExport(cmd *cobra.Command, client *docker.Client, meshMgr *mesh.Manager) {
-	if dir, err := state.RealmDir(meshMgr.Realm); err == nil {
-		if err := syncSSHExport(cmd.Context(), client, meshMgr, fsFrom(cmd.Context()), dir); err != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(err.Error()))
-		}
+	if err := cluster.ExportSSHConfig(cmd.Context(), client, fsFrom(cmd.Context()), meshMgr.Realm); err != nil {
+		cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(err.Error()))
 	}
 }
 

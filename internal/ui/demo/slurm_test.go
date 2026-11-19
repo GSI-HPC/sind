@@ -6,10 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +28,7 @@ func TestSlurmOfTheSeededWorld(t *testing.T) {
 		"worker-0": "allocated/", "worker-1": "mixed/", "worker-2": "idle/", "worker-3": "idle/",
 		"worker-4": "down*/Not responding", "worker-5": "drained/memory errors, admin 09:02",
 	}, states)
-	assert.Equal(t, []slurm.PartitionInfo{{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: 6, NodeList: "worker-[0-5]"}}, sl.Info.Partitions)
+	assert.Equal(t, []cluster.SlurmPartition{{Name: "all", Default: true, State: "up", TimeLimit: "infinite", Nodes: 6, NodeList: "worker-[0-5]"}}, sl.Info.Partitions)
 	conf := sl.Info.Files[0].Content
 	assert.Contains(t, conf, "ClusterName=dev\n")
 	assert.Contains(t, conf, "SlurmctldHost=controller-backup\n")
@@ -56,7 +55,7 @@ func TestSlurmOfAControllerThatDoesNotAnswer(t *testing.T) {
 	assert.Contains(t, slurmOf(c).Err, "Unable to contact slurm controller")
 	assert.Len(t, slurmOf(c).Info.Files, 2, "cat reads the files without slurmctld")
 	assert.Empty(t, slurmOf(c).Info.Nodes)
-	ctl.up[probe.ServiceSlurmctld] = true
+	ctl.up["slurmctld"] = true
 	sl := slurmOf(c)
 	assert.Empty(t, sl.Info.Nodes)
 	assert.Empty(t, sl.Info.Partitions, "no worker, no partition")

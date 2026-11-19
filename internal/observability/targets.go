@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Target is a monitored node: a node container of a monitored cluster,

@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 func init() {
@@ -85,7 +85,7 @@ func NodeServices(st *cluster.Status, short, name string) map[string]bool {
 		}
 		out := map[string]bool{}
 		for svc, up := range s.Health.Services {
-			out[string(svc)] = up
+			out[svc] = up
 		}
 		return out
 	}

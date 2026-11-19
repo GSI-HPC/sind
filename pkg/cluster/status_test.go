@@ -16,7 +16,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,7 +100,7 @@ func nodeHealthOnCall(t *testing.T, inspect string, down []string, execErr error
 
 func TestGetNodeHealth(t *testing.T) {
 	unmanaged := docker.Labels{LabelManaged: "false"}
-	munge, sshd := probe.ServiceMunge, probe.ServiceSSHD
+	munge, sshd := "munge", "sshd"
 	tests := []struct {
 		name    string
 		node    string // in cluster dev
@@ -114,13 +113,13 @@ func TestGetNodeHealth(t *testing.T) {
 		wantRun []string // the readiness exec, when set
 	}{
 		{name: "controller", node: "controller", role: config.RoleController,
-			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmctld: true}},
+			want: ServiceHealth{munge: true, sshd: true, "slurmctld": true}},
 		{name: "worker", node: "worker-0", role: config.RoleWorker,
-			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmd: true}},
+			want: ServiceHealth{munge: true, sshd: true, "slurmd": true}},
 		// Submitters have no role-specific Slurm service.
 		{name: "submitter", node: "submitter", role: config.RoleSubmitter, want: ServiceHealth{munge: true, sshd: true}},
 		{name: "db", node: "db", role: config.RoleDB,
-			want:    ServiceHealth{munge: true, sshd: true, probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true},
+			want:    ServiceHealth{munge: true, sshd: true, "mariadb": true, "slurmdbd": true},
 			wantRun: []string{"exec", "sind-dev-db", "systemctl", "is-active", "munge", "sshd", "mariadb", "slurmdbd"}},
 		// slurmd, mariadb and slurmdbd are not sind's on unmanaged nodes.
 		{name: "unmanaged worker", node: "worker-0", role: config.RoleWorker, labels: unmanaged,
@@ -130,21 +129,21 @@ func TestGetNodeHealth(t *testing.T) {
 		{name: "unmanaged not running", node: "worker-0", role: config.RoleWorker, status: "exited", labels: unmanaged,
 			want: ServiceHealth{munge: false, sshd: false}},
 		{name: "controller not running", node: "controller", role: config.RoleController, status: "exited",
-			want: ServiceHealth{munge: false, sshd: false, probe.ServiceSlurmctld: false}},
+			want: ServiceHealth{munge: false, sshd: false, "slurmctld": false}},
 		{name: "worker not running", node: "worker-0", role: config.RoleWorker, status: "exited",
-			want: ServiceHealth{munge: false, sshd: false, probe.ServiceSlurmd: false}},
+			want: ServiceHealth{munge: false, sshd: false, "slurmd": false}},
 		{name: "slurmd failing", node: "worker-0", role: config.RoleWorker, down: []string{"slurmd"},
-			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmd: false}},
+			want: ServiceHealth{munge: true, sshd: true, "slurmd": false}},
 		{name: "slurmctld failing", node: "controller", role: config.RoleController, down: []string{"slurmctld"},
-			want: ServiceHealth{munge: true, sshd: true, probe.ServiceSlurmctld: false}},
+			want: ServiceHealth{munge: true, sshd: true, "slurmctld": false}},
 		{name: "munge failing", node: "controller", role: config.RoleController, down: []string{"munge"},
-			want: ServiceHealth{munge: false, sshd: true, probe.ServiceSlurmctld: true}},
+			want: ServiceHealth{munge: false, sshd: true, "slurmctld": true}},
 		{name: "sshd failing", node: "controller", role: config.RoleController, down: []string{"sshd"},
-			want: ServiceHealth{munge: true, sshd: false, probe.ServiceSlurmctld: true}},
+			want: ServiceHealth{munge: true, sshd: false, "slurmctld": true}},
 		// A readiness exec that fails outright, e.g. when docker cannot
 		// reach the daemon: every service reads unhealthy.
 		{name: "probe error", node: "worker-0", role: config.RoleWorker, execErr: fmt.Errorf("docker daemon unreachable"),
-			want: ServiceHealth{munge: false, sshd: false, probe.ServiceSlurmd: false}},
+			want: ServiceHealth{munge: false, sshd: false, "slurmd": false}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -587,9 +586,9 @@ func TestGetStatus_UnmanagedNodes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, status.Nodes, 2)
 	assert.True(t, status.Nodes[0].Managed)
-	assert.Contains(t, status.Nodes[0].Health.Services, probe.ServiceSlurmctld)
+	assert.Contains(t, status.Nodes[0].Health.Services, "slurmctld")
 	assert.False(t, status.Nodes[1].Managed)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, status.Nodes[1].Health.Services)
+	assert.Equal(t, ServiceHealth{"munge": true, "sshd": true}, status.Nodes[1].Health.Services)
 }
 
 // fullStatusOnCall returns a mock dispatcher for GetStatus with all healthy nodes.
@@ -646,13 +645,13 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
 	assert.Equal(t, StateRunning, status.Nodes[0].Health.State)
 	assert.Equal(t, "172.18.0.2", status.Nodes[0].Health.IP)
-	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceMunge])
-	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceSSHD])
-	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceSlurmctld])
+	assert.True(t, status.Nodes[0].Health.Services["munge"])
+	assert.True(t, status.Nodes[0].Health.Services["sshd"])
+	assert.True(t, status.Nodes[0].Health.Services["slurmctld"])
 
 	assert.Equal(t, "worker-0.dev", status.Nodes[1].Name)
 	assert.Equal(t, config.RoleWorker, status.Nodes[1].Role)
-	assert.True(t, status.Nodes[1].Health.Services[probe.ServiceSlurmd])
+	assert.True(t, status.Nodes[1].Health.Services["slurmd"])
 
 	assert.Equal(t, "worker-1.dev", status.Nodes[2].Name)
 
@@ -1009,9 +1008,9 @@ func TestNodeHealth_JSONServicesMap(t *testing.T) {
 		State: StateRunning,
 		IP:    "10.0.0.1",
 		Services: ServiceHealth{
-			probe.ServiceMunge:     true,
-			probe.ServiceSSHD:      true,
-			probe.ServiceSlurmctld: false,
+			"munge":     true,
+			"sshd":      true,
+			"slurmctld": false,
 		},
 	}
 	data, err := json.Marshal(h)

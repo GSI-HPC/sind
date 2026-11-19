@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // SlurmctldPort is slurmctld's RPC port, on which Slurm 26.05 and later

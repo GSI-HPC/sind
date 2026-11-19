@@ -10,13 +10,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/probe"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -26,8 +26,10 @@ import (
 // limit of 8 saturates a typical docker host without fork-storming the CLI.
 const statusNodeConcurrency = 8
 
-// ServiceHealth maps a readiness-check service to its health status.
-type ServiceHealth map[probe.Service]bool
+// ServiceHealth maps the name of a readiness-checked service to its health
+// status. The names are the systemd units of the services, such as munge,
+// sshd, slurmd, slurmdbd, mariadb, sackd and slurmrestd, and slurmctld.
+type ServiceHealth map[string]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
@@ -82,7 +84,7 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 		}
 	}
 	for _, svc := range services {
-		health.Services[svc] = snap[svc]
+		health.Services[string(svc)] = snap[svc]
 	}
 	return health
 }

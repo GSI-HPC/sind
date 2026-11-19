@@ -8,9 +8,9 @@ import (
 	"path"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.

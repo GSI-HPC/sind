@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GSI-HPC/sind/pkg/slurm"
+	"github.com/GSI-HPC/sind/internal/slurm"
 )
 
 // AlloyConfigPath is the configuration file sind writes into the Alloy

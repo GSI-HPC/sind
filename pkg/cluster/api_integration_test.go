@@ -18,12 +18,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,7 +166,7 @@ nodes:
 	require.NoError(t, err)
 	i := slices.IndexFunc(status.Nodes, func(n *NodeStatus) bool { return n.Role == config.RoleAPI })
 	require.NotEqual(t, -1, i)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true, probe.ServiceSlurmrestd: true}, status.Nodes[i].Health.Services)
+	assert.Equal(t, ServiceHealth{"munge": true, "sshd": true, "slurmrestd": true}, status.Nodes[i].Health.Services)
 
 	// root's token from slurmctld reaches both daemons.
 	rootToken := scontrolToken(ctx, t, c, controller, "root")
@@ -260,7 +259,7 @@ nodes:
 	require.NoError(t, err)
 	i := slices.IndexFunc(status.Nodes, func(n *NodeStatus) bool { return n.Role == config.RoleAPI })
 	require.NotEqual(t, -1, i)
-	assert.Equal(t, ServiceHealth{probe.ServiceSSHD: true, probe.ServiceSlurmrestd: true}, status.Nodes[i].Health.Services)
+	assert.Equal(t, ServiceHealth{"sshd": true, "slurmrestd": true}, status.Nodes[i].Health.Services)
 	assert.Equal(t, "2", lookupStatus(ctx, t, c, ContainerName(realm, clusterName, "api"), "alice"))
 
 	t.Logf("docker I/O:\n%s", rec.Dump())

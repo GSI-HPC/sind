@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/ssh"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/ssh"
 )
 
 // setupStep is one step of a node's setup script (see nodeSetupScript).

@@ -21,7 +21,7 @@
 #
 # Pins are read from docker-bake.hcl (Slurm), the Dockerfile ARGs (UCX, PMIx,
 # PRRTE, Open MPI, libjwt) and the image constants in pkg/mesh/mesh.go (CoreDNS)
-# and pkg/observability/observability.go (Alloy, Prometheus, Loki, Grafana).
+# and internal/observability/observability.go (Alloy, Prometheus, Loki, Grafana).
 # Releases come from the final release tags (v1.2.3, or slurm-25-11-8-1 for
 # Slurm) of each project's GitHub repository; release candidates are ignored.
 # GITHUB_BASE replaces https://github.com, for tests. With --verify-download a
@@ -146,7 +146,7 @@ check libjwt benmcollins/libjwt v 1 no "$(arg LIBJWT)"
 
 image() { pins "$1" "s|^[[:space:]]*$2 += \"$3:([^\"]+)\"\$|\\1|p"; }
 check coredns coredns/coredns v 1 yes "$(image pkg/mesh/mesh.go 'const DNSImage' coredns/coredns)"
-check alloy grafana/alloy v 1 yes "$(image pkg/observability/observability.go AlloyImage grafana/alloy)"
-check prometheus prometheus/prometheus v 1 yes "$(image pkg/observability/observability.go PrometheusImage prom/prometheus)"
-check loki grafana/loki v 1 yes "$(image pkg/observability/observability.go LokiImage grafana/loki)"
-check grafana grafana/grafana v 1 yes "$(image pkg/observability/observability.go GrafanaImage grafana/grafana)"
+check alloy grafana/alloy v 1 yes "$(image internal/observability/observability.go AlloyImage grafana/alloy)"
+check prometheus prometheus/prometheus v 1 yes "$(image internal/observability/observability.go PrometheusImage prom/prometheus)"
+check loki grafana/loki v 1 yes "$(image internal/observability/observability.go LokiImage grafana/loki)"
+check grafana grafana/grafana v 1 yes "$(image internal/observability/observability.go GrafanaImage grafana/grafana)"

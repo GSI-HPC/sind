@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
+	"github.com/GSI-HPC/sind/internal/ssh"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/ssh"
 	"golang.org/x/sync/errgroup"
 )
 

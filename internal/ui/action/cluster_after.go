@@ -5,10 +5,10 @@ package action
 import (
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/nodefold"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Step is what sind create cluster runs once the nodes of a new cluster
@@ -22,7 +22,7 @@ type Step struct {
 // valid and after ApplyDefaults, besides the containers: the users and
 // groups on the nodes that get them, the Slurm accounts on the
 // controller, and slurm.conf with sind-nodes.conf, which a cluster that sind
-// does not manage does not get. pkg/cluster and pkg/slurm make them, as
+// does not manage does not get. pkg/cluster and internal/slurm make them, as
 // they do for the create.
 func afterCreate(cfg *config.Cluster) (steps []Step, slurmConf string) {
 	if script := cluster.UsersScript(cfg); script != "" {

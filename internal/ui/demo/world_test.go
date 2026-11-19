@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 func seededStore(t *testing.T) (*World, *store.Store) {
@@ -33,7 +33,7 @@ func seededStore(t *testing.T) (*World, *store.Store) {
 func slurmdUp(st *store.Store) bool {
 	for _, n := range st.Snapshot().Status("sind", "dev").Nodes {
 		if n.Name == "worker-4.dev" {
-			return n.Health.Services[probe.ServiceSlurmd]
+			return n.Health.Services["slurmd"]
 		}
 	}
 	return false
@@ -100,7 +100,7 @@ func TestSeeded(t *testing.T) {
 	for _, n := range status.Nodes {
 		for s, ok := range n.Health.Services {
 			if !ok {
-				down = append(down, n.Name+" "+string(s))
+				down = append(down, n.Name+" "+s)
 			}
 		}
 		if n.Name == "controller-backup.dev" {
@@ -142,9 +142,9 @@ func TestWorld_Lifecycle(t *testing.T) {
 
 	apply(opStart, "w0")
 	assert.Equal(t, cluster.StateRunning, state()["w0.new.sind.sind"])
-	assert.False(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services[probe.ServiceSlurmd], "no services yet")
+	assert.False(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services["slurmd"], "no services yet")
 	apply(opReady, "w0")
-	assert.True(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services[probe.ServiceSlurmd])
+	assert.True(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services["slurmd"])
 	apply(opPause, "w0")
 	assert.Equal(t, cluster.StatePaused, state()["w0.new.sind.sind"])
 	apply(opUnpause, "w0")

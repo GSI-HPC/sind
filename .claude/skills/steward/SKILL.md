@@ -60,7 +60,7 @@ CI runs for every pull request and every push to `main` and `next`.
   the URL, re-run the job once, and report it if it fails again.
 - Integration Test pulls the Docker Hub images the tests run (the mesh's CoreDNS, which
   it reads from `pkg/mesh`'s `DNSImage`, the monitoring stack's four, which it reads from
-  the `<Name>Image` lines of `pkg/observability`, and `busybox:latest`) from
+  the `<Name>Image` lines of `internal/observability`, and `busybox:latest`) from
   `mirror.gcr.io` and tags them with their Docker Hub names, so the tests never pull them
   from Docker Hub. A `toomanyrequests` or an `auth.docker.io` timeout from Docker Hub
   means the job pulls another Docker Hub image: take it from `mirror.gcr.io` too.
