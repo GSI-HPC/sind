@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
@@ -88,8 +89,9 @@ type ImageInfo struct {
 	// Unloadable those whose libraries do not.
 	Plugins, Unloadable []string
 	// MariaDBLogError is MariaDB's last log-error option, such as
-	// "--skip-log-error", empty when it has none; set only when the request
-	// asked for MariaDB.
+	// "--skip-log-error" or "--log-error=/var/log/mariadb.log", empty when
+	// it has none; set only when the request asked for MariaDB. A path in
+	// it has no blanks, control or format characters.
 	MariaDBLogError string
 }
 
@@ -122,8 +124,9 @@ var pluginFilePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+\.so$`)
 // printable characters without blanks or colons.
 var probePathPattern = regexp.MustCompile(`^/[A-Za-z0-9_./+@-]*$`)
 
-// mariadbOptionPattern is the form of a MariaDB log-error option.
-var mariadbOptionPattern = regexp.MustCompile(`^--(skip-)?log[-_]error(=\S+)?$`)
+// mariadbOptionPattern is the form of a MariaDB log-error option: its
+// value, if any, has no blanks, control or format characters.
+var mariadbOptionPattern = regexp.MustCompile(`^--(skip-)?log[-_]error(=[^\s\p{C}]+)?$`)
 
 // parseProbe reads the output of probeScript. Every line must have one of
 // the forms the script prints, with words and paths of the expected shapes,
@@ -169,7 +172,7 @@ func parseProbe(stdout string, req ProbeRequest) (*ImageInfo, error) {
 				info.Unloadable = append(info.Unloadable, rest)
 			}
 		case "mariadb":
-			if !req.MariaDB {
+			if !req.MariaDB || rest != "" && (!utf8.ValidString(rest) || !mariadbOptionPattern.MatchString(rest)) {
 				return nil, unexpectedProbeLine(line)
 			}
 			info.MariaDBLogError = rest
@@ -259,9 +262,6 @@ func (i *ImageInfo) MariaDBWarning() string {
 	opt := i.MariaDBLogError
 	if opt == "" || opt == "--skip-log-error" {
 		return ""
-	}
-	if !mariadbOptionPattern.MatchString(opt) {
-		return "cannot read MariaDB's error log setting, so monitoring may not collect MariaDB's log"
 	}
 	return "MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file"
 }
