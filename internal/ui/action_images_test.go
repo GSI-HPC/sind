@@ -5,6 +5,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -63,6 +64,36 @@ func TestActImages_Facts(t *testing.T) {
 
 	f.inspErr = errors.New("permission denied")
 	assert.Equal(t, action.ImageFacts{Err: "permission denied"}, a.facts(ctx, "new:1"))
+}
+
+// A look that its request's end cut short is not kept: the next request
+// asks Docker again.
+func TestActImages_FactsOfACanceledRequest(t *testing.T) {
+	f, a, _ := newFakeImages()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	f.inspErr = context.Canceled
+	assert.Equal(t, action.ImageFacts{Err: "context canceled"}, a.facts(ctx, "labelled:1"))
+
+	f.inspErr = nil
+	assert.Equal(t, action.ImageFacts{Local: true, Version: "26.05.4"}, a.facts(t.Context(), "labelled:1"))
+	assert.Equal(t, 2, f.inspects)
+}
+
+// A cache that is full drops what is too old to use before it keeps more.
+func TestActKeep(t *testing.T) {
+	now := time.Unix(1000, 0)
+	seen := map[string]actSeen[int]{}
+	for i := range actSeenMax {
+		actKeep(t.Context(), seen, fmt.Sprint(i), i, now)
+	}
+	actKeep(t.Context(), seen, "fresh", 1, now.Add(actImageTTL-time.Millisecond))
+	assert.Len(t, seen, actSeenMax+1, "nothing is old enough to drop yet")
+
+	actKeep(t.Context(), seen, "late", 2, now.Add(actImageTTL))
+	assert.Len(t, seen, 2)
+	assert.Contains(t, seen, "fresh")
+	assert.Contains(t, seen, "late")
 }
 
 func TestActImages_Check(t *testing.T) {
