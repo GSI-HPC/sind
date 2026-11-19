@@ -83,6 +83,20 @@ assert.Contains(t, m.Calls[0].Args, "--name")
 
 Read `Calls` once the code under test has returned. While it still runs, such as a server or a watcher that a test starts, `m.CallsSnapshot()` returns a copy of the calls so far. Queue results and set `OnCall` before the code runs; `AddResult` may also run while it does.
 
+### Shared fake daemon
+
+A dispatcher that answers from fixed results does not notice when the code removes what it created, or creates it twice. `internal/fakedocker` holds a stand-in for dockerd that keeps state and that the tests of several packages share, as `_test.go` helpers cannot be imported. Its `Daemon` keeps networks, and answers `docker network create`, `inspect` and `rm` as dockerd does: the commands of the realm lock's daemon part, which the tests of `pkg/state` and `cmd/sind` run. A test checks the end state, such as `d.Networks()`, instead of the calls:
+
+```go
+d := fakedocker.New(t)
+unlock, err := LockRealm(ctx, "sind", opts(d.Client()))
+require.NoError(t, err)
+unlock()
+assert.Empty(t, d.Networks())
+```
+
+`SetHook` lets a test answer some calls itself, for example to make a remove fail.
+
 ## Simulating missing resources
 
 The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr.
