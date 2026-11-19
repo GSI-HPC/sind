@@ -302,23 +302,26 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			}
 		}
 		// The monitoring stack goes with the mesh, or when this create
-		// made it and no other cluster is monitored; its containers
-		// before the mesh network, its volumes after them.
+		// made it and no other cluster is monitored: its containers, then
+		// its volumes, before the mesh, as cleanupRealm removes them.
+		// A part of the stack that is left keeps the mesh, as in
+		// cleanupRealm, so that the next delete finds both.
 		removeStack := removeMesh || stackCreated && !rollbackKeepsStack(cleanupCtx, client, realm, cfg.Name)
+		stackLeft := false
 		if removeStack {
 			if err := removeMonitoringContainers(cleanupCtx, client, realm); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: %w", err))
+				stackLeft = true
+			}
+			if err := removeMonitoringVolumes(cleanupCtx, client, realm); err != nil {
+				errs = append(errs, fmt.Errorf("rolling back: %w", err))
+				stackLeft = true
 			}
 		}
-		if removeMesh {
+		if removeMesh && !stackLeft {
 			log.DebugContext(ctx, "removing mesh created by this invocation")
 			if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: removing the mesh: %w", err))
-			}
-		}
-		if removeStack {
-			if err := removeMonitoringVolumes(cleanupCtx, client, realm); err != nil {
-				errs = append(errs, fmt.Errorf("rolling back: %w", err))
 			}
 		}
 		endRollback(errors.Join(errs[1:]...))

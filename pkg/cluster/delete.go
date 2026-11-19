@@ -30,7 +30,7 @@ import (
 //	deleteClusterResources   deregisters from the mesh and the monitoring stack only if other clusters remain
 //	      │
 //	    yes → done
-//	    no  → cleanupRealm (monitoring stack containers → mesh → stack volumes)
+//	    no  → cleanupRealm (monitoring stack containers → stack volumes → mesh)
 //
 // Whether other clusters remain does not depend on this cluster's
 // containers, so Delete settles it first: when the mesh goes too, removing
@@ -90,20 +90,23 @@ func warnDetached(ctx context.Context, meshMgr *mesh.Manager, external []docker.
 
 // cleanupRealm removes a realm's shared resources once its last cluster is
 // gone: the monitoring stack's containers, which hold endpoints on the mesh
-// network, then the mesh, then the stack's volumes and the journal volume,
-// which Docker removes only once no container references them.
+// network, then the stack's volumes and the journal volume, which Docker
+// removes only once no container references them, then the mesh. The
+// volumes go before the mesh, so that a cleanup cut short leaves a mesh,
+// which a later delete finds, rather than data of the realm that a stack
+// created later would take up.
 //
-// The parts are the progress steps "monitoring stack", "mesh" and
-// "monitoring volumes". The two of the stack are hidden, since a realm
+// The parts are the progress steps "monitoring stack", "monitoring
+// volumes" and "mesh". The two of the stack are hidden, since a realm
 // without a monitoring stack has nothing for them to do.
 func cleanupRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	if err := removeMonitoringContainers(ctx, client, meshMgr.Realm); err != nil {
 		return err
 	}
-	if err := removeMesh(ctx, meshMgr); err != nil {
+	if err := removeMonitoringVolumes(ctx, client, meshMgr.Realm); err != nil {
 		return err
 	}
-	return removeMonitoringVolumes(ctx, client, meshMgr.Realm)
+	return removeMesh(ctx, meshMgr)
 }
 
 // removeMesh removes the realm's mesh (mesh.Manager.CleanupMesh), as the
@@ -132,8 +135,8 @@ const deleteAllConcurrency = 4
 //
 // The clusters are the progress step "clusters", with a target for each
 // (fanout.Map), under which each cluster's removal reports its steps as
-// Delete does; the realm's the steps "monitoring stack", "mesh" and
-// "monitoring volumes".
+// Delete does; the realm's the steps "monitoring stack", "monitoring
+// volumes" and "mesh".
 func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm

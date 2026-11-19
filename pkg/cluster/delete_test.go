@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -843,9 +844,13 @@ func TestDeleteAll(t *testing.T) {
 	})
 	assert.Empty(t, meshUpdates(&m), "no deregistration from a mesh that goes")
 	n := len(m.Calls)
-	assert.Equal(t, "volume rm sind-ssh-config", strings.Join(m.Calls[n-2].Args, " "), "mesh removed after the clusters")
-	assert.Equal(t, "volume ls --format json --filter label=com.docker.compose.project=sind-mesh", strings.Join(m.Calls[n-1].Args, " "),
-		"the monitoring volumes after the mesh")
+	assert.Equal(t, "volume rm sind-ssh-config", strings.Join(m.Calls[n-1].Args, " "), "mesh removed last")
+	ls := slices.IndexFunc(m.Calls, func(c mock.Call) bool {
+		return strings.Join(c.Args, " ") == "volume ls --format json --filter label=com.docker.compose.project=sind-mesh"
+	})
+	rm := slices.IndexFunc(m.Calls, func(c mock.Call) bool { return strings.Join(c.Args, " ") == "network rm sind-mesh" })
+	assert.Positive(t, ls)
+	assert.Less(t, ls, rm, "the monitoring volumes before the mesh")
 }
 
 // TestDeleteAll_MeshOnly covers a realm left with a mesh and no cluster, as

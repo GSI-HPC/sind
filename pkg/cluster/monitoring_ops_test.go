@@ -220,8 +220,9 @@ func TestCleanupRealm(t *testing.T) {
 	require.NoError(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
 	assert.Empty(t, f.containers)
 	assert.Empty(t, f.volumes)
-	assert.Less(t, slices.Index(removed(m), "sind-grafana"), slices.Index(removed(m), "sind-mesh"))
-	assert.Less(t, slices.Index(removed(m), "sind-mesh"), slices.Index(removed(m), "sind-journal"))
+	assert.Less(t, slices.Index(removed(m), "sind-grafana"), slices.Index(removed(m), "sind-journal"))
+	assert.Less(t, slices.Index(removed(m), "sind-journal"), slices.Index(removed(m), "sind-mesh"),
+		"a cleanup cut short leaves no volume of the stack without the mesh")
 
 	for _, prefix := range []string{"ps -a --no-trunc --format json --filter label=com.docker.compose.project", "volume ls --format json --filter label=com.docker.compose.project"} {
 		f := newStackFake(t).withStack()
@@ -231,13 +232,14 @@ func TestCleanupRealm(t *testing.T) {
 		require.Error(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)), prefix)
 	}
 
-	// A failed mesh cleanup leaves the volumes.
+	// A failed removal of the volumes leaves the mesh, which a later
+	// delete finds.
 	f = newStackFake(t).withStack()
-	realm = &realmFake{t: t, clusters: map[string][]string{}, fail: func(args []string) bool { return args[0] == "network" && args[1] == "rm" }}
+	f.fail["volume rm sind-journal"] = mock.Result{Err: testutil.ExitCode1(t)}
 	m = &mock.Executor{OnCall: stackFirst(f, realm.onCall)}
 	client = docker.NewClient(m)
 	require.Error(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
-	assert.NotEmpty(t, f.volumes)
+	assert.NotContains(t, removed(m), "sind-mesh")
 }
 
 func TestDelete_Monitored(t *testing.T) {

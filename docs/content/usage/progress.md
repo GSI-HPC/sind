@@ -155,13 +155,13 @@ $ sind power reboot 'worker-[0-23]'
 | `network` | | detaches the containers that joined the cluster network, those of the mesh and outside sind, and removes it |
 | `volumes` | one per volume | removes the cluster's volumes |
 | `monitoring` | | on a monitored cluster: syncs the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}) and removes the nodes' journals |
-| `monitoring stack`, `mesh`, `monitoring volumes` | | with the realm's last cluster: remove the monitoring stack's containers, the mesh and the stack's volumes. The two of the stack show only when they take long or fail |
+| `monitoring stack`, `monitoring volumes`, `mesh` | | with the realm's last cluster: remove the monitoring stack's containers, the stack's volumes and the mesh. The two of the stack show only when they take long or fail |
 
 `sind delete worker` shows `slurm` (takes the workers out of `sind-nodes.conf` and reconfigures slurmctld, on a managed cluster), then `mesh deregistration`, `nodes`, with a target for each worker, and on a monitored cluster `monitoring`. A node that cannot be removed fails its target, and the other nodes are removed still.
 
 `sind connect container` shows the step `connecting`, and `sind disconnect container` the step `disconnecting`, each with a target for each container, named as you name it: the containers are attached or detached one after another, and one that is on every network of the realm already, or on none, is skipped, as `skipped: connected` or `skipped: not connected`. The first container that fails ends the step, and those not yet tried are canceled.
 
-`sind delete cluster --all` and `sind delete realm` show the step `clusters`, with a target for each cluster; what each cluster's removal does shows as `nodes`, `network` and `volumes` steps below its target, without targets of their own. `mesh deregistration` follows, for the clusters that were deleted when another one failed to be, then `monitoring stack`, `mesh` and `monitoring volumes` for the realm.
+`sind delete cluster --all` and `sind delete realm` show the step `clusters`, with a target for each cluster; what each cluster's removal does shows as `nodes`, `network` and `volumes` steps below its target, without targets of their own. `mesh deregistration` follows, for the clusters that were deleted when another one failed to be, then `monitoring stack`, `monitoring volumes` and `mesh` for the realm.
 
 ## Choosing the display
 
