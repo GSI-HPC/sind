@@ -236,6 +236,10 @@ func TestRunBack(t *testing.T) {
 	snap := store.Snapshot{Clusters: map[string][]cluster.Summary{"sind": {{Name: "dev"}}}}
 	assert.Equal(t, &runLink{Label: "Open dev", Href: "/clusters/sind/dev"}, runBack(snap, store.Task{Realm: "sind", Cluster: "dev"}))
 	assert.Equal(t, &runLink{Label: "Open Clusters", Href: "/clusters"}, runBack(snap, store.Task{Realm: "lab", Cluster: "dev"}))
+	// The address is the one of every other link to the cluster's page.
+	odd := store.Snapshot{Clusters: map[string][]cluster.Summary{"a/b": {{Name: "c d"}}}}
+	assert.Equal(t, &runLink{Label: "Open c d", Href: pgClusterURL("a/b", "c d", "")}, runBack(odd, store.Task{Realm: "a/b", Cluster: "c d"}))
+	assert.Equal(t, "/clusters/a%2Fb/c%20d", runBack(odd, store.Task{Realm: "a/b", Cluster: "c d"}).Href)
 	for _, a := range []string{"connect", "disconnect", "delete-realm"} {
 		assert.Equal(t, &runLink{Label: "Open Mesh and DNS", Href: "/mesh"}, runBack(snap, store.Task{Realm: "sind", Action: a}), a)
 	}

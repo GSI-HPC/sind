@@ -441,7 +441,7 @@ func runBack(snap store.Snapshot, t store.Task) *runLink {
 	_, exists := snap.Cluster(t.Realm, t.Cluster)
 	switch {
 	case t.Cluster != "" && exists:
-		return &runLink{Label: "Open " + t.Cluster, Href: "/clusters/" + t.Realm + "/" + t.Cluster}
+		return &runLink{Label: "Open " + t.Cluster, Href: pgClusterURL(t.Realm, t.Cluster, "")}
 	case t.Cluster != "":
 		return &runLink{Label: "Open Clusters", Href: "/clusters"}
 	case t.Action == "connect" || t.Action == "disconnect" || t.Action == "delete-realm":
