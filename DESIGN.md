@@ -43,7 +43,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 
 **Phase 1: Global Infrastructure**
 1. Create `sind-mesh` network (if not exists)
-2. Create and start the `sind-dns` container (if not exists), or start it (if stopped), in parallel with step 3
+2. Create and start the `sind-dns` container (if not exists), or start it (if stopped), in parallel with step 3. A DNS container that never started gets an empty configuration if it has no Corefile, before any command starts it, as a killed or failed create can leave one between its `docker create` and the copy of its Corefile. A running DNS container without a Corefile, as an earlier sind could start one, counts as one without records: the next DNS update writes the Corefile and restarts the container (its pinned address stays), as CoreDNS started without a Corefile serves its default and does not load one on SIGUSR1
 3. Create the `sind-ssh-config` volume (if not exists)
 4. Create the `sind-ssh` container (if not exists), copy a new keypair into a new volume through it, and start it (or start it, if stopped), after `sind-dns`, whose address it resolves through. An existing volume without the public key, as a killed or failed create leaves one between the volume and the keys, gets a new keypair too: no node can hold a key that never existed
 

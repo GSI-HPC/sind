@@ -622,16 +622,54 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 		return nil, fmt.Errorf("writing DNS configuration: %w", err)
 	}
 
-	return m.startDNS(ctx, &docker.ContainerInfo{Name: name, Status: docker.StateCreated})
+	return m.bootDNS(ctx, &docker.ContainerInfo{Name: name, Status: docker.StateCreated})
 }
 
 // startDNS starts the DNS container that info describes unless it is
 // running, and then returns its details again: the started container has a
 // new address on the mesh network.
+//
+// A container that never ran (docker.StateCreated) gets an empty
+// configuration first if it has no Corefile: an EnsureMesh killed, or
+// failed, between its docker create and the copy of its Corefile leaves
+// one, and CoreDNS started without a Corefile serves its default and never
+// loads one on SIGUSR1.
 func (m *Manager) startDNS(ctx context.Context, info *docker.ContainerInfo) (*docker.ContainerInfo, error) {
 	if info.Status == docker.StateRunning {
 		return info, nil
 	}
+	if info.Status == docker.StateCreated {
+		if err := m.writeMissingDNSConfig(ctx, info.Name); err != nil {
+			return nil, err
+		}
+	}
+	return m.bootDNS(ctx, info)
+}
+
+// writeMissingDNSConfig copies an empty configuration into the DNS
+// container name unless it has a Corefile. The copy ignores the
+// cancellation of ctx (internal/detach), so that Ctrl+C cannot leave half
+// of it.
+func (m *Manager) writeMissingDNSConfig(ctx context.Context, name docker.ContainerName) error {
+	_, err := m.Docker.CopyFromContainer(ctx, name, corefilePath)
+	if err == nil {
+		return nil
+	}
+	if !docker.IsFileNotFound(err) {
+		return fmt.Errorf("reading DNS Corefile: %w", err)
+	}
+	sindlog.From(ctx).InfoContext(ctx, "writing the missing DNS configuration", "container", string(name))
+	wctx, cancel := detach.Context(ctx)
+	defer cancel()
+	if err := m.Docker.CopyToContainer(wctx, name, "/", dnsFiles(m.Realm, nil)); err != nil {
+		return fmt.Errorf("writing DNS configuration: %w", err)
+	}
+	return nil
+}
+
+// bootDNS starts the DNS container that info describes and returns its
+// details again.
+func (m *Manager) bootDNS(ctx context.Context, info *docker.ContainerInfo) (*docker.ContainerInfo, error) {
 	sindlog.From(ctx).InfoContext(ctx, "starting mesh DNS", "container", string(info.Name), "state", string(info.Status))
 	if err := m.Docker.StartContainer(ctx, info.Name); err != nil {
 		return nil, fmt.Errorf("starting DNS container: %w", err)
@@ -650,7 +688,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	if len(records) == 0 {
 		return nil
 	}
-	entries, err := m.readDNSEntries(ctx)
+	entries, found, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return err
 	}
@@ -686,7 +724,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 		kept = append(kept, r.IP+" "+r.Hostname)
 	}
 
-	return m.writeDNSEntries(ctx, kept)
+	return m.writeDNSEntries(ctx, kept, !found)
 }
 
 // RemoveDNSRecords removes all A records for the given hostnames from the
@@ -695,12 +733,12 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 	if len(hostnames) == 0 {
 		return nil
 	}
-	entries, err := m.readDNSEntries(ctx)
+	entries, found, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return err
 	}
 
-	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames))
+	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames), !found)
 }
 
 // Info holds information about the mesh infrastructure for a realm.
@@ -810,7 +848,7 @@ func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 	if err := m.requireMeshContainer(ctx, m.DNSContainerName()); err != nil {
 		return nil, err
 	}
-	entries, err := m.readDNSEntries(ctx)
+	entries, _, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -825,26 +863,34 @@ func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 	return records, nil
 }
 
-// readDNSEntries reads the current Corefile and extracts the host entries.
-func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
+// readDNSEntries reads the current Corefile and extracts the host entries,
+// and reports whether the DNS container has a Corefile. One without, which
+// an earlier sind could start before it had copied its configuration, has
+// no entries.
+func (m *Manager) readDNSEntries(ctx context.Context) (entries []string, found bool, err error) {
 	data, err := m.Docker.CopyFromContainer(ctx, m.DNSContainerName(), corefilePath)
-	if err != nil {
-		return nil, fmt.Errorf("reading DNS Corefile: %w", err)
+	if docker.IsFileNotFound(err) {
+		return nil, false, nil
 	}
-	return parseEntries(string(data)), nil
+	if err != nil {
+		return nil, false, fmt.Errorf("reading DNS Corefile: %w", err)
+	}
+	return parseEntries(string(data)), true, nil
 }
 
 // writeDNSEntries writes a Corefile with the given host entries into the
 // DNS container and has CoreDNS load it. A running CoreDNS reloads it on
 // SIGUSR1 without dropping queries. A stopped DNS container is started,
 // with a stopped relay (see StartMesh), as every node and the relay resolve
-// through it.
+// through it. With restart, a running DNS container is stopped and started
+// in the same way: CoreDNS started without a Corefile serves its default
+// and does not reload on SIGUSR1.
 //
 // The write and the reload ignore the cancellation and the deadline of
 // ctx, so that Ctrl+C cannot leave the DNS container stopped or with a
 // Corefile it has not loaded, but end with the rollback that ctx runs
 // under (internal/detach).
-func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
+func (m *Manager) writeDNSEntries(ctx context.Context, entries []string, restart bool) error {
 	ctx, cancel := detach.Context(ctx)
 	defer cancel()
 	name := m.DNSContainerName()
@@ -856,6 +902,13 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	info, err := m.Docker.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspecting DNS container: %w", err)
+	}
+	if info.Status == docker.StateRunning && restart {
+		sindlog.From(ctx).InfoContext(ctx, "restarting mesh DNS, as it runs without its Corefile", "container", string(name))
+		if err := m.Docker.StopContainer(ctx, name); err != nil {
+			return fmt.Errorf("restarting DNS: %w", err)
+		}
+		info.Status = docker.StateExited
 	}
 	if info.Status != docker.StateRunning {
 		if _, _, err := m.StartMesh(ctx); err != nil {
