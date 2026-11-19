@@ -370,7 +370,9 @@ type psEntry struct {
 // ListContainers returns containers matching the given filters, running or
 // not. Each filter is passed as a --filter flag to docker ps (e.g.
 // "label=sind.cluster"); docker ps keeps a container that matches every
-// filter key, and any of the values a key is given more than once with
+// filter key. A container must match every label= filter
+// ("label=sind.realm=x", "label=sind.cluster=y"), while the repeated values
+// of another key, such as network= or name=, are alternatives
 // ("network=a", "network=b").
 func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]ContainerListEntry, error) {
 	ps, err := listJSON[psEntry](ctx, c, "ps", filters, "ps", "-a", "--no-trunc")
