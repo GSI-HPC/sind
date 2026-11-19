@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -150,4 +152,18 @@ func (s Shot) File(size, theme string) string {
 		return s.Name + "-" + theme + ".png"
 	}
 	return s.Name + "-" + size + "-" + theme + ".png"
+}
+
+// checkNames refuses the names, of -only, that name no shot of the list.
+func (l Shots) checkNames(names []string) error {
+	var unknown []string
+	for _, name := range names {
+		if !slices.ContainsFunc(l.Shots, func(s Shot) bool { return s.Name == name }) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		return fmt.Errorf("-only: no shot is named %s", strings.Join(unknown, ", "))
+	}
+	return nil
 }

@@ -137,6 +137,27 @@ func TestRun_Errors(t *testing.T) {
 	}
 }
 
+// TestRun_UnknownOnly checks that a name of -only that names no shot is
+// refused before a browser starts, also when another one names a shot.
+func TestRun_UnknownOnly(t *testing.T) {
+	t.Setenv("PATH", "")
+	t.Setenv("CHROMIUM", "")
+	err := run([]string{"-out", t.TempDir(), "-only", "overview", "-only", "typo", "-only", "other"})
+	if err == nil || err.Error() != "-only: no shot is named typo, other" {
+		t.Errorf("the error is %v", err)
+	}
+	l, err := loadShots("shots.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.checkNames([]string{"overview", "clusters"}); err != nil {
+		t.Errorf("shots of the list: %v", err)
+	}
+	if err := l.checkNames(nil); err != nil {
+		t.Errorf("no -only: %v", err)
+	}
+}
+
 func TestFindChromium(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Setenv("CHROMIUM", "")

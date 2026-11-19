@@ -66,6 +66,9 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := list.checkNames(o.Only); err != nil {
+		return err
+	}
 	if o.Chromium, err = findChromium(o.Chromium); err != nil {
 		return err
 	}
