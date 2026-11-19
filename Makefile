@@ -47,8 +47,9 @@ build: ## Build the sind binary
 install: ## Install sind to GOPATH/bin
 	CGO_ENABLED=$(CGO_ENABLED) go install -trimpath -ldflags='$(LDFLAGS)' $(CMD)
 
-lint: ## Run golangci-lint
+lint: ## Run golangci-lint, on the unit and on the integration build
 	golangci-lint run
+	golangci-lint run --build-tags integration
 
 lint-docs: ## Lint documentation markdown files
 	npx markdownlint-cli2@0.24.1 "docs/content/**/*.md"

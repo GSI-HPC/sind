@@ -42,7 +42,7 @@ All common tasks are available via `make`:
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
 | `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
-| `make lint` | Run golangci-lint |
+| `make lint` | Run golangci-lint on the unit and on the integration build (`-tags integration`) |
 | `make lint-docs` | Lint documentation markdown files |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |

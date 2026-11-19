@@ -34,6 +34,14 @@ jobs:
         with:
           version: v2.15.0
 
+      # The files behind //go:build integration, which the run above
+      # leaves out, as it leaves out those behind !integration.
+      - name: Lint the integration build
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          args: --build-tags integration
+
   # markdownlint-cli2 on docs/content, at the version that the Makefile
   # pins and with the rules of .markdownlint.json, on the runner's Node.
   lint-docs:

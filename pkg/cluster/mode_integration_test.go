@@ -499,7 +499,7 @@ nodes:
 	require.NoError(t, err, "the backup sees and edits the primary's file")
 	for _, n := range []docker.ContainerName{submitter, worker} {
 		_, err = c.Exec(ctx, n, "touch", slurm.ConfDir+"/from-elsewhere")
-		assert.Error(t, err, "%s mounts the config volume read-only", n)
+		assert.ErrorContains(t, err, "Read-only file system", "%s mounts the config volume read-only", n)
 	}
 
 	// Both controllers share the slurmctld state volume.
@@ -625,7 +625,7 @@ nodes:
 	_, err = c.Exec(ctx, db, "runuser", "-u", "slurm", "--", "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
 	require.NoError(t, err)
 	_, err = c.Exec(ctx, db, "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
-	assert.Error(t, err, "root logged in as slurm")
+	assert.ErrorContains(t, err, "Access denied", "root logged in as slurm")
 
 	// The controller sends accounting data to slurmdbd on the db node.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -697,7 +697,7 @@ nodes:
 	assert.NotContains(t, conf, "AccountingStorage")
 	assert.NotContains(t, conf, "JobAcctGather")
 	_, err = c.Exec(ctx, controller, "test", "-e", slurm.SlurmdbdConfPath)
-	assert.Error(t, err, "no slurmdbd.conf")
+	assert.EqualError(t, err, "exit status 1", "no slurmdbd.conf")
 	db := ContainerName(realm, clusterName, "db")
 	for _, unit := range []string{"mariadb", "slurmdbd"} {
 		out, err := c.ExecAllowNonZero(ctx, db, "systemctl", "is-active", unit)
@@ -994,7 +994,7 @@ nodes:
 
 	// Outside a job, the worker does not know alice, so she cannot log in.
 	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-o", "BatchMode=yes", "-l", "alice", DNSName("worker-0", clusterName, realm), "true")
-	assert.Error(t, err, "SSH as alice to a worker")
+	assert.ErrorContains(t, err, "Permission denied", "SSH as alice to a worker")
 
 	// Workers added later resolve users the same way.
 	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
