@@ -56,9 +56,9 @@ func stackQuery(ctx context.Context, t *testing.T, c *docker.Client, realm strin
 
 // TestMonitoring creates a monitored cluster with a db node and checks
 // that the stack runs and collects its metrics and logs, that Grafana
-// serves its datasources and dashboards anonymously without password
-// login, that Loki refuses deletes, and that deleting the cluster removes
-// the stack. With an image of
+// serves its datasources and dashboards anonymously to an Editor without
+// password login, that Loki refuses deletes, and that deleting the cluster
+// removes the stack. With an image of
 // Slurm 25.11, which serves no metrics, it checks that the create fails
 // before any node exists and skips the rest.
 func TestMonitoring(t *testing.T) {
@@ -174,18 +174,18 @@ func TestMonitoring(t *testing.T) {
 	out, err = stackGet(ctx, c, realm, "-o", "/dev/null", "-w", "%{http_code}", "http://localhost:3000/explore")
 	require.NoError(t, err)
 	assert.Equal(t, "200", out)
-	// admin:admin does not make a request a server admin's: server stats
-	// stay forbidden, and of the server settings an org Admin only sees
-	// the SMTP section.
-	out, err = stackGet(ctx, c, realm, "-o", "/dev/null", "-w", "%{http_code}", "-u", "admin:admin", "http://localhost:3000/api/admin/stats")
-	require.NoError(t, err)
-	assert.Equal(t, "403", out)
-	out, err = stackGet(ctx, c, realm, "-u", "admin:admin", "http://localhost:3000/api/admin/settings")
-	require.NoError(t, err)
-	var settings map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out), &settings), out)
-	assert.NotContains(t, settings, "security")
-	assert.NotContains(t, settings, "auth.basic")
+	// The visitor is an Editor, also with admin:admin: no server stats,
+	// no server settings, no new datasource and no service account.
+	for _, req := range [][]string{
+		{"-u", "admin:admin", "http://localhost:3000/api/admin/stats"},
+		{"-u", "admin:admin", "http://localhost:3000/api/admin/settings"},
+		{"-X", "POST", "-H", "Content-Type: application/json", "-d", `{"name":"x","type":"prometheus","access":"proxy","url":"http://example.invalid"}`, "http://localhost:3000/api/datasources"},
+		{"-X", "POST", "-H", "Content-Type: application/json", "-d", `{"name":"x","role":"Admin"}`, "http://localhost:3000/api/serviceaccounts"},
+	} {
+		out, err = stackGet(ctx, c, realm, append([]string{"-o", "/dev/null", "-w", "%{http_code}"}, req...)...)
+		require.NoError(t, err)
+		assert.Equal(t, "403", out, req[len(req)-1])
+	}
 	out, err = stackGet(ctx, c, realm, "http://localhost:3000/api/search?tag="+url.QueryEscape("sind"))
 	require.NoError(t, err)
 	assert.Contains(t, out, `"uid":"sind-slurm-cluster"`)

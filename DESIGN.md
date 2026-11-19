@@ -1971,11 +1971,11 @@ Images and names are listed under Docker Resources. Grafana, Prometheus and Loki
 
 sind copies each service's configuration into its container with `docker cp` before the first start, as it does the Corefile. The dashboards are part of the sind binary, so a stack created by a newer sind gets that version's dashboards.
 
-Grafana is open to whoever reaches it: there is no data or access to protect. Its environment makes every visitor an anonymous org Admin, with no login at all, and keeps it from fetching anything:
+Grafana is open to whoever reaches it: there is no login to manage on a development stack. Its environment makes every visitor an anonymous org Editor, with no login at all, and keeps it from fetching anything:
 
 ```
 GF_AUTH_ANONYMOUS_ENABLED=true
-GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+GF_AUTH_ANONYMOUS_ORG_ROLE=Editor
 GF_AUTH_DISABLE_LOGIN_FORM=true
 GF_AUTH_DISABLE_LOGIN=true                     # no password login: admin/admin is unusable
 GF_AUTH_BASIC_ENABLED=false
@@ -1992,7 +1992,7 @@ GF_SECURITY_DISABLE_GRAVATAR=true
 GF_SNAPSHOTS_EXTERNAL_ENABLED=false            # no publishing to an external snapshot service
 ```
 
-An org Admin can use Explore, edit dashboards and datasources and create service account tokens, but not install plugins or change server settings other than SMTP. Anyone who reaches the mesh, local users of the host and jobs on the nodes alike, acts as that Admin, and can point a new datasource at any address the Grafana container reaches. Prometheus and Loki are unauthenticated on the mesh as well. With plugin preinstallation off, the Logs and Metrics Drilldown apps are absent; Explore remains.
+An org Editor can use Explore and save dashboards, but cannot add or change datasources, create service accounts or their tokens, install plugins or change settings. Anyone who reaches the mesh acts as that Editor: local users of the host, jobs on the nodes, and web pages that a browser on the host opens, by the services' predictable addresses or by DNS rebinding, as no service of the stack checks the `Host` header. An Admin would let such a page point a new datasource at any address the Grafana container reaches and keep a service account token; an Editor cannot. Prometheus and Loki are unauthenticated on the mesh as well, so such a page reads what they hold, and writes without reading an answer: series through Prometheus's remote-write receiver, which takes a body without `Content-Type` as protobuf, and log lines through Loki's push API, which takes `text/plain` as protobuf. It can also stop Loki with `GET /ingester/shutdown` of the single-process target, which `sind get monitoring` then shows and `sind power on` repairs; Loki refuses deletes (`deletion_mode: disabled`). Browsers that enforce Local Network Access, such as Chrome from version 142, ask the user before a public page reaches such an address. With plugin preinstallation off, the Logs and Metrics Drilldown apps are absent; Explore remains.
 
 From the host, Grafana is at `http://grafana.<realm>.sind:3000` when host DNS works (see Host DNS Resolution), otherwise at the address `sind get monitoring -o json` prints. For a Docker host reached over SSH, `ssh -L 3000:grafana.sind.sind:3000 devbox` (or the address) forwards it.
 

@@ -128,14 +128,16 @@ const (
 )
 
 // grafanaEnv is Grafana's environment: anyone who reaches it is an
-// anonymous org Admin, with no login at all (there is no data or access
-// to protect, and admin:admin over basic auth would only fall through to
-// the anonymous identity), and Grafana fetches nothing from the internet:
-// no plugin installs or updates, no update checks, news, gravatars or
-// external snapshots, and no usage reports.
+// anonymous org Editor, with no login at all (admin:admin over basic auth
+// would only fall through to the anonymous identity), and Grafana fetches
+// nothing from the internet: no plugin installs or updates, no update
+// checks, news, gravatars or external snapshots, and no usage reports. An
+// Editor uses Explore and saves dashboards, but adds no datasource and no
+// service account: a web page that reaches Grafana, such as by DNS
+// rebinding, can neither point Grafana at another address nor keep a token.
 var grafanaEnv = []string{
 	"GF_AUTH_ANONYMOUS_ENABLED=true",
-	"GF_AUTH_ANONYMOUS_ORG_ROLE=Admin",
+	"GF_AUTH_ANONYMOUS_ORG_ROLE=Editor",
 	"GF_AUTH_DISABLE_LOGIN_FORM=true",
 	"GF_AUTH_DISABLE_LOGIN=true",
 	"GF_AUTH_BASIC_ENABLED=false",

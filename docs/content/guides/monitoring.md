@@ -94,7 +94,7 @@ ssh -L 3000:grafana.sind.sind:3000 devbox
 
 and open `http://localhost:3000`. sind publishes no host port, so realms and CI jobs never compete for port 3000.
 
-There is no login: every visitor is an anonymous org Admin, who can use Explore and edit dashboards and datasources. Grafana installs no plugins and contacts nothing on the internet, so the stack works offline once its images are on the host.
+There is no login: every visitor is an anonymous org Editor, who can use Explore and save dashboards, but cannot add or change datasources. Grafana installs no plugins and contacts nothing on the internet, so the stack works offline once its images are on the host.
 
 ## What is collected
 
@@ -211,7 +211,7 @@ The stack's images come from Docker Hub; a runner that cannot reach it needs the
 
 ## Limits
 
-- Anyone who reaches the mesh, local users of the host and jobs on the nodes alike, is a Grafana org Admin and can add datasources that point anywhere the Grafana container reaches. Prometheus and Loki have no authentication either. The stack is a development tool.
+- Anyone who reaches the mesh is a Grafana org Editor and reads everything that the stack holds: local users of the host, jobs on the nodes, and web pages that a browser on the host opens. A page reaches the stack by its address or by DNS rebinding, and needs no answer to write: it can add series to Prometheus through its remote-write receiver, add log lines to Loki, and stop Loki with `/ingester/shutdown`, which `sind get monitoring` then shows and `sind power on` repairs. Loki refuses deletes. Browsers that ask before a page reaches a local network, such as Chrome from version 142, ask first. Prometheus and Loki have no authentication. The stack is a development tool: do not browse untrusted pages on a host where it holds data that matters.
 - Grafana, Prometheus and Loki get 1 GB of memory each, Alloy 512 MB.
 - Slurm reports memory in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in its metric names says.
 - Job history, such as efficiency and timelines as `sacct` shows them, is not collected: no metric carries accounting data.
