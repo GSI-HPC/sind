@@ -578,6 +578,11 @@ func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
 	assert.Equal(t, 4, configs[2].CPUs)
 	assert.Equal(t, "worker-2", configs[3].ShortName)
 	assert.Equal(t, 2, configs[3].CPUs)
+	// The compose container number of a worker is its index, from 1, over
+	// all worker groups.
+	for i, rc := range configs[1:] {
+		assert.Equal(t, i+1, rc.ContainerNumber, rc.ShortName)
+	}
 }
 
 func TestNodeRunConfigs_WithSubmitter(t *testing.T) {

@@ -396,6 +396,25 @@ func monitoredInfo(shortName, subpath string) *docker.ContainerInfo {
 	return info
 }
 
+// The subpath of the journal mount is the directory that the node mounts
+// of the journal volume, whatever its name: only that mount tells it, not
+// a bind mount or another volume with a subpath.
+func TestJournalMount_SubpathOfTheMount(t *testing.T) {
+	info := monitoredInfo("controller", "renamed/controller")
+	info.HostConfig.Mounts = append(info.HostConfig.Mounts,
+		docker.HostMount{Type: docker.MountBind, Source: "sind-journal", Target: "/mnt", VolumeOptions: docker.VolumeOptions{Subpath: "bind/controller"}},
+		docker.HostMount{Type: docker.MountVolume, Source: "sind-dev-data", Target: "/data", VolumeOptions: docker.VolumeOptions{Subpath: "data/controller"}},
+	)
+
+	mount, ok := journalMount("sind", "dev", []*docker.ContainerInfo{{Name: "sind-dev-db"}, info})
+
+	require.True(t, ok)
+	assert.Equal(t, MountPoint{Path: "/var/log/journal", Source: "sind-journal", Subpath: "renamed", Type: config.StorageVolume}, mount)
+
+	_, ok = journalMount("sind", "dev", []*docker.ContainerInfo{{Name: "sind-dev-db"}})
+	assert.False(t, ok, "no node mounts the journal volume")
+}
+
 func TestGetMountPoints_Journal(t *testing.T) {
 	f := newStackFake(t).withStack()
 	base := func(args []string, _ string) mock.Result {

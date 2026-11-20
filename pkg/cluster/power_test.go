@@ -3,9 +3,11 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -413,6 +416,43 @@ func TestPower_On_MissingHostKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPower_On_NoHostKeyReadable covers a started node whose host key
+// known_hosts lacks and cannot be read: a warning, and known_hosts is not
+// written.
+func TestPower_On_NoHostKeyReadable(t *testing.T) {
+	var written string
+	wrote := false
+	var m mock.Executor
+	m.OnCall = powerOnCall(t, func(args []string, stdin string) (mock.Result, bool) {
+		switch strings.Join(args, " ") {
+		case "inspect sind-dev-worker-0 --type container":
+			return mock.Result{Stdout: startedNodesJSON("10.0.9.2")}, true
+		case "exec sind-ssh cat /root/.ssh/known_hosts":
+			return mock.Result{Stdout: "controller.dev.sind.sind ssh-ed25519 A\n"}, true
+		case "exec sind-dev-worker-0 cat /etc/ssh/ssh_host_ed25519_key.pub":
+			return mock.Result{Stderr: "cat: no such file\n", Err: testutil.ExitCode1(t)}, true
+		}
+		if args[0] == "exec" && args[1] == "-i" && args[2] == "sind-ssh" {
+			wrote = true
+			return mock.Result{}, true
+		}
+		return meshCall(t, nil, &written)(args, stdin)
+	})
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	var warned []string
+	mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+
+	var logs bytes.Buffer
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+
+	require.NoError(t, PowerOn(ctx, client, mgr, "dev", []string{"worker-0"}))
+	assert.False(t, wrote, "known_hosts is not written")
+	assert.NotContains(t, logs.String(), "adding host keys", "and no log line says that it is")
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], "reading the host key of sind-dev-worker-0: ")
 }
 
 // TestPower_On_KnownHostsErrors covers a known_hosts that cannot be read or

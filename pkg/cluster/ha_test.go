@@ -77,6 +77,8 @@ func TestHeartbeat_InControl(t *testing.T) {
 	assert.False(t, hb.inControl(1, true), "other index")
 	assert.False(t, hb.inControl(0, false), "slurmctld down")
 	assert.False(t, heartbeat{index: 0, age: 2 * time.Minute}.inControl(0, true), "stale")
+	assert.True(t, heartbeat{index: 0, age: heartbeatMaxAge}.inControl(0, true), "as old as a heartbeat may be")
+	assert.False(t, heartbeat{index: 0, age: heartbeatMaxAge + time.Nanosecond}.inControl(0, true), "older")
 }
 
 // pairStatusOnCall serves GetStatus for a cluster with a controller pair and

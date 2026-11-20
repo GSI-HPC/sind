@@ -750,6 +750,18 @@ func TestProbeMonitoringImages(t *testing.T) {
 	})
 }
 
+// A stack without a monitored cluster has no Slurm numbers to ask for.
+func TestGetMonitoring_NoClusters(t *testing.T) {
+	f := newStackFake(t).withStack()
+	client, _ := f.client()
+
+	m, err := GetMonitoring(t.Context(), client, "sind")
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Clusters)
+	assert.False(t, f.called("exec sind-grafana curl -sS --max-time 5 -w \n%{http_code} -G --data-urlencode query="), "no query")
+}
+
 func TestGetMonitoring(t *testing.T) {
 	f := newStackFake(t)
 	client, _ := f.client()
@@ -792,6 +804,13 @@ func TestGetMonitoring(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, m.Clusters[0].Slurm)
 	assert.Equal(t, &SlurmCounts{Nodes: 2, NodesDown: 1, JobsRunning: 3, JobsPending: 4}, m.Clusters[1].Slurm)
+
+	// Or those of dev, the first cluster of the list.
+	f.query = `{"status":"success","data":{"resultType":"vector","result":[` + sample("slurm_nodes", "dev", "1") + `]}}`
+	m, err = GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Equal(t, &SlurmCounts{Nodes: 1}, m.Clusters[0].Slurm)
+	assert.Nil(t, m.Clusters[1].Slurm)
 
 	// Without Prometheus running, nothing asks it.
 	f.containers["sind-prometheus"].state = docker.StateExited
