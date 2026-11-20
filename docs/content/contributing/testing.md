@@ -295,6 +295,16 @@ Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC mu
 
 When you change code that a model describes, change the model with it. When TLC reports a violation, it prints the steps that lead to it: run `spec/tla/check.sh` and read the trace of the configuration that failed. The script needs Java 11 or later. It fetches the release of the TLA+ tools that it pins and checks its sha256, or uses the `tla2tools.jar` that `TLA2TOOLS` names.
 
+## Comparisons with Slurm
+
+sind reads text in forms that Slurm defines. An integration test can compare how sind reads such a text with how Slurm reads it, in the node image:
+
+| Test | sind | Slurm |
+|---|---|---|
+| `TestNodeSetsAsSlurmReadsThem` (`cmd/sind`) | The nodes of a node argument (`parseNodeArgs`, with go-nodeset) | `scontrol show hostnames` |
+
+The test has a list of node sets that both read alike, 300 more from a fixed seed, and a list of the node sets that the two are known to read differently, with the nodes of each. A difference that ends fails the test too, so the list stays true. sind also takes what Slurm does not, such as steps and the operators of a node set; the test has none of these.
+
 ## Integration test prerequisites
 
 An integration test that needs Docker gets its client from `testutil.NewClient` (`newTestClient` in `pkg/docker`), which checks with `docker info`, once per test process, that `docker` reaches a daemon (`itest.RequireDocker`). A test that creates clusters also calls `prereq.Check`, which checks the Docker version and that cgroup v2 is mounted with `nsdelegate`.
