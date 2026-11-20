@@ -8,9 +8,9 @@ import (
 	"fmt"
 
 	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
+	"github.com/GSI-HPC/sind/internal/doctor"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 )
 
 // Budget is what new nodes take of the Docker host, beside the nodes that

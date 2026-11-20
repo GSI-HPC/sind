@@ -12,7 +12,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/eventlog"
 	"github.com/GSI-HPC/go-clikit/progress/mcpprogress"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -52,7 +52,7 @@ func withToolProgress(ctx context.Context, req *mcp.CallToolRequest) (context.Co
 		})
 	}
 	env := append(os.Environ(), "TRACEPARENT="+tc.Traceparent())
-	return cmdexec.WithEnv(ctx, env), followToolProgress(ctx, path, tc.ID, send)
+	return execopt.WithEnv(ctx, env), followToolProgress(ctx, path, tc.ID, send)
 }
 
 // followToolProgress reads the event log at path as it grows, until the

@@ -7,25 +7,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/GSI-HPC/sind/internal/execopt"
 )
-
-// outputLimitKey is the context key of WithOutputLimit.
-type outputLimitKey struct{}
-
-// WithOutputLimit returns ctx for a command whose standard output and
-// standard error OSExecutor.Run keeps to about n bytes each, such as one
-// whose output a server returns: the first and the last n/2 bytes, with a
-// line between them that says how many bytes it left out. Without it, Run
-// keeps all of it.
-func WithOutputLimit(ctx context.Context, n int) context.Context {
-	return context.WithValue(ctx, outputLimitKey{}, n)
-}
-
-// OutputLimit returns the limit of WithOutputLimit, zero without one.
-func OutputLimit(ctx context.Context) int {
-	n, _ := ctx.Value(outputLimitKey{}).(int)
-	return n
-}
 
 // output is where Run collects a stream of a command.
 type output interface {
@@ -33,10 +17,10 @@ type output interface {
 	String() string
 }
 
-// newOutput returns the buffer of a stream of a command run with ctx:
-// one that keeps its head and tail under WithOutputLimit, else all of it.
+// newOutput returns the buffer of a stream of a command run with ctx: one that
+// keeps its head and tail under execopt.WithOutputLimit, else all of it.
 func newOutput(ctx context.Context) output {
-	if n := OutputLimit(ctx); n > 0 {
+	if n := execopt.OutputLimit(ctx); n > 0 {
 		return &headTail{half: max(n/2, 1)}
 	}
 	return &bytes.Buffer{}

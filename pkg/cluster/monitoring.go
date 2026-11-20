@@ -12,21 +12,21 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
 )
 
-// Monitored reports whether a node container mounts the realm's journal
+// monitored reports whether a node container mounts the realm's journal
 // volume: the node is collected by the realm's monitoring stack, and on
 // a controller the whole cluster is monitored. The sind.monitoring label
 // does not decide, as an image could carry it; an image cannot forge a
 // mount.
-func Monitored(realm string, info *docker.ContainerInfo) bool {
+func monitored(realm string, info *docker.ContainerInfo) bool {
 	journal := observability.JournalVolume(realm)
 	return slices.ContainsFunc(info.Mounts, func(m docker.Mount) bool {
 		return m.Type == docker.MountVolume && m.Name == journal
@@ -65,7 +65,7 @@ func monitoringTargets(ctx context.Context, client *docker.Client, realm string)
 			Cluster:     cluster,
 			Node:        strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, cluster)),
 			Role:        config.Role(c.Labels[LabelRole]),
-			Managed:     IsManaged(c.Labels),
+			Managed:     isManaged(c.Labels),
 			Container:   c.Name,
 			ContainerID: c.ID,
 		})
@@ -223,6 +223,20 @@ func forgetMonitoredNodes(ctx context.Context, client *docker.Client, meshMgr *m
 	if err := observability.NewManager(client, realm).RemoveJournals(ctx, cluster, nodes...); err != nil {
 		warn(err)
 	}
+}
+
+// journalsLeft reports whether the realm's monitoring stack may still hold
+// journals of a cluster without containers: a delete of the cluster that
+// failed, or was killed, after it removed the containers leaves the
+// cluster's journal directory, which forgetMonitoredNodes removes last
+// (see observability.Manager.JournalsLeft). A failure to look is a
+// warning (meshMgr.Warn), and counts as none left.
+func journalsLeft(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cluster string) bool {
+	left, err := observability.NewManager(client, meshMgr.Realm).JournalsLeft(ctx, cluster)
+	if err != nil {
+		meshMgr.Warn(ctx, fmt.Sprintf("looking for journals of cluster %q in the monitoring stack of realm %q: %v", cluster, meshMgr.Realm, err))
+	}
+	return left
 }
 
 // clusterMonitored reports whether any node container of a cluster mounts
@@ -391,15 +405,15 @@ const ServiceMissing docker.ContainerState = "missing"
 
 // MonitoringService is a service of the realm's monitoring stack.
 type MonitoringService struct {
-	Name      observability.Service   `json:"name"`
-	Container docker.ContainerName    `json:"container"`
-	Image     string                  `json:"image"`
-	Interface observability.Interface `json:"interface"` // what its port serves: a web UI, an API or both
-	IP        string                  `json:"ip"`        // on the mesh, empty while stopped
-	URL       string                  `json:"url"`       // by mesh DNS name; by IP for Alloy, which has none
-	State     docker.ContainerState   `json:"status"`    // the container's state, or ServiceMissing
-	Ready     bool                    `json:"ready"`
-	Checked   bool                    `json:"checked"` // whether Ready was checked, which needs Grafana running
+	Name      string                `json:"name"` // grafana, prometheus, loki or alloy
+	Container docker.ContainerName  `json:"container"`
+	Image     string                `json:"image"`
+	Interface string                `json:"interface"` // what its port serves: "web UI", "API" or "web UI + API"
+	IP        string                `json:"ip"`        // on the mesh, empty while stopped
+	URL       string                `json:"url"`       // by mesh DNS name; by IP for Alloy, which has none
+	State     docker.ContainerState `json:"status"`    // the container's state, or ServiceMissing
+	Ready     bool                  `json:"ready"`
+	Checked   bool                  `json:"checked"` // whether Ready was checked, which needs Grafana running
 }
 
 // MonitoredCluster is a cluster the realm's monitoring stack collects.
@@ -489,7 +503,7 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 	}
 	m := &Monitoring{Realm: realm, Services: make([]MonitoringService, len(statuses)), Clusters: []MonitoredCluster{}}
 	for i, st := range statuses {
-		svc := MonitoringService{Name: st.Service, Container: st.Container, Image: st.Image, Interface: st.Service.Interface(), IP: st.IP, State: cmp.Or(st.State, ServiceMissing), Ready: st.Ready, Checked: st.Checked}
+		svc := MonitoringService{Name: string(st.Service), Container: st.Container, Image: st.Image, Interface: string(st.Service.Interface()), IP: st.IP, State: cmp.Or(st.State, ServiceMissing), Ready: st.Ready, Checked: st.Checked}
 		switch {
 		case st.DNSName != "":
 			svc.URL = "http://" + st.DNSName + ":" + st.Port
@@ -512,7 +526,7 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 	}
 	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return natsort.Compare(a.Name, b.Name) })
 	running := func(s observability.Service) bool {
-		return slices.ContainsFunc(m.Services, func(ms MonitoringService) bool { return ms.Name == s && ms.State == docker.StateRunning })
+		return slices.ContainsFunc(m.Services, func(ms MonitoringService) bool { return ms.Name == string(s) && ms.State == docker.StateRunning })
 	}
 	if len(m.Clusters) > 0 && running(observability.ServiceGrafana) && running(observability.ServicePrometheus) {
 		addSlurmCounts(ctx, stack, m)

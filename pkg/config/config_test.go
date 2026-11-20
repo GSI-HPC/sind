@@ -992,6 +992,21 @@ func TestSection_MarshalYAML(t *testing.T) {
 	assert.Equal(t, map[string]string{"a": "y=2", "b": "x=1"}, back.Cgroup.Fragments)
 }
 
+// A block scalar whose first line starts with a tab does not parse.
+func TestSection_MarshalYAML_LeadingTab(t *testing.T) {
+	slurm := Slurm{
+		Main:   Section{Content: "\tSelectType=select/cons_tres\nMaxJobCount=100\n"},
+		Cgroup: Section{Fragments: map[string]string{"a": "\tx=1\n", "b": "\ty=2"}},
+	}
+	out, err := yaml.Marshal(slurm)
+	require.NoError(t, err)
+	assert.Equal(t, "main: \"\\tSelectType=select/cons_tres\\nMaxJobCount=100\\n\"\ncgroup:\n    a: \"\\tx=1\\n\"\n    b: \"\\ty=2\"\n", string(out))
+
+	var back Slurm
+	require.NoError(t, yaml.Unmarshal(out, &back))
+	assert.Equal(t, slurm, back)
+}
+
 func TestSection_IsEmpty(t *testing.T) {
 	assert.True(t, Section{}.IsEmpty())
 	assert.False(t, Section{Content: "x"}.IsEmpty())

@@ -13,7 +13,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,10 +24,10 @@ func faultStatus() *cluster.Status {
 	return &cluster.Status{Name: "dev", Nodes: []*cluster.NodeStatus{
 		nil,
 		{Name: "api.dev"},
-		{Name: "db.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{probe.ServiceMunge: true}}},
+		{Name: "db.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{"munge": true}}},
 		{Name: "worker-1.dev", Health: &cluster.NodeHealth{State: cluster.StateStopped}},
 		{Name: "worker-4.dev", Health: &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{
-			probe.ServiceSlurmd: false, probe.ServiceMunge: false, probe.ServiceSSHD: true,
+			"slurmd": false, "munge": false, "sshd": true,
 		}}},
 		{Name: "worker-6.dev", Health: &cluster.NodeHealth{State: cluster.StatePaused}},
 	}}

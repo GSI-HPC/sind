@@ -58,7 +58,7 @@ jobs:
                 tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName) || tag=""
                 if [[ -n "$tag" ]]; then
                   config=$(gh api "repos/$GITHUB_REPOSITORY/contents/.goreleaser.yaml?ref=$tag" --jq .content | base64 -d) || config=""
-                  if grep -q 'pkg/config\.DefaultImage=' <<<"$config"; then
+                  if grep -qE 'pkg/config\.(DefaultImage|defaultImage)=' <<<"$config"; then
                     builds+=("$(build "$tag" "$tag")")
                   else
                     echo "::notice::Release $tag predates release images and is not rebuilt"

@@ -426,6 +426,7 @@ func TestLoad_Errors(t *testing.T) {
 		{"not an object", `[]`, "not a JSON object"},
 		{"servers not an object", `{"mcpServers": []}`, `"mcpServers" is not an object`},
 		{"duplicate server", `{"mcpServers": {"sind": {}, "a": {}, "sind": {}}}`, `server "sind" is defined more than once in "mcpServers"`},
+		{"duplicate server without a name", `{"mcpServers": {"": {"command": "a"}, "": {}}}`, `server "" is defined more than once in "mcpServers"`},
 		{"duplicate servers", `{"mcpServers": {}, "x": 1, "mcpServers": {}}`, `"mcpServers" is defined more than once`},
 		// Another name defined twice before does not hide it.
 		{"duplicate servers after another duplicate", `{"a": 1, "a": 2, "mcpServers": {"old": {}}, "mcpServers": {"new": {}}}`,
@@ -468,6 +469,7 @@ func TestLoad_OnlyComments(t *testing.T) {
 	for in, want := range map[string]string{
 		"// nothing yet\n":        "// nothing yet\n" + newServers,
 		"/* a */\n// b":           "/* a */\n// b\n" + newServers,
+		"/**/\n":                  "/**/\n" + newServers,
 		"\ufeff/* settings */\n":  "\ufeff/* settings */\n" + newServers,
 		"// one\r\n/* two */\r\n": "// one\r\n/* two */\r\n" + strings.ReplaceAll(newServers, "\n", "\r\n"),
 	} {

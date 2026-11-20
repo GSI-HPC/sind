@@ -111,7 +111,7 @@ func newEventsFixture(t *testing.T) *eventsFixture {
 	exec := &mock.Executor{OnStart: pipes.OnStart}
 	bus := &Bus{}
 	f := &eventsFixture{pipes: pipes, exec: exec, sub: bus.Subscribe(), ev: &Events{
-		Exec: exec, Bus: bus,
+		Docker: docker.NewClient(exec), Bus: bus,
 		Debounce: 20 * time.Millisecond, BackoffMin: 10 * time.Millisecond, BackoffMax: 40 * time.Millisecond,
 		Stable: time.Hour,
 	}}

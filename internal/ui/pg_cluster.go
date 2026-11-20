@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // pgClusterPage is the page of one cluster, template pg_cluster.tmpl. Its
@@ -417,8 +417,8 @@ func pgNames(d *pgClusterView, sn store.Snapshot) []pgNameRow {
 	}
 	if m.Info != nil {
 		rows = append(rows,
-			pgNameRow{Label: "DNS server", Value: m.Info.DNSIP, Note: "The container " + m.Info.DNSContainer + " on the mesh network.", Copy: true},
-			pgNameRow{Label: "SSH relay", Value: m.Info.SSHContainer, Note: "sind ssh goes through it.", Copy: true},
+			pgNameRow{Label: "DNS server", Value: m.Info.DNSIP, Note: "The container " + string(m.Info.DNSContainer) + " on the mesh network.", Copy: true},
+			pgNameRow{Label: "SSH relay", Value: string(m.Info.SSHContainer), Note: "sind ssh goes through it.", Copy: true},
 		)
 	}
 	munge := pgNameRow{Label: "munge key", Value: slurm.MungeKeyPath, Copy: true,

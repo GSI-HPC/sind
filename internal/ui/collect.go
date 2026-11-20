@@ -65,7 +65,7 @@ func colSetup(env *Env) error {
 	interval := collect.NewInterval(cmp.Or(env.Opts.MonitoringInterval, collect.MonitoringEvery))
 	viewers := &collect.Viewers{}
 	set := &colSet{
-		events:     &collect.Events{Exec: env.Exec, Bus: bus, Log: env.Log, Realms: collect.StoreRealms(env.Store)},
+		events:     &collect.Events{Docker: client, Bus: bus, Log: env.Log, Realms: collect.StoreRealms(env.Store)},
 		sind:       &collect.Sind{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		lock:       &collect.Lock{Store: env.Store, Client: client, Bus: bus, Log: env.Log},
 		monitoring: &collect.Monitoring{Store: env.Store, Client: client, Bus: bus, Interval: interval, Viewers: viewers, Log: env.Log},

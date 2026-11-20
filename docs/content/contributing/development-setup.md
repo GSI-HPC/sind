@@ -12,6 +12,7 @@ toc: true
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 - **firejail**, which sandboxes `make test`
 - **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
+- **actionlint** and **shellcheck** for `make lint-ci`, when you change a workflow or a shell script
 
 ## Clone and build
 
@@ -39,10 +40,14 @@ All common tasks are available via `make`:
 | `make build` | Build the sind binary |
 | `make install` | Install sind to `GOPATH/bin` |
 | `make test` | Run unit tests with race detector, sandboxed with firejail |
+| `make fuzz` | Run every fuzz target for `FUZZTIME` each (default `30s`) |
+| `make mutation` | Report the mutation score of the packages in `MUTATION_PACKAGES` (takes minutes) |
+| `make check-models` | Check the TLA+ models in `spec/tla` with TLC (needs Java) |
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
 | `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
-| `make lint` | Run golangci-lint |
+| `make lint` | Run golangci-lint on the unit and on the integration build (`-tags integration`) |
+| `make lint-ci` | Lint the workflows with actionlint and the shell scripts with shellcheck |
 | `make lint-docs` | Lint documentation markdown files |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
@@ -69,7 +74,7 @@ sind uses a minimal set of dependencies:
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the log lines |
 | `github.com/muesli/termenv` | The colour profiles lipgloss reports |
 | `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log, and TTY detection; the pools of the power commands and `delete cluster --all`; escaping of the text sind prints from docker and containers; the strict command tree and the usage errors that exit 2; the output of `get` and `doctor`; whole-file writes; the server of `sind ui` and its reading of the activity log; MCP progress notifications |
-| `github.com/creack/pty` | The pseudo-terminal of `docker pull`, which writes its byte counts only to a terminal (`cmdexec.WithTerminal`) |
+| `github.com/creack/pty` | The pseudo-terminal of `docker pull`, which writes its byte counts only to a terminal (`execopt.WithTerminal`) |
 | `github.com/njayp/ophis` | MCP server framework, and the flag filter of the MCP tools |
 | `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |

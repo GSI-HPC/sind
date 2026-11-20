@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- ListClusterResources ---
+// --- listClusterResources ---
 
-// resourcesOnCall serves ListClusterResources, whose three lookups run
+// resourcesOnCall serves listClusterResources, whose three lookups run
 // concurrently: docker ps gets ps, the network inspect network and the
 // volume listing volumes.
 func resourcesOnCall(ps, network, volumes mock.Result) func([]string, string) mock.Result {
@@ -54,7 +54,7 @@ func TestListClusterResources(t *testing.T) {
 	)
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+	res, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 
@@ -92,7 +92,7 @@ func TestListClusterResources_NoResources(t *testing.T) {
 	)
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "nonexistent")
+	res, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "nonexistent")
 
 	require.NoError(t, err)
 	assert.Empty(t, res.Containers)
@@ -105,7 +105,7 @@ func TestListClusterResources_PartialVolumes(t *testing.T) {
 	m.OnCall = resourcesOnCall(mock.Result{}, mock.Result{}, volumeLs("sind-dev-config", "sind-dev-data"))
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+	res, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, res.NetworkExists)
@@ -121,7 +121,7 @@ func TestListClusterResources_SiblingClusterVolumes(t *testing.T) {
 		volumeLs("sind-dev-2-config", "sind-dev-2-data", "sind-dev-config", "sind-dev-scratch"))
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+	res, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, []docker.VolumeName{"sind-dev-config"}, res.Volumes)
@@ -132,7 +132,7 @@ func TestListClusterResources_ListContainersError(t *testing.T) {
 	m.OnCall = resourcesOnCall(mock.Result{Err: fmt.Errorf("docker ps failed")}, mock.Result{}, mock.Result{})
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.ErrorContains(t, err, "listing containers")
 }
@@ -142,7 +142,7 @@ func TestListClusterResources_NetworkCheckError(t *testing.T) {
 	m.OnCall = resourcesOnCall(mock.Result{}, mock.Result{Err: fmt.Errorf("network inspect failed")}, mock.Result{})
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.ErrorContains(t, err, "checking network sind-dev-net: network inspect failed")
 }
@@ -152,7 +152,7 @@ func TestListClusterResources_VolumeListError(t *testing.T) {
 	m.OnCall = resourcesOnCall(mock.Result{}, mock.Result{}, mock.Result{Err: fmt.Errorf("daemon gone")})
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.ErrorContains(t, err, "listing volumes: daemon gone")
 }
@@ -168,7 +168,7 @@ func TestListClusterResources_ErrorOrder(t *testing.T) {
 		}
 		c := docker.NewClient(&m)
 
-		_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
+		_, err := listClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 		require.EqualError(t, err, "listing containers: daemon gone")
 	}
@@ -192,7 +192,7 @@ func TestListClusterResources_SkipsAnotherRealmsResources(t *testing.T) {
 	)
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, "ci", "42-dev")
+	res, err := listClusterResources(t.Context(), c, "ci", "42-dev")
 
 	require.NoError(t, err)
 	assert.False(t, res.NetworkExists)
@@ -251,7 +251,7 @@ func TestOwnedBy(t *testing.T) {
 	}
 }
 
-// --- HasOtherClusters ---
+// --- hasOtherClusters ---
 
 func TestHasOtherClusters(t *testing.T) {
 	entry := func(name, labels string) testutil.PsEntry {
@@ -290,7 +290,7 @@ func TestHasOtherClusters(t *testing.T) {
 			var m mock.Executor
 			m.AddResult(testutil.NDJSON(tt.ps...), "", nil)
 
-			has, err := HasOtherClusters(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+			has, err := hasOtherClusters(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, has)
@@ -304,7 +304,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := hasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.ErrorContains(t, err, "listing containers")
 }

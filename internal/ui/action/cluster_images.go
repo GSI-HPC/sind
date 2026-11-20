@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // ImageFacts is what sind ui knows of an image: whether Docker has it,
@@ -41,7 +41,7 @@ func (i PlanImage) CanCheck() bool { return i.Version == "" && i.Err == "" }
 
 // nodeImage is the image of the node n of cfg.
 func nodeImage(cfg config.Cluster, n config.Node) string {
-	return cmp.Or(n.Image, cfg.Defaults.Image, config.DefaultImage)
+	return cmp.Or(n.Image, cfg.Defaults.Image, config.DefaultNodeImage())
 }
 
 // nodeManaged reports whether sind runs the Slurm daemons of n.

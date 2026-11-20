@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/probe"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Controller positions in a primary/backup pair, matching the order of the
@@ -110,7 +110,7 @@ func setControllerHA(ctx context.Context, client *docker.Client, realm, clusterN
 		position, index := controllerPosition(strings.TrimSuffix(n.Name, "."+clusterName))
 		n.Health.HA = &HAStatus{
 			Position:  position,
-			InControl: ok && hb.inControl(index, n.Health.Services[probe.ServiceSlurmctld]),
+			InControl: ok && hb.inControl(index, n.Health.Services[string(probe.ServiceSlurmctld)]),
 		}
 	}
 }
@@ -148,7 +148,7 @@ func nodeHA(ctx context.Context, client *docker.Client, realm, clusterName, shor
 	ha := &HAStatus{Position: position}
 	if source != "" {
 		if hb, ok := readHeartbeat(ctx, client, source); ok {
-			ha.InControl = hb.inControl(index, health.Services[probe.ServiceSlurmctld])
+			ha.InControl = hb.inControl(index, health.Services[string(probe.ServiceSlurmctld)])
 		}
 	}
 	return ha, nil

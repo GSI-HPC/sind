@@ -15,11 +15,11 @@ import (
 	"github.com/GSI-HPC/go-clikit/cliout"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/internal/observability"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/spf13/cobra"
 )
 
@@ -188,7 +188,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			row = append(row, formatHA(n.HA))
 		}
 		header = append(header, "FQDN", "IP", "STATUS")
-		row = append(row, n.FQDN, cell(n.IP), cell(n.Status))
+		row = append(row, n.FQDN, cell(n.IP), cell(n.State))
 		if managedWorker(n.Role, n.Managed) {
 			header = append(header, "SLURM")
 			row = append(row, formatSlurmState(n.Slurm))
@@ -203,7 +203,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 		_, _ = fmt.Fprintln(out, "SERVICES")
 		t = newTable("NAME", "STATUS")
 		for _, name := range slices.Sorted(maps.Keys(n.Services)) {
-			t.Add(string(name), checkmark(n.Services[name]))
+			t.Add(name, checkmark(n.Services[name]))
 		}
 		return writeTable(out, t)
 	})
@@ -372,13 +372,13 @@ func runGetMesh(cmd *cobra.Command, _ []string) error {
 	return runGet(cmd, fromMesh((*mesh.Manager).GetInfo), func(cmd *cobra.Command, info *mesh.Info, _ string) error {
 		t := newTable("PROPERTY", "VALUE")
 		for _, row := range [][2]string{
-			{"network", info.Network},
-			{"dns-container", info.DNSContainer},
+			{"network", string(info.Network)},
+			{"dns-container", string(info.DNSContainer)},
 			{"dns-ip", info.DNSIP},
 			{"dns-zone", info.DNSZone},
 			{"dns-image", info.DNSImage},
-			{"ssh-container", info.SSHContainer},
-			{"ssh-volume", info.SSHVolume},
+			{"ssh-container", string(info.SSHContainer)},
+			{"ssh-volume", string(info.SSHVolume)},
 			{"ssh-image", info.SSHImage},
 		} {
 			t.Add(row[0], cell(row[1]))
@@ -400,9 +400,9 @@ func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 		t := newTable("SERVICE", "CONTAINER", "ADDRESS", "TYPE", "STATUS")
 		var apiOnly []string
 		for _, s := range m.Services {
-			t.Add(string(s.Name), cell(s.Container), cell(s.URL), cell(s.Interface), formatServiceState(s))
-			if s.Interface == observability.InterfaceAPI {
-				apiOnly = append(apiOnly, string(s.Name))
+			t.Add(s.Name, cell(s.Container), cell(s.URL), cell(s.Interface), formatServiceState(s))
+			if observability.Interface(s.Interface) == observability.InterfaceAPI {
+				apiOnly = append(apiOnly, s.Name)
 			}
 		}
 		if err := writeTable(out, t); err != nil {
@@ -464,7 +464,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 		if err != nil {
 			return nil, err
 		}
-		cluster.AddSlurmStates(ctx, client, realm, status)
+		cluster.AddSlurmStates(ctx, client, status)
 		return status, nil
 	}
 	return runGet(cmd, getStatus, printStatus)
@@ -636,7 +636,7 @@ func inRealm(realm string) string {
 func formatServices(services cluster.ServiceHealth) string {
 	parts := make([]string, 0, len(services))
 	for _, name := range slices.Sorted(maps.Keys(services)) {
-		parts = append(parts, string(name)+" "+checkmark(services[name]))
+		parts = append(parts, name+" "+checkmark(services[name]))
 	}
 	return strings.Join(parts, " ")
 }

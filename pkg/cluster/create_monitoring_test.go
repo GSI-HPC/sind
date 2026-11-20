@@ -9,20 +9,20 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/observability"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // createMonitored runs Create for a monitored cfg against happyOnCall with
 // the stack calls answered by f, and the override before both.
-func createMonitored(t *testing.T, f *stackFake, cfg *config.Cluster, override func([]string, string) (mock.Result, bool)) (*Cluster, *mock.Executor, error) {
+func createMonitored(t *testing.T, f *stackFake, cfg *config.Cluster, override func([]string, string) (mock.Result, bool)) (*mock.Executor, error) {
 	t.Helper()
 	cfg.Monitoring = true
-	m, c, err := runCreate(t.Context(), t, cfg, false, func(args []string, stdin string) (mock.Result, bool) {
+	return runCreate(t.Context(), t, cfg, false, func(args []string, stdin string) (mock.Result, bool) {
 		if override != nil {
 			if r, ok := override(args, stdin); ok {
 				return r, true
@@ -30,7 +30,6 @@ func createMonitored(t *testing.T, f *stackFake, cfg *config.Cluster, override f
 		}
 		return f.handle(args, stdin)
 	})
-	return c, m, err
 }
 
 // callsWith returns the calls whose joined arguments contain s.
@@ -46,9 +45,9 @@ func callsWith(m *mock.Executor, s string) [][]string {
 
 func TestCreate_Monitoring(t *testing.T) {
 	f := newStackFake(t)
-	cluster, m, err := createMonitored(t, f, createCfg(), nil)
+	m, err := createMonitored(t, f, createCfg(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, "26.05.6", cluster.SlurmVersion)
+	assert.Equal(t, "26.05.6", createdNodes(m)["sind-dev-controller"][LabelSlurmVersion])
 
 	for _, s := range observability.Services {
 		c := f.containers[string(observability.ContainerName("sind", s))]
@@ -88,7 +87,7 @@ func TestCreate_Monitoring(t *testing.T) {
 func TestCreate_NotMonitored(t *testing.T) {
 	// A cluster without monitoring makes no call of the stack.
 	f := newStackFake(t)
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		r, mine := f.handle(c.Args, c.Stdin)
@@ -101,7 +100,7 @@ func TestCreate_MonitoringBackupController(t *testing.T) {
 	f := newStackFake(t)
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	_, m, err := createMonitored(t, f, cfg, func(args []string, _ string) (mock.Result, bool) {
+	m, err := createMonitored(t, f, cfg, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}, true
 		}
@@ -120,7 +119,7 @@ func TestCreate_MonitoringBackupController(t *testing.T) {
 func TestCreate_MonitoringUnsupportedImage(t *testing.T) {
 	f := newStackFake(t)
 	f.version = "25.11.2"
-	_, _, err := createMonitored(t, f, createCfg(), nil)
+	_, err := createMonitored(t, f, createCfg(), nil)
 	require.ErrorIs(t, err, ErrImageUnsupported)
 	assert.Empty(t, f.containers)
 }
@@ -129,18 +128,32 @@ func TestCreate_MonitoringPullFails(t *testing.T) {
 	f := newStackFake(t)
 	cfg := createCfg()
 	cfg.Pull = true
-	_, _, err := createMonitored(t, f, cfg, pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
+	cfg.Monitoring = true
+	pullFails := pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")})
+	m := createExecutor(t, func(args []string, stdin string) (mock.Result, bool) {
+		if r, ok := pullFails(args, stdin); ok {
+			return r, true
+		}
+		return f.handle(args, stdin)
+	})
+	// The journal volume is created after the failed pull cancelled its
+	// context too, so that the helper waits for the pull, and its failure.
+	m.IgnoreContext = true
+	err := runCreateOn(t.Context(), t, m, cfg, false)
 	require.ErrorContains(t, err, "manifest unknown")
 	assert.False(t, f.called("run --rm --name sind-dev-journal-helper"))
 }
 
 func TestCreate_MonitoringResourcesFail(t *testing.T) {
-	for _, prefix := range []string{"volume create", "run --rm --name sind-dev-journal-helper"} {
+	for prefix, want := range map[string]string{
+		"volume create": "creating journal volume: exit status 1",
+		"run --rm --name sind-dev-journal-helper": "making journal directories: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t)
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
-			_, _, err := createMonitored(t, f, createCfg(), nil)
-			require.Error(t, err)
+			_, err := createMonitored(t, f, createCfg(), nil)
+			require.ErrorContains(t, err, want)
 			assert.Empty(t, f.containers)
 		})
 	}
@@ -162,7 +175,7 @@ func TestCreate_MonitoringRollback(t *testing.T) {
 				f.nodes = []docker.ContainerListEntry{monitoredNode("prod", "controller", "controller")}
 			}
 			f.fail["inspect sind-grafana sind-prometheus sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
-			_, _, err := createMonitored(t, f, createCfg(), func(args []string, _ string) (mock.Result, bool) {
+			_, err := createMonitored(t, f, createCfg(), func(args []string, _ string) (mock.Result, bool) {
 				// The mesh is in use by the other cluster, so it stays.
 				if tt.other && args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && !slices.Contains(args, "label=sind.role") &&
 					!slices.Contains(args, "label=sind.cluster=dev") {
@@ -190,7 +203,7 @@ func TestCreate_MonitoringRollbackWithMesh(t *testing.T) {
 	cfg.Monitoring = true
 	// The calls of EnsureMeshNetwork, before Create, make the mesh.
 	ensured := false
-	m, _, err := runCreate(t.Context(), t, cfg, true, func(args []string, stdin string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, cfg, true, func(args []string, stdin string) (mock.Result, bool) {
 		if ensured = ensured || args[0] != "network"; !ensured {
 			return mock.Result{}, false
 		}
@@ -217,7 +230,7 @@ func TestCreate_MonitoringRollbackKeepsMesh(t *testing.T) {
 	cfg.Monitoring = true
 	// The calls of EnsureMeshNetwork, before Create, make the mesh.
 	ensured := false
-	m, _, err := runCreate(t.Context(), t, cfg, true, func(args []string, stdin string) (mock.Result, bool) {
+	m, err := runCreate(t.Context(), t, cfg, true, func(args []string, stdin string) (mock.Result, bool) {
 		if ensured = ensured || args[0] != "network"; !ensured {
 			return mock.Result{}, false
 		}
@@ -233,7 +246,7 @@ func TestCreate_MonitoringRollbackErrors(t *testing.T) {
 	f.fail["inspect sind-grafana sind-prometheus sind-loki"] = mock.Result{Err: testutil.ExitCode1(t)}
 	f.fail["ps -a --no-trunc --format json --filter label=com.docker.compose.project=sind-mesh"] = mock.Result{Stderr: "ps failed\n", Err: testutil.ExitCode1(t)}
 	f.fail["volume ls --format json --filter label=com.docker.compose.project=sind-mesh"] = mock.Result{Stderr: "ls failed\n", Err: testutil.ExitCode1(t)}
-	_, _, err := createMonitored(t, f, createCfg(), nil)
+	_, err := createMonitored(t, f, createCfg(), nil)
 	require.ErrorContains(t, err, "rolling back: removing the monitoring stack: ")
 	require.ErrorContains(t, err, "rolling back: removing the monitoring stack's volumes: ")
 }

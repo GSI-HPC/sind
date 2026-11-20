@@ -14,7 +14,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +105,7 @@ func TestPgLadder(t *testing.T) {
 
 	// A worker that Slurm sends no jobs: resume it.
 	n = fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "drained"}
+	n.Slurm = &cluster.SlurmNode{State: "drained"}
 	assert.Equal(t, "sind exec dev -- scontrol update NodeName=worker-4 State=RESUME", pgLadder(n)[0].Cmd)
 	n.Cluster = config.DefaultClusterName
 	assert.Equal(t, "sind exec -- scontrol update NodeName=worker-4 State=RESUME", pgLadder(n)[0].Cmd)
@@ -156,7 +155,7 @@ func TestPgNodeFaults(t *testing.T) {
 	assert.Equal(t, "exit code 137, out of memory", n.Cause())
 	// Slurm's reason.
 	n = fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "drained", Reason: "memory errors"}
+	n.Slurm = &cluster.SlurmNode{State: "drained", Reason: "memory errors"}
 	assert.Equal(t, "memory errors", n.Cause())
 
 	assert.Equal(t, "exit code 1", pgExitShort(store.Exit{Code: 1}))
@@ -178,7 +177,7 @@ func TestPgNodeFaults(t *testing.T) {
 func TestPgSlurmActions(t *testing.T) {
 	n := fixWorker()
 	assert.Nil(t, n.SlurmActions(), "sinfo did not list it")
-	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	n.Slurm = &cluster.SlurmNode{State: "idle"}
 	acts := n.SlurmActions()
 	require.Len(t, acts, 1)
 	assert.Equal(t, "Drain…", acts[0].Label)
@@ -216,7 +215,7 @@ func TestPgNodeMenus(t *testing.T) {
 		return on, off
 	}
 	n := fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	n.Slurm = &cluster.SlurmNode{State: "idle"}
 	menus := pgNodeMenus(n)
 	require.Len(t, menus, 3)
 	assert.Equal(t, []string{"slurm", "power", "more"}, []string{menus[0].ID, menus[1].ID, menus[2].ID})
@@ -260,7 +259,7 @@ func TestPgNodeMenus(t *testing.T) {
 // Power dialog and the selection bar.
 func TestPgOpOff(t *testing.T) {
 	n := fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	n.Slurm = &cluster.SlurmNode{State: "idle"}
 	off := func(ops ...string) []string {
 		var out []string
 		for _, op := range ops {
@@ -289,7 +288,7 @@ func TestPgOpOff(t *testing.T) {
 
 func TestPgNodeOps(t *testing.T) {
 	n := fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	n.Slurm = &cluster.SlurmNode{State: "idle"}
 	assert.Equal(t, "drain shutdown reboot freeze cycle cut delete", n.Ops())
 	n.Creating = true
 	assert.Empty(t, n.Ops(), "sind creates it now")
@@ -480,7 +479,7 @@ func TestPgDiag(t *testing.T) {
 	assert.Len(t, d.Ladder, 2)
 
 	// Slurm marks it down, and munge is down too.
-	n.Slurm = &slurm.NodeInfo{State: "down*", Reason: "Not responding"}
+	n.Slurm = &cluster.SlurmNode{State: "down*", Reason: "Not responding"}
 	n.Services = append(n.Services, pgSvc{"sshd", true})
 	n.Services[0].OK = false
 	d = pgDiagOf(sn, n, nil, now)
@@ -554,15 +553,15 @@ func TestPgDiagSlurm(t *testing.T) {
 		{At: now.Add(-3 * time.Minute), Source: store.SourceSlurm, Subject: "slurm", State: "drained"},
 	}}}
 	n := fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "drained", Reason: "memory errors"}
+	n.Slurm = &cluster.SlurmNode{State: "drained", Reason: "memory errors"}
 	d := pgDiagOf(sn, n, nil, now)
 	assert.Equal(t, "warn", d.Sev)
 	assert.Equal(t, "worker-4 is drained: Slurm starts no new job on it", d.Title)
 	assert.Equal(t, "Reason: memory errors. Its services are active and its container runs. A drain is often on purpose: resume it when the cause is gone.", d.Text)
 	assert.Equal(t, "since 09:28 · 3 min", d.Since)
-	n.Slurm = &slurm.NodeInfo{State: "draining"}
+	n.Slurm = &cluster.SlurmNode{State: "draining"}
 	assert.Equal(t, "worker-4 is draining: it ends its jobs and takes no new ones", pgDiagOf(sn, n, nil, now).Title)
-	n.Slurm = &slurm.NodeInfo{State: "down*"}
+	n.Slurm = &cluster.SlurmNode{State: "down*"}
 	d = pgDiagOf(store.Snapshot{}, n, nil, now)
 	assert.Equal(t, "warn", d.Sev, "its services run: amber")
 	assert.Equal(t, "Slurm marks worker-4 down*: it takes no jobs", d.Title)
@@ -581,7 +580,7 @@ func TestPgFixed(t *testing.T) {
 		{At: end.Add(-time.Hour), Source: store.SourceSystemd, Subject: "slurmd"},
 	}}}
 	n := fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	n.Slurm = &cluster.SlurmNode{State: "idle"}
 	f := pgFixedOf(sn, n, now)
 	require.NotNil(t, f)
 	assert.False(t, f.Wait)
@@ -620,7 +619,7 @@ func TestPgFixed(t *testing.T) {
 		{"Slurm state is down*: no new job starts on worker-4 yet.", false},
 	}, f.Checks)
 	n = fixWorker()
-	n.Slurm = &slurm.NodeInfo{State: "idle"}
+	n.Slurm = &cluster.SlurmNode{State: "idle"}
 
 	// Resume.
 	sn.Tasks[0] = store.Task{ID: "t2", Action: "power", Realm: "sind", Cluster: "dev", Form: map[string][]string{"nodes": {"worker-4"}, "op": {"resume"}},
@@ -794,7 +793,7 @@ func TestPgNodeWorkspace(t *testing.T) {
 				c := *n
 				h := *n.Health
 				h.Services = maps.Clone(h.Services)
-				h.Services[pgProbe("slurmd")] = up
+				h.Services["slurmd"] = up
 				c.Health = &h
 				st.Nodes[i] = &c
 			}

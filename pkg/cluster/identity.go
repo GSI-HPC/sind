@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // nssSlurmCheck succeeds when glibc finds the nss_slurm module, which
@@ -30,7 +30,7 @@ grep -q '^group: slurm ' /etc/nsswitch.conf`
 // outside of one it finds nothing, and the image's own sources answer. The
 // first step checks that the image has the module, which custom and older
 // images may lack.
-func nssSlurmSteps(nc RunConfig) []setupStep {
+func nssSlurmSteps(nc nodeRunConfig) []setupStep {
 	return []setupStep{
 		{
 			name:   "nss_slurm",
@@ -57,7 +57,7 @@ const (
 )
 
 // officialImageRepo is the repository of the official sind-node images, of
-// which config.DefaultImage is a tag.
+// which config.DefaultNodeImage returns a tag.
 const officialImageRepo = "ghcr.io/gsi-hpc/sind-node"
 
 // checkIdentityImage refuses a local sind-node image from before identity
@@ -110,7 +110,7 @@ func checkIdentityImages(ctx context.Context, client *docker.Client, cfg *config
 // sackd on the submitter with identity clientIds, which hands its client
 // commands their auth/slurm tokens. Other nodes get theirs from their Slurm
 // daemon; slurmrestd uses the JWT of each request.
-func nodeSlurmService(nc RunConfig) (probe.Service, bool) {
+func nodeSlurmService(nc nodeRunConfig) (probe.Service, bool) {
 	if nc.Role == config.RoleSubmitter && nc.Identity == config.IdentityClientIDs {
 		return probe.ServiceSackd, true
 	}

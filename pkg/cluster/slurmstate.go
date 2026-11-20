@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // SlurmNodeState is what slurmctld says about a managed worker, as sinfo
@@ -39,10 +39,10 @@ func newSlurmNodeState(n slurm.NodeInfo) *SlurmNodeState {
 // not hold up the status. A cluster without a running controller, or a
 // sinfo that fails or does not answer within slurmInfoTimeout, leaves the
 // states unset, with a debug log line that says why.
-func AddSlurmStates(ctx context.Context, client *docker.Client, realm string, status *Status) {
+func AddSlurmStates(ctx context.Context, client *docker.Client, status *Status) {
 	var workers []string
 	var controller docker.ContainerName
-	prefix := ContainerPrefix(realm, status.Name)
+	prefix := ContainerPrefix(status.Realm, status.Name)
 	for _, n := range status.Nodes {
 		shortName, _, _ := strings.Cut(n.Name, ".")
 		switch {

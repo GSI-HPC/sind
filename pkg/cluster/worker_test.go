@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
 	"slices"
@@ -20,12 +19,12 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/detach"
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -133,7 +132,7 @@ func workerContainers(computes ...string) string {
 
 // addWorkers runs WorkerAdd with opts, within 10 seconds, against a mock
 // that onCall answers, with docker events, in the default realm.
-func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts WorkerAddOptions) (*mock.Executor, []*Node, error) {
+func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts WorkerAddOptions) (*mock.Executor, []*NodeSummary, error) {
 	t.Helper()
 	pipes := &mock.Pipes{}
 	t.Cleanup(pipes.CloseAll)
@@ -141,7 +140,10 @@ func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts Wo
 	client := docker.NewClient(m)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	nodes, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), opts, time.Millisecond)
+	if opts.Interval == 0 {
+		opts.Interval = time.Millisecond
+	}
+	nodes, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), opts)
 	return m, nodes, err
 }
 
@@ -198,7 +200,7 @@ func TestReadNodesConf_ControllerNotRunning(t *testing.T) {
 
 	_, err := readNodesConf(t.Context(), client, controller)
 
-	require.EqualError(t, err, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first")
+	require.EqualError(t, err, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start or unfreeze it first")
 	assert.Empty(t, m.Calls, "no docker exec")
 }
 
@@ -231,8 +233,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 		Count:       1,
 	})
 
-	require.Error(t, err)
-	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
+	require.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -241,7 +242,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 func TestWorkerAdd_InvalidRealm(t *testing.T) {
 	var m mock.Executor
 	client := docker.NewClient(&m)
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, "a.b"), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, "a.b"), WorkerAddOptions{ClusterName: "dev", Count: 1, Interval: time.Millisecond})
 	require.ErrorContains(t, err, `invalid realm name "a.b"`)
 	assert.Empty(t, m.Calls)
 }
@@ -495,7 +496,10 @@ func TestWorkerAdd_Managed(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
+	assert.Equal(t, "sind-dev-worker-1", nodes[0].Container)
+	assert.Equal(t, "dev", nodes[0].Cluster)
+	assert.Equal(t, "worker-1.dev.sind.sind", nodes[0].FQDN)
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
@@ -813,10 +817,10 @@ func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
 		opts    WorkerAddOptions
 		wantErr string
 	}{
-		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
-		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
-		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in --device: host path must be absolute`},
-		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, `unknown security option "privileged" in --security-opt`},
+		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in WorkerAddOptions.CapAdd`},
+		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in WorkerAddOptions.CapDrop`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in WorkerAddOptions.Devices: host path must be absolute`},
+		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, `unknown security option "privileged" in WorkerAddOptions.SecurityOpt`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -849,8 +853,7 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 		TmpSize:     "1g",
 	})
 
-	require.Error(t, err)
-	assert.EqualError(t, err, `controller not found for cluster "dev"`)
+	require.EqualError(t, err, `controller not found for cluster "dev"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -868,7 +871,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
@@ -892,7 +895,7 @@ func TestWorkerAdd_UnmanagedCluster(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assertNoSlurmChanges(t, m.Calls)
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
@@ -1017,7 +1020,7 @@ func TestWorkerRemove_NodeWithoutContainerNotInConf(t *testing.T) {
 		"stopped controller": {
 			conf: "NodeName=worker-3 CPUs=2 RealMemory=2048 State=UNKNOWN\n", state: "exited",
 			want: notFound + " (sind-nodes.conf could not be checked: controller sind-dev-controller is not running (exited): " +
-				"sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first)",
+				"sind updates sind-nodes.conf and reconfigures Slurm through it; start or unfreeze it first)",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -1262,8 +1265,8 @@ func TestWorkerAdd_MultipleNodes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
-	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker-2", nodes[1].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
+	assert.Equal(t, "worker-2", nodes[1].ShortName())
 
 	// Both nodes appear in the sind-nodes.conf update.
 	writes := nodesConfWrites(m.Calls)
@@ -1424,14 +1427,19 @@ func TestWorkerAddOptions_Check(t *testing.T) {
 	tests := []struct {
 		name    string
 		opts    WorkerAddOptions
+		field   string
 		wantErr string
 	}{
-		{"valid", WorkerAddOptions{Image: "img:1", Pull: true, CPUs: 2, CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}}, ""},
-		{"negative cpus", WorkerAddOptions{CPUs: -1}, "--cpus must not be negative, got -1"},
-		{"pull without image", WorkerAddOptions{Pull: true}, "--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID"},
-		{"cap-add", WorkerAddOptions{CapAdd: []string{"NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
-		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
-		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in --device: host path must be absolute`},
+		{"valid", WorkerAddOptions{Image: "img:1", Pull: true, CPUs: 2, CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}}, "", ""},
+		{"negative cpus", WorkerAddOptions{CPUs: -1}, "CPUs", "WorkerAddOptions.CPUs must not be negative, got -1"},
+		{"memory", WorkerAddOptions{Memory: "bogus"}, "Memory", `invalid WorkerAddOptions.Memory "bogus": want a number with an optional unit b, k, m, g, t or p, e.g. 512m or 1.5g`},
+		{"tmp size", WorkerAddOptions{TmpSize: "1x"}, "TmpSize", `invalid WorkerAddOptions.TmpSize "1x": want a whole number with an optional unit k, m, g, t, p or e, or a percentage, e.g. 256m`},
+		{"pull without image", WorkerAddOptions{Pull: true}, "Pull", "WorkerAddOptions.Pull needs WorkerAddOptions.Image: without one, new workers run the image of the cluster's newest worker, by ID"},
+		{"cap-add", WorkerAddOptions{CapAdd: []string{"NOT_A_CAP"}}, "CapAdd", `unknown capability "NOT_A_CAP" in WorkerAddOptions.CapAdd`},
+		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, "CapDrop", `unknown capability "net_raw" in WorkerAddOptions.CapDrop`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, "Devices", `device "dev/fuse" in WorkerAddOptions.Devices: host path must be absolute`},
+		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, "SecurityOpt", `unknown security option "privileged" in WorkerAddOptions.SecurityOpt: want label=, apparmor=, seccomp=, no-new-privileges, writable-cgroups= or systempaths=`},
+		{"first in order", WorkerAddOptions{Memory: "bogus", Pull: true, CapAdd: []string{"NOT_A_CAP"}}, "Memory", `invalid WorkerAddOptions.Memory "bogus": want a number with an optional unit b, k, m, g, t or p, e.g. 512m or 1.5g`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1441,8 +1449,19 @@ func TestWorkerAddOptions_Check(t *testing.T) {
 				return
 			}
 			require.EqualError(t, err, tt.wantErr)
+			var optErr *OptionError
+			require.ErrorAs(t, err, &optErr)
+			assert.Equal(t, tt.field, optErr.Field)
+			assert.NotNil(t, errors.Unwrap(err))
 		})
 	}
+}
+
+// TestWorkerAddOptions_CheckNamed checks that a caller names the options
+// in the errors, as a command line names its flags.
+func TestWorkerAddOptions_CheckNamed(t *testing.T) {
+	err := WorkerAddOptions{Pull: true}.CheckNamed(func(field string) string { return "--" + strings.ToLower(field) })
+	assert.EqualError(t, err, "--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID")
 }
 
 func TestWorkerAdd_InfraError(t *testing.T) {
@@ -1541,8 +1560,8 @@ func TestWorkerAdd_InvalidResources(t *testing.T) {
 	for _, tt := range []struct {
 		memory, tmpSize, wantErr string
 	}{
-		{"bogus", "1g", `invalid --memory "bogus"`},
-		{"1.5g", "1.5g", `invalid --tmp-size "1.5g"`},
+		{"bogus", "1g", `invalid WorkerAddOptions.Memory "bogus"`},
+		{"1.5g", "1.5g", `invalid WorkerAddOptions.TmpSize "1.5g"`},
 	} {
 
 		m, _, err := addWorkers(t, nil, WorkerAddOptions{
@@ -1579,7 +1598,7 @@ func TestUpdateNodesConf_InvalidMemory(t *testing.T) {
 	var m mock.Executor
 	client := docker.NewClient(&m)
 
-	err := updateNodesConf(t.Context(), client, "sind-dev-controller", "# Generated by sind\n", config.Section{}, []RunConfig{{ShortName: "worker-1", CPUs: 1, Memory: "bogus"}})
+	err := updateNodesConf(t.Context(), client, "sind-dev-controller", "# Generated by sind\n", config.Section{}, []nodeRunConfig{{ShortName: "worker-1", CPUs: 1, Memory: "bogus"}})
 
 	require.ErrorContains(t, err, `parsing memory "bogus" for worker-1`)
 }
@@ -1625,7 +1644,7 @@ func TestWorkerAdd_DefaultCount(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
-		assert.Equal(t, "worker-1", nodes[0].Name)
+		assert.Equal(t, "worker-1", nodes[0].ShortName())
 	}
 }
 
@@ -1641,8 +1660,8 @@ func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
-	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker-2", nodes[1].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
+	assert.Equal(t, "worker-2", nodes[1].ShortName())
 
 	assertNoSlurmChanges(t, m.Calls)
 }
@@ -1743,34 +1762,32 @@ func TestWorkerAdd_CreateNodeError(t *testing.T) {
 		return inner(args, stdin)
 	}
 
-	_, _, err := addWorkers(t, onCall, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
+	require.EqualError(t, err, "node worker-1: creating container worker-1: image not found")
+	assert.Zero(t, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "docker create made no container to roll back")
 }
 
 func TestWorkerAdd_SetupNodesError(t *testing.T) {
-	var m mock.Executor
+	// The setup of the new node fails: the error says so, and the node is
+	// rolled back.
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	onCall := func(args []string, stdin string) mock.Result {
 		if args[0] == "exec" && len(args) > 2 && args[2] == "sh" &&
-			strings.Contains(strings.Join(args, " "), "is-system-running") {
-			return mock.Result{Err: fmt.Errorf("container not running")}
+			strings.Contains(strings.Join(args, " "), "ssh-keyscan") {
+			return mock.Result{Err: errors.New("setup broke")}
 		}
 		return inner(args, stdin)
 	}
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
-	}, 50*time.Millisecond)
+	})
 
-	require.Error(t, err)
+	require.EqualError(t, err, "node worker-1: running the node setup: setup broke")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker is rolled back")
 }
 
 func TestWorkerAdd_RegisterNodesError(t *testing.T) {
@@ -1783,11 +1800,13 @@ func TestWorkerAdd_RegisterNodesError(t *testing.T) {
 		return inner(args, stdin)
 	}
 
-	_, _, err := addWorkers(t, onCall, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
+	// The rollback cannot read the Corefile either.
+	require.EqualError(t, err, "registering DNS: reading DNS Corefile: DNS container crashed\nrolling back: removing DNS records: reading DNS Corefile: DNS container crashed")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker is rolled back")
 }
 
 func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
@@ -1805,7 +1824,7 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "systemctl failed")
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "cleanup should remove the new worker container")
 }
 
@@ -1822,12 +1841,15 @@ func TestWorkerAdd_RollbackSkipsUncreatedWorkers(t *testing.T) {
 	}
 	pipes := &mock.Pipes{}
 	t.Cleanup(pipes.CloseAll)
-	m := &mock.Executor{OnCall: onCall, OnStart: pipes.OnStart}
+	// The docker create of worker-1 is answered after the failed create of
+	// worker-2 cancelled it too, so that the rollback has worker-1 to
+	// remove, whichever ran first.
+	m := &mock.Executor{IgnoreContext: true, OnCall: onCall, OnStart: pipes.OnStart}
 	client := docker.NewClient(m)
 	var logs strings.Builder
 	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2, Interval: time.Millisecond})
 
 	require.ErrorContains(t, err, "creating container worker-2")
 	assert.NotContains(t, logs.String(), "already gone")
@@ -1975,7 +1997,7 @@ func TestWorkerAdd_RollbackRemovesNodesFromConf(t *testing.T) {
 
 			m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-			require.Error(t, err)
+			require.ErrorContains(t, err, "boom")
 			writes := nodesConfWrites(m.Calls)
 			require.Len(t, writes, 2, "added, then removed")
 			assert.Contains(t, writes[0], "NodeName=worker-1")
@@ -2014,31 +2036,11 @@ func TestWorkerAdd_RollbackWritesOriginalNodesConf(t *testing.T) {
 	assert.Equal(t, 1, countCalls(m.Calls, "exec", "sind-dev-controller", "cat", "/etc/slurm/sind-nodes.conf"), "read once, before the update")
 }
 
-// ctxExecutor fails a call whose context is done, as os/exec does, and
-// hands the others to Executor.
-type ctxExecutor struct {
-	mock.Executor
-}
-
-func (e *ctxExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.Run(ctx, name, args...)
-}
-
-func (e *ctxExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.RunWithStdin(ctx, stdin, name, args...)
-}
-
 func TestWriteNodesConfAndReconfigure_Cancelled(t *testing.T) {
 	// The --wait deadline or Ctrl+C does not stop the write of
 	// sind-nodes.conf, which replaces the file in one step; the reconfigure
 	// after it does stop.
-	var e ctxExecutor
+	var e mock.Executor
 	e.AddResult("", "", nil)
 	client := docker.NewClient(&e)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -2058,7 +2060,7 @@ func TestWriteNodesConfAndReconfigure_RollbackDeadline(t *testing.T) {
 	// Under a rollback whose deadline has passed, the write of
 	// sind-nodes.conf ends too, so a hung Docker daemon cannot hold the
 	// rollback past RollbackTimeout.
-	var e ctxExecutor
+	var e mock.Executor
 	client := docker.NewClient(&e)
 	ctx, cancel := context.WithDeadline(context.WithoutCancel(t.Context()), time.Now().Add(-time.Second))
 	defer cancel()
@@ -2271,11 +2273,12 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 		CPUs:        2,
 		Memory:      "2g",
 		TmpSize:     "1g",
-	}, time.Millisecond)
+		Interval:    time.Millisecond,
+	})
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
+	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
@@ -2438,7 +2441,7 @@ func TestTmpfsSize(t *testing.T) {
 }
 
 func TestCapabilityNames(t *testing.T) {
-	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN", "ALL"}, capabilityNames([]string{"CAP_SYS_ADMIN", "CAP_SYS_NICE", "net_admin", "ALL"}, TaskAffinityCapability))
+	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN", "ALL"}, capabilityNames([]string{"CAP_SYS_ADMIN", "CAP_SYS_NICE", "net_admin", "ALL"}, taskAffinityCapability))
 	assert.Equal(t, []string{"SYS_NICE"}, capabilityNames([]string{"CAP_SYS_NICE"}))
 	assert.Nil(t, capabilityNames(nil))
 }

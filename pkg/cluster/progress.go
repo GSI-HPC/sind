@@ -119,7 +119,7 @@ func startTargets(ctx context.Context, names []string, role func(i int) string) 
 
 // nodeTargets announces a progress target for each node, as startTargets
 // does, named by the node's short name and with its role.
-func nodeTargets(ctx context.Context, nodes []RunConfig) ([]context.Context, []*progress.Span) {
+func nodeTargets(ctx context.Context, nodes []nodeRunConfig) ([]context.Context, []*progress.Span) {
 	return startTargets(ctx, shortNames(nodes), func(i int) string { return string(nodes[i].Role) })
 }
 

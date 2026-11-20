@@ -15,10 +15,8 @@ import (
 // cgroup v2 daemon that sind needs.
 func TestInfoLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
-	if !rec.IsIntegration() {
-		rec.AddResult(`{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","name=cgroupns"]}`, "", nil)
-	}
 
 	info, err := c.Info(t.Context())
 	require.NoError(t, err)

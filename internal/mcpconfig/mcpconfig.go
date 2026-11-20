@@ -125,25 +125,25 @@ func Load(path, key string) (*File, error) {
 		if !ok {
 			return nil, fmt.Errorf("parsing %s: %q is not an object", path, key)
 		}
-		if name := duplicate(obj); name != "" {
+		if name, ok := duplicate(obj); ok {
 			return nil, fmt.Errorf("parsing %s: server %q is defined more than once in %q", path, name, key)
 		}
 	}
 	return f, nil
 }
 
-// duplicate returns the first member name that obj has more than once, or
-// "" if it has none.
-func duplicate(obj *hujson.Object) string {
+// duplicate returns the first member name that obj has more than once,
+// and whether it has one: the empty string is a name too.
+func duplicate(obj *hujson.Object) (string, bool) {
 	seen := make(map[string]bool, len(obj.Members))
 	for _, m := range obj.Members {
 		name := m.Name.Value.(hujson.Literal).String()
 		if seen[name] {
-			return name
+			return name, true
 		}
 		seen[name] = true
 	}
-	return ""
+	return "", false
 }
 
 // onlyComments reports whether data holds nothing but whitespace and

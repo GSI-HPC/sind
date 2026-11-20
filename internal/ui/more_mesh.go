@@ -180,7 +180,7 @@ func moreMeshLoad(v *View) error {
 			if m.Info != nil {
 				r.Has, r.Info = true, *m.Info
 				for _, n := range v.Snap.Networks[name] {
-					if n.Name == m.Info.Network {
+					if n.Name == string(m.Info.Network) {
 						r.Subnet = n.Subnet
 					}
 				}

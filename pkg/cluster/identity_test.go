@@ -9,19 +9,19 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityFromLabels(t *testing.T) {
-	assert.Equal(t, config.IdentityLocal, IdentityFromLabels(docker.Labels{}))
-	assert.Equal(t, config.IdentityNSSSlurm, IdentityFromLabels(docker.Labels{LabelIdentity: "nssSlurm"}))
-	assert.Equal(t, config.IdentityClientIDs, IdentityFromLabels(docker.Labels{LabelIdentity: "clientIds"}))
+	assert.Equal(t, config.IdentityLocal, identityFromLabels(docker.Labels{}))
+	assert.Equal(t, config.IdentityNSSSlurm, identityFromLabels(docker.Labels{LabelIdentity: "nssSlurm"}))
+	assert.Equal(t, config.IdentityClientIDs, identityFromLabels(docker.Labels{LabelIdentity: "clientIds"}))
 }
 
 func TestNodeGetsUsers(t *testing.T) {
@@ -62,14 +62,14 @@ func TestNodeGetsUsers(t *testing.T) {
 }
 
 func TestNodeSlurmService(t *testing.T) {
-	svc, ok := nodeSlurmService(RunConfig{Role: config.RoleSubmitter, Identity: config.IdentityClientIDs})
+	svc, ok := nodeSlurmService(nodeRunConfig{Role: config.RoleSubmitter, Identity: config.IdentityClientIDs})
 	assert.True(t, ok)
 	assert.Equal(t, probe.ServiceSackd, svc)
 
-	_, ok = nodeSlurmService(RunConfig{Role: config.RoleSubmitter, Identity: config.IdentityNSSSlurm})
+	_, ok = nodeSlurmService(nodeRunConfig{Role: config.RoleSubmitter, Identity: config.IdentityNSSSlurm})
 	assert.False(t, ok)
 
-	svc, ok = nodeSlurmService(RunConfig{Role: config.RoleWorker, Identity: config.IdentityClientIDs})
+	svc, ok = nodeSlurmService(nodeRunConfig{Role: config.RoleWorker, Identity: config.IdentityClientIDs})
 	assert.True(t, ok)
 	assert.Equal(t, probe.ServiceSlurmd, svc)
 }
@@ -77,25 +77,25 @@ func TestNodeSlurmService(t *testing.T) {
 func TestBuildRunArgs_ClientIDs(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.Identity = config.IdentityClientIDs
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, "/etc/munge")
 	}
 	assert.Contains(t, testutil.ArgValues(args, "--label"), "sind.identity=clientIds")
 	entrypoint := args[len(args)-1]
-	assert.Equal(t, MaskMunge+NodeEntrypoint, entrypoint)
+	assert.Equal(t, maskMunge+nodeEntrypoint, entrypoint)
 	assert.True(t, strings.HasPrefix(entrypoint, "ln -sf /dev/null /etc/systemd/system/munge.service\n"))
 }
 
 func TestBuildRunArgs_NSSSlurm(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.Identity = config.IdentityNSSSlurm
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Contains(t, testutil.ArgValues(args, "-v"), "sind-dev-munge:/etc/munge:ro")
 	assert.Contains(t, testutil.ArgValues(args, "--label"), "sind.identity=nssSlurm")
-	assert.Equal(t, NodeEntrypoint, args[len(args)-1])
+	assert.Equal(t, nodeEntrypoint, args[len(args)-1])
 }
 
 func TestBuildRunArgs_LocalIdentity(t *testing.T) {
@@ -103,7 +103,7 @@ func TestBuildRunArgs_LocalIdentity(t *testing.T) {
 	for _, mode := range []config.IdentityMode{"", config.IdentityLocal} {
 		cfg := defaultRunConfig()
 		cfg.Identity = mode
-		assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), "sind.identity=local")
+		assert.Contains(t, testutil.ArgValues(buildRunArgs(cfg), "--label"), "sind.identity=local")
 	}
 }
 
@@ -124,9 +124,9 @@ func identityCfg(identity config.Identity) *config.Cluster {
 	return cfg
 }
 
-// placement returns, per node of NodeRunConfigs, whether it gets the users
+// placement returns, per node of nodeRunConfigs, whether it gets the users
 // and whether it switches to nss_slurm.
-func placement(configs []RunConfig) (users, nss map[string]bool) {
+func placement(configs []nodeRunConfig) (users, nss map[string]bool) {
 	users, nss = map[string]bool{}, map[string]bool{}
 	for _, c := range configs {
 		users[c.ShortName] = c.AddUsers
@@ -164,7 +164,7 @@ func TestNodeRunConfigs_Identity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s/controllerUsers=%v", tt.identity.Mode, tt.identity.ControllerUsers), func(t *testing.T) {
-			configs := NodeRunConfigs(identityCfg(tt.identity), mesh.DefaultRealm, "", "", "")
+			configs := nodeRunConfigs(identityCfg(tt.identity), mesh.DefaultRealm, "", "", "")
 			users, nss := placement(configs)
 			assert.Equal(t, tt.users, users)
 			assert.Equal(t, tt.nss, nss)
@@ -182,7 +182,7 @@ func TestNodeRunConfigs_ClientIDsWithoutSubmitter(t *testing.T) {
 	cfg.Identity = config.Identity{Mode: config.IdentityClientIDs}
 	cfg.Nodes = []config.Node{{Role: config.RoleController, BackupController: true}, {Role: config.RoleWorker}}
 
-	users, _ := placement(NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", ""))
+	users, _ := placement(nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", ""))
 
 	assert.Equal(t, map[string]bool{"controller": true, "controller-backup": true, "worker-0": false}, users)
 }
@@ -206,7 +206,7 @@ func TestNodeRunConfigs_APIUsers(t *testing.T) {
 			cfg.Identity = config.Identity{Mode: tt.mode}
 			cfg.Nodes = []config.Node{{Role: config.RoleController}, {Role: config.RoleAPI, Managed: tt.managed}, {Role: config.RoleSubmitter}, {Role: config.RoleWorker}}
 
-			users, nss := placement(NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", ""))
+			users, nss := placement(nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", ""))
 
 			assert.Equal(t, tt.want, users["api"])
 			assert.False(t, nss["api"])
@@ -221,7 +221,7 @@ const (
 )
 
 func TestOfficialImageRepo(t *testing.T) {
-	assert.True(t, strings.HasPrefix(config.DefaultImage, officialImageRepo+":"), config.DefaultImage)
+	assert.True(t, strings.HasPrefix(config.DefaultNodeImage(), officialImageRepo+":"), config.DefaultNodeImage())
 }
 
 func TestCheckIdentityImage(t *testing.T) {
@@ -325,14 +325,14 @@ func TestPreflightCheck_ClientIDsSkipsMungeVolume(t *testing.T) {
 	m.OnCall = preflightOnCallLabels(t, map[string]string{"sind-dev-munge": `{"sind.realm":"other"}`})
 	client := docker.NewClient(&m)
 
-	require.Error(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()))
+	require.ErrorContains(t, preflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()), "conflicting resources already exist: volume sind-dev-munge")
 
 	cfg := minimalConfig()
 	cfg.Identity = config.Identity{Mode: config.IdentityClientIDs}
-	require.NoError(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg))
+	require.NoError(t, preflightCheck(t.Context(), client, mesh.DefaultRealm, cfg))
 
 	m.OnCall = preflightOnCallLabels(t, map[string]string{"sind-dev-munge": `{"sind.realm":"sind","sind.cluster":"dev"}`})
-	require.ErrorContains(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg), "volume sind-dev-munge")
+	require.ErrorContains(t, preflightCheck(t.Context(), client, mesh.DefaultRealm, cfg), "volume sind-dev-munge")
 }
 
 func TestWriteClusterConfig_ClientIDs(t *testing.T) {
@@ -348,7 +348,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 		Identity: config.Identity{Mode: config.IdentityClientIDs},
 		Nodes:    []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
+	err := writeClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 4)
@@ -384,7 +384,7 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 			m.AddResult("", "", nil) // RemoveContainer (defer)
 			c := docker.NewClient(&m)
 
-			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
+			err := writeClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 			require.EqualError(t, err, tt.wantErr)
 			assert.Equal(t, "run", m.Calls[0].Args[0], "helper runs to fix ownership")
@@ -446,7 +446,7 @@ func collectIdentityCalls(calls []mock.Call) *identityCalls {
 // its calls.
 func createIdentityCluster(t *testing.T, cfg *config.Cluster) *identityCalls {
 	t.Helper()
-	m, _, err := runCreate(t.Context(), t, cfg, false, imageLabels(currentSindNodeLabels))
+	m, err := runCreate(t.Context(), t, cfg, false, imageLabels(currentSindNodeLabels))
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "img:1"), "image checked once")
 	return collectIdentityCalls(m.Calls)
@@ -466,7 +466,7 @@ func imageLabels(labels string) func([]string, string) (mock.Result, bool) {
 func TestCreate_IdentityOldImage(t *testing.T) {
 	// A cached sind-node image from before identity modes is refused
 	// before anything is created.
-	m, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
+	m, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
 
 	require.ErrorContains(t, err, "image img:1 is a sind-node image from before identity modes")
 	assert.Zero(t, countCalls(m.Calls, "create"), "no node")
@@ -498,12 +498,12 @@ func TestCreate_ClientIDs(t *testing.T) {
 	require.Len(t, ic.created, 5)
 	for name, args := range ic.created {
 		assert.Contains(t, testutil.ArgValues(args, "--label"), "sind.identity=clientIds", name)
-		assert.True(t, strings.HasPrefix(args[len(args)-1], MaskMunge), name)
+		assert.True(t, strings.HasPrefix(args[len(args)-1], maskMunge), name)
 	}
 }
 
 func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
-	_, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, func(args []string, stdin string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, func(args []string, stdin string) (mock.Result, bool) {
 		if _, steps, ok := setupCall(args); ok && steps["nss_slurm"] != "" {
 			return failedSetup(t, 1, "", "nss_slurm"), true
 		}
@@ -536,7 +536,7 @@ func TestWorkerAdd_Identity(t *testing.T) {
 			assert.Equal(t, tt.users, slices.Contains(ic.users, worker))
 			require.Contains(t, ic.created, worker)
 			assert.Contains(t, testutil.ArgValues(ic.created[worker], "--label"), "sind.identity="+tt.mode)
-			assert.Equal(t, tt.mode == "clientIds", strings.HasPrefix(ic.created[worker][len(ic.created[worker])-1], MaskMunge))
+			assert.Equal(t, tt.mode == "clientIds", strings.HasPrefix(ic.created[worker][len(ic.created[worker])-1], maskMunge))
 		})
 	}
 }

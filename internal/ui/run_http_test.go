@@ -216,29 +216,43 @@ func TestRunStreamSendsWhatChanged(t *testing.T) {
 
 // TestRunFragmentsOfEveryPrefix renders every part of the progress display
 // for the run after each line of each recording, as a viewer who opens the
-// page at any moment sees it: no error, and the same HTML twice.
+// page at any moment sees it: no error. A sample of the prefixes, every
+// fourth one and the whole recording, it also renders at the run's start
+// and an hour after it, and each twice, for the same HTML: rendering all
+// of them so took a third of the package's time under the race detector.
+// The recordings run in parallel, each on a server of its own.
 func TestRunFragmentsOfEveryPrefix(t *testing.T) {
-	ts := runTestServer(t, runNow)
 	for _, file := range []string{"create-ok.jsonl", "create-failed.jsonl", "create-canceled.jsonl", "interleaved.jsonl"} {
-		data := runFixture(t, file, -1)
-		require.NotEmpty(t, data, file)
-		lines := strings.Count(runReadFixture(t, file), "\n") + 1
-		for n := 1; n <= lines; n += 3 {
-			runs := runFixture(t, file, n)
-			ts.st.SetRuns(runs)
-			id := fmt.Sprint(file, n)
-			ts.st.AddTask(store.Task{ID: id, Trace: "other", Status: store.TaskRunning, Start: runAt(0)})
-			for _, run := range runs {
-				for _, now := range []time.Time{runAt(0), runAt(30), runAt(3600)} {
-					for _, name := range runFragments {
-						first := runFragment(t, ts, now, name, "id", run.ID)
-						assert.Equal(t, first, runFragment(t, ts, now, name, "id", run.ID), "%s %s after %d lines", file, name, n)
+		t.Run(file, func(t *testing.T) {
+			t.Parallel()
+			ts := runTestServer(t, runNow)
+			data := runFixture(t, file, -1)
+			require.NotEmpty(t, data, file)
+			lines := strings.Count(runReadFixture(t, file), "\n") + 1
+			for n := 1; n <= lines; n += 3 {
+				runs := runFixture(t, file, n)
+				ts.st.SetRuns(runs)
+				id := fmt.Sprint(file, n)
+				ts.st.AddTask(store.Task{ID: id, Trace: "other", Status: store.TaskRunning, Start: runAt(0)})
+				sampled := n%12 == 1 || n+3 > lines
+				times := []time.Time{runAt(30)}
+				if sampled {
+					times = []time.Time{runAt(0), runAt(30), runAt(3600)}
+				}
+				for _, run := range runs {
+					for _, now := range times {
+						for _, name := range runFragments {
+							first := runFragment(t, ts, now, name, "id", run.ID)
+							if sampled {
+								assert.Equal(t, first, runFragment(t, ts, now, name, "id", run.ID), "%s after %d lines", name, n)
+							}
+						}
 					}
 				}
+				runFragment(t, ts, runAt(30), "run-list")
+				runFragment(t, ts, runAt(30), "tasks")
+				ts.st.UpdateTask(id, func(t *store.Task) { t.End, t.Status = runPtr(runAt(1)), store.TaskOK })
 			}
-			runFragment(t, ts, runAt(30), "run-list")
-			runFragment(t, ts, runAt(30), "tasks")
-			ts.st.UpdateTask(id, func(t *store.Task) { t.End, t.Status = runPtr(runAt(1)), store.TaskOK })
-		}
+		})
 	}
 }

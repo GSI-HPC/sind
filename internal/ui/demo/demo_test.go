@@ -184,7 +184,7 @@ func TestDemo_StillStandsStill(t *testing.T) {
 
 func TestDemo_Images(t *testing.T) {
 	ctx := t.Context()
-	img, local, err := InspectImage(ctx, config.DefaultImage)
+	img, local, err := InspectImage(ctx, config.DefaultNodeImage())
 	require.NoError(t, err)
 	assert.True(t, local)
 	assert.Equal(t, slurmNew, img.Labels[cluster.LabelSlurmVersion])

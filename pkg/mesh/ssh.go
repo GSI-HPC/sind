@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/pem"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/detach"
@@ -24,11 +25,11 @@ const knownHostsPath = "/root/.ssh/known_hosts"
 // sshVolumeLabel is the com.docker.compose.volume label of the SSH volume.
 const sshVolumeLabel = "ssh-config"
 
-// SSHImage returns the container image of the SSH relay: sind's default
+// sshImage returns the container image of the SSH relay: sind's default
 // node image, which has an ssh client and bash, and which the default
 // cluster pulls anyway. Custom node images need not have an ssh client.
-func SSHImage() string {
-	return config.DefaultImage
+func sshImage() string {
+	return config.DefaultNodeImage()
 }
 
 // ensureSSHVolume creates the SSH config volume if it does not exist yet,
@@ -43,23 +44,23 @@ func SSHImage() string {
 // or com.docker.compose.volume label names something else is refused; one
 // without them, as docker run makes for a volume it mounts, is not.
 func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
-	volName := m.SSHVolumeName()
+	volName := m.sshVolumeName()
 	labels, exists, err := m.Docker.VolumeLabels(ctx, volName)
 	if err != nil {
 		return false, fmt.Errorf("checking SSH volume: %w", err)
 	}
 	if exists {
-		realm, hasRealm := labels[LabelRealm]
+		realm, hasRealm := labels[labelRealm]
 		vol, hasVol := labels[docker.ComposeVolumeLabel]
 		if hasRealm && realm != m.Realm || hasVol && vol != sshVolumeLabel {
 			return false, fmt.Errorf("volume %s is not the SSH volume of realm %q: its labels are %s=%q, %s=%q",
-				volName, m.Realm, LabelRealm, realm, docker.ComposeVolumeLabel, vol)
+				volName, m.Realm, labelRealm, realm, docker.ComposeVolumeLabel, vol)
 		}
 		return false, nil
 	}
 
 	volumeLabels := docker.Labels{
-		LabelRealm:                 m.Realm,
+		labelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeVolumeLabel:  sshVolumeLabel,
 	}
@@ -93,11 +94,11 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (
 			"--name", string(name),
 			"--network", string(m.NetworkName()),
 			"--dns", dnsIP,
-			"-v", string(m.SSHVolumeName()) + ":/root/.ssh",
+			"-v", string(m.sshVolumeName()) + ":/root/.ssh",
 		}
 		sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), ComposeServiceSSH)...)
-		sshArgs = append(sshArgs, SSHImage(), "sleep", "infinity")
-		if err := m.pullFor(ctx, SSHImage()); err != nil {
+		sshArgs = append(sshArgs, sshImage(), "sleep", "infinity")
+		if err := m.pullFor(ctx, sshImage()); err != nil {
 			return false, err
 		}
 		if _, err := m.Docker.CreateContainer(ctx, sshArgs...); err != nil {
@@ -142,7 +143,7 @@ func (m *Manager) lacksKeys(ctx context.Context) (bool, error) {
 	if len(bytes.TrimSpace(key)) > 0 {
 		return false, nil
 	}
-	sindlog.From(ctx).InfoContext(ctx, "SSH volume has no keypair, writing a new one", "volume", string(m.SSHVolumeName()))
+	sindlog.From(ctx).InfoContext(ctx, "SSH volume has no keypair, writing a new one", "volume", string(m.sshVolumeName()))
 	return true, nil
 }
 
@@ -253,6 +254,29 @@ func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) e
 // known_hosts file in a single operation.
 func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
 	return m.editKnownHosts(ctx, hostnames, nil)
+}
+
+// RemoveKnownHostsDomains removes the entries of every host in the domains
+// from the known_hosts file, as RemoveDNSDomains removes their A records.
+// A file without such an entry stays as it is.
+func (m *Manager) RemoveKnownHostsDomains(ctx context.Context, domains []string) error {
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
+	if err != nil {
+		return fmt.Errorf("reading known_hosts: %w", err)
+	}
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	kept := withoutDomains(slices.Clone(lines), 0, domains)
+	if len(kept) == len(lines) {
+		return nil
+	}
+	var result string
+	if len(kept) > 0 {
+		result = strings.Join(kept, "\n") + "\n"
+	}
+	if err := m.writeKnownHosts(ctx, result); err != nil {
+		return fmt.Errorf("writing known_hosts: %w", err)
+	}
+	return nil
 }
 
 // editKnownHosts drops the known_hosts lines of hostnames and appends add.

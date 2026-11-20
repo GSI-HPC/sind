@@ -91,7 +91,7 @@ func TestNodeRunConfigs_StoragePass(t *testing.T) {
 		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker}},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 3)
 	assert.Empty(t, configs[0].StoragePass, "controller")
@@ -100,6 +100,6 @@ func TestNodeRunConfigs_StoragePass(t *testing.T) {
 
 	// An unmanaged db node runs no MariaDB of sind's.
 	cfg.Nodes[1].Managed = new(bool)
-	configs = NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs = nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 	assert.Empty(t, configs[1].StoragePass)
 }

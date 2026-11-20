@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/ssh"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/ssh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -200,16 +200,16 @@ func stepNames(steps []setupStep) []string {
 }
 
 func TestNodeSetupSteps(t *testing.T) {
-	nss := RunConfig{NSSSlurm: true, Image: "img:1", Identity: config.IdentityNSSSlurm}
+	nss := nodeRunConfig{NSSSlurm: true, Image: "img:1", Identity: config.IdentityNSSSlurm}
 	for _, tt := range []struct {
 		name string
-		nc   RunConfig
+		nc   nodeRunConfig
 		want []string
 	}{
-		{"local without users", RunConfig{}, []string{"ssh"}},
-		{"users", RunConfig{AddUsers: true, Users: testUsers}, []string{"users", "ssh"}},
-		{"users elsewhere", RunConfig{Users: testUsers}, []string{"ssh"}},
-		{"no users to add", RunConfig{AddUsers: true}, []string{"ssh"}},
+		{"local without users", nodeRunConfig{}, []string{"ssh"}},
+		{"users", nodeRunConfig{AddUsers: true, Users: testUsers}, []string{"users", "ssh"}},
+		{"users elsewhere", nodeRunConfig{Users: testUsers}, []string{"ssh"}},
+		{"no users to add", nodeRunConfig{AddUsers: true}, []string{"ssh"}},
 		{"nss_slurm", nss, []string{"nss_slurm", "nsswitch", "ssh"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -218,7 +218,7 @@ func TestNodeSetupSteps(t *testing.T) {
 	}
 
 	scripts := map[string]string{}
-	for _, s := range append(nodeSetupSteps(nss), nodeSetupSteps(RunConfig{AddUsers: true, Users: testUsers})...) {
+	for _, s := range append(nodeSetupSteps(nss), nodeSetupSteps(nodeRunConfig{AddUsers: true, Users: testUsers})...) {
 		scripts[s.name] = s.script
 	}
 	assert.Equal(t, map[string]string{
@@ -232,7 +232,7 @@ func TestNodeSetupSteps(t *testing.T) {
 func TestSetupNode(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.9\nlocalhost ssh-ed25519 AAAA-hostkey\n", "", nil)
-	nc := RunConfig{AddUsers: true, Users: testUsers}
+	nc := nodeRunConfig{AddUsers: true, Users: testUsers}
 
 	key, err := setupNode(t.Context(), docker.NewClient(&m), "sind-dev-controller", nc, "ssh-ed25519 AAAA-test-key\n")
 
@@ -244,11 +244,11 @@ func TestSetupNode(t *testing.T) {
 }
 
 func TestSetupNode_StepFails(t *testing.T) {
-	nss := RunConfig{NSSSlurm: true, Image: "old:1", Identity: config.IdentityClientIDs}
-	users := RunConfig{AddUsers: true, Users: testUsers}
+	nss := nodeRunConfig{NSSSlurm: true, Image: "old:1", Identity: config.IdentityClientIDs}
+	users := nodeRunConfig{AddUsers: true, Users: testUsers}
 	for _, tt := range []struct {
 		name   string
-		nc     RunConfig
+		nc     nodeRunConfig
 		result func(t *testing.T) mock.Result
 		want   string
 	}{
@@ -286,7 +286,7 @@ func TestSetupNode_NoHostKey(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.9\n", "", nil)
 
-	_, err := setupNode(t.Context(), docker.NewClient(&m), "sind-dev-controller", RunConfig{}, "ssh-ed25519 AAAA-test-key\n")
+	_, err := setupNode(t.Context(), docker.NewClient(&m), "sind-dev-controller", nodeRunConfig{}, "ssh-ed25519 AAAA-test-key\n")
 
 	require.EqualError(t, err, "setting up SSH: no ed25519 host key found")
 }
@@ -296,7 +296,7 @@ func TestSetupNodes_CallsPerNode(t *testing.T) {
 	// calls, whatever its role and identity mode: create, start, the base
 	// probes once each (inspect, then three execs), the inspect of its
 	// addresses, and one setup exec.
-	base := RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", Users: testUsers}
+	base := nodeRunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", Users: testUsers}
 	controller, local, nss := base, base, base
 	controller.ShortName, controller.Role, controller.AddUsers = "controller", config.RoleController, true
 	local.ShortName, local.Role, local.AddUsers = "worker-0", config.RoleWorker, true

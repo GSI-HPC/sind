@@ -16,18 +16,18 @@ sind publishes a multi-role node image for each supported Slurm release line to 
 | 26.05 | `latest`, `26.05`, `26.05.6` |
 | 25.11 | `25.11`, `25.11.9` |
 
-- `latest` is the newest release line. Builds of sind from source (`make build`, `go install`) use it when `defaults.image` is not specified.
+- `latest` is the newest release line. sind built from a commit between releases or from a modified tree uses it when `defaults.image` is not specified.
 - `<YY>.<MM>` (e.g. `25.11`) follows the newest patch release of that line. Use it to stay on one Slurm release line.
 - `<YY>.<MM>.<patch>` (e.g. `25.11.9`) pins a patch release.
 
 Each sind release also publishes the images it was released with:
 
-- `vX.Y.Z` (e.g. `v0.17.0`) is the newest release line's image of sind vX.Y.Z. The release binaries of vX.Y.Z use it when `defaults.image` is not specified, so upgrading sind also brings the node image it was released with, and a pinned sind version keeps its Slurm version.
+- `vX.Y.Z` (e.g. `v0.17.0`) is the newest release line's image of sind vX.Y.Z. sind vX.Y.Z uses it when `defaults.image` is not specified: the release binaries, `go install` at vX.Y.Z, `make build` in a clean checkout of that tag, and programs that require sind vX.Y.Z as a library, so upgrading sind also brings the node image it was released with, and a pinned sind version keeps its Slurm version.
 - `vX.Y.Z-<YY>.<MM>` (e.g. `v0.17.0-25.11`) is the image of each supported release line at sind vX.Y.Z.
 
 Every tag is a multi-platform image for linux/amd64 and linux/arm64, except `25.11.4`, which is for linux/amd64 only; Docker pulls the variant that matches the host. The images of all release lines share their layers up to Slurm, so pulling a second release line downloads little more than its Slurm.
 
-The images are rebuilt when the image build changes, so the tags above pick up image fixes. They are also rebuilt every week with the current Rocky Linux packages, together with the tags of the newest sind release, so they pick up security updates. Tags of superseded patch releases, of older sind releases and of release lines that are no longer supported stay available but are not updated.
+The images are rebuilt when the image build changes, so the tags above pick up image fixes. They are also rebuilt every week with the current Rocky Linux packages, together with the tags of the newest sind release, so they pick up security updates. Before a rebuilt image gets its tags, it runs a cluster, an MPI job and job accounting on each platform; an image that fails keeps its tags on the last image that passed. Tags of superseded patch releases, of older sind releases and of release lines that are no longer supported stay available but are not updated.
 
 To run a cluster on a specific release line, set its image in the [cluster configuration](../../configuration/cluster-config/):
 

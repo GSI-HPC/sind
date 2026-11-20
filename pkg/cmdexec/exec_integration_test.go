@@ -20,6 +20,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,7 +62,7 @@ func TestOSExecutor_ShowsNoLinesOfData(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.Flagged(progress.FlagShowLines))
 	var e cmdexec.OSExecutor
-	stdout, stderr, err := e.Run(cmdexec.WithStdoutAsData(ctx), "sh", "-c", "echo '[{\"Id\": 1}]'; echo pulling >&2")
+	stdout, stderr, err := e.Run(execopt.WithStdoutAsData(ctx), "sh", "-c", "echo '[{\"Id\": 1}]'; echo pulling >&2")
 	step.End(err)
 	require.NoError(t, err)
 	assert.Equal(t, "[{\"Id\": 1}]\n", stdout)
@@ -146,12 +147,12 @@ func TestOSExecutor_ParsesLines(t *testing.T) {
 		want []string
 	}{
 		{"both", t.Context(), []string{"stderr err", "stdout out"}},
-		{"data", cmdexec.WithStdoutAsData(t.Context()), []string{"stderr err"}},
+		{"data", execopt.WithStdoutAsData(t.Context()), []string{"stderr err"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var mu sync.Mutex
 			var lines []string
-			ctx := cmdexec.WithLineParser(tc.ctx, func(st progress.Stream, line string) {
+			ctx := execopt.WithLineParser(tc.ctx, func(st progress.Stream, line string) {
 				mu.Lock()
 				defer mu.Unlock()
 				lines = append(lines, st.String()+" "+line)
@@ -170,38 +171,38 @@ func TestOSExecutor_ParsesLines(t *testing.T) {
 	}
 }
 
-// A command runs with the environment WithEnv gives it, and WithStarted is
-// told its process ID while it runs.
+// A command runs with the environment execopt.WithEnv gives it, and
+// execopt.WithStarted is told its process ID while it runs.
 func TestOSExecutor_EnvAndStarted(t *testing.T) {
 	var e cmdexec.OSExecutor
 	var pid int
-	ctx := cmdexec.WithEnv(t.Context(), []string{"ONLY=this"})
-	ctx = cmdexec.WithStarted(ctx, func(p int) { pid = p })
+	ctx := execopt.WithEnv(t.Context(), []string{"ONLY=this"})
+	ctx = execopt.WithStarted(ctx, func(p int) { pid = p })
 	stdout, _, err := e.Run(ctx, "/bin/sh", "-c", "echo $ONLY $$; echo ${HOME:-nohome}")
 	require.NoError(t, err)
 	assert.Positive(t, pid)
 	assert.Equal(t, "this "+strconv.Itoa(pid)+"\nnohome\n", stdout)
 }
 
-// A command run WithTerminal writes its standard output to a terminal of
-// TerminalWidth columns, which reaches the caller and the line parser as
-// plain lines; standard error stays a pipe.
+// A command run execopt.WithTerminal writes its standard output to a terminal
+// of execopt.TerminalWidth columns, which reaches the caller and the line
+// parser as plain lines; standard error stays a pipe.
 func TestOSExecutor_Terminal(t *testing.T) {
 	var mu sync.Mutex
 	var parsed []string
-	ctx := cmdexec.WithLineParser(cmdexec.WithTerminal(t.Context()), func(st progress.Stream, line string) {
+	ctx := execopt.WithLineParser(execopt.WithTerminal(t.Context()), func(st progress.Stream, line string) {
 		mu.Lock()
 		defer mu.Unlock()
 		parsed = append(parsed, st.String()+" "+line)
 	})
 	opened := false
-	ctx = cmdexec.WithTerminalOpened(ctx, func() { opened = true })
+	ctx = execopt.WithTerminalOpened(ctx, func() { opened = true })
 	var e cmdexec.OSExecutor
 	script := `[ -t 1 ] && [ ! -t 2 ] && stty size <&1; printf 'a: one\r\033[1Aa: two\r\033[1B\n'; echo err >&2`
 	stdout, stderr, err := e.Run(ctx, "sh", "-c", script)
 	require.NoError(t, err)
 	assert.True(t, opened)
-	assert.Equal(t, "24 "+strconv.Itoa(cmdexec.TerminalWidth)+"\na: one\na: two\n", stdout)
+	assert.Equal(t, "24 "+strconv.Itoa(execopt.TerminalWidth)+"\na: one\na: two\n", stdout)
 	assert.Equal(t, "err\n", stderr)
 	mu.Lock()
 	defer mu.Unlock()
@@ -209,12 +210,12 @@ func TestOSExecutor_Terminal(t *testing.T) {
 	assert.Contains(t, parsed, "stderr err")
 }
 
-// A command run WithTerminal returns at most outputWaitDelay after it
+// A command run execopt.WithTerminal returns at most outputWaitDelay after it
 // ended, although a process that it left behind holds the terminal.
 func TestOSExecutor_TerminalHeldByAChild(t *testing.T) {
 	var e cmdexec.OSExecutor
 	start := time.Now()
-	stdout, _, err := e.Run(cmdexec.WithTerminal(t.Context()), "sh", "-c", "sleep 8 & echo one")
+	stdout, _, err := e.Run(execopt.WithTerminal(t.Context()), "sh", "-c", "sleep 8 & echo one")
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", stdout)
 	assert.Less(t, time.Since(start), 6*time.Second, "closing the terminal ends its read")
@@ -243,8 +244,8 @@ func TestOSExecutor_DeadlineWithAChildLeft(t *testing.T) {
 	assert.Less(t, time.Since(start), 6*time.Second)
 }
 
-// A command run WithStopGrace gets SIGTERM when its context ends, and its
-// process group is killed once the grace has passed.
+// A command run execopt.WithStopGrace gets SIGTERM when its context ends, and
+// its process group is killed once the grace has passed.
 func TestOSExecutor_StopGrace(t *testing.T) {
 	for _, tc := range []struct {
 		name, script, stdout string
@@ -256,8 +257,8 @@ func TestOSExecutor_StopGrace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			ctx = cmdexec.WithStopGrace(cmdexec.WithProcessGroup(ctx), time.Second)
-			ctx = cmdexec.WithStarted(ctx, func(int) { time.AfterFunc(300*time.Millisecond, cancel) })
+			ctx = execopt.WithStopGrace(execopt.WithProcessGroup(ctx), time.Second)
+			ctx = execopt.WithStarted(ctx, func(int) { time.AfterFunc(300*time.Millisecond, cancel) })
 			var e cmdexec.OSExecutor
 			start := time.Now()
 			stdout, _, err := e.Run(ctx, "sh", "-c", tc.script)
@@ -273,20 +274,20 @@ func TestOSExecutor_StopGrace(t *testing.T) {
 	}
 }
 
-// A command run WithTerminal that cannot start fails as without one.
+// A command run execopt.WithTerminal that cannot start fails as without one.
 func TestOSExecutor_TerminalNotStarted(t *testing.T) {
 	var e cmdexec.OSExecutor
-	_, _, err := e.Run(cmdexec.WithTerminal(t.Context()), "/nonexistent/sind-test")
+	_, _, err := e.Run(execopt.WithTerminal(t.Context()), "/nonexistent/sind-test")
 	require.Error(t, err)
 }
 
-// A command run WithOrphanSafe writes no pipe of this process: its standard
-// output goes nowhere, and its standard error to a file, which Run returns,
-// also in the ExitError.
+// A command run execopt.WithOrphanSafe writes no pipe of this process: its
+// standard output goes nowhere, and its standard error to a file, which Run
+// returns, also in the ExitError.
 func TestOSExecutor_OrphanSafe(t *testing.T) {
 	var e cmdexec.OSExecutor
 	var pid int
-	ctx := cmdexec.WithStarted(cmdexec.WithOrphanSafe(cmdexec.WithProcessGroup(t.Context())), func(p int) { pid = p })
+	ctx := execopt.WithStarted(execopt.WithOrphanSafe(execopt.WithProcessGroup(t.Context())), func(p int) { pid = p })
 	script := `echo out; if [ -p /dev/stderr ]; then echo pipe >&2; else echo file >&2; fi; exit 3`
 	stdout, stderr, err := e.Run(ctx, "sh", "-c", script)
 	assert.Positive(t, pid)
@@ -297,7 +298,7 @@ func TestOSExecutor_OrphanSafe(t *testing.T) {
 	assert.Equal(t, 3, ee.ExitCode())
 	assert.Equal(t, "file\n", ee.Stderr)
 
-	_, _, err = e.Run(cmdexec.WithOrphanSafe(t.Context()), "/nonexistent/sind-test")
+	_, _, err = e.Run(execopt.WithOrphanSafe(t.Context()), "/nonexistent/sind-test")
 	require.Error(t, err)
 }
 
@@ -305,14 +306,14 @@ func TestOSExecutor_OrphanSafe(t *testing.T) {
 // TestOSExecutor_OrphanSafeInterruptsOnParentDeath.
 const orphanParentEnv = "CMDEXEC_TEST_ORPHAN_DIR"
 
-// A command run WithOrphanSafe gets SIGINT when the process that ran it
+// A command run execopt.WithOrphanSafe gets SIGINT when the process that ran it
 // dies, and can still write its standard error then.
 func TestOSExecutor_OrphanSafeInterruptsOnParentDeath(t *testing.T) {
 	if dir := os.Getenv(orphanParentEnv); dir != "" {
 		// The helper: run the command, and wait to be killed.
 		script := `trap 'echo stopping >&2; echo interrupted > "$0/out"; exit 130' INT; echo > "$0/ready"; while :; do sleep 0.1; done`
 		var e cmdexec.OSExecutor
-		_, _, _ = e.Run(cmdexec.WithOrphanSafe(context.Background()), "sh", "-c", script, dir)
+		_, _, _ = e.Run(execopt.WithOrphanSafe(context.Background()), "sh", "-c", script, dir)
 		return
 	}
 	dir := t.TempDir()

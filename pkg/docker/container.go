@@ -10,8 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
-	"os/exec"
 	"path"
 	"slices"
 	"strconv"
@@ -439,12 +439,12 @@ func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, 
 	args := append([]string{"exec", string(container)}, command...)
 	stdout, stderr, err := c.run(ctx, args...)
 	// A docker CLI killed by a signal has no exit status of the command.
-	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
 	if !ok || exitErr.ExitCode() < 0 || ctx.Err() != nil || errors.Is(err, ErrUnreachable) || execFailed(stderr) {
 		return stdout, err
 	}
 	if msg, ok := execNotStarted(exitErr.ExitCode(), stdout); ok {
-		return "", &cmdexec.ExitError{Err: exitErr, Stderr: msg}
+		return "", &cmdexec.ExitError{Code: exitErr.Code, Stderr: msg, Err: exitErr.Err}
 	}
 	return stdout, nil
 }
@@ -516,7 +516,7 @@ type FileContents map[string][]byte
 // File represents a file to copy into a container with explicit permissions.
 type File struct {
 	Content []byte
-	Mode    int64 // e.g. 0644, 0600
+	Mode    fs.FileMode // permission bits, e.g. 0644, 0600
 }
 
 // CopyFilesToContainer writes files into a container directory via docker cp.
@@ -545,7 +545,7 @@ func buildFilesTar(w io.Writer, files map[string]File) error {
 			}
 		}
 		f := files[name]
-		if err := tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: f.Mode}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: int64(f.Mode.Perm())}); err != nil {
 			return fmt.Errorf("writing tar header for %s: %w", name, err)
 		}
 		if _, err := tw.Write(f.Content); err != nil {

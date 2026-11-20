@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/GSI-HPC/go-clikit/progress"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/execopt"
 )
 
 // ImageLabels returns the labels of a local image, and whether the image is
@@ -50,7 +50,7 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 //
 // The innermost progress span in ctx, which is the image's target and has
 // to be running, reports the pull as work (see layerCount). docker pull
-// then writes its standard output to a terminal (cmdexec.WithTerminal),
+// then writes its standard output to a terminal (execopt.WithTerminal),
 // where it tells the bytes of each layer it downloads, and the work is in
 // bytes; where no terminal can be opened, it is in layers. A pull on a
 // terminal that downloads nothing ends with a size of 0 and the message
@@ -65,8 +65,8 @@ func (c *Client) PullImage(ctx context.Context, image string) error {
 		return c.do(ctx, "pull", image)
 	}
 	layers := &layerCount{span: target}
-	ctx = cmdexec.WithTerminalOpened(cmdexec.WithTerminal(ctx), layers.opened)
-	err := c.do(cmdexec.WithLineParser(ctx, layers.line), "pull", image)
+	ctx = execopt.WithTerminalOpened(execopt.WithTerminal(ctx), layers.opened)
+	err := c.do(execopt.WithLineParser(ctx, layers.line), "pull", image)
 	if err == nil {
 		layers.finish()
 	}

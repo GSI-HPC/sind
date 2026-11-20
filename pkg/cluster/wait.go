@@ -10,11 +10,20 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"golang.org/x/sync/errgroup"
 )
+
+// WaitOptions holds the options of WaitNodes.
+type WaitOptions struct {
+	// Wait bounds the whole wait; zero or less sets no limit.
+	Wait time.Duration
+	// Interval is the delay between probe rounds; zero or less is
+	// DefaultReadinessInterval.
+	Interval time.Duration
+}
 
 // WaitNodes waits until nodes of a cluster that exist, by their short
 // names, each once, are ready, as Create and WorkerAdd wait for the nodes
@@ -25,16 +34,17 @@ import (
 // as sinfo on the controller in control tells (probe.WorkersRegistered).
 // The power commands that start nodes call it with --wait.
 //
-// wait bounds the whole wait; zero or less sets no limit. When the limit
-// ends it, the error wraps ErrNotReady. A container that exits, or a unit
-// that fails, ends the wait at once, as in Create. Managed workers need a
-// running controller to register with: without one the wait fails at
-// once. interval is the delay between probe rounds, as for Create.
+// opts.Wait bounds the whole wait; zero or less sets no limit. When the
+// limit ends it, the error wraps ErrNotReady. A container that exits, or a
+// unit that fails, ends the wait at once, as in Create. Managed workers
+// need a running controller to register with: without one the wait fails
+// at once. opts.Interval is the delay between probe rounds, as for Create.
 //
 // The wait is the progress step "readiness", with a target for each node,
 // named as the power commands name it (QualifiedNodeName), and, after them, the
 // wait for the workers' registration.
-func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string, wait, interval time.Duration) (err error) {
+func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string, opts WaitOptions) (err error) {
+	wait, interval := opts.Wait, opts.Interval
 	if len(shortNames) == 0 {
 		return nil
 	}
@@ -109,7 +119,7 @@ func WaitNodes(ctx context.Context, client *docker.Client, realm, clusterName st
 // managedWorkerLabels reports whether the labels are those of a worker on
 // which sind manages slurmd.
 func managedWorkerLabels(labels docker.Labels) bool {
-	return config.Role(labels[LabelRole]) == config.RoleWorker && IsManaged(labels)
+	return config.Role(labels[LabelRole]) == config.RoleWorker && isManaged(labels)
 }
 
 // nodeProbes returns the readiness probes of a node that exists, from its

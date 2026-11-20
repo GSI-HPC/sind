@@ -30,7 +30,7 @@ func clusterNotFound(ctx context.Context, client *docker.Client, realm, clusterN
 		}
 		hints = append(hints, "existing clusters: "+strings.Join(names, ", "))
 	}
-	if others, lerr := OtherRealms(ctx, client, realm, clusterName); lerr == nil && len(others) > 0 {
+	if others, lerr := otherRealms(ctx, client, realm, clusterName); lerr == nil && len(others) > 0 {
 		quoted := make([]string, len(others))
 		for i, r := range others {
 			quoted[i] = fmt.Sprintf("%q", r)
@@ -60,7 +60,7 @@ func clusterContainers(ctx context.Context, client *docker.Client, realm, cluste
 // of the cluster's nodes. The config, munge and journal helpers carry the
 // realm and cluster labels but no role, and an interrupted create can
 // leave one behind: the queries and the power commands leave them out,
-// while ListClusterResources lists them, so that delete removes them.
+// while listClusterResources lists them, so that delete removes them.
 func isNode(labels docker.Labels) bool {
 	return labels[LabelRole] != ""
 }
@@ -99,10 +99,10 @@ func checkClusterExists(ctx context.Context, client *docker.Client, realm, clust
 	return nil
 }
 
-// OtherRealms returns, sorted, the realms other than realm that hold a node
+// otherRealms returns, sorted, the realms other than realm that hold a node
 // container of a cluster named clusterName. Labels that are not valid realm
 // names are left out.
-func OtherRealms(ctx context.Context, client *docker.Client, realm, clusterName string) ([]string, error) {
+func otherRealms(ctx context.Context, client *docker.Client, realm, clusterName string) ([]string, error) {
 	entries, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)

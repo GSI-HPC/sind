@@ -1,0 +1,281 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package monitor
+
+import (
+	"context"
+	"errors"
+	"io"
+	"sync"
+
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
+)
+
+// Watcher monitors a sind cluster for state changes across all nodes.
+// It manages the lifecycle of docker events and per-node systemd monitors,
+// and broadcasts events to subscribers.
+type Watcher struct {
+	client      *docker.Client
+	realm       string
+	clusterName string
+	prefix      string
+
+	internalCh chan Event
+
+	// ctx is the context Start was given. Every monitor, including those
+	// AddNodes starts later, runs until it ends.
+	ctx context.Context
+
+	mu          sync.Mutex
+	subscribers []subscriber
+
+	wg sync.WaitGroup
+}
+
+// NewWatcher creates a Watcher for the given cluster. The client starts
+// its long-lived streams (docker events, busctl monitor through docker
+// exec), with the client's docker command (docker.Client.Start). Its
+// docker events stream asks for the events of the clusters of that name in
+// every realm; NewRealmWatcher asks for those of one realm.
+func NewWatcher(client *docker.Client, containerPrefix, clusterName string) *Watcher {
+	return NewRealmWatcher(client, "", containerPrefix, clusterName)
+}
+
+// NewRealmWatcher is NewWatcher for the cluster of one realm, or of every
+// realm when realm is empty.
+func NewRealmWatcher(client *docker.Client, realm, containerPrefix, clusterName string) *Watcher {
+	return &Watcher{
+		client:      client,
+		realm:       realm,
+		clusterName: clusterName,
+		prefix:      containerPrefix,
+		internalCh:  make(chan Event, 64),
+	}
+}
+
+// subscriber is a channel that receives events, of one container or of
+// all (container empty).
+type subscriber struct {
+	ch        chan Event
+	container docker.ContainerName
+}
+
+// wants reports whether the subscriber receives ev: an event of its
+// container, or a monitor error of the whole watcher, which no container's
+// subscription may miss.
+func (s subscriber) wants(ev Event) bool {
+	return s.container == "" || ev.Container == s.container ||
+		ev.Kind == EventMonitorError && ev.Container == ""
+}
+
+// Subscribe returns a channel that receives a copy of every event.
+// The channel is closed when the Watcher stops. The caller should drain
+// the channel: the broadcast loop drops an event that a full channel has
+// no room for, and for a monitor error, which a subscriber must not miss,
+// the oldest event the channel holds instead.
+func (w *Watcher) Subscribe() <-chan Event {
+	return w.SubscribeTo("")
+}
+
+// SubscribeTo is Subscribe for the events of one container, or of every
+// container when it is empty. A readiness wait for one node subscribes to
+// its container only: while many nodes boot, the other nodes' events would
+// otherwise fill its buffer and crowd out its own. A subscription to one
+// container also receives the monitor errors of the whole watcher (those
+// without a container), as its container's events are missing after one.
+func (w *Watcher) SubscribeTo(container docker.ContainerName) <-chan Event {
+	ch := make(chan Event, 64)
+	w.mu.Lock()
+	w.subscribers = append(w.subscribers, subscriber{ch: ch, container: container})
+	w.mu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes a previously subscribed channel and closes it.
+func (w *Watcher) Unsubscribe(ch <-chan Event) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i, sub := range w.subscribers {
+		if sub.ch == ch {
+			w.subscribers = append(w.subscribers[:i], w.subscribers[i+1:]...)
+			close(sub.ch)
+			return
+		}
+	}
+}
+
+// Start begins monitoring. It starts the docker events stream, spawns
+// systemd monitors for each given node, and starts the broadcast loop.
+// Cancel the context to stop all monitors, those AddNodes starts later
+// included.
+func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
+	log := sindlog.From(ctx)
+
+	// Start docker events monitor.
+	dockerArgs := DockerRealmEventsArgs(w.realm, w.clusterName)
+	proc, err := w.client.Start(ctx, dockerArgs...)
+	if err != nil {
+		log.Log(ctx, sindlog.LevelTrace, "failed to start docker events monitor", "err", err)
+		return err
+	}
+	w.ctx = ctx
+
+	// The broadcast loop runs before the monitors, as a monitor that fails
+	// to start emits its error, which waits for the loop once internalCh
+	// is full.
+	w.wg.Go(func() { w.broadcastLoop(ctx) })
+
+	w.runMonitor(ctx, proc, "docker events", NewDockerMonitor(w.prefix).Run, Event{Kind: EventMonitorError})
+
+	// Start systemd monitors for pre-existing nodes.
+	for _, node := range nodes {
+		w.startSystemdMonitor(ctx, node)
+	}
+
+	return nil
+}
+
+// Wait blocks until all monitor goroutines have exited and closes
+// all remaining subscriber channels. Wait and Unsubscribe may run in either
+// order, or at the same time: each takes the watcher's lock and removes the
+// channels it closes, so each channel is closed once.
+func (w *Watcher) Wait() {
+	w.wg.Wait()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, sub := range w.subscribers {
+		close(sub.ch)
+	}
+	w.subscribers = nil
+}
+
+// AddNodes starts systemd monitors for the given nodes. Call this
+// after Start and after the node containers have been created so that
+// systemd state changes can accelerate readiness probing. The monitors run
+// on the context Start was given, until the watcher stops, so that they
+// also serve the waits that follow the caller's own (e.g. for the Slurm
+// daemons). Before a successful Start, AddNodes does nothing.
+func (w *Watcher) AddNodes(nodes []NodeTarget) {
+	if w.ctx == nil {
+		return
+	}
+	for _, node := range nodes {
+		w.startSystemdMonitor(w.ctx, node)
+	}
+}
+
+func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
+	log := sindlog.From(ctx)
+	args := SystemdMonitorArgs(node.Container)
+	proc, err := w.client.Start(ctx, args...)
+	if err != nil {
+		log.Log(ctx, sindlog.LevelTrace, "failed to start systemd monitor", "node", node.ShortName, "err", err)
+		w.emit(ctx, Event{
+			Kind:      EventMonitorError,
+			Node:      node.ShortName,
+			Container: node.Container,
+			Err:       err,
+		})
+		return
+	}
+
+	w.runMonitor(ctx, proc, "systemd monitor", NewSystemdMonitor(node.ShortName, node.Container).Run,
+		Event{Kind: EventMonitorError, Node: node.ShortName, Container: node.Container})
+}
+
+// runMonitor runs a monitor on proc's stdout until its stream ends or ctx
+// is cancelled, which closes the stream to unblock it. A stream that ends
+// while ctx runs is a monitor error: fail, with the stream's end and the
+// error of the docker command, which says why it failed.
+func (w *Watcher) runMonitor(ctx context.Context, proc *cmdexec.Process, source string,
+	run func(context.Context, io.Reader, chan<- Event) error, fail Event) {
+	w.wg.Go(func() {
+		stop := context.AfterFunc(ctx, func() { _ = proc.Stdout.Close() })
+		err := run(ctx, proc.Stdout, w.internalCh)
+		stop()
+		exitErr := docker.ClassifyUnreachable(proc.Close())
+		if ctx.Err() == nil {
+			fail.Detail, fail.Err = streamEnd(source, err, exitErr)
+			w.emit(ctx, fail)
+		}
+	})
+}
+
+// errStreamEnded is the error of a monitor stream that ended without one,
+// such as the busctl monitor of a node that stopped, or of an image without
+// busctl.
+var errStreamEnded = errors.New("stream ended")
+
+// streamEnd returns the detail and the error of the EventMonitorError for a
+// monitor stream whose reading stopped with readErr and whose command
+// exited with exitErr, both nil when it ended cleanly.
+func streamEnd(source string, readErr, exitErr error) (string, error) {
+	if readErr != nil || exitErr != nil {
+		return source + " stream failed", errors.Join(readErr, exitErr)
+	}
+	return source + " stream ended", errStreamEnded
+}
+
+// emit best-effort sends ev to the internal channel. The ctx.Done() branch
+// guards against sending into a drained channel after the watcher has been
+// torn down — a race that is possible when ctx is cancelled between the
+// caller's guard check and this select.
+func (w *Watcher) emit(ctx context.Context, ev Event) {
+	select {
+	case w.internalCh <- ev:
+	case <-ctx.Done():
+	}
+}
+
+// broadcastLoop reads events from the internal channel and sends them
+// to the subscribers that want them. It runs until the context is
+// cancelled.
+func (w *Watcher) broadcastLoop(ctx context.Context) {
+	log := sindlog.From(ctx)
+	for {
+		select {
+		case ev := <-w.internalCh:
+			log.Log(ctx, sindlog.LevelTrace, "event", "kind", ev.Kind, "node", ev.Node, "unit", ev.Unit, "detail", ev.Detail, "err", ev.Err)
+			w.mu.Lock()
+			for _, sub := range w.subscribers {
+				if !sub.wants(ev) {
+					continue
+				}
+				select {
+				case sub.ch <- ev:
+				default:
+					if ev.Kind != EventMonitorError {
+						// Subscriber is full — drop event to avoid blocking.
+						log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", ev.Kind, "node", ev.Node)
+						continue
+					}
+					// After a monitor error, the subscriber must stop
+					// trusting the events: drop the oldest one to make
+					// room. Only this loop sends, under w.mu, so the send
+					// then cannot block.
+					if old, ok := takeOldest(sub.ch); ok {
+						log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", old.Kind, "node", old.Node)
+					}
+					sub.ch <- ev
+				}
+			}
+			w.mu.Unlock()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// takeOldest takes the oldest event of ch without waiting, and reports
+// whether there was one: a subscriber may have taken them all since ch was
+// full.
+func takeOldest(ch chan Event) (Event, bool) {
+	select {
+	case ev := <-ch:
+		return ev, true
+	default:
+		return Event{}, false
+	}
+}

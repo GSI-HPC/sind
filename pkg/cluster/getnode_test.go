@@ -12,7 +12,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,9 +51,9 @@ func TestGetNode(t *testing.T) {
 		Managed:   true,
 		FQDN:      "controller.dev.sind.sind",
 		IP:        "10.0.0.2",
-		Status:    StateRunning,
-		Services: ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true,
-			probe.ServiceSlurmctld: true},
+		State:     StateRunning,
+		Services: ServiceHealth{"munge": true, "sshd": true,
+			"slurmctld": true},
 	}, node)
 }
 
@@ -170,7 +169,7 @@ func TestGetSSHConfig_NoStateDir(t *testing.T) {
 
 	_, err := GetSSHConfig(afero.NewMemMapFs(), "ci-42")
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "$HOME is not defined")
 }
 
 func TestStatus_NodeCounts(t *testing.T) {

@@ -13,17 +13,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/internal/testutil/prereq"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// requireRunningNodes checks that the cluster has n nodes, all of them
+// running, and returns them.
+func requireRunningNodes(ctx context.Context, t *testing.T, c *docker.Client, realm, clusterName string, n int) []*NodeSummary {
+	t.Helper()
+	nodes, err := GetNodes(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	require.Len(t, nodes, n)
+	for _, node := range nodes {
+		assert.Equal(t, StateRunning, node.State, node.Container)
+	}
+	return nodes
+}
 
 func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	t.Parallel()
@@ -36,11 +47,8 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	cfg := testConfig(t, clusterName, "")
 
 	// Create.
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, clusterName, result.Name)
-	assert.Equal(t, StateRunning, result.State)
-	require.Len(t, result.Nodes, 2)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 2)
 
 	// GetClusters.
 	clusters, err := GetClusters(ctx, c, realm)
@@ -59,7 +67,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
-	// GetStatus and ListClusterResources find the network and the volumes
+	// GetStatus and listClusterResources find the network and the volumes
 	// with one listing each.
 	status, err := GetStatus(ctx, c, realm, clusterName)
 	require.NoError(t, err)
@@ -68,7 +76,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	for _, m := range status.Mounts {
 		assert.True(t, m.OK, "mount %s present", m.Path)
 	}
-	res, err := ListClusterResources(ctx, c, realm, clusterName)
+	res, err := listClusterResources(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.True(t, res.NetworkExists)
 	assert.Equal(t, []docker.VolumeName{
@@ -137,7 +145,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// The network and the volumes are gone too.
-	res, err = ListClusterResources(ctx, c, realm, clusterName)
+	res, err = listClusterResources(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.Empty(t, res.Containers)
 	assert.False(t, res.NetworkExists)
@@ -175,9 +183,7 @@ slurm:
     ConstrainCores=yes
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, StateRunning, result.State)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 
 	// Verify settings via scontrol show config on the controller.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -227,9 +233,7 @@ slurm:
       TaskPlugin=task/cgroup,task/affinity
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, StateRunning, result.State)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
 
 	// Verify settings via scontrol show config on the controller.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -258,10 +262,10 @@ slurm:
 
 	// A worker added later gets it too: sind reads the TaskPlugin from the
 	// fragment slurm.conf includes.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].Name)))
+	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].ShortName())))
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -301,9 +305,8 @@ slurm:
     SlurmctldTimeout=10
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	require.Len(t, result.Nodes, 3)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 3)
 
 	primary := ContainerName(realm, clusterName, "controller")
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -352,12 +355,12 @@ slurm:
 	assert.Equal(t, jobID, strings.TrimSpace(out))
 
 	// Managed worker add goes through the backup while the primary is down.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
 	out, err = c.Exec(ctx, backup, "sinfo", "-h", "-N", "-o", "%N")
 	require.NoError(t, err)
-	assert.Contains(t, out, added[0].Name)
+	assert.Contains(t, out, added[0].ShortName())
 
 	// Recovery: the restarted primary takes control back.
 	require.NoError(t, PowerOn(ctx, c, meshMgr, clusterName, []string{"controller"}))
@@ -401,7 +404,7 @@ func TestClusterNamesAroundMesh(t *testing.T) {
 
 	// One create at a time: both rewrite the realm's Corefile.
 	for _, name := range clusters {
-		_, err := Create(ctx, c, meshMgr, testConfig(t, name, ""), probeInterval)
+		err := Create(ctx, c, meshMgr, testConfig(t, name, ""), CreateOptions{Interval: probeInterval})
 		require.NoError(t, err, "creating %s", name)
 	}
 
@@ -463,10 +466,13 @@ nodes:
   - worker
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 5)
+	clusters, err := GetClusters(ctx, c, realm)
 	require.NoError(t, err)
-	assert.Empty(t, result.SlurmVersion)
-	require.Len(t, result.Nodes, 5)
+	i := slices.IndexFunc(clusters, func(s *Summary) bool { return s.Name == clusterName })
+	require.NotEqual(t, -1, i)
+	assert.Empty(t, clusters[i].SlurmVersion)
 
 	primary := ContainerName(realm, clusterName, "controller")
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -499,7 +505,7 @@ nodes:
 	require.NoError(t, err, "the backup sees and edits the primary's file")
 	for _, n := range []docker.ContainerName{submitter, worker} {
 		_, err = c.Exec(ctx, n, "touch", slurm.ConfDir+"/from-elsewhere")
-		assert.Error(t, err, "%s mounts the config volume read-only", n)
+		assert.ErrorContains(t, err, "Read-only file system", "%s mounts the config volume read-only", n)
 	}
 
 	// Both controllers share the slurmctld state volume.
@@ -521,16 +527,16 @@ nodes:
 	for _, n := range status.Nodes {
 		assert.False(t, n.Managed, n.Name)
 		assert.Nil(t, n.Health.HA, n.Name)
-		assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, n.Health.Services, n.Name)
+		assert.Equal(t, ServiceHealth{"munge": true, "sshd": true}, n.Health.Services, n.Name)
 	}
 
 	// Workers added later are unmanaged too.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].Name))
+	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].ShortName()))
 	require.NoError(t, err)
-	assert.False(t, IsManaged(info.Labels))
+	assert.False(t, isManaged(info.Labels))
 
 	// The blank slate is usable: configure and start Slurm by hand.
 	require.NoError(t, c.WriteFile(ctx, primary, slurm.ConfDir+"/slurm.conf", "ClusterName="+clusterName+`
@@ -557,7 +563,7 @@ PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP
 	// Removing a worker leaves the user's configuration alone.
 	conf, err := c.ReadFile(ctx, primary, slurm.ConfDir+"/slurm.conf")
 	require.NoError(t, err)
-	require.NoError(t, WorkerRemove(ctx, c, meshMgr, clusterName, []string{added[0].Name}))
+	require.NoError(t, WorkerRemove(ctx, c, meshMgr, clusterName, []string{added[0].ShortName()}))
 	after, err := c.ReadFile(ctx, primary, slurm.ConfDir+"/slurm.conf")
 	require.NoError(t, err)
 	assert.Equal(t, conf, after)
@@ -590,10 +596,8 @@ nodes:
   - worker
 `)
 
-	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.NoError(t, err)
-	assert.Equal(t, StateRunning, result.State)
-	require.Len(t, result.Nodes, 3)
+	require.NoError(t, Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval}))
+	requireRunningNodes(ctx, t, c, realm, clusterName, 3)
 
 	// slurmdbd.conf includes the slurmdbd section's fragments. It has the
 	// ownership and mode slurmdbd insists on, and the fragments, which may
@@ -625,7 +629,7 @@ nodes:
 	_, err = c.Exec(ctx, db, "runuser", "-u", "slurm", "--", "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
 	require.NoError(t, err)
 	_, err = c.Exec(ctx, db, "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
-	assert.Error(t, err, "root logged in as slurm")
+	assert.ErrorContains(t, err, "Access denied", "root logged in as slurm")
 
 	// The controller sends accounting data to slurmdbd on the db node.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -663,8 +667,8 @@ nodes:
 	}
 	require.NotNil(t, dbNode, "db node missing from status")
 	assert.Equal(t, ServiceHealth{
-		probe.ServiceMunge: true, probe.ServiceSSHD: true,
-		probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true,
+		"munge": true, "sshd": true,
+		"mariadb": true, "slurmdbd": true,
 	}, dbNode.Health.Services)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
@@ -687,7 +691,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	// sind configures no accounting and starts nothing on the db node.
@@ -697,7 +701,7 @@ nodes:
 	assert.NotContains(t, conf, "AccountingStorage")
 	assert.NotContains(t, conf, "JobAcctGather")
 	_, err = c.Exec(ctx, controller, "test", "-e", slurm.SlurmdbdConfPath)
-	assert.Error(t, err, "no slurmdbd.conf")
+	assert.EqualError(t, err, "exit status 1", "no slurmdbd.conf")
 	db := ContainerName(realm, clusterName, "db")
 	for _, unit := range []string{"mariadb", "slurmdbd"} {
 		out, err := c.ExecAllowNonZero(ctx, db, "systemctl", "is-active", unit)
@@ -721,7 +725,7 @@ nodes:
 	}
 	require.NotNil(t, dbNode, "db node missing from status")
 	assert.False(t, dbNode.Managed)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, dbNode.Health.Services)
+	assert.Equal(t, ServiceHealth{"munge": true, "sshd": true}, dbNode.Health.Services)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -750,7 +754,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -804,10 +808,10 @@ nodes:
 	assert.Contains(t, status.Mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume, OK: true})
 
 	// Workers added later get the users, groups and the shared homes.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	newWorker := ContainerName(realm, clusterName, added[0].ShortName())
 	out, err = c.Exec(ctx, newWorker, "id", "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out))
@@ -875,7 +879,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -965,7 +969,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -994,13 +998,13 @@ nodes:
 
 	// Outside a job, the worker does not know alice, so she cannot log in.
 	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-o", "BatchMode=yes", "-l", "alice", DNSName("worker-0", clusterName, realm), "true")
-	assert.Error(t, err, "SSH as alice to a worker")
+	assert.ErrorContains(t, err, "Permission denied", "SSH as alice to a worker")
 
 	// Workers added later resolve users the same way.
-	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1, Interval: probeInterval})
 	require.NoError(t, err)
 	require.Len(t, added, 1)
-	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	newWorker := ContainerName(realm, clusterName, added[0].ShortName())
 	assert.Equal(t, "2", lookupStatus(ctx, t, c, newWorker, "alice"))
 	_, err = c.Exec(ctx, newWorker, "grep", "-q", "^passwd: slurm ", "/etc/nsswitch.conf")
 	assert.NoError(t, err)
@@ -1035,7 +1039,7 @@ nodes:
   - worker
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.NoError(t, err)
 
 	controller := ContainerName(realm, clusterName, "controller")
@@ -1088,9 +1092,9 @@ nodes:
 	status, err := GetStatus(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	for _, n := range status.Nodes {
-		assert.NotContains(t, n.Health.Services, probe.ServiceMunge, n.Name)
+		assert.NotContains(t, n.Health.Services, "munge", n.Name)
 		if n.Role == config.RoleSubmitter {
-			assert.Equal(t, ServiceHealth{probe.ServiceSSHD: true, probe.ServiceSackd: true}, n.Health.Services)
+			assert.Equal(t, ServiceHealth{"sshd": true, "sackd": true}, n.Health.Services)
 		}
 	}
 	for _, m := range status.Mounts {
@@ -1121,10 +1125,18 @@ users:
   - munge
 `)
 
-	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	err := Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	require.ErrorContains(t, err, ": adding users: exit status ")
 	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
 	assert.NotContains(t, err.Error(), setupStepMarker)
+	assert.NotContains(t, err.Error(), "rolling back")
+
+	// The rollback removed the cluster's nodes, network and volumes.
+	res, err := listClusterResources(ctx, c, meshMgr.Realm, clusterName)
+	require.NoError(t, err)
+	assert.Empty(t, res.Containers)
+	assert.False(t, res.NetworkExists)
+	assert.Empty(t, res.Volumes)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -1174,18 +1186,51 @@ func waitInControl(t *testing.T, c *docker.Client, realm, clusterName, shortName
 // named after prefix, which goes when the test ends, with the clusters.
 func testMesh(ctx context.Context, t *testing.T, c *docker.Client, prefix string, clusters ...string) (*mesh.Manager, string) {
 	t.Helper()
-	checkPrerequisites(t, c)
+	prereq.Check(t, c)
 	realm := testutil.Realm(prefix)
 	meshMgr := mesh.NewManager(c, realm)
 	t.Cleanup(func() {
 		bg := context.Background()
 		for _, name := range clusters {
-			_ = Delete(bg, c, meshMgr, name)
+			if err := Delete(bg, c, meshMgr, name); err != nil {
+				t.Errorf("deleting cluster %s: %v", name, err)
+			}
 		}
-		_ = meshMgr.CleanupMesh(bg)
+		if err := meshMgr.CleanupMesh(bg); err != nil {
+			t.Errorf("removing the mesh: %v", err)
+		}
+		assertRealmEmpty(t, c, meshMgr)
 	})
 	require.NoError(t, meshMgr.EnsureMesh(ctx))
 	return meshMgr, realm
+}
+
+// assertRealmEmpty checks that no container, network or volume of the
+// realm of meshMgr is left: none labelled with the realm, and no container
+// of its monitoring stack.
+func assertRealmEmpty(t *testing.T, c *docker.Client, meshMgr *mesh.Manager) {
+	t.Helper()
+	ctx := context.Background()
+	realm := "label=" + LabelRealm + "=" + meshMgr.Realm
+	var left []string
+	for _, filter := range []string{realm, "label=" + docker.ComposeProjectLabel + "=" + meshMgr.ComposeProject()} {
+		containers, err := c.ListContainers(ctx, filter)
+		require.NoError(t, err)
+		for _, e := range containers {
+			left = append(left, "container "+string(e.Name))
+		}
+	}
+	networks, err := c.ListNetworks(ctx, realm)
+	require.NoError(t, err)
+	for _, e := range networks {
+		left = append(left, "network "+string(e.Name))
+	}
+	volumes, err := c.ListVolumes(ctx, realm)
+	require.NoError(t, err)
+	for _, e := range volumes {
+		left = append(left, "volume "+string(e.Name))
+	}
+	assert.Empty(t, left, "realm %s is left with resources", meshMgr.Realm)
 }
 
 // testConfig returns the validated config of cluster name on testutil.Image(),
@@ -1197,21 +1242,4 @@ func testConfig(t *testing.T, name, body string) *config.Cluster {
 	cfg.ApplyDefaults()
 	require.NoError(t, cfg.Validate())
 	return cfg
-}
-
-func checkPrerequisites(t *testing.T, c *docker.Client) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	info, err := c.Info(ctx)
-	if err != nil {
-		t.Skipf("cannot query Docker version: %v", err)
-	}
-	if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
-		t.Skipf("%v", vErr)
-	}
-	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())
-	if !hasNsd {
-		t.Skip("host cgroup mount lacks nsdelegate")
-	}
 }

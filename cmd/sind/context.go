@@ -12,6 +12,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -95,7 +96,7 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 	return mesh.NewHostManager(client, realm)
 }
 
-// resolveRealm determines the realm (cluster.ResolveRealm): --realm >
+// resolveRealm determines the realm (envvar.ResolveRealm): --realm >
 // SIND_REALM > configRealm > mesh.DefaultRealm. Only `create cluster` has a
 // config file; every other command resolves with realmFromFlag. An invalid
 // --realm is a usage error.
@@ -105,8 +106,8 @@ func resolveRealm(cmd *cobra.Command, configRealm string) (string, error) {
 		r, _ := cmd.Root().Flags().GetString("realm")
 		flag = &r
 	}
-	realm, err := cluster.ResolveRealm(flag, configRealm)
-	var flagErr *cluster.RealmFlagError
+	realm, err := envvar.ResolveRealm(flag, configRealm)
+	var flagErr *envvar.RealmFlagError
 	if errors.As(err, &flagErr) {
 		return "", cobratree.Usage(err)
 	}

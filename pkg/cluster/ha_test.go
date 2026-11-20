@@ -13,7 +13,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -160,7 +159,7 @@ func TestGetStatus_ControllerPair(t *testing.T) {
 		primary, backup := controllerHA(t, status)
 		assert.Equal(t, &HAStatus{Position: PositionPrimary, InControl: false}, primary)
 		assert.Equal(t, &HAStatus{Position: PositionBackup, InControl: true}, backup)
-		assert.False(t, status.Nodes[0].Health.Services[probe.ServiceSlurmctld])
+		assert.False(t, status.Nodes[0].Health.Services["slurmctld"])
 	})
 
 	t.Run("no controller running", func(t *testing.T) {
@@ -251,7 +250,7 @@ func TestGetNodeHealth_UnmanagedControllerHasNoHA(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Nil(t, health.HA)
-	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services)
+	assert.Equal(t, ServiceHealth{"munge": true, "sshd": true}, health.Services)
 	assert.Len(t, m.Calls, 2, "no partner inspect, scontrol ping or heartbeat read")
 }
 

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/GSI-HPC/sind/internal/execopt"
 )
 
 // Endpoint is the address at which the docker CLI reaches the daemon.
@@ -31,9 +33,11 @@ func (e Endpoint) UnixSocket() bool {
 // the context that DOCKER_CONTEXT names, else of the current context of the
 // CLI's configuration (`docker context use`), else the default socket.
 // Without DOCKER_HOST it runs `docker context inspect`, which resolves the
-// context without contacting the daemon.
+// context without contacting the daemon. DOCKER_HOST is read from the
+// environment that the client's docker commands get: that of
+// execopt.WithEnv, else the process's own.
 func (c *Client) Endpoint(ctx context.Context) (Endpoint, error) {
-	if host := os.Getenv("DOCKER_HOST"); host != "" {
+	if host := dockerHost(ctx); host != "" {
 		return Endpoint{Host: host}, nil
 	}
 	stdout, _, err := c.run(ctx, "context", "inspect", "--format", "{{json .}}")
@@ -54,4 +58,21 @@ func (c *Client) Endpoint(ctx context.Context) (Endpoint, error) {
 		return Endpoint{}, fmt.Errorf("docker context %q has no docker endpoint", out.Name)
 	}
 	return Endpoint{Host: host, Context: out.Name}, nil
+}
+
+// dockerHost returns DOCKER_HOST of the environment that a docker command
+// run with ctx gets: the whole environment of execopt.WithEnv, where the
+// last entry of a name wins, as in os/exec, else the process's own.
+func dockerHost(ctx context.Context) string {
+	env := execopt.Env(ctx)
+	if len(env) == 0 {
+		return os.Getenv("DOCKER_HOST")
+	}
+	host := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "DOCKER_HOST="); ok {
+			host = v
+		}
+	}
+	return host
 }

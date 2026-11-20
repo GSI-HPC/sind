@@ -135,7 +135,7 @@ func TestAccountsScript_RunsEachCommand(t *testing.T) {
 
 func TestAccountsScript_StopsAtFirstFailure(t *testing.T) {
 	calls, stderr, err := runAccountsScript(t, accountsScript(wantAccountCommands), "theory")
-	require.Error(t, err)
+	require.EqualError(t, err, "exit status 1")
 	assert.Equal(t, "sacctmgr add account theory parent=physics:  Nothing new added.\n", stderr)
 	assert.Len(t, calls, 2, "stops at the first failure")
 }
@@ -258,7 +258,7 @@ func TestCreateSlurmAccounts_Timeout(t *testing.T) {
 func TestCreate_Accounts(t *testing.T) {
 	var registered atomic.Int32
 
-	m, _, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
+	m, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 	require.NoError(t, err)
 
 	require.Equal(t, []string{accountsScript(wantAccountCommands)}, accountsScripts(t, m.Calls))
@@ -285,7 +285,7 @@ func TestCreate_NoAccounts(t *testing.T) {
 	cfg := accountsCfg()
 	cfg.Accounts = nil
 	cfg.Users = nil
-	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
+	m, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	for _, c := range m.Calls {
@@ -297,7 +297,7 @@ func TestCreate_NoAccounts(t *testing.T) {
 func TestCreate_AccountsFail(t *testing.T) {
 	var registered atomic.Int32
 
-	_, _, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{
+	_, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{
 		Stderr: "sacctmgr add account physics:  Nothing new added.\n",
 		Err:    fmt.Errorf("exit status 1"),
 	}))

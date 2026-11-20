@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/detach"
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -41,46 +41,68 @@ type WorkerAddOptions struct {
 	Pull        bool // pull Image first; needs Image
 	// Wait, when positive, limits how long WorkerAdd waits for the new
 	// workers to become ready, counted as for Create's config.Cluster.Wait.
-	Wait        time.Duration
+	Wait time.Duration
+	// Interval is the delay between readiness probe rounds; zero or less
+	// is DefaultReadinessInterval.
+	Interval    time.Duration
 	CapAdd      []string
 	CapDrop     []string
 	Devices     []string
 	SecurityOpt []string
 }
 
+// OptionError reports an option that a call cannot act on
+// (WorkerAddOptions.Check). Field is the option's field, such as "CPUs".
+type OptionError struct {
+	Field string
+	Err   error
+}
+
+// Error returns the cause, which names the option.
+func (e *OptionError) Error() string { return e.Err.Error() }
+
+// Unwrap returns the cause.
+func (e *OptionError) Unwrap() error { return e.Err }
+
 // Check reports the first option WorkerAdd cannot act on: a negative CPU
 // count, a memory or /tmp size sind cannot read, Pull without Image, an
 // unknown capability, a device path that is not absolute or an unknown
-// security option. It calls docker for none of them, so that the CLI can
-// reject them as usage errors before it takes the realm lock.
+// security option, as an *OptionError that names the option by its field,
+// such as WorkerAddOptions.CPUs. It calls docker for none of them, so that
+// a caller can reject them before it takes the realm lock.
 func (o WorkerAddOptions) Check() error {
-	if err := config.CheckCPUs("--cpus", o.CPUs); err != nil {
-		return err
+	return o.CheckNamed(func(field string) string { return "WorkerAddOptions." + field })
+}
+
+// CheckNamed is Check with the options named in its errors as name names
+// them: a command line names its flags.
+func (o WorkerAddOptions) CheckNamed(name func(field string) string) error {
+	fail := func(field string, err error) error {
+		if err == nil {
+			return nil
+		}
+		return &OptionError{Field: field, Err: err}
 	}
-	if err := config.CheckMemory("--memory", o.Memory); err != nil {
-		return err
-	}
-	if err := config.CheckTmpSize("--tmp-size", o.TmpSize); err != nil {
-		return err
-	}
+	var pullErr error
 	if o.Pull && o.Image == "" {
-		return errors.New("--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID")
+		pullErr = fmt.Errorf("%s needs %s: without one, new workers run the image of the cluster's newest worker, by ID", name("Pull"), name("Image"))
 	}
-	if err := config.CheckCapabilities("--cap-add", o.CapAdd); err != nil {
-		return err
-	}
-	if err := config.CheckCapabilities("--cap-drop", o.CapDrop); err != nil {
-		return err
-	}
-	if err := config.CheckDevices("--device", o.Devices); err != nil {
-		return err
-	}
-	return config.CheckSecurityOpts("--security-opt", o.SecurityOpt)
+	return cmp.Or(
+		fail("CPUs", config.CheckCPUs(name("CPUs"), o.CPUs)),
+		fail("Memory", config.CheckMemory(name("Memory"), o.Memory)),
+		fail("TmpSize", config.CheckTmpSize(name("TmpSize"), o.TmpSize)),
+		fail("Pull", pullErr),
+		fail("CapAdd", config.CheckCapabilities(name("CapAdd"), o.CapAdd)),
+		fail("CapDrop", config.CheckCapabilities(name("CapDrop"), o.CapDrop)),
+		fail("Devices", config.CheckDevices(name("Devices"), o.Devices)),
+		fail("SecurityOpt", config.CheckSecurityOpts(name("SecurityOpt"), o.SecurityOpt)),
+	)
 }
 
 // --- Exported functions ---
 
-// WorkerAdd adds worker nodes to an existing cluster.
+// WorkerAdd adds worker nodes to an existing cluster and returns them, in
+// the order of their names.
 //
 // The caller holds the realm lock (state.LockRealm) until WorkerAdd
 // returns.
@@ -107,14 +129,13 @@ func (o WorkerAddOptions) Check() error {
 // For unmanaged workers (Unmanaged=true), the Slurm steps are skipped.
 // Workers added to an unmanaged cluster are always unmanaged. A failure
 // after the first container exists removes the new containers, mesh
-// entries and NodeName lines again. readinessInterval is the delay
-// between readiness probe rounds, as for Create. As there, the writes of
+// entries and NodeName lines again. As there, the writes of
 // the mesh DNS, known_hosts and sind-nodes.conf ignore the end of ctx and
 // may outlive it by up to RollbackTimeout.
-func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
+func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions) (added []*NodeSummary, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
-	rd := &readiness{interval: readinessInterval, wait: opts.Wait}
+	rd := &readiness{interval: opts.Interval, wait: opts.Wait}
 
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
@@ -142,7 +163,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// The newest worker that is managed like the new ones gives them their
 	// shape. sind always writes sind.managed, so the docker ps label is
 	// reliable for this choice.
-	wantManaged := !opts.Unmanaged && IsManaged(controller.Labels)
+	wantManaged := !opts.Unmanaged && isManaged(controller.Labels)
 	newest, _ := newestWorker(containers, realm, opts.ClusterName, wantManaged)
 
 	// The mesh and the cluster network must have room for the new workers
@@ -178,7 +199,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	// sind wrote no Slurm configuration for an unmanaged cluster to add
 	// workers to.
-	if !opts.Unmanaged && !IsManaged(labels) {
+	if !opts.Unmanaged && !isManaged(labels) {
 		log.DebugContext(ctx, "cluster is unmanaged, adding unmanaged workers", "cluster", opts.ClusterName)
 		opts.Unmanaged = true
 	}
@@ -212,13 +233,13 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if dataHostPath != "" && !path.IsAbs(dataHostPath) {
 		return nil, fmt.Errorf("controller label %s=%q is not an absolute path: refusing to bind-mount it into new workers", LabelDataHostPath, dataHostPath)
 	}
-	dataMountPath := DataMountPath(labels)
+	dataMountPath := dataMountPath(labels)
 	cvmfs := config.StorageType(labels[LabelCVMFS])
-	users, err := LinuxUsersFromLabels(labels)
+	users, err := linuxUsersFromLabels(labels)
 	if err != nil {
 		return nil, err
 	}
-	identity := config.Identity{Mode: IdentityFromLabels(labels)}
+	identity := config.Identity{Mode: identityFromLabels(labels)}
 	slurmVersion := labels[LabelSlurmVersion]
 
 	// The new workers' shape: the newest worker's, or the controller's
@@ -237,7 +258,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// worker's slurmd must serve the HTTP endpoint the stack probes. An
 	// image given with --image must have the cluster's Slurm version; the
 	// newest worker's has it already.
-	monitored := Monitored(realm, infra.controller)
+	monitored := monitored(realm, infra.controller)
 	if managed {
 		version := ""
 		if opts.Image != "" {
@@ -254,12 +275,12 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 	}
 
-	// Build RunConfig entries for new nodes.
+	// Build nodeRunConfig entries for new nodes.
 	startIdx := nextWorkerIndexFromContainers(containers, realm, opts.ClusterName)
 	count := max(opts.Count, 1)
-	nodeConfigs := make([]RunConfig, count)
+	nodeConfigs := make([]nodeRunConfig, count)
 	for i := range count {
-		nodeConfigs[i] = RunConfig{
+		nodeConfigs[i] = nodeRunConfig{
 			Realm:           realm,
 			ClusterName:     opts.ClusterName,
 			ShortName:       fmt.Sprintf("worker-%d", startIdx+i),
@@ -353,12 +374,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// network, as in Create. The group has no shared context, so a failure
 	// on one side does not cancel the other halfway, such as in the middle
 	// of a CoreDNS restart; the rollback undoes both.
-	var nodes []*Node
 	var g errgroup.Group
 	g.Go(func() error {
-		var err error
-		nodes, err = registerNodes(readyCtx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
-		return err
+		return registerNodes(readyCtx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
 	})
 	if managed {
 		confUpdated = true
@@ -366,7 +384,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			if err := updateNodesConf(readyCtx, client, controllerName, nodesConf, slurmConf, nodeConfigs); err != nil {
 				return err
 			}
-			return enableSlurm(readyCtx, client, realm, opts.ClusterName, controllerName, nodeConfigs, readinessInterval, watcher)
+			return enableSlurm(readyCtx, client, realm, opts.ClusterName, controllerName, nodeConfigs, opts.Interval, watcher)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -379,7 +397,25 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 
 	needsCleanup = false
-	return nodes, nil
+	return nodeSummaries(realm, opts.ClusterName, nodeConfigs, nodeResults), nil
+}
+
+// nodeSummaries returns the summaries of new nodes, which run, as GetNodes
+// would list them.
+func nodeSummaries(realm, clusterName string, nodeConfigs []nodeRunConfig, results []nodeResult) []*NodeSummary {
+	netName := NetworkName(realm, clusterName)
+	nodes := make([]*NodeSummary, len(nodeConfigs))
+	for i, nc := range nodeConfigs {
+		nodes[i] = &NodeSummary{
+			Container: string(ContainerName(realm, clusterName, nc.ShortName)),
+			Cluster:   clusterName,
+			Role:      nc.Role,
+			FQDN:      DNSName(nc.ShortName, clusterName, realm),
+			IP:        results[i].info.IPs[netName],
+			State:     StateRunning,
+		}
+	}
+	return nodes
 }
 
 // checkWorkerSlurm checks the slurmd of image, the image of new managed
@@ -422,7 +458,7 @@ func checkWorkerSlurm(ctx context.Context, client *docker.Client, clusterName, i
 // workers of a monitored cluster are created: it creates or starts it (see
 // ensureMonitoring), registers its DNS names, and empties or makes the
 // workers' journal directories.
-func prepareMonitoredWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig) error {
+func prepareMonitoredWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, nodeConfigs []nodeRunConfig) error {
 	if _, err := ensureMonitoring(ctx, client, meshMgr); err != nil {
 		return err
 	}
@@ -433,7 +469,7 @@ func prepareMonitoredWorkers(ctx context.Context, client *docker.Client, meshMgr
 }
 
 // shortNames returns the short names of nodes.
-func shortNames(nodeConfigs []RunConfig) []string {
+func shortNames(nodeConfigs []nodeRunConfig) []string {
 	names := make([]string, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		names[i] = nc.ShortName
@@ -476,7 +512,7 @@ func findController(containers []docker.ContainerListEntry, realm, clusterName s
 // findController picks. A cluster without a controller counts as managed.
 func clusterManaged(containers []docker.ContainerListEntry, realm, clusterName string) bool {
 	controller, ok := findController(containers, realm, clusterName)
-	return !ok || IsManaged(controller.Labels)
+	return !ok || isManaged(controller.Labels)
 }
 
 // readNodesConf reads sind-nodes.conf through the controller, which has to
@@ -486,7 +522,7 @@ func clusterManaged(containers []docker.ContainerListEntry, realm, clusterName s
 // ErrNodesConfMissing; any other failure is returned as it is.
 func readNodesConf(ctx context.Context, client *docker.Client, controller docker.ContainerListEntry) (string, error) {
 	if controller.State != docker.StateRunning {
-		return "", fmt.Errorf("controller %s is not running (%s): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", controller.Name, controller.State)
+		return "", fmt.Errorf("controller %s is not running (%s): sind updates sind-nodes.conf and reconfigures Slurm through it; start or unfreeze it first", controller.Name, controller.State)
 	}
 	content, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
 	if err == nil {
@@ -590,7 +626,7 @@ func checkSettingLabels(ctx context.Context, client *docker.Client, controller *
 // content read before (see readNodesConf), writes it back, and
 // reconfigures slurmctld. slurmConf, the cluster's slurm.conf, decides
 // whether a new partition line is the default (see slurm.AddNodesToConf).
-func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, slurmConf config.Section, nodeConfigs []RunConfig) error {
+func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, slurmConf config.Section, nodeConfigs []nodeRunConfig) error {
 	var entries []slurm.NodeEntry
 	for _, nc := range nodeConfigs {
 		memMB, err := config.MemoryMB(nc.Memory)
@@ -688,7 +724,7 @@ func newestWorker(containers []docker.ContainerListEntry, realm, clusterName str
 		if idx > anyIdx {
 			anyIdx, anyWorker = idx, c.Name
 		}
-		if IsManaged(c.Labels) == managed && idx > matchIdx {
+		if isManaged(c.Labels) == managed && idx > matchIdx {
 			matchIdx, match = idx, c.Name
 		}
 	}
@@ -730,7 +766,7 @@ func defaultWorkerShape(controllerImage string) workerShape {
 // tag may since have moved to another image, even another Slurm release.
 // A resource docker reports none for keeps fallback's value. The security
 // options every node gets are left out, as sind decides on them for each
-// new worker, and so is TaskAffinityCapability where sind gave it to this
+// new worker, and so is taskAffinityCapability where sind gave it to this
 // worker by itself: on a managed worker of a cluster whose slurm.conf
 // enables task/affinity, as taskAffinity says (see
 // getsTaskAffinityCapability). A SYS_NICE the user asked for stays.
@@ -740,8 +776,8 @@ func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallba
 	hc := info.HostConfig
 	capDrop := capabilityNames(hc.CapDrop)
 	var own []string
-	if IsManaged(info.Labels) && getsTaskAffinityCapability(taskAffinity, capDrop) {
-		own = append(own, TaskAffinityCapability)
+	if isManaged(info.Labels) && getsTaskAffinityCapability(taskAffinity, capDrop) {
+		own = append(own, taskAffinityCapability)
 	}
 	shape := workerShape{
 		Image:       cmp.Or(info.Image, fallback.Image),
@@ -841,7 +877,7 @@ func deviceArgs(devices []docker.DeviceMapping) []string {
 }
 
 // extraSecurityOpts returns a container's security options other than the
-// ones BuildRunArgs gives every node, from its host configuration. A
+// ones buildRunArgs gives every node, from its host configuration. A
 // seccomp profile is left out with a warning: docker reports its content,
 // which the docker CLI cannot take back, as it reads a profile from a
 // file. systempaths=unconfined, which the docker CLI does not pass on to
@@ -868,10 +904,10 @@ func extraSecurityOpts(ctx context.Context, container docker.ContainerName, hc d
 // systemPathsUnconfined is the security option that unmasks /proc and /sys.
 const systemPathsUnconfined = "systempaths=unconfined"
 
-// nodeSecurityOpts returns the security options BuildRunArgs gives every
+// nodeSecurityOpts returns the security options buildRunArgs gives every
 // node.
 func nodeSecurityOpts() []string {
-	args := BuildRunArgs(RunConfig{})
+	args := buildRunArgs(nodeRunConfig{})
 	var opts []string
 	for i := range len(args) - 1 {
 		if args[i] == "--security-opt" {
@@ -884,11 +920,11 @@ func nodeSecurityOpts() []string {
 // cleanupWorkers removes containers and mesh registrations for the given
 // worker node configs. Used to roll back a failed WorkerAdd. It logs the
 // diagnostics of the containers and removes them in parallel, as Create's
-// rollback does (DeleteContainers, the progress step "nodes"), but only
+// rollback does (deleteContainers, the progress step "nodes"), but only
 // those that exist (see createdWorkers). It goes on past a failure, a
 // container that is already gone is no failure, and it returns the
 // failures joined.
-func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []RunConfig) error {
+func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []nodeRunConfig) error {
 	log := sindlog.From(ctx)
 	var errs []error
 
@@ -911,7 +947,7 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 		names[i] = c.Name
 	}
 	logContainersDiagnostics(ctx, client, names)
-	if err := DeleteContainers(ctx, client, containers); err != nil {
+	if err := deleteContainers(ctx, client, containers); err != nil {
 		log.DebugContext(ctx, "cleanup: removing containers", "error", err)
 		errs = append(errs, err)
 	}
@@ -922,7 +958,7 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 // exist, as one listing of the cluster's containers shows them: a failed
 // create worker may not have made them all. When the listing fails, it
 // returns every worker, so that the rollback still tries to remove them.
-func createdWorkers(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig) []docker.ContainerListEntry {
+func createdWorkers(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []nodeRunConfig) []docker.ContainerListEntry {
 	listed, err := clusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
 		sindlog.From(ctx).DebugContext(ctx, "cleanup: listing containers", "error", err)

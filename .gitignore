@@ -6,6 +6,9 @@
 *.out
 coverage.html
 
+# Inputs that a property test failed on (pgregory.net/rapid)
+testdata/rapid/
+
 # IDE/editor
 .idea/
 .vscode/

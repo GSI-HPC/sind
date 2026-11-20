@@ -30,7 +30,7 @@ systemctl daemon-reload`
 // neither may a custom or a cached older image; without the check,
 // enabling the unit would fail only once every node is up), and the
 // drop-in that lets slurmrestd start in the container.
-func slurmrestdSteps(nc RunConfig) []setupStep {
+func slurmrestdSteps(nc nodeRunConfig) []setupStep {
 	return []setupStep{
 		{
 			name:   "slurmrestd",

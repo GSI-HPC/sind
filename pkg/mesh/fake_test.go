@@ -5,7 +5,6 @@ package mesh
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -83,26 +82,6 @@ func newFakeDocker(t *testing.T) (*fakeDocker, *docker.Client, *mock.Executor) {
 	return f, docker.NewClient(m), m
 }
 
-// ctxExecutor fails a call whose context is done, as os/exec does, and
-// hands the others to Executor.
-type ctxExecutor struct {
-	*mock.Executor
-}
-
-func (e ctxExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.Run(ctx, name, args...)
-}
-
-func (e ctxExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.RunWithStdin(ctx, stdin, name, args...)
-}
-
 // withMesh adds a complete mesh for realm, as earlier sind versions created
 // it: a network without a pinned DNS address, with both containers in
 // state.
@@ -121,7 +100,7 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 	mesh := string(mgr.NetworkName())
 	nw := f.addNetwork(mesh)
 	dns := &fakeContainer{
-		image: DNSImage, state: docker.StateCreated, networks: []string{mesh},
+		image: dnsImage, state: docker.StateCreated, networks: []string{mesh},
 		files: map[string]string{corefilePath: generateCorefile(realm, nil)},
 	}
 	if pinned {
@@ -131,17 +110,17 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 		nw.labels[LabelDNSIP] = dnsIP
 		dns.ip = dnsIP
 	}
-	f.volumes[string(mgr.SSHVolumeName())] = docker.Labels{
-		LabelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
+	f.volumes[string(mgr.sshVolumeName())] = docker.Labels{
+		labelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
 	}
 	sshFiles := map[string]string{
 		privateKeyPath: "-----BEGIN OPENSSH PRIVATE KEY-----\n", PublicKeyPath: "ssh-ed25519 AAAA\n", knownHostsPath: "",
 	}
-	f.volFiles[string(mgr.SSHVolumeName())] = sshFiles
+	f.volFiles[string(mgr.sshVolumeName())] = sshFiles
 	f.containers[string(mgr.DNSContainerName())] = dns
 	require.NoError(f.t, f.start(string(mgr.DNSContainerName())))
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
-		image: SSHImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dns.ips[mesh]},
+		image: sshImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dns.ips[mesh]},
 		files: sshFiles,
 	}
 	require.NoError(f.t, f.start(string(mgr.SSHContainerName())))

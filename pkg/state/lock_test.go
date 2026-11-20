@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/fakedocker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,13 +53,14 @@ func TestLockRealm(t *testing.T) {
 			unlock2()
 		}()
 
-		// Second lock should not be acquired while first is held.
+		// The second lock waits, and says so once, while the first is held.
+		require.Eventually(t, func() bool { return waited.Load() > 0 }, 5*time.Second, time.Millisecond, "OnWait is called before blocking")
 		select {
 		case <-acquired:
 			t.Fatal("second lock acquired while first is held")
 		case <-time.After(100 * time.Millisecond):
 		}
-		assert.Equal(t, int32(1), waited.Load(), "OnWait is called once before blocking")
+		assert.Equal(t, int32(1), waited.Load(), "OnWait is called once")
 
 		unlock1()
 
@@ -217,11 +219,11 @@ func TestLockRealm_UnlockTwice(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(fmt.Sprintf("daemon=%v", daemon), func(t *testing.T) {
 			dir := t.TempDir()
-			d := newFakeDaemon(t)
+			d := fakedocker.New(t)
 			opts := func() *LockOptions {
 				o := &LockOptions{Dir: dir, pollFirst: time.Millisecond}
 				if daemon {
-					o.Client = d.client()
+					o.Client = d.Client()
 				}
 				return o
 			}
@@ -243,7 +245,7 @@ func TestLockRealm_UnlockTwice(t *testing.T) {
 			_, err = LockRealm(ctx, "twice", o)
 			require.ErrorIs(t, err, context.DeadlineExceeded, "the second holder keeps the lock")
 			assert.True(t, waited)
-			assert.Equal(t, daemon, d.network("twice-lock") != nil, "and its daemon lock")
+			assert.Equal(t, daemon, d.Network("twice-lock") != nil, "and its daemon lock")
 		})
 	}
 }

@@ -13,11 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/internal/testutil/prereq"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,7 +66,7 @@ func TestMonitoring(t *testing.T) {
 	t.Parallel()
 	c, _ := testutil.NewClient(t)
 	ctx := t.Context()
-	checkPrerequisites(t, c)
+	prereq.Check(t, c)
 
 	version, err := slurm.DiscoverVersion(ctx, c, testutil.Image())
 	require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestMonitoring(t *testing.T) {
 
 	cfg := testConfig(t, name, "monitoring: true\nnodes: [controller, db, worker]\n")
 
-	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	err = Create(ctx, c, meshMgr, cfg, CreateOptions{Interval: probeInterval})
 	if strings.HasPrefix(version, "25.") {
 		require.ErrorIs(t, err, ErrImageUnsupported)
 		nodes, lerr := c.ListContainers(ctx, "label="+LabelRealm+"="+realm, "label="+LabelCluster+"="+name)

@@ -7,10 +7,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
+	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
@@ -37,7 +40,9 @@ type Result struct {
 }
 
 // Executor records all calls and returns preconfigured results.
-// It is safe for concurrent use.
+// Run, RunWithStdin, Start, AddResult and CallsSnapshot are safe for
+// concurrent use. Set OnCall and OnStart before the first call, and read
+// Calls only once the code under test has returned, or use CallsSnapshot.
 //
 // Results are dispatched in two modes:
 //   - If OnCall is set, it is called for every invocation to produce a result.
@@ -49,14 +54,22 @@ type Executor struct {
 	// OnCall, if set, is called to produce a result for each invocation.
 	// The args slice contains the subcommand and its arguments
 	// (e.g. ["inspect", "sind-dns"]). Stdin is non-empty for RunWithStdin calls.
+	// It runs under the mock's lock, one call at a time, so it may change
+	// the test's variables without locking them; a test that must hold one
+	// call while others run wraps the executor and blocks outside the lock.
 	OnCall func(args []string, stdin string) Result
 
 	// OnStart, if set, is called to produce a StreamResult for Start calls.
 	// If nil, Start returns an error.
 	OnStart func(args []string) StreamResult
 
+	// IgnoreContext makes the mock answer a call whose context is done.
+	// Without it, such a call fails with the context's error and is not
+	// recorded, as OSExecutor does not start the command.
+	IgnoreContext bool
+
 	// NoTerminal makes the mock open no terminal for a command run
-	// cmdexec.WithTerminal, as OSExecutor where it cannot: the command
+	// execopt.WithTerminal, as OSExecutor where it cannot: the command
 	// writes to a pipe.
 	NoTerminal bool
 
@@ -64,6 +77,8 @@ type Executor struct {
 	Calls   []Call
 	results []Result
 	idx     int
+	// unexpected holds the calls that came after the queue ran out.
+	unexpected []Call
 }
 
 // Ensure Executor implements cmdexec.Executor.
@@ -72,10 +87,46 @@ var _ cmdexec.Executor = (*Executor)(nil)
 // AddResult enqueues a result to be returned by the next Run or RunWithStdin call.
 // Only used when OnCall is nil.
 func (m *Executor) AddResult(stdout, stderr string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.results = append(m.results, Result{Stdout: stdout, Stderr: stderr, Err: err})
 }
 
+// AssertDone fails t unless every result queued with AddResult was used
+// and no call came after the queue ran out: code that ignores an error on
+// purpose, such as a cleanup, takes the error of an unexpected call for
+// an answer.
+func (m *Executor) AssertDone(t testing.TB) {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if left := len(m.results) - m.idx; left > 0 {
+		t.Errorf("mock: %d of %d queued results were not used", left, len(m.results))
+	}
+	for _, c := range m.unexpected {
+		t.Errorf("mock: unexpected call: %s %s", c.Name, strings.Join(c.Args, " "))
+	}
+}
+
+// CallsSnapshot returns a copy of the calls recorded so far, which a test
+// can read while the code under test still runs.
+func (m *Executor) CallsSnapshot() []Call {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.Calls)
+}
+
+// setOnCall sets OnCall under the lock that guards its calls.
+func (m *Executor) setOnCall(onCall func(args []string, stdin string) Result) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.OnCall = onCall
+}
+
 func (m *Executor) record(ctx context.Context, name string, args []string, stdin string) (string, string, error) {
+	if err := m.contextErr(ctx); err != nil {
+		return "", "", err
+	}
 	stdout, stderr, err := m.dispatch(name, args, stdin)
 	if !m.NoTerminal {
 		stdout = onTerminal(ctx, stdout)
@@ -84,20 +135,29 @@ func (m *Executor) record(ctx context.Context, name string, args []string, stdin
 	return stdout, stderr, err
 }
 
+// contextErr returns the error of ctx once it is done, unless
+// IgnoreContext is set.
+func (m *Executor) contextErr(ctx context.Context) error {
+	if m.IgnoreContext {
+		return nil
+	}
+	return ctx.Err()
+}
+
 // onTerminal returns stdout as OSExecutor returns what a command wrote to
-// the terminal of cmdexec.WithTerminal: in plain lines, the one that did
+// the terminal of execopt.WithTerminal: in plain lines, the one that did
 // not end included, after it called the function of
-// cmdexec.WithTerminalOpened. Without a terminal, or when stdout is data, it
+// execopt.WithTerminalOpened. Without a terminal, or when stdout is data, it
 // is stdout itself.
 func onTerminal(ctx context.Context, stdout string) string {
-	if !cmdexec.Terminal(ctx) || cmdexec.StdoutIsData(ctx) {
+	if !execopt.Terminal(ctx) || execopt.StdoutIsData(ctx) {
 		return stdout
 	}
-	if opened := cmdexec.TerminalOpened(ctx); opened != nil {
+	if opened := execopt.TerminalOpened(ctx); opened != nil {
 		opened()
 	}
 	var b strings.Builder
-	tl := cmdexec.NewTerminalLines(&b)
+	tl := execopt.NewTerminalLines(&b)
 	_, _ = tl.Write([]byte(stdout))
 	_ = tl.Flush()
 	return b.String()
@@ -116,6 +176,7 @@ func (m *Executor) dispatch(name string, args []string, stdin string) (string, s
 	}
 
 	if m.idx >= len(m.results) {
+		m.unexpected = append(m.unexpected, m.Calls[len(m.Calls)-1])
 		return "", "", fmt.Errorf("mock: unexpected call #%d: %s %v", len(m.Calls), name, args)
 	}
 	r := m.results[m.idx]
@@ -124,12 +185,12 @@ func (m *Executor) dispatch(name string, args []string, stdin string) (string, s
 }
 
 // parseLines hands the lines of a result to the line parser ctx carries
-// (cmdexec.WithLineParser), as OSExecutor does while the command runs: the
+// (execopt.WithLineParser), as OSExecutor does while the command runs: the
 // lines of standard output, unless ctx says it is data, then those of
 // standard error, each without its line break; a last line without one is
 // left out.
 func parseLines(ctx context.Context, stdout, stderr string) {
-	parse := cmdexec.LineParser(ctx)
+	parse := execopt.LineParser(ctx)
 	if parse == nil {
 		return
 	}
@@ -143,7 +204,7 @@ func parseLines(ctx context.Context, stdout, stderr string) {
 			text = rest
 		}
 	}
-	if !cmdexec.StdoutIsData(ctx) {
+	if !execopt.StdoutIsData(ctx) {
 		feed(progress.StreamStdout, stdout)
 	}
 	feed(progress.StreamStderr, stderr)
@@ -214,7 +275,10 @@ func (p *Pipes) CloseAll() {
 }
 
 // Start implements cmdexec.Executor.
-func (m *Executor) Start(_ context.Context, name string, args ...string) (*cmdexec.Process, error) {
+func (m *Executor) Start(ctx context.Context, name string, args ...string) (*cmdexec.Process, error) {
+	if err := m.contextErr(ctx); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	m.Calls = append(m.Calls, Call{Name: name, Args: args})
 	m.mu.Unlock()

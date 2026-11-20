@@ -213,7 +213,7 @@ var nodeLists = []struct {
 func nodeSize(f Form, key, label string, n *config.Node, ps *problems) {
 	get := func(attr string) string { return strings.TrimSpace(f.Get(key + "-" + attr)) }
 	if image := get("image"); image != "" {
-		if err := imageError(image); err == nil {
+		if err := config.CheckImage(image); err == nil {
 			n.Image = image
 		} else {
 			ps.add(key+"-image", label+" image", true, err)

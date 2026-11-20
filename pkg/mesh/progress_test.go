@@ -14,9 +14,9 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/display"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +37,7 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
   target dns,relay amount=2000000 size=2000000 unit=bytes [hidden,show-lines]: ok
   target network,volume [hidden,show-lines]: ok
 `},
-		{"new, the images there", func(f *fakeDocker) { f.images[DNSImage], f.images[SSHImage()] = true, true }, `step mesh total=4 [hidden,fold,show-lines]: ok
+		{"new, the images there", func(f *fakeDocker) { f.images[dnsImage], f.images[sshImage()] = true, true }, `step mesh total=4 [hidden,fold,show-lines]: ok
   target dns,network,relay,volume [hidden,show-lines]: ok
 `},
 		{"in place", func(f *fakeDocker) { f.withPinnedMesh(DefaultRealm, docker.StateRunning) }, `step mesh total=4 [hidden,fold,show-lines]: ok
@@ -181,7 +181,7 @@ type pullingExecutor struct {
 }
 
 func (e *pullingExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if strings.Join(args, " ") == "pull "+SSHImage() {
+	if strings.Join(args, " ") == "pull "+sshImage() {
 		stdout := progress.Tee(ctx, io.Discard, progress.StreamStdout, nil)
 		_, _ = io.WriteString(stdout, "latest: Pulling from gsi-hpc/sind-node\n")
 		e.frame = e.screen.draw(2 * time.Second)
@@ -228,7 +228,7 @@ func (e *teeingExecutor) Run(ctx context.Context, name string, args ...string) (
 	if strings.HasPrefix(joined, "create --name sind-ssh ") {
 		stdout = strings.Repeat("0123456789abcdef", 4) + "\n"
 	}
-	if !cmdexec.StdoutIsData(ctx) {
+	if !execopt.StdoutIsData(ctx) {
 		_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStdout, nil), stdout)
 	}
 	_, _ = io.WriteString(progress.Tee(ctx, io.Discard, progress.StreamStderr, nil), stderr)
@@ -237,7 +237,7 @@ func (e *teeingExecutor) Run(ctx context.Context, name string, args ...string) (
 	if e.pulled && strings.Contains(joined, "sind-ssh") {
 		e.frames = append(e.frames, e.screen.draw(time.Second))
 	}
-	e.pulled = e.pulled || joined == "pull "+SSHImage()
+	e.pulled = e.pulled || joined == "pull "+sshImage()
 	return stdout, stderr, err
 }
 

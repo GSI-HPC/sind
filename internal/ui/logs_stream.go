@@ -16,8 +16,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
+	"github.com/GSI-HPC/sind/internal/nodecmd"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -88,11 +89,11 @@ type logsReq struct {
 // node stops.
 func logsArgs(q logsReq) []string {
 	tail := q.tail
-	opts := cluster.LogOptions{Follow: true, Tail: &tail}
+	opts := nodecmd.LogOptions{Follow: true, Tail: &tail}
 	if q.src == logsDocker {
-		return cluster.ContainerLogArgs(q.realm, q.node, q.cluster, opts)
+		return nodecmd.ContainerLogArgs(q.realm, q.cluster, q.node, opts)
 	}
-	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), cluster.ServiceLogCommand(q.unit, opts)...)
+	return docker.TiedExecArgs(cluster.ContainerName(q.realm, q.cluster, q.node), nodecmd.ServiceLogCommand(q.unit, opts)...)
 }
 
 // logsCheck validates the request against the store.
@@ -151,7 +152,7 @@ func logsHandle(s *Server, w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	// What the container or journalctl writes to its standard error is
 	// part of the log.
-	proc, err := s.env.Exec.Start(cmdexec.WithStderrMerged(ctx), "docker", logsArgs(q)...)
+	proc, err := docker.NewClient(s.env.Exec).Start(execopt.WithStderrMerged(ctx), logsArgs(q)...)
 	if err != nil {
 		s.log.Error("starting the log stream", "node", q.node, "err", err)
 		http.Error(w, "could not start the log stream", http.StatusBadGateway)

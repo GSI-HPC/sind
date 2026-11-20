@@ -10,12 +10,12 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +65,8 @@ type stackFake struct {
 	calls      [][]string
 	// query is what Prometheus answers a query, through Grafana's curl.
 	query string
+	// journals are the directories of the journal volume that Alloy finds.
+	journals map[string]bool
 }
 
 // newStackFake returns a stackFake without a stack, on a mesh with a
@@ -78,6 +80,7 @@ func newStackFake(t *testing.T) *stackFake {
 		version:    "26.05.6",
 		logError:   "--skip-log-error",
 		fail:       map[string]mock.Result{},
+		journals:   map[string]bool{},
 	}
 }
 
@@ -277,6 +280,14 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 		if strings.HasSuffix(joined, "/api/v1/query") {
 			return mock.Result{Stdout: f.query + "\n200"}, true
 		}
+		// observability.Manager.JournalsLeft and RemoveJournals.
+		dir := args[len(args)-1]
+		switch {
+		case strings.Contains(joined, "echo found") && f.journals[dir]:
+			return mock.Result{Stdout: "found\n"}, true
+		case args[len(args)-2] == "remove":
+			delete(f.journals, dir)
+		}
 		return mock.Result{}, true
 	case "network":
 		return mock.Result{Stdout: `{"` + mesh.LabelDNSIP + `":"` + f.dnsIP + `"}`}, true
@@ -404,10 +415,10 @@ func TestMonitored(t *testing.T) {
 		{Type: docker.MountVolume, Name: "sind-dev-config"},
 		{Type: docker.MountVolume, Name: "sind-journal"},
 	}}
-	assert.True(t, Monitored("sind", journal))
-	assert.False(t, Monitored("other", journal))
+	assert.True(t, monitored("sind", journal))
+	assert.False(t, monitored("other", journal))
 	bind := &docker.ContainerInfo{Mounts: []docker.Mount{{Type: docker.MountBind, Name: "sind-journal"}}}
-	assert.False(t, Monitored("sind", bind))
+	assert.False(t, monitored("sind", bind))
 }
 
 func TestAlloyConfig(t *testing.T) {
@@ -427,13 +438,16 @@ func TestAlloyConfig(t *testing.T) {
 }
 
 func TestAlloyConfig_Errors(t *testing.T) {
-	for _, prefix := range []string{"info", "ps"} {
+	for prefix, want := range map[string]string{
+		"info": "reading the cgroup driver: exit status 1",
+		"ps":   "listing monitored nodes: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t)
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 			client, _ := f.client()
 			_, err := alloyConfig(t.Context(), client, "sind")
-			require.Error(t, err)
+			require.EqualError(t, err, want)
 		})
 	}
 }
@@ -473,12 +487,13 @@ func TestEnsureMonitoring_Errors(t *testing.T) {
 		name, prefix string
 		stack        bool
 		created      bool
+		want         string
 	}{
-		{"exists", "container inspect sind-alloy", false, false},
-		{"pinned address", "network inspect sind-mesh", false, false},
-		{"alloy config", "info", false, false},
-		{"stack", "volume create", false, true},
-		{"sync", "cp - sind-alloy:", true, false},
+		{"exists", "container inspect sind-alloy", false, false, "checking the monitoring stack: exit status 1: boom"},
+		{"pinned address", "network inspect sind-mesh", false, false, "checking mesh network: exit status 1: boom"},
+		{"alloy config", "info", false, false, "reading the cgroup driver: exit status 1: boom"},
+		{"stack", "volume create", false, true, "creating prometheus volume: exit status 1: boom"},
+		{"sync", "cp - sind-alloy:", true, false, "writing Alloy configuration: exit status 1: boom"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -490,7 +505,7 @@ func TestEnsureMonitoring_Errors(t *testing.T) {
 			client, _ := f.client()
 			meshMgr, _ := stackMesh(client)
 			created, err := ensureMonitoring(t.Context(), client, meshMgr)
-			require.Error(t, err)
+			require.ErrorContains(t, err, tt.want)
 			assert.Equal(t, tt.created, created)
 		})
 	}
@@ -515,13 +530,16 @@ func TestRegisterStackDNS(t *testing.T) {
 }
 
 func TestRegisterStackDNS_Errors(t *testing.T) {
-	for _, prefix := range []string{"inspect sind-grafana", "cp - sind-dns:/"} {
+	for prefix, want := range map[string]string{
+		"inspect sind-grafana": "inspecting the monitoring stack: exit status 1",
+		"cp - sind-dns:/":      "registering the monitoring stack's DNS names: writing DNS Corefile: exit status 1",
+	} {
 		t.Run(prefix, func(t *testing.T) {
 			f := newStackFake(t).withStack()
 			f.fail[prefix] = mock.Result{Err: testutil.ExitCode1(t)}
 			client, _ := f.client()
 			meshMgr, _ := stackMesh(client)
-			require.Error(t, registerStackDNS(t.Context(), client, meshMgr))
+			require.EqualError(t, registerStackDNS(t.Context(), client, meshMgr), want)
 		})
 	}
 }
@@ -551,7 +569,7 @@ func TestStartMonitoring(t *testing.T) {
 		client, _ := f.client()
 		meshMgr, _ := stackMesh(client)
 		_, err := startMonitoring(t.Context(), client, meshMgr)
-		require.Error(t, err)
+		require.ErrorContains(t, err, "starting loki container: exit status 1")
 	})
 }
 
@@ -627,7 +645,7 @@ func TestClusterMonitored(t *testing.T) {
 	_, err = clusterMonitored(t.Context(), client, "sind", "dev")
 	require.ErrorContains(t, err, "listing monitored nodes")
 	_, err = otherMonitoredClusters(t.Context(), client, "sind", "dev")
-	require.Error(t, err)
+	require.ErrorContains(t, err, "listing monitored nodes")
 }
 
 func TestRemoveMonitoring(t *testing.T) {
@@ -751,7 +769,7 @@ func TestGetMonitoring(t *testing.T) {
 	assert.Equal(t, "sind", m.Realm)
 	require.Len(t, m.Services, 4)
 	assert.Equal(t, MonitoringService{
-		Name: observability.ServiceGrafana, Container: "sind-grafana", Interface: observability.InterfaceWebUI, IP: f.containers["sind-grafana"].ip,
+		Name: "grafana", Container: "sind-grafana", Interface: "web UI", IP: f.containers["sind-grafana"].ip,
 		URL: "http://grafana.sind.sind:3000", State: docker.StateRunning, Ready: true, Checked: true,
 	}, m.Services[0])
 	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")

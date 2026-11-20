@@ -87,10 +87,10 @@ func nodesOnCall(t *testing.T, override func(args []string) (mock.Result, bool))
 }
 
 // nodeConfigs returns the run configs of workers named names.
-func workerConfigs(names ...string) []RunConfig {
-	configs := make([]RunConfig, len(names))
+func workerConfigs(names ...string) []nodeRunConfig {
+	configs := make([]nodeRunConfig, len(names))
 	for i, name := range names {
-		configs[i] = RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: name, Role: config.RoleWorker, Image: "img:1"}
+		configs[i] = nodeRunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: name, Role: config.RoleWorker, Image: "img:1"}
 	}
 	return configs
 }
@@ -100,7 +100,7 @@ func workerConfigs(names ...string) []RunConfig {
 func TestSetupNodes_ReportsTheNodes(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	_, _, err := setupNodesWith(ctx, t, func([]string) (mock.Result, bool) { return mock.Result{}, false },
-		append([]RunConfig{controllerConfig}, workerConfigs("worker-0", "worker-1")...)...)
+		append([]nodeRunConfig{controllerConfig}, workerConfigs("worker-0", "worker-1")...)...)
 
 	require.NoError(t, err)
 	w.Finish()
@@ -130,14 +130,14 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 		{"ok", t.Context(), "localhost ssh-ed25519 AAAA-hostkey\n", "call setup: ok\n  call docker exec [hidden]: ok\n"},
 		{"failed", t.Context(), "", "call setup: failed (target): setting up SSH: no ed25519 host key found\n  call docker exec [hidden]: ok\n"},
 		{"stopped by a sibling", stoppedBy(errors.New("node worker-1: image not found")), "",
-			"call setup: canceled (canceled): setting up SSH: no ed25519 host key found\n  call docker exec [hidden]: ok\n"},
+			"call setup: canceled (canceled): running the node setup: context canceled\n  call docker exec [hidden]: canceled (canceled): context canceled\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, w := progresstest.Watch(tc.ctx, t)
 			var m mock.Executor
 			m.AddResult(tc.stdout, "", nil)
 
-			_, _ = setupNode(ctx, docker.NewClient(&m), "sind-dev-worker-0", RunConfig{}, "ssh-ed25519 AAAA-test-key\n")
+			_, _ = setupNode(ctx, docker.NewClient(&m), "sind-dev-worker-0", nodeRunConfig{}, "ssh-ed25519 AAAA-test-key\n")
 
 			assert.Equal(t, tc.want, w.Finish())
 		})
@@ -148,7 +148,9 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 // canceled, not failed, and the error is that of the node that failed.
 func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
+	// The docker calls are answered after the cancel too, so that every
+	// node gets as far as its wait, whichever ran first.
+	m := &mock.Executor{IgnoreContext: true, OnCall: nodesOnCall(t, func(args []string) (mock.Result, bool) {
 		switch {
 		case args[0] == "create" && strings.Contains(strings.Join(args, " "), "sind-dev-worker-0"):
 			return mock.Result{Err: errors.New("image not found")}, true
@@ -157,7 +159,8 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 			return mock.Result{Stdout: inspectJSON(t, args[1], "created", nil)}, true
 		}
 		return mock.Result{}, false
-	}, workerConfigs("worker-0", "worker-1", "worker-2")...)
+	})}
+	_, err := setupNodesOn(ctx, m, workerConfigs("worker-0", "worker-1", "worker-2")...)
 
 	require.EqualError(t, err, "node worker-0: creating container worker-0: image not found")
 	w.Finish()
@@ -212,7 +215,11 @@ func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	cfg := createCfg()
 	cfg.Pull = true
 
-	_, _, err := runCreate(ctx, t, cfg, false, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
+	// The checks' docker calls are answered after the failed pull cancelled
+	// them too, so that they create what the rollback removes.
+	m := createExecutor(t, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
+	m.IgnoreContext = true
+	err := runCreateOn(ctx, t, m, cfg, false)
 
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	w.Finish()
@@ -229,9 +236,13 @@ step rollback: ok
 // the preflight is not stopped by a pull.
 func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	_, _, err := runCreate(ctx, t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	// The checks' docker calls are answered after the failed inspection
+	// cancelled them too, so that they create what the rollback removes.
+	m := createExecutor(t, func(args []string, _ string) (mock.Result, bool) {
 		return mock.Result{Err: errors.New("docker daemon unavailable")}, isImageExists(args)
 	})
+	m.IgnoreContext = true
+	err := runCreateOn(ctx, t, m, createCfg(), false)
 
 	require.EqualError(t, err, "inspecting image img:1: docker daemon unavailable")
 	w.Finish()
@@ -248,7 +259,7 @@ func TestCreate_ReportsItsSteps(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	var registered atomic.Int32
 
-	_, _, err := runCreate(ctx, t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
+	_, err := runCreate(ctx, t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 
 	require.NoError(t, err)
 	w.Finish()
@@ -287,7 +298,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
 		return mock.Result{}
 	}
 	ctx, w := progresstest.Watch(t.Context(), t)
-	configs := []RunConfig{
+	configs := []nodeRunConfig{
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
 		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
@@ -296,7 +307,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
 
 	err := enableSlurm(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", "sind-dev-controller", configs, time.Millisecond, nil)
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "enabling mariadb on db: mariadb failed")
 	w.Finish()
 	assert.Equal(t, `step slurm total=3 [fold]: failed (target): enabling mariadb on db: mariadb failed\nmariadb journal:\n
   target controller role=controller: canceled (canceled): not finished
@@ -315,7 +326,7 @@ func TestWorkerAdd_ReportsItsSteps(t *testing.T) {
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 2, Interval: time.Millisecond})
 
 	require.NoError(t, err)
 	w.Finish()

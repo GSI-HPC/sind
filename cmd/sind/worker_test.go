@@ -3,6 +3,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -38,6 +40,9 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 		{[]string{"--cap-add", "BOGUS"}, `unknown capability "BOGUS" in --cap-add`},
 		{[]string{"--cap-drop", "net_raw"}, `unknown capability "net_raw" in --cap-drop`},
 		{[]string{"--device", "relative/dev"}, `device "relative/dev" in --device: host path must be absolute`},
+		{[]string{"--security-opt", "privileged"}, `unknown security option "privileged" in --security-opt`},
+		{[]string{"--memory", "bogus"}, `invalid --memory "bogus"`},
+		{[]string{"--tmp-size", "1x"}, `invalid --tmp-size "1x"`},
 		// An unset variable in --image "$IMAGE" is not the default.
 		{[]string{"--image", ""}, "--image must not be empty: leave it out for the default"},
 		{[]string{"--memory="}, "--memory must not be empty: leave it out for the default"},
@@ -157,4 +162,16 @@ func TestCreateWorker_FlagHelpNamesDefaults(t *testing.T) {
 	assert.Equal(t, "memory limit per node (default: the newest worker's, else 512m)", c.Flags().Lookup("memory").Usage)
 	assert.Equal(t, "/tmp tmpfs size (default: the newest worker's, else 256m)", c.Flags().Lookup("tmp-size").Usage)
 	assert.Contains(t, c.Flags().Lookup("image").Usage, "the newest worker's, else the controller's")
+}
+
+// TestWithUnmanagedHint checks that the error of a cluster without
+// sind-nodes.conf names the flag that adds workers without it, and that
+// other errors stay as they are.
+func TestWithUnmanagedHint(t *testing.T) {
+	err := withUnmanagedHint(fmt.Errorf("adding workers: %w", cluster.ErrNodesConfMissing))
+	require.ErrorIs(t, err, cluster.ErrNodesConfMissing)
+	assert.EqualError(t, err, "adding workers: sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
+
+	other := errors.New("boom")
+	assert.Same(t, other, withUnmanagedHint(other))
 }

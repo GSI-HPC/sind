@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-nodeset"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/action"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // The jump box reads a query that starts with a verb as a command, as a

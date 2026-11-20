@@ -11,7 +11,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,10 +57,10 @@ func moreFixture(t *testing.T, st *store.Store) {
 	st.SetMonitoring("sind", &cluster.Monitoring{
 		Realm: "sind",
 		Services: []cluster.MonitoringService{
-			{Name: "grafana", Interface: observability.InterfaceWebUI, Container: "sind-grafana", Image: "grafana/grafana:13.2.3", IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true},
-			{Name: "prometheus", Interface: observability.InterfaceBoth, Container: "sind-prometheus", Image: "prom/prometheus:v3.15.0", URL: "http://prometheus.sind.sind:9090", State: "running"},
-			{Name: "loki", Interface: observability.InterfaceAPI, Container: "sind-loki", Image: "grafana/loki:3.7.8", URL: "http://loki.sind.sind:3100", State: "running", Checked: true},
-			{Name: "alloy", Interface: observability.InterfaceWebUI, Container: "sind-alloy", Image: "grafana/alloy:v1.20.1", URL: "http://172.18.0.9:12345", State: "running", Ready: true, Checked: true},
+			{Name: "grafana", Interface: "web UI", Container: "sind-grafana", Image: "grafana/grafana:13.2.3", IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true},
+			{Name: "prometheus", Interface: "web UI + API", Container: "sind-prometheus", Image: "prom/prometheus:v3.15.0", URL: "http://prometheus.sind.sind:9090", State: "running"},
+			{Name: "loki", Interface: "API", Container: "sind-loki", Image: "grafana/loki:3.7.8", URL: "http://loki.sind.sind:3100", State: "running", Checked: true},
+			{Name: "alloy", Interface: "web UI", Container: "sind-alloy", Image: "grafana/alloy:v1.20.1", URL: "http://172.18.0.9:12345", State: "running", Ready: true, Checked: true},
 		},
 		Clusters: []cluster.MonitoredCluster{{Name: "dev", Nodes: 4, SlurmVersion: "26.05.1"}},
 	})

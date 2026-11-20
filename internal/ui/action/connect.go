@@ -98,7 +98,7 @@ func connectReach(sn store.Snapshot, realm, name string, m store.Mesh) string {
 		clusters = append(clusters, cl.Name)
 	}
 	slices.SortFunc(clusters, natsort.Compare)
-	text := "`" + name + "` joins `" + m.Info.Network + "`"
+	text := "`" + name + "` joins `" + string(m.Info.Network) + "`"
 	switch len(clusters) {
 	case 0:
 	case 1:
@@ -150,7 +150,7 @@ func SindContainer(sn store.Snapshot, name string) (string, bool) {
 		}
 	}
 	for realm, m := range sn.Meshes {
-		if i := m.Info; i != nil && (name == i.DNSContainer || name == i.SSHContainer) {
+		if i := m.Info; i != nil && (name == string(i.DNSContainer) || name == string(i.SSHContainer)) {
 			return realm, true
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,12 +15,8 @@ import (
 // TestEndpointLifecycle asks the docker CLI in integration mode, where the
 // tests run next to the daemon: on its own machine, through a unix socket.
 func TestEndpointLifecycle(t *testing.T) {
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
-	if !rec.IsIntegration() {
-		t.Setenv("DOCKER_HOST", "")
-		rec.AddResult(`{"Name":"default","Metadata":{},"Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock","SkipTLSVerify":false}},`+
-			`"TLSMaterial":{},"Storage":{"MetadataPath":"\u003cIN MEMORY\u003e","TLSPath":"\u003cIN MEMORY\u003e"}}`+"\n", "", nil)
-	}
 
 	ep, err := c.Endpoint(t.Context())
 	require.NoError(t, err)
@@ -37,6 +34,29 @@ func TestEndpoint_DockerHost(t *testing.T) {
 	assert.Equal(t, Endpoint{Host: "tcp://build-host:2376"}, ep)
 	assert.False(t, ep.UnixSocket())
 	assert.Empty(t, m.Calls, "DOCKER_HOST wins over any context")
+}
+
+// TestEndpoint_EnvFromContext checks that Endpoint reads DOCKER_HOST from
+// the environment that execopt.WithEnv gives the client's docker commands,
+// which replaces the process's own.
+func TestEndpoint_EnvFromContext(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "tcp://process-host:2376")
+	var m mock.Executor
+	c := NewClient(&m)
+
+	ctx := execopt.WithEnv(t.Context(), []string{"PATH=/usr/bin", "DOCKER_HOST=tcp://old:2376", "DOCKER_HOST=ssh://ci@build-host"})
+	ep, err := c.Endpoint(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, Endpoint{Host: "ssh://ci@build-host"}, ep, "the last entry wins")
+	assert.Empty(t, m.Calls)
+
+	// An environment without DOCKER_HOST asks the docker CLI, as that is
+	// what it gets.
+	m.AddResult(`{"Name":"default","Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}`+"\n", "", nil)
+	ep, err = c.Endpoint(execopt.WithEnv(t.Context(), []string{"PATH=/usr/bin"}))
+	require.NoError(t, err)
+	assert.Equal(t, Endpoint{Host: "unix:///var/run/docker.sock", Context: "default"}, ep)
+	m.AssertDone(t)
 }
 
 func TestEndpoint_Context(t *testing.T) {

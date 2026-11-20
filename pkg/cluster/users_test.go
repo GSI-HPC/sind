@@ -21,9 +21,9 @@ import (
 // testUsers are the users and groups of usersCfg: alice with a private
 // group and hpc as a supplementary group, bob with hpc as his primary
 // group.
-var testUsers = LinuxUsers{
-	Users: []LinuxUser{{Name: "alice", UID: 1000, GID: 1000}, {Name: "bob", UID: 2001, GID: 3000}},
-	Groups: []LinuxGroup{
+var testUsers = linuxUsers{
+	Users: []linuxUser{{Name: "alice", UID: 1000, GID: 1000}, {Name: "bob", UID: 2001, GID: 3000}},
+	Groups: []linuxGroup{
 		{Name: "alice", GID: 1000},
 		{Name: "hpc", GID: 3000, Members: []string{"alice"}},
 	},
@@ -58,8 +58,8 @@ func TestHomeDir(t *testing.T) {
 }
 
 func TestNewLinuxUsers(t *testing.T) {
-	assert.Equal(t, testUsers, NewLinuxUsers(usersCfg()))
-	assert.True(t, NewLinuxUsers(createCfg()).IsEmpty())
+	assert.Equal(t, testUsers, newLinuxUsers(usersCfg()))
+	assert.True(t, newLinuxUsers(createCfg()).IsEmpty())
 
 	// Private groups come first, in user order; a group no user lists has
 	// no members.
@@ -70,54 +70,54 @@ func TestNewLinuxUsers(t *testing.T) {
 		{Name: "erin", UID: 1003, Group: "physics"},
 	}
 	cfg.Groups = []config.Group{{Name: "hpc", GID: 3000}, {Name: "physics", GID: 3001}, {Name: "empty", GID: 3002}}
-	assert.Equal(t, LinuxUsers{
-		Users: []LinuxUser{
+	assert.Equal(t, linuxUsers{
+		Users: []linuxUser{
 			{Name: "carol", UID: 1001, GID: 1001},
 			{Name: "dave", UID: 1002, GID: 1002},
 			{Name: "erin", UID: 1003, GID: 3001},
 		},
-		Groups: []LinuxGroup{
+		Groups: []linuxGroup{
 			{Name: "carol", GID: 1001},
 			{Name: "dave", GID: 1002},
 			{Name: "hpc", GID: 3000, Members: []string{"carol", "dave"}},
 			{Name: "physics", GID: 3001, Members: []string{"carol"}},
 			{Name: "empty", GID: 3002},
 		},
-	}, NewLinuxUsers(cfg))
+	}, newLinuxUsers(cfg))
 }
 
 func TestLinuxUsers_IsEmpty(t *testing.T) {
-	assert.True(t, LinuxUsers{}.IsEmpty())
+	assert.True(t, linuxUsers{}.IsEmpty())
 	assert.False(t, testUsers.IsEmpty())
-	assert.False(t, LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}.IsEmpty())
+	assert.False(t, linuxUsers{Groups: []linuxGroup{{Name: "hpc", GID: 3000}}}.IsEmpty())
 }
 
 func TestLinuxUsers_Labels(t *testing.T) {
 	assert.Equal(t, testUsersLabels, testUsers.Labels())
-	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: ""}, LinuxUsers{}.Labels(),
+	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: ""}, linuxUsers{}.Labels(),
 		"both set, empty, so that image labels cannot show through")
-	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: "hpc:3000"}, LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}.Labels())
+	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: "hpc:3000"}, linuxUsers{Groups: []linuxGroup{{Name: "hpc", GID: 3000}}}.Labels())
 
-	users, err := LinuxUsersFromLabels(LinuxUsers{}.Labels())
+	users, err := linuxUsersFromLabels(linuxUsers{}.Labels())
 	require.NoError(t, err)
 	assert.True(t, users.IsEmpty(), "empty labels record no users")
 }
 
 func TestLinuxUsersFromLabels(t *testing.T) {
-	users, err := LinuxUsersFromLabels(testUsersLabels)
+	users, err := linuxUsersFromLabels(testUsersLabels)
 	require.NoError(t, err)
 	assert.Equal(t, testUsers, users)
 
-	users, err = LinuxUsersFromLabels(docker.Labels{LabelRole: "worker"})
+	users, err = linuxUsersFromLabels(docker.Labels{LabelRole: "worker"})
 	require.NoError(t, err)
 	assert.True(t, users.IsEmpty())
 
 	for _, value := range []string{"alice", "alice:1000", "alice:1000:1000:x", ":1000:1000", "Alice:1000:1000", "alice:x:1000", "alice:1000:x", "alice:1000:1000,bob:2001:2001"} {
-		_, err := LinuxUsersFromLabels(docker.Labels{LabelUsers: value})
+		_, err := linuxUsersFromLabels(docker.Labels{LabelUsers: value})
 		require.EqualError(t, err, `invalid sind.users label "`+value+`": want name:uid:gid entries`, value)
 	}
 	for _, value := range []string{"hpc", "hpc:3000:alice:bob", "-hpc:3000", "hpc:x", "hpc:3000:", "hpc:3000:alice+", "hpc:3000:Alice"} {
-		_, err := LinuxUsersFromLabels(docker.Labels{LabelGroups: value})
+		_, err := linuxUsersFromLabels(docker.Labels{LabelGroups: value})
 		require.EqualError(t, err, `invalid sind.groups label "`+value+`": want name:gid[:member+...] entries`, value)
 	}
 }
@@ -134,14 +134,14 @@ func TestLinuxUsersFromLabels_RoundTripsDockerPs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 
-	users, err := LinuxUsersFromLabels(entries[0].Labels)
+	users, err := linuxUsersFromLabels(entries[0].Labels)
 	require.NoError(t, err)
 	assert.Equal(t, testUsers, users)
 }
 
 func TestAddUsersScript(t *testing.T) {
 	assert.Equal(t, testUsersScript, addUsersScript(testUsers))
-	assert.Equal(t, "groupadd --gid 3000 hpc\n", addUsersScript(LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}))
+	assert.Equal(t, "groupadd --gid 3000 hpc\n", addUsersScript(linuxUsers{Groups: []linuxGroup{{Name: "hpc", GID: 3000}}}))
 }
 
 func TestAddUsersStep(t *testing.T) {
@@ -171,7 +171,7 @@ func TestCreateHomes_Error(t *testing.T) {
 func TestBuildRunArgs_Users(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.Users = testUsers
-	args := BuildRunArgs(cfg)
+	args := buildRunArgs(cfg)
 
 	assert.Contains(t, testutil.ArgValues(args, "-v"), "sind-dev-home:/home:rw")
 	assert.Contains(t, testutil.ArgValues(args, "--label"), "sind.users=alice:1000:1000 bob:2001:3000")
@@ -186,31 +186,31 @@ func TestBuildRunArgs_TaskAffinityCapability(t *testing.T) {
 	worker.Role = config.RoleWorker
 	worker.CapAdd = []string{"SYS_ADMIN"}
 	worker.TaskAffinity = true
-	assert.Equal(t, []string{"SYS_NICE", "SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(worker), "--cap-add"))
+	assert.Equal(t, []string{"SYS_NICE", "SYS_ADMIN"}, testutil.ArgValues(buildRunArgs(worker), "--cap-add"))
 
 	controller := worker
 	controller.Role = config.RoleController
-	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(controller), "--cap-add"))
+	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(buildRunArgs(controller), "--cap-add"))
 
 	withoutAffinity := worker
 	withoutAffinity.TaskAffinity = false
 	withoutAffinity.Users = testUsers
-	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(withoutAffinity), "--cap-add"))
+	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(buildRunArgs(withoutAffinity), "--cap-add"))
 
 	// A capDrop of SYS_NICE or ALL wins: --cap-drop would not undo
 	// --cap-add.
 	for _, drop := range []string{"SYS_NICE", "ALL"} {
 		dropped := worker
 		dropped.CapDrop = []string{drop}
-		assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(dropped), "--cap-add"), drop)
+		assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(buildRunArgs(dropped), "--cap-add"), drop)
 	}
 }
 
 func TestBuildRunArgs_GroupsOnly(t *testing.T) {
 	// Groups without users get no home volume.
 	cfg := defaultRunConfig()
-	cfg.Users = LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}
-	args := BuildRunArgs(cfg)
+	cfg.Users = linuxUsers{Groups: []linuxGroup{{Name: "hpc", GID: 3000}}}
+	args := buildRunArgs(cfg)
 
 	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, ":/home:")
@@ -219,7 +219,7 @@ func TestBuildRunArgs_GroupsOnly(t *testing.T) {
 }
 
 func TestBuildRunArgs_NoUsers(t *testing.T) {
-	args := BuildRunArgs(defaultRunConfig())
+	args := buildRunArgs(defaultRunConfig())
 
 	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, ":/home:")
@@ -239,7 +239,7 @@ func TestNodeRunConfigs_Users(t *testing.T) {
 		{Role: config.RoleWorker, Count: 2},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+	configs := nodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 5)
 	for _, c := range configs {
@@ -259,11 +259,11 @@ func TestPreflightCheck_HomeVolume(t *testing.T) {
 
 	// Without users, sind creates no home volume, so another realm's of
 	// that name is not in the way.
-	require.NoError(t, PreflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()))
+	require.NoError(t, preflightCheck(t.Context(), client, mesh.DefaultRealm, minimalConfig()))
 
 	cfg := minimalConfig()
 	cfg.Users = []config.User{{Name: "alice", UID: 1000}}
-	err := PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg)
+	err := preflightCheck(t.Context(), client, mesh.DefaultRealm, cfg)
 
 	require.ErrorContains(t, err, "volume sind-dev-home")
 }
@@ -320,7 +320,7 @@ func collectUserCalls(calls []mock.Call) *userCalls {
 }
 
 func TestCreate_Users(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, usersCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, usersCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -343,14 +343,14 @@ func TestCreate_TaskAffinity(t *testing.T) {
 	// CAP_SYS_NICE; the controller does not.
 	cfg := createCfg()
 	cfg.Slurm.Main = config.Section{Content: "TaskPlugin=task/cgroup,task/affinity\n"}
-	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
+	m, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{"sind-dev-worker-0": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestCreate_NoUsers(t *testing.T) {
-	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
+	m, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -366,7 +366,7 @@ func TestCreate_NoUsers(t *testing.T) {
 }
 
 func TestCreate_AddUsersFails(t *testing.T) {
-	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if container, steps, ok := setupCall(args); ok && container == "sind-dev-worker-0" && steps["users"] != "" {
 			return failedSetup(t, 1, "useradd: cannot lock /etc/passwd\n", "users"), true
 		}
@@ -377,7 +377,7 @@ func TestCreate_AddUsersFails(t *testing.T) {
 }
 
 func TestCreate_CreateHomesFails(t *testing.T) {
-	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+	_, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 4 && args[4] == createHomesScript {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}, true
 		}
@@ -486,4 +486,16 @@ func TestGetMountPoints_Home(t *testing.T) {
 func TestUsersScript(t *testing.T) {
 	assert.Equal(t, testUsersScript, UsersScript(usersCfg()))
 	assert.Empty(t, UsersScript(createCfg()))
+}
+
+func TestUserNodes(t *testing.T) {
+	cfg := usersCfg()
+	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleSubmitter, Image: "img:1"})
+	assert.Equal(t, []string{"controller", "worker-0", "submitter"}, UserNodes(cfg))
+
+	cfg.Identity.Mode = config.IdentityNSSSlurm
+	assert.Equal(t, []string{"controller", "submitter"}, UserNodes(cfg), "workers resolve users with nss_slurm")
+
+	cfg.Identity.Mode = config.IdentityClientIDs
+	assert.Equal(t, []string{"submitter"}, UserNodes(cfg))
 }

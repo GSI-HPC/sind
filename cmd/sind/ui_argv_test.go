@@ -17,7 +17,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +38,7 @@ func uiActionContext(t *testing.T) action.Context {
 		node("sind", "dev", "worker-0", config.RoleWorker), node("sind", "dev", "worker-1", config.RoleWorker),
 	})
 	st.SetNodes("ci", []cluster.NodeSummary{node("ci", "ci1", "controller", config.RoleController), node("ci", "ci1", "worker-0", config.RoleWorker)})
-	health := &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{probe.ServiceSlurmd: true, probe.ServiceSSHD: true}}
+	health := &cluster.NodeHealth{State: cluster.StateRunning, Services: cluster.ServiceHealth{"slurmd": true, "sshd": true}}
 	st.SetStatus("sind", "dev", &cluster.Status{Nodes: []*cluster.NodeStatus{
 		{Name: "controller.dev", Role: config.RoleController, Managed: true},
 		{Name: "worker-0.dev", Role: config.RoleWorker, Managed: true, Health: health},

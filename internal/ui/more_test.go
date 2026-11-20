@@ -14,7 +14,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -263,7 +262,7 @@ func TestMoreMonitoringHostDNS(t *testing.T) {
 
 	// Without an address of Grafana there is no ssh example.
 	m := *ts.st.Snapshot().Monitorings["sind"]
-	m.Services = []cluster.MonitoringService{{Name: "grafana", Interface: observability.InterfaceWebUI, URL: "http://grafana.sind.sind:3000", State: "running"}}
+	m.Services = []cluster.MonitoringService{{Name: "grafana", Interface: "web UI", URL: "http://grafana.sind.sind:3000", State: "running"}}
 	ts.st.SetMonitoring("sind", &m)
 	ts.st.SetDoctor(nil)
 	body = pgBody(t, ts, "/monitoring", http.StatusOK)

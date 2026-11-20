@@ -313,7 +313,7 @@ The `S` count of `STATUS (R/S/P/T)` includes the `unknown` nodes.
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok` and `ssh_ok` in the JSON output). After a host reboot or a Docker daemon restart they exist but are stopped; `sind power on` starts them again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
 
-When the realm has a [monitoring stack]({{< relref "/guides/monitoring" >}}), `MESH SERVICES` adds its four containers, each with ✓ while the service answers its readiness check, or while its container runs when Grafana, which runs the checks, does not (`grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` in the JSON output, which leaves them out without a stack). A monitored cluster lists its journal mount under `MOUNTS`: the realm's journal volume and the cluster's directory in it, in which each node mounts its own (`"subpath": "dev"` in the JSON output). The JSON output has `"monitoring": true` for a monitored cluster.
+When the realm has a [monitoring stack]({{< relref "/guides/monitoring" >}}), `MESH SERVICES` adds its four containers, each with ✓ while the service answers its readiness check, or while its container runs when Grafana, which runs the checks, does not (`grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` in the JSON output, which leaves them out without a stack). A monitored cluster lists its journal mount under `MOUNTS`: the realm's journal volume and the cluster's directory in it, in which each node mounts its own (`"subpath": "dev"` in the JSON output). The JSON output has `"monitoring": true` for a monitored cluster, and names the cluster's realm in `realm`.
 
 ```
 MESH SERVICES

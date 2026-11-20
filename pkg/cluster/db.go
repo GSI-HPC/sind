@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/probe"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // accountingSQL returns the SQL that creates the accounting database and the

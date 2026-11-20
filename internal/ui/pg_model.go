@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The view models of the main pages. They are built from a snapshot only,
@@ -168,7 +168,7 @@ type pgNode struct {
 	Phase *pgPhase
 	// Slurm is what sinfo says about the node, nil when it does not list
 	// it or was not asked.
-	Slurm *slurm.NodeInfo
+	Slurm *cluster.SlurmNode
 	// Fault is what sind ui read of why the node needs a look, nil for
 	// nothing (pgAttachFaults).
 	Fault *store.Fault
@@ -582,7 +582,7 @@ func pgNodeOf(realm string, ns cluster.NodeSummary, st *cluster.Status) pgNode {
 				n.IP = s.Health.IP
 			}
 			for name, ok := range s.Health.Services {
-				n.Services = append(n.Services, pgSvc{string(name), ok})
+				n.Services = append(n.Services, pgSvc{name, ok})
 			}
 			slices.SortFunc(n.Services, func(a, b pgSvc) int {
 				return slices.Index(pgServiceOrder, a.Name) - slices.Index(pgServiceOrder, b.Name)

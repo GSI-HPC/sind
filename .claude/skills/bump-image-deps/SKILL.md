@@ -13,7 +13,8 @@ libjwt, which published no release tarball for 1.18.4, by version and git commit
 Slurm's version and checksum are build args without defaults; `SLURM_RELEASES` in
 `docker-bake.hcl` sets them for each image, one entry per supported release line,
 newest line first. The first entry is also tagged `latest`, the default image of
-builds from source, and at each sind release `vX.Y.Z`, the release binaries' default.
+sind built from a commit between releases, and at each sind release `vX.Y.Z`, the
+default of sind built from that release (its binaries, `go install`, library callers).
 
 | Component | ARG | Tarball URL |
 |-----------|-----|-------------|
@@ -24,26 +25,27 @@ builds from source, and at each sind release `vX.Y.Z`, the release binaries' def
 | Open MPI | `OMPI_VERSION` | `https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-${V}.tar.bz2` |
 | libjwt | `LIBJWT_VERSION`, `LIBJWT_COMMIT` | tag `v${V}` of `https://github.com/benmcollins/libjwt.git`; `LIBJWT_COMMIT` is the commit it points to (`git ls-remote https://github.com/benmcollins/libjwt 'v${V}^{}'`). Stay on 1.x: Slurm's auth/slurm uses the 1.x API, which libjwt 3 dropped |
 
-The realm mesh's DNS image is not part of the node image: `DNSImage` in
+The realm mesh's DNS image is not part of the node image: `dnsImage` in
 `pkg/mesh/mesh.go` pins `coredns/coredns:<version>`. Bump it on its own, check the
 release notes for Corefile or `SIGUSR1` reload changes, and update the tag in
 `DESIGN.md`, `docs/content/architecture/docker-resources.md` and
 `docs/content/getting-started/installation.md`.
 
 The monitoring stack's images are not part of the node image either: `GrafanaImage`,
-`PrometheusImage`, `LokiImage` and `AlloyImage` in `pkg/observability/observability.go`
+`PrometheusImage`, `LokiImage` and `AlloyImage` in `internal/observability/observability.go`
 pin `grafana/grafana`, `prom/prometheus`, `grafana/loki` and `grafana/alloy`. Bump each
 one on its own, in a commit of its own, and read its release notes for changes to what
 sind generates or relies on: Alloy's configuration syntax and components
-(`pkg/observability/alloy.go`, golden file `testdata/sind.alloy`), Prometheus's flags and
+(`internal/observability/alloy.go`, golden file `testdata/sind.alloy`), Prometheus's flags and
 remote-write receiver, Loki's configuration, and Grafana's environment variables,
 provisioning, bundled datasource plugins, anonymous access and dashboard JSON. Keep
 Grafana on the standard image (not `-slim`) and no variant suffix on any of them. A bump
 changes the stack's fingerprint, so existing stacks are recreated at the next monitored
 create. The monitoring integration test, `TestMonitoring` in
 `pkg/cluster/monitoring_integration_test.go`, is the real check (CI, as it needs Docker);
-`.github/workflows/ci.yml` reads the four `<Name>Image = "<image>"` lines with `sed`
-to pull the images from Google's mirror, so keep that form.
+`.github/workflows/ci.yml` pulls the images that `go run ./tools/images` prints from
+Google's mirror, and `.github/scripts/image-updates.sh` reads the four
+`<Name>Image = "<image>"` lines, so keep that form.
 Update the tag in `DESIGN.md` (the Monitoring Stack table),
 `docs/content/architecture/docker-resources.md` and the offline preload list in
 `docs/content/getting-started/installation.md`, and Grafana's also in the
@@ -53,7 +55,7 @@ update the series under "Supported Versions" in `DESIGN.md`, which a grep for th
 tag does not find.
 
 sind discovers the Slurm version from the image at runtime (`slurmctld -V` in an
-ephemeral container, see `pkg/slurm/version.go`), so a bump needs no Go code changes,
+ephemeral container, see `internal/slurm/version.go`), so a bump needs no Go code changes,
 only the files below. With Docker, `docker run --rm <new image> slurmctld -V` must print
 `slurm <X.Y.Z>`.
 
@@ -65,7 +67,7 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
    Bump each entry within its release line. Add a release line only when an issue
    asks for it: insert it as the first entry, since that one becomes `latest` (and, at
    the next sind release, `vX.Y.Z`, the release binaries' default image), and
-   review the generated `slurm.conf` and `cgroup.conf` (`pkg/slurm/config.go`) and the
+   review the generated `slurm.conf` and `cgroup.conf` (`internal/slurm/config.go`) and the
    Dockerfile's `configure` flags against its `RELEASE_NOTES.md`. Dropping a line
    removes its entry; its published tags stay but are no longer rebuilt. Adding or
    dropping a line also updates the release lines listed in `README.md` and under
@@ -107,7 +109,7 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
      The grep is the list. For Slurm it finds `DESIGN.md`, pages under `docs/content/`,
      the terminal output of the quickstart episode (`video/episodes/quickstart/index.html`;
      then `npm run episode -- check quickstart` in `video/`), the web UI's demo
-     (`internal/ui/demo/`) and tests in `cmd/sind`, `pkg/cluster`, `pkg/slurm` and
+     (`internal/ui/demo/`) and tests in `cmd/sind`, `pkg/cluster`, `internal/slurm` and
      `internal/ui`. For Slurm, grep for the release line too (e.g.
      `grep -rnE '26\.05\.[0-9]+' --exclude-dir=.git .`): it finds a version that an
      earlier bump left behind, which the grep for the old version misses.

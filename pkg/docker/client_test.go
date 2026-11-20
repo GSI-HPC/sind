@@ -276,9 +276,9 @@ func TestClient_WaitingCallEndsWithContext(t *testing.T) {
 }
 
 func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
-	// With a slot free, the command runs and the executor reports the
-	// ended context, as it did before the bound.
-	var m mock.Executor
+	// With a slot free, the command reaches the executor, as it did
+	// before the bound; this one answers it although its context ended.
+	m := mock.Executor{IgnoreContext: true}
 	m.AddResult("27.0.0\n", "", nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -289,7 +289,7 @@ func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
 
 func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
 	e := newBlockingExecutor()
-	c := &Client{Executor: e, Command: "docker"}
+	c := &Client{Executor: e}
 	var wg sync.WaitGroup
 	for range MaxConcurrentCalls + 1 {
 		wg.Go(func() { _, _, _ = c.run(t.Context(), "version") })
@@ -412,4 +412,58 @@ func TestClient_TracesEveryCommand(t *testing.T) {
 
 	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="stop `+string(testContainerName)+`"`), buf.String())
 	assert.Equal(t, 1, strings.Count(buf.String(), `cmd="exec -i `+string(testContainerName)+` cat"`), buf.String())
+}
+
+// TestNewExitErrorRecognised checks that the error of an Executor that runs
+// no local process, made with cmdexec.NewExitError, is read as the docker
+// CLI's: a missing resource, and a non-zero exit of the command docker exec
+// ran.
+func TestNewExitErrorRecognised(t *testing.T) {
+	stderr := "Error response from daemon: No such container: sind-dev-controller\n"
+	var m mock.Executor
+	m.AddResult("", stderr, cmdexec.NewExitError(1, stderr))
+	m.AddResult("inactive\n", "", cmdexec.NewExitError(3, ""))
+	c := NewClient(&m)
+
+	_, err := c.InspectContainer(t.Context(), "sind-dev-controller")
+	assert.True(t, IsNotFound(err))
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+	require.NoError(t, err)
+	assert.Equal(t, "inactive\n", stdout)
+	m.AssertDone(t)
+}
+
+// TestClient_Command checks that a Client runs the docker CLI that
+// WithCommand names, for its commands and its streams, and "docker" without
+// it, also as a Client literal.
+func TestClient_Command(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("27.0.0\n", "", nil)
+	m.AddResult("27.0.0\n", "", nil)
+	m.AddResult("27.0.0\n", "", nil)
+	m.OnStart = func([]string) mock.StreamResult {
+		return mock.StreamResult{Reader: io.NopCloser(strings.NewReader(""))}
+	}
+
+	custom := NewClient(&m, WithCommand("/opt/docker/bin/docker"))
+	assert.Equal(t, "/opt/docker/bin/docker", custom.Command())
+	_, _, err := custom.run(t.Context(), "version")
+	require.NoError(t, err)
+	proc, err := custom.Start(t.Context(), "events")
+	require.NoError(t, err)
+	require.NoError(t, proc.Close())
+
+	for _, c := range []*Client{NewClient(&m), {Executor: &m}} {
+		assert.Equal(t, "docker", c.Command())
+		_, _, err := c.run(t.Context(), "version")
+		require.NoError(t, err)
+	}
+	names := make([]string, 0, len(m.Calls))
+	for _, call := range m.Calls {
+		names = append(names, call.Name)
+	}
+	assert.Equal(t, []string{"/opt/docker/bin/docker", "/opt/docker/bin/docker", "docker", "docker"}, names,
+		"version and events with WithCommand, then version twice without")
+	m.AssertDone(t)
 }

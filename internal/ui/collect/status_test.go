@@ -147,12 +147,16 @@ func TestStatusReadsAfterAnEventOfItsCluster(t *testing.T) {
 	f.fake.settle()
 
 	// Many events of one cluster make one read, after the delay.
-	n := f.reads()
+	n, sent := f.reads(), time.Now()
 	for range 5 {
 		f.bus.Notify(Event{Kind: KindChange, Realm: "sind", Cluster: "dev"})
 	}
 	time.Sleep(20 * time.Millisecond)
-	assert.Equal(t, n, f.reads(), "not at once")
+	// The read waits for the delay, which a slow runner may have let
+	// pass by now.
+	if reads := f.reads(); time.Since(sent) < f.status.After {
+		assert.Equal(t, n, reads, "not at once")
+	}
 	waitFor(t, "read", func() bool { return f.reads() > n })
 	f.fake.settle()
 	assert.Equal(t, n+1, f.reads(), "one read, and none of prod or ci")

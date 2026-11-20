@@ -32,20 +32,20 @@ const (
 // AllVolumeTypes lists the cluster volume types in creation order.
 var AllVolumeTypes = []VolumeType{VolumeConfig, VolumeMunge, VolumeData, VolumeState, VolumeHome}
 
-// Resources holds the Docker resources belonging to a cluster.
-type Resources struct {
+// clusterResources holds the Docker resources belonging to a cluster.
+type clusterResources struct {
 	Containers    []docker.ContainerListEntry
 	Network       docker.NetworkName
 	NetworkExists bool
 	Volumes       []docker.VolumeName
 }
 
-// ListClusterResources discovers all Docker resources belonging to the named cluster.
+// listClusterResources discovers all Docker resources belonging to the named cluster.
 // Containers are found by label filter; network and volumes are checked by name
 // convention and skipped when their labels name another realm or cluster.
 // The three lookups run concurrently.
-func ListClusterResources(ctx context.Context, client *docker.Client, realm, clusterName string) (*Resources, error) {
-	res := &Resources{
+func listClusterResources(ctx context.Context, client *docker.Client, realm, clusterName string) (*clusterResources, error) {
+	res := &clusterResources{
 		Network: NetworkName(realm, clusterName),
 	}
 
@@ -193,7 +193,7 @@ func sortedClusterNames(names []string) []string {
 	return slices.DeleteFunc(slices.Compact(names), func(n string) bool { return n == "" })
 }
 
-// HasOtherClusters checks whether any sind cluster containers exist besides
+// hasOtherClusters checks whether any sind cluster containers exist besides
 // the named cluster. This is used to decide whether to clean up mesh
 // infrastructure after deleting a cluster.
 //
@@ -204,7 +204,7 @@ func sortedClusterNames(names []string) []string {
 // and the monitoring stack's containers have no realm label for this
 // reason: they carry only the Compose labels of <realm>-mesh, by which
 // ownContainer knows them.
-func HasOtherClusters(ctx context.Context, client *docker.Client, realm, clusterName string) (bool, error) {
+func hasOtherClusters(ctx context.Context, client *docker.Client, realm, clusterName string) (bool, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return false, fmt.Errorf("listing containers: %w", err)

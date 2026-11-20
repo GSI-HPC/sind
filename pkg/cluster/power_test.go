@@ -615,7 +615,7 @@ func TestPower_Restart(t *testing.T) {
 
 			// Nodes that all fail to go down: no start, and no mesh call.
 			m, err = run(func(args []string) bool { return args[0] == op.docker }, "worker-0")
-			require.Error(t, err)
+			require.ErrorContains(t, err, op.verb+" sind-dev-worker-0: "+op.docker+" failed")
 			assert.Len(t, m.Calls, 2, "ps and "+op.docker)
 
 			_, err = run(func(args []string) bool { return args[0] == "start" }, "worker-0")
@@ -655,7 +655,7 @@ func TestPower_Helper(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"config-helper"})
 	require.ErrorIs(t, err, ErrNodeNotFound)
-	err = WaitNodes(t.Context(), client, mesh.DefaultRealm, "dev", []string{"config-helper"}, 0, time.Millisecond)
+	err = WaitNodes(t.Context(), client, mesh.DefaultRealm, "dev", []string{"config-helper"}, WaitOptions{Interval: time.Millisecond})
 	require.ErrorIs(t, err, ErrNodeNotFound)
 }
 
@@ -663,6 +663,7 @@ func TestPower_Helper(t *testing.T) {
 
 func TestPowerLifecycle(t *testing.T) {
 	t.Parallel()
+	testutil.SkipWithoutDocker(t)
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	realm := testutil.Realm("it-pwr")
@@ -670,52 +671,6 @@ func TestPowerLifecycle(t *testing.T) {
 	cluster := "it-pwr"
 	ctrName := ContainerName(realm, cluster, "worker-0")
 
-	if !rec.IsIntegration() {
-		// Create container with labels
-		rec.AddResult("ctr-id\n", "", nil)
-
-		// Each power op: ListContainers (resolve targets) + the operation
-		// itself. Starting ops first look for the realm's mesh, which
-		// this test has none of.
-		psLine := `{"ID":"ctr-id","Names":"` + string(ctrName) + `","State":"running","Image":"busybox:latest","Labels":"sind.cluster=` + cluster + `,sind.role=worker"}` + "\n"
-		noMesh := func() {
-			rec.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))
-			rec.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
-		}
-
-		// PowerShutdown: ps + stop
-		rec.AddResult(psLine, "", nil)
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-
-		// PowerOn: ps + mesh + start
-		rec.AddResult(psLine, "", nil)
-		noMesh()
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-
-		// PowerFreeze: ps + pause
-		rec.AddResult(psLine, "", nil)
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-
-		// PowerUnfreeze: ps + unpause
-		rec.AddResult(psLine, "", nil)
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-
-		// PowerReboot: ps + stop + mesh + start
-		rec.AddResult(psLine, "", nil)
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-		noMesh()
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-
-		// PowerCycle: ps + kill + mesh + start
-		rec.AddResult(psLine, "", nil)
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-		noMesh()
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-
-		// Cleanup: kill + rm
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-		rec.AddResult(string(ctrName)+"\n", "", nil)
-	}
 	t.Cleanup(func() {
 		bg := context.Background()
 		_ = c.KillContainer(bg, ctrName)

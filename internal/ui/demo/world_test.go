@@ -8,15 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 func seededStore(t *testing.T) (*World, *store.Store) {
@@ -31,7 +33,7 @@ func seededStore(t *testing.T) (*World, *store.Store) {
 func slurmdUp(st *store.Store) bool {
 	for _, n := range st.Snapshot().Status("sind", "dev").Nodes {
 		if n.Name == "worker-4.dev" {
-			return n.Health.Services[probe.ServiceSlurmd]
+			return n.Health.Services["slurmd"]
 		}
 	}
 	return false
@@ -84,12 +86,12 @@ func TestSeeded(t *testing.T) {
 	assert.Equal(t, []string{"gitlab-runner", "kind-control-plane", "my-app", "postgres-test"}, names(ciOut))
 	assert.Equal(t, store.Outside{Name: "kind-control-plane", Image: "kindest/node:v1.31.0", State: "running", Status: "Up 5 hours", Networks: []string{"kind", "sind-mesh"}}, ciOut[1],
 		"a container on the mesh of another realm is on its network")
-	assert.Equal(t, "sind-mesh", m.Info.Network)
-	assert.Equal(t, mesh.DNSImage, m.Info.DNSImage)
+	assert.Equal(t, docker.NetworkName("sind-mesh"), m.Info.Network)
+	assert.Equal(t, mesh.DNSImage(), m.Info.DNSImage)
 	assert.Equal(t, imageNew, m.Info.SSHImage)
 	assert.Len(t, m.Records, 11+2+3)
 	ci := sn.Meshes["ci"]
-	assert.Equal(t, "ci-mesh", ci.Info.Network)
+	assert.Equal(t, docker.NetworkName("ci-mesh"), ci.Info.Network)
 
 	status := sn.Status("sind", "dev")
 	require.NotNil(t, status)
@@ -98,7 +100,7 @@ func TestSeeded(t *testing.T) {
 	for _, n := range status.Nodes {
 		for s, ok := range n.Health.Services {
 			if !ok {
-				down = append(down, n.Name+" "+string(s))
+				down = append(down, n.Name+" "+s)
 			}
 		}
 		if n.Name == "controller-backup.dev" {
@@ -140,9 +142,9 @@ func TestWorld_Lifecycle(t *testing.T) {
 
 	apply(opStart, "w0")
 	assert.Equal(t, cluster.StateRunning, state()["w0.new.sind.sind"])
-	assert.False(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services[probe.ServiceSlurmd], "no services yet")
+	assert.False(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services["slurmd"], "no services yet")
 	apply(opReady, "w0")
-	assert.True(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services[probe.ServiceSlurmd])
+	assert.True(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services["slurmd"])
 	apply(opPause, "w0")
 	assert.Equal(t, cluster.StatePaused, state()["w0.new.sind.sind"])
 	apply(opUnpause, "w0")

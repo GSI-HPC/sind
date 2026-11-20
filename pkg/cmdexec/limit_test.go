@@ -7,16 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOutputLimit(t *testing.T) {
-	assert.Zero(t, OutputLimit(t.Context()))
-	assert.Equal(t, 64, OutputLimit(WithOutputLimit(t.Context(), 64)))
 	assert.IsType(t, &bytes.Buffer{}, newOutput(t.Context()))
-	assert.Equal(t, &headTail{half: 32}, newOutput(WithOutputLimit(t.Context(), 64)))
-	assert.Equal(t, &headTail{half: 1}, newOutput(WithOutputLimit(t.Context(), 1)))
+	assert.Equal(t, &headTail{half: 32}, newOutput(execopt.WithOutputLimit(t.Context(), 64)))
+	assert.Equal(t, &headTail{half: 1}, newOutput(execopt.WithOutputLimit(t.Context(), 1)))
 }
 
 func TestHeadTail(t *testing.T) {

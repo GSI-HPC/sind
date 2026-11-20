@@ -34,6 +34,50 @@ jobs:
         with:
           version: v2.15.0
 
+      # The files behind //go:build integration, which the run above
+      # leaves out, as it leaves out those behind !integration.
+      - name: Lint the integration build
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          args: --build-tags integration
+
+  # actionlint on the workflows, with shellcheck on their run steps, and
+  # shellcheck on the scripts of the repository. The image and the nightly
+  # workflows do not run for a pull request, so this is their only check
+  # before the merge.
+  lint-ci:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Lint the workflows and the shell scripts
+        run: make lint-ci
+
+  # TLC on the TLA+ models of spec/tla: each configuration must give the
+  # result that it expects. The runner image has Java; the script fetches
+  # the release of the TLA+ tools that it pins and checks its sha256.
+  models:
+    name: Design Models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the models
+        run: make check-models
+
   # markdownlint-cli2 on docs/content, at the version that the Makefile
   # pins and with the rules of .markdownlint.json, on the runner's Node.
   lint-docs:
@@ -138,6 +182,29 @@ jobs:
       - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
+  # The go line of go.mod is the oldest Go a library caller may build sind
+  # with; the toolchain line, which the other jobs use, does not reach
+  # them. Build and vet the public packages, tests included, with it.
+  oldest-go:
+    name: Oldest Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build and vet pkg/ with the go line of go.mod
+        run: |
+          GOTOOLCHAIN=go$(sed -n 's/^go //p' go.mod)
+          export GOTOOLCHAIN
+          go version
+          go build ./pkg/...
+          go vet ./pkg/...
+
   image-targets:
     name: Image Targets
     runs-on: ubuntu-latest
@@ -187,9 +254,10 @@ jobs:
           sysctl fs.inotify.max_user_instances
           sudo sysctl -w fs.inotify.max_user_instances=8192
 
-      # The integration tests skip when the host lacks sind's prerequisites;
-      # fail here instead so a runner change cannot turn this job green.
-      # inotify is only a warning for sind, but the tests need it to pass.
+      # The integration tests fail when the host lacks sind's prerequisites,
+      # under SIND_TEST_REQUIRE_DOCKER; fail here first, with sind's own
+      # words. inotify is only a warning for sind, but the tests need it to
+      # pass.
       - name: Check prerequisites
         run: |
           go run ./cmd/sind doctor
@@ -223,25 +291,16 @@ jobs:
 
       # Docker Hub rate-limits anonymous pulls per IP, which the runners
       # share, and then refuses the Docker Hub images the tests run, the
-      # mesh's CoreDNS (pkg/mesh DNSImage), the monitoring stack's four
-      # (pkg/observability) and busybox, with toomanyrequests. A
+      # mesh's CoreDNS and the monitoring stack's four, which
+      # tools/images prints, and busybox, with toomanyrequests. A
       # registry-mirrors entry in daemon.json was not used for those pulls,
       # so pull them from Google's mirror of Docker Hub and tag them with
       # their Docker Hub names: present locally, nothing pulls them again.
       - name: Pull the tests' Docker Hub images from mirror.gcr.io
         run: |
-          dns=$(sed -n 's/^const DNSImage = "\(.*\)"$/\1/p' pkg/mesh/mesh.go)
-          if [ -z "$dns" ]; then
-            echo "::error::no DNSImage constant in pkg/mesh/mesh.go"
-            exit 1
-          fi
-          stack=$(sed -n 's/^\t[A-Za-z]*Image *= "\(.*\)"$/\1/p' pkg/observability/observability.go)
-          if [ "$(echo "$stack" | wc -w)" -ne 4 ]; then
-            echo "::error::expected four image constants in pkg/observability/observability.go, found: $stack"
-            exit 1
-          fi
+          images=$(go run ./tools/images)
           # shellcheck disable=SC2086 # one word per image
-          for image in "$dns" $stack busybox:latest; do
+          for image in $images busybox:latest; do
             case "$image" in
               */*) path=$image ;;
               *) path=library/$image ;;
@@ -262,7 +321,24 @@ jobs:
         run: make test-integration
         env:
           SIND_TEST_IMAGE: local/sind-node:ci
+          SIND_TEST_REQUIRE_DOCKER: "1"
           GOTEST: gotestsum --junitfile integration-tests.xml --
+
+      # A test removes what it made, and so does sind: after a suite that
+      # passed, Docker holds nothing with a sind label. A leftover is a
+      # test without cleanup, or a delete that leaves a resource behind.
+      - name: Check for leftover sind resources
+        run: |
+          left=$(
+            docker ps -a --filter label=sind.realm --format 'container {{.Names}}'
+            docker network ls --filter label=sind.realm --format 'network {{.Name}}'
+            docker volume ls --filter label=sind.realm --format 'volume {{.Name}}'
+          )
+          if [[ -n "$left" ]]; then
+            echo "::error::the integration tests left sind resources behind"
+            echo "$left"
+            exit 1
+          fi
 
       - name: Test report
         uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0

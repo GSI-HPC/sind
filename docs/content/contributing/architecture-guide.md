@@ -11,13 +11,12 @@ toc: true
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
   ├── root.go      Root command, persistent --realm, --progress, --progress-log and -v flags, TraverseChildren, the strict tree (go-clikit's cobratree)
-  ├── context.go   Dependency injection via context; --realm flag glue for cluster.ResolveRealm
+  ├── context.go   Dependency injection via context; --realm flag glue for envvar.ResolveRealm
   ├── exitcode.go  Exit statuses, the words of flag value errors and the usage line of argument errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
-  ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json; SIND_OUTPUT)
   ├── progress.go  Progress of create, delete, connect, disconnect and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
@@ -34,9 +33,15 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
 
-internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI, pkg/cluster and sind ui read them through it
+internal/envvar/   The names of the SIND_* environment variables and Lookup, which takes an empty variable for one that is not set; the CLI and sind ui read them through it. ResolveRealm (--realm > SIND_REALM > config > default) and ResolveCluster (argument > SIND_CLUSTER > config > default)
 
-internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
+internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and internal/ssh's ssh_config host names
+
+internal/execopt/  The options that sind's packages give cmdexec.OSExecutor in the context of a call
+  ├── execopt.go   WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup, WithStopGrace, WithOrphanSafe, WithStarted, WithEnv and WithOutputLimit for the commands of the CLI and sind ui
+  └── terminal.go  WithTerminal: a command's stdout is a pseudo-terminal, as docker pull writes its byte counts only there; TerminalLines turns what it draws there into plain lines
+
+internal/nodecmd/  The docker command lines of ssh, enter, exec and logs, and of the log views of sind ui (BuildSSHArgs, BuildContainerExecArgs, ContainerLogArgs, ServiceLogArgs)
 
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
 
@@ -57,15 +62,18 @@ internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fra
   ├── demo/        --demo: made-up clusters and commands that write event logs in memory
   └── web/         Embedded templates, CSS and JavaScript (htmx comes from go-clikit's localweb/htmx)
 
+internal/fakedocker/ A stateful stand-in for dockerd that the unit tests of several packages share: Daemon keeps networks and answers network create, inspect and rm, the commands of the realm lock's daemon part (pkg/state, cmd/sind)
+
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE), TarModes, WithoutCalls
   ├── client.go    NewClient, Realm (unit test variants)
-  └── client_integration.go NewClient, Realm (integration test variants)
+  ├── client_integration.go NewClient, Realm (integration test variants)
+  ├── itest/       What every package's integration tests share, pkg/docker's too: RequireDocker (docker info, once per process), Unavailable (skip, or fail under SIND_TEST_REQUIRE_DOCKER), RunID
+  └── prereq/      Check: sind's prerequisites on the host (Docker version, cgroup v2 with nsdelegate), for the tests that create clusters
 
 pkg/cmdexec/       Command executor abstraction
-  ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
-  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup: a cancel kills the command's process group
-  ├── terminal.go  WithTerminal: a command's stdout is a pseudo-terminal, as docker pull writes its byte counts only there; TerminalLines turns what it draws there into plain lines
+  ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call, and follows the options of internal/execopt)
+  ├── limit.go     The head and tail of a command's output that Run keeps under execopt.WithOutputLimit
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
@@ -95,8 +103,6 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── wait.go      WaitNodes: the --wait of the power commands that start nodes
   ├── ha.go        Controller pair (backup controller) position and control state
-  ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
-  ├── clustername.go Cluster resolution (ResolveCluster: argument > SIND_CLUSTER > config > default)
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
@@ -112,87 +118,130 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── discovery.go Cluster/node discovery queries, VolumeType
   ├── external.go  External containers on the mesh: connect, disconnect, and their connection to new clusters
   ├── resources.go Resource creation helpers
-  ├── types.go     Shared types (Cluster, Node, State)
-  ├── ssh.go       ssh/enter/exec arg building and target selection
-  ├── logs.go      Log command arg building
+  ├── types.go     Shared types (State)
+  ├── ssh.go       EnterTarget: the node and directory of enter and exec
+  ├── logs.go      NodeServices: the units whose journal logs shows
   ├── dns.go       Node DNS names and search domain
   ├── naming.go    Resource naming conventions
   ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan), joinFailures, WithPanicLog
   ├── rollback.go  The rollback step of a failed Create or WorkerAdd
+  ├── sshexport.go ExportSSHConfig: the realm's SSH config export in the state directory (internal/ssh)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, the daemon's mode, where the daemon runs,
-                   cgroupv2 and the nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS) and the names of its resources (RealmNames)
-pkg/monitor/       Event-driven Docker and systemd watchers for readiness
-pkg/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
+pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock
+                   network on the daemon) that library callers of Create, CreateInRealm, Delete,
+                   DeleteAll, WorkerAdd, WorkerRemove, Connect, Disconnect, PowerOn, PowerReboot
+                   and PowerCycle hold; Holder reads who holds it
+
+internal/doctor/   Host prerequisite checks (Docker version, the daemon's mode, where the daemon runs,
+                   cgroupv2 and the nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
+internal/monitor/  Event-driven Docker and systemd watchers for readiness
+internal/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
                    configuration, Alloy config generation, dashboards
-pkg/probe/         Node readiness probes
-pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
+internal/probe/    Node readiness probes
+internal/slurm/    Slurm and slurmdbd config generation, sind-nodes.conf editing, version
                    discovery and image probe (ProbeImage), sinfo parsing, munge key, slurm.key
                    and jwt_hs256.key generation, sacctmgr account commands
-pkg/ssh/           SSH key injection, host key collection, ssh_config export
-pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock
-                   network on the daemon) that library callers of Create, Delete, DeleteAll,
-                   WorkerAdd, WorkerRemove, Connect, Disconnect, PowerOn, PowerReboot and
-                   PowerCycle hold; Holder reads who holds it
+internal/ssh/      SSH key injection, host key collection, ssh_config export (ExportConfig, RemoveExport, ExportFiles)
+
+internal/archdoc/  The test that keeps the dependency flow below in step with the imports
+
+tools/images/      Prints the pinned images of the mesh and the monitoring stack, which CI pulls from a mirror
 ```
 
 ## Dependency flow
 
+Each package of the module, and the packages of the module that its non-test files import (the public ones under `pkg/` first): the commands, then the public packages, then the internal ones. No package under `pkg/` imports `internal/ui`, `cmd/` or `tools/`.
+
 ```
-cmd/sind → pkg/cluster → pkg/cmdexec
-                       → internal/detach
-                       → internal/envvar
-                       → internal/natsort
-                       → pkg/config  → internal/hostname
-                       → pkg/docker  → pkg/cmdexec
-                                     → pkg/log
-                       → pkg/doctor  → pkg/docker
-                                     → pkg/cmdexec
-                                     → pkg/config
-                                     → pkg/log
-                                     → pkg/mesh
-                       → pkg/log
-                       → pkg/mesh    → pkg/docker
-                                     → pkg/cmdexec
-                                     → pkg/config
-                                     → pkg/log
-                                     → internal/detach
-                                     → internal/natsort
-                       → pkg/monitor → pkg/docker
-                                     → pkg/cmdexec
-                                     → pkg/log
-                       → pkg/observability → pkg/config
-                                           → pkg/docker
-                                           → pkg/log
-                                           → pkg/mesh
-                                           → pkg/probe
-                       → pkg/probe   → pkg/docker
-                                     → pkg/config
-                                     → pkg/log
-                                     → pkg/monitor
-                       → pkg/slurm   → pkg/docker
-                                     → pkg/config
-                       → pkg/ssh     → pkg/docker
-                                     → internal/hostname
-                       → pkg/state   → pkg/docker
-                                     → pkg/log
-         → pkg/doctor
-         → pkg/observability
-         → pkg/state
-         → github.com/GSI-HPC/go-clikit/cobratree
-         → github.com/GSI-HPC/go-clikit/termtext
-         → github.com/GSI-HPC/go-nodeset
+cmd/sind
+  → pkg/cluster pkg/cmdexec pkg/config pkg/docker pkg/log pkg/mesh pkg/state
+  → internal/doctor internal/envvar internal/execopt internal/help internal/mcpconfig
+  → internal/nodecmd internal/observability internal/ui internal/ui/collect
+tools/images
+  → pkg/mesh internal/observability
+pkg/cluster
+  → pkg/cmdexec pkg/config pkg/docker pkg/log pkg/mesh pkg/state internal/detach
+  → internal/doctor internal/monitor internal/natsort internal/observability
+  → internal/probe internal/slurm internal/ssh
+pkg/cmdexec
+  → internal/execopt
+pkg/config
+  → internal/hostname
+pkg/docker
+  → pkg/cmdexec pkg/log internal/execopt
+pkg/log
+pkg/mesh
+  → pkg/cmdexec pkg/config pkg/docker pkg/log internal/detach internal/natsort
+pkg/state
+  → pkg/config pkg/docker pkg/log
+internal/archdoc
+internal/detach
+internal/doctor
+  → pkg/cmdexec pkg/config pkg/docker pkg/log pkg/mesh
+internal/envvar
+  → pkg/config pkg/mesh
+internal/execopt
+internal/fakedocker
+  → pkg/docker internal/mock internal/testutil
+internal/help
+internal/hostname
+internal/mcpconfig
+internal/mock
+  → pkg/cmdexec internal/execopt
+internal/monitor
+  → pkg/cmdexec pkg/docker pkg/log
+internal/natsort
+internal/nodecmd
+  → pkg/cluster pkg/docker pkg/mesh
+internal/observability
+  → pkg/config pkg/docker pkg/log pkg/mesh internal/hostname internal/probe
+  → internal/slurm
+internal/probe
+  → pkg/config pkg/docker pkg/log internal/monitor internal/slurm
+internal/slurm
+  → pkg/config pkg/docker
+internal/ssh
+  → pkg/docker pkg/mesh internal/hostname
+internal/testutil
+  → pkg/docker internal/mock
+internal/testutil/itest
+  → pkg/cmdexec
+internal/testutil/prereq
+internal/ui
+  → pkg/cluster pkg/cmdexec pkg/config pkg/docker pkg/log pkg/mesh pkg/state
+  → internal/execopt internal/help internal/natsort internal/nodecmd
+  → internal/observability internal/probe internal/slurm internal/ui/action
+  → internal/ui/activity internal/ui/collect internal/ui/demo internal/ui/nodefold
+  → internal/ui/run internal/ui/store
+internal/ui/action
+  → pkg/cluster pkg/config pkg/mesh internal/doctor internal/natsort internal/probe
+  → internal/slurm internal/ui/nodefold internal/ui/store
+internal/ui/activity
+  → internal/ui/nodefold internal/ui/store
+internal/ui/collect
+  → pkg/cluster pkg/config pkg/docker pkg/mesh pkg/state internal/doctor
+  → internal/envvar internal/ui/store
+internal/ui/demo
+  → pkg/cluster pkg/cmdexec pkg/config pkg/docker pkg/mesh pkg/state
+  → internal/observability internal/probe internal/slurm internal/ui/action
+  → internal/ui/activity internal/ui/run internal/ui/store
+internal/ui/nodefold
+  → pkg/cluster
+internal/ui/run
+  → pkg/cmdexec internal/envvar internal/execopt internal/ui/store
+internal/ui/store
+  → pkg/cluster pkg/config pkg/mesh pkg/state internal/natsort internal/slurm
 ```
 
-`cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh` and `pkg/ssh` directly, and `internal/envvar`, `internal/help`, `internal/mcpconfig`, `internal/ui` (`sind ui`) and `internal/ui/collect` (the bounds of its `--monitoring-interval`).
+The block is the imports of the default build. The test of `internal/archdoc` fails when it differs from the code, and its message is the block to put here.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks (`doctor.Run`) directly from `cmd/sind` (no cluster orchestration; `cmd/sind/doctor.go` only writes the result with go-clikit's `doctor` package, whose `Check` is the type of the checks); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), writes files whole (editor configurations, the MCP stream's token, the configs of `sind ui`) with its `fsutil` package, and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack, with the options of its calls in `internal/execopt`. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `internal/doctor` runs host prerequisite checks (`doctor.Run`) for `cmd/sind` and `sind ui` (no cluster orchestration; `cmd/sind/doctor.go` only writes the result with go-clikit's `doctor` package, whose `Check` is the type of the checks); `pkg/cluster` uses its daemon checks and nsdelegate probe (`CheckDaemon`, `CheckNsdelegate`). `internal/ui` and its subpackages read the realms through `pkg/cluster`, `pkg/mesh` and `pkg/state` (`collect`), keep them in snapshots (`store`), and run the commands of their dialogs as `sind` child processes (`action`, `run`). `internal/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock`, `internal/fakedocker` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), writes files whole (editor configurations, the MCP stream's token, the configs of `sind ui`) with its `fsutil` package, and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
-The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
+The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `internal/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
 ## Adding a new CLI command
 
@@ -239,7 +288,7 @@ type Executor interface {
 }
 ```
 
-`pkg/docker` uses an executor for Docker CLI calls. `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl, pkcheck). The CLI wraps the mesh executor in a `LoggingExecutor` to emit TRACE-level logs for system commands.
+`pkg/docker` uses an executor for Docker CLI calls. `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl, pkcheck). `mesh.NewHostManager`, the manager of the CLI and `sind ui`, wraps it in a `LoggingExecutor` to emit TRACE-level logs for system commands, and turns on host DNS; `mesh.NewManager`, a library caller's, does neither.
 
 One is `dockerExec` in `cmd/sind/ssh.go`, used by `ssh`, `enter`, `exec` and `logs`. It runs `docker` through `os/exec` with the terminal's stdin, stdout and stderr attached, because `Executor` only captures output, and unlike the calls through `docker.Client` it logs no TRACE line. Its unit tests cannot use `mock.Executor`: they put the test binary first on `PATH` as a fake `docker`, controlled by the `SIND_TEST_DOCKER_*` variables in `cmd/sind/main_test.go`.
 
@@ -247,15 +296,15 @@ The other is the browser that `sind ui --open` opens: go-clikit's `localweb/laun
 
 ### Context-based dependency injection
 
-The CLI layer injects dependencies via Go context:
+The CLI reads its dependencies from the Go context, which holds the production ones unless a test put others there:
 
 ```go
-ctx = withClient(ctx, client)
-ctx = withMeshMgr(ctx, meshMgr)
-ctx = sindlog.With(ctx, logger)     // injected by PersistentPreRunE
+client := clientFrom(ctx)                  // docker.NewClient(&cmdexec.OSExecutor{}) by default
+meshMgr := meshMgrFrom(ctx, client, realm) // mesh.NewHostManager(client, realm) by default
+fs := fsFrom(ctx)                          // afero.NewOsFs() by default
 ```
 
-Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`. The logger is injected automatically by the root command's `PersistentPreRunE` based on the `-v` flag count; under a progress display, `withProgress` replaces it, and the stderr `withStderr` stored, with writers that go above the display.
+`withClient`, `withMeshMgr` and `withFs` are the injection points of the tests (a mock executor, a manager over it, an in-memory file system); no production code calls them. The logger is injected by the root command's `PersistentPreRunE` (`sindlog.With`) based on the `-v` flag count; under a progress display, `withProgress` replaces it, and the stderr `withStderr` stored, with writers that go above the display.
 
 ### Structured logging
 
@@ -283,4 +332,4 @@ Work that takes a while reports what it does as progress spans of [go-clikit](ht
 
 ### Resource naming
 
-All resource names are derived from cluster name and realm via functions in `pkg/cluster/naming.go`. Never hardcode resource name prefixes.
+Every resource name comes from a function of the realm and, for a cluster's, the cluster name: the cluster's containers, networks and volumes from `pkg/cluster/naming.go` (`ContainerName`, `NetworkName`, `VolumeName`), the realm's mesh from `mesh.RealmNames` and the `mesh.Manager` methods, the monitoring stack's from `internal/observability` (`ContainerName`, `JournalVolume`), and the realm lock's from `state.LockNetworkName`. Use them; never build a name from its prefix and parts elsewhere.

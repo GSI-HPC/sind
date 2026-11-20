@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/ssh"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/ssh"
 )
 
 // setupStep is one step of a node's setup script (see nodeSetupScript).
@@ -89,7 +89,7 @@ func nodeSetupScript(steps []setupStep) string {
 // (createResources), so munge starts and the readiness wait sees it.
 // createHomes, which runs once on the controller after every node's setup,
 // sets ownership by number and needs none of the steps.
-func nodeSetupSteps(nc RunConfig) []setupStep {
+func nodeSetupSteps(nc nodeRunConfig) []setupStep {
 	var steps []setupStep
 	if nc.NSSSlurm {
 		steps = append(steps, nssSlurmSteps(nc)...)
@@ -111,7 +111,7 @@ func nodeSetupSteps(nc RunConfig) []setupStep {
 // The setup is the progress call "setup", under the node's target, with
 // the docker exec under it; it ends as endSpan ends it, canceled when a
 // sibling's failure or an interrupt stopped it.
-func setupNode(ctx context.Context, client *docker.Client, container docker.ContainerName, nc RunConfig, sshPubKey string) (_ string, err error) {
+func setupNode(ctx context.Context, client *docker.Client, container docker.ContainerName, nc nodeRunConfig, sshPubKey string) (_ string, err error) {
 	ctx, call := progress.Start(ctx, progress.KindCall, "setup")
 	defer func() { endSpan(ctx, call, err) }()
 	stdout, err := runSetupSteps(ctx, client, container, nodeSetupSteps(nc), strings.TrimSpace(sshPubKey))
@@ -138,7 +138,7 @@ func runSetupSteps(ctx context.Context, client *docker.Client, container docker.
 	var exitErr *cmdexec.ExitError
 	if errors.As(err, &exitErr) {
 		if step, out, ok := failedStep(steps, exitErr.Stderr); ok {
-			return "", fmt.Errorf("%s: %w", step.what, &cmdexec.ExitError{Err: exitErr.Err, Stderr: out})
+			return "", fmt.Errorf("%s: %w", step.what, &cmdexec.ExitError{Code: exitErr.Code, Stderr: out, Err: exitErr.Err})
 		}
 	}
 	// docker exec failed itself, e.g. on a container that stopped.

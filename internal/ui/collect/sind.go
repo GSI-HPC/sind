@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/doctor"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 

@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/probe"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // The size of a worker of the demo that was made without one, as slurmd
@@ -64,7 +64,7 @@ func slurmInfoOf(c *clusterState) *cluster.SlurmInfo {
 		}
 	}
 	if len(names) > 0 {
-		info.Partitions = []slurm.PartitionInfo{{Name: partitionName, Default: true, State: "up", TimeLimit: "infinite", Nodes: len(names), NodeList: hostList(names)}}
+		info.Partitions = []cluster.SlurmPartition{{Name: partitionName, Default: true, State: "up", TimeLimit: "infinite", Nodes: len(names), NodeList: hostList(names)}}
 	}
 	opts.DefMemPerCPU = slurm.DefMemPerCPU(workers)
 	info.Files = []cluster.SlurmFile{
@@ -78,9 +78,9 @@ func slurmInfoOf(c *clusterState) *cluster.SlurmInfo {
 // answer, draining when the demo drained it while its jobs hold CPUs,
 // drained when they do not, else idle, mixed or allocated by the CPUs its
 // jobs hold.
-func slurmNode(n *nodeState) slurm.NodeInfo {
+func slurmNode(n *nodeState) cluster.SlurmNode {
 	cpus, mem := n.size()
-	sn := slurm.NodeInfo{Name: n.short, State: "idle", CPUs: cpus, MemoryMB: mem, Partitions: []string{partitionName}}
+	sn := cluster.SlurmNode{Name: n.short, State: "idle", CPUs: cpus, MemoryMB: mem, Partitions: []string{partitionName}}
 	switch {
 	case n.state != cluster.StateRunning || !n.up[probe.ServiceSlurmd]:
 		sn.State, sn.Reason = "down*", "Not responding"

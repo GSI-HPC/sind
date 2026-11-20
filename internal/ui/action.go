@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/fsutil"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/internal/ui/action"
 	"github.com/GSI-HPC/sind/internal/ui/run"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 

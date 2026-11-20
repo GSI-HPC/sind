@@ -37,8 +37,8 @@ The host needs Docker, host DNS for `*.sind` (systemd-resolved and a polkit
 rule), an `fs.inotify.max_user_instances` of at least 1024 (the scenario's
 clusters use up the default of 128 on many distributions, and their nodes then
 exit with code 255), mise, jq, Chrome and node with `video/node_modules`.
-`setup-host.sh` prepares an Ubuntu GitHub runner: sind from the checkout,
-mise, the polkit rule for the runner's user, `fs.inotify.max_user_instances`
+`setup-host.sh` prepares an Ubuntu GitHub runner: sind from the checkout, built
+without its VCS stamp so that it defaults to the node image `latest`, mise, the polkit rule for the runner's user, `fs.inotify.max_user_instances`
 raised to 8192, the Docker Hub images of the scenario from mirror.gcr.io and
 `ghcr.io/gsi-hpc/sind-node:latest`, and it then runs `sind doctor`.
 

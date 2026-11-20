@@ -13,10 +13,11 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/natsort"
+	"github.com/GSI-HPC/sind/internal/slurm"
+	"github.com/GSI-HPC/sind/internal/ssh"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 )
@@ -104,19 +105,28 @@ type NodeSummary struct {
 	State     State       `json:"status"`
 }
 
+// ShortName returns the node's name in its cluster, such as "worker-0":
+// the first label of its DNS name.
+func (n *NodeSummary) ShortName() string {
+	short, _, _ := strings.Cut(n.FQDN, ".")
+	return short
+}
+
 // NodeDetail holds the full identity and health information for a single node
-// as reported by 'sind get node'. It extends NodeSummary with a per-service
-// health map. All readiness-checked services (munge, sshd, and on managed
+// as reported by 'sind get node'. It has the fields of NodeSummary, by the
+// same names, and adds Managed and a per-service health map; it does not
+// embed NodeSummary, so that Managed keeps its place in the JSON. All
+// readiness-checked services (munge, sshd, and on managed
 // nodes the role's Slurm service, or mariadb and slurmdbd on a db node) are
 // reported under Services.
 type NodeDetail struct {
 	Container string        `json:"container"`
 	Cluster   string        `json:"cluster"`
 	Role      config.Role   `json:"role"`
-	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see IsManaged)
+	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see isManaged)
 	FQDN      string        `json:"fqdn"`
 	IP        string        `json:"ip"`
-	Status    State         `json:"status"`
+	State     State         `json:"status"`
 	Services  ServiceHealth `json:"services"`
 	HA        *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
 	// Slurm is what slurmctld says about a managed worker, from a sinfo
@@ -156,10 +166,10 @@ func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, sho
 		Container: string(containerName),
 		Cluster:   clusterName,
 		Role:      role,
-		Managed:   IsManaged(info.Labels),
+		Managed:   isManaged(info.Labels),
 		FQDN:      DNSName(shortName, clusterName, realm),
 		IP:        health.IP,
-		Status:    health.State,
+		State:     health.State,
 		Services:  health.Services,
 		HA:        health.HA,
 	}
@@ -407,7 +417,7 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 		return nil, fmt.Errorf("cluster %q has no node to read a key from", clusterName)
 	}
 	primary := AuthMunge
-	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {
+	if identityFromLabels(containers[0].Labels) == config.IdentityClientIDs {
 		primary = AuthSlurm
 	}
 	if authType == "" {
@@ -417,7 +427,7 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 	switch {
 	case authType == AuthJWT:
 		i := slices.IndexFunc(containers, func(c docker.ContainerListEntry) bool {
-			return config.Role(c.Labels[LabelRole]) == config.RoleAPI && IsManaged(c.Labels)
+			return config.Role(c.Labels[LabelRole]) == config.RoleAPI && isManaged(c.Labels)
 		})
 		if i < 0 {
 			return nil, fmt.Errorf("cluster %q has no JWT key: sind sets up JWT only for a cluster with a managed api node", clusterName)
@@ -515,14 +525,14 @@ type SSHConfig struct {
 
 // GetSSHConfig returns the path of the realm's ssh_config in the state
 // directory and whether the file exists in fs. The path is also right before
-// the file exists, for an Include; sind writes the file when a cluster is
-// created in the realm.
+// the file exists, for an Include; ExportSSHConfig writes the file, which
+// the sind CLI runs after every command that changes the realm's clusters.
 func GetSSHConfig(fs afero.Fs, realm string) (*SSHConfig, error) {
 	dir, err := state.RealmDir(realm)
 	if err != nil {
 		return nil, err
 	}
-	p := filepath.Join(dir, "ssh_config")
+	p := filepath.Join(dir, ssh.ConfigFile)
 	exists, _ := afero.Exists(fs, p)
 	return &SSHConfig{Path: p, Exists: exists}, nil
 }

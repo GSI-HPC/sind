@@ -39,6 +39,15 @@ func TestAll(t *testing.T) {
 	assert.Len(t, All, len(CommandLine)+2)
 }
 
+// TestReservedBySindAction checks that sind reads none of the variables
+// that GSI-HPC/sind-action sets: SIND_VERBOSITY for the whole job, and
+// SIND_VERSION and SIND_VERIFY for its install step.
+func TestReservedBySindAction(t *testing.T) {
+	for _, name := range []string{"SIND_VERBOSITY", "SIND_VERSION", "SIND_VERIFY"} {
+		assert.NotContains(t, All, name, "sind-action sets %s", name)
+	}
+}
+
 // TestDocumented checks that DESIGN.md and the docs page of the variables
 // give every variable a row of its table.
 func TestDocumented(t *testing.T) {

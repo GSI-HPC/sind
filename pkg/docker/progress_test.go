@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,7 +112,7 @@ type dataRecorder struct {
 }
 
 func (e *dataRecorder) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	e.data[strings.Join(args[:min(2, len(args))], " ")] = cmdexec.StdoutIsData(ctx)
+	e.data[strings.Join(args[:min(2, len(args))], " ")] = execopt.StdoutIsData(ctx)
 	return e.Executor.Run(ctx, name, args...)
 }
 

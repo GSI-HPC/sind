@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"iter"
 	"regexp"
 	"slices"
@@ -169,4 +170,65 @@ func listsWith(value, item string, match func(v, item string) bool) bool {
 		}
 	}
 	return false
+}
+
+// fixedSlurmParameters are the slurm.conf parameters that sind always
+// writes, whatever the main section sets: the cluster name, the
+// controller, SlurmUser, the spool directories and PlugStackConfig, which
+// sind's names, volumes and images depend on. Slurm takes the last value
+// of a parameter, so a main section that sets one of them replaces sind's.
+var fixedSlurmParameters = []string{"ClusterName", "SlurmctldHost", "SlurmUser", "StateSaveLocation", "SlurmdSpoolDir", "PlugStackConfig"}
+
+// FixedSlurmParameters returns the slurm.conf parameters that sind always
+// writes, whatever the main section sets.
+func FixedSlurmParameters() []string { return slices.Clone(fixedSlurmParameters) }
+
+// SlurmWarnings warns of what sind takes in the Slurm config of a managed
+// cluster but likely breaks it: the main section setting a parameter that
+// sind writes itself (FixedSlurmParameters), which Slurm takes in place of
+// sind's, and lines that are no Key=Value pair. Validate refuses
+// SlurmctldHost and StateSaveLocation itself with a backup controller.
+// They need no valid config: sind ui shows them while the config has
+// errors.
+func (c *Cluster) SlurmWarnings() []string {
+	if !c.Managed() {
+		return nil
+	}
+	var warns, fixed []string
+	for _, key := range fixedSlurmParameters {
+		refused := c.HasBackupController() && slices.Contains(backupControllerManagedKeys, key)
+		if !refused && c.Slurm.Main.SetsParameter(key) {
+			fixed = append(fixed, key)
+		}
+	}
+	if len(fixed) > 0 {
+		warns = append(warns, fmt.Sprintf("The lines of slurm.conf set %s, which sind sets itself. Slurm takes your value in place of sind's, and the cluster may not start.", strings.Join(fixed, ", ")))
+	}
+	for _, s := range c.Slurm.sections() {
+		if s.name == "plugstack" {
+			// Its lines are SPANK plugins, no Key=Value pairs.
+			continue
+		}
+		if line := pairlessLine(s.section); line != "" {
+			warns = append(warns, fmt.Sprintf("The lines of %s have %q, which is no Key=Value pair. Slurm may refuse it and not start.", s.file, line))
+		}
+	}
+	return warns
+}
+
+// pairlessLine returns the first line of s that is neither empty, a
+// comment, an include nor a Key=Value pair.
+func pairlessLine(s Section) string {
+	for line := range s.Lines() {
+		text, _, _ := strings.Cut(line, "#")
+		text = strings.TrimSpace(text)
+		if text == "" || strings.Contains(text, "=") {
+			continue
+		}
+		if first, _, _ := strings.Cut(text, " "); strings.EqualFold(first, "include") {
+			continue
+		}
+		return text
+	}
+	return ""
 }

@@ -11,9 +11,9 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
+	"github.com/GSI-HPC/sind/internal/nodecmd"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -89,8 +89,14 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target.Cluster, target.ShortName); err != nil {
 		return err
 	}
-	sshContainer := mesh.RealmNames(realm).SSHContainer
-	dockerArgs := cluster.BuildSSHArgs(sshContainer, target.ShortName, target.Cluster, realm, isTTY, sshOptions, command)
+	dockerArgs := nodecmd.BuildSSHArgs(nodecmd.SSHCommand{
+		Realm:   realm,
+		Cluster: target.Cluster,
+		Node:    target.ShortName,
+		TTY:     isTTY,
+		Options: sshOptions,
+		Command: command,
+	})
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -153,7 +159,7 @@ func execOnEnterTarget(cmd *cobra.Command, clusterName string, isTTY bool, comma
 		return err
 	}
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	return dockerExec(cmd, cluster.BuildContainerExecArgs(containerName, user, workDir, isTTY, command))
+	return dockerExec(cmd, nodecmd.BuildContainerExecArgs(containerName, user, workDir, isTTY, command))
 }
 
 func newExecCommand() *cobra.Command {

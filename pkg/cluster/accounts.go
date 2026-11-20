@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/monitor"
+	"github.com/GSI-HPC/sind/internal/probe"
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // sacctmgrTimeout bounds the docker exec that runs the account commands:

@@ -44,6 +44,6 @@ func (r *Recorder) IsIntegration() bool {
 // runs calls concurrently. No-op in integration mode.
 func (r *Recorder) SetOnCall(onCall func(args []string, stdin string) Result) {
 	if r.mock != nil {
-		r.mock.OnCall = onCall
+		r.mock.setOnCall(onCall)
 	}
 }

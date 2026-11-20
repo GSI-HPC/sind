@@ -150,7 +150,7 @@ $ sind power reboot 'worker-[0-23]'
 
 | Step | Targets | What it does |
 |------|---------|--------------|
-| `mesh deregistration` | | when other clusters keep the realm's mesh: removes the nodes' DNS records and `known_hosts` entries, starting the mesh first if it is stopped. A failure is a warning, not a failure of the step |
+| `mesh deregistration` | | when other clusters keep the realm's mesh: removes the nodes' `known_hosts` entries, then their DNS records, starting the mesh first if it is stopped; also those that an earlier delete of the cluster left. A failure is a warning, not a failure of the step |
 | `nodes` | one per node | stops and removes each node's container |
 | `network` | | detaches the containers that joined the cluster network, those of the mesh and outside sind, and removes it |
 | `volumes` | one per volume | removes the cluster's volumes |

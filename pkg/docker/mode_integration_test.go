@@ -5,24 +5,20 @@
 package docker
 
 import (
-	"context"
-	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil/itest"
 )
 
+// newTestClient is testutil.NewClient, which this package cannot import.
 func newTestClient(t *testing.T) (*Client, *mock.Recorder) {
 	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not found in PATH")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker daemon not running")
-	}
+	itest.RequireDocker(t)
 	rec := mock.NewIntegrationRecorder()
 	return NewClient(rec.RecordingExecutor), rec
 }
+
+// skipWithoutDocker does nothing in integration mode, where newTestClient
+// skips a test when Docker is not there.
+func skipWithoutDocker(*testing.T) {}

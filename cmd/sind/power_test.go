@@ -263,19 +263,26 @@ func TestPowerLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, info.Status)
 
-	// reboot (stop + start)
+	// reboot (stop + start): the container ran already, so it must have
+	// stopped and started again.
+	before := info
 	_, _, err = executeWithRealm(realm, "power", "reboot", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, info.Status)
+	assert.True(t, info.FinishedAt.After(before.StartedAt), "reboot stopped the node")
+	assert.True(t, info.StartedAt.After(info.FinishedAt), "reboot started the node again")
 
 	// cycle (kill + start)
+	before = info
 	_, _, err = executeWithRealm(realm, "power", "cycle", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, info.Status)
+	assert.True(t, info.FinishedAt.After(before.StartedAt), "cycle killed the node")
+	assert.True(t, info.StartedAt.After(info.FinishedAt), "cycle started the node again")
 
 	// cut (kill)
 	_, _, err = executeWithRealm(realm, "power", "cut", node)

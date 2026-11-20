@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/observability"
+	"github.com/GSI-HPC/sind/internal/probe"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
 // World is the Docker host of the demo: realms, clusters and nodes. The
@@ -584,9 +584,9 @@ func (w *World) publishRealm(st *store.Store, r *realm, keys *[]store.StatusKey)
 	st.SetVolumes(r.name, volumes)
 	st.SetMesh(r.name, store.Mesh{
 		Info: &mesh.Info{
-			Network: string(names.Network), DNSContainer: string(names.DNSContainer), DNSIP: fmt.Sprintf("172.%d.255.254", r.net),
-			DNSZone: r.name + ".sind", DNSImage: mesh.DNSImage,
-			SSHContainer: string(names.SSHContainer), SSHVolume: string(names.SSHVolume), SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
+			Network: names.Network, DNSContainer: names.DNSContainer, DNSIP: fmt.Sprintf("172.%d.255.254", r.net),
+			DNSZone: r.name + ".sind", DNSImage: mesh.DNSImage(),
+			SSHContainer: names.SSHContainer, SSHVolume: names.SSHVolume, SSHImage: "ghcr.io/gsi-hpc/sind-node:" + slurmNew,
 		},
 		Records:     records,
 		External:    slices.Clone(r.external),
@@ -637,7 +637,7 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 			url = fmt.Sprintf("http://%s:%d", ip, port)
 		}
 		return cluster.MonitoringService{
-			Name: s, Container: observability.ContainerName(r.name, s), Image: s.Image(), Interface: s.Interface(), IP: ip, URL: url,
+			Name: string(s), Container: observability.ContainerName(r.name, s), Image: s.Image(), Interface: string(s.Interface()), IP: ip, URL: url,
 			State: "running", Ready: true, Checked: true,
 		}
 	}
@@ -656,12 +656,12 @@ func monitoringOf(r *realm, watched []cluster.MonitoredCluster) *cluster.Monitor
 // statusOf returns the status of a cluster, as the page of the cluster
 // shows it.
 func (w *World) statusOf(r *realm, c *clusterState, names mesh.Names) *cluster.Status {
-	st := &cluster.Status{Name: c.name, SlurmVersion: c.slurm, State: clusterStateOf(c), Monitoring: c.monitoring}
+	st := &cluster.Status{Realm: r.name, Name: c.name, SlurmVersion: c.slurm, State: clusterStateOf(c), Monitoring: c.monitoring}
 	pair := c.find(cluster.ControllerBackupShortName) != nil
 	for _, n := range c.nodes {
 		h := &cluster.NodeHealth{State: n.state, IP: n.ip, Services: cluster.ServiceHealth{}}
 		for _, s := range services(n.role) {
-			h.Services[s] = n.up[s]
+			h.Services[string(s)] = n.up[s]
 		}
 		if pair && n.role == config.RoleController {
 			h.HA = &cluster.HAStatus{Position: "primary", InControl: n.state == cluster.StateRunning}

@@ -8,9 +8,11 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -264,7 +266,7 @@ func TestExecutor_ExitErrorShape(t *testing.T) {
 	}
 }
 
-// A command run under a line parser (cmdexec.WithLineParser) has the lines
+// A command run under a line parser (execopt.WithLineParser) has the lines
 // of its result parsed, as the real executor does while it runs: those of
 // standard output, unless that is data, then those of standard error, each
 // without its line break; a last line that has none is left out. Without a
@@ -283,13 +285,13 @@ func TestExecutor_ParsesLines(t *testing.T) {
 	}{
 		{"both", func(ctx context.Context) context.Context { return ctx },
 			[]line{{progress.StreamStdout, "a"}, {progress.StreamStdout, "b"}, {progress.StreamStderr, "d"}}, result.Stdout},
-		{"stdout is data", cmdexec.WithStdoutAsData, []line{{progress.StreamStderr, "d"}}, result.Stdout},
-		{"terminal", cmdexec.WithTerminal,
+		{"stdout is data", execopt.WithStdoutAsData, []line{{progress.StreamStderr, "d"}}, result.Stdout},
+		{"terminal", execopt.WithTerminal,
 			[]line{{progress.StreamStdout, "a"}, {progress.StreamStdout, "b"}, {progress.StreamStdout, "c"}, {progress.StreamStderr, "d"}}, "a\nb\nc\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []line
-			ctx := cmdexec.WithLineParser(tc.ctx(t.Context()), func(st progress.Stream, text string) { got = append(got, line{st, text}) })
+			ctx := execopt.WithLineParser(tc.ctx(t.Context()), func(st progress.Stream, text string) { got = append(got, line{st, text}) })
 			m := Executor{OnCall: func([]string, string) Result { return result }}
 
 			stdout, stderr, err := m.Run(ctx, "docker", "pull", "img")
@@ -309,28 +311,126 @@ func TestExecutor_ParsesLines(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// The mock calls the function of cmdexec.WithTerminalOpened as OSExecutor
+// The mock calls the function of execopt.WithTerminalOpened as OSExecutor
 // does once it opened the terminal: for each command run WithTerminal whose
 // standard output is no data.
 func TestExecutorTerminalOpened(t *testing.T) {
 	opened := 0
-	ctx := cmdexec.WithTerminalOpened(t.Context(), func() { opened++ })
+	ctx := execopt.WithTerminalOpened(t.Context(), func() { opened++ })
 	m := Executor{OnCall: func([]string, string) Result { return Result{} }}
 
 	_, _, err := m.Run(ctx, "docker", "pull", "img")
 	require.NoError(t, err)
-	_, _, err = m.Run(cmdexec.WithStdoutAsData(cmdexec.WithTerminal(ctx)), "docker", "pull", "img")
+	_, _, err = m.Run(execopt.WithStdoutAsData(execopt.WithTerminal(ctx)), "docker", "pull", "img")
 	require.NoError(t, err)
 	assert.Zero(t, opened)
 
-	_, _, err = m.Run(cmdexec.WithTerminal(ctx), "docker", "pull", "img")
+	_, _, err = m.Run(execopt.WithTerminal(ctx), "docker", "pull", "img")
 	require.NoError(t, err)
 	assert.Equal(t, 1, opened)
 
 	// Where it opens no terminal, the command writes to a pipe.
 	m = Executor{NoTerminal: true, OnCall: func([]string, string) Result { return Result{Stdout: "a\rb"} }}
-	stdout, _, err := m.Run(cmdexec.WithTerminal(ctx), "docker", "pull", "img")
+	stdout, _, err := m.Run(execopt.WithTerminal(ctx), "docker", "pull", "img")
 	require.NoError(t, err)
 	assert.Equal(t, "a\rb", stdout)
 	assert.Equal(t, 1, opened)
+}
+
+// TestExecutor_ConcurrentSetup checks that results can be queued, an OnCall
+// set and the calls read while other goroutines run commands.
+func TestExecutor_ConcurrentSetup(t *testing.T) {
+	var m Executor
+	rec := NewRecorder()
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			_, _, _ = m.Run(t.Context(), "docker", "ps")
+			_, _, _ = rec.Run(t.Context(), "docker", "ps")
+		})
+		wg.Go(func() {
+			m.AddResult("", "", nil)
+			rec.SetOnCall(func([]string, string) Result { return Result{} })
+			_ = m.CallsSnapshot()
+		})
+	}
+	wg.Wait()
+	assert.Len(t, m.CallsSnapshot(), 4)
+}
+
+func TestExecutor_CallsSnapshot(t *testing.T) {
+	var m Executor
+	m.AddResult("", "", nil)
+	_, _, _ = m.Run(t.Context(), "docker", "ps")
+
+	calls := m.CallsSnapshot()
+	calls[0].Name = "changed"
+
+	assert.Equal(t, []Call{{Name: "docker", Args: []string{"ps"}}}, m.CallsSnapshot())
+}
+
+// errorsT records what AssertDone reports.
+type errorsT struct {
+	testing.TB
+	errors []string
+}
+
+func (e *errorsT) Helper() {}
+
+func (e *errorsT) Errorf(format string, args ...any) {
+	e.errors = append(e.errors, fmt.Sprintf(format, args...))
+}
+
+func TestExecutor_AssertDone(t *testing.T) {
+	var done Executor
+	done.AddResult("", "", nil)
+	_, _, _ = done.Run(t.Context(), "docker", "ps")
+	var et errorsT
+	done.AssertDone(&et)
+	assert.Empty(t, et.errors)
+
+	var unused Executor
+	unused.AddResult("", "", nil)
+	unused.AddResult("", "", nil)
+	_, _, _ = unused.Run(t.Context(), "docker", "ps")
+	et = errorsT{}
+	unused.AssertDone(&et)
+	assert.Equal(t, []string{"mock: 1 of 2 queued results were not used"}, et.errors)
+
+	var extra Executor
+	extra.AddResult("", "", nil)
+	_, _, _ = extra.Run(t.Context(), "docker", "ps")
+	_, _, _ = extra.Run(t.Context(), "docker", "rm", "-f", "c1")
+	et = errorsT{}
+	extra.AssertDone(&et)
+	assert.Equal(t, []string{"mock: unexpected call: docker rm -f c1"}, et.errors)
+}
+
+// TestExecutor_EndedContext checks that a call whose context is done fails
+// with its error and is not recorded, as OSExecutor starts no command
+// then, and that IgnoreContext answers it.
+func TestExecutor_EndedContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	var m Executor
+	m.AddResult("ok", "", nil)
+	_, _, err := m.Run(ctx, "docker", "ps")
+	require.ErrorIs(t, err, context.Canceled)
+	_, _, err = m.RunWithStdin(ctx, strings.NewReader("x"), "docker", "cp")
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = m.Start(ctx, "docker", "events")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, m.CallsSnapshot())
+
+	stdout, _, err := m.Run(t.Context(), "docker", "ps")
+	require.NoError(t, err)
+	assert.Equal(t, "ok", stdout, "the queued result is left for the next call")
+
+	ignoring := Executor{IgnoreContext: true}
+	ignoring.AddResult("ok", "", nil)
+	stdout, _, err = ignoring.Run(ctx, "docker", "ps")
+	require.NoError(t, err)
+	assert.Equal(t, "ok", stdout)
+	assert.Len(t, ignoring.Calls, 1)
 }

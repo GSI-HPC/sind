@@ -19,23 +19,12 @@ const testNetworkName NetworkName = "sind-dev-net"
 
 func TestNetworkLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itNetworkName("net")
 	n := string(name)
 
-	if !rec.IsIntegration() {
-		rec.AddResult("6f02052f\n", "", nil)                                                                                    // create
-		rec.AddResult("[{}]\n", "", nil)                                                                                        // exists → true
-		rec.AddResult(n+"\n", "", nil)                                                                                          // remove
-		rec.AddResult("", "Error response from daemon: network "+n+" not found\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
-		rec.AddResult("6f02052f\n", "", nil)                                                                                    // re-create
-		rec.AddResult(`{"Name":"`+n+`","Driver":"bridge","ID":"x","Scope":"local"}`+"\n", "", nil)                              // list
-		rec.AddResult("", "Error: network already exists\n", fmt.Errorf("exit status 1"))                                       // create duplicate (error)
-		rec.AddResult("", "", nil)                                                                                              // list no matches (empty)
-		rec.AddResult(n+"\n", "", nil)                                                                                          // remove (ok)
-		rec.AddResult("", "Error: No such network\n", fmt.Errorf("exit status 1"))                                              // remove again (error)
-	}
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
 
 	// Create.
@@ -90,18 +79,12 @@ func TestNetworkLifecycle(t *testing.T) {
 // networks that exist.
 func TestInspectNetworksLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itNetworkName("inspect")
 	missing := itNetworkName("inspect-missing")
 
-	if !rec.IsIntegration() {
-		rec.AddResult("net-id\n", "", nil) // create
-		rec.AddResult(`[{"Name":"`+string(name)+`","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.30.0.0/16","Gateway":"172.30.0.1"}]}}]`+"\n",
-			"Error response from daemon: network "+string(missing)+" not found\n",
-			&exec.ExitError{ProcessState: exitCode1(t)}) // inspect
-		rec.AddResult(string(name)+"\n", "", nil) // remove (cleanup)
-	}
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
 
 	_, err := c.CreateNetwork(ctx, name, nil)
@@ -124,27 +107,12 @@ func TestInspectNetworksLifecycle(t *testing.T) {
 // by ID.
 func TestConfigOnlyNetworkLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itNetworkName("config-only")
 	labels := Labels{"sind.lock.pid": "42"}
 
-	const id = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
-	if !rec.IsIntegration() {
-		n := string(name)
-		// create
-		rec.AddResult(id+"\n", "", nil)
-		// inspect meta
-		rec.AddResult(`{"Name":"`+n+`","Id":"`+id+`","Created":"2026-10-04T10:02:03.5Z","Driver":"null","ConfigOnly":true,"Labels":{"sind.lock.pid":"42"}}`+"\n", "", nil)
-		// inspect
-		rec.AddResult(`[{"Name":"`+n+`","Driver":"null","IPAM":{"Driver":"default","Config":[]}}]`+"\n", "", nil)
-		// create again
-		rec.AddResult("", "Error response from daemon: network with name "+n+" already exists\n", &exec.ExitError{ProcessState: exitCode1(t)})
-		// remove by ID
-		rec.AddResult(id+"\n", "", nil)
-		// inspect meta
-		rec.AddResult("", "Error: No such network: "+n+"\n", &exec.ExitError{ProcessState: exitCode1(t)})
-	}
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
 
 	created, err := c.CreateConfigOnlyNetwork(ctx, name, labels)
@@ -240,22 +208,12 @@ func TestInspectNetworkMeta_BadJSON(t *testing.T) {
 
 func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	net := itNetworkName("conn")
 	ctr := itContainerName("conn")
 
-	if !rec.IsIntegration() {
-		rec.AddResult("net-id\n", "", nil)                  // create network
-		rec.AddResult("ctr-id\n", "", nil)                  // run container
-		rec.AddResult("", "", nil)                          // connect
-		rec.AddResult(inspectRunning(string(ctr)), "", nil) // inspect (has net)
-		rec.AddResult("", "", nil)                          // disconnect
-		rec.AddResult(inspectRunning(string(ctr)), "", nil) // inspect (no net)
-		rec.AddResult(string(ctr)+"\n", "", nil)            // kill (cleanup)
-		rec.AddResult(string(ctr)+"\n", "", nil)            // rm (cleanup)
-		rec.AddResult(string(net)+"\n", "", nil)            // rm network (cleanup)
-	}
 	t.Cleanup(func() {
 		bg := context.Background()
 		_ = c.KillContainer(bg, ctr)
@@ -276,9 +234,7 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 
 	info, err := c.InspectContainer(ctx, ctr)
 	require.NoError(t, err)
-	if rec.IsIntegration() {
-		assert.Contains(t, info.IPs, net, "container should be on network after connect")
-	}
+	assert.Contains(t, info.IPs, net, "container should be on network after connect")
 
 	// Disconnect → container no longer on network.
 	err = c.DisconnectNetwork(ctx, net, ctr)
@@ -286,9 +242,7 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 
 	info, err = c.InspectContainer(ctx, ctr)
 	require.NoError(t, err)
-	if rec.IsIntegration() {
-		assert.NotContains(t, info.IPs, net, "container should not be on network after disconnect")
-	}
+	assert.NotContains(t, info.IPs, net, "container should not be on network after disconnect")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -298,29 +252,13 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 // stopped container can start once it is gone.
 func TestDisconnectAllLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	net := itNetworkName("detach")
 	ctr := itContainerName("detach")
 	stopped := itContainerName("detach-stopped")
 
-	if !rec.IsIntegration() {
-		list := `{"Names":"` + string(ctr) + `","State":"running"}` + "\n" +
-			`{"Names":"` + string(stopped) + `","State":"created"}` + "\n"
-		rec.AddResult("net-id\n", "", nil)                                        // create network
-		rec.AddResult("ctr-id\n", "", nil)                                        // run container
-		rec.AddResult("stopped-id\n", "", nil)                                    // create stopped container
-		rec.AddResult(list, "", nil)                                              // list containers
-		rec.AddResult(list, "", nil)                                              // DisconnectAll: list
-		rec.AddResult("", "", nil)                                                // DisconnectAll: disconnect running
-		rec.AddResult("", "", nil)                                                // DisconnectAll: disconnect stopped
-		rec.AddResult(string(net)+"\n", "", nil)                                  // rm network
-		rec.AddResult(string(stopped)+"\n", "", nil)                              // start stopped container
-		rec.AddResult(string(ctr)+"\n", "", nil)                                  // kill (cleanup)
-		rec.AddResult(string(ctr)+"\n", "", nil)                                  // rm (cleanup)
-		rec.AddResult(string(stopped)+"\n", "", nil)                              // rm stopped (cleanup)
-		rec.AddResult("", "Error response from daemon: network not found\n", nil) // rm network (cleanup)
-	}
 	t.Cleanup(func() {
 		bg := context.Background()
 		_ = c.KillContainer(bg, ctr)
@@ -623,11 +561,12 @@ func TestDisconnectAll_DisconnectError(t *testing.T) {
 
 func TestInspectNetwork(t *testing.T) {
 	var m mock.Executor
-	m.AddResult(`[{"Name":"sind-dev-net","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
+	m.AddResult(`[{"Name":"sind-dev-net","Id":"abcdef0123456789","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
 	c := NewClient(&m)
 
 	info, err := c.InspectNetwork(t.Context(), testNetworkName)
 	require.NoError(t, err)
+	assert.Equal(t, NetworkID("abcdef0123456789"), info.ID)
 	assert.Equal(t, testNetworkName, info.Name)
 	assert.Equal(t, "bridge", info.Driver)
 	assert.Equal(t, "172.18.0.0/16", info.Subnet)

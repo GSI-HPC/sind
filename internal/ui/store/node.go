@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // What the store knows of one node beyond the lists and the status of its
@@ -207,7 +207,7 @@ func statusChanges(realm, name string, old, st *cluster.Status) map[NodeKey][]Ch
 			if was, ok := o.Health.Services[svc]; !ok || was == up {
 				continue
 			}
-			c := Change{Source: SourceSystemd, Subject: string(svc), State: "down"}
+			c := Change{Source: SourceSystemd, Subject: svc, State: "down"}
 			if up {
 				c.State, c.OK = "active", true
 			}
@@ -235,7 +235,7 @@ func slurmChanges(realm, name string, old, sl *Slurm) map[NodeKey][]Change {
 		return out
 	}
 	for _, n := range sl.Info.Nodes {
-		i := slices.IndexFunc(old.Info.Nodes, func(o slurm.NodeInfo) bool { return o.Name == n.Name })
+		i := slices.IndexFunc(old.Info.Nodes, func(o cluster.SlurmNode) bool { return o.Name == n.Name })
 		if i < 0 || old.Info.Nodes[i].State == n.State && old.Info.Nodes[i].Reason == n.Reason {
 			continue
 		}

@@ -6,26 +6,19 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"fmt"
 	"io"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/internal/testutil/itest"
+	"github.com/GSI-HPC/sind/internal/testutil/prereq"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
-	"github.com/spf13/afero"
 )
 
 // testID is a per-process random suffix for unique resource names.
-var testID = func() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("%x", b)
-}()
+var testID = itest.RunID
 
 // executeWithDocker runs a CLI command backed by a real Docker client.
 // Uses context.Background(); for commands needing a deadline use executeWithDockerCtx.
@@ -74,21 +67,9 @@ func realClient(t *testing.T) *docker.Client {
 	return c
 }
 
-// checkPrerequisites skips the test if the host does not meet sind
-// prerequisites (Docker version, cgroupv2 with nsdelegate).
+// checkPrerequisites ends the test unless the host meets sind's
+// prerequisites (prereq.Check).
 func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	info, err := c.Info(ctx)
-	if err != nil {
-		t.Skipf("cannot query Docker version: %v", err)
-	}
-	if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
-		t.Skipf("%v", vErr)
-	}
-	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())
-	if !hasNsd {
-		t.Skip("host cgroup mount lacks nsdelegate")
-	}
+	prereq.Check(t, c)
 }

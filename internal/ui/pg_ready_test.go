@@ -8,7 +8,6 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -116,9 +115,9 @@ func TestPgReadyWorkers(t *testing.T) {
 	ok := readyNode("worker-0", config.RoleWorker, "slurmd")
 	svcDown := down(readyNode("worker-1", config.RoleWorker, "slurmd"), "slurmd")
 	drained := readyNode("worker-2", config.RoleWorker, "slurmd")
-	drained.Slurm = &slurm.NodeInfo{State: "drained", Reason: "disk check"}
+	drained.Slurm = &cluster.SlurmNode{State: "drained", Reason: "disk check"}
 	notResp := readyNode("worker-3", config.RoleWorker, "slurmd")
-	notResp.Slurm = &slurm.NodeInfo{State: "down*"}
+	notResp.Slurm = &cluster.SlurmNode{State: "down*"}
 	unmanaged := readyNode("worker-4", config.RoleWorker)
 	unmanaged.Managed = false
 

@@ -88,13 +88,13 @@ func TestClusterNotFound_NamesExistingClusters(t *testing.T) {
 func TestOtherRealms(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(psLine("ci-42", "dev", "controller")+"\n"+psLine("a", "dev", "controller")+"\n"+psLine("a", "dev", "worker-0"), "", nil)
-	realms, err := OtherRealms(t.Context(), docker.NewClient(&m), "ci-42", "dev")
+	realms, err := otherRealms(t.Context(), docker.NewClient(&m), "ci-42", "dev")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a"}, realms)
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.cluster=dev"}, m.Calls[0].Args)
 
 	m = mock.Executor{}
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	_, err = OtherRealms(t.Context(), docker.NewClient(&m), "ci-42", "dev")
+	_, err = otherRealms(t.Context(), docker.NewClient(&m), "ci-42", "dev")
 	require.ErrorContains(t, err, "listing containers: docker daemon not running")
 }

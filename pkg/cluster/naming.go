@@ -2,17 +2,18 @@
 
 // Package cluster provides types and operations for sind cluster management.
 //
-// Create, Delete, DeleteAll, WorkerAdd, WorkerRemove, Connect, Disconnect,
-// PowerOn, PowerReboot and PowerCycle change state that every cluster of a
-// realm shares and take no lock themselves: their caller holds the realm
-// lock, state.LockRealm with the docker client as LockOptions.Client, for
-// the whole operation.
+// CreateInRealm, Create, Delete, DeleteAll, WorkerAdd, WorkerRemove,
+// Connect, Disconnect, PowerOn, PowerReboot and PowerCycle change state that
+// every cluster of a realm shares and take no lock themselves: their caller
+// holds the realm lock, state.LockRealm with the docker client as
+// LockOptions.Client, for the whole operation. A cluster is created with
+// CheckDaemon, the lock and CreateInRealm.
 package cluster
 
 import (
+	"github.com/GSI-HPC/sind/internal/slurm"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // ControllerBackupShortName is the hostname of the backup controller created

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/fakedocker"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -50,12 +51,12 @@ func emptyRealmCtx(t *testing.T, psErr error) (context.Context, string) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(export), 0o700))
 	require.NoError(t, os.WriteFile(export, []byte("stale"), 0o600))
 
-	d := newLockDaemon(t)
+	d := fakedocker.New(t)
 	exit1 := testutil.ExitCode1(t)
 	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
 		switch {
 		case args[0] == "network" && (args[1] == "create" || args[1] == "inspect" || args[1] == "rm"):
-			return d.onCall(args, stdin)
+			return d.OnCall(args, stdin)
 		case args[0] == "exec":
 			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: exit1}
 		case args[0] == "ps" && psErr != nil:

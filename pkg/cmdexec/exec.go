@@ -16,15 +16,24 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/creack/pty"
 )
 
 // Executor runs external commands and captures their output.
+//
+// sind's own packages give OSExecutor options in the context of a call,
+// such as a pseudo-terminal for docker pull, the lines of a command's
+// output for a progress display, or the environment of a command that the
+// CLI runs. Those that a library call sets change only what is shown or
+// kept of the output, so an Executor of a library caller may ignore the
+// context apart from its end.
 type Executor interface {
 	// Run executes the named command with the given arguments and returns
 	// the captured stdout and stderr. If the command exits with a non-zero
-	// status, the returned error is an *ExitError that carries stderr and
-	// wraps the *exec.ExitError.
+	// status, the returned error is an *ExitError that carries its exit
+	// code and stderr (NewExitError, or WrapExitError of an
+	// *exec.ExitError).
 	Run(ctx context.Context, name string, args ...string) (stdout string, stderr string, err error)
 
 	// RunWithStdin is like Run but pipes the given reader to the command's stdin.
@@ -32,7 +41,10 @@ type Executor interface {
 
 	// Start starts a long-lived command and returns a Process for reading
 	// its stdout incrementally. The command is killed when ctx is cancelled.
-	// The caller must call Process.Close to release resources.
+	// The caller must call Process.Close to release resources. An Executor
+	// that runs no local process returns a Process with only Stdout set,
+	// whose Close ends the command and returns an *ExitError for one that
+	// failed.
 	Start(ctx context.Context, name string, args ...string) (*Process, error)
 }
 
@@ -46,8 +58,8 @@ type OSExecutor struct{}
 const outputWaitDelay = 2 * time.Second
 
 // inProcessGroup makes cmd run in a process group of its own, which the
-// end of its context kills whole (WithProcessGroup), or with a grace
-// (WithStopGrace), stops with SIGTERM and kills whole once grace has
+// end of its context kills whole (execopt.WithProcessGroup), or with a grace
+// (execopt.WithStopGrace), stops with SIGTERM and kills whole once grace has
 // passed. The caller calls done once cmd.Wait has returned.
 func inProcessGroup(cmd *exec.Cmd, grace time.Duration) (done func()) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -77,34 +89,35 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = stdin
 	cmd.WaitDelay = outputWaitDelay
-	if env := Env(ctx); len(env) > 0 {
+	if env := execopt.Env(ctx); len(env) > 0 {
 		cmd.Env = env
 	}
-	if InProcessGroup(ctx) {
-		done := inProcessGroup(cmd, StopGrace(ctx))
+	if execopt.InProcessGroup(ctx) {
+		done := inProcessGroup(cmd, execopt.StopGrace(ctx))
 		defer done()
 	}
-	if OrphanSafe(ctx) {
+	if execopt.OrphanSafe(ctx) {
 		return runOrphanSafe(ctx, cmd)
 	}
 	outBuf, errBuf := newOutput(ctx), newOutput(ctx)
-	// Under a progress span that shows lines, such as the target of an
-	// image docker pulls, its display shows the newest line the command
-	// wrote, of standard error alone when standard output is data
-	// (WithStdoutAsData); otherwise Tee returns the buffer itself. A line
-	// parser (WithLineParser) is handed the lines of the same streams.
-	parse := LineParser(ctx)
+	// Under a progress span that shows lines, such as the target of an image
+	// docker pulls, its display shows the newest line the command wrote, of
+	// standard error alone when standard output is data
+	// (execopt.WithStdoutAsData); otherwise Tee returns the buffer itself. A
+	// line parser (execopt.WithLineParser) is handed the lines of the same
+	// streams.
+	parse := execopt.LineParser(ctx)
 	cmd.Stdout = outBuf
-	if !StdoutIsData(ctx) {
+	if !execopt.StdoutIsData(ctx) {
 		cmd.Stdout = progress.Tee(ctx, outBuf, progress.StreamStdout, parse)
 	}
 	var term *terminal
-	if Terminal(ctx) {
+	if execopt.Terminal(ctx) {
 		term = openTerminal(cmd.Stdout)
 	}
 	if term != nil {
 		cmd.Stdout = term.tty
-		if opened := TerminalOpened(ctx); opened != nil {
+		if opened := execopt.TerminalOpened(ctx); opened != nil {
 			opened()
 		}
 	}
@@ -114,7 +127,7 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 		term.started(err == nil)
 	}
 	if err == nil {
-		if started := Started(ctx); started != nil {
+		if started := execopt.Started(ctx); started != nil {
 			started(cmd.Process.Pid)
 		}
 		err = cmd.Wait()
@@ -130,12 +143,12 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	return outBuf.String(), errBuf.String(), WrapExitError(err, errBuf.String())
 }
 
-// runOrphanSafe runs cmd as WithOrphanSafe describes: its standard output
-// goes to the null device and its standard error to a temporary file that
-// is unlinked at once, so that nothing is left of it once both processes
-// have ended. The goroutine keeps its thread until cmd ends, as the signal
-// of the parent's death (orphanSignal) comes when the thread that started
-// cmd ends.
+// runOrphanSafe runs cmd as execopt.WithOrphanSafe describes: its standard
+// output goes to the null device and its standard error to a temporary file
+// that is unlinked at once, so that nothing is left of it once both processes
+// have ended. The goroutine keeps its thread until cmd ends, as the signal of
+// the parent's death (orphanSignal) comes when the thread that started cmd
+// ends.
 func runOrphanSafe(ctx context.Context, cmd *exec.Cmd) (string, string, error) {
 	f, err := os.CreateTemp("", "sind-stderr-")
 	if err != nil {
@@ -149,7 +162,7 @@ func runOrphanSafe(ctx context.Context, cmd *exec.Cmd) (string, string, error) {
 	defer runtime.UnlockOSThread()
 	err = cmd.Start()
 	if err == nil {
-		if started := Started(ctx); started != nil {
+		if started := execopt.Started(ctx); started != nil {
 			started(cmd.Process.Pid)
 		}
 		err = cmd.Wait()
@@ -161,23 +174,23 @@ func runOrphanSafe(ctx context.Context, cmd *exec.Cmd) (string, string, error) {
 	return "", errBuf.String(), WrapExitError(err, errBuf.String())
 }
 
-// terminal is the pseudo-terminal of a command run WithTerminal: the
+// terminal is the pseudo-terminal of a command run execopt.WithTerminal: the
 // command writes to tty, and what it writes is read from pty and written to
 // out as plain lines.
 type terminal struct {
 	pty, tty *os.File
-	out      *TerminalLines
+	out      *execopt.TerminalLines
 	done     chan struct{}
 }
 
-// openTerminal opens a pseudo-terminal of TerminalWidth columns whose
+// openTerminal opens a pseudo-terminal of execopt.TerminalWidth columns whose
 // output goes to w, or returns nil when it cannot.
 func openTerminal(w io.Writer) *terminal {
 	p, tty, err := pty.Open()
 	if err != nil {
 		return nil
 	}
-	if err := pty.Setsize(p, &pty.Winsize{Rows: 24, Cols: TerminalWidth}); err != nil {
+	if err := pty.Setsize(p, &pty.Winsize{Rows: 24, Cols: execopt.TerminalWidth}); err != nil {
 		_ = p.Close()
 		_ = tty.Close()
 		return nil
@@ -186,7 +199,7 @@ func openTerminal(w io.Writer) *terminal {
 		_ = tty.Close()
 		return nil
 	}
-	return &terminal{pty: p, tty: tty, out: NewTerminalLines(w), done: make(chan struct{})}
+	return &terminal{pty: p, tty: tty, out: execopt.NewTerminalLines(w), done: make(chan struct{})}
 }
 
 // pollable returns a non-blocking copy of f, which the runtime's poller

@@ -158,6 +158,8 @@ Deleting is idempotent — deleting a non-existent cluster is not an error. sind
 
 Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. Containers outside sind attached to its networks, such as [kind nodes]({{< relref "/guides/kind" >}}), are disconnected first, not removed. sind also updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes.
 
+When a delete fails partway, or prints a warning, run it again. In a realm with other clusters, the second delete also removes what the first one left after it removed the containers: the nodes' DNS records and `known_hosts` entries, and on a monitored cluster its entries in the monitoring stack and its journals.
+
 ```bash
 # Delete the default cluster
 sind delete cluster

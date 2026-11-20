@@ -39,9 +39,9 @@ Creating and deleting clusters and workers, deleting a realm, and connecting and
 ## Creation flow
 
 ```
-┌ PreflightCheck → createResources ───────────────────┐
+┌ preflightCheck → createResources ───────────────────┐
 ├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┤
-├ DetectCVMFS (storage.cvmfs only) ────────────────────┼→ setupNodes
+├ detectCVMFS (storage.cvmfs only) ────────────────────┼→ setupNodes
 └ CheckNsdelegate ─────────────────────────────────────┘
                            │
   registerNodes ║ enableSlurm → createSlurmAccounts ║ createHomes ║ ensureMonitoring
@@ -53,7 +53,7 @@ Creating and deleting clusters and workers, deleting a realm, and connecting and
 
 - `createResources` creates the cluster network first, and only then, in parallel, connects the SSH relay and the realm's [external containers]({{< relref "/architecture/networking#external-containers" >}}) to it and creates the config volume and its Slurm configuration (managed clusters only; with a managed api node also `jwt_hs256.key`), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume, with `users` the home volume and, on a monitored cluster, the realm's journal volume `<realm>-journal`, if it does not exist yet, with an empty directory `<cluster>/<node>` for each node. The network comes first because `docker network create` fails for a name that exists, while `docker volume create` hands over an existing volume.
 - `resolveInfra` starts the mesh DNS and SSH relay if they are stopped, and looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created. On a monitored cluster the Slurm version comes from the check of the images for the endpoints that the monitoring stack uses, which fails the creation, before any node exists, for an image that cannot serve them.
-- `DetectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
+- `detectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
 - `CheckNsdelegate` reads `/proc/self/mounts` in a throwaway container of the controller's image, also while the resources are created, and fails the creation, before any node container exists, when the cgroup2 mount lacks `nsdelegate`. `nsdelegate` is an option of the whole cgroup2 hierarchy, which the kernel lists in every cgroup2 mount, so the container shows the option of the kernel the Docker daemon runs on.
 - Each distinct node image the daemon does not have, or with `--pull` each one, is pulled once, concurrently, before the helper containers, the version check, the CVMFS check, the nsdelegate check and the nodes run it; none of these containers is created with `--pull always`, and no node's `docker create` pulls. On a monitored cluster the monitoring stack's images are pulled with the node images. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, get their images the same way: each is pulled, when the daemon does not have it or with `--pull`, in the row of its part of the mesh step, before its `docker create`.
 - The helper containers that write the Slurm configuration and the munge key copy each file in with its final mode, then hand the secrets to their owner with `chown`; `docker rm -f` stops them.
@@ -117,3 +117,7 @@ sind is designed for use as both:
 2. **Go library** — embeddable package for wrapper tools and integrations
 
 The CLI command structure is reflected in the library API, allowing programmatic access to all sind operations.
+
+The library's public API is the packages under `pkg/` (`cluster`, `config`, `state`, `mesh`, `docker`, `cmdexec` and `log`); the packages under `internal/` are not part of it. sind is at v0: a release may still change the public API, but only as a marked breaking change that its release notes list, and, where the old name can stay for a release, after it was marked deprecated. A check in CI compares the public API of every pull request with its base. The example `ExampleCreateInRealm` of the `cluster` package shows how a program creates a cluster: the daemon check, the realm lock, the mesh and the cluster, and the SSH config export. From v1.0.0 on, the public packages follow semantic versioning. The progress spans that the operations report are go-clikit's `progress` package, whose stability is go-clikit's.
+
+A program that imports the library needs Go 1.26 or later. Its binary gets only the library's own dependencies, not the CLI's (cobra, the MCP server, the terminal styling), but the library and the CLI are one Go module: every module that sind's `go.mod` requires takes part in the version selection of the program's module, so the program builds with at least sind's version of any of them that it requires too.

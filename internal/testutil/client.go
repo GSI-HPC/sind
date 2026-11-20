@@ -21,3 +21,12 @@ func NewClient(t *testing.T) (*docker.Client, *mock.Recorder) {
 	rec := mock.NewRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }
+
+// SkipWithoutDocker skips a test that checks sind against Docker, which
+// unit mode does not have: answers queued for it would only replay what
+// the test expects. The unit tests check the commands and how their output
+// is read.
+func SkipWithoutDocker(t *testing.T) {
+	t.Helper()
+	t.Skip("needs Docker (-tags integration)")
+}

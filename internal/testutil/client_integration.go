@@ -5,14 +5,12 @@
 package testutil
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
-	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil/itest"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -24,22 +22,16 @@ func Realm(prefix string) string {
 	return fmt.Sprintf("%s-%x", prefix, b)
 }
 
-// dockerInfoTimeout is the maximum time to wait for docker info to respond
-// when checking whether the Docker daemon is available.
-const dockerInfoTimeout = 5 * time.Second
-
 // NewClient returns a docker.Client backed by a real OSExecutor.
-// The test is skipped when docker is not available.
+// The test is skipped, or fails under itest.RequireEnv, when docker
+// reaches no daemon.
 func NewClient(t *testing.T) (*docker.Client, *mock.Recorder) {
 	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not found in PATH")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), dockerInfoTimeout)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker daemon not running")
-	}
+	itest.RequireDocker(t)
 	rec := mock.NewIntegrationRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }
+
+// SkipWithoutDocker does nothing in integration mode, where NewClient skips
+// a test when Docker is not there.
+func SkipWithoutDocker(*testing.T) {}

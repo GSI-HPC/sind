@@ -1,0 +1,204 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package slurm
+
+import (
+	"errors"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// FuzzReadSlurmConf checks the reader of a cluster's slurm.conf with the
+// files it includes: no content makes it panic or loop, and what it
+// returns holds no include that it follows, so that reading it again
+// returns the same lines.
+func FuzzReadSlurmConf(f *testing.F) {
+	for _, seed := range [][2]string{
+		{"", ""},
+		{"ClusterName=dev\nSlurmctldHost=controller\n", ""},
+		{"ClusterName=Dev\ninclude sind-nodes.conf\ninclude extra.conf\n", "NodeName=n0 CPUs=1\n"},
+		{"include extra.conf\n", "include extra.conf\n"},
+		{"ClusterName=dev\ninclude %c.conf\nInclude /etc/slurm/slurm.conf.d/*.conf\n", "# empty\n"},
+		{"include extra.conf # comment\nKey=1 \\\n", "Key=2"},
+		{"include\ninclude  \n#include x\n", ""},
+	} {
+		f.Add(seed[0], seed[1])
+	}
+	f.Fuzz(func(t *testing.T, main, extra string) {
+		read := func(files map[string]string) func(string) (string, error) {
+			return func(path string) (string, error) {
+				content, ok := files[path]
+				if !ok {
+					return "", errors.New("no such file")
+				}
+				return content, nil
+			}
+		}
+		// Every include path that is not slurm.conf itself reads extra.
+		files := map[string]string{SlurmConfPath: main}
+		conf, err := ReadSlurmConf(func(path string) (string, error) {
+			if path == SlurmConfPath {
+				return main, nil
+			}
+			return extra, nil
+		})
+		if err != nil {
+			assert.ErrorContains(t, err, "includes nested more than")
+			return
+		}
+		assert.False(t, conf.IsMap())
+		_ = EnablesTaskAffinity(conf)
+
+		files[SlurmConfPath] = conf.Content
+		again, err := ReadSlurmConf(read(files))
+		require.NoError(t, err, "the result still includes a file:\n%s", conf.Content)
+		assert.Equal(t, conf.Content, again.Content)
+	})
+}
+
+// FuzzParseSinfo checks the readers of sinfo's output: no output makes
+// them panic, and each node and partition they return comes from a line.
+func FuzzParseSinfo(f *testing.F) {
+	for _, seed := range []string{
+		"",
+		"worker-0|idle|0/2/0/2|1024|all*|none\n",
+		"worker-0|idle|0/2/0/2|1024|all*|none\nworker-0|idle|0/2/0/2|1024|debug|none\n",
+		"worker-1|down*|0/0/2/2|1024|all*|Not responding\n",
+		"all*|up|infinite|2|worker-[0-1]\n",
+		"debug|down|1:00:00|0|\n",
+		"a|b|c|d|e|f|g\n",
+		"n|s|1/2/3|4|p|r\n",
+		"n|s|x/2/3/4|4|p|r\n",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, out string) {
+		lines := strings.Count(out, "\n") + 1
+		if nodes, err := ParseSinfoNodes(out); err == nil {
+			assert.LessOrEqual(t, len(nodes), lines)
+			for _, n := range nodes {
+				assert.NotEmpty(t, n.Partitions, "node %q", n.Name)
+				_ = NodeStateTakesJobs(n.State)
+			}
+		}
+		if parts, err := ParseSinfoPartitions(out); err == nil {
+			assert.LessOrEqual(t, len(parts), lines)
+		}
+	})
+}
+
+// FuzzParseProbe checks the reader of the image probe, whose input an
+// untrusted image prints: no output makes it panic, and what it takes
+// holds only the daemons that were asked for and words of the expected
+// forms.
+func FuzzParseProbe(f *testing.F) {
+	for _, seed := range []string{
+		"",
+		"daemon slurmctld slurm 25.11.2\ndaemon slurmd slurm 25.11.2\n",
+		"daemon slurmctld slurm 25.11.2\nmissing slurmd\nplugindir /usr/lib64/slurm\nplugin metrics_openmetrics.so\nunloadable auth_jwt.so\nmariadb --log-error=/var/log/mariadb.log\n",
+		"daemon slurmctld slurm 25.11.2\ndaemon slurmctld slurm 25.11.2\n",
+		"plugin x.so\n",
+		"plugindir relative\n",
+		"mariadb\n",
+		"mariadb --skip-log-error\n",
+		"daemon slurmd\n",
+		"other line\n",
+		"missing slurmrestd\n",
+	} {
+		f.Add(seed, true)
+		f.Add(seed, false)
+	}
+	f.Fuzz(func(t *testing.T, out string, mariadb bool) {
+		// A request without daemons takes no line about one.
+		_, _ = parseProbe(out, ProbeRequest{MariaDB: mariadb})
+		req := ProbeRequest{Daemons: []string{"slurmctld", "slurmd"}, PluginDir: "/usr/lib64/slurm", MariaDB: mariadb}
+		info, err := parseProbe(out, req)
+		if err != nil {
+			return
+		}
+		assert.NotContains(t, info.Version, "\n")
+		for _, m := range info.Missing {
+			assert.Contains(t, req.Daemons, m)
+		}
+		for _, p := range slices.Concat(info.Plugins, info.Unloadable) {
+			assert.Regexp(t, pluginFilePattern, p)
+		}
+		if !mariadb {
+			assert.Empty(t, info.MariaDBLogError)
+		}
+		_ = info.MonitoringProblems(req)
+		_ = info.Problems()
+		_ = info.MariaDBWarning()
+	})
+}
+
+// FuzzNodesConf checks the editor of sind-nodes.conf on any content, such
+// as one a user changed by hand: adding and removing nodes does not panic,
+// each added node is defined once, and removing them leaves none of them
+// defined. The properties of well-formed content are in nodes_test.go.
+func FuzzNodesConf(f *testing.F) {
+	for _, seed := range []string{
+		"",
+		"# Generated by sind\n",
+		"# Generated by sind\nNodeName=worker-0 CPUs=2 RealMemory=1024 State=UNKNOWN\nPartitionName=all Nodes=worker-0 Default=YES\n",
+		"NodeName=worker-0 CPUs=2\nNodeName=worker-0 CPUs=4\nPartitionName=all Default=YES MaxTime=1:00:00 # mine\n",
+		"NodeName=DEFAULT CPUs=2\nNodeName=worker-[0-3]\nPartitionName=DEFAULT State=UP\nPartitionName = all Nodes = \"worker-[0-3]\"\n",
+		"PartitionName=all\n",
+		"partitionname=all nodes=a,b\nPartitionName=debug Nodes=a\n",
+		"PartitionName=all Nodes=a # Nodes=b\n",
+		"  PartitionName=all\\\n",
+		"Partition\\Name=all\n",
+		"\"PartitionName\"=all\n",
+		"PartitionName=all Nodes=\"\"0\n",
+		"NodeName=\\#\nNodeName=\"a b\"\n",
+		"PartitionName=all Other=\"x Nodes=y\" Nodes=a Nodes=b\n",
+	} {
+		f.Add(seed, "worker-0", "worker-7")
+	}
+	f.Fuzz(func(t *testing.T, existing, first, second string) {
+		// Node names as config.CheckName takes them have no blank, quote,
+		// "#" or "=": sind names every node it adds.
+		for _, name := range []string{first, second} {
+			if config.CheckName("node", name) != nil {
+				t.Skip()
+			}
+		}
+		nodes := []NodeEntry{{Name: first, CPUs: 2, MemoryMB: 1024}, {Name: second, CPUs: 4, MemoryMB: 2048}}
+		names := []string{first, second}
+
+		added := AddNodesToConf(existing, nodes, config.Section{})
+		for _, name := range names {
+			assert.Equal(t, 1, definitions(added, name), "definitions of %s in:\n%s", name, added)
+		}
+		_ = AddNodesToConf(added, nodes, config.Section{})
+
+		removed := RemoveNodesFromConf(added, names)
+		for _, name := range names {
+			assert.Zero(t, definitions(removed, name), "definitions of %s in:\n%s", name, removed)
+		}
+		_ = RemoveNodesFromConf(removed, names)
+		_ = RemoveNodesFromConf(existing, names)
+	})
+}
+
+// defined returns the nodes that the NodeName lines of conf define, in
+// their order.
+func defined(conf string) []string {
+	var names []string
+	for line := range strings.Lines(conf) {
+		if name, ok := nodeName(strings.TrimSuffix(line, "\n")); ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// definitions counts the NodeName lines of conf that define name.
+func definitions(conf, name string) int {
+	return len(slices.DeleteFunc(defined(conf), func(n string) bool { return n != name }))
+}

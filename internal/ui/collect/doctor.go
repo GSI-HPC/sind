@@ -6,15 +6,15 @@ import (
 	"context"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/doctor"
+	"github.com/GSI-HPC/sind/internal/envvar"
 	"github.com/GSI-HPC/sind/internal/ui/store"
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 )
 
-// Doctor runs the host checks (pkg/doctor) once when it starts and again
+// Doctor runs the host checks (internal/doctor) once when it starts and again
 // each time Request is called, and keeps the report in the store. While a
 // check runs, the report says so (store.DoctorReport.Running) next to the
 // outcome of the last one.
@@ -66,7 +66,7 @@ func (d *Doctor) check(ctx context.Context) {
 	}
 	// An invalid SIND_REALM only affects the checks of the host DNS, which
 	// the default realm answers just as well.
-	realm, err := cluster.ResolveRealm(nil, "")
+	realm, err := envvar.ResolveRealm(nil, "")
 	if err != nil {
 		realm = mesh.DefaultRealm
 	}

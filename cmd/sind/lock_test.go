@@ -5,96 +5,25 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/fakedocker"
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// lockDaemon answers the docker commands of the realm lock's daemon part
-// like dockerd: it keeps networks by name and refuses a name that is
-// taken. Each command's client has its own mock.Executor, so the daemon
-// serializes the calls itself.
-type lockDaemon struct {
-	mu    sync.Mutex
-	exit1 error
-	nets  map[string]map[string]string // name → labels
-	ids   map[string]string            // ID → name
-	// rmErr, when set, fails every network rm.
-	rmErr error
-}
-
-func newLockDaemon(t *testing.T) *lockDaemon {
-	return &lockDaemon{exit1: testutil.ExitCode1(t), nets: map[string]map[string]string{}, ids: map[string]string{}}
-}
-
-// add creates a network as another client would.
-func (d *lockDaemon) add(name string, labels map[string]string) {
-	id := fmt.Sprintf("%064d", len(d.ids)+1)
-	d.nets[name] = labels
-	d.ids[id] = name
-}
-
-// withClient returns ctx with a docker client of the daemon.
-func (d *lockDaemon) withClient(ctx context.Context) context.Context {
-	return withClient(ctx, docker.NewClient(&mock.Executor{OnCall: d.onCall}))
-}
-
-func (d *lockDaemon) onCall(args []string, _ string) mock.Result {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	switch args[1] {
-	case "create":
-		name := args[len(args)-1]
-		if _, ok := d.nets[name]; ok {
-			return mock.Result{Stderr: "Error response from daemon: network with name " + name + " already exists\n", Err: d.exit1}
-		}
-		labels := map[string]string{}
-		for i := 2; i < len(args)-1; i++ {
-			if args[i] == "--label" {
-				k, v, _ := strings.Cut(args[i+1], "=")
-				labels[k] = v
-			}
-		}
-		d.add(name, labels)
-		return mock.Result{Stdout: fmt.Sprintf("%064d\n", len(d.ids))}
-	case "inspect":
-		labels, ok := d.nets[args[2]]
-		if !ok {
-			return mock.Result{Stderr: testutil.NoSuchNetwork(args[2]), Err: d.exit1}
-		}
-		var id string
-		for i, name := range d.ids {
-			if name == args[2] {
-				id = i
-			}
-		}
-		out, _ := json.Marshal(map[string]any{"Name": args[2], "Id": id, "Created": "2026-10-04T10:02:03Z", "ConfigOnly": true, "Labels": labels})
-		return mock.Result{Stdout: string(out) + "\n"}
-	case "rm":
-		if d.rmErr != nil {
-			return mock.Result{Err: d.rmErr}
-		}
-		name, ok := d.ids[args[2]]
-		if !ok {
-			return mock.Result{Stderr: testutil.NoSuchNetwork(args[2]), Err: d.exit1}
-		}
-		delete(d.ids, args[2])
-		delete(d.nets, name)
-		return mock.Result{Stdout: args[2] + "\n"}
-	}
-	return mock.Result{Err: fmt.Errorf("unexpected docker call %v", args)}
+// withDaemon returns ctx with a docker client of d, which answers the
+// commands of the realm lock's daemon part.
+func withDaemon(ctx context.Context, d *fakedocker.Daemon) context.Context {
+	return withClient(ctx, d.Client())
 }
 
 // TestAcquireRealmLock covers the CLI's use of state.LockRealm; the lock
@@ -105,34 +34,34 @@ func TestAcquireRealmLock(t *testing.T) {
 	t.Run("creates directory, lock file and daemon lock", func(t *testing.T) {
 		t.Parallel()
 		stateHome := t.TempDir()
-		d := newLockDaemon(t)
+		d := fakedocker.New(t)
 
-		unlock, err := acquireRealmLock(d.withClient(context.Background()), "test-realm", stateHome)
+		unlock, err := acquireRealmLock(withDaemon(context.Background(), d), "test-realm", stateHome)
 		require.NoError(t, err)
 
 		lockPath := filepath.Join(stateHome, "sind", "test-realm", "lock")
 		_, err = os.Stat(lockPath)
 		assert.NoError(t, err)
-		assert.Contains(t, d.nets, "test-realm-lock")
+		assert.Contains(t, d.Networks(), "test-realm-lock")
 
 		unlock()
-		assert.Empty(t, d.nets, "unlock removes the daemon lock")
+		assert.Empty(t, d.Networks(), "unlock removes the daemon lock")
 	})
 
 	t.Run("contention blocks until released", func(t *testing.T) {
 		t.Parallel()
 		stateHome := t.TempDir()
-		d := newLockDaemon(t)
+		d := fakedocker.New(t)
 
 		var stderr1 bytes.Buffer
-		unlock1, err := acquireRealmLock(d.withClient(withStderr(context.Background(), &stderr1)), "contention", stateHome)
+		unlock1, err := acquireRealmLock(withDaemon(withStderr(context.Background(), &stderr1), d), "contention", stateHome)
 		require.NoError(t, err)
 		assert.Empty(t, stderr1.String(), "a free lock gives no warning")
 
 		var stderr2 bytes.Buffer
 		acquired := make(chan struct{})
 		go func() {
-			unlock2, err := acquireRealmLock(d.withClient(withStderr(context.Background(), &stderr2)), "contention", stateHome)
+			unlock2, err := acquireRealmLock(withDaemon(withStderr(context.Background(), &stderr2), d), "contention", stateHome)
 			assert.NoError(t, err)
 			close(acquired)
 			unlock2()
@@ -161,8 +90,8 @@ func TestAcquireRealmLock(t *testing.T) {
 // that the warning names the command that holds the lock.
 func TestAcquireRealmLock_SharedDaemon(t *testing.T) {
 	t.Parallel()
-	d := newLockDaemon(t)
-	ctx := d.withClient(context.Background())
+	d := fakedocker.New(t)
+	ctx := withDaemon(context.Background(), d)
 
 	unlock1, err := acquireRealmLock(ctx, "shared", t.TempDir())
 	require.NoError(t, err)
@@ -197,15 +126,15 @@ func TestAcquireRealmLock_SharedDaemon(t *testing.T) {
 // of another client's lock cannot reach the terminal as control sequences.
 func TestAcquireRealmLock_EscapesHolder(t *testing.T) {
 	t.Parallel()
-	d := newLockDaemon(t)
-	d.add("evil-lock", map[string]string{
+	d := fakedocker.New(t)
+	d.Add("evil-lock", map[string]string{
 		"sind.lock.token":   "x",
 		"sind.lock.command": "sind \x1b]0;owned\x07",
 		"sind.lock.host":    "elsewhere",
 		"sind.lock.pid":     "7",
 	})
 	var stderr bytes.Buffer
-	ctx, cancel := context.WithTimeout(d.withClient(withStderr(context.Background(), &stderr)), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(withDaemon(withStderr(context.Background(), &stderr), d), 200*time.Millisecond)
 	defer cancel()
 
 	_, err := acquireRealmLock(ctx, "evil", t.TempDir())
@@ -219,12 +148,17 @@ func TestAcquireRealmLock_EscapesHolder(t *testing.T) {
 // command cannot remove is reported on stderr with the command that does.
 func TestAcquireRealmLock_ReleaseWarning(t *testing.T) {
 	t.Parallel()
-	d := newLockDaemon(t)
+	d := fakedocker.New(t)
 	var stderr bytes.Buffer
 
-	unlock, err := acquireRealmLock(d.withClient(withStderr(context.Background(), &stderr)), "gone", t.TempDir())
+	unlock, err := acquireRealmLock(withDaemon(withStderr(context.Background(), &stderr), d), "gone", t.TempDir())
 	require.NoError(t, err)
-	d.rmErr = fmt.Errorf("Cannot connect to the Docker daemon\x1b[2J")
+	d.SetHook(func(args []string) *mock.Result {
+		if args[1] == "rm" {
+			return &mock.Result{Err: fmt.Errorf("Cannot connect to the Docker daemon\x1b[2J")}
+		}
+		return nil
+	})
 	unlock()
 
 	assert.Equal(t, `Warning: releasing the realm lock: Cannot connect to the Docker daemon\x1b[2J; remove it with: docker network rm gone-lock`+"\n", stderr.String())
@@ -234,4 +168,68 @@ func TestStderrFrom(t *testing.T) {
 	assert.Equal(t, os.Stderr, stderrFrom(context.Background()))
 	var buf bytes.Buffer
 	assert.Equal(t, &buf, stderrFrom(withStderr(context.Background(), &buf)))
+}
+
+// TestMutatingCommandsTakeTheRealmLock runs each command that changes a
+// realm while another sind command holds the realm's lock, and checks that
+// it waits for the lock before any docker call that is not the lock's,
+// other than the daemon check of create cluster. The command is
+// interrupted while it waits. The realm is not the default one, so that a
+// command that locks the default realm fails.
+func TestMutatingCommandsTakeTheRealmLock(t *testing.T) {
+	const daemonInfo = "info --format {{json .}}"
+	const realm, lockNet = "ci", "ci-lock"
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, tt := range []struct {
+		args   []string
+		before []string // the docker calls the command makes before the lock
+	}{
+		{[]string{"create", "cluster"}, []string{daemonInfo}},
+		{[]string{"create", "worker"}, nil},
+		{[]string{"delete", "cluster"}, nil},
+		{[]string{"delete", "cluster", "--all"}, nil},
+		{[]string{"delete", "realm"}, nil},
+		{[]string{"delete", "worker", "worker-0"}, nil},
+		{[]string{"connect", "container", "ext"}, nil},
+		{[]string{"disconnect", "container", "ext"}, nil},
+		{[]string{"power", "on", "worker-0"}, nil},
+		{[]string{"power", "reboot", "worker-0"}, nil},
+		{[]string{"power", "cycle", "worker-0"}, nil},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			d := fakedocker.New(t)
+			d.Add(lockNet, map[string]string{
+				"sind.lock.token":   "x",
+				"sind.lock.command": "sind create cluster",
+				"sind.lock.host":    "elsewhere",
+				"sind.lock.pid":     "7",
+			})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var others []string
+			lockCalls := 0
+			ctx = withClient(ctx, docker.NewClient(&mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+				if args[0] != "network" || args[len(args)-1] != lockNet && args[len(args)-3] != lockNet {
+					joined := strings.Join(args, " ")
+					others = append(others, joined)
+					if joined == daemonInfo {
+						return mock.Result{Stdout: `{"ServerVersion":"28.0.0","CgroupVersion":"2"}` + "\n"}
+					}
+					return mock.Result{Err: fmt.Errorf("unexpected docker call %v", args)}
+				}
+				if lockCalls++; lockCalls == 4 {
+					cancel()
+				}
+				return d.OnCall(args, stdin)
+			}}))
+			var stderr bytes.Buffer
+
+			code := run(ctx, append([]string{"--realm", realm}, tt.args...), &stderr)
+
+			assert.Equal(t, exitInterrupted, code, stderr.String())
+			assert.Contains(t, stderr.String(), `Warning: waiting for another sind command in realm "ci" to finish: sind create cluster (pid 7 on elsewhere`)
+			assert.Contains(t, stderr.String(), "interrupted: taking the realm lock on the Docker daemon: context canceled")
+			assert.Equal(t, tt.before, others)
+		})
+	}
 }

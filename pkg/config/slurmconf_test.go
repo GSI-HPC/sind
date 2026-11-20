@@ -121,3 +121,38 @@ func TestListsValue(t *testing.T) {
 	assert.False(t, ListsValue("ENABLE_NSS_SLURM", "enable_nss_slurm"))
 	assert.False(t, ListsValue("", "enable_nss_slurm"))
 }
+
+func TestFixedSlurmParameters(t *testing.T) {
+	fixed := FixedSlurmParameters()
+	assert.Contains(t, fixed, "ClusterName")
+	fixed[0] = "changed"
+	assert.Equal(t, "ClusterName", FixedSlurmParameters()[0], "a caller gets a copy")
+}
+
+func TestCluster_SlurmWarnings(t *testing.T) {
+	cluster := func(main string, backup bool, managed *bool) Cluster {
+		return Cluster{
+			Nodes: []Node{{Role: RoleController, BackupController: backup, Managed: managed}},
+			Slurm: Slurm{Main: Section{Content: main}},
+		}
+	}
+	c := cluster("SelectType=select/cons_tres\n# a comment\n\ninclude /etc/slurm/more.conf\n", false, nil)
+	assert.Empty(t, c.Warnings())
+	c = cluster("clustername=prod\nSlurmUser=root\n", false, nil)
+	assert.Equal(t, []string{"The lines of slurm.conf set ClusterName, SlurmUser, which sind sets itself. Slurm takes your value in place of sind's, and the cluster may not start."},
+		c.Warnings())
+	c = cluster("SlurmctldHost=x\nStateSaveLocation=/s\nSlurmdSpoolDir=/d\n", true, nil)
+	assert.Equal(t, []string{"The lines of slurm.conf set SlurmdSpoolDir, which sind sets itself. Slurm takes your value in place of sind's, and the cluster may not start."},
+		c.Warnings(), "the config refuses the others with a backup controller")
+	off := false
+	c = cluster("ClusterName=prod\n", false, &off)
+	assert.Empty(t, c.Warnings(), "the config refuses Slurm config of an unmanaged cluster")
+
+	c = cluster("SelectType select/cons_tres # no =\n", false, nil)
+	c.Slurm.Plugstack = Section{Content: "optional /usr/lib64/slurm/spank_demo.so\n"}
+	c.Slurm.Cgroup = Section{Fragments: map[string]string{"ram": "ConstrainRAMSpace=yes\nConstrainCores\n"}}
+	assert.Equal(t, []string{
+		`The lines of slurm.conf have "SelectType select/cons_tres", which is no Key=Value pair. Slurm may refuse it and not start.`,
+		`The lines of cgroup.conf have "ConstrainCores", which is no Key=Value pair. Slurm may refuse it and not start.`,
+	}, c.Warnings())
+}

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -24,27 +25,11 @@ import (
 
 func TestContainerStateLifecycle(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itContainerName("state")
-	n := string(name)
 
-	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)                                                                                       // create
-		rec.AddResult("[{}]\n", "", nil)                                                                                         // exists → true
-		rec.AddResult(n+"\n", "", nil)                                                                                           // start
-		rec.AddResult(inspectRunning(n), "", nil)                                                                                // inspect → running
-		rec.AddResult(n+"\n", "", nil)                                                                                           // stop
-		rec.AddResult(inspectExited(n), "", nil)                                                                                 // inspect → exited
-		rec.AddResult(n+"\n", "", nil)                                                                                           // start again
-		rec.AddResult(n+"\n", "", nil)                                                                                           // pause
-		rec.AddResult(inspectPaused(n), "", nil)                                                                                 // inspect → paused
-		rec.AddResult(n+"\n", "", nil)                                                                                           // unpause
-		rec.AddResult(inspectRunning(n), "", nil)                                                                                // inspect → running
-		rec.AddResult(n+"\n", "", nil)                                                                                           // kill
-		rec.AddResult(n+"\n", "", nil)                                                                                           // remove
-		rec.AddResult("", "Error response from daemon: No such container: "+n+"\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
-	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_ = c.KillContainer(cleanupCtx, name)
@@ -110,25 +95,11 @@ func TestContainerStateLifecycle(t *testing.T) {
 
 func TestContainerExecAndFiles(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itContainerName("files")
-	n := string(name)
 
-	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)                 // run
-		rec.AddResult("hello\n", "", nil)                  // exec echo
-		rec.AddResult("", "", nil)                         // write
-		rec.AddResult("line1\n", "", nil)                  // read
-		rec.AddResult("", "", nil)                         // replace
-		rec.AddResult("", "", errors.New("exit status 1")) // short replace
-		rec.AddResult("new\n", "", nil)                    // read
-		rec.AddResult("/tmp/test.txt\n", "", nil)          // ls
-		rec.AddResult("", "", nil)                         // copy to
-		rec.AddResult(copyFromTar("content-a"), "", nil)   // copy from
-		rec.AddResult(n+"\n", "", nil)                     // kill (cleanup)
-		rec.AddResult(n+"\n", "", nil)                     // rm (cleanup)
-	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_ = c.KillContainer(cleanupCtx, name)
@@ -181,19 +152,11 @@ func TestContainerExecAndFiles(t *testing.T) {
 
 func TestContainerLabelsAndList(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itContainerName("labels")
-	n := string(name)
 
-	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)                                                                                                                                                             // run
-		rec.AddResult(`[{"Id":"abc123","Name":"/`+n+`","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
-		rec.AddResult(`{"ID":"abc123","Names":"`+n+`","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=worker"}`+"\n", "", nil)                                     // list
-		rec.AddResult("", "", nil)                                                                                                                                                                     // list empty
-		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                 // kill (cleanup)
-		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                 // rm (cleanup)
-	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_ = c.KillContainer(cleanupCtx, name)
@@ -609,20 +572,12 @@ func TestListContainers_Networks(t *testing.T) {
 // the network among their Networks.
 func TestListContainersOnNetwork(t *testing.T) {
 	t.Parallel()
+	skipWithoutDocker(t)
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	network := itNetworkName("list")
 	name := itContainerName("list")
 
-	if !rec.IsIntegration() {
-		rec.AddResult("net-id\n", "", nil)        // network create
-		rec.AddResult("cid\n", "", nil)           // run
-		rec.AddResult(string(name)+"\n", "", nil) // stop
-		rec.AddResult(`{"ID":"cid","Names":"`+string(name)+`","State":"exited","Image":"busybox:latest","Networks":"`+string(network)+`"}`+"\n", "", nil)
-		rec.AddResult("", "", nil)                // ps for another network
-		rec.AddResult(string(name)+"\n", "", nil) // rm (cleanup)
-		rec.AddResult("", "", nil)                // network rm (cleanup)
-	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		_ = c.RemoveContainer(cleanupCtx, name)
@@ -1085,7 +1040,7 @@ func TestCopyFilesToContainer(t *testing.T) {
 
 	files := map[string]File{
 		"munge.key": {Content: []byte("secret"), Mode: 0600},
-		"config":    {Content: []byte("data"), Mode: 0644},
+		"config":    {Content: []byte("data"), Mode: fs.FileMode(0644)},
 	}
 	err := c.CopyFilesToContainer(t.Context(), testContainerName, "/etc", files)
 	require.NoError(t, err)

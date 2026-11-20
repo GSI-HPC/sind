@@ -25,11 +25,11 @@ import (
 // DefaultRealm is the realm name that produces the standard resource names.
 const DefaultRealm = "sind"
 
-// LabelRealm is the Docker label applied to mesh resources (network, volumes)
+// labelRealm is the Docker label applied to mesh resources (network, volumes)
 // so realm-scoped listings can filter by label rather than by name prefix.
 // pkg/cluster defines the same constant for cluster-scoped resources; keeping
 // it local here avoids a pkg/mesh → pkg/cluster import.
-const LabelRealm = "sind.realm"
+const labelRealm = "sind.realm"
 
 // LabelDNSIP is the label of a mesh network that records the address its
 // DNS container is pinned to (see EnsureMeshNetwork). Meshes created by
@@ -42,18 +42,9 @@ const LabelDNSIP = "sind.dns.ip"
 // the subnet in between, before it keeps one without.
 const meshSubnetAttempts = 5
 
-// Default-realm resource names. Production code uses RealmNames or the
-// Manager methods; these constants are used in tests as expected values for DefaultRealm.
-const (
-	NetworkName      docker.NetworkName   = "sind-mesh"
-	DNSContainerName docker.ContainerName = "sind-dns"
-	SSHContainerName docker.ContainerName = "sind-ssh"
-	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
-)
-
 // The Compose services of the mesh's containers, in the project
 // Names.ComposeProject. The monitoring stack's containers join that project
-// too, as the services of pkg/observability.
+// too, as the services of the monitoring stack.
 const (
 	ComposeServiceDNS = "dns"
 	ComposeServiceSSH = "ssh"
@@ -64,9 +55,13 @@ func composeLabelFlags(project, service string) []string {
 	return docker.SortedLabelFlags(docker.ComposeLabels(project, service, 1))
 }
 
-// DNSImage is the container image used for the mesh DNS server, a pinned
+// dnsImage is the container image of the mesh DNS server, a pinned
 // CoreDNS release.
-const DNSImage = "coredns/coredns:1.15.0"
+const dnsImage = "coredns/coredns:1.15.0"
+
+// DNSImage returns the container image of the mesh DNS server, a CoreDNS
+// release that sind pins and bumps by hand.
+func DNSImage() string { return dnsImage }
 
 // corefilePath is the path to the Corefile inside the DNS container.
 const corefilePath = "/Corefile"
@@ -99,6 +94,12 @@ func dnsFiles(realm string, entries []string) docker.FileContents {
 }
 
 // Manager handles global infrastructure resources shared across all clusters.
+// Its changes of a mesh file, the Corefile (AddDNSRecords) or the relay's
+// known_hosts (AddKnownHosts), are read-modify-writes: two changes of the
+// same file must not run at once, while changes of different files may, as
+// Create runs AddDNSRecords and AddKnownHosts together. Other sind
+// processes change the files too: callers hold the realm lock
+// (state.LockRealm) while they change the realm.
 type Manager struct {
 	Docker  *docker.Client
 	Exec    cmdexec.Executor // executor for non-docker system commands (systemctl, resolvectl, etc.)
@@ -196,13 +197,13 @@ func (m *Manager) SSHContainerName() docker.ContainerName {
 	return RealmNames(m.Realm).SSHContainer
 }
 
-// SSHVolumeName returns the SSH volume name for this realm.
-func (m *Manager) SSHVolumeName() docker.VolumeName {
+// sshVolumeName returns the SSH volume name for this realm.
+func (m *Manager) sshVolumeName() docker.VolumeName {
 	return RealmNames(m.Realm).SSHVolume
 }
 
-// SSHKeygenName returns the temporary keygen container name for this realm.
-func (m *Manager) SSHKeygenName() docker.ContainerName {
+// sshKeygenName returns the temporary keygen container name for this realm.
+func (m *Manager) sshKeygenName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-ssh-keygen")
 }
 
@@ -442,7 +443,7 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		name docker.ContainerName
 		what string
 	}{
-		{m.SSHKeygenName(), "SSH keygen"},
+		{m.sshKeygenName(), "SSH keygen"},
 		{m.SSHContainerName(), "SSH"},
 		{m.DNSContainerName(), "DNS"},
 	} {
@@ -466,7 +467,7 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}
 
-	if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, m.SSHVolumeName())); err != nil {
+	if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, m.sshVolumeName())); err != nil {
 		return fmt.Errorf("removing SSH volume: %w", err)
 	}
 
@@ -531,7 +532,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 	log := sindlog.From(ctx)
 	name := m.NetworkName()
 	labels := docker.Labels{
-		LabelRealm:                 m.Realm,
+		labelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
@@ -679,8 +680,8 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 		args = append(args, "--ip", pinnedIP)
 	}
 	args = append(args, composeLabelFlags(m.ComposeProject(), ComposeServiceDNS)...)
-	args = append(args, DNSImage)
-	if err := m.pullFor(ctx, DNSImage); err != nil {
+	args = append(args, dnsImage)
+	if err := m.pullFor(ctx, dnsImage); err != nil {
 		return nil, err
 	}
 	if _, err := m.Docker.CreateContainer(ctx, args...); err != nil {
@@ -811,16 +812,47 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames), !found)
 }
 
+// HasDomainRecords reports whether the mesh DNS Corefile holds an A record
+// of a host in one of the domains, such as a cluster's dev.sind.sind. It
+// reads the Corefile from the DNS container, which need not run. A realm
+// without a DNS container has no record.
+func (m *Manager) HasDomainRecords(ctx context.Context, domains []string) (bool, error) {
+	entries, _, err := m.readDNSEntries(ctx)
+	if docker.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return len(withoutDomains(slices.Clone(entries), 1, domains)) < len(entries), nil
+}
+
+// RemoveDNSDomains removes the A records of every host in the domains from
+// the mesh DNS Corefile and reloads CoreDNS once: all that a cluster's
+// nodes ever registered, whether or not their containers still exist. A
+// Corefile without such a record stays as it is.
+func (m *Manager) RemoveDNSDomains(ctx context.Context, domains []string) error {
+	entries, found, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return err
+	}
+	kept := withoutDomains(slices.Clone(entries), 1, domains)
+	if found && len(kept) == len(entries) {
+		return nil
+	}
+	return m.writeDNSEntries(ctx, kept, !found)
+}
+
 // Info holds information about the mesh infrastructure for a realm.
 type Info struct {
-	Network      string `json:"network"`
-	DNSContainer string `json:"dns_container"`
-	DNSIP        string `json:"dns_ip"`
-	DNSZone      string `json:"dns_zone"`
-	DNSImage     string `json:"dns_image"`
-	SSHContainer string `json:"ssh_container"`
-	SSHVolume    string `json:"ssh_volume"`
-	SSHImage     string `json:"ssh_image"`
+	Network      docker.NetworkName   `json:"network"`
+	DNSContainer docker.ContainerName `json:"dns_container"`
+	DNSIP        string               `json:"dns_ip"`
+	DNSZone      string               `json:"dns_zone"`
+	DNSImage     string               `json:"dns_image"`
+	SSHContainer docker.ContainerName `json:"ssh_container"`
+	SSHVolume    docker.VolumeName    `json:"ssh_volume"`
+	SSHImage     string               `json:"ssh_image"`
 }
 
 // requireMeshContainer returns an error if the given mesh container does not
@@ -860,13 +892,13 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	}
 
 	info := &Info{
-		Network:      string(netName),
-		DNSContainer: string(dnsName),
+		Network:      netName,
+		DNSContainer: dnsName,
 		DNSIP:        dnsInfo.IPs[netName],
 		DNSZone:      m.Realm + ".sind",
 		DNSImage:     dnsInfo.ImageRef,
-		SSHContainer: string(m.SSHContainerName()),
-		SSHVolume:    string(m.SSHVolumeName()),
+		SSHContainer: m.SSHContainerName(),
+		SSHVolume:    m.sshVolumeName(),
 	}
 	if sshInfo != nil {
 		info.SSHImage = sshInfo.ImageRef
@@ -1039,6 +1071,18 @@ func isEntry(line string) bool {
 	addr, _, _ = strings.Cut(addr, "\t")
 	_, err := netip.ParseAddr(addr)
 	return err == nil
+}
+
+// withoutDomains returns lines without those whose field i is a host name
+// in one of the domains: a known_hosts line (0) or a hosts entry of the
+// Corefile (1). It filters lines in place.
+func withoutDomains(lines []string, i int, domains []string) []string {
+	return slices.DeleteFunc(lines, func(line string) bool {
+		fields := strings.Fields(line)
+		return len(fields) > i && slices.ContainsFunc(domains, func(domain string) bool {
+			return strings.HasSuffix(fields[i], "."+domain)
+		})
+	})
 }
 
 // withoutNames returns lines without the blank ones and those whose field i

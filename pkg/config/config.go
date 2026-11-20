@@ -138,7 +138,7 @@ func (d DataStorage) validate() error {
 }
 
 // validateDataMountPath checks that the data storage's mountPath is not a
-// path where every node already has a mount (see cluster.BuildRunArgs):
+// path where every node already has a mount, such as /etc/slurm or /tmp:
 // Docker refuses a container with two mounts at one path.
 func (c *Cluster) validateDataMountPath() error {
 	if c.Storage.DataStorage.MountPath == "" {
@@ -215,9 +215,25 @@ func (s *Section) UnmarshalYAML(v *yaml.Node) error {
 // map of fragments, or else the string.
 func (s Section) MarshalYAML() (any, error) {
 	if s.IsMap() {
-		return s.Fragments, nil
+		fragments := make(map[string]any, len(s.Fragments))
+		for name, content := range s.Fragments {
+			fragments[name] = yamlText(content)
+		}
+		return fragments, nil
 	}
-	return s.Content, nil
+	return yamlText(s.Content), nil
+}
+
+// yamlText returns text as the YAML encoder must get it so that the
+// decoder reads it back. The encoder writes text of several lines as a
+// block ("|"), and the decoder takes a tab at the start of its first line
+// for indentation, which it refuses: such text is written in double
+// quotes.
+func yamlText(text string) any {
+	if strings.HasPrefix(text, "\t") && strings.Contains(text, "\n") {
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: text, Style: yaml.DoubleQuotedStyle}
+	}
+	return text
 }
 
 // Slurm configures custom Slurm configuration files.
@@ -230,6 +246,25 @@ type Slurm struct {
 	Topology  Section `yaml:"topology,omitempty"`
 	Plugstack Section `yaml:"plugstack,omitempty"`
 	Slurmdbd  Section `yaml:"slurmdbd,omitempty"`
+}
+
+// slurmSection is a section of Slurm, with the file sind writes its lines
+// to.
+type slurmSection struct {
+	name, file string
+	section    Section
+}
+
+// sections returns the sections of s, in order.
+func (s *Slurm) sections() []slurmSection {
+	return []slurmSection{
+		{"main", "slurm.conf", s.Main},
+		{"cgroup", "cgroup.conf", s.Cgroup},
+		{"gres", "gres.conf", s.Gres},
+		{"topology", "topology.conf", s.Topology},
+		{"plugstack", "plugstack.conf", s.Plugstack},
+		{"slurmdbd", "slurmdbd.conf", s.Slurmdbd},
+	}
 }
 
 // Cluster represents a sind cluster configuration.
@@ -267,13 +302,6 @@ const (
 	DefaultTmpSize     = "256m"
 )
 
-// DefaultImage is the node image of nodes that set none. Release builds
-// set it with -ldflags "-X" to the image the image workflow publishes for
-// their release, ghcr.io/gsi-hpc/sind-node:vX.Y.Z (.goreleaser.yaml), so a
-// release keeps the node image it was built with. Other builds use latest,
-// the newest Slurm release line.
-var DefaultImage = "ghcr.io/gsi-hpc/sind-node:latest"
-
 // ApplyDefaults populates missing fields with defaults.
 // If no nodes are defined, creates a minimal cluster (1 controller + 1 worker).
 // Node-level fields inherit from the Defaults section, which in turn falls back
@@ -296,7 +324,7 @@ func (c *Cluster) ApplyDefaults() {
 	d := c.Defaults
 	for i := range c.Nodes {
 		n := &c.Nodes[i]
-		n.Image = cmp.Or(n.Image, d.Image, DefaultImage)
+		n.Image = cmp.Or(n.Image, d.Image, DefaultNodeImage())
 		n.CPUs = cmp.Or(n.CPUs, d.CPUs, DefaultCPUs)
 		n.Memory = cmp.Or(n.Memory, d.Memory, DefaultMemory)
 		n.TmpSize = cmp.Or(n.TmpSize, d.TmpSize, DefaultTmpSize)
@@ -389,11 +417,17 @@ func (c *Cluster) ValidateAll() []error {
 		add(fmt.Errorf("at least one worker node required, got %d", roles[RoleWorker]))
 	}
 
+	for _, err := range c.imageErrors() {
+		add(err)
+	}
 	add(c.validateResources())
 	add(c.Storage.DataStorage.validate())
 	add(c.validateDataMountPath())
 	add(validateUsers(c.Users, c.Groups))
 	add(c.validateAccounts())
+	for _, err := range c.qosErrors() {
+		add(err)
+	}
 	add(c.Identity.validate(c.Managed(), c.Slurm.Main))
 	add(c.validateAPI())
 	add(c.validateSlurmdbd())
@@ -406,17 +440,7 @@ func (c *Cluster) ValidateAll() []error {
 		add(CheckSecurityOpts("securityOpt", n.SecurityOpt))
 	}
 
-	sections := []struct {
-		name    string
-		section Section
-	}{
-		{"main", c.Slurm.Main},
-		{"cgroup", c.Slurm.Cgroup},
-		{"gres", c.Slurm.Gres},
-		{"topology", c.Slurm.Topology},
-		{"plugstack", c.Slurm.Plugstack},
-		{"slurmdbd", c.Slurm.Slurmdbd},
-	}
+	sections := c.Slurm.sections()
 
 	if !c.Managed() {
 		for _, n := range c.Nodes {

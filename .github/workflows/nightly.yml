@@ -1,0 +1,196 @@
+name: Nightly
+
+# Checks of next that find a defect without a change to the code, or take
+# too long for a pull request:
+# - govulncheck, for an advisory published since the last pull request
+# - the unit tests in a random order, three times, for a test that depends
+#   on another one or fails now and then
+# - every fuzz target for three minutes, for an input that a parser does
+#   not handle; a pull request runs only the seeds
+# - the mutation score of the packages that parse and generate text, for
+#   code that the tests run but do not check; it reports and never fails
+#   for a score
+#
+# Scheduled workflows run from the default branch, but sind is developed on
+# next, so each job checks out next. The report job keeps one open issue,
+# labelled nightly, that names the jobs that failed and links their run:
+# - an open issue is updated in place, so there is never more than one
+# - a night without a failure leaves it open, as a test that fails now and
+#   then passes the next night; a maintainer closes it with the fix
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  govulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  # go test prints the seed of a shuffled run that fails
+  # ("-test.shuffle <seed>"): go test -shuffle=<seed> runs that order again.
+  shuffle:
+    name: Unit Test (shuffled)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install firejail
+        run: sudo apt-get update && sudo apt-get install -y firejail
+
+      # firejail breaks DNS resolution, as in the Unit Test job of CI.
+      - name: Prime module cache
+        run: go mod download
+
+      - name: Unit tests, shuffled
+        run: make test
+        env:
+          GOTEST: go test -shuffle=on -count=3
+
+  # The inputs that failed are in the job summary and in the artifact
+  # fuzz-inputs: put one at the same path in a checkout, and go test runs
+  # it with the seeds.
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run every fuzz target
+        run: make fuzz
+        env:
+          FUZZTIME: 3m
+
+      - name: Show the inputs that failed
+        if: failure()
+        run: |
+          git ls-files --others --exclude-standard -- '*/testdata/fuzz/*' | while read -r input; do
+            {
+              echo "### \`$input\`"
+              echo
+              echo '```'
+              cat "$input"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload the inputs that failed
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-inputs
+          path: "**/testdata/fuzz/**"
+          if-no-files-found: ignore
+
+  # The job summary has the score of each package and the mutants that
+  # lived: a change of one operator that no test of the package fails. The
+  # job fails only when the tool fails.
+  #
+  # pkg/cluster has a job of its own: its tests run for some seconds, once
+  # for each of its mutants.
+  mutation:
+    name: Mutation Score (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: text
+            packages: "" # the packages that the script names
+          - name: cluster
+            packages: pkg/cluster
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run the mutation tests
+        run: make mutation
+        env:
+          MUTATION_PACKAGES: ${{ matrix.packages }}
+
+  report:
+    name: Report
+    needs: [govulncheck, shuffle, fuzz, mutation]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LABEL: nightly
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          failed=$(jq -r '[to_entries[] | select(.value.result == "failure") | .key] | join(", ")' <<<"$NEEDS")
+          if [[ -z "$failed" ]]; then
+            echo "No nightly check failed."
+            exit 0
+          fi
+
+          title="Nightly checks fail on next: $failed"
+          {
+            echo "The nightly checks of \`next\` (\`.github/workflows/nightly.yml\`) failed in: $failed."
+            echo
+            echo "See [the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for the output of each job."
+            echo
+            echo "Close this issue with the fix. A later failure opens a new one."
+          } > "$RUNNER_TEMP/body.md"
+
+          gh label create "$LABEL" --color b60205 --description "A nightly check of next fails" 2>/dev/null || true
+
+          number=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$number" ]]; then
+            gh issue edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            echo "Updated issue #$number."
+          else
+            gh issue create --label "$LABEL" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi

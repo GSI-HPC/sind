@@ -106,16 +106,45 @@ func isLimitKey(key string) bool {
 	return slices.ContainsFunc(LimitKeys, func(k string) bool { return strings.EqualFold(k, key) })
 }
 
+// qosLimits are the account limits that name QOS.
+var qosLimits = []string{"DefaultQOS", "QOS", "QosLevel"}
+
+// NewClusterQOS is the only QOS of a new cluster: Slurm makes it, sind
+// makes no other.
+const NewClusterQOS = "normal"
+
+// CheckLimitQOS says why the account limit key=value cannot work in a new
+// cluster: it names a QOS other than NewClusterQOS. It returns nil for any
+// other limit.
+func CheckLimitQOS(key, value string) error {
+	if !slices.ContainsFunc(qosLimits, func(k string) bool { return strings.EqualFold(k, key) }) {
+		return nil
+	}
+	for q := range strings.SplitSeq(value, ",") {
+		if q = strings.TrimLeft(strings.TrimSpace(q), "+-="); q != "" && !strings.EqualFold(q, NewClusterQOS) {
+			return fmt.Errorf("%s=%s names the QOS %s, but a new cluster has only the QOS %s, and sind creates no QOS; remove the limit, or create the QOS after the cluster", key, value, q, NewClusterQOS)
+		}
+	}
+	return nil
+}
+
 // enforcingValues are the AccountingStorageEnforce values that make
 // slurmctld enforce association limits, in lowercase.
 var enforcingValues = []string{"2", "limits", "safe", "all"}
 
 // Warnings returns what is likely a mistake in a valid config, for sind
-// create cluster to print: account limits (Max* and Grp*) that Slurm does
+// create cluster to print: account limits that Slurm does not enforce
+// (LimitWarnings), and Slurm config lines that likely break the cluster
+// (SlurmWarnings).
+func (c *Cluster) Warnings() []string {
+	return append(c.LimitWarnings(), c.SlurmWarnings()...)
+}
+
+// LimitWarnings warns of account limits (Max* and Grp*) that Slurm does
 // not enforce, as slurm.main's AccountingStorageEnforce does not include
 // limits. sind keeps Slurm's default of no enforcement, which changes which
 // jobs run.
-func (c *Cluster) Warnings() []string {
+func (c *Cluster) LimitWarnings() []string {
 	var limited []string
 	for _, a := range c.Accounts {
 		var keys []string
@@ -156,6 +185,20 @@ func (c *Cluster) UsesAccounts() bool {
 		}
 	}
 	return false
+}
+
+// qosErrors returns an error for each account limit that names a QOS a new
+// cluster lacks (CheckLimitQOS), so that the plan of sind ui lists each.
+func (c *Cluster) qosErrors() []error {
+	var errs []error
+	for _, a := range c.Accounts {
+		for _, key := range a.Limits.Keys() {
+			if err := CheckLimitQOS(key, a.Limits[key]); err != nil {
+				errs = append(errs, fmt.Errorf("account %q: %w", a.Name, err))
+			}
+		}
+	}
+	return errs
 }
 
 // validateAccounts checks the accounts and the users' Slurm settings: names,

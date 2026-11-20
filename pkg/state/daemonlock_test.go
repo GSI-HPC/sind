@@ -5,12 +5,10 @@ package state
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/fakedocker"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -25,113 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// fakeDaemon stands in for dockerd in the daemon lock's unit tests: it
-// keeps networks by name and answers the lock's network commands, through
-// mock.Executor.OnCall, as dockerd and the docker CLI do.
-type fakeDaemon struct {
-	exit1 *exec.ExitError
-
-	mu   sync.Mutex
-	nets map[string]*fakeNetwork
-	ids  int
-
-	// hook, when set, sees each call first; a result it returns answers
-	// the call instead of the daemon. mock.Executor holds its lock while it
-	// runs, so a hook must not run docker commands.
-	hook func(args []string) *mock.Result
-}
-
-type fakeNetwork struct {
-	id      string
-	labels  docker.Labels
-	created time.Time
-}
-
-func newFakeDaemon(t *testing.T) *fakeDaemon {
-	return &fakeDaemon{exit1: testutil.ExitCode1(t), nets: map[string]*fakeNetwork{}}
-}
-
-// client returns a docker client of the fake daemon.
-func (d *fakeDaemon) client() *docker.Client {
-	return docker.NewClient(&mock.Executor{OnCall: d.onCall})
-}
-
-// fail returns the result of a docker command that exits 1 with stderr.
-func (d *fakeDaemon) fail(stderr string) *mock.Result {
-	return &mock.Result{Stderr: stderr, Err: d.exit1}
-}
-
-// add creates a network, as another client would, and returns its ID.
-func (d *fakeDaemon) add(name string, labels docker.Labels) string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.ids++
-	id := fmt.Sprintf("%064x", d.ids)
-	d.nets[name] = &fakeNetwork{id: id, labels: labels, created: time.Date(2026, 10, 4, 10, 2, 3, 0, time.UTC)}
-	return id
-}
-
-// remove removes the network name, as another client would.
-func (d *fakeDaemon) remove(name string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	delete(d.nets, name)
-}
-
-// network returns the network name, or nil.
-func (d *fakeDaemon) network(name string) *fakeNetwork {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.nets[name]
-}
-
-func (d *fakeDaemon) onCall(args []string, _ string) mock.Result {
-	if d.hook != nil {
-		if r := d.hook(args); r != nil {
-			return *r
-		}
-	}
-	if len(args) < 3 || args[0] != "network" {
-		return mock.Result{Err: fmt.Errorf("fake daemon: unexpected call %v", args)}
-	}
-	switch args[1] {
-	case "create":
-		name := args[len(args)-1]
-		labels := docker.Labels{}
-		for i := 2; i < len(args)-1; i++ {
-			if args[i] == "--label" {
-				k, v, _ := strings.Cut(args[i+1], "=")
-				labels[k] = v
-				i++
-			}
-		}
-		if d.network(name) != nil {
-			return *d.fail("Error response from daemon: network with name " + name + " already exists\n")
-		}
-		return mock.Result{Stdout: d.add(name, labels) + "\n"}
-	case "inspect":
-		n := d.network(args[2])
-		if n == nil {
-			return *d.fail(testutil.NoSuchNetwork(args[2]))
-		}
-		out, _ := json.Marshal(map[string]any{
-			"Name": args[2], "Id": n.id, "Created": n.created, "ConfigOnly": true, "Labels": n.labels,
-		})
-		return mock.Result{Stdout: string(out) + "\n"}
-	case "rm":
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		for name, n := range d.nets {
-			if n.id == args[2] {
-				delete(d.nets, name)
-				return mock.Result{Stdout: args[2] + "\n"}
-			}
-		}
-		return *d.fail("Error response from daemon: network " + args[2] + " not found\n")
-	}
-	return mock.Result{Err: fmt.Errorf("fake daemon: unexpected call %v", args)}
-}
 
 // fakeProc returns a stand-in for /proc with a boot ID, a PID namespace,
 // and this process as self, which started at testStart.
@@ -232,18 +124,18 @@ func daemonOpts(t *testing.T, client *docker.Client, procRoot string, w *warning
 }
 
 func TestLockRealm_DaemonAcquireRelease(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	host, _ := os.Hostname()
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 
 	unlock, err := LockRealm(t.Context(), "sind", opts)
 	require.NoError(t, err)
 
-	n := d.network("sind-lock")
+	n := d.Network("sind-lock")
 	require.NotNil(t, n, "the lock is the network <realm>-lock")
-	assert.NotEmpty(t, n.labels[labelLockToken])
-	delete(n.labels, labelLockToken)
+	assert.NotEmpty(t, n.Labels[labelLockToken])
+	delete(n.Labels, labelLockToken)
 	assert.Equal(t, docker.Labels{
 		labelRealm:       "sind",
 		labelLockCommand: "sind test",
@@ -252,10 +144,10 @@ func TestLockRealm_DaemonAcquireRelease(t *testing.T) {
 		labelLockBootID:  testBootID,
 		labelLockPIDNS:   testPIDNS,
 		labelLockStart:   testStart,
-	}, n.labels)
+	}, n.Labels)
 
 	unlock()
-	assert.Nil(t, d.network("sind-lock"), "unlock removes the lock")
+	assert.Nil(t, d.Network("sind-lock"), "unlock removes the lock")
 	assert.Empty(t, w.waits())
 	assert.Empty(t, w.warnings())
 
@@ -268,20 +160,20 @@ func TestLockRealm_DaemonAcquireRelease(t *testing.T) {
 // TestLockRealm_DaemonCommandDefault checks that the lock records the
 // process's command line when the caller names none.
 func TestLockRealm_DaemonCommandDefault(t *testing.T) {
-	d := newFakeDaemon(t)
-	unlock, err := LockRealm(t.Context(), "sind", &LockOptions{Dir: t.TempDir(), Client: d.client()})
+	d := fakedocker.New(t)
+	unlock, err := LockRealm(t.Context(), "sind", &LockOptions{Dir: t.TempDir(), Client: d.Client()})
 	require.NoError(t, err)
 	defer unlock()
 
-	assert.Equal(t, commandLine(os.Args), d.network("sind-lock").labels[labelLockCommand])
+	assert.Equal(t, commandLine(os.Args), d.Network("sind-lock").Labels[labelLockCommand])
 }
 
 // TestLockRealm_DaemonContention checks that a client waits while another
 // one, with another state directory, holds the daemon lock, and is told
 // who that is.
 func TestLockRealm_DaemonContention(t *testing.T) {
-	d := newFakeDaemon(t)
-	client := d.client()
+	d := fakedocker.New(t)
+	client := d.Client()
 	proc := fakeProc(t, testBootID, testPIDNS)
 	var w1, w2 warnings
 	opts1 := daemonOpts(t, client, proc, &w1)
@@ -320,11 +212,11 @@ func TestLockRealm_DaemonContention(t *testing.T) {
 // TestLockRealm_DaemonStale checks that a lock whose holder ran in this
 // PID namespace and no longer runs is taken over, with a warning.
 func TestLockRealm_DaemonStale(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	host, _ := os.Hostname()
-	d.add("sind-lock", holderLabels(host, 4242))
+	d.Add("sind-lock", holderLabels(host, 4242))
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 	var checked []int
 	opts.alive = func(pid int) bool { checked = append(checked, pid); return false }
 
@@ -337,24 +229,24 @@ func TestLockRealm_DaemonStale(t *testing.T) {
 	require.Len(t, w.warnings(), 1)
 	assert.Contains(t, w.warnings()[0], "removing the realm lock of sind create cluster dev (pid 4242 on "+host)
 	assert.Contains(t, w.warnings()[0], "which no longer runs")
-	assert.Equal(t, strconv.Itoa(os.Getpid()), d.network("sind-lock").labels[labelLockPID])
+	assert.Equal(t, strconv.Itoa(os.Getpid()), d.Network("sind-lock").Labels[labelLockPID])
 }
 
 // TestLockRealm_DaemonStaleRemovedMeanwhile checks that a stale lock that
 // another client removes first is no error.
 func TestLockRealm_DaemonStaleRemovedMeanwhile(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	host, _ := os.Hostname()
-	d.add("sind-lock", holderLabels(host, 4242))
-	d.hook = func(args []string) *mock.Result {
-		if args[1] == "rm" && d.network("sind-lock") != nil && args[2] == d.network("sind-lock").id {
-			d.remove("sind-lock")
-			return d.fail("Error response from daemon: network " + args[2] + " not found\n")
+	d.Add("sind-lock", holderLabels(host, 4242))
+	d.SetHook(func(args []string) *mock.Result {
+		if args[1] == "rm" && d.Network("sind-lock") != nil && args[2] == d.Network("sind-lock").ID {
+			d.Remove("sind-lock")
+			return d.Fail("Error response from daemon: network " + args[2] + " not found\n")
 		}
 		return nil
-	}
+	})
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 	opts.alive = func(int) bool { return false }
 
 	unlock, err := LockRealm(t.Context(), "sind", opts)
@@ -363,17 +255,17 @@ func TestLockRealm_DaemonStaleRemovedMeanwhile(t *testing.T) {
 }
 
 func TestLockRealm_DaemonStaleRemoveFails(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	host, _ := os.Hostname()
-	d.add("sind-lock", holderLabels(host, 4242))
-	d.hook = func(args []string) *mock.Result {
+	d.Add("sind-lock", holderLabels(host, 4242))
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "rm" {
 			return &mock.Result{Err: fmt.Errorf("connection reset")}
 		}
 		return nil
-	}
+	})
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 	opts.alive = func(int) bool { return false }
 
 	_, err := LockRealm(t.Context(), "sind", opts)
@@ -383,13 +275,13 @@ func TestLockRealm_DaemonStaleRemoveFails(t *testing.T) {
 // TestLockRealm_DaemonLiveHolderHere checks that a lock held by a process
 // that runs on this host is waited for, with no removal hint.
 func TestLockRealm_DaemonLiveHolderHere(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	host, _ := os.Hostname()
-	d.add("sind-lock", holderLabels(host, 4242))
+	d.Add("sind-lock", holderLabels(host, 4242))
 	var w warnings
 	proc := fakeProc(t, testBootID, testPIDNS)
 	procStat(t, proc, 4242, testHolderStart)
-	opts := daemonOpts(t, d.client(), proc, &w)
+	opts := daemonOpts(t, d.Client(), proc, &w)
 	opts.alive = func(int) bool { return true }
 	opts.hintAfter = time.Millisecond
 
@@ -407,7 +299,7 @@ func TestLockRealm_DaemonLiveHolderHere(t *testing.T) {
 		t.Fatal("took a lock whose holder runs")
 	default:
 	}
-	d.remove("sind-lock")
+	d.Remove("sind-lock")
 	<-acquired
 
 	require.Len(t, w.waits(), 1)
@@ -422,12 +314,12 @@ func TestLockRealm_DaemonReusedPID(t *testing.T) {
 	host, _ := os.Hostname()
 	for name, pid := range map[string]int{"another process": 4242, "this process": os.Getpid()} {
 		t.Run(name, func(t *testing.T) {
-			d := newFakeDaemon(t)
-			d.add("sind-lock", holderLabels(host, pid))
+			d := fakedocker.New(t)
+			d.Add("sind-lock", holderLabels(host, pid))
 			var w warnings
 			proc := fakeProc(t, testBootID, testPIDNS)
 			procStat(t, proc, 4242, "999999")
-			opts := daemonOpts(t, d.client(), proc, &w)
+			opts := daemonOpts(t, d.Client(), proc, &w)
 			opts.alive = func(int) bool { return true }
 
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -439,7 +331,7 @@ func TestLockRealm_DaemonReusedPID(t *testing.T) {
 			assert.Empty(t, w.waits(), "a lock whose holder is gone is no wait")
 			require.Len(t, w.warnings(), 1)
 			assert.Contains(t, w.warnings()[0], fmt.Sprintf("removing the realm lock of sind create cluster dev (pid %d on %s", pid, host))
-			assert.Equal(t, strconv.Itoa(os.Getpid()), d.network("sind-lock").labels[labelLockPID])
+			assert.Equal(t, strconv.Itoa(os.Getpid()), d.Network("sind-lock").Labels[labelLockPID])
 		})
 	}
 }
@@ -452,10 +344,10 @@ func TestLockRealm_DaemonUnsureHolderHere(t *testing.T) {
 	host, _ := os.Hostname()
 	earlier := holderLabels(host, 4242)
 	delete(earlier, labelLockStart)
-	d := newFakeDaemon(t)
-	d.add("sind-lock", earlier)
+	d := fakedocker.New(t)
+	d.Add("sind-lock", earlier)
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 	opts.alive = func(int) bool { return true }
 	opts.hintAfter = 20 * time.Millisecond
 
@@ -464,7 +356,7 @@ func TestLockRealm_DaemonUnsureHolderHere(t *testing.T) {
 	_, err := LockRealm(ctx, "sind", opts)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.NotNil(t, d.network("sind-lock"), "the lock stays")
+	assert.NotNil(t, d.Network("sind-lock"), "the lock stays")
 	require.Len(t, w.warnings(), 1, "the hint is given once")
 	assert.Contains(t, w.warnings()[0], "the realm lock is still held by sind create cluster dev (pid 4242 on "+host)
 }
@@ -538,10 +430,10 @@ func TestLockRealm_DaemonHolderElsewhere(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			d := newFakeDaemon(t)
-			d.add("ci-7-lock", labels)
+			d := fakedocker.New(t)
+			d.Add("ci-7-lock", labels)
 			var w warnings
-			opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+			opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 			opts.alive = func(int) bool {
 				t.Error("checked a process it cannot see")
 				return false
@@ -553,7 +445,7 @@ func TestLockRealm_DaemonHolderElsewhere(t *testing.T) {
 			_, err := LockRealm(ctx, "ci-7", opts)
 
 			require.ErrorIs(t, err, context.DeadlineExceeded)
-			assert.NotNil(t, d.network("ci-7-lock"), "the lock stays")
+			assert.NotNil(t, d.Network("ci-7-lock"), "the lock stays")
 			require.Len(t, w.waits(), 1)
 			require.Len(t, w.warnings(), 1, "the hint is given once")
 			assert.Contains(t, w.warnings()[0], "the realm lock is still held by ")
@@ -572,10 +464,10 @@ func TestLockRealm_DaemonHolderElsewhere(t *testing.T) {
 // while a client waits is reported again, with its new holder, and that the
 // hint waits a minute for that holder, not for the first.
 func TestLockRealm_DaemonHolderChanges(t *testing.T) {
-	d := newFakeDaemon(t)
-	d.add("ci-7-lock", holderLabels("ci-runner-7", 4242))
+	d := fakedocker.New(t)
+	d.Add("ci-7-lock", holderLabels("ci-runner-7", 4242))
 	var w warnings
-	opts := daemonOpts(t, d.client(), fakeProc(t, testBootID, testPIDNS), &w)
+	opts := daemonOpts(t, d.Client(), fakeProc(t, testBootID, testPIDNS), &w)
 	opts.hintAfter = 500 * time.Millisecond
 	// When the waiter reports the new holder, and when it warns.
 	var mu sync.Mutex
@@ -605,7 +497,7 @@ func TestLockRealm_DaemonHolderChanges(t *testing.T) {
 	// The lock changes hands well before the first holder's hint is due.
 	require.Eventually(t, func() bool { return len(w.waits()) == 1 }, 2*time.Second, time.Millisecond)
 	time.Sleep(200 * time.Millisecond)
-	d.add("ci-7-lock", holderLabels("ci-runner-8", 4343))
+	d.Add("ci-7-lock", holderLabels("ci-runner-8", 4343))
 	require.Eventually(t, func() bool { return len(w.warnings()) > 0 }, 4*time.Second, time.Millisecond)
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
@@ -623,43 +515,43 @@ func TestLockRealm_DaemonHolderChanges(t *testing.T) {
 }
 
 func TestLockRealm_DaemonNotALock(t *testing.T) {
-	d := newFakeDaemon(t)
-	d.add("sind-lock", docker.Labels{"com.example": "mine"})
+	d := fakedocker.New(t)
+	d.Add("sind-lock", docker.Labels{"com.example": "mine"})
 
-	_, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.client(), t.TempDir(), &warnings{}))
+	_, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.Client(), t.TempDir(), &warnings{}))
 
 	require.ErrorContains(t, err, "network sind-lock exists but is not a sind realm lock: remove or rename it")
-	assert.NotNil(t, d.network("sind-lock"))
+	assert.NotNil(t, d.Network("sind-lock"))
 }
 
 // TestLockRealm_DaemonReleasedMeanwhile covers a lock released between the
 // failed create and the inspect.
 func TestLockRealm_DaemonReleasedMeanwhile(t *testing.T) {
-	d := newFakeDaemon(t)
-	d.add("sind-lock", holderLabels("elsewhere", 1))
-	d.hook = func(args []string) *mock.Result {
+	d := fakedocker.New(t)
+	d.Add("sind-lock", holderLabels("elsewhere", 1))
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "inspect" {
-			d.remove("sind-lock")
+			d.Remove("sind-lock")
 		}
 		return nil
-	}
+	})
 	var w warnings
 
-	unlock, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.client(), t.TempDir(), &w))
+	unlock, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.Client(), t.TempDir(), &w))
 	require.NoError(t, err)
 	unlock()
 	assert.Empty(t, w.waits())
 }
 
 func TestLockRealm_DaemonCreateFails(t *testing.T) {
-	d := newFakeDaemon(t)
-	d.hook = func(args []string) *mock.Result {
+	d := fakedocker.New(t)
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "create" {
-			return d.fail("failed to connect to the docker API at unix:///var/run/docker.sock\n")
+			return d.Fail("failed to connect to the docker API at unix:///var/run/docker.sock\n")
 		}
 		return nil
-	}
-	opts := daemonOpts(t, d.client(), t.TempDir(), &warnings{})
+	})
+	opts := daemonOpts(t, d.Client(), t.TempDir(), &warnings{})
 
 	_, err := LockRealm(t.Context(), "sind", opts)
 
@@ -672,9 +564,9 @@ func TestLockRealm_DaemonCreateFails(t *testing.T) {
 // TestLockRealm_DaemonCreateFailsAfterCreating checks that a lock which
 // the daemon created for a create that failed nonetheless is removed.
 func TestLockRealm_DaemonCreateFailsAfterCreating(t *testing.T) {
-	d := newFakeDaemon(t)
-	other := d.add("other-lock", docker.Labels{labelLockToken: "x"})
-	d.hook = func(args []string) *mock.Result {
+	d := fakedocker.New(t)
+	other := d.Add("other-lock", docker.Labels{labelLockToken: "x"})
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "create" {
 			labels := docker.Labels{}
 			for i := 2; i < len(args)-1; i++ {
@@ -683,48 +575,48 @@ func TestLockRealm_DaemonCreateFailsAfterCreating(t *testing.T) {
 					labels[k] = v
 				}
 			}
-			d.add(args[len(args)-1], labels)
+			d.Add(args[len(args)-1], labels)
 			return &mock.Result{Err: fmt.Errorf("unexpected EOF")}
 		}
 		return nil
-	}
+	})
 
-	_, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.client(), t.TempDir(), &warnings{}))
+	_, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.Client(), t.TempDir(), &warnings{}))
 
 	require.ErrorContains(t, err, "creating sind-lock: unexpected EOF")
-	assert.Nil(t, d.network("sind-lock"), "the lock this attempt created is removed")
-	assert.Equal(t, other, d.network("other-lock").id)
+	assert.Nil(t, d.Network("sind-lock"), "the lock this attempt created is removed")
+	assert.Equal(t, other, d.Network("other-lock").ID)
 }
 
 // TestLockRealm_DaemonCreateCancelled checks that a create that ctx ends
 // returns the context's error.
 func TestLockRealm_DaemonCreateCancelled(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	d.hook = func(args []string) *mock.Result {
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "create" {
 			cancel()
 			return &mock.Result{Err: fmt.Errorf("signal: killed")}
 		}
 		return nil
-	}
+	})
 
-	_, err := LockRealm(ctx, "sind", daemonOpts(t, d.client(), t.TempDir(), &warnings{}))
+	_, err := LockRealm(ctx, "sind", daemonOpts(t, d.Client(), t.TempDir(), &warnings{}))
 
 	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestLockRealm_DaemonInspectFails(t *testing.T) {
-	d := newFakeDaemon(t)
-	d.add("sind-lock", holderLabels("elsewhere", 1))
-	d.hook = func(args []string) *mock.Result {
+	d := fakedocker.New(t)
+	d.Add("sind-lock", holderLabels("elsewhere", 1))
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "inspect" {
 			return &mock.Result{Err: fmt.Errorf("connection reset")}
 		}
 		return nil
-	}
+	})
 
-	_, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.client(), t.TempDir(), &warnings{}))
+	_, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.Client(), t.TempDir(), &warnings{}))
 
 	require.ErrorContains(t, err, "inspecting sind-lock: connection reset")
 }
@@ -732,17 +624,17 @@ func TestLockRealm_DaemonInspectFails(t *testing.T) {
 // TestLockRealm_DaemonReleaseFails checks that a lock that unlock cannot
 // remove gives a warning with the command that does.
 func TestLockRealm_DaemonReleaseFails(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	var w warnings
-	unlock, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.client(), t.TempDir(), &w))
+	unlock, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.Client(), t.TempDir(), &w))
 	require.NoError(t, err)
 
-	d.hook = func(args []string) *mock.Result {
+	d.SetHook(func(args []string) *mock.Result {
 		if args[1] == "rm" {
 			return &mock.Result{Err: fmt.Errorf("connection reset")}
 		}
 		return nil
-	}
+	})
 	unlock()
 
 	assert.Equal(t, []string{"releasing the realm lock: connection reset; remove it with: docker network rm sind-lock"}, w.warnings())
@@ -751,8 +643,8 @@ func TestLockRealm_DaemonReleaseFails(t *testing.T) {
 // TestLockRealm_DaemonReleaseAfterCancel checks that unlock removes the
 // lock after ctx ended, as after Ctrl+C.
 func TestLockRealm_DaemonReleaseAfterCancel(t *testing.T) {
-	d := newFakeDaemon(t)
-	client := docker.NewClient(&ctxExecutor{Executor: &mock.Executor{OnCall: d.onCall}})
+	d := fakedocker.New(t)
+	client := docker.NewClient(&mock.Executor{OnCall: d.OnCall})
 	ctx, cancel := context.WithCancel(t.Context())
 	unlock, err := LockRealm(ctx, "sind", daemonOpts(t, client, t.TempDir(), &warnings{}))
 	require.NoError(t, err)
@@ -760,50 +652,37 @@ func TestLockRealm_DaemonReleaseAfterCancel(t *testing.T) {
 	cancel()
 	unlock()
 
-	assert.Nil(t, d.network("sind-lock"))
-}
-
-// ctxExecutor fails every command run with an ended context, as the real
-// executor does when it kills docker.
-type ctxExecutor struct {
-	*mock.Executor
-}
-
-func (e *ctxExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", "", err
-	}
-	return e.Executor.Run(ctx, name, args...)
+	assert.Nil(t, d.Network("sind-lock"))
 }
 
 // TestLockRealm_DaemonRemovedBeforeRelease checks that a lock removed by
 // hand while it was held is released without a warning.
 func TestLockRealm_DaemonRemovedBeforeRelease(t *testing.T) {
-	d := newFakeDaemon(t)
+	d := fakedocker.New(t)
 	var w warnings
-	unlock, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.client(), t.TempDir(), &w))
+	unlock, err := LockRealm(t.Context(), "sind", daemonOpts(t, d.Client(), t.TempDir(), &w))
 	require.NoError(t, err)
 
-	d.remove("sind-lock")
-	other := d.add("sind-lock", holderLabels("elsewhere", 1))
+	d.Remove("sind-lock")
+	other := d.Add("sind-lock", holderLabels("elsewhere", 1))
 	unlock()
 
 	assert.Empty(t, w.warnings())
-	assert.Equal(t, other, d.network("sind-lock").id, "unlock leaves another holder's lock alone")
+	assert.Equal(t, other, d.Network("sind-lock").ID, "unlock leaves another holder's lock alone")
 }
 
 // TestLockRealm_DaemonLogs checks that without OnWait and OnWarning the
 // wait and the warnings go to the log.
 func TestLockRealm_DaemonLogs(t *testing.T) {
-	d := newFakeDaemon(t)
-	d.add("sind-lock", holderLabels("elsewhere", 4242))
+	d := fakedocker.New(t)
+	d.Add("sind-lock", holderLabels("elsewhere", 4242))
 	var logs bytes.Buffer
 	ctx, cancel := context.WithTimeout(sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil))), 100*time.Millisecond)
 	defer cancel()
 
 	_, err := LockRealm(ctx, "sind", &LockOptions{
 		Dir:       t.TempDir(),
-		Client:    d.client(),
+		Client:    d.Client(),
 		pollFirst: time.Millisecond,
 		hintAfter: time.Millisecond,
 	})
@@ -911,7 +790,7 @@ func TestCommandLine(t *testing.T) {
 func TestHolder(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
-	rec.SetOnCall(newFakeDaemon(t).onCall)
+	rec.SetOnCall(fakedocker.New(t).OnCall)
 	realm := testutil.Realm("it-holder")
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), LockNetworkName(realm)) })
 
@@ -991,7 +870,7 @@ func TestLockNetworkName(t *testing.T) {
 func TestLockRealm_DaemonTwoClients(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
-	rec.SetOnCall(newFakeDaemon(t).onCall)
+	rec.SetOnCall(fakedocker.New(t).OnCall)
 	realm := testutil.Realm("it-lock")
 	name := LockNetworkName(realm)
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
@@ -1058,7 +937,7 @@ func TestLockRealm_DaemonTwoClients(t *testing.T) {
 func TestLockRealm_DaemonMutualExclusion(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
-	rec.SetOnCall(newFakeDaemon(t).onCall)
+	rec.SetOnCall(fakedocker.New(t).OnCall)
 	realm := testutil.Realm("it-lock")
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), LockNetworkName(realm)) })
 
@@ -1098,7 +977,7 @@ func TestLockRealm_DaemonMutualExclusion(t *testing.T) {
 func TestLockRealm_DaemonStaleTakeover(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
-	rec.SetOnCall(newFakeDaemon(t).onCall)
+	rec.SetOnCall(fakedocker.New(t).OnCall)
 	realm := testutil.Realm("it-lock")
 	name := LockNetworkName(realm)
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })

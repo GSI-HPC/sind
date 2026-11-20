@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/GSI-HPC/sind/internal/envvar"
+	"github.com/GSI-HPC/sind/internal/fakedocker"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -500,8 +501,8 @@ func TestTheTreeShowsTheWaitForTheRealmLock(t *testing.T) {
 	c := fakeDisplays(t)
 	screen := &progresstest.Screen{Width: screenWidth}
 	onTerminals(t, nil, screen)
-	d := newLockDaemon(t)
-	d.add("sind-lock", map[string]string{
+	d := fakedocker.New(t)
+	d.Add("sind-lock", map[string]string{
 		"sind.lock.token":   "x",
 		"sind.lock.command": "sind create cluster",
 		"sind.lock.host":    "elsewhere",
@@ -520,7 +521,7 @@ func TestTheTreeShowsTheWaitForTheRealmLock(t *testing.T) {
 			c.draw()
 			frames = append(frames, screen.String())
 		}
-		return d.onCall(args, stdin)
+		return d.OnCall(args, stdin)
 	}}))
 
 	code := run(ctx, []string{"delete", "cluster"}, screen)
@@ -544,12 +545,12 @@ HH:MM:SS.mmm ERRO interrupted: taking the realm lock on the Docker daemon: conte
 // and then the daemon lock, whose holder its message names.
 func TestAcquireRealmLock_WaitIsASpan(t *testing.T) {
 	stateHome := t.TempDir()
-	first := newLockDaemon(t)
-	unlock, err := acquireRealmLock(first.withClient(t.Context()), "spans", stateHome)
+	first := fakedocker.New(t)
+	unlock, err := acquireRealmLock(withDaemon(t.Context(), first), "spans", stateHome)
 	require.NoError(t, err)
 
-	other := newLockDaemon(t)
-	other.add("spans-lock", map[string]string{
+	other := fakedocker.New(t)
+	other.Add("spans-lock", map[string]string{
 		"sind.lock.token":   "x",
 		"sind.lock.command": "sind create cluster",
 		"sind.lock.host":    "elsewhere",
@@ -557,7 +558,7 @@ func TestAcquireRealmLock_WaitIsASpan(t *testing.T) {
 	})
 	ctx, w := progresstest.Watch(t.Context(), t)
 	var stderr syncBuffer
-	ctx, cancel := context.WithCancel(other.withClient(withStderr(ctx, &stderr)))
+	ctx, cancel := context.WithCancel(withDaemon(withStderr(ctx, &stderr), other))
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {

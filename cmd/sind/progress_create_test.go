@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/GSI-HPC/sind/internal/fakedocker"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -34,11 +35,11 @@ import (
 // realm whose mesh runs already, the way dockerd would for a cluster that
 // gets ready at once: the cluster's resources do not exist before, the
 // images are there, every node runs and its services are active. The realm
-// lock's daemon part goes to a lockDaemon.
+// lock's daemon part goes to a fakedocker.Daemon.
 func createDaemon(t *testing.T) func(args []string, stdin string) mock.Result {
 	t.Helper()
 	exit1 := testutil.ExitCode1(t)
-	lock := newLockDaemon(t)
+	lock := fakedocker.New(t)
 	inspect := func(name string, networks map[string]string) string {
 		type network struct {
 			IPAddress string `json:"IPAddress"`
@@ -64,8 +65,8 @@ func createDaemon(t *testing.T) func(args []string, stdin string) mock.Result {
 		switch {
 		case args[0] == "info":
 			return mock.Result{Stdout: `{"ServerVersion":"28.0.0","CgroupVersion":"2"}` + "\n"}
-		case args[0] == "network" && (last == "sind-lock" || args[1] == "rm" && lock.ids[args[2]] != ""):
-			return lock.onCall(args, stdin)
+		case args[0] == "network" && (last == "sind-lock" || args[1] == "rm" && lock.HasID(args[2])):
+			return lock.OnCall(args, stdin)
 
 		// The mesh runs.
 		case joined == "network inspect sind-mesh --format {{json .Labels}}":

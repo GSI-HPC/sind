@@ -13,10 +13,10 @@ import (
 	"testing"
 
 	clidoctor "github.com/GSI-HPC/go-clikit/doctor"
+	"github.com/GSI-HPC/sind/internal/doctor"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"

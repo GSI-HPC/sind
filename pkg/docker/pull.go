@@ -94,7 +94,7 @@ const (
 // a span keeps the unit it is given first:
 //
 //   - Bytes, once docker writes the bytes of a layer it downloads, as it
-//     does to a terminal (cmdexec.WithTerminal): the amount is the bytes
+//     does to a terminal (execopt.WithTerminal): the amount is the bytes
 //     downloaded, and the size that of the layers, those the daemon has
 //     left out. docker tells the size of a layer once it downloads it, a
 //     few at a time, so the size of the layers still waiting is guessed
@@ -166,7 +166,7 @@ func (l *layerCount) line(_ progress.Stream, line string) {
 }
 
 // opened records that docker pull writes to a terminal
-// (cmdexec.WithTerminalOpened), where the pull counts bytes: the span says
+// (execopt.WithTerminalOpened), where the pull counts bytes: the span says
 // so at once, with a size not yet known, so that a display shows it as a
 // transfer while docker waits to download.
 func (l *layerCount) opened() {

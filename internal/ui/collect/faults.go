@@ -45,7 +45,7 @@ func readFaults(ctx context.Context, c *docker.Client, realm, name string, st *c
 		var units []store.Unit
 		for _, svc := range slices.Sorted(maps.Keys(n.Health.Services)) {
 			if !n.Health.Services[svc] {
-				units = append(units, readUnit(ctx, c, container, string(svc)))
+				units = append(units, readUnit(ctx, c, container, svc))
 			}
 		}
 		if len(units) > 0 {
