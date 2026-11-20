@@ -25,9 +25,12 @@ jobs:
           # GoReleaser finds the previous release among the tags.
           fetch-depth: 0
 
+      # No cache: the binaries that this job attests come from the sources
+      # of the tag alone, not from build results that another run stored.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
 
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
