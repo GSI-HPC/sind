@@ -63,6 +63,8 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
   `internal/mock.Executor` (FIFO `AddResult` or `OnCall` dispatcher for concurrent code).
 - Dual-mode tests: `mode_unit_test.go` (`!integration`) and `mode_integration_test.go`
   (`integration`) provide the per-package helpers.
+- A package that starts goroutines has a `main_test.go` with `goleak.VerifyTestMain`:
+  a goroutine that a test leaves fails the package.
 - testify: `require` for fatal checks, `assert` otherwise. Wrap errors with
   `fmt.Errorf("context: %w", err)`. Use strong types for Docker identifiers.
 - Follow the "CLI Design Guidelines" in `DESIGN.md` (verb-noun commands, positional

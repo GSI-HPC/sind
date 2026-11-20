@@ -167,6 +167,14 @@ step slurm total=2 [fold]: ok
 
 The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets every `SIND_*` variable that sind reads (`envvar.All`) and points `XDG_STATE_HOME` at a temporary directory, so that a developer's own settings reach no test and no test writes the activity log into a real home; a test of the log gives itself a directory with `t.Setenv("XDG_STATE_HOME", t.TempDir())`.
 
+## Goroutine leaks
+
+A package that starts goroutines has a `main_test.go` whose `TestMain` calls [`goleak.VerifyTestMain`](https://pkg.go.dev/go.uber.org/goleak#VerifyTestMain): when all tests of the package passed, it fails the package if a goroutine that a test started still runs, and prints the stack of each one. `cmd/sind` has a `TestMain` of its own, which does the same check with `goleak.Find`.
+
+- A test ends what it starts: it cancels the context of a watcher, a stream or a server, or closes it, and waits for it where the code gives a way to.
+- The check tells that a goroutine is left, not which test left it. Run the tests of the package one at a time (`go test ./<pkg> -run '^TestXxx$'`), or call `goleak.VerifyNone(t, goleak.IgnoreCurrent())` in the test that you suspect.
+- When a new package starts a goroutine (`go`, `errgroup`, `sync.WaitGroup.Go`, `context.AfterFunc`), give it the same `main_test.go`.
+
 ## Fuzz tests
 
 A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".
