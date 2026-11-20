@@ -138,6 +138,22 @@ func TestReadSlurmConf_Errors(t *testing.T) {
 
 	_, err = ReadSlurmConf(confFiles(map[string]string{SlurmConfPath: "include slurm.conf\n"}))
 	require.EqualError(t, err, "reading /etc/slurm/slurm.conf: includes nested more than 10 deep")
+
+	// Ten includes, each in the file of the one before, are read; one
+	// more is not.
+	chain := map[string]string{SlurmConfPath: "include 1.conf\n"}
+	for i := 1; i < maxIncludeDepth; i++ {
+		chain[fmt.Sprintf("/etc/slurm/%d.conf", i)] = fmt.Sprintf("include %d.conf\n", i+1)
+	}
+	chain["/etc/slurm/10.conf"] = "ClusterName=deep\n"
+	conf, err := ReadSlurmConf(confFiles(chain))
+	require.NoError(t, err)
+	assert.Contains(t, conf.Content, "ClusterName=deep")
+
+	chain["/etc/slurm/10.conf"] = "include 11.conf\n"
+	chain["/etc/slurm/11.conf"] = "ClusterName=deeper\n"
+	_, err = ReadSlurmConf(confFiles(chain))
+	require.EqualError(t, err, "reading /etc/slurm/11.conf: includes nested more than 10 deep")
 }
 
 func TestGenerateSlurmConf_DefaultCluster(t *testing.T) {

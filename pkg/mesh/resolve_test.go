@@ -104,6 +104,11 @@ func TestFindBridgeInterface(t *testing.T) {
 	iface, err := findBridgeInterface(networkID)
 	require.NoError(t, err)
 	assert.Equal(t, bridgeName, iface)
+
+	// An ID of the 12 characters that name the bridge is long enough.
+	iface, err = findBridgeInterface(networkID[:12])
+	require.NoError(t, err)
+	assert.Equal(t, bridgeName, iface)
 }
 
 func TestFindBridgeInterface_NotFound(t *testing.T) {

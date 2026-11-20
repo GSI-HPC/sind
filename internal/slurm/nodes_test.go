@@ -332,6 +332,8 @@ func TestPartitionLine(t *testing.T) {
 	assert.Equal(t, `PartitionName=all Comment="x Nodes=y" Nodes=a Nodes=worker-1`, partitionLine(`PartitionName=all Comment="x Nodes=y" Nodes=a Nodes=b`, []string{"worker-1"}))
 	// A quote that no blank follows does not end a value.
 	assert.Equal(t, `PartitionName=all Nodes=worker-1`, partitionLine(`PartitionName=all Nodes=""0`, []string{"worker-1"}))
+	// More than one blank between the pairs stays as it is.
+	assert.Equal(t, "PartitionName=all  Default=NO   Nodes=worker-1  State=UP", partitionLine("PartitionName=all  Default=NO   Nodes=a,b  State=UP", []string{"worker-1"}))
 	// A node that a user defined with a name that needs an escape, or
 	// quotes, is listed with them.
 	assert.Equal(t, `PartitionName=all Nodes="\#,a b"`, partitionLine(`PartitionName=all Nodes=x`, []string{"#", "a b"}))

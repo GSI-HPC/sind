@@ -469,6 +469,7 @@ func TestLoad_OnlyComments(t *testing.T) {
 	for in, want := range map[string]string{
 		"// nothing yet\n":        "// nothing yet\n" + newServers,
 		"/* a */\n// b":           "/* a */\n// b\n" + newServers,
+		"/**/\n":                  "/**/\n" + newServers,
 		"\ufeff/* settings */\n":  "\ufeff/* settings */\n" + newServers,
 		"// one\r\n/* two */\r\n": "// one\r\n/* two */\r\n" + strings.ReplaceAll(newServers, "\n", "\r\n"),
 	} {
