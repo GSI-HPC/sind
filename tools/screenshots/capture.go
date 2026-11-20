@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -49,8 +50,10 @@ func takeShots(ctx context.Context, o options, l Shots, base string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(o.Out, 0o755); err != nil { //nolint:gosec // G301: the docs' images
-		return err
+	if !o.Check {
+		if err := os.MkdirAll(o.Out, 0o755); err != nil { //nolint:gosec // G301: the docs' images
+			return err
+		}
 	}
 	taken := 0
 	for _, s := range l.Shots {
@@ -63,15 +66,22 @@ func takeShots(ctx context.Context, o options, l Shots, base string) error {
 				if err != nil {
 					return fmt.Errorf("%s (%s, %s): %w", s.Name, size, theme, err)
 				}
+				taken++
+				if o.Check {
+					continue
+				}
 				if png, err = shrink(png); err != nil {
 					return fmt.Errorf("%s (%s, %s): %w", s.Name, size, theme, err)
 				}
 				if err := os.WriteFile(filepath.Join(o.Out, s.File(size, theme)), png, 0o644); err != nil { //nolint:gosec // G306: the docs' images
 					return err
 				}
-				taken++
 			}
 		}
+	}
+	if o.Check {
+		fmt.Printf("opened %d pages; none reports a fault\n", taken)
+		return nil
 	}
 	fmt.Printf("took %d screenshots into %s\n", taken, o.Out)
 	return nil
@@ -88,12 +98,16 @@ func rootURL(base string) (string, error) {
 }
 
 // take returns the PNG of the shot in one window and theme, on a tab of its
-// own.
+// own. It fails when the page reports a fault on the way (faults).
 func take(parent context.Context, root string, s Shot, size Size, theme string, epoch time.Time) ([]byte, error) {
 	ctx, cancel := chromedp.NewContext(parent)
 	defer cancel()
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
+	var seen faults
+	if err := chromedp.Listen(ctx, seen.event); err != nil {
+		return nil, err
+	}
 
 	steps := []chromedp.Action[chromedp.Void]{
 		setWindow(size.Width, size.Height),
@@ -129,9 +143,14 @@ func take(parent context.Context, root string, s Shot, size Size, theme string, 
 		shot = chromedp.Screenshot(chromedp.CSS(s.Crop), chromedp.NodeVisible)
 	}
 	if err := chromedp.Do(ctx, steps...); err != nil {
+		// What the page reported says more than a step that timed out.
+		return nil, errors.Join(err, seen.err())
+	}
+	png, err := chromedp.Run(ctx, shot)
+	if err != nil {
 		return nil, err
 	}
-	return chromedp.Run(ctx, shot)
+	return png, seen.err()
 }
 
 // setWindow sets the size of the window, at a device scale factor of 1.

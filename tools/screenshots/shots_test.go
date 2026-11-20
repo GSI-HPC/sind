@@ -137,6 +137,21 @@ func TestRun_Errors(t *testing.T) {
 	}
 }
 
+// TestRun_OutOrCheck checks that run asks for the directory of the images,
+// which -check does not need.
+func TestRun_OutOrCheck(t *testing.T) {
+	t.Setenv("PATH", "")
+	t.Setenv("CHROMIUM", "")
+	err := run(nil)
+	if err == nil || err.Error() != "name the directory for the images with -out, or check the pages with -check" {
+		t.Errorf("the error without -out is %v", err)
+	}
+	// With -check, run goes on to the next thing that is wrong.
+	if err := run([]string{"-check", "-only", "typo"}); err == nil || err.Error() != "-only: no shot is named typo" {
+		t.Errorf("the error with -check is %v", err)
+	}
+}
+
 // TestRun_UnknownOnly checks that a name of -only that names no shot is
 // refused before a browser starts, also when another one names a shot.
 func TestRun_UnknownOnly(t *testing.T) {

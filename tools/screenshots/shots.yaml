@@ -13,6 +13,9 @@
 # task dock; fit, to shorten the window to a short page;
 # sizes, default desktop; page, the page of the UI that the shot shows. The docs
 # show a shot by its name with the shortcode uishot; the docs workflow takes them.
+# A shot whose page reports a fault (an exception, a console.error, a failed
+# request) fails. make check-ui opens the shots for that alone, as CI does on
+# each pull request.
 sizes:
   desktop: {width: 1440, height: 900}
   phone: {width: 390, height: 844}
