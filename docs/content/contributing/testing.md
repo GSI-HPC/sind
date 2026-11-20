@@ -213,10 +213,6 @@ Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC mu
 
 When you change code that a model describes, change the model with it. When TLC reports a violation, it prints the steps that lead to it: run `spec/tla/check.sh` and read the trace of the configuration that failed. The script needs Java 11 or later. It fetches the release of the TLA+ tools that it pins and checks its sha256, or uses the `tla2tools.jar` that `TLA2TOOLS` names.
 
-{{< callout type="warning" >}}
-`DeleteRetry.code.cfg` expects a violation: a delete that follows a failed one finds no container and reports success, with DNS records, monitoring targets and journal directories of the cluster still there. The configuration `both-fixes` shows the design that closes the gap.
-{{< /callout >}}
-
 ## Integration test prerequisites
 
 An integration test that needs Docker gets its client from `testutil.NewClient` (`newTestClient` in `pkg/docker`), which checks with `docker info`, once per test process, that `docker` reaches a daemon (`itest.RequireDocker`). A test that creates clusters also calls `prereq.Check`, which checks the Docker version and that cgroup v2 is mounted with `nsdelegate`.

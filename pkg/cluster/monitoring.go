@@ -225,6 +225,20 @@ func forgetMonitoredNodes(ctx context.Context, client *docker.Client, meshMgr *m
 	}
 }
 
+// journalsLeft reports whether the realm's monitoring stack may still hold
+// journals of a cluster without containers: a delete of the cluster that
+// failed, or was killed, after it removed the containers leaves the
+// cluster's journal directory, which forgetMonitoredNodes removes last
+// (see observability.Manager.JournalsLeft). A failure to look is a
+// warning (meshMgr.Warn), and counts as none left.
+func journalsLeft(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cluster string) bool {
+	left, err := observability.NewManager(client, meshMgr.Realm).JournalsLeft(ctx, cluster)
+	if err != nil {
+		meshMgr.Warn(ctx, fmt.Sprintf("looking for journals of cluster %q in the monitoring stack of realm %q: %v", cluster, meshMgr.Realm, err))
+	}
+	return left
+}
+
 // clusterMonitored reports whether any node container of a cluster mounts
 // the realm's journal volume.
 func clusterMonitored(ctx context.Context, client *docker.Client, realm, cluster string) (bool, error) {

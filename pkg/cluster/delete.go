@@ -154,9 +154,9 @@ const deleteAllConcurrency = 4
 // A cluster that fails to delete does not stop the others. The mesh then
 // stays for what is left, the clusters that were deleted are deregistered
 // from it, and so are the nodes of a cluster that failed after it listed
-// them, as Delete deregisters them before it removes any: a later delete
-// of that cluster would find no containers to name them by. DeleteAll
-// returns the failures, joined. Once ctx has ended
+// them, as Delete deregisters them before it removes any (see
+// deregisterClusters). DeleteAll returns the failures, joined. Once ctx
+// has ended
 // no further cluster is tried, and those left out fail with the context's
 // error, worded as "deleting cluster <name>: listing containers: <err>",
 // as when they were tried and failed at their first lookup; a panic while
@@ -211,13 +211,13 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return res, removeClusterResources(ctx, client, meshMgr, name, res, false)
 	})
 	if err != nil {
-		var hostnames []string
+		var listed []string
 		for i, d := range deleted {
 			if d.Value != nil {
-				hostnames = append(hostnames, meshHostnames(realm, names[i], d.Value.Containers)...)
+				listed = append(listed, names[i])
 			}
 		}
-		deregisterHostnames(ctx, meshMgr, hostnames)
+		deregisterClusters(ctx, meshMgr, listed, true)
 		// The clusters went in parallel, without a sync each: one sync
 		// takes the deleted ones out of the monitoring stack, if any.
 		forgetMonitoredNodes(ctx, client, meshMgr, "")
@@ -251,20 +251,29 @@ func realmClusterNames(ctx context.Context, client *docker.Client, realm string)
 
 // deleteClusterResources removes containers, network, and volumes for a
 // cluster. With deregister it also removes the nodes' DNS records and
-// known_hosts entries; callers that remove the mesh next skip that. Does NOT
-// clean up mesh infrastructure — that decision belongs to the caller.
+// known_hosts entries, and the cluster from the realm's monitoring stack;
+// callers that remove the mesh and the stack next skip that. Does NOT clean
+// up mesh infrastructure — that decision belongs to the caller.
 //
-// Removing a non-existent cluster is not an error.
+// Removing a non-existent cluster is not an error. With deregister, a
+// cluster without containers, network and volumes may still have what an
+// earlier delete left when it failed or was killed after it removed them:
+// DNS records, known_hosts entries, monitoring targets and journals. They
+// are looked for and removed (see removeClusterResources), so that a delete
+// that reports success, without a warning, leaves nothing of the cluster.
+// spec/tla/DeleteRetry.tla is the model of this rule.
 //
 //	listClusterResources
 //	      │
-//	deregisterMesh        start mesh → DNS ║ known_hosts (with deregister)
+//	deregisterClusters    start mesh → known_hosts → DNS (with deregister)
 //	      │
 //	deleteContainers      stop + rm per container
 //	      │
 //	deleteNetwork         rm cluster network
 //	      │
 //	deleteVolumes         rm cluster volumes
+//	      │
+//	forgetMonitoredNodes  sync Alloy → rm journals (with deregister)
 func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, deregister bool) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -274,8 +283,9 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 		return err
 	}
 
-	// Nothing to delete.
-	if len(res.Containers) == 0 && !res.NetworkExists && len(res.Volumes) == 0 {
+	// Nothing to delete: the mesh and the monitoring stack go next, with
+	// all that they hold of the cluster.
+	if !deregister && len(res.Containers) == 0 && !res.NetworkExists && len(res.Volumes) == 0 {
 		log.DebugContext(ctx, "no resources found, nothing to delete")
 		return nil
 	}
@@ -287,24 +297,34 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // with deregister first the nodes' DNS records and known_hosts entries, and
 // last, for a monitored cluster, its nodes from the realm's monitoring
 // stack and their journals (see forgetMonitoredNodes), also when the
-// removal of its network or volumes fails: a retry finds no containers to
-// tell that the stack collected the cluster.
+// removal of its network or volumes fails.
+//
+// Whether the stack collects the cluster is told by its containers. For a
+// cluster without containers, which an earlier delete may have removed, it
+// is told by the cluster's journal directory, which forgetMonitoredNodes
+// removes last (see journalsLeft); its DNS records tell in the same way
+// that it is still registered on the mesh (see deregisterClusters).
 func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *clusterResources, deregister bool) error {
 	log := sindlog.From(ctx)
 
 	// The realm's monitoring stack stays too: whether it collects the
-	// cluster is told by its containers, so before they go, and before
-	// the mesh changes, so that a failed listing changes nothing.
+	// cluster is settled before the containers go, and before the mesh
+	// changes, so that a failed listing changes nothing.
 	monitored := false
 	if deregister {
-		var err error
-		if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
-			return err
+		retry := len(res.Containers) == 0
+		if retry {
+			monitored = journalsLeft(ctx, client, meshMgr, clusterName)
+		} else {
+			var err error
+			if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
+				return err
+			}
 		}
 		// Remove DNS records and known_hosts entries before deleting
-		// containers. Failures are logged inside deregisterMesh; the
-		// teardown continues.
-		deregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+		// containers. Failures are warnings inside deregisterClusters;
+		// the teardown continues.
+		deregisterClusters(ctx, meshMgr, []string{clusterName}, retry)
 	}
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
@@ -493,6 +513,55 @@ func failures(errs []error) error {
 // down.
 func deregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) {
 	deregisterHostnames(ctx, meshMgr, meshHostnames(meshMgr.Realm, clusterName, containers))
+}
+
+// deregisterClusters removes the DNS records and known_hosts entries of
+// every node of the clusters from the mesh, by the DNS domain of each
+// cluster: also those of nodes whose containers an earlier delete removed,
+// which no container names any more. It starts a stopped mesh first, as
+// deregisterHostnames does. Failures are warnings (meshMgr.Warn), for the
+// reasons deregisterMesh gives.
+//
+// The known_hosts entries go first, and the DNS records only once those
+// are gone. The records of a cluster without containers thus show a
+// deregistration that did not finish. With look, for clusters that may
+// have no containers, the records are looked for first, in a DNS container
+// that need not run, and without one nothing more is done: the delete of a
+// cluster that does not exist starts no mesh.
+//
+// It is the progress step "mesh deregistration", which ends ok whatever
+// the warnings say; without clusters, or with look and without records,
+// there is no step.
+func deregisterClusters(ctx context.Context, meshMgr *mesh.Manager, clusters []string, look bool) {
+	if len(clusters) == 0 {
+		return
+	}
+	domains := make([]string, len(clusters))
+	for i, c := range clusters {
+		domains[i] = dnsSearchDomain(c, meshMgr.Realm)
+	}
+	if look {
+		left, err := meshMgr.HasDomainRecords(ctx, domains)
+		if err != nil {
+			meshMgr.Warn(ctx, fmt.Sprintf("looking for deleted nodes in the mesh DNS: %v", err))
+			return
+		}
+		if !left {
+			return
+		}
+	}
+	ctx, end := startStep(ctx, "mesh deregistration")
+	defer end(nil) // failures are warnings
+	if _, _, err := meshMgr.StartMesh(ctx); err != nil {
+		meshMgr.Warn(ctx, fmt.Sprintf("starting the mesh to remove the deleted nodes from it: %v", err))
+	}
+	if err := meshMgr.RemoveKnownHostsDomains(ctx, domains); err != nil {
+		meshMgr.Warn(ctx, fmt.Sprintf("not removing the deleted nodes from known_hosts and the mesh DNS: %v; delete the cluster again to remove them", err))
+		return
+	}
+	if err := meshMgr.RemoveDNSDomains(ctx, domains); err != nil {
+		meshMgr.Warn(ctx, fmt.Sprintf("not removing the deleted nodes from the mesh DNS: %v; delete the cluster again to remove them", err))
+	}
 }
 
 // meshHostnames returns the mesh DNS names of a cluster's node containers.

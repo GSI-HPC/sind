@@ -1,105 +1,137 @@
 ------------------------------ MODULE DeleteRetry ------------------------------
 (* sind delete cluster X (pkg/cluster/delete.go, deleteClusterResources and
-   removeClusterResources) in a realm that has other clusters, so the mesh
-   stays and X is deregistered.  Any step can fail, and the process can be
-   killed between any two steps.  The user then runs the same delete again,
-   up to MaxRuns times.
+   removeClusterResources) of a monitored cluster in a realm that has other
+   clusters, so the mesh and the monitoring stack stay and X is taken out of
+   them.  Any step can fail, and the process can be killed between any two
+   steps.  The user then runs the same delete again, up to MaxRuns times.
 
    Question: once a run of delete ends without error and without a warning,
-   is every trace of X gone: containers, network, volume, DNS records,
-   monitoring targets and journal directories?
+   is every trace of X gone: containers, network, volumes, known_hosts
+   entries, DNS records, monitoring targets and the journal directory?
 
-   FixMonitored and FixDNS select the candidate fixes:
-   - FixMonitored: decide "X is monitored" from state that outlives the
-     containers (the journal directory or the stack targets), not from the
-     containers that the run removes.
-   - FixDNS: deregister by the cluster's DNS suffix, not by the names of
-     the containers found.
-   Each fix also makes its traces count in the "nothing to delete" check. *)
+   The code removes the containers before it knows that the rest succeeds,
+   so a later run cannot tell from them what is left.  Two traces tell it
+   instead, each the last one that its part of the delete removes:
+   - the DNS records of the cluster's domain: the nodes are still on the
+     mesh.  They go only once the known_hosts entries are gone.
+   - the journal directory of the cluster: the monitoring stack still has
+     it.  It goes only once Alloy is synced.
+
+   The constants select the code (all TRUE) or a design that the model
+   shows to be wrong:
+   - Traces = FALSE: a run looks only at the containers it finds.  It
+     removes the DNS records and known_hosts entries of those, decides
+     from them whether the cluster is monitored, and has nothing to do
+     without containers, network and volumes.
+   - KnownFirst = FALSE: the DNS records and the known_hosts entries are
+     removed each on its own, so the records can go while entries stay.
+   - JournalLast = FALSE: the journal directory is removed before Alloy
+     is synced. *)
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS Nodes, MaxRuns, FixMonitored, FixDNS
+CONSTANTS Nodes, MaxRuns, Traces, KnownFirst, JournalLast
 
-VARIABLES ctr, net, vol, dns, stack, journal,  \* the world
-          pc, res, monitored, warned, runs     \* one run of delete
+VARIABLES ctr, net, vol, known, dns, stack, journal,  \* the world
+          pc, res, monitored, warned, failed, runs    \* one run of delete
 
-vars == <<ctr, net, vol, dns, stack, journal, pc, res, monitored, warned, runs>>
+world == <<ctr, net, vol, known, dns, stack, journal>>
+vars  == <<ctr, net, vol, known, dns, stack, journal,
+           pc, res, monitored, warned, failed, runs>>
 
 Init == /\ ctr = Nodes /\ net = TRUE /\ vol = TRUE
-        /\ dns = Nodes /\ stack = Nodes /\ journal = TRUE
+        /\ known = Nodes /\ dns = Nodes /\ stack = Nodes /\ journal = TRUE
         /\ pc = "idle" /\ res = [c |-> {}, n |-> FALSE, v |-> FALSE]
-        /\ monitored = FALSE /\ warned = FALSE /\ runs = 0
+        /\ monitored = FALSE /\ warned = FALSE /\ failed = FALSE /\ runs = 0
 
-World == <<ctr, net, vol, dns, stack, journal>>
+\* The process is killed (SIGKILL, OOM): the run ends at once, and says
+\* nothing.
+Kill == /\ pc \notin {"idle", "done"}
+        /\ pc' = "idle"
+        /\ UNCHANGED <<world, res, monitored, warned, failed, runs>>
 
-\* The process ends: an error is returned, or it is killed (SIGHUP, OOM).
-Abort == /\ pc \notin {"idle", "done"}
-         /\ pc' = "idle"
-         /\ UNCHANGED <<ctr, net, vol, dns, stack, journal, res, monitored, warned, runs>>
+Start == /\ pc = "idle" /\ runs < MaxRuns
+         /\ pc' = "list" /\ runs' = runs + 1
+         /\ warned' = FALSE /\ failed' = FALSE
+         /\ UNCHANGED <<world, res, monitored>>
 
-Start == /\ pc \in {"idle"} /\ runs < MaxRuns
-         /\ pc' = "list" /\ runs' = runs + 1 /\ warned' = FALSE
-         /\ UNCHANGED <<ctr, net, vol, dns, stack, journal, res, monitored>>
-
-\* "Nothing to delete": today it looks at containers, network and volumes
-\* only. With a fix, the traces that outlive them count too.
-Empty == /\ ctr = {} /\ ~net /\ ~vol
-         /\ FixMonitored => (stack = {} /\ ~journal)
-         /\ FixDNS => dns = {}
-
-\* ListClusterResources
+\* listClusterResources.  Without Traces, a cluster without containers,
+\* network and volumes has nothing to delete.
 List == /\ pc = "list"
         /\ res' = [c |-> ctr, n |-> net, v |-> vol]
-        /\ pc' = IF Empty THEN "done" ELSE "dereg"
-        /\ UNCHANGED <<ctr, net, vol, dns, stack, journal, monitored, warned, runs>>
+        /\ pc' = IF ~Traces /\ ctr = {} /\ ~net /\ ~vol THEN "done" ELSE "mon"
+        /\ UNCHANGED <<world, monitored, warned, failed, runs>>
 
-\* DeregisterMesh: best effort, a failure is a warning.
-Dereg == /\ pc = "dereg"
-         /\ \/ /\ dns' = IF FixDNS THEN {} ELSE dns \ res.c
-               /\ warned' = warned
-            \/ /\ dns' = dns /\ warned' = TRUE
-         /\ pc' = "mon"
-         /\ UNCHANGED <<ctr, net, vol, stack, journal, res, monitored, runs>>
-
-\* clusterMonitored: today, does a container of X mount the journal volume?
+\* clusterMonitored, by the containers, or journalsLeft for a cluster
+\* without them, which can fail: a warning.
 Mon == /\ pc = "mon"
-       /\ monitored' = IF FixMonitored THEN journal \/ stack # {} ELSE ctr # {}
-       /\ pc' = "ctrs"
-       /\ UNCHANGED <<ctr, net, vol, dns, stack, journal, res, warned, runs>>
+       /\ IF res.c # {}
+          THEN monitored' = TRUE /\ warned' = warned
+          ELSE IF Traces
+               THEN \/ monitored' = journal /\ warned' = warned
+                    \/ monitored' = FALSE /\ warned' = TRUE
+               ELSE monitored' = FALSE /\ warned' = warned
+       /\ pc' = "dereg"
+       /\ UNCHANGED <<world, res, failed, runs>>
 
-\* DeleteContainers: every container is tried; some can fail.
+\* What a deregistration takes out of a set of names: all of the cluster's
+\* domain, or without Traces those of the containers found.
+Without(names) == IF Traces THEN {} ELSE names \ res.c
+
+\* deregisterClusters.  A cluster without containers is looked at first
+\* (HasDomainRecords), which can fail: a warning.  Every other failure is
+\* a warning too.
+Dereg == /\ pc = "dereg"
+         /\ IF res.c = {} /\ (~Traces \/ dns = {})
+            THEN UNCHANGED <<known, dns, warned>>
+            ELSE \/ known' = Without(known) /\ dns' = Without(dns) /\ warned' = warned
+                 \/ UNCHANGED <<known, dns>> /\ warned' = TRUE
+                 \/ known' = Without(known) /\ dns' = dns /\ warned' = TRUE
+                 \/ /\ ~KnownFirst
+                    /\ known' = known /\ dns' = Without(dns) /\ warned' = TRUE
+         /\ pc' = "ctrs"
+         /\ UNCHANGED <<ctr, net, vol, stack, journal, res, monitored, failed, runs>>
+
+\* deleteContainers: every container is tried; some can fail, which ends
+\* the run with an error.
 Ctrs == /\ pc = "ctrs"
         /\ \E gone \in SUBSET res.c :
              /\ ctr' = ctr \ gone
-             /\ IF res.c \subseteq gone THEN pc' = "net" ELSE pc' = "idle"
-        /\ UNCHANGED <<net, vol, dns, stack, journal, res, monitored, warned, runs>>
+             /\ pc' = IF res.c \subseteq gone THEN "net" ELSE "idle"
+        /\ UNCHANGED <<net, vol, known, dns, stack, journal, res, monitored, warned, failed, runs>>
 
+\* removeClusterNetwork.  A failure ends the run with an error, after the
+\* monitoring stack has forgotten the cluster.
 Net == /\ pc = "net"
-       /\ net' = (net /\ ~res.n)
-       /\ pc' = "vols"
-       /\ UNCHANGED <<ctr, vol, dns, stack, journal, res, monitored, warned, runs>>
+       /\ \/ net' = (net /\ ~res.n) /\ pc' = "vols" /\ failed' = failed
+          \/ res.n /\ net' = net /\ pc' = "forget" /\ failed' = TRUE
+       /\ UNCHANGED <<ctr, vol, known, dns, stack, journal, res, monitored, warned, runs>>
 
+\* deleteVolumes, with the same failure.
 Vols == /\ pc = "vols"
-        /\ vol' = (vol /\ ~res.v)
+        /\ \/ vol' = (vol /\ ~res.v) /\ failed' = failed
+           \/ res.v /\ vol' = vol /\ failed' = TRUE
         /\ pc' = "forget"
-        /\ UNCHANGED <<ctr, net, dns, stack, journal, res, monitored, warned, runs>>
+        /\ UNCHANGED <<ctr, net, known, dns, stack, journal, res, monitored, warned, runs>>
 
-\* forgetMonitoredNodes: sync the stack with the containers that exist and
-\* remove the journal directories; failures are warnings.
+\* forgetMonitoredNodes: start the stack, sync Alloy with the containers
+\* that exist, remove the journal directory.  Failures are warnings.
 Forget == /\ pc = "forget"
           /\ IF monitored
-             THEN \/ /\ stack' = stack \cap ctr /\ journal' = FALSE /\ warned' = warned
-                  \/ /\ stack' = stack /\ journal' = journal /\ warned' = TRUE
+             THEN \/ stack' = stack \cap ctr /\ journal' = FALSE /\ warned' = warned
+                  \/ UNCHANGED <<stack, journal>> /\ warned' = TRUE
+                  \/ IF JournalLast
+                     THEN stack' = stack \cap ctr /\ journal' = journal /\ warned' = TRUE
+                     ELSE stack' = stack /\ journal' = FALSE /\ warned' = TRUE
              ELSE UNCHANGED <<stack, journal, warned>>
-          /\ pc' = "done"
-          /\ UNCHANGED <<ctr, net, vol, dns, res, monitored, runs>>
+          /\ pc' = IF failed THEN "idle" ELSE "done"
+          /\ UNCHANGED <<ctr, net, vol, known, dns, res, monitored, failed, runs>>
 
-\* A failed run lets the user run delete again.
+\* The user runs the delete again after a warning.
 Retry == /\ pc = "done" /\ warned /\ runs < MaxRuns
          /\ pc' = "idle"
-         /\ UNCHANGED <<ctr, net, vol, dns, stack, journal, res, monitored, warned, runs>>
+         /\ UNCHANGED <<world, res, monitored, warned, failed, runs>>
 
-Next == Start \/ List \/ Dereg \/ Mon \/ Ctrs \/ Net \/ Vols \/ Forget \/ Abort \/ Retry
+Next == Start \/ List \/ Mon \/ Dereg \/ Ctrs \/ Net \/ Vols \/ Forget \/ Kill \/ Retry
 
 Spec == Init /\ [][Next]_vars
 
@@ -107,5 +139,5 @@ Spec == Init /\ [][Next]_vars
 CleanAfterSuccess ==
   (pc = "done" /\ ~warned) =>
      /\ ctr = {} /\ ~net /\ ~vol
-     /\ dns = {} /\ stack = {} /\ ~journal
+     /\ known = {} /\ dns = {} /\ stack = {} /\ ~journal
 ================================================================================

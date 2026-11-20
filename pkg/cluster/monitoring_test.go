@@ -65,6 +65,8 @@ type stackFake struct {
 	calls      [][]string
 	// query is what Prometheus answers a query, through Grafana's curl.
 	query string
+	// journals are the directories of the journal volume that Alloy finds.
+	journals map[string]bool
 }
 
 // newStackFake returns a stackFake without a stack, on a mesh with a
@@ -78,6 +80,7 @@ func newStackFake(t *testing.T) *stackFake {
 		version:    "26.05.6",
 		logError:   "--skip-log-error",
 		fail:       map[string]mock.Result{},
+		journals:   map[string]bool{},
 	}
 }
 
@@ -276,6 +279,14 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 		}
 		if strings.HasSuffix(joined, "/api/v1/query") {
 			return mock.Result{Stdout: f.query + "\n200"}, true
+		}
+		// observability.Manager.JournalsLeft and RemoveJournals.
+		dir := args[len(args)-1]
+		switch {
+		case strings.Contains(joined, "echo found") && f.journals[dir]:
+			return mock.Result{Stdout: "found\n"}, true
+		case args[len(args)-2] == "remove":
+			delete(f.journals, dir)
 		}
 		return mock.Result{}, true
 	case "network":

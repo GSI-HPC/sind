@@ -900,7 +900,14 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 	case args[0] == "rm", args[0] == "network" && (args[1] == "rm" || args[1] == "disconnect"), args[0] == "volume" && args[1] == "rm":
 		return mock.Result{}
 	case args[0] == "cp" && args[1] == "sind-dns:/Corefile":
-		return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+		var entries []string
+		for name, nodes := range f.clusters {
+			for _, n := range nodes {
+				entries = append(entries, "10.0.0.1 "+DNSName(n, name, "sind"))
+			}
+		}
+		slices.Sort(entries)
+		return mock.Result{Stdout: testutil.TarArchive("Corefile", corefileWith(entries))}
 	case args[0] == "cp", args[0] == "kill":
 		return mock.Result{}
 	case joined == "inspect sind-dns --type container":
@@ -1143,6 +1150,7 @@ type deleteOnCallOpts struct {
 	containerRemoveFail bool
 	networkRemoveFail   bool
 	volumeRemoveFail    bool
+	corefile            []string           // the host entries of the mesh DNS
 	networkContainers   []testutil.PsEntry // containers still attached to the cluster network
 	meshContainers      []testutil.PsEntry // containers on the mesh network
 	disconnectFail      bool
@@ -1248,9 +1256,13 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 				return mock.Result{Err: fmt.Errorf("DNS container not running")}
 			}
 			if len(args) >= 2 && strings.Contains(args[1], "sind-dns") {
-				return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+				return mock.Result{Stdout: testutil.TarArchive("Corefile", corefileWith(opts.corefile))}
 			}
 			return mock.Result{}
+
+		// docker inspect of a monitoring stack container: the realm has none
+		case args[0] == "inspect" && len(args) >= 2 && isStackContainer(args[1]):
+			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: exitErr}
 
 		// docker inspect sind-dns (state check before DNS reload)
 		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
@@ -1287,4 +1299,178 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 		t.Logf("unhandled mock call: %v", args)
 		return mock.Result{}
 	}
+}
+
+// --- A delete after one that did not finish ---
+
+// leftByDelete answers the calls of Delete for a cluster dev whose
+// containers, network and volumes an earlier delete removed, in a realm
+// with another cluster, whose mesh still has what entries and knownHosts
+// say. fail answers a call first when it returns true.
+func leftByDelete(t *testing.T, entries []string, knownHosts string, fail func(joined string) bool) *mock.Executor {
+	base := deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
+		otherClusters: true,
+		corefile:      entries,
+		knownHosts:    knownHosts,
+	})
+	return &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		if fail != nil && fail(strings.Join(args, " ")) {
+			return mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
+		}
+		return base(args, stdin)
+	}}
+}
+
+// written returns what the last call whose joined arguments start with
+// prefix got on its standard input, and whether there was one.
+func written(m *mock.Executor, prefix string) (string, bool) {
+	var stdin string
+	var found bool
+	for _, c := range m.Calls {
+		if strings.HasPrefix(strings.Join(c.Args, " "), prefix) {
+			stdin, found = c.Stdin, true
+		}
+	}
+	return stdin, found
+}
+
+// TestDelete_FinishesAnEarlierDelete covers a cluster without containers,
+// network and volumes whose nodes the mesh still knows: an earlier delete
+// failed to deregister them, or was killed before it did. The delete
+// removes them by the cluster's DNS domain, as no container names them.
+func TestDelete_FinishesAnEarlierDelete(t *testing.T) {
+	entries := []string{
+		"10.0.0.2 controller.dev.sind.sind",
+		"10.0.0.3 worker-0.dev.sind.sind",
+		"10.0.0.4 controller.other.sind.sind",
+	}
+	const knownHosts = "controller.dev.sind.sind ssh-ed25519 A\ncontroller.other.sind.sind ssh-ed25519 B\nworker-0.dev.sind.sind ssh-ed25519 C\n"
+	m := leftByDelete(t, entries, knownHosts, nil)
+	c := docker.NewClient(m)
+	mgr, warnings := stackMesh(c)
+
+	require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+	assert.Empty(t, *warnings)
+	hosts, ok := written(m, "exec -i sind-ssh")
+	require.True(t, ok, "known_hosts is written")
+	assert.Equal(t, "controller.other.sind.sind ssh-ed25519 B\n", hosts)
+	_, ok = written(m, "cp - sind-dns:/")
+	require.True(t, ok, "the Corefile is written")
+	assert.Zero(t, countCalls(m.Calls, "rm"), "nothing else is left to remove")
+}
+
+// TestDelete_NothingLeft covers the delete of a cluster that the realm
+// does not know at all: it reads the Corefile and looks for the monitoring
+// stack, starts nothing and writes nothing.
+func TestDelete_NothingLeft(t *testing.T) {
+	m := leftByDelete(t, []string{"10.0.0.4 controller.other.sind.sind"}, "controller.other.sind.sind ssh-ed25519 B\n", nil)
+	c := docker.NewClient(m)
+	mgr, warnings := stackMesh(c)
+
+	require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+	assert.Empty(t, *warnings)
+	assert.Equal(t, []string{"cp sind-dns:/Corefile -"}, meshUpdates(m))
+	assert.Zero(t, countCalls(m.Calls, "start"))
+	assert.Zero(t, countCalls(m.Calls, "exec"))
+}
+
+// TestDelete_FinishesAnEarlierDelete_Failures covers what a delete does
+// when it cannot finish the deregistration either: it warns, and keeps the
+// DNS records, which tell the next delete that the nodes are still there,
+// until the known_hosts entries are gone.
+func TestDelete_FinishesAnEarlierDelete_Failures(t *testing.T) {
+	entries := []string{"10.0.0.2 controller.dev.sind.sind"}
+	const knownHosts = "controller.dev.sind.sind ssh-ed25519 A\n"
+	tests := []struct {
+		name, fail, warning string
+		corefileWritten     bool
+	}{
+		{"look", "cp sind-dns:/Corefile -", "looking for deleted nodes in the mesh DNS: reading DNS Corefile: ", false},
+		{"start", "inspect sind-ssh", "starting the mesh to remove the deleted nodes from it: inspecting SSH container: ", true},
+		{"known_hosts", "exec sind-ssh cat", "not removing the deleted nodes from known_hosts and the mesh DNS: reading known_hosts: ", false},
+		{"dns", "cp - sind-dns:/", "not removing the deleted nodes from the mesh DNS: writing DNS Corefile: ", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := leftByDelete(t, entries, knownHosts, func(joined string) bool { return strings.HasPrefix(joined, tt.fail) })
+			c := docker.NewClient(m)
+			mgr, warnings := stackMesh(c)
+
+			require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+			require.Len(t, *warnings, 1)
+			assert.Contains(t, (*warnings)[0], tt.warning)
+			_, ok := written(m, "cp - sind-dns:/")
+			assert.Equal(t, tt.corefileWritten, ok, "the Corefile is written")
+		})
+	}
+}
+
+// TestDelete_FinishesAnEarlierDelete_Monitoring covers a cluster without
+// containers whose journal directory the realm's monitoring stack still
+// has: an earlier delete removed the containers and did not get to the
+// stack. The delete syncs Alloy and removes the directory.
+func TestDelete_FinishesAnEarlierDelete_Monitoring(t *testing.T) {
+	// executor answers the calls of a delete of dev in a realm with the
+	// stack f and another cluster.
+	executor := func(t *testing.T, f *stackFake) *mock.Executor {
+		return &mock.Executor{OnCall: stackFirst(f, deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{otherClusters: true}))}
+	}
+
+	t.Run("journals left", func(t *testing.T) {
+		f := newStackFake(t).withStack()
+		f.journals["/var/log/sind/dev"] = true
+		m := executor(t, f)
+		c := docker.NewClient(m)
+		mgr, warnings := stackMesh(c)
+
+		require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+		assert.Empty(t, *warnings)
+		assert.True(t, f.called("cp - sind-alloy:"), "Alloy is synced")
+		assert.Empty(t, f.journals, "the journal directory is removed")
+	})
+	t.Run("no journals", func(t *testing.T) {
+		f := newStackFake(t).withStack()
+		f.journals["/var/log/sind/other"] = true
+		m := executor(t, f)
+		c := docker.NewClient(m)
+		mgr, warnings := stackMesh(c)
+
+		require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+		assert.Empty(t, *warnings)
+		assert.False(t, f.called("cp - sind-alloy:"), "Alloy is left alone")
+		assert.Len(t, f.journals, 1)
+	})
+	t.Run("stopped stack", func(t *testing.T) {
+		// Alloy cannot look while it is stopped: the delete starts the
+		// stack and removes what there is.
+		f := newStackFake(t).withStack().stopped()
+		f.journals["/var/log/sind/dev"] = true
+		m := executor(t, f)
+		c := docker.NewClient(m)
+		mgr, warnings := stackMesh(c)
+
+		require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+		assert.Empty(t, *warnings)
+		assert.Empty(t, f.journals)
+	})
+	t.Run("look fails", func(t *testing.T) {
+		f := newStackFake(t).withStack()
+		f.journals["/var/log/sind/dev"] = true
+		f.fail["exec sind-alloy sh -c"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
+		m := executor(t, f)
+		c := docker.NewClient(m)
+		mgr, warnings := stackMesh(c)
+
+		require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+
+		require.Len(t, *warnings, 1)
+		assert.Contains(t, (*warnings)[0], `looking for journals of cluster "dev" in the monitoring stack of realm "sind": checking journal directories: `)
+		assert.Len(t, f.journals, 1)
+	})
 }
