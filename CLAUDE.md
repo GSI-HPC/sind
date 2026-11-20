@@ -121,5 +121,6 @@ the `releases/latest` redirect, `sind version --json` (its `version` field), the
 `-v` flag, `sind doctor`, `sind create cluster [NAME] --config [--pull[=false]] [--wait]`,
 `sind get cluster` (`sind status` before v0.9.0), `sind delete cluster --all`, and
 `SIND_REALM`. Removing, renaming or moving any of these needs a matching sind-action
-change. sind-action sets `SIND_VERBOSITY` for the whole job, and `SIND_VERSION` and
+change; `cmd/sind/contract_test.go` states the list as tests, so change it with the
+list. sind-action sets `SIND_VERBOSITY` for the whole job, and `SIND_VERSION` and
 `SIND_VERIFY` for its install step: no `SIND_*` variable of sind may take these names.
