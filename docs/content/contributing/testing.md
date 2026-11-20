@@ -153,6 +153,24 @@ step slurm total=2 [fold]: ok
 
 The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets every `SIND_*` variable that sind reads (`envvar.All`) and points `XDG_STATE_HOME` at a temporary directory, so that a developer's own settings reach no test and no test writes the activity log into a real home; a test of the log gives itself a directory with `t.Setenv("XDG_STATE_HOME", t.TempDir())`.
 
+## Fuzz tests
+
+A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".
+
+```go
+func FuzzParseEntries(f *testing.F) {
+    f.Add(generateCorefile("sind", nil)) // a seed
+    f.Fuzz(func(t *testing.T, corefile string) {
+        entries := parseEntries(corefile)
+        assert.Equal(t, entries, parseEntries(generateCorefile("sind", entries)))
+    })
+}
+```
+
+`make test` runs each target on its seeds, as a unit test. `make fuzz` searches for new inputs: it runs every target for `FUZZTIME` (default `30s`), one after the other. The Nightly workflow runs it with three minutes per target. When a target fails, `go test` writes the input to `testdata/fuzz/<target>/` in the directory of the package and prints the command that runs it again. Fix the defect, and keep the input: add it to the seeds of the target, or commit the file, which `go test` then runs with the seeds.
+
+A property that holds only for well-formed input belongs in a test that generates such input, not in a fuzz target, whose input is anything.
+
 ## Integration test prerequisites
 
 An integration test that needs Docker gets its client from `testutil.NewClient` (`newTestClient` in `pkg/docker`), which checks with `docker info`, once per test process, that `docker` reaches a daemon (`itest.RequireDocker`). A test that creates clusters also calls `prereq.Check`, which checks the Docker version and that cgroup v2 is mounted with `nsdelegate`.

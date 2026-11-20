@@ -29,6 +29,10 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,
    Conventional Commit messages with bullet bodies.
+8. A new function that reads text sind did not write (a file, the output of a command,
+   an argument) gets a fuzz target in the `fuzz_test.go` of its package; run it for a
+   minute: `go test ./<pkg> -run '^$' -fuzz '^FuzzXxx$' -fuzztime 1m`. A bug fix gets a
+   test that fails without the fix.
 
 ## Updating the branch
 

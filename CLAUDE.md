@@ -32,6 +32,7 @@ go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
+FUZZTIME=1m make fuzz        # every fuzz target, one after the other (default 30s each)
 goreleaser release --snapshot --clean # release binaries and checksums.txt into dist/
 ```
 
