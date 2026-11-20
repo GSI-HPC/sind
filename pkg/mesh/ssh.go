@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/pem"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/detach"
@@ -253,6 +254,29 @@ func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) e
 // known_hosts file in a single operation.
 func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
 	return m.editKnownHosts(ctx, hostnames, nil)
+}
+
+// RemoveKnownHostsDomains removes the entries of every host in the domains
+// from the known_hosts file, as RemoveDNSDomains removes their A records.
+// A file without such an entry stays as it is.
+func (m *Manager) RemoveKnownHostsDomains(ctx context.Context, domains []string) error {
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
+	if err != nil {
+		return fmt.Errorf("reading known_hosts: %w", err)
+	}
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	kept := withoutDomains(slices.Clone(lines), 0, domains)
+	if len(kept) == len(lines) {
+		return nil
+	}
+	var result string
+	if len(kept) > 0 {
+		result = strings.Join(kept, "\n") + "\n"
+	}
+	if err := m.writeKnownHosts(ctx, result); err != nil {
+		return fmt.Errorf("writing known_hosts: %w", err)
+	}
+	return nil
 }
 
 // editKnownHosts drops the known_hosts lines of hostnames and appends add.

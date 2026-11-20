@@ -335,3 +335,54 @@ func TestGetSSHFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveKnownHostsDomains(t *testing.T) {
+	const ctl, w0, other = "controller.dev.sind.sind", "worker-0.dev.sind.sind", "controller.dev2.sind.sind"
+	tests := []struct {
+		name, existing, want string
+	}{
+		{"removes the domain", ctl + " ssh-ed25519 A\n" + other + " ssh-ed25519 B\n" + w0 + " ssh-ed25519 C\n", other + " ssh-ed25519 B\n"},
+		{"removes the last", ctl + " ssh-ed25519 A\n", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(tt.existing, "", nil) // ReadFile
+			m.AddResult("", "", nil)          // ReplaceFile
+			mgr := NewManager(docker.NewClient(&m), DefaultRealm)
+
+			require.NoError(t, mgr.RemoveKnownHostsDomains(t.Context(), []string{"gone.sind.sind", "dev.sind.sind"}))
+
+			require.Len(t, m.Calls, 2)
+			assert.Equal(t, tt.want, m.Calls[1].Stdin)
+		})
+	}
+
+	for name, existing := range map[string]string{
+		"nothing of the domain": other + " ssh-ed25519 B\n",
+		"empty file":            "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(existing, "", nil) // ReadFile
+			mgr := NewManager(docker.NewClient(&m), DefaultRealm)
+
+			require.NoError(t, mgr.RemoveKnownHostsDomains(t.Context(), []string{"dev.sind.sind"}))
+
+			assert.Len(t, m.Calls, 1, "the file is not written")
+		})
+	}
+}
+
+func TestRemoveKnownHostsDomains_Errors(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("container stopped"))
+	mgr := NewManager(docker.NewClient(&m), DefaultRealm)
+	require.ErrorContains(t, mgr.RemoveKnownHostsDomains(t.Context(), []string{"dev.sind.sind"}), "reading known_hosts")
+
+	m = mock.Executor{}
+	m.AddResult("a.dev.sind.sind k\n", "", nil)
+	m.AddResult("", "", fmt.Errorf("disk full"))
+	mgr = NewManager(docker.NewClient(&m), DefaultRealm)
+	require.ErrorContains(t, mgr.RemoveKnownHostsDomains(t.Context(), []string{"dev.sind.sind"}), "writing known_hosts")
+}

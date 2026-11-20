@@ -1933,3 +1933,90 @@ func TestDNSImage(t *testing.T) {
 	assert.Equal(t, dnsImage, DNSImage())
 	assert.True(t, strings.HasPrefix(DNSImage(), "coredns/coredns:"), DNSImage())
 }
+
+// --- Records of a domain ---
+
+// domainCorefile is a Corefile with the nodes of the clusters dev and
+// dev2, and a service of the realm.
+func domainCorefile() string {
+	return generateCorefile(DefaultRealm, []string{
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
+		"172.18.0.4 controller.dev2.sind.sind",
+		"172.18.0.5 grafana.sind.sind",
+	})
+}
+
+func TestHasDomainRecords(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	f.containers["sind-dns"].files[corefilePath] = domainCorefile()
+	mgr := NewManager(c, DefaultRealm)
+
+	for domain, want := range map[string]bool{
+		"dev.sind.sind":  true,
+		"dev2.sind.sind": true,
+		"ev.sind.sind":   false, // not a suffix of a label
+		"gone.sind.sind": false,
+		"sind.sind.sind": false,
+	} {
+		got, err := mgr.HasDomainRecords(t.Context(), []string{"other.sind.sind", domain})
+		require.NoError(t, err)
+		assert.Equal(t, want, got, domain)
+	}
+	assert.Empty(t, calls(m, "start"), "a stopped DNS container is read as it is")
+}
+
+func TestHasDomainRecords_NoMesh(t *testing.T) {
+	_, c, _ := newFakeDocker(t)
+
+	got, err := NewManager(c, DefaultRealm).HasDomainRecords(t.Context(), []string{"dev.sind.sind"})
+
+	require.NoError(t, err)
+	assert.False(t, got, "a realm without a DNS container has no record")
+}
+
+func TestHasDomainRecords_ReadError(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	f.fail["cp sind-dns:/Corefile"] = failure()
+
+	_, err := NewManager(c, DefaultRealm).HasDomainRecords(t.Context(), []string{"dev.sind.sind"})
+
+	require.ErrorContains(t, err, "reading DNS Corefile")
+}
+
+func TestRemoveDNSDomains(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	dns := f.containers["sind-dns"]
+	dns.files[corefilePath] = domainCorefile()
+	mgr := NewManager(c, DefaultRealm)
+
+	require.NoError(t, mgr.RemoveDNSDomains(t.Context(), []string{"dev.sind.sind"}))
+
+	assert.Equal(t, generateCorefile(DefaultRealm, []string{
+		"172.18.0.4 controller.dev2.sind.sind",
+		"172.18.0.5 grafana.sind.sind",
+	}), dns.files[corefilePath])
+	assert.Equal(t, []string{"USR1"}, dns.signals, "CoreDNS reloads once")
+
+	// Nothing left of the domain: the Corefile is not written again.
+	require.NoError(t, mgr.RemoveDNSDomains(t.Context(), []string{"dev.sind.sind"}))
+	assert.Equal(t, []string{"USR1"}, dns.signals)
+	assert.Len(t, calls(m, "cp -"), 1)
+}
+
+func TestRemoveDNSDomains_Errors(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	f.containers["sind-dns"].files[corefilePath] = domainCorefile()
+	mgr := NewManager(c, DefaultRealm)
+
+	f.fail["cp sind-dns:/Corefile"] = failure()
+	require.ErrorContains(t, mgr.RemoveDNSDomains(t.Context(), []string{"dev.sind.sind"}), "reading DNS Corefile")
+	delete(f.fail, "cp sind-dns:/Corefile")
+
+	f.fail["cp -"] = failure()
+	require.ErrorContains(t, mgr.RemoveDNSDomains(t.Context(), []string{"dev.sind.sind"}), "writing DNS Corefile")
+}

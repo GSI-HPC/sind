@@ -812,6 +812,37 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames), !found)
 }
 
+// HasDomainRecords reports whether the mesh DNS Corefile holds an A record
+// of a host in one of the domains, such as a cluster's dev.sind.sind. It
+// reads the Corefile from the DNS container, which need not run. A realm
+// without a DNS container has no record.
+func (m *Manager) HasDomainRecords(ctx context.Context, domains []string) (bool, error) {
+	entries, _, err := m.readDNSEntries(ctx)
+	if docker.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return len(withoutDomains(slices.Clone(entries), 1, domains)) < len(entries), nil
+}
+
+// RemoveDNSDomains removes the A records of every host in the domains from
+// the mesh DNS Corefile and reloads CoreDNS once: all that a cluster's
+// nodes ever registered, whether or not their containers still exist. A
+// Corefile without such a record stays as it is.
+func (m *Manager) RemoveDNSDomains(ctx context.Context, domains []string) error {
+	entries, found, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return err
+	}
+	kept := withoutDomains(slices.Clone(entries), 1, domains)
+	if found && len(kept) == len(entries) {
+		return nil
+	}
+	return m.writeDNSEntries(ctx, kept, !found)
+}
+
 // Info holds information about the mesh infrastructure for a realm.
 type Info struct {
 	Network      docker.NetworkName   `json:"network"`
@@ -1040,6 +1071,18 @@ func isEntry(line string) bool {
 	addr, _, _ = strings.Cut(addr, "\t")
 	_, err := netip.ParseAddr(addr)
 	return err == nil
+}
+
+// withoutDomains returns lines without those whose field i is a host name
+// in one of the domains: a known_hosts line (0) or a hosts entry of the
+// Corefile (1). It filters lines in place.
+func withoutDomains(lines []string, i int, domains []string) []string {
+	return slices.DeleteFunc(lines, func(line string) bool {
+		fields := strings.Fields(line)
+		return len(fields) > i && slices.ContainsFunc(domains, func(domain string) bool {
+			return strings.HasSuffix(fields[i], "."+domain)
+		})
+	})
 }
 
 // withoutNames returns lines without the blank ones and those whose field i
