@@ -118,7 +118,8 @@ seeds.
   versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo (in `ci.yml`
   and `docs.yml`), which it does not: bump those by hand. Dependabot also updates the Go modules at the root and
   in `tools/screenshots`, the npm packages of `video/` and the pins of
-  `video/voice/requirements.txt`, all against `next`. It leaves out the Hextra docs
+  `video/voice/requirements.txt`, all against `next`, each release 7 days after it
+  came out (`cooldown`; security updates do not wait). It leaves out the Hextra docs
   theme, a Hugo module in `docs/go.mod`, because its `go mod tidy` drops the
   requirement: bump it by hand with `hugo mod get github.com/imfing/hextra@<version>` in
   `docs/`, as the markdownlint-cli2 version that `make lint-docs` runs (`Makefile`).
