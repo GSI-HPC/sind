@@ -103,13 +103,14 @@ seeds.
 - A leftover that the Integration Test job names after the tests passed is a test
   without `t.Cleanup`, or a delete that leaves a resource behind: find which test made
   it by the realm in its name (`it-<prefix>-<id>`), and fix the cause.
-- `TestDeleteAfterKilledCreate` (Integration Test) kills `sind create cluster` when
-  a line of its plain progress appears (the start of a step, a wait); a step or a wait
-  that is renamed changes `killPoints` of the test too. When the delete after a kill leaves
-  something, the test has found what a killed create leaves and `sind delete cluster`
-  does not remove: the log of the subtest has the progress lines of the create and
-  what it left, and the failure names what the delete left. It is a defect to fix, in
-  the delete or in the order of the create, not a flake.
+- `TestDeleteAfterKilledCreate` and `TestDeleteAfterKilledDelete` (Integration Test)
+  kill `sind create cluster` and `sind delete cluster` when a line of their plain
+  progress appears (the start of a step, a wait); a step or a wait that is renamed
+  changes `killPoints` or `deleteKillLines` of the tests too. When the delete after a
+  kill leaves something, the test has found what a killed sind leaves and
+  `sind delete cluster` does not remove: the log of the subtest has the progress lines
+  of the killed command and what it left, and the failure names what the delete left.
+  It is a defect to fix, in the delete or in the order of the create, not a flake.
 - Integration Test fetches sources while building the image: the Slurm, UCX, PMIx,
   PRRTE and Open MPI tarballs, and a `git clone` of libjwt from github.com. A failure in
   that build step with a network error on any source fetch of the Dockerfile (e.g.
