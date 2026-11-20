@@ -815,6 +815,13 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // registerNodes registers DNS records and known_hosts entries for all nodes
 // in batch. It is the progress step "mesh registration".
+//
+// The DNS records come first, and the known_hosts entries only once the
+// records are there: a known_hosts entry of the cluster then always has a
+// DNS record of the cluster's domain beside it, whenever the create fails
+// or is killed. A delete of a cluster without containers relies on it, as
+// it looks only for the records (see deregisterClusters), and removes them
+// last.
 func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []nodeRunConfig, results []nodeResult) (err error) {
 	ctx, end := startStep(ctx, "mesh registration")
 	defer func() { end(err) }()
@@ -830,25 +837,13 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 		hostEntries[i] = mesh.KnownHostEntry{Hostname: dnsName, HostKey: nr.hostKey}
 	}
 
-	// The Corefile and known_hosts live in different containers: update
-	// them in parallel, each with a single read-modify-write. Neither
-	// update cancels the other, which could cut a write short.
-	var dnsErr, hostsErr error
-	var g errgroup.Group
-	g.Go(func() error {
-		if err := meshMgr.AddDNSRecords(ctx, dnsRecords); err != nil {
-			dnsErr = fmt.Errorf("registering DNS: %w", err)
-		}
-		return nil
-	})
-	g.Go(func() error {
-		if err := meshMgr.AddKnownHosts(ctx, hostEntries); err != nil {
-			hostsErr = fmt.Errorf("registering host keys: %w", err)
-		}
-		return nil
-	})
-	_ = g.Wait() // the goroutines report through dnsErr and hostsErr
-	return errors.Join(dnsErr, hostsErr)
+	if err := meshMgr.AddDNSRecords(ctx, dnsRecords); err != nil {
+		return fmt.Errorf("registering DNS: %w", err)
+	}
+	if err := meshMgr.AddKnownHosts(ctx, hostEntries); err != nil {
+		return fmt.Errorf("registering host keys: %w", err)
+	}
+	return nil
 }
 
 // enableSlurm enables the Slurm daemon on each managed node with a Slurm
