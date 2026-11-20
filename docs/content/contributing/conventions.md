@@ -64,6 +64,7 @@ Commits made by Anthropic's Claude Code agent are additionally authored as `Clau
 - Use `testify` for assertions (`assert` for non-fatal, `require` for fatal)
 - Strong types for Docker identifiers (`ContainerName`, `NetworkName`, etc.)
 - Error wrapping with `fmt.Errorf("context: %w", err)`
+- `make lint` runs `gosec` on the code outside the tests. For a finding that is no defect, give the rule and the reason on the line: `//nolint:gosec // G301: the users of the nodes read the data directory`
 
 ## License headers
 

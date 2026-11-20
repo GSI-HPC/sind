@@ -47,7 +47,7 @@ All common tasks are available via `make`:
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
 | `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
-| `make lint` | Run golangci-lint on the unit and on the integration build (`-tags integration`) |
+| `make lint` | Run golangci-lint, with `gosec`, on the unit and on the integration build (`-tags integration`) |
 | `make lint-ci` | Lint the workflows with actionlint and the shell scripts with shellcheck |
 | `make lint-docs` | Lint documentation markdown files |
 | `make check-docs` | Build the docs site with Hugo, in memory: a broken shortcode, template or page reference fails |

@@ -151,7 +151,9 @@ func pgRealmRoute(p Page, remember, anyRealm bool) Route {
 // pgRememberRealm sets the cookie that remembers the realm, or removes it
 // for every realm.
 func pgRememberRealm(w http.ResponseWriter, realm string) {
-	c := &http.Cookie{
+	// No Secure: sind ui serves HTTP on 127.0.0.1, where not every browser
+	// keeps a Secure cookie, and the value is the name of a realm.
+	c := &http.Cookie{ //nolint:gosec // G124: see above
 		Name: realmCookie, Value: realm, Path: "/", MaxAge: realmCookieAge,
 		HttpOnly: true, SameSite: http.SameSiteStrictMode,
 	}

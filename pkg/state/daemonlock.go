@@ -25,7 +25,7 @@ import (
 // client on the same machine can tell that it no longer runs.
 const (
 	labelRealm       = "sind.realm"
-	labelLockToken   = "sind.lock.token"
+	labelLockToken   = "sind.lock.token" //nolint:gosec // G101: the name of the label, not a token
 	labelLockCommand = "sind.lock.command"
 	labelLockHost    = "sind.lock.host"
 	labelLockPID     = "sind.lock.pid"

@@ -87,7 +87,9 @@ func actSaveFile(path string, data []byte) error {
 
 // actMkdirAll makes a directory that a command needs, such as the data
 // directory of a new cluster, as mkdir -p does.
-func actMkdirAll(path string) error { return os.MkdirAll(path, 0o755) }
+func actMkdirAll(path string) error {
+	return os.MkdirAll(path, 0o755) //nolint:gosec // G301: the users of the nodes read the data directory
+}
 
 // actDockerImages returns the images of client, which runs docker.
 func actDockerImages(client *docker.Client) *actImages {

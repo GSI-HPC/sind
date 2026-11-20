@@ -44,7 +44,7 @@ const (
 	LogTimestamps = "SIND_LOG_TIMESTAMPS"
 	// MCPToken is the bearer token of sind mcp stream, which a command
 	// line would show to the other users of the host.
-	MCPToken = "SIND_MCP_TOKEN"
+	MCPToken = "SIND_MCP_TOKEN" //nolint:gosec // G101: the name of the variable, not a token
 )
 
 // CommandLine lists the variables that stand in for a flag or an argument.

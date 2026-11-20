@@ -4,7 +4,7 @@ package cluster
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: mysql_native_password is defined with SHA-1
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -43,8 +43,8 @@ func accountingSQL(storagePass string) string {
 // as MariaDB's PASSWORD() computes it: "*" and the uppercase hex digits of
 // SHA1(SHA1(password)), the hash that authentication method is defined with.
 func nativePasswordHash(password string) string {
-	inner := sha1.Sum([]byte(password))
-	outer := sha1.Sum(inner[:])
+	inner := sha1.Sum([]byte(password)) //nolint:gosec // G401: see the import
+	outer := sha1.Sum(inner[:])         //nolint:gosec // G401: see the import
 	return "*" + strings.ToUpper(hex.EncodeToString(outer[:]))
 }
 

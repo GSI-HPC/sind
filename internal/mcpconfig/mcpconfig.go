@@ -530,7 +530,7 @@ func (f *File) Save(now time.Time) (backup string, err error) {
 		if backup, err = f.backup(now); err != nil {
 			return "", err
 		}
-	} else if err := os.MkdirAll(dir, 0o755); err != nil {
+	} else if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // G301: as the client makes it; the mode of the file keeps a token private
 		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
 	if err := fsutil.WriteAtomic(f.name, data, f.mode); err != nil {

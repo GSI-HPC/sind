@@ -25,7 +25,7 @@ Personal, uncommitted instructions belong in `CLAUDE.local.md` (gitignored).
 
 ```bash
 make build                   # ./sind-<os>-<arch>
-make lint                    # golangci-lint v2 (.golangci.yml, gofmt + goimports)
+make lint                    # golangci-lint v2 (.golangci.yml, gosec, gofmt + goimports)
 go mod download && make test # unit tests, -race, sandboxed with firejail
 make test-integration        # needs Docker; SIND_TEST_IMAGE overrides sind-node:latest
 go vet -tags integration ./... # compile-check integration tests without Docker
