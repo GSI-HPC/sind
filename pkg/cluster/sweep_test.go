@@ -97,6 +97,25 @@ func sweepRealm(t *testing.T, other bool) *fakeDaemon {
 	return d
 }
 
+// hostsWithoutRecords returns the known_hosts entries of the cluster in a
+// state whose mesh DNS has no record of the cluster. A delete of the
+// cluster, once its containers are gone, looks only for the records, and
+// would not find these entries (KnownHasRecords in
+// spec/tla/CreateRecover.tla, here on the code).
+func hostsWithoutRecords(state []string, cluster string) []string {
+	domain := "." + dnsSearchDomain(cluster, mesh.DefaultRealm)
+	var hosts []string
+	for _, line := range state {
+		switch {
+		case strings.Contains(line, "/Corefile: ") && strings.HasSuffix(line, domain):
+			return nil
+		case strings.Contains(line, "/known_hosts: ") && strings.Contains(line, domain+" "):
+			hosts = append(hosts, line)
+		}
+	}
+	return hosts
+}
+
 // first returns the first of the calls that failed, shortened.
 func first(failed []string) string {
 	call, _, _ := strings.Cut(failed[0], "\n")
@@ -106,7 +125,9 @@ func first(failed []string) string {
 // A create in which one docker call fails, whichever it is, either rolls
 // back to the realm as it was, or goes on to the cluster of a create
 // without a failure. A create that loses the daemon at any call fails, and
-// a delete of the cluster then returns the realm to what it was.
+// a delete of the cluster then returns the realm to what it was. What such
+// a create leaves has no known_hosts entry of the cluster without a DNS
+// record of it (hostsWithoutRecords).
 //
 // The calls of a create run in part at the same time, so the k-th call is
 // not the same in every run: each run of the test sweeps the calls in
@@ -143,6 +164,7 @@ func TestCreate_FaultSweep(t *testing.T) {
 				_, err = sweepCreate(t, d, "dev", sweepWait)
 				what := fmt.Sprintf("the daemon is gone from call %d on (%s)", k, first(d.heal()))
 				require.ErrorContains(t, err, errFault.Error(), what)
+				assert.Empty(t, hostsWithoutRecords(d.state(), "dev"), "%s: known_hosts entries without a DNS record", what)
 				_, err = sweepDelete(t, d, "dev")
 				require.NoError(t, err, "%s: the delete after it", what)
 				assert.Empty(t, stateDiff(before, d.state()), "%s: the delete after it", what)
