@@ -45,24 +45,31 @@
   // ---- format ----
 
   // dur writes seconds as the server's runDur does: 3.4s below ten
-  // seconds with fine, 42s, 5m07s, 2h03m.
+  // seconds with fine, 42s, 5m07s, 2h03m. It counts in whole
+  // milliseconds, as the times of a run are: the difference of two times
+  // in seconds can be a little less than it is, and 2.6 s would read 2.5s.
   function dur(s, fine) {
-    s = Math.max(s, 0);
-    if (s < 10 && fine) return (Math.floor(s * 10) / 10).toFixed(1) + 's';
-    if (s < 60) return Math.floor(s) + 's';
+    const ms = Math.round(Math.max(s, 0) * 1000);
+    if (ms < 10000 && fine) {
+      const t = Math.floor(ms / 100);
+      return Math.floor(t / 10) + '.' + (t % 10) + 's';
+    }
+    const sec = Math.floor(ms / 1000);
+    if (sec < 60) return sec + 's';
     const pad = n => (n < 10 ? '0' : '') + n;
-    if (s < 3600) return Math.floor(s / 60) + 'm' + pad(Math.floor(s % 60)) + 's';
-    return Math.floor(s / 3600) + 'h' + pad(Math.floor(s % 3600 / 60)) + 'm';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm' + pad(sec % 60) + 's';
+    return Math.floor(sec / 3600) + 'h' + pad(Math.floor(sec % 3600 / 60)) + 'm';
   }
   // bytes writes a size in decimal units, as the server's runBytes does.
   function bytes(n) {
-    const u = ['B', 'kB', 'MB', 'GB', 'TB'];
+    const u = ['B', 'kB', 'MB', 'GB'];
     let i = 0;
     // The unit and the decimal follow from the rounded value: 999600 is
     // 1.0 MB, not 1000 kB.
     while (Math.round(n) >= 1000 && i < u.length - 1) { n /= 1000; i++; }
     if (i === 0) return Math.max(Math.round(n), 0) + ' B';
-    return (Math.round(n * 10) < 100 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
+    const tenths = Math.round(n * 10);
+    return (tenths < 100 ? Math.floor(tenths / 10) + '.' + (tenths % 10) : Math.round(n)) + ' ' + u[i];
   }
   function plural(n, noun) { return n + ' ' + noun + (n === 1 ? '' : 's'); }
   function tickLabel(v) {
