@@ -107,6 +107,6 @@ The docs are a Hugo site in `docs/`. A page that tells how to do a task shows it
 - Target the `next` branch; `main` only moves at release
 - One logical change per PR
 - Include tests for new functionality
-- Ensure `make lint`, `make test` and `make check-coverage` pass, and `make lint-docs` when you change `docs/content/`
+- Ensure `make lint`, `make test` and `make check-coverage` pass, and `make lint-docs` when you change `docs/content/`; CI also builds the site (`make check-docs`)
 - Follow the commit message conventions above
 - A PR that changes a package under `pkg/` incompatibly needs the `breaking-api` label, which the maintainer sets; without it the API Compatibility check fails. See [Dual use]({{< relref "/architecture/overview#dual-use" >}}) for the stability of the public API

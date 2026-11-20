@@ -12,6 +12,7 @@ toc: true
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 - **firejail**, which sandboxes `make test`
 - **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
+- **Hugo** for `make check-docs`, when you change the docs site (the version that `.github/workflows/docs.yml` installs)
 - **actionlint** and **shellcheck** for `make lint-ci`, when you change a workflow or a shell script
 
 ## Clone and build
@@ -49,6 +50,7 @@ All common tasks are available via `make`:
 | `make lint` | Run golangci-lint on the unit and on the integration build (`-tags integration`) |
 | `make lint-ci` | Lint the workflows with actionlint and the shell scripts with shellcheck |
 | `make lint-docs` | Lint documentation markdown files |
+| `make check-docs` | Build the docs site with Hugo, in memory: a broken shortcode, template or page reference fails |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
 | `make clean` | Remove build artifacts and coverage files |

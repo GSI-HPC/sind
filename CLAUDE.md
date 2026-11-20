@@ -31,6 +31,7 @@ make test-integration        # needs Docker; SIND_TEST_IMAGE overrides sind-node
 go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
+make check-docs              # Hugo build of docs/ in memory (shortcodes, templates, relref)
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
 FUZZTIME=1m make fuzz        # every fuzz target, one after the other (default 30s each)
 make mutation                # mutation score of MUTATION_PACKAGES (gremlins; minutes, no gate)

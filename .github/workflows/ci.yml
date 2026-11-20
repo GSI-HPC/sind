@@ -91,6 +91,33 @@ jobs:
       - name: Lint the docs
         run: make lint-docs
 
+  # Hugo builds the site as the Deploy docs workflow does after the merge,
+  # so that a broken shortcode, template or page reference (relref) fails
+  # on the pull request and not on the site of next. It makes no videos
+  # and no screenshots: their shortcodes show nothing, or a box, without
+  # them. The Hugo version is the one of docs.yml.
+  check-docs:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Hugo fetches the Hextra theme, a Hugo module, with Go.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Hugo
+        uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3.2.1
+        with:
+          hugo-version: "0.169.0"
+
+      - name: Build the docs
+        run: make check-docs
+
   unit-test:
     name: Unit Test
     runs-on: ubuntu-latest

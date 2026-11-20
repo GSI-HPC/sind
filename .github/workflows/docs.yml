@@ -187,6 +187,7 @@ jobs:
               -sind "$RUNNER_TEMP/sind-$branch" -out "$GITHUB_WORKSPACE/$branch/docs/static/ui-shots")
           done
 
+      # The Docs Build job of ci.yml builds with the same version.
       - name: Install Hugo
         uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3.2.1
         with:
