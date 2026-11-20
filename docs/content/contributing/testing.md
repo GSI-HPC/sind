@@ -285,6 +285,7 @@ Some rules of sind are about every order in which steps can run, fail and run ag
 |---|---|---|
 | `ReadinessCache.tla` | `internal/probe` (`untilReady`), `internal/monitor` (`broadcastLoop`) | When a wait says "ready", every probe holds, with events that are dropped, a monitor that attaches late and a monitor that stops |
 | `RealmLock.tla` | `pkg/state` (`lockDaemon`) | No two clients change a realm at once, with clients on two hosts that can be killed at any time |
+| `MeshNetwork.tla` | `pkg/mesh` (`ensureMeshNetwork`, `ensureDNS`), `pkg/cluster` (`CreateInRealm`, the rollback of `Create`) | A create removes only a mesh network that it created; the DNS container of a mesh with a pinned address has that address; a cluster whose create ended well keeps its mesh. With steps that fail and clients that are killed. The last two rules need the realm lock, which two configurations show |
 | `DeleteRetry.tla` | `pkg/cluster` (`deleteClusterResources`) | A delete that reports success leaves nothing of the cluster, with steps that fail, a process that is killed, and a second run |
 
 Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC must give in a comment:
