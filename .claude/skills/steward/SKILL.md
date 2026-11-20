@@ -35,6 +35,11 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    for every input of a kind (what one function writes, another reads back; an edit
    keeps a file well-formed) gets a property test in `property_test.go`; run it with
    `-rapid.checks=10000` once. A bug fix gets a test that fails without the fix.
+9. If the change touches the readiness wait (`internal/probe`, the broadcast loop of
+   `internal/monitor`), the realm lock (`pkg/state/daemonlock.go`) or the delete of a
+   cluster (`pkg/cluster/delete.go`): change the TLA+ model in `spec/tla` with it, and
+   run `make check-models` (Java 11 or later). See "Design models" in
+   `docs/content/contributing/testing.md`.
 
 ## Updating the branch
 
@@ -52,6 +57,7 @@ CI runs for every pull request and every push to `main` and `next`.
 |-----|------|
 | Lint | golangci-lint |
 | Workflow Lint | `make lint-ci`: actionlint on the workflows, with shellcheck on their `run` steps, and shellcheck on every `*.sh` |
+| Design Models | `make check-models`: TLC on the TLA+ models of `spec/tla`; each configuration must give the result in its `\* expect:` line |
 | Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
 | Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |

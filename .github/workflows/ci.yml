@@ -64,6 +64,20 @@ jobs:
       - name: Lint the workflows and the shell scripts
         run: make lint-ci
 
+  # TLC on the TLA+ models of spec/tla: each configuration must give the
+  # result that it expects. The runner image has Java; the script fetches
+  # the release of the TLA+ tools that it pins and checks its sha256.
+  models:
+    name: Design Models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the models
+        run: make check-models
+
   # markdownlint-cli2 on docs/content, at the version that the Makefile
   # pins and with the rules of .markdownlint.json, on the runner's Node.
   lint-docs:

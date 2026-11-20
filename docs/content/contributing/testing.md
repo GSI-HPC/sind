@@ -196,6 +196,27 @@ func TestCompare_IsATotalOrder(t *testing.T) {
 - For a sequence of operations, keep a model next to the real thing and compare the two after each step (`t.Repeat`, as `TestNodesConf_EditsKeepTheFileWellFormed` does).
 - A failure prints its seed. `go test ./<pkg> -run '^TestXxx$' -rapid.seed=<seed>` runs the same input again, and `-rapid.checks=10000` draws more inputs. rapid also writes the input to `testdata/rapid/`, which git ignores: fix the defect, and add the input to a table test.
 
+## Design models
+
+Some rules of sind are about every order in which steps can run, fail and run again, which no test of one order shows. `spec/tla/` holds a [TLA+](https://lamport.azurewebsites.net/tla/tla.html) model of each, and `make check-models` checks them with the TLC model checker, which visits every state that the model can reach. The Design Models job of CI runs it.
+
+| Model | Code | Rule |
+|---|---|---|
+| `ReadinessCache.tla` | `internal/probe` (`untilReady`), `internal/monitor` (`broadcastLoop`) | When a wait says "ready", every probe holds, with events that are dropped, a monitor that attaches late and a monitor that stops |
+| `RealmLock.tla` | `pkg/state` (`lockDaemon`) | No two clients change a realm at once, with clients on two hosts that can be killed at any time |
+| `DeleteRetry.tla` | `pkg/cluster` (`deleteClusterResources`) | A delete that reports success leaves nothing of the cluster, with steps that fail, a process that is killed, and a second run |
+
+Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC must give in a comment:
+
+- `\* expect: pass`: the configuration `code` sets the constants of the model as the code works, and holds the rule.
+- `\* expect: <Invariant> is violated`: a design that the model rules out, such as a realm lock removed by its name. It must go on to fail: that shows that the model still finds the defect, and records why the code is as it is.
+
+When you change code that a model describes, change the model with it. When TLC reports a violation, it prints the steps that lead to it: run `spec/tla/check.sh` and read the trace of the configuration that failed. The script needs Java 11 or later. It fetches the release of the TLA+ tools that it pins and checks its sha256, or uses the `tla2tools.jar` that `TLA2TOOLS` names.
+
+{{< callout type="warning" >}}
+`DeleteRetry.code.cfg` expects a violation: a delete that follows a failed one finds no container and reports success, with DNS records, monitoring targets and journal directories of the cluster still there. The configuration `both-fixes` shows the design that closes the gap.
+{{< /callout >}}
+
 ## Integration test prerequisites
 
 An integration test that needs Docker gets its client from `testutil.NewClient` (`newTestClient` in `pkg/docker`), which checks with `docker info`, once per test process, that `docker` reaches a daemon (`itest.RequireDocker`). A test that creates clusters also calls `prereq.Check`, which checks the Docker version and that cgroup v2 is mounted with `nsdelegate`.
