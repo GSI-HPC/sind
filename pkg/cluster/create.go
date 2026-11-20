@@ -821,7 +821,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // DNS record of the cluster's domain beside it, whenever the create fails
 // or is killed. A delete of a cluster without containers relies on it, as
 // it looks only for the records (see deregisterClusters), and removes them
-// last.
+// last. spec/tla/CreateRecover.tla is the model of this rule.
 func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []nodeRunConfig, results []nodeResult) (err error) {
 	ctx, end := startStep(ctx, "mesh registration")
 	defer func() { end(err) }()

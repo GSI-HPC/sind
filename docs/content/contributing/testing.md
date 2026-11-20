@@ -107,7 +107,7 @@ assert.Empty(t, d.Networks())
 | Create, the daemon goes away | The create fails, and a delete of the cluster returns the realm to what it was. What the create left has no `known_hosts` entry of the cluster without a DNS record of it: a delete of a cluster without containers looks for the records |
 | Delete, one call fails or the daemon goes away | The next delete returns the realm to what it was before the cluster, without a warning. A delete that reports success without a warning has done so itself |
 
-The sweeps run on `fakeDaemon` (`fakedaemon_test.go`), a Docker daemon in memory that keeps the networks, volumes and containers and the files of the mesh. A test thus compares what a run left behind (`state()`), not the calls. Each sweep runs in an empty realm, whose mesh comes and goes with the cluster, and in a realm with another cluster, whose mesh stays. A realm with a monitoring stack is not swept: `spec/tla/DeleteRetry.tla` covers its part of the delete.
+The sweeps run on `fakeDaemon` (`fakedaemon_test.go`), a Docker daemon in memory that keeps the networks, volumes and containers and the files of the mesh. A test thus compares what a run left behind (`state()`), not the calls. Each sweep runs in an empty realm, whose mesh comes and goes with the cluster, and in a realm with another cluster, whose mesh stays. A realm with a monitoring stack is not swept: `spec/tla/DeleteRetry.tla` covers its part of the delete, and `spec/tla/CreateRecover.tla` its part of the create.
 
 A docker call that a change adds to create or delete is swept with no change to the tests. A sweep that fails names the call that failed and the lines of the state that differ.
 
@@ -287,6 +287,7 @@ Some rules of sind are about every order in which steps can run, fail and run ag
 | `RealmLock.tla` | `pkg/state` (`lockDaemon`) | No two clients change a realm at once, with clients on two hosts that can be killed at any time |
 | `MeshNetwork.tla` | `pkg/mesh` (`ensureMeshNetwork`, `ensureDNS`), `pkg/cluster` (`CreateInRealm`, the rollback of `Create`) | A create removes only a mesh network that it created; the DNS container of a mesh with a pinned address has that address; a cluster whose create ended well keeps its mesh. With steps that fail and clients that are killed. The last two rules need the realm lock, which two configurations show |
 | `DeleteRetry.tla` | `pkg/cluster` (`deleteClusterResources`) | A delete that reports success leaves nothing of the cluster, with steps that fail, a process that is killed, and a second run |
+| `CreateRecover.tla` | `pkg/cluster` (`Create` and its rollback, `registerNodes`), with the steps of `DeleteRetry.tla` | A delete, or the rollback of a create, that reports success leaves nothing of the cluster, whatever a create that failed or was killed left before. The rule needs the DNS records of a create before its `known_hosts` entries, which one configuration shows |
 
 Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC must give in a comment:
 
