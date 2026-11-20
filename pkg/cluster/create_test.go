@@ -1150,12 +1150,20 @@ func TestSetupNodes_SSHSetupError(t *testing.T) {
 	}
 }
 
+// The DNS records come before the known_hosts entries: without the records,
+// registerNodes writes no entry, which a later delete of the cluster
+// without containers would not find.
 func TestRegisterNodes_DNSError(t *testing.T) {
 	var m mock.Executor
+	var relay atomic.Int64
 	m.OnCall = func(args []string, _ string) mock.Result {
 		// CopyFromContainer (read Corefile) fails
 		if args[0] == "cp" && len(args) == 3 && args[2] == "-" {
 			return mock.Result{Err: fmt.Errorf("dns container not running")}
+		}
+		// known_hosts is read and written with docker exec in the relay.
+		if args[0] == "exec" {
+			relay.Add(1)
 		}
 		return mock.Result{}
 	}
@@ -1171,6 +1179,7 @@ func TestRegisterNodes_DNSError(t *testing.T) {
 	err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
 	require.ErrorContains(t, err, "registering DNS")
+	assert.Zero(t, relay.Load(), "calls that read or write known_hosts")
 }
 
 func TestRegisterNodes_KnownHostError(t *testing.T) {
