@@ -100,7 +100,8 @@ func sweepRealm(t *testing.T, other bool) *fakeDaemon {
 // hostsWithoutRecords returns the known_hosts entries of the cluster in a
 // state whose mesh DNS has no record of the cluster. A delete of the
 // cluster, once its containers are gone, looks only for the records, and
-// would not find these entries.
+// would not find these entries (KnownHasRecords in
+// spec/tla/CreateRecover.tla, here on the code).
 func hostsWithoutRecords(state []string, cluster string) []string {
 	domain := "." + dnsSearchDomain(cluster, mesh.DefaultRealm)
 	var hosts []string

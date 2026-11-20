@@ -48,8 +48,9 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 9. If the change touches the readiness wait (`internal/probe`, the broadcast loop of
    `internal/monitor`), the realm lock (`pkg/state/daemonlock.go`), the mesh network
    and its DNS container (`ensureMeshNetwork` and `ensureDNS` of `pkg/mesh/mesh.go`,
-   and what `pkg/cluster/create.go` does with `Created`) or the delete of a
-   cluster (`pkg/cluster/delete.go`): change the TLA+ model in `spec/tla` with it, and
+   and what `pkg/cluster/create.go` does with `Created`), the steps of a create that
+   make something a delete removes (`Create`, `createResources`, `registerNodes`) or the
+   delete of a cluster (`pkg/cluster/delete.go`): change the TLA+ model in `spec/tla` with it, and
    run `make check-models` (Java 11 or later). See "Design models" in
    `docs/content/contributing/testing.md`.
 
