@@ -149,6 +149,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The runner's Node.
+      - name: Test the page scripts
+        run: make test-js
+
       # The runner's Chrome; -no-sandbox as the runner's AppArmor may refuse
       # the user namespaces of its sandbox.
       - name: Open the pages of sind ui

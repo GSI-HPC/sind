@@ -204,6 +204,12 @@ The docs workflow takes the screenshots with the same tool, so a fault also fail
 - To look at one shot, name it: `cd tools/screenshots && go run . -sind ../../sind-linux-amd64 -check -only new-cluster-retry`.
 - Chromium is found as `chromium`, `chromium-browser` or `google-chrome` on `PATH`, or named with `$CHROMIUM`. `SHOTS_FLAGS=-no-sandbox` starts it without its sandbox, as CI does.
 
+### Tests of the page scripts
+
+A script whose functions take and give plain values has tests that Node runs without a browser: `make test-js` runs each `*.test.js` of `internal/ui/jstest` with `node --test`, and the UI Pages job runs it first. A test sets `window`, loads the script from `internal/ui/web/static/js`, and calls the functions that the script puts on `window`.
+
+`nodeset.js` reads and writes node sets in the pages; the CLI reads them with go-nodeset. Both have the same cases, in `internal/ui/nodefold/testdata/nodesets.json`: `nodeset.test.js` checks the script, and `TestSharedNodeSets` of `internal/ui/nodefold` checks go-nodeset. A node set that a page writes names the same nodes for the CLI, and so does a text that a person types in a page. A change to how `nodeset.js` reads or writes a node set adds its case to this file.
+
 ## Fuzz tests
 
 A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".

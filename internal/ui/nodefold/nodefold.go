@@ -3,7 +3,8 @@
 // Package nodefold folds the names of nodes into node sets as sind's node
 // arguments take them. It is the one fold of the Go code of sind ui: the
 // commands that its dialogs build, the titles of the runs and what the run
-// pages say of their nodes. The page scripts fold by nodeset.js.
+// pages say of their nodes. The page scripts fold by nodeset.js; the cases
+// of testdata/nodesets.json state what nodeset.js and go-nodeset read alike.
 package nodefold
 
 import (

@@ -11,7 +11,7 @@ toc: true
 - **Docker Engine 28.0+**, a rootful daemon without `userns-remap`
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 - **firejail**, which sandboxes `make test`
-- **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
+- **golangci-lint v2** for `make lint`, and **Node.js 22+** for `make lint-docs` (npx) and `make test-js`
 - **Hugo** (the version that `.github/workflows/docs.yml` installs) and **Python 3.11+** for `make check-docs`, when you change the docs site
 - **actionlint** and **shellcheck** for `make lint-ci`, when you change a workflow or a shell script
 - **zizmor** for `make audit-ci`, when you change a workflow or `.github/dependabot.yml` (`pipx install zizmor`, the version that `.github/workflows/ci.yml` installs)
@@ -42,6 +42,7 @@ All common tasks are available via `make`:
 | `make build` | Build the sind binary |
 | `make install` | Install sind to `GOPATH/bin` |
 | `make test` | Run unit tests with race detector, sandboxed with firejail |
+| `make test-js` | Run the tests of the page scripts of `sind ui` with `node --test` |
 | `make fuzz` | Run every fuzz target for `FUZZTIME` each (default `30s`) |
 | `make mutation` | Report the mutation score of the packages in `MUTATION_PACKAGES` (takes minutes) |
 | `make check-models` | Check the TLA+ models in `spec/tla` with TLC (needs Java) |

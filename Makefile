@@ -39,7 +39,7 @@ FIREJAIL_TEST := firejail --quiet --noprofile \
 	--blacklist=/bin/docker --blacklist=/usr/bin/docker \
 	--blacklist=/bin/ssh --blacklist=/usr/bin/ssh
 
-.PHONY: build install lint lint-ci audit-ci lint-docs check-docs docs-shots check-ui test fuzz mutation check-models test-integration coverage check-coverage image clean help
+.PHONY: build install lint lint-ci audit-ci lint-docs check-docs docs-shots check-ui test test-js fuzz mutation check-models test-integration coverage check-coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
@@ -73,6 +73,9 @@ check-ui: build ## Open the pages of the sind ui demo in Chromium; a fault of a 
 
 test: ## Run unit tests (sandboxed with firejail to catch host leaks)
 	$(FIREJAIL_TEST) -- $(GOTEST) -race ./...
+
+test-js: ## Run the tests of the page scripts of sind ui (needs Node.js)
+	node --test internal/ui/jstest/*.test.js
 
 fuzz: ## Run every fuzz target for FUZZTIME each (default 30s)
 	.github/scripts/fuzz.sh
