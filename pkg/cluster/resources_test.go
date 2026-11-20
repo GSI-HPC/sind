@@ -491,6 +491,29 @@ func TestWriteMungeKey(t *testing.T) {
 	assert.Equal(t, []string{"rm", "-f", "-v", "sind-dev-munge-helper"}, m.Calls[3].Args)
 }
 
+// A helper that docker does not remove once its work is done is a container
+// of the cluster that is no node: the write fails, so that the create rolls
+// back and removes it. A write that failed keeps its own error.
+func TestRemoveHelper_Fails(t *testing.T) {
+	rm := func(args []string, _ string) mock.Result {
+		if args[0] == "rm" {
+			return mock.Result{Err: fmt.Errorf("rm failed")}
+		}
+		if args[0] == "exec" {
+			return mock.Result{Err: fmt.Errorf("chown failed")}
+		}
+		return mock.Result{}
+	}
+	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{{Role: config.RoleController, CPUs: 2, Memory: "2g"}}}
+
+	c := docker.NewClient(&mock.Executor{OnCall: rm})
+	err := writeClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
+	require.EqualError(t, err, "removing config helper container: rm failed")
+
+	err = writeMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
+	require.EqualError(t, err, "fixing munge key ownership: chown failed")
+}
+
 func TestWriteMungeKey_RunError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("run failed"))

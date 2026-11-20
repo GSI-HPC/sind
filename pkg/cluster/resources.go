@@ -85,7 +85,7 @@ func SlurmConfFiles(cfg *config.Cluster) (slurmConf, nodesConf string, err error
 // cp writes files as root, so the helper then runs (like the munge helper)
 // to give them to SlurmUser with docker exec, and the fragments' directory
 // too, with mode 0700.
-func writeClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
+func writeClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) (err error) {
 	slurmConf, nodesConf, err := SlurmConfFiles(cfg)
 	if err != nil {
 		return err
@@ -128,15 +128,13 @@ func writeClusterConfig(ctx context.Context, client *docker.Client, realm string
 		if _, err := client.RunContainer(ctx, args...); err != nil {
 			return fmt.Errorf("creating config helper container: %w", err)
 		}
-		// docker rm -f kills the helper's sleep first.
-		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	} else {
 		args = append(args, "--entrypoint", "true", image)
 		if _, err := client.CreateContainer(ctx, args...); err != nil {
 			return fmt.Errorf("creating config helper container: %w", err)
 		}
-		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	}
+	defer removeHelper(ctx, client, helperName, "config", &err)
 
 	files := docker.FileContents{
 		"slurm.conf":        []byte(slurmConf),
@@ -216,9 +214,20 @@ func confPaths(names []string) []string {
 	return paths
 }
 
+// removeHelper removes the helper container of a volume once its work is
+// done; docker rm -f kills a helper's sleep first. When the work succeeded
+// and the removal fails, it sets *err: a helper that stays is a container
+// of the cluster that is no node, so the create fails, and its rollback
+// removes the helper with the rest.
+func removeHelper(ctx context.Context, client *docker.Client, name docker.ContainerName, what string, err *error) {
+	if rmErr := client.RemoveContainer(ctx, name); rmErr != nil && *err == nil {
+		*err = fmt.Errorf("removing %s helper container: %w", what, rmErr)
+	}
+}
+
 // writeMungeKey writes the given munge key to the munge volume.
 // Uses a temporary container to access the volume.
-func writeMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) error {
+func writeMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) (err error) {
 	helperName := ContainerName(realm, clusterName, "munge-helper")
 	volName := VolumeName(realm, clusterName, VolumeMunge)
 
@@ -229,12 +238,11 @@ func writeMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		"-v", string(volName) + ":" + slurm.MungeDir,
 	}
 	args = append(args, "--entrypoint", "sleep", image, "30")
-	_, err := client.RunContainer(ctx, args...)
+	_, err = client.RunContainer(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("creating munge helper container: %w", err)
 	}
-	// docker rm -f kills the helper's sleep first.
-	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
+	defer removeHelper(ctx, client, helperName, "munge", &err)
 
 	// Mode 0400 from the start, so that the key is never readable by others.
 	err = client.CopyFilesToContainer(ctx, helperName, slurm.MungeDir, map[string]docker.File{
