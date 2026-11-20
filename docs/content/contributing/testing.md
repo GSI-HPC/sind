@@ -242,6 +242,7 @@ func TestCompare_IsATotalOrder(t *testing.T) {
 | `pkg/config` | `Parse` reads back the file that the YAML encoder writes for any config, which the web UI depends on; a second `ApplyDefaults` changes nothing, and an ID that it assigns is free |
 | `internal/slurm` | The `slurm.conf` of any main section and options sets no parameter that the main section sets; `sind-nodes.conf` stays well-formed over any sequence of worker additions and removals |
 | `pkg/cluster` | No two Docker resources of sind get the same name (`naming_collision_test.go`, which checks every name up to a length instead of drawing some) |
+| `pkg/mesh` | A pinned mesh network gets a layout exactly when its subnet is a /21 or larger; the DNS address is the last one before the broadcast address, outside the range that the other containers get their addresses from |
 
 - Write a generator for the inputs that the property is about (`rapid.Custom`), and draw each value with a label: rapid prints the labelled values of the smallest input that fails.
 - For a sequence of operations, keep a model next to the real thing and compare the two after each step (`t.Repeat`, as `TestNodesConf_EditsKeepTheFileWellFormed` does).
