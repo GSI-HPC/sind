@@ -226,15 +226,16 @@ from YAML and Edit YAML open. */}}
 {{/* act-page-oob are the parts of the form of the page that each preview
 updates: whether the name is free, the count of the nodes and those under
 More nodes, the files, the start whose card is on and the cluster that Copy
-a cluster copies, and what the nodes use, which a phone shows in the
-footer. */}}
+a cluster copies, where the form has that card, and what the nodes use,
+which a phone shows in the footer. htmx reports a part whose element the
+page does not have as an error. */}}
 {{define "act-page-oob"}}<span class="act-good" id="act-ok-name" hx-swap-oob="innerHTML">{{with .NameOK}}✓ {{.}}{{end}}</span>
 <span class="act-sr" id="act-ncount" hx-swap-oob="innerHTML">{{.NodeCount}}</span>
 <span class="act-ss" id="act-sum-more" hx-swap-oob="innerHTML">{{.MoreNodes}}</span>
 <div class="act-fmap" id="act-fmap" hx-swap-oob="innerHTML">{{template "pg-files" .Files}}</div>
 <span id="act-start-on" data-start="{{.StartOn}}" hidden hx-swap-oob="true"></span>
-<span class="act-tmeta" id="act-copy-foot" hx-swap-oob="innerHTML">{{.CopyFoot}}</span>
-<span class="hint act-tot" id="act-tot" hx-swap-oob="innerHTML">{{.Totals}}</span>{{end}}
+{{if .CopyCard}}<span class="act-tmeta" id="act-copy-foot" hx-swap-oob="innerHTML">{{.CopyFoot}}</span>
+{{end}}<span class="hint act-tot" id="act-tot" hx-swap-oob="innerHTML">{{.Totals}}</span>{{end}}
 
 {{/* act-pstatus is the status at the foot of the plan, which a phone shows:
 a button that goes to the first problem while the command cannot run, or to

@@ -252,6 +252,21 @@ func (d *actDialog) CopyNames() string {
 	return text
 }
 
+// CopyCard reports whether the form of the preview has the card of Copy a
+// cluster, whose foot the preview then updates: the form does not try a
+// run again, and there is a cluster to copy.
+func (p actPreview) CopyCard() bool {
+	if actRetryOf(p.Snap, p.Form.Get("from")) != nil {
+		return false
+	}
+	for _, realm := range pgRealmNames(p.Snap, "") {
+		if len(p.Snap.Clusters[realm]) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // CopyFoot is the foot of the card of Copy a cluster: the cluster that the
 // form copies, or what to do.
 func (d *actDialog) CopyFoot() string { return actCopyFoot(d.Snap, d.Form) }
