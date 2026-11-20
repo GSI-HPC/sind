@@ -7,6 +7,9 @@ name: Nightly
 #   on another one or fails now and then
 # - every fuzz target for three minutes, for an input that a parser does
 #   not handle; a pull request runs only the seeds
+# - the mutation score of the packages that parse and generate text, for
+#   code that the tests run but do not check; it reports and never fails
+#   for a score
 #
 # Scheduled workflows run from the default branch, but sind is developed on
 # next, so each job checks out next. The report job keeps one open issue,
@@ -117,9 +120,44 @@ jobs:
           path: "**/testdata/fuzz/**"
           if-no-files-found: ignore
 
+  # The job summary has the score of each package and the mutants that
+  # lived: a change of one operator that no test of the package fails. The
+  # job fails only when the tool fails.
+  #
+  # pkg/cluster has a job of its own: its tests run for some seconds, once
+  # for each of its mutants.
+  mutation:
+    name: Mutation Score (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: text
+            packages: "" # the packages that the script names
+          - name: cluster
+            packages: pkg/cluster
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run the mutation tests
+        run: make mutation
+        env:
+          MUTATION_PACKAGES: ${{ matrix.packages }}
+
   report:
     name: Report
-    needs: [govulncheck, shuffle, fuzz]
+    needs: [govulncheck, shuffle, fuzz, mutation]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:

@@ -33,6 +33,7 @@ make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
 FUZZTIME=1m make fuzz        # every fuzz target, one after the other (default 30s each)
+make mutation                # mutation score of MUTATION_PACKAGES (gremlins; minutes, no gate)
 make check-models            # TLC on the TLA+ models in spec/tla (needs Java)
 goreleaser release --snapshot --clean # release binaries and checksums.txt into dist/
 ```

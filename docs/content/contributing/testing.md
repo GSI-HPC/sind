@@ -210,6 +210,26 @@ func TestCompare_IsATotalOrder(t *testing.T) {
 - For a sequence of operations, keep a model next to the real thing and compare the two after each step (`t.Repeat`, as `TestNodesConf_EditsKeepTheFileWellFormed` does).
 - A failure prints its seed. `go test ./<pkg> -run '^TestXxx$' -rapid.seed=<seed>` runs the same input again, and `-rapid.checks=10000` draws more inputs. rapid also writes the input to `testdata/rapid/`, which git ignores: fix the defect, and add the input to a table test.
 
+## Mutation tests
+
+Coverage tells that a test runs a line, not that it checks what the line does. A mutation test changes one operator of the code at a time, such as `<` to `<=` or `+` to `-`, and runs the tests of the package: a mutant that the tests fail is killed, and one that they pass lived. A mutant that lived shows code that no test tells from a wrong version of it.
+
+`make mutation` runs [gremlins](https://gremlins.dev) on the packages that parse and generate text and prints the score of each, killed / (killed + lived), and the mutants that lived:
+
+```text
+package                     killed  lived  timed out  not covered   score
+internal/natsort                 7      0          8            0    100%
+internal/mcpconfig              87      2          2            4   97.8%
+
+Mutants that lived:
+  internal/mcpconfig/mcpconfig.go:159:11 CONDITIONALS_BOUNDARY
+  internal/mcpconfig/mcpconfig.go:165:11 CONDITIONALS_BOUNDARY
+```
+
+- `MUTATION_PACKAGES="pkg/mesh" make mutation` runs it on the packages you name. A run takes from seconds to many minutes: one run of the package's tests for each mutant.
+- The Mutation Score job of the Nightly workflow runs it on `next` and writes the table to its summary. It does not fail for a score: a mutant can live because the changed code is as right as the old, for example a `<` that `<=` replaces where the two operands are never equal.
+- For a mutant that lived in code you change, add the test that fails with it. A mutant that timed out made a loop that does not end, or took too long on a busy machine: it counts as neither. A mutant that is not covered is mostly a `+` between the parts of a constant, which no test line runs.
+
 ## Design models
 
 Some rules of sind are about every order in which steps can run, fail and run again, which no test of one order shows. `spec/tla/` holds a [TLA+](https://lamport.azurewebsites.net/tla/tla.html) model of each, and `make check-models` checks them with the TLC model checker, which visits every state that the model can reach. The Design Models job of CI runs it.

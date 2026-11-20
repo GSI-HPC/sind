@@ -35,6 +35,9 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    for every input of a kind (what one function writes, another reads back; an edit
    keeps a file well-formed) gets a property test in `property_test.go`; run it with
    `-rapid.checks=10000` once. A bug fix gets a test that fails without the fix.
+   For new logic in a package that parses or generates text, run
+   `MUTATION_PACKAGES=<pkg> make mutation` and add a test for each mutant in the new
+   code that lived, or say in the PR why the changed code is as right as the old.
 9. If the change touches the readiness wait (`internal/probe`, the broadcast loop of
    `internal/monitor`), the realm lock (`pkg/state/daemonlock.go`) or the delete of a
    cluster (`pkg/cluster/delete.go`): change the TLA+ model in `spec/tla` with it, and
@@ -76,9 +79,10 @@ it fails on an incompatible change of a package under `pkg/`, or of go-clikit's
 the label from the maintainer, and its commits are marked `!` with `BREAKING CHANGE:`.
 
 The Nightly workflow (`.github/workflows/nightly.yml`) runs from `main` each night and
-checks out `next`: govulncheck, the unit tests three times in a random order, and every
-fuzz target for three minutes (`make fuzz`). Its Report job keeps one open issue,
-labelled `nightly`, that names the jobs that failed. Run a shuffled order again with the
+checks out `next`: govulncheck, the unit tests three times in a random order, every
+fuzz target for three minutes (`make fuzz`), and the mutation score (`make mutation`),
+which is in the summary of the Mutation Score job and fails no run. Its Report job
+keeps one open issue, labelled `nightly`, that names the jobs that failed. Run a shuffled order again with the
 seed that `go test` prints: `go test -shuffle=<seed>`. An input that a fuzz target fails
 on is in the summary of the Fuzz job and in its `fuzz-inputs` artifact: put it at the
 same path under `testdata/fuzz/`, fix the defect, and add the input to the target's

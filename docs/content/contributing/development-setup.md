@@ -41,6 +41,7 @@ All common tasks are available via `make`:
 | `make install` | Install sind to `GOPATH/bin` |
 | `make test` | Run unit tests with race detector, sandboxed with firejail |
 | `make fuzz` | Run every fuzz target for `FUZZTIME` each (default `30s`) |
+| `make mutation` | Report the mutation score of the packages in `MUTATION_PACKAGES` (takes minutes) |
 | `make check-models` | Check the TLA+ models in `spec/tla` with TLC (needs Java) |
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |

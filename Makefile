@@ -39,7 +39,7 @@ FIREJAIL_TEST := firejail --quiet --noprofile \
 	--blacklist=/bin/docker --blacklist=/usr/bin/docker \
 	--blacklist=/bin/ssh --blacklist=/usr/bin/ssh
 
-.PHONY: build install lint lint-ci lint-docs docs-shots test fuzz check-models test-integration coverage check-coverage image clean help
+.PHONY: build install lint lint-ci lint-docs docs-shots test fuzz mutation check-models test-integration coverage check-coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
@@ -66,6 +66,9 @@ test: ## Run unit tests (sandboxed with firejail to catch host leaks)
 
 fuzz: ## Run every fuzz target for FUZZTIME each (default 30s)
 	.github/scripts/fuzz.sh
+
+mutation: ## Report the mutation score of MUTATION_PACKAGES (takes minutes; reports, does not fail on a score)
+	.github/scripts/mutation.sh
 
 check-models: ## Check the TLA+ models of spec/tla with TLC (requires Java)
 	spec/tla/check.sh
