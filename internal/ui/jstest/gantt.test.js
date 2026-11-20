@@ -8,6 +8,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { test } = require('node:test');
 const { Element, install } = require('./dom.js');
 
@@ -447,16 +449,32 @@ test('a run that ended stands still: a frame without a change draws nothing', ()
   assert.equal(g.clock.textContent, '20s');
 });
 
-test('the sizes round as the server writes them', () => {
+// The cases of ../testdata/runtexts.json are also the cases of a Go test
+// (TestSharedRunTexts), which reads them with the functions of the server:
+// the script and the server write the same text.
+const shared = JSON.parse(fs.readFileSync(path.join(__dirname, '../testdata/runtexts.json'), 'utf8'));
+
+test('a duration reads as the server writes it', () => {
   const g = open();
-  const sized = a => pullRun({ last: 4000 }, { w: [], a, z: 0 });
-  const amount = a => { draw(g, sized(a), 4.25); return row(g, 'p0').res[1]; };
-  assert.equal(amount(999), '999 B');
-  assert.equal(amount(1000), '1.0 kB');
-  assert.equal(amount(9949), '9.9 kB');
-  assert.equal(amount(9950), '10 kB');
-  // 999600 is 1.0 MB, not 1000 kB.
-  assert.equal(amount(999600), '1.0 MB');
-  assert.equal(amount(2.5e12), '2.5 TB');
-  assert.equal(amount(2.5e15), '2500 TB');
+  // The result of a node that ended is the time from its start to its end.
+  const took = (from, to) => {
+    const spans = [command('create cluster'), step('nodes', 'nodes', 0), target('t0', 'nodes', 'controller', from / 1000, to / 1000), target('t1', 'nodes', 'worker-0', 0)];
+    draw(g, { last: to, spans }, to / 1000 + 1);
+    return row(g, 't0').res[0];
+  };
+  for (const c of shared.durations) assert.equal(took(c.from, c.to), c.text, 'from ' + c.from + ' to ' + c.to + ' ms');
+});
+
+test('a size reads as the server writes it', () => {
+  const g = open();
+  // The amount of an image that is pulled, beside one that is not yet.
+  const amount = bytes => {
+    const spans = [
+      command('create cluster'), step('pull', 'pull images', 1),
+      pull('p0', 'pull', 'sind-node:25.11', 1, 2, { a: bytes }), pull('p1', 'pull', 'sind-node:26.05', 1),
+    ];
+    draw(g, { last: 2000, spans }, 2.5);
+    return row(g, 'p0').res[1];
+  };
+  for (const c of shared.sizes) assert.equal(amount(c.bytes), c.text, c.bytes + ' bytes');
 });
