@@ -215,9 +215,25 @@ func (s *Section) UnmarshalYAML(v *yaml.Node) error {
 // map of fragments, or else the string.
 func (s Section) MarshalYAML() (any, error) {
 	if s.IsMap() {
-		return s.Fragments, nil
+		fragments := make(map[string]any, len(s.Fragments))
+		for name, content := range s.Fragments {
+			fragments[name] = yamlText(content)
+		}
+		return fragments, nil
 	}
-	return s.Content, nil
+	return yamlText(s.Content), nil
+}
+
+// yamlText returns text as the YAML encoder must get it so that the
+// decoder reads it back. The encoder writes text of several lines as a
+// block ("|"), and the decoder takes a tab at the start of its first line
+// for indentation, which it refuses: such text is written in double
+// quotes.
+func yamlText(text string) any {
+	if strings.HasPrefix(text, "\t") && strings.Contains(text, "\n") {
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: text, Style: yaml.DoubleQuotedStyle}
+	}
+	return text
 }
 
 // Slurm configures custom Slurm configuration files.
