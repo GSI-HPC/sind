@@ -97,6 +97,20 @@ assert.Empty(t, d.Networks())
 
 `SetHook` lets a test answer some calls itself, for example to make a remove fail.
 
+### Fault sweeps
+
+`TestCreate_FaultSweep` and `TestDelete_FaultSweep` in `pkg/cluster` fail each docker call of a create and of a delete in turn, once as a single failure and once as a daemon that is gone from that call on. They state what must hold for every one of these runs:
+
+| Run | What must hold |
+|-----|----------------|
+| Create, one call fails | The create rolls back to the realm as it was, or goes on to the cluster of a create without a failure |
+| Create, the daemon goes away | The create fails, and a delete of the cluster returns the realm to what it was |
+| Delete, one call fails or the daemon goes away | The next delete returns the realm to what it was before the cluster, without a warning. A delete that reports success without a warning has done so itself |
+
+The sweeps run on `fakeDaemon` (`fakedaemon_test.go`), a Docker daemon in memory that keeps the networks, volumes and containers and the files of the mesh. A test thus compares what a run left behind (`state()`), not the calls. Each sweep runs in an empty realm, whose mesh comes and goes with the cluster, and in a realm with another cluster, whose mesh stays. A realm with a monitoring stack is not swept: `spec/tla/DeleteRetry.tla` covers its part of the delete.
+
+A docker call that a change adds to create or delete is swept with no change to the tests. A sweep that fails names the call that failed and the lines of the state that differ.
+
 ## Simulating missing resources
 
 The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr. An executor that runs no local process, or a test double that needs a code other than 1, returns `cmdexec.NewExitError(code, stderr)`, which the mock passes on unchanged.
