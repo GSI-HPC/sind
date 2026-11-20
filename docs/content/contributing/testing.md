@@ -169,7 +169,32 @@ func FuzzParseEntries(f *testing.F) {
 
 `make test` runs each target on its seeds, as a unit test. `make fuzz` searches for new inputs: it runs every target for `FUZZTIME` (default `30s`), one after the other. The Nightly workflow runs it with three minutes per target. When a target fails, `go test` writes the input to `testdata/fuzz/<target>/` in the directory of the package and prints the command that runs it again. Fix the defect, and keep the input: add it to the seeds of the target, or commit the file, which `go test` then runs with the seeds.
 
-A property that holds only for well-formed input belongs in a test that generates such input, not in a fuzz target, whose input is anything.
+A property that holds only for well-formed input belongs in a property test, which generates such input, not in a fuzz target, whose input is anything.
+
+## Property tests
+
+A property test states what holds for every input of a kind, and checks it on inputs that [rapid](https://pkg.go.dev/pgregory.net/rapid) draws: 100 on each run of the unit tests, other ones each time. It lives in the `property_test.go` of its package.
+
+```go
+func TestCompare_IsATotalOrder(t *testing.T) {
+    rapid.Check(t, func(t *rapid.T) {
+        a, b := name().Draw(t, "a"), name().Draw(t, "b")
+        assert.Equal(t, a == b, Compare(a, b) == 0, "only equal names compare equal")
+        assert.Equal(t, Compare(a, b), -Compare(b, a))
+    })
+}
+```
+
+| Package | Property |
+|---|---|
+| `internal/natsort` | `Compare` is a total order, and orders names that differ in one number by that number |
+| `pkg/config` | `Parse` reads back the file that the YAML encoder writes for any config, which the web UI depends on; a second `ApplyDefaults` changes nothing, and an ID that it assigns is free |
+| `internal/slurm` | The `slurm.conf` of any main section and options sets no parameter that the main section sets; `sind-nodes.conf` stays well-formed over any sequence of worker additions and removals |
+| `pkg/cluster` | No two Docker resources of sind get the same name (`naming_collision_test.go`, which checks every name up to a length instead of drawing some) |
+
+- Write a generator for the inputs that the property is about (`rapid.Custom`), and draw each value with a label: rapid prints the labelled values of the smallest input that fails.
+- For a sequence of operations, keep a model next to the real thing and compare the two after each step (`t.Repeat`, as `TestNodesConf_EditsKeepTheFileWellFormed` does).
+- A failure prints its seed. `go test ./<pkg> -run '^TestXxx$' -rapid.seed=<seed>` runs the same input again, and `-rapid.checks=10000` draws more inputs. rapid also writes the input to `testdata/rapid/`, which git ignores: fix the defect, and add the input to a table test.
 
 ## Integration test prerequisites
 

@@ -31,8 +31,10 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    Conventional Commit messages with bullet bodies.
 8. A new function that reads text sind did not write (a file, the output of a command,
    an argument) gets a fuzz target in the `fuzz_test.go` of its package; run it for a
-   minute: `go test ./<pkg> -run '^$' -fuzz '^FuzzXxx$' -fuzztime 1m`. A bug fix gets a
-   test that fails without the fix.
+   minute: `go test ./<pkg> -run '^$' -fuzz '^FuzzXxx$' -fuzztime 1m`. A rule that holds
+   for every input of a kind (what one function writes, another reads back; an edit
+   keeps a file well-formed) gets a property test in `property_test.go`; run it with
+   `-rapid.checks=10000` once. A bug fix gets a test that fails without the fix.
 
 ## Updating the branch
 
