@@ -167,6 +167,19 @@ step slurm total=2 [fold]: ok
 
 The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets every `SIND_*` variable that sind reads (`envvar.All`) and points `XDG_STATE_HOME` at a temporary directory, so that a developer's own settings reach no test and no test writes the activity log into a real home; a test of the log gives itself a directory with `t.Setenv("XDG_STATE_HOME", t.TempDir())`.
 
+## Golden files of the command line
+
+Scripts, sind-action and the MCP tools depend on the commands, the flags and the JSON output of sind. The tests of `cmd/sind` compare them with golden files in `cmd/sind/testdata`:
+
+| File | Content | Test |
+|---|---|---|
+| `cli.txt` | Each command with its arguments and aliases, each flag with its type and default, and the `SIND_*` variables | `TestCLISurface` |
+| `json/<command>.json` | The JSON output of a command, byte for byte: the fields, their order and the layout. A second case of a command is `json/<command>_<case>.json` | The JSON test of the command, with `goldenJSON` |
+
+- A test fails when its output differs from its file. If the change is intended, write the files again with `go test ./cmd/sind -update`, read the diff, and update `DESIGN.md` and the docs in the same commit. A field or flag that is removed or renamed breaks the scripts of users: say so in the commit.
+- Every `get` subcommand, `doctor` and `version` must have a golden file of its JSON output (`TestJSONGoldens_CoverTheCommands`). For a new `get` subcommand, write a test that runs it with `-o json` on a mock executor and calls `goldenJSON(t, "get-<name>", stdout)`.
+- A value that changes with the build or the machine is replaced before the comparison, as the Go version in `TestVersionCommand_JSONOutput`.
+
 ## Goroutine leaks
 
 A package that starts goroutines has a `main_test.go` whose `TestMain` calls [`goleak.VerifyTestMain`](https://pkg.go.dev/go.uber.org/goleak#VerifyTestMain): when all tests of the package passed, it fails the package if a goroutine that a test started still runs, and prints the stack of each one. `cmd/sind` has a `TestMain` of its own, which does the same check with `goleak.Find`.

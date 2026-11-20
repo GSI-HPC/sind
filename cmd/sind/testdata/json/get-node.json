@@ -1,0 +1,14 @@
+{
+  "container": "sind-dev-controller",
+  "cluster": "dev",
+  "role": "controller",
+  "managed": true,
+  "fqdn": "controller.dev.sind.sind",
+  "ip": "10.0.0.2",
+  "status": "running",
+  "services": {
+    "munge": true,
+    "slurmctld": true,
+    "sshd": true
+  }
+}

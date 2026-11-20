@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Docker Engine",
+    "status": "failed",
+    "detail": "27.5.0 (requires >= 28.0)"
+  },
+  {
+    "name": "Docker daemon",
+    "status": "ok",
+    "detail": "rootful, no userns-remap"
+  },
+  {
+    "name": "Docker host",
+    "status": "ok",
+    "detail": "this machine (unix:///var/run/docker.sock)"
+  },
+  {
+    "name": "cgroupv2",
+    "status": "failed",
+    "detail": "nsdelegate not found",
+    "remediation": "Enable nsdelegate on the Docker host temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n\nEnable nsdelegate on boot (systemd):\n\nsudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d\necho -e '[Mount]\\nOptions=nsdelegate' \\\n  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf\nsudo systemctl daemon-reload"
+  },
+  {
+    "name": "DNS policy",
+    "status": "warning",
+    "detail": "not authorized (optional)",
+    "remediation": "Install a polkit rule to enable host DNS resolution for *.sind.\nChoose the profile that matches your environment:\n\nDesktop — allows docker group members to configure DNS from local\nsessions only (direct keyboard/display access, not SSH):\n\nsudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'\npolkit.addRule(function(action, subject) {\n    if ([\"org.freedesktop.resolve1.set-dns-servers\",\n         \"org.freedesktop.resolve1.set-domains\",\n         \"org.freedesktop.resolve1.revert\"].indexOf(action.id) >= 0 &&\n        subject.isInGroup(\"docker\") &&\n        subject.active && subject.local) {\n        return polkit.Result.YES;\n    }\n});\nRULES\n\nServer — allows docker group members to configure DNS from any\nactive session, including SSH:\n\nsudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'\npolkit.addRule(function(action, subject) {\n    if ([\"org.freedesktop.resolve1.set-dns-servers\",\n         \"org.freedesktop.resolve1.set-domains\",\n         \"org.freedesktop.resolve1.revert\"].indexOf(action.id) >= 0 &&\n        subject.isInGroup(\"docker\") &&\n        subject.active) {\n        return polkit.Result.YES;\n    }\n});\nRULES"
+  }
+]

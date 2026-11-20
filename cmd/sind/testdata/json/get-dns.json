@@ -1,0 +1,10 @@
+[
+  {
+    "hostname": "controller.dev.sind.sind",
+    "ip": "172.18.0.2"
+  },
+  {
+    "hostname": "worker-0.dev.sind.sind",
+    "ip": "172.18.0.3"
+  }
+]

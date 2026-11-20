@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Docker Engine",
+    "status": "ok",
+    "detail": "29.0.0 (>= 28.0)"
+  },
+  {
+    "name": "Docker daemon",
+    "status": "ok",
+    "detail": "rootful, no userns-remap"
+  },
+  {
+    "name": "Docker host",
+    "status": "ok",
+    "detail": "this machine (unix:///var/run/docker.sock)"
+  },
+  {
+    "name": "cgroupv2",
+    "status": "ok",
+    "detail": "nsdelegate enabled (/sys/fs/cgroup)"
+  },
+  {
+    "name": "DNS policy",
+    "status": "ok",
+    "detail": "host resolution available"
+  }
+]

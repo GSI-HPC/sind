@@ -1,0 +1,13 @@
+{
+  "container": "sind-dev-worker-0",
+  "cluster": "dev",
+  "role": "worker",
+  "managed": false,
+  "fqdn": "worker-0.dev.sind.sind",
+  "ip": "10.0.0.3",
+  "status": "running",
+  "services": {
+    "munge": true,
+    "sshd": true
+  }
+}

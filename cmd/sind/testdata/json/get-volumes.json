@@ -1,0 +1,10 @@
+[
+  {
+    "name": "sind-dev-data",
+    "driver": "local"
+  },
+  {
+    "name": "sind-ssh-config",
+    "driver": "local"
+  }
+]

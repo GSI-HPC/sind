@@ -1,0 +1,5 @@
+{
+  "zone": "sind.sind",
+  "server": "10.0.0.2",
+  "corefile": "sind.sind:53 {\n    errors\n    cache 30\n    forward . 10.0.0.2\n}\n"
+}

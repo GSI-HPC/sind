@@ -85,6 +85,7 @@ func TestGetCluster_Monitored(t *testing.T) {
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: monitoredOnCall(t)}, "get", "cluster", "dev", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-cluster_monitoring", stdout)
 	var status map[string]any
 	require.NoError(t, json.Unmarshal([]byte(stdout), &status))
 	assert.Equal(t, true, status["monitoring"])
@@ -111,6 +112,7 @@ dev   2      26.05.6
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: monitoredOnCall(t)}, "get", "monitoring", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-monitoring", stdout)
 	var m cluster.Monitoring
 	require.NoError(t, json.Unmarshal([]byte(stdout), &m))
 	assert.Equal(t, "sind", m.Realm)

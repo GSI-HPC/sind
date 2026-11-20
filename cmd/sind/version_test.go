@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,6 +64,10 @@ func TestVersionCommand_JSONOutput(t *testing.T) {
 	assert.Equal(t, "abc1234", info.Commit)
 	assert.NotEmpty(t, info.GoVer)
 	assert.NotEmpty(t, info.Platform)
+
+	// The Go version and the platform are those of the build.
+	stdout = strings.NewReplacer(info.GoVer, "GO_VERSION", info.Platform, "PLATFORM").Replace(stdout)
+	goldenJSON(t, "version", stdout)
 }
 
 func TestVersionCommand_JSONOutput_NoCommit(t *testing.T) {

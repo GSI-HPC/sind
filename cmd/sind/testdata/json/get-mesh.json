@@ -1,0 +1,10 @@
+{
+  "network": "sind-mesh",
+  "dns_container": "sind-dns",
+  "dns_ip": "10.0.0.2",
+  "dns_zone": "sind.sind",
+  "dns_image": "coredns/coredns:1.15.0",
+  "ssh_container": "sind-ssh",
+  "ssh_volume": "sind-ssh-config",
+  "ssh_image": "ghcr.io/gsi-hpc/sind-node:latest"
+}

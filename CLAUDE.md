@@ -69,6 +69,9 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
   `fmt.Errorf("context: %w", err)`. Use strong types for Docker identifiers.
 - Follow the "CLI Design Guidelines" in `DESIGN.md` (verb-noun commands, positional
   cluster names, silent mutations, `-o json` on every `get` subcommand).
+- Golden files in `cmd/sind/testdata` state the commands, flags and `SIND_*` variables
+  (`cli.txt`) and the JSON output of each command that has one (`json/`). After an
+  intended change, write them again with `go test ./cmd/sind -update` and review the diff.
 - Package map and patterns: `docs/content/contributing/architecture-guide.md`.
 
 ## Docs
