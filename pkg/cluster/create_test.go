@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
@@ -1116,14 +1117,16 @@ func TestSetupNodes_SetupErrorWaitsForTheInspect(t *testing.T) {
 }
 
 func TestSetupNodes_WaitsForMunge(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
-		return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")},
-			strings.HasSuffix(strings.Join(args, " "), "systemctl is-active munge")
-	}, workerConfigs("worker-0")...)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		defer cancel()
+		_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
+			return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")},
+				strings.HasSuffix(strings.Join(args, " "), "systemctl is-active munge")
+		}, workerConfigs("worker-0")...)
 
-	require.ErrorContains(t, err, "probe munge")
+		require.ErrorContains(t, err, "probe munge")
+	})
 }
 
 func TestSetupNodes_SSHSetupError(t *testing.T) {
@@ -1268,52 +1271,56 @@ func TestLogExtraPrivileges(t *testing.T) {
 }
 
 func TestEnableSlurm_ProbeTimeout(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+	synctest.Test(t, func(t *testing.T) {
+		var m mock.Executor
+		m.OnCall = func(args []string, _ string) mock.Result {
+			if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+				return mock.Result{}
+			}
+			// scontrol ping always fails → probe times out
+			if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+				return mock.Result{Err: fmt.Errorf("slurmctld not responding")}
+			}
 			return mock.Result{}
 		}
-		// scontrol ping always fails → probe times out
-		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
-			return mock.Result{Err: fmt.Errorf("slurmctld not responding")}
-		}
-		return mock.Result{}
-	}
 
-	client := docker.NewClient(&m)
-	configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true}}
+		client := docker.NewClient(&m)
+		configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true}}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
-	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
+		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer cancel()
+		err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld: ")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld: ")
+	})
 }
 
 // TestEnableSlurm_HTTPProbeTimeout checks that a monitored controller whose
 // slurmctld serves no HTTP is named in the error of its wait.
 func TestEnableSlurm_HTTPProbeTimeout(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
-			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+	synctest.Test(t, func(t *testing.T) {
+		var m mock.Executor
+		m.OnCall = func(args []string, _ string) mock.Result {
+			if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+			}
+			if args[0] == "exec" && len(args) > 2 && args[2] == "systemctl" {
+				return mock.Result{}
+			}
+			return mock.Result{Err: fmt.Errorf("connection refused")}
 		}
-		if args[0] == "exec" && len(args) > 2 && args[2] == "systemctl" {
-			return mock.Result{}
-		}
-		return mock.Result{Err: fmt.Errorf("connection refused")}
-	}
 
-	client := docker.NewClient(&m)
-	configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true, Monitoring: true}}
+		client := docker.NewClient(&m)
+		configs := []nodeRunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true, Monitoring: true}}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
-	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
+		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer cancel()
+		err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", "sind-dev-controller", configs, 10*time.Millisecond, nil)
 
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld HTTP: ")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld HTTP: ")
+	})
 }
 
 func TestEnableSlurm_DBFirst(t *testing.T) {

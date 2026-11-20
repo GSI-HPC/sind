@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -182,23 +183,29 @@ func TestCreateSlurmAccounts_NoCommands(t *testing.T) {
 	assert.Empty(t, accountsScripts(t, m.Calls))
 }
 
+// The clock of the test is the one of synctest, which moves only while the
+// wait sleeps: the deadline cannot come before the first probe ran. On the
+// real clock it did, on a machine with much load, and the error then had
+// no probe result to name.
 func TestCreateSlurmAccounts_NotRegistered(t *testing.T) {
-	var registered atomic.Int32
-	registered.Store(1 << 30)
-	var m mock.Executor
-	override := accountsOnCall(&registered, mock.Result{})
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		r, _ := override(args, stdin)
-		return r
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		var registered atomic.Int32
+		registered.Store(1 << 30)
+		var m mock.Executor
+		override := accountsOnCall(&registered, mock.Result{})
+		m.OnCall = func(args []string, stdin string) mock.Result {
+			r, _ := override(args, stdin)
+			return r
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+		defer cancel()
 
-	err := createSlurmAccounts(ctx, docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
+		err := createSlurmAccounts(ctx, docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
 
-	require.ErrorContains(t, err, "waiting for slurmdbd to register the cluster: timed out; last probe error: probe registration:")
-	assert.Contains(t, err.Error(), "cluster dev not registered with slurmdbd yet")
-	assert.Empty(t, accountsScripts(t, m.Calls))
+		require.ErrorContains(t, err, "waiting for slurmdbd to register the cluster: timed out; last probe error: probe registration:")
+		assert.Contains(t, err.Error(), "cluster dev not registered with slurmdbd yet")
+		assert.Empty(t, accountsScripts(t, m.Calls))
+	})
 }
 
 func TestCreateSlurmAccounts_SacctmgrFails(t *testing.T) {
