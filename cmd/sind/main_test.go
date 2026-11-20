@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 // childEnv makes the test binary act as the process under test: "main" runs
@@ -103,7 +105,33 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("XDG_STATE_HOME", state)
 	code := m.Run()
 	_ = os.RemoveAll(state)
+	// As goleak.VerifyTestMain: no test leaves a goroutine that still runs.
+	if code == 0 {
+		if err := leftGoroutines(); err != nil {
+			fmt.Fprintln(os.Stderr, "goleak: Errors on successful test run:", err)
+			code = 1
+		}
+	}
 	os.Exit(code)
+}
+
+// leftGoroutines returns an error that lists the goroutines that the tests
+// left, or nil.
+//
+// The HTTP client of the tests keeps its connections to the MCP streams
+// that they ran, with two goroutines each. And `sind mcp stream` returns as
+// soon as its server accepts no more requests: the shutdown of the server,
+// which closes the connections, can still run then. It ends when the
+// client has closed its connections, so the check gives it the time.
+func leftGoroutines() error {
+	http.DefaultClient.CloseIdleConnections()
+	var err error
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+		if err = goleak.Find(); err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // withoutExitSleep returns the GORACE options gorace with the race
