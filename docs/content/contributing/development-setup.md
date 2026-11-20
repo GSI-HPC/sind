@@ -14,6 +14,7 @@ toc: true
 - **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
 - **Hugo** for `make check-docs`, when you change the docs site (the version that `.github/workflows/docs.yml` installs)
 - **actionlint** and **shellcheck** for `make lint-ci`, when you change a workflow or a shell script
+- **zizmor** for `make audit-ci`, when you change a workflow or `.github/dependabot.yml` (`pipx install zizmor`, the version that `.github/workflows/ci.yml` installs)
 
 ## Clone and build
 
@@ -49,6 +50,7 @@ All common tasks are available via `make`:
 | `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
 | `make lint` | Run golangci-lint, with `gosec`, on the unit and on the integration build (`-tags integration`) |
 | `make lint-ci` | Lint the workflows with actionlint and the shell scripts with shellcheck |
+| `make audit-ci` | Audit the workflows and the Dependabot config for security defects with zizmor; `.github/zizmor.yml` lists the findings that are accepted |
 | `make lint-docs` | Lint documentation markdown files |
 | `make check-docs` | Build the docs site with Hugo, in memory: a broken shortcode, template or page reference fails |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |

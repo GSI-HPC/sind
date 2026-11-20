@@ -42,10 +42,12 @@ jobs:
           version: v2.15.0
           args: --build-tags integration
 
-  # actionlint on the workflows, with shellcheck on their run steps, and
-  # shellcheck on the scripts of the repository. The image and the nightly
-  # workflows do not run for a pull request, so this is their only check
-  # before the merge.
+  # actionlint on the workflows, with shellcheck on their run steps,
+  # shellcheck on the scripts of the repository, and zizmor on the workflows
+  # and the Dependabot config for security defects, such as an expression
+  # of the event in a run step or an action that is not pinned. The image
+  # and the nightly workflows do not run for a pull request, so this is
+  # their only check before the merge.
   lint-ci:
     name: Workflow Lint
     runs-on: ubuntu-latest
@@ -63,6 +65,16 @@ jobs:
 
       - name: Lint the workflows and the shell scripts
         run: make lint-ci
+
+      - name: Install zizmor
+        run: pipx install zizmor==1.32.0
+
+      # With the token, zizmor also asks GitHub about each action that the
+      # workflows use: known vulnerabilities, and the commit behind a pin.
+      - name: Audit the workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make audit-ci
 
   # TLC on the TLA+ models of spec/tla: each configuration must give the
   # result that it expects. The runner image has Java; the script fetches

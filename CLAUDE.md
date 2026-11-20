@@ -33,6 +33,7 @@ make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
 make check-docs              # Hugo build of docs/ in memory (shortcodes, templates, relref)
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
+make audit-ci                # zizmor on the workflows and dependabot.yml (.github/zizmor.yml)
 FUZZTIME=1m make fuzz        # every fuzz target, one after the other (default 30s each)
 make mutation                # mutation score of MUTATION_PACKAGES (gremlins; minutes, no gate)
 make check-models            # TLC on the TLA+ models in spec/tla (needs Java)

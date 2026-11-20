@@ -39,7 +39,7 @@ FIREJAIL_TEST := firejail --quiet --noprofile \
 	--blacklist=/bin/docker --blacklist=/usr/bin/docker \
 	--blacklist=/bin/ssh --blacklist=/usr/bin/ssh
 
-.PHONY: build install lint lint-ci lint-docs check-docs docs-shots test fuzz mutation check-models test-integration coverage check-coverage image clean help
+.PHONY: build install lint lint-ci audit-ci lint-docs check-docs docs-shots test fuzz mutation check-models test-integration coverage check-coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
@@ -54,6 +54,9 @@ lint: ## Run golangci-lint, on the unit and on the integration build
 lint-ci: ## Lint the workflows (actionlint) and the shell scripts (shellcheck)
 	actionlint
 	git ls-files -z '*.sh' | xargs -0 shellcheck
+
+audit-ci: ## Audit the workflows and the Dependabot config for security defects (zizmor)
+	zizmor .
 
 lint-docs: ## Lint documentation markdown files
 	npx markdownlint-cli2@0.24.1 "docs/content/**/*.md"

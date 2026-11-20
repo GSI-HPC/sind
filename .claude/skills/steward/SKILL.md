@@ -25,7 +25,9 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    too. If anything under `docs/` or `tools/screenshots/shots.yaml` changed and Hugo
    is installed: `make check-docs`, the Docs Build job of CI. If a workflow or a shell script changed: `make lint-ci` (actionlint,
    `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`, and shellcheck,
-   `pip install shellcheck-py`).
+   `pip install shellcheck-py`). The Workflow Lint job of CI also runs `make audit-ci`
+   (zizmor): fix what it reports, or list the finding in `.github/zizmor.yml` with
+   the reason.
 6. If the CLI surface, output format, config schema or labels changed: `DESIGN.md` and
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,
@@ -60,7 +62,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Job | Runs |
 |-----|------|
 | Lint | golangci-lint |
-| Workflow Lint | `make lint-ci`: actionlint on the workflows, with shellcheck on their `run` steps, and shellcheck on every `*.sh` |
+| Workflow Lint | `make lint-ci`: actionlint on the workflows, with shellcheck on their `run` steps, and shellcheck on every `*.sh`. Then `make audit-ci`: zizmor on the workflows and `.github/dependabot.yml`, with the token of the job |
 | Design Models | `make check-models`: TLC on the TLA+ models of `spec/tla`; each configuration must give the result in its `\* expect:` line |
 | Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
 | Docs Build | `make check-docs`: Hugo builds the site in memory, without videos and screenshots; a broken shortcode, template or `relref` fails, and so does a warning |
@@ -115,7 +117,7 @@ seeds.
   it gets its tags, selected by name (`TESTS` in `image-build.yml`): a PR that renames
   or removes one of them changes that list too.
 - The workflows pin every action to a commit SHA, which Dependabot updates, and the
-  versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo (in `ci.yml`
+  versions of goreleaser, golangci-lint, gotestsum, govulncheck, zizmor, and Hugo (in `ci.yml`
   and `docs.yml`), which it does not: bump those by hand. Dependabot also updates the Go modules at the root and
   in `tools/screenshots`, the npm packages of `video/` and the pins of
   `video/voice/requirements.txt`, all against `next`, each release 7 days after it
