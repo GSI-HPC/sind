@@ -137,11 +137,10 @@ func endRealmProcesses(t *testing.T, realm string) {
 // are processes of their own, and containers that it started still run.
 // Each realm has one cluster, so its mesh goes with it.
 //
-// The rule is about what Docker holds. A killed sind can also leave a
-// process: the docker events call of its readiness watcher learns that its
-// reader is gone only when it writes the next event, which never comes for
-// containers that are removed before they ran. The test does not check
-// for it. It kills what it finds, so that no process of a test realm stays.
+// A killed sind must also leave no process that runs on: docker events,
+// which the readiness watcher starts, does not end with its reader, so the
+// kernel ends it with sind (execopt.WithDiesWithParent, on Linux). The
+// test looks for processes that name the realm, where there is a /proc.
 func TestDeleteAfterKilledCreate(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
@@ -220,6 +219,10 @@ func TestDeleteAfterKilledCreate(t *testing.T) {
 				require.Less(t, run, 3, "delete %d still warns: stderr=%q", run, stderr)
 			}
 			assert.Empty(t, realmObjects(ctx, t, c, realm), "the delete reported success without a warning: stderr=%q", stderr)
+			// The docker calls of the killed create that still run end with
+			// the containers, at the latest.
+			assert.Eventually(t, func() bool { return len(realmProcesses(realm)) == 0 }, 10*time.Second, 100*time.Millisecond,
+				"docker calls of the killed create still run after the delete")
 		})
 	}
 }

@@ -38,7 +38,7 @@ internal/envvar/   The names of the SIND_* environment variables and Lookup, whi
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and internal/ssh's ssh_config host names
 
 internal/execopt/  The options that sind's packages give cmdexec.OSExecutor in the context of a call
-  ├── execopt.go   WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup, WithStopGrace, WithOrphanSafe, WithStarted, WithEnv and WithOutputLimit for the commands of the CLI and sind ui
+  ├── execopt.go   WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as PullImage reads those of docker pull; WithProcessGroup, WithStopGrace, WithOrphanSafe, WithDiesWithParent, WithStarted, WithEnv and WithOutputLimit for the commands of the CLI and sind ui
   └── terminal.go  WithTerminal: a command's stdout is a pseudo-terminal, as docker pull writes its byte counts only there; TerminalLines turns what it draws there into plain lines
 
 internal/nodecmd/  The docker command lines of ssh, enter, exec and logs, and of the log views of sind ui (BuildSSHArgs, BuildContainerExecArgs, ContainerLogArgs, ServiceLogArgs)
@@ -193,7 +193,7 @@ internal/mcpconfig
 internal/mock
   → pkg/cmdexec internal/execopt
 internal/monitor
-  → pkg/cmdexec pkg/docker pkg/log
+  → pkg/cmdexec pkg/docker pkg/log internal/execopt
 internal/natsort
 internal/nodecmd
   → pkg/cluster pkg/docker pkg/mesh
@@ -224,7 +224,7 @@ internal/ui/activity
   → internal/ui/nodefold internal/ui/store
 internal/ui/collect
   → pkg/cluster pkg/config pkg/docker pkg/mesh pkg/state internal/doctor
-  → internal/envvar internal/ui/store
+  → internal/envvar internal/execopt internal/ui/store
 internal/ui/demo
   → pkg/cluster pkg/cmdexec pkg/config pkg/docker pkg/mesh pkg/state
   → internal/observability internal/probe internal/slurm internal/ui/action

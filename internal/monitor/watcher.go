@@ -8,6 +8,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -115,7 +116,9 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 
 	// Start docker events monitor.
 	dockerArgs := DockerRealmEventsArgs(w.realm, w.clusterName)
-	proc, err := w.client.Start(ctx, dockerArgs...)
+	// docker events does not end with its reader, so the kernel ends it
+	// with this process.
+	proc, err := w.client.Start(execopt.WithDiesWithParent(ctx), dockerArgs...)
 	if err != nil {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start docker events monitor", "err", err)
 		return err
