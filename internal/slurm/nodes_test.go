@@ -327,6 +327,31 @@ func TestPartitionLine(t *testing.T) {
 	// A line edited to lose its Nodes= gets them back after its name,
 	// before any comment.
 	assert.Equal(t, "PartitionName = all Nodes=worker-1  Default=NO # Nodes=x", partitionLine("PartitionName = all  Default=NO # Nodes=x", []string{"worker-1"}))
+	// Of several Nodes= pairs Slurm takes the last, and a Nodes= in the
+	// quoted value of another pair is not one.
+	assert.Equal(t, `PartitionName=all Comment="x Nodes=y" Nodes=a Nodes=worker-1`, partitionLine(`PartitionName=all Comment="x Nodes=y" Nodes=a Nodes=b`, []string{"worker-1"}))
+	// A quote that no blank follows does not end a value.
+	assert.Equal(t, `PartitionName=all Nodes=worker-1`, partitionLine(`PartitionName=all Nodes=""0`, []string{"worker-1"}))
+	// A node that a user defined with a name that needs an escape, or
+	// quotes, is listed with them.
+	assert.Equal(t, `PartitionName=all Nodes="\#,a b"`, partitionLine(`PartitionName=all Nodes=x`, []string{"#", "a b"}))
+}
+
+// A backslash in the line of partition all, which Slurm removes as it
+// reads the line, is no reason to panic: the line is written anew with its
+// pairs and its comment.
+func TestPartitionLine_Backslash(t *testing.T) {
+	assert.Equal(t, "PartitionName=all Nodes=worker-1", partitionLine(`Partition\Name=all`, []string{"worker-1"}))
+	assert.Equal(t, `PartitionName=all Nodes=worker-1 Default=NO Comment="a \# b" Empty="" # mine`,
+		partitionLine(`PartitionName=all nodes=worker-0 Default\=NO Comment="a \# b" Empty="" # mine`, []string{"worker-1"}))
+
+	conf := "NodeName=worker-0 CPUs=1\nPartition\\Name=all Nodes=worker-0 MaxTime=1:00:00\n"
+	added := AddNodesToConf(conf, []NodeEntry{{Name: "worker-1", CPUs: 1, MemoryMB: 512}}, config.Section{})
+	assert.Equal(t, "NodeName=worker-0 CPUs=1\n"+
+		"NodeName=worker-1 CPUs=1 RealMemory=512 State=UNKNOWN\n"+
+		"PartitionName=all Nodes=worker-0,worker-1 MaxTime=1:00:00\n", added)
+	assert.Equal(t, "NodeName=worker-1 CPUs=1 RealMemory=512 State=UNKNOWN\n"+
+		"PartitionName=all Nodes=worker-1 MaxTime=1:00:00\n", RemoveNodesFromConf(added, []string{"worker-0"}))
 }
 
 func splitLines(s string) []string {

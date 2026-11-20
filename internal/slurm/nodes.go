@@ -81,30 +81,100 @@ func newPartitionLine(nodes []string, isDefault bool) string {
 	if !isDefault {
 		flag = "NO"
 	}
-	return "PartitionName=" + PartitionAll + " Nodes=" + strings.Join(nodes, ",") + " Default=" + flag
+	return "PartitionName=" + PartitionAll + " " + nodesPair(nodes) + " Default=" + flag
 }
 
-// nodesPairPattern matches the Nodes= pair of a partition line, and
-// partitionNamePattern its PartitionName= pair, as config.LinePairs reads
-// them: in any case, with blanks around the "=", an optional operator
-// before it, and a value in double quotes or up to the next blank.
-var (
-	nodesPairPattern     = regexp.MustCompile(`(?i)(^|\s)Nodes\s*[-*+/]?=\s*(?:"[^"]*"|\S+)`)
-	partitionNamePattern = regexp.MustCompile(`(?i)^\s*PartitionName\s*[-*+/]?=\s*(?:"[^"]*"|\S+)`)
-)
+// escapePair escapes the characters of a slurm.conf value that Slurm's
+// parser, and config.LinePairs, take for something else: a "#" starts a
+// comment, and a backslash escapes the next character.
+var escapePair = strings.NewReplacer(`\`, `\\`, "#", `\#`)
+
+// pairText returns the pair key=value as slurm.conf takes it: the value
+// escaped (see escapePair), and in double quotes when it is empty or
+// holds a blank.
+func pairText(key, value string) string {
+	value = escapePair.Replace(value)
+	if value == "" || strings.ContainsAny(value, " \t") {
+		value = `"` + value + `"`
+	}
+	return key + "=" + value
+}
+
+// nodesPair returns the Nodes= pair of a partition with the given nodes.
+// The names of sind's nodes need no escape; a node that a user defined in
+// sind-nodes.conf may.
+func nodesPair(nodes []string) string {
+	return pairText("Nodes", strings.Join(nodes, ","))
+}
+
+// pairPattern matches the first key=value pair of a slurm.conf line that
+// holds no backslash, as config.LinePairs reads it, with the bounds of the
+// pair and of its key: blanks around the "=", an optional operator before
+// it, and a value in double quotes or up to the next blank.
+var pairPattern = regexp.MustCompile(`^\s*(([[:alnum:]_.]+)\s*[-*+/]?=\s*(?:"[^"]*"|\S+))(?:\s|$)`)
+
+// pair is a key=value pair of a line: its key, and where it starts and
+// ends in the line.
+type pair struct {
+	key        string
+	start, end int
+}
+
+// linePairs returns the pairs of code, a slurm.conf line without its
+// comment and without a backslash, in order: the pairs that
+// config.LinePairs returns for it.
+func linePairs(code string) []pair {
+	var pairs []pair
+	for at := 0; ; {
+		m := pairPattern.FindStringSubmatchIndex(code[at:])
+		if m == nil {
+			return pairs
+		}
+		pairs = append(pairs, pair{key: code[at+m[4] : at+m[5]], start: at + m[2], end: at + m[3]})
+		at += m[1]
+	}
+}
 
 // partitionLine returns old, the earlier line of partition all, with its
 // Nodes= list replaced by nodes, so that other changes to the line
-// survive. A line without a Nodes= pair gets one after its name. A
+// survive. Of several Nodes= pairs it replaces the last, which is the one
+// Slurm takes. A line without a Nodes= pair gets one after its name. A
 // comment at the end of the line stays as it is.
+//
+// A backslash makes Slurm, and config.LinePairs, read another line than
+// the one written: such a line is written anew from its pairs (see
+// rewritePartitionLine).
 func partitionLine(old string, nodes []string) string {
-	list := "Nodes=" + strings.Join(nodes, ",")
+	list := nodesPair(nodes)
 	code := config.StripComment(old)
-	if loc := nodesPairPattern.FindStringSubmatchIndex(code); loc != nil {
-		return old[:loc[3]] + list + old[loc[1]:]
+	if strings.Contains(code, `\`) {
+		if comment := old[len(code):]; comment != "" {
+			return rewritePartitionLine(code, list) + " " + comment
+		}
+		return rewritePartitionLine(code, list)
 	}
-	name := partitionNamePattern.FindStringIndex(code)
-	return old[:name[1]] + " " + list + old[name[1]:]
+	pairs := linePairs(code)
+	for _, p := range slices.Backward(pairs[1:]) {
+		if strings.EqualFold(p.key, "Nodes") {
+			return old[:p.start] + list + old[p.end:]
+		}
+	}
+	name := pairs[0].end
+	return old[:name] + " " + list + old[name:]
+}
+
+// rewritePartitionLine returns the line of partition all whose code,
+// the line without its comment, holds a backslash: its name, list, the
+// Nodes= pair to give it, and its other pairs as config.LinePairs reads
+// them, in their order. An operator before a "=" is not kept.
+func rewritePartitionLine(code, list string) string {
+	parts := []string{"PartitionName=" + PartitionAll, list}
+	for _, p := range config.LinePairs(code)[1:] {
+		if !strings.EqualFold(p[0], "Nodes") {
+			parts = append(parts, pairText(p[0], p[1]))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // declaresDefaultPartition reports whether slurm.conf content, such as the
