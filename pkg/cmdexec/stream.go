@@ -32,6 +32,9 @@ type Process struct {
 	// inProcessGroup started once the command has ended.
 	group     bool
 	groupDone func()
+	// release lets go of the thread that started a command which dies with
+	// this process (execopt.WithDiesWithParent), once the command has ended.
+	release func()
 
 	closeOnce sync.Once
 	closeErr  error
@@ -50,12 +53,23 @@ type Process struct {
 // As OSExecutor.Run does, Start runs the command with the environment of
 // execopt.WithEnv, and in a process group of its own under
 // execopt.WithProcessGroup, which the end of ctx and Close kill whole.
+//
+// A command that never reads its stdin, such as docker events, does not see
+// that pipe close when this process dies. Under execopt.WithDiesWithParent
+// the kernel kills it then (Linux).
 func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	if env := execopt.Env(ctx); len(env) > 0 {
 		cmd.Env = env
 	}
-	p := &Process{cmd: cmd, groupDone: func() {}}
+	p := &Process{cmd: cmd, groupDone: func() {}, release: func() {}}
+	start := cmd.Start
+	if execopt.DiesWithParent(ctx) {
+		start = func() (err error) {
+			p.release, err = startTied(cmd)
+			return err
+		}
+	}
 	if execopt.InProcessGroup(ctx) {
 		p.group = true
 		p.groupDone = inProcessGroup(cmd, execopt.StopGrace(ctx))
@@ -72,7 +86,7 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 			return nil, err
 		}
 		cmd.Stdout, cmd.Stderr = w, w
-		err = cmd.Start()
+		err = start()
 		_ = w.Close() // the child holds its own copy
 		if err != nil {
 			_ = r.Close()
@@ -91,7 +105,7 @@ func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	p.stderr = &headTail{half: streamStderrHalf}
 	cmd.Stderr = p.stderr
 	cmd.WaitDelay = max(cmd.WaitDelay, outputWaitDelay)
-	if err := cmd.Start(); err != nil {
+	if err := start(); err != nil {
 		_ = stdout.Close()
 		return nil, err
 	}
@@ -132,6 +146,7 @@ func (p *Process) close() error {
 	_ = p.stdin.Close()
 	err := p.cmd.Wait()
 	p.groupDone()
+	p.release()
 	if errors.Is(err, exec.ErrWaitDelay) {
 		err = nil // it exited 0; a process it left behind held stderr
 	}

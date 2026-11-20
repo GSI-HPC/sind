@@ -36,6 +36,11 @@ func TestOrphanSafe(t *testing.T) {
 	assert.True(t, OrphanSafe(WithOrphanSafe(t.Context())))
 }
 
+func TestDiesWithParent(t *testing.T) {
+	assert.False(t, DiesWithParent(t.Context()))
+	assert.True(t, DiesWithParent(WithDiesWithParent(t.Context())))
+}
+
 func TestLineParser(t *testing.T) {
 	assert.Nil(t, LineParser(t.Context()))
 

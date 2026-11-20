@@ -103,6 +103,25 @@ func OrphanSafe(ctx context.Context) bool {
 	return safe
 }
 
+// diesWithParentKey is the context key of WithDiesWithParent.
+type diesWithParentKey struct{}
+
+// WithDiesWithParent returns ctx for a stream that must not outlive this
+// process, such as docker events: it reads no standard input, and learns
+// that nobody reads its output only when it writes the next event, which
+// may never come. On Linux, cmdexec.Start has the kernel kill such a
+// command when this process dies, however it dies. On other systems the
+// command stays, as it does without this option.
+func WithDiesWithParent(ctx context.Context) context.Context {
+	return context.WithValue(ctx, diesWithParentKey{}, true)
+}
+
+// DiesWithParent reports whether ctx is one WithDiesWithParent returned.
+func DiesWithParent(ctx context.Context) bool {
+	dies, _ := ctx.Value(diesWithParentKey{}).(bool)
+	return dies
+}
+
 // lineParserKey is the context key of WithLineParser.
 type lineParserKey struct{}
 
