@@ -188,6 +188,22 @@ A package that starts goroutines has a `main_test.go` whose `TestMain` calls [`g
 - The check tells that a goroutine is left, not which test left it. Run the tests of the package one at a time (`go test ./<pkg> -run '^TestXxx$'`), or call `goleak.VerifyNone(t, goleak.IgnoreCurrent())` in the test that you suspect.
 - When a new package starts a goroutine (`go`, `errgroup`, `sync.WaitGroup.Go`, `context.AfterFunc`), give it the same `main_test.go`.
 
+## The web UI in a browser
+
+The Go tests of `internal/ui` check the HTML that the server writes. They do not run the scripts of the pages. `make check-ui` does: it starts `sind ui --demo --still` and opens each shot of `tools/screenshots/shots.yaml` in Chromium, in the light and the dark theme and in each size of the shot, with the steps of the shot (a click, a dialog, typed text). It writes no image. The UI Pages job of CI runs it on each pull request.
+
+A page fails the check when it reports a fault:
+
+- an exception that no script catches
+- a call of `console.error` or `console.assert`; htmx reports its own errors this way, such as an out-of-band part whose element the page does not have
+- a request that fails, or a response with a status of 400 or more
+
+The docs workflow takes the screenshots with the same tool, so a fault also fails a screenshot.
+
+- A new page, tab or dialog gets a shot in `shots.yaml`. The docs can then show it, and the check opens it.
+- To look at one shot, name it: `cd tools/screenshots && go run . -sind ../../sind-linux-amd64 -check -only new-cluster-retry`.
+- Chromium is found as `chromium`, `chromium-browser` or `google-chrome` on `PATH`, or named with `$CHROMIUM`. `SHOTS_FLAGS=-no-sandbox` starts it without its sandbox, as CI does.
+
 ## Fuzz tests
 
 A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".

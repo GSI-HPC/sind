@@ -54,6 +54,7 @@ All common tasks are available via `make`:
 | `make lint-docs` | Lint documentation markdown files |
 | `make check-docs` | Build the docs site with Hugo, in memory: a broken shortcode, template or page reference fails |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
+| `make check-ui` | Open the same pages of the `sind ui` demo in Chromium and write no image: a fault of a page fails (needs Chromium) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
 | `make clean` | Remove build artifacts and coverage files |
 | `make help` | Show all available targets |

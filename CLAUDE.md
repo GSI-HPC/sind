@@ -32,6 +32,7 @@ go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
 make check-docs              # Hugo build of docs/ in memory (shortcodes, templates, relref)
+make check-ui                # Chromium opens each docs shot on the sind ui demo; a page fault fails
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
 make audit-ci                # zizmor on the workflows and dependabot.yml (.github/zizmor.yml)
 FUZZTIME=1m make fuzz        # every fuzz target, one after the other (default 30s each)
@@ -94,6 +95,8 @@ Task pages show their steps for the CLI or the web UI, as the reader selects: a
 `tools/screenshots/shots.yaml`, and `webui: none` in the front matter of a page the UI
 cannot do. When a change to `sind ui` changes such steps, update them in the same PR.
 The docs workflow takes the screenshots (`make docs-shots` locally); never commit them.
+The UI Pages job of CI opens the same shots on each pull request (`make check-ui`): a
+page that throws an exception, calls `console.error` or has a request that fails, fails it.
 See "Documentation" in `docs/content/contributing/conventions.md`.
 
 Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in

@@ -27,7 +27,9 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`, and shellcheck,
    `pip install shellcheck-py`). The Workflow Lint job of CI also runs `make audit-ci`
    (zizmor): fix what it reports, or list the finding in `.github/zizmor.yml` with
-   the reason.
+   the reason. If `internal/ui` or `tools/screenshots` changed and Chromium is
+   installed: `make check-ui`, the UI Pages job of CI; a new page, tab or dialog gets
+   a shot in `tools/screenshots/shots.yaml`.
 6. If the CLI surface, output format, config schema or labels changed: `DESIGN.md` and
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,
@@ -66,6 +68,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Design Models | `make check-models`: TLC on the TLA+ models of `spec/tla`; each configuration must give the result in its `\* expect:` line |
 | Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
 | Docs Build | `make check-docs`: Hugo builds the site in memory, without videos and screenshots; a broken shortcode, template or `relref` fails, and so does a warning |
+| UI Pages | `make check-ui`: the runner's Chrome opens each shot of `tools/screenshots/shots.yaml` on `sind ui --demo --still`; an uncaught exception, a `console.error`, a failed request or a status of 400 or more fails |
 | Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
