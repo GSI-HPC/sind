@@ -61,8 +61,9 @@ audit-ci: ## Audit the workflows and the Dependabot config for security defects 
 lint-docs: ## Lint documentation markdown files
 	npx markdownlint-cli2@0.24.1 "docs/content/**/*.md"
 
-check-docs: ## Build the docs site in memory: a broken shortcode, template or page reference fails (requires Hugo)
-	hugo --source docs --renderToMemory --panicOnWarning
+check-docs: ## Build the docs site into docs/public: a broken shortcode, template, page reference, link or anchor fails (requires Hugo)
+	hugo --source docs --destination public --cleanDestinationDir --panicOnWarning
+	python3 .github/scripts/check-doc-links.py docs/public docs/hugo.toml
 
 docs-shots: build ## Take the sind ui screenshots of the docs into docs/static/ui-shots (needs Chromium)
 	cd tools/screenshots && go run . $(SHOTS_FLAGS) -sind ../../$(BINARY) -out ../../docs/static/ui-shots

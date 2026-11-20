@@ -102,6 +102,7 @@ The docs are a Hugo site in `docs/`. A page that tells how to do a task shows it
 - A web UI variant is one sentence, or two to four numbered steps. It shows one screenshot of the page, tab or dialog of the task, if a shot shows it. For a dialog whose fields map to flags, add a table of its fields and their flags.
 - A page that the web UI cannot do sets `webui: none` in its front matter. It then shows a note in web UI mode: `webuiNote`, or a default.
 - `uishot "NAME"` shows a screenshot of `sind ui`, light or dark as the page, with the alt text of the shot. `NAME` is a shot of `tools/screenshots/shots.yaml`; add one there for a new screenshot. The docs workflow takes the screenshots, and `make docs-shots` takes them locally, which needs Chromium. They are not committed. The shot list is also the browser test of the web UI: see [The web UI in a browser]({{< relref "testing#the-web-ui-in-a-browser" >}}).
+- Link to another page with the `relref` shortcode, and to a heading of it with its fragment, as in `relref "testing#fuzz-tests"`. Hugo fails the build for a page that does not exist, and `make check-docs` then fails for a heading that does not exist. It checks every link into the site, and no link to another site.
 
 ## Pull requests
 

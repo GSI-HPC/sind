@@ -105,9 +105,11 @@ jobs:
 
   # Hugo builds the site as the Deploy docs workflow does after the merge,
   # so that a broken shortcode, template or page reference (relref) fails
-  # on the pull request and not on the site of next. It makes no videos
-  # and no screenshots: their shortcodes show nothing, or a box, without
-  # them. The Hugo version is the one of docs.yml.
+  # on the pull request and not on the site of next. A script then checks
+  # each link of the site into the site: its page, and the element of its
+  # fragment. The build makes no videos and no screenshots: their
+  # shortcodes show nothing, or a box, without them. The Hugo version is
+  # the one of docs.yml.
   check-docs:
     name: Docs Build
     runs-on: ubuntu-latest

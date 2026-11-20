@@ -12,7 +12,7 @@ toc: true
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 - **firejail**, which sandboxes `make test`
 - **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
-- **Hugo** for `make check-docs`, when you change the docs site (the version that `.github/workflows/docs.yml` installs)
+- **Hugo** (the version that `.github/workflows/docs.yml` installs) and **Python 3.11+** for `make check-docs`, when you change the docs site
 - **actionlint** and **shellcheck** for `make lint-ci`, when you change a workflow or a shell script
 - **zizmor** for `make audit-ci`, when you change a workflow or `.github/dependabot.yml` (`pipx install zizmor`, the version that `.github/workflows/ci.yml` installs)
 
@@ -52,7 +52,7 @@ All common tasks are available via `make`:
 | `make lint-ci` | Lint the workflows with actionlint and the shell scripts with shellcheck |
 | `make audit-ci` | Audit the workflows and the Dependabot config for security defects with zizmor; `.github/zizmor.yml` lists the findings that are accepted |
 | `make lint-docs` | Lint documentation markdown files |
-| `make check-docs` | Build the docs site with Hugo, in memory: a broken shortcode, template or page reference fails |
+| `make check-docs` | Build the docs site with Hugo into `docs/public`, which git ignores: a broken shortcode, template or page reference fails. Then check each link of the site into the site: its page, and the heading of its `#fragment` (needs Python 3.11) |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
 | `make check-ui` | Open the same pages of the `sind ui` demo in Chromium and write no image: a fault of a page fails (needs Chromium) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
