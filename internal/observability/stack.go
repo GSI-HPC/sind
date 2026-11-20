@@ -376,6 +376,38 @@ func (m *Manager) RemoveJournals(ctx context.Context, cluster string, nodes ...s
 	return nil
 }
 
+// journalCheckScript prints "found" when its argument is a directory.
+const journalCheckScript = `[ ! -d "$1" ] || echo found`
+
+// JournalsLeft reports whether the journal volume may still hold the
+// journal directory of a cluster: what RemoveJournals removes last when a
+// monitored cluster is deleted, so a directory without the cluster shows a
+// delete that did not finish. It looks in the Alloy container. A realm
+// without one has no journals to remove, and neither has a name that is no
+// host name label. When Alloy does not run, JournalsLeft cannot look and
+// reports true: the cleanup of the caller starts the stack.
+func (m *Manager) JournalsLeft(ctx context.Context, cluster string) (bool, error) {
+	if hostname.CheckLabel(cluster) != nil {
+		return false, nil
+	}
+	name := ContainerName(m.Realm, ServiceAlloy)
+	info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
+	if err != nil {
+		return false, fmt.Errorf("checking %s container: %w", ServiceAlloy, err)
+	}
+	if info == nil {
+		return false, nil
+	}
+	if info.Status != docker.StateRunning {
+		return true, nil
+	}
+	out, err := m.Docker.Exec(ctx, name, "sh", "-c", journalCheckScript, "sh", path.Join(JournalDir, cluster))
+	if err != nil {
+		return false, fmt.Errorf("checking journal directories: %w", err)
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // Remove removes the stack's containers, keeping their volumes. It finds
 // them by their labels first, so that a realm without a stack costs one
 // docker call.

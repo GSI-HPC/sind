@@ -4,6 +4,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"testing"
@@ -505,4 +506,53 @@ func TestStart_Errors(t *testing.T) {
 	f.fail["start sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())
 	require.ErrorContains(t, err, "starting alloy container: ")
+}
+
+func TestJournalsLeft(t *testing.T) {
+	m, f := newTestManager(t)
+
+	left, err := m.JournalsLeft(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.False(t, left, "a realm without a stack has no journals")
+
+	_, err = m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+	f.journals["/var/log/sind/dev"] = true
+
+	left, err = m.JournalsLeft(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.True(t, left)
+	assert.Equal(t, []string{"sind-alloy", "sh", "-c", journalCheckScript, "sh", "/var/log/sind/dev"}, f.execs[len(f.execs)-1])
+
+	left, err = m.JournalsLeft(t.Context(), "other")
+	require.NoError(t, err)
+	assert.False(t, left)
+
+	// A name that is no host name label has no directory: nothing runs.
+	before := len(f.execs)
+	left, err = m.JournalsLeft(t.Context(), "..")
+	require.NoError(t, err)
+	assert.False(t, left)
+	assert.Len(t, f.execs, before)
+
+	// A stopped Alloy cannot look.
+	f.containers["sind-alloy"].state = docker.StateExited
+	left, err = m.JournalsLeft(t.Context(), "other")
+	require.NoError(t, err)
+	assert.True(t, left)
+	assert.Len(t, f.execs, before)
+}
+
+func TestJournalsLeft_Errors(t *testing.T) {
+	m, f := newTestManager(t)
+	_, err := m.EnsureStack(t.Context(), "", "")
+	require.NoError(t, err)
+
+	f.fail["exec sind-alloy sh"] = mock.Result{Err: errors.New("exec failed")}
+	_, err = m.JournalsLeft(t.Context(), "dev")
+	require.EqualError(t, err, "checking journal directories: exec failed")
+
+	f.fail["inspect sind-alloy"] = mock.Result{Err: errors.New("daemon down")}
+	_, err = m.JournalsLeft(t.Context(), "dev")
+	require.EqualError(t, err, "checking alloy container: daemon down")
 }

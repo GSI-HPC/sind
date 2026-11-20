@@ -40,6 +40,7 @@ type fakeDocker struct {
 	fail       map[string]mock.Result
 	down       map[string]bool
 	execs      [][]string
+	journals   map[string]bool // the directories of the journal volume
 }
 
 // newFakeDocker returns an empty fakeDocker and a client that talks to it.
@@ -50,6 +51,7 @@ func newFakeDocker(t *testing.T) (*fakeDocker, *docker.Client) {
 		volumes:    map[string]map[string]string{},
 		fail:       map[string]mock.Result{},
 		down:       map[string]bool{},
+		journals:   map[string]bool{},
 	}
 	m := &mock.Executor{OnCall: f.onCall}
 	return f, docker.NewClient(m)
@@ -145,6 +147,9 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		f.execs = append(f.execs, args[1:])
 		if args[2] == "curl" && f.down[args[len(args)-1]] {
 			return mock.Result{Stderr: "curl: (7) Failed to connect\n", Err: f.exitErr()}
+		}
+		if slices.Contains(args, journalCheckScript) && f.journals[args[len(args)-1]] {
+			return mock.Result{Stdout: "found\n"}
 		}
 		return mock.Result{}
 	case "ps":
