@@ -31,6 +31,7 @@ func FuzzLoad(f *testing.F) {
 		`{"mcpServers": []}`,
 		`{"mcpServers": {}, "mcpServers": {}}`,
 		`{"servers": {"a": {}, "a": {}}}`,
+		`{"mcpServers": {"": {"command": "a"}, "": {}}}`,
 		`[]`, `null`, `{"a": }`, "{\"mcpServers\": null}", "{\"\\u006dcpServers\": {\"sind\": {}}}",
 	} {
 		f.Add([]byte(seed), false)
