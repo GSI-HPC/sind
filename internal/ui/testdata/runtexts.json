@@ -1,0 +1,37 @@
+{
+  "durations": [
+    {"from": 0, "to": 0, "text": "0.0s"},
+    {"from": 0, "to": 340, "text": "0.3s"},
+    {"from": 35, "to": 2635, "text": "2.6s"},
+    {"from": 49, "to": 5249, "text": "5.2s"},
+    {"from": 84, "to": 1384, "text": "1.3s"},
+    {"from": 0, "to": 9999, "text": "9.9s"},
+    {"from": 0, "to": 10000, "text": "10s"},
+    {"from": 3016, "to": 16016, "text": "13s"},
+    {"from": 0, "to": 59900, "text": "59s"},
+    {"from": 0, "to": 60000, "text": "1m00s"},
+    {"from": 1000, "to": 308000, "text": "5m07s"},
+    {"from": 0, "to": 3599999, "text": "59m59s"},
+    {"from": 0, "to": 3600000, "text": "1h00m"},
+    {"from": 500, "to": 7439500, "text": "2h03m"}
+  ],
+  "sizes": [
+    {"bytes": 0, "text": "0 B"},
+    {"bytes": 999, "text": "999 B"},
+    {"bytes": 1000, "text": "1.0 kB"},
+    {"bytes": 1250, "text": "1.3 kB"},
+    {"bytes": 1750, "text": "1.8 kB"},
+    {"bytes": 9940, "text": "9.9 kB"},
+    {"bytes": 9960, "text": "10 kB"},
+    {"bytes": 12345, "text": "12 kB"},
+    {"bytes": 12500, "text": "13 kB"},
+    {"bytes": 999400, "text": "999 kB"},
+    {"bytes": 999600, "text": "1.0 MB"},
+    {"bytes": 2250000, "text": "2.3 MB"},
+    {"bytes": 4194304, "text": "4.2 MB"},
+    {"bytes": 100663296, "text": "101 MB"},
+    {"bytes": 999600000, "text": "1.0 GB"},
+    {"bytes": 3000000000, "text": "3.0 GB"},
+    {"bytes": 5000000000000, "text": "5000 GB"}
+  ]
+}

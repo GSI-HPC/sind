@@ -221,6 +221,8 @@ A script whose functions take and give plain values has tests that Node runs wit
 
 `gantt.js` draws the summary and the timeline of the run page from the data of the run, once a frame, and puts no function on `window`. `gantt.test.js` gives it a document in memory, draws one frame for the data of a run at a time of its clock, and reads the texts and the classes of the elements: the headline, the counts, the note, the time left, the rows, and the labels of the axis. It also sends the clicks and the key that open a step and change the range of the axis. The document, `dom.js`, has the elements, attributes and selectors that the script uses, and no layout. It is not a browser: `make check-ui` opens the run page in one. A change to what the run page says for a run changes this test.
 
+The server and `gantt.js` each write the text of a duration and of a size, and a page shows both. They have the same cases, in `internal/ui/testdata/runtexts.json`: `gantt.test.js` checks the script, and `TestSharedRunTexts` of `internal/ui` checks `runDur` and `runBytes`. A change to how one of them writes a duration or a size adds its case to this file.
+
 ## Fuzz tests
 
 A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".

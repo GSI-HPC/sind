@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -92,6 +94,33 @@ func TestRunBytes(t *testing.T) {
 		999_600_000: "1.0 GB",
 	} {
 		assert.Equal(t, want, runBytes(n), want)
+	}
+}
+
+// The server and the script of the run page (gantt.js) write the same
+// text for a duration and for a size: both have the cases of
+// testdata/runtexts.json (internal/ui/jstest/gantt.test.js, make test-js).
+func TestSharedRunTexts(t *testing.T) {
+	data, err := os.ReadFile("testdata/runtexts.json")
+	require.NoError(t, err)
+	var cases struct {
+		Durations []struct {
+			From, To int64
+			Text     string
+		}
+		Sizes []struct {
+			Bytes int64
+			Text  string
+		}
+	}
+	require.NoError(t, json.Unmarshal(data, &cases))
+	require.NotEmpty(t, cases.Durations)
+	require.NotEmpty(t, cases.Sizes)
+	for _, c := range cases.Durations {
+		assert.Equal(t, c.Text, runDur(time.Duration(c.To-c.From)*time.Millisecond), "from %d to %d ms", c.From, c.To)
+	}
+	for _, c := range cases.Sizes {
+		assert.Equal(t, c.Text, runBytes(c.Bytes), "%d bytes", c.Bytes)
 	}
 }
 
