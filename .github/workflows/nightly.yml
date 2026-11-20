@@ -5,6 +5,8 @@ name: Nightly
 # - govulncheck, for an advisory published since the last pull request
 # - the unit tests in a random order, three times, for a test that depends
 #   on another one or fails now and then
+# - every fuzz target for three minutes, for an input that a parser does
+#   not handle; a pull request runs only the seeds
 #
 # Scheduled workflows run from the default branch, but sind is developed on
 # next, so each job checks out next. The report job keeps one open issue,
@@ -71,9 +73,53 @@ jobs:
         env:
           GOTEST: go test -shuffle=on -count=3
 
+  # The inputs that failed are in the job summary and in the artifact
+  # fuzz-inputs: put one at the same path in a checkout, and go test runs
+  # it with the seeds.
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run every fuzz target
+        run: make fuzz
+        env:
+          FUZZTIME: 3m
+
+      - name: Show the inputs that failed
+        if: failure()
+        run: |
+          git ls-files --others --exclude-standard -- '*/testdata/fuzz/*' | while read -r input; do
+            {
+              echo "### \`$input\`"
+              echo
+              echo '```'
+              cat "$input"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload the inputs that failed
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-inputs
+          path: "**/testdata/fuzz/**"
+          if-no-files-found: ignore
+
   report:
     name: Report
-    needs: [govulncheck, shuffle]
+    needs: [govulncheck, shuffle, fuzz]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:

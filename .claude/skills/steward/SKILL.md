@@ -68,9 +68,13 @@ it fails on an incompatible change of a package under `pkg/`, or of go-clikit's
 the label from the maintainer, and its commits are marked `!` with `BREAKING CHANGE:`.
 
 The Nightly workflow (`.github/workflows/nightly.yml`) runs from `main` each night and
-checks out `next`: govulncheck, and the unit tests three times in a random order. Its
-Report job keeps one open issue, labelled `nightly`, that names the jobs that failed. Run
-a shuffled order again with the seed that `go test` prints: `go test -shuffle=<seed>`.
+checks out `next`: govulncheck, the unit tests three times in a random order, and every
+fuzz target for three minutes (`make fuzz`). Its Report job keeps one open issue,
+labelled `nightly`, that names the jobs that failed. Run a shuffled order again with the
+seed that `go test` prints: `go test -shuffle=<seed>`. An input that a fuzz target fails
+on is in the summary of the Fuzz job and in its `fuzz-inputs` artifact: put it at the
+same path under `testdata/fuzz/`, fix the defect, and add the input to the target's
+seeds.
 
 - A leftover that the Integration Test job names after the tests passed is a test
   without `t.Cleanup`, or a delete that leaves a resource behind: find which test made
