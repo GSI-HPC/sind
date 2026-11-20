@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,9 +44,12 @@ var killPoints = []struct {
 	{name: "slurm starts in the cluster", line: "slurm › ready: waiting"},
 }
 
-// progressPrefix starts each line of the plain progress of a create, after
-// its time.
-const progressPrefix = "create cluster › "
+// progressPrefix and deleteProgressPrefix start each line of the plain
+// progress of a create and of a delete, after its time.
+const (
+	progressPrefix       = "create cluster › "
+	deleteProgressPrefix = "delete cluster › "
+)
 
 // waitForLine waits until the plain progress in file has the line, or
 // until ended closes, and reports whether it saw the line.
@@ -53,7 +57,7 @@ func waitForLine(file, line string, ended <-chan struct{}) bool {
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		if out, err := os.ReadFile(file); err == nil && strings.Contains(string(out), progressPrefix+line) {
+		if out, err := os.ReadFile(file); err == nil && strings.Contains(string(out), line) {
 			return true
 		}
 		select {
@@ -66,22 +70,22 @@ func waitForLine(file, line string, ended <-chan struct{}) bool {
 
 // realmObjects lists the containers, networks and volumes with the label
 // of the realm, as the Integration Test job of CI does for every realm
-// once the tests have passed.
-func realmObjects(ctx context.Context, t *testing.T, c *docker.Client, realm string) []string {
+// once the tests have passed, and with the filters of more.
+func realmObjects(ctx context.Context, t *testing.T, c *docker.Client, realm string, more ...string) []string {
 	t.Helper()
-	filter := "label=" + cluster.LabelRealm + "=" + realm
+	filters := append([]string{"label=" + cluster.LabelRealm + "=" + realm}, more...)
 	var objects []string
-	containers, err := c.ListContainers(ctx, filter)
+	containers, err := c.ListContainers(ctx, filters...)
 	require.NoError(t, err)
 	for _, e := range containers {
 		objects = append(objects, "container "+string(e.Name))
 	}
-	networks, err := c.ListNetworks(ctx, filter)
+	networks, err := c.ListNetworks(ctx, filters...)
 	require.NoError(t, err)
 	for _, e := range networks {
 		objects = append(objects, "network "+string(e.Name))
 	}
-	volumes, err := c.ListVolumes(ctx, filter)
+	volumes, err := c.ListVolumes(ctx, filters...)
 	require.NoError(t, err)
 	for _, e := range volumes {
 		objects = append(objects, "volume "+string(e.Name))
@@ -126,6 +130,85 @@ func endRealmProcesses(t *testing.T, realm string) {
 	}
 }
 
+// sindProcess is a sind that a test runs as a process of its own, to kill
+// it: this test binary as sind (see TestMain).
+type sindProcess struct {
+	cmd   *exec.Cmd
+	out   string        // the file that holds its output
+	ended chan struct{} // closed once it has ended
+	err   error         // how it ended, once ended is closed
+}
+
+// startSind starts sind with args in the realm, with plain progress. Its
+// output goes to a file: with a pipe, Wait would not return before the
+// docker processes that a killed sind leaves end.
+func startSind(ctx context.Context, t *testing.T, realm string, args ...string) *sindProcess {
+	t.Helper()
+	self, err := os.Executable()
+	require.NoError(t, err)
+	out, err := os.Create(filepath.Join(t.TempDir(), "sind.log"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = out.Close() })
+	p := &sindProcess{out: out.Name(), ended: make(chan struct{})}
+	p.cmd = exec.CommandContext(ctx, self, append([]string{"--realm", realm, "--progress", "plain"}, args...)...)
+	p.cmd.Env = append(os.Environ(), childEnv+"=main")
+	p.cmd.Stdout, p.cmd.Stderr = out, out
+	require.NoError(t, p.cmd.Start())
+	go func() {
+		p.err = p.cmd.Wait()
+		close(p.ended)
+	}()
+	return p
+}
+
+// log returns what the process has written.
+func (p *sindProcess) log() string {
+	b, _ := os.ReadFile(p.out)
+	return string(b)
+}
+
+// kill kills the process with SIGKILL and waits for its end.
+func (p *sindProcess) kill() {
+	_ = p.cmd.Process.Kill() // an error: the process has just ended
+	<-p.ended
+}
+
+// killAtLine kills the process as soon as its plain progress has the line,
+// and fails the test when the process ends without it.
+func (p *sindProcess) killAtLine(t *testing.T, line string) {
+	t.Helper()
+	if !waitForLine(p.out, line, p.ended) {
+		require.FailNow(t, "sind ended without the line "+line, "error: %v\n%s", p.err, p.log())
+	}
+	p.kill()
+}
+
+// deleteUntilQuiet runs sind delete cluster, which must succeed, until it
+// warns no more, at most 3 times, and returns what the last run wrote to
+// standard error. A delete that warns may leave something, and says so:
+// the user then runs it again.
+func deleteUntilQuiet(ctx context.Context, t *testing.T, realm, name string) string {
+	t.Helper()
+	for run := 1; ; run++ {
+		_, stderr, err := executeWithRealmCtx(ctx, realm, "delete", "cluster", name)
+		require.NoError(t, err, "delete %d after the kill: stderr=%q", run, stderr)
+		if !strings.Contains(stderr, "Warning:") {
+			return stderr
+		}
+		t.Logf("delete %d warns: %s", run, stderr)
+		require.Less(t, run, 3, "delete %d still warns: stderr=%q", run, stderr)
+	}
+}
+
+// requireNoRealmProcess fails the test when a process that names the realm
+// still runs 10 seconds from now: the docker calls of a killed sind end
+// with what they work on, at the latest.
+func requireNoRealmProcess(t *testing.T, realm string) {
+	t.Helper()
+	assert.Eventually(t, func() bool { return len(realmProcesses(realm)) == 0 }, 10*time.Second, 100*time.Millisecond,
+		"docker calls of the killed sind still run after the delete")
+}
+
 // TestDeleteAfterKilledCreate kills sind create cluster with SIGKILL, so
 // that no rollback runs, at several points of the create (killPoints), and
 // then runs sind delete cluster. The delete must succeed, and once it
@@ -145,8 +228,6 @@ func TestDeleteAfterKilledCreate(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
 	checkPrerequisites(t, c)
-	self, err := os.Executable()
-	require.NoError(t, err)
 	cfgPath := filepath.Join(t.TempDir(), "cluster.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\ndefaults:\n  image: "+testutil.Image()+"\n"), 0o644))
 
@@ -160,69 +241,129 @@ func TestDeleteAfterKilledCreate(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
 			defer cancel()
 
-			// The create is this test binary as sind (see TestMain). Its
-			// output goes to a file: with a pipe, Wait would not return
-			// before the docker processes that the create leaves end.
-			out, err := os.Create(filepath.Join(t.TempDir(), "create.log"))
-			require.NoError(t, err)
-			defer func() { _ = out.Close() }()
-			create := exec.CommandContext(ctx, self, "--realm", realm, "--progress", "plain",
-				"create", "cluster", "--config", cfgPath, "--data", t.TempDir())
-			create.Env = append(os.Environ(), childEnv+"=main")
-			create.Stdout, create.Stderr = out, out
-			require.NoError(t, create.Start())
-			var createErr error
-			ended := make(chan struct{})
-			go func() {
-				createErr = create.Wait()
-				close(ended)
-			}()
-			log := func() string {
-				b, _ := os.ReadFile(out.Name())
-				return string(b)
-			}
-
+			create := startSind(ctx, t, realm, "create", "cluster", "--config", cfgPath, "--data", t.TempDir())
 			if point.line != "" {
-				// The kill follows the line at once.
-				if !waitForLine(out.Name(), point.line, ended) {
-					require.FailNow(t, "the create ended without the line "+point.line, "error: %v\n%s", createErr, log())
-				}
-				_ = create.Process.Kill() // an error: the create has just ended
-				<-ended
+				create.killAtLine(t, progressPrefix+point.line)
 			} else {
 				// A create that ends before its kill left a complete
 				// cluster, which the delete takes as well.
 				select {
-				case <-ended:
-					require.NoError(t, createErr, "the create failed before its kill:\n%s", log())
+				case <-create.ended:
+					require.NoError(t, create.err, "the create failed before its kill:\n%s", create.log())
 				case <-time.After(point.after):
-					_ = create.Process.Kill()
-					<-ended
+					create.kill()
 				}
 			}
-			t.Logf("the create wrote:\n%s", log())
+			t.Logf("the create wrote:\n%s", create.log())
 			if point.notYet != "" {
-				assert.NotContains(t, log(), progressPrefix+point.notYet, "the kill came too late")
+				assert.NotContains(t, create.log(), progressPrefix+point.notYet, "the kill came too late")
 			}
 			t.Logf("the create left: %s", strings.Join(realmObjects(ctx, t, c, realm), ", "))
 
-			// A delete that warns may leave something, and says so: the
-			// user then runs it again.
-			var stderr string
-			for run := 1; ; run++ {
-				_, stderr, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", "default")
-				require.NoError(t, err, "delete %d after the kill: stderr=%q", run, stderr)
-				if !strings.Contains(stderr, "Warning:") {
-					break
-				}
-				t.Logf("delete %d warns: %s", run, stderr)
-				require.Less(t, run, 3, "delete %d still warns: stderr=%q", run, stderr)
-			}
+			stderr := deleteUntilQuiet(ctx, t, realm, "default")
 			assert.Empty(t, realmObjects(ctx, t, c, realm), "the delete reported success without a warning: stderr=%q", stderr)
-			// The docker calls of the killed create that still run end with
-			// the containers, at the latest.
-			assert.Eventually(t, func() bool { return len(realmProcesses(realm)) == 0 }, 10*time.Second, 100*time.Millisecond,
-				"docker calls of the killed create still run after the delete")
+			requireNoRealmProcess(t, realm)
 		})
 	}
+}
+
+// deleteKillLines are the lines of the plain progress of sind delete
+// cluster at which TestDeleteAfterKilledDelete kills it: the start of each
+// step of a delete in a realm that keeps its mesh.
+var deleteKillLines = []string{
+	"mesh deregistration: start",
+	"nodes: start",
+	"network: start",
+	"volumes: start",
+}
+
+// meshNames returns the DNS records and the known_hosts lines of the realm
+// that name a node of the cluster.
+func meshNames(ctx context.Context, t *testing.T, realm, name string) []string {
+	t.Helper()
+	domain := "." + name + "."
+	var names []string
+	stdout, stderr, err := executeWithRealmCtx(ctx, realm, "get", "dns", "-o", "json")
+	require.NoError(t, err, "get dns: stderr=%q", stderr)
+	var records []struct {
+		Hostname string `json:"hostname"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &records), stdout)
+	for _, r := range records {
+		if strings.Contains(r.Hostname, domain) {
+			names = append(names, "DNS record "+r.Hostname)
+		}
+	}
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "get", "ssh-known-hosts", "-o", "json")
+	require.NoError(t, err, "get ssh-known-hosts: stderr=%q", stderr)
+	var hosts struct {
+		KnownHosts string `json:"known_hosts"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &hosts), stdout)
+	for line := range strings.SplitSeq(hosts.KnownHosts, "\n") {
+		if strings.Contains(line, domain) {
+			names = append(names, "known_hosts entry "+strings.Fields(line)[0])
+		}
+	}
+	return names
+}
+
+// TestDeleteAfterKilledDelete kills sind delete cluster with SIGKILL at the
+// start of each of its steps, and then runs it again. The second delete
+// must succeed, and once it reports no warning, nothing of the cluster is
+// left: no container, network or volume, and no DNS record or known_hosts
+// entry on the mesh, which another cluster of the realm keeps.
+//
+// It is the rule of spec/tla/DeleteRetry.tla and of TestDelete_FaultSweep
+// (pkg/cluster) on a real daemon. The last subtest kills the delete of the
+// last cluster of the realm when it starts to remove the mesh.
+func TestDeleteAfterKilledDelete(t *testing.T) {
+	t.Parallel()
+	c := realClient(t)
+	checkPrerequisites(t, c)
+	realm := "it-killdel-" + testID
+	cleanupRealm(t, c, realm)
+	t.Cleanup(func() { endRealmProcesses(t, realm) })
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
+	defer cancel()
+
+	create := func(t *testing.T, name string) {
+		t.Helper()
+		cfgPath := filepath.Join(t.TempDir(), "cluster.yaml")
+		cfg := "kind: Cluster\nname: " + name + "\ndefaults:\n  image: " + testutil.Image() + "\n"
+		require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o644))
+		stdout, stderr, err := executeWithRealmCtx(ctx, realm, "create", "cluster", "--config", cfgPath, "--data", t.TempDir())
+		require.NoError(t, err, "create cluster %s: stdout=%q stderr=%q", name, stdout, stderr)
+	}
+	// The cluster that keeps the mesh of the realm.
+	create(t, "keep")
+
+	for i, line := range deleteKillLines {
+		t.Run(line, func(t *testing.T) {
+			name := fmt.Sprintf("gone%d", i)
+			create(t, name)
+			require.NotEmpty(t, meshNames(ctx, t, realm, name), "the cluster has no name on the mesh")
+
+			del := startSind(ctx, t, realm, "delete", "cluster", name)
+			del.killAtLine(t, deleteProgressPrefix+line)
+			t.Logf("the delete wrote:\n%s", del.log())
+			ofCluster := "label=" + cluster.LabelCluster + "=" + name
+			t.Logf("the delete left: %s", strings.Join(realmObjects(ctx, t, c, realm, ofCluster), ", "))
+
+			stderr := deleteUntilQuiet(ctx, t, realm, name)
+			assert.Empty(t, realmObjects(ctx, t, c, realm, ofCluster), "the delete reported success without a warning: stderr=%q", stderr)
+			assert.Empty(t, meshNames(ctx, t, realm, name), "the delete reported success without a warning: stderr=%q", stderr)
+		})
+	}
+
+	t.Run("mesh: start", func(t *testing.T) {
+		del := startSind(ctx, t, realm, "delete", "cluster", "keep")
+		del.killAtLine(t, deleteProgressPrefix+"mesh: start")
+		t.Logf("the delete wrote:\n%s", del.log())
+		t.Logf("the delete left: %s", strings.Join(realmObjects(ctx, t, c, realm), ", "))
+
+		stderr := deleteUntilQuiet(ctx, t, realm, "keep")
+		assert.Empty(t, realmObjects(ctx, t, c, realm), "the delete reported success without a warning: stderr=%q", stderr)
+		requireNoRealmProcess(t, realm)
+	})
 }
