@@ -77,7 +77,7 @@ func PrepareActivityDir() (string, error) {
 	}
 	// A directory that is not this user's keeps its mode; the log's own
 	// mode, which the check of the log holds to, is what keeps it private.
-	_ = os.Chmod(dir, 0o700)
+	_ = os.Chmod(dir, 0o700) //nolint:gosec // G302: a directory
 	return path, nil
 }
 

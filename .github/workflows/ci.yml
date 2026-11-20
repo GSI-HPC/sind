@@ -42,10 +42,12 @@ jobs:
           version: v2.15.0
           args: --build-tags integration
 
-  # actionlint on the workflows, with shellcheck on their run steps, and
-  # shellcheck on the scripts of the repository. The image and the nightly
-  # workflows do not run for a pull request, so this is their only check
-  # before the merge.
+  # actionlint on the workflows, with shellcheck on their run steps,
+  # shellcheck on the scripts of the repository, and zizmor on the workflows
+  # and the Dependabot config for security defects, such as an expression
+  # of the event in a run step or an action that is not pinned. The image
+  # and the nightly workflows do not run for a pull request, so this is
+  # their only check before the merge.
   lint-ci:
     name: Workflow Lint
     runs-on: ubuntu-latest
@@ -63,6 +65,16 @@ jobs:
 
       - name: Lint the workflows and the shell scripts
         run: make lint-ci
+
+      - name: Install zizmor
+        run: pipx install zizmor==1.32.0
+
+      # With the token, zizmor also asks GitHub about each action that the
+      # workflows use: known vulnerabilities, and the commit behind a pin.
+      - name: Audit the workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make audit-ci
 
   # TLC on the TLA+ models of spec/tla: each configuration must give the
   # result that it expects. The runner image has Java; the script fetches
@@ -90,6 +102,62 @@ jobs:
 
       - name: Lint the docs
         run: make lint-docs
+
+  # Hugo builds the site as the Deploy docs workflow does after the merge,
+  # so that a broken shortcode, template or page reference (relref) fails
+  # on the pull request and not on the site of next. A script then checks
+  # each link of the site into the site: its page, and the element of its
+  # fragment. The build makes no videos and no screenshots: their
+  # shortcodes show nothing, or a box, without them. The Hugo version is
+  # the one of docs.yml.
+  check-docs:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Hugo fetches the Hextra theme, a Hugo module, with Go.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Hugo
+        uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3.2.1
+        with:
+          hugo-version: "0.169.0"
+
+      - name: Build the docs
+        run: make check-docs
+
+  # The pages of sind ui in a browser: tools/screenshots opens each shot of
+  # its list on the demo, in both themes, and fails when a page reports an
+  # exception, a console.error, a request that fails or a response with a
+  # status of 400 or more. It writes no image: the Deploy docs workflow
+  # takes the screenshots after the merge, and fails on the same faults.
+  # Then it opens 8 tabs at once, 6 of them hidden: each must show its page.
+  check-ui:
+    name: UI Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # The runner's Node.
+      - name: Test the page scripts
+        run: make test-js
+
+      # The runner's Chrome; -no-sandbox as the runner's AppArmor may refuse
+      # the user namespaces of its sandbox.
+      - name: Open the pages of sind ui
+        run: make check-ui SHOTS_FLAGS=-no-sandbox
 
   unit-test:
     name: Unit Test

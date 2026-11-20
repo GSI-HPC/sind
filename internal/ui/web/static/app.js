@@ -314,7 +314,8 @@
   // lets its streams go, and opens them again when it is shown: a stream
   // opens with every fragment, so that the page is up to date at once. A
   // page that marks itself data-keep-live, as the page of a run that goes
-  // on does for the tab's title, keeps them while it is hidden.
+  // on does for the tab's title, keeps them while it is hidden. make check-ui
+  // opens eight tabs to check this (tools/screenshots/tabs.go).
   const sleepAfter = 10000;
   const sources = new Set();
 

@@ -328,6 +328,7 @@ Rules:
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗; `!` for the warnings of `doctor`) only in `get cluster`, `get node` and `doctor` output, and in the progress display, which draws ASCII marks unless the locale is UTF-8
 - All `get` subcommands and `doctor` accept `--output|-o {human,json}`; the default is `SIND_OUTPUT`, else `human`
+- The commands with their arguments and flags, the `SIND_*` variables, and the JSON output of each `get` subcommand, `doctor` and `version --json` are stated in golden files (`cmd/sind/testdata/cli.txt`, `cmd/sind/testdata/json/`), which the tests of `cmd/sind` compare: a change to the surface that scripts depend on changes its file in the same commit (`go test ./cmd/sind -update`). A new `get` subcommand without a golden file of its JSON output fails `TestJSONGoldens_CoverTheCommands`
 
 Exit status and signals:
 - `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT, SIGTERM or SIGHUP interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered

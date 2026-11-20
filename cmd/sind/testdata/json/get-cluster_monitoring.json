@@ -1,0 +1,116 @@
+{
+  "realm": "sind",
+  "name": "dev",
+  "slurm_version": "",
+  "status": "running",
+  "monitoring": true,
+  "nodes": [
+    {
+      "name": "controller.dev",
+      "role": "controller",
+      "managed": true,
+      "health": {
+        "status": "running",
+        "ip": "10.0.0.2",
+        "services": {
+          "munge": true,
+          "slurmctld": true,
+          "sshd": true
+        },
+        "ha": {
+          "position": "primary",
+          "in_control": false
+        }
+      }
+    },
+    {
+      "name": "controller-backup.dev",
+      "role": "controller",
+      "managed": true,
+      "health": {
+        "status": "running",
+        "ip": "10.0.0.2",
+        "services": {
+          "munge": true,
+          "slurmctld": true,
+          "sshd": true
+        },
+        "ha": {
+          "position": "backup",
+          "in_control": true
+        }
+      }
+    },
+    {
+      "name": "worker-0.dev",
+      "role": "worker",
+      "managed": true,
+      "health": {
+        "status": "running",
+        "ip": "10.0.0.2",
+        "services": {
+          "munge": true,
+          "slurmd": true,
+          "sshd": true
+        },
+        "slurm": {
+          "state": "idle",
+          "registered": true
+        }
+      }
+    }
+  ],
+  "network": {
+    "mesh_ok": true,
+    "mesh_name": "sind-mesh",
+    "mesh_driver": "",
+    "mesh_subnet": "",
+    "mesh_gateway": "",
+    "dns_ok": true,
+    "dns_name": "sind-dns",
+    "ssh_ok": true,
+    "ssh_name": "sind-ssh",
+    "cluster_ok": true,
+    "cluster_name": "sind-dev-net",
+    "cluster_driver": "",
+    "cluster_subnet": "",
+    "cluster_gateway": "",
+    "grafana_ok": true,
+    "prometheus_ok": true,
+    "loki_ok": true,
+    "alloy_ok": false
+  },
+  "mounts": [
+    {
+      "path": "/etc/slurm",
+      "source": "sind-dev-config",
+      "type": "volume",
+      "ok": true
+    },
+    {
+      "path": "/etc/munge",
+      "source": "sind-dev-munge",
+      "type": "volume",
+      "ok": true
+    },
+    {
+      "path": "/data",
+      "source": "sind-dev-data",
+      "type": "volume",
+      "ok": true
+    },
+    {
+      "path": "/var/spool/slurmctld",
+      "source": "sind-dev-state",
+      "type": "volume",
+      "ok": true
+    },
+    {
+      "path": "/var/log/journal",
+      "source": "sind-journal",
+      "subpath": "dev",
+      "type": "volume",
+      "ok": true
+    }
+  ]
+}

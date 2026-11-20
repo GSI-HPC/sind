@@ -217,6 +217,7 @@ func TestDoctorCommand_JSON(t *testing.T) {
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(true)), t, "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "doctor", out)
 
 	var checks []clidoctor.Check
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
@@ -252,6 +253,7 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 	ctx := hermeticDoctorCtxWithMounts(t, &m, resolvedWithPolkit(false), "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n")
 	out, err := executeDoctor(ctx, t, "--output", "json")
 	require.EqualError(t, err, "checks failed: Docker Engine, cgroupv2")
+	goldenJSON(t, "doctor_failures", out)
 
 	var checks []clidoctor.Check
 	require.NoError(t, json.Unmarshal([]byte(out), &checks), "stdout holds only the JSON document")

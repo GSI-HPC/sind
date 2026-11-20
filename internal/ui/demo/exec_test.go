@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/nodecmd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func testExec(every time.Duration) *Exec {
@@ -164,6 +165,17 @@ func TestLogLine(t *testing.T) {
 			assert.NotContains(t, logLine(true, "x", daemon, messagesOf(daemon, Facts{Up: []string{"worker-0"}, Down: []string{"worker-1"}}), i, at), "%d")
 		}
 	}
+}
+
+// The Close of a stream ends it, as it kills a real command: a stream that
+// has nothing more to write does not wait for a context that never ends.
+func TestExec_CloseEndsTheStream(t *testing.T) {
+	before := goleak.IgnoreCurrent()
+	for _, every := range []time.Duration{0, time.Hour} {
+		args := nodecmd.ContainerLogArgs("sind", "dev", "worker-1", nodecmd.LogOptions{Follow: true})
+		readLines(context.Background(), t, testExec(every), head, args...)
+	}
+	goleak.VerifyNone(t, before)
 }
 
 func TestPidOf(t *testing.T) {

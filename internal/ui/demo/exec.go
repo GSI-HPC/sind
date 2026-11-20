@@ -81,10 +81,26 @@ func (e *Exec) Start(ctx context.Context, name string, args ...string) (*cmdexec
 		}
 	}
 	pr, pw := io.Pipe()
+	ctx, stop := context.WithCancel(ctx)
 	go func() {
+		defer stop()
 		pw.CloseWithError(e.stream(ctx, pw, journal, container, unit))
 	}()
-	return &cmdexec.Process{Stdout: pr}, nil
+	return &cmdexec.Process{Stdout: stopOnClose{pr, stop}}, nil
+}
+
+// stopOnClose is the reader of a stream, which ends the stream when it
+// closes, as the Close of a real process kills the command. Without it a
+// stream with nothing more to write would run until its context ends.
+type stopOnClose struct {
+	*io.PipeReader
+	stop context.CancelFunc
+}
+
+// Close implements io.Closer.
+func (s stopOnClose) Close() error {
+	s.stop()
+	return s.PipeReader.Close()
 }
 
 // stream writes the lines of the stream until ctx ends or the reader goes.

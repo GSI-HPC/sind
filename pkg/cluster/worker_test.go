@@ -3,6 +3,7 @@
 package cluster
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -503,8 +504,9 @@ func TestWorkerAdd_Managed(t *testing.T) {
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
-	_, created := createArgs(m.Calls, "sind-dev-worker-1")
+	args, created := createArgs(m.Calls, "sind-dev-worker-1")
 	assert.True(t, created, "worker-1 container should be created")
+	assert.Contains(t, args, "com.docker.compose.container-number=2", "its index among the workers, from 1")
 	assert.Positive(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"), "scontrol reconfigure should be called")
 	assert.Positive(t, countCalls(m.Calls, "exec", "sind-dev-worker-1", "systemctl", "enable"), "slurmd should be enabled on new node")
 	writes := nodesConfWrites(m.Calls)
@@ -1267,6 +1269,12 @@ func TestWorkerAdd_MultipleNodes(t *testing.T) {
 	require.Len(t, nodes, 2)
 	assert.Equal(t, "worker-1", nodes[0].ShortName())
 	assert.Equal(t, "worker-2", nodes[1].ShortName())
+	// The compose container number of each one is its index, from 1.
+	for name, number := range map[string]string{"sind-dev-worker-1": "2", "sind-dev-worker-2": "3"} {
+		args, created := createArgs(m.Calls, name)
+		require.True(t, created, name)
+		assert.Contains(t, args, "com.docker.compose.container-number="+number, name)
+	}
 
 	// Both nodes appear in the sind-nodes.conf update.
 	writes := nodesConfWrites(m.Calls)
@@ -1292,6 +1300,21 @@ func TestWorkerAdd_ExplicitImage(t *testing.T) {
 	assert.Contains(t, args, "custom:v1", "should use explicit image")
 	assert.NotContains(t, args, "img:1", "should not use controller image")
 	assert.Equal(t, 1, countSlurmdProbes(m.Calls, "custom:v1"), "Slurm version checked")
+}
+
+// An image that the daemon has is not pulled without --pull, and nothing
+// says that images are pulled.
+func TestPullWorkerImage_ImagePresent(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("sha256:0123\n", "", nil) // image inspect: the image is local
+	var logs bytes.Buffer
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+
+	require.NoError(t, pullWorkerImage(ctx, docker.NewClient(&m), WorkerAddOptions{Image: "custom:v1"}))
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"image", "inspect", "--format", "{{.Id}}", "custom:v1"}, m.Calls[0].Args)
+	assert.NotContains(t, logs.String(), "pulling images")
 }
 
 func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
@@ -2370,6 +2393,7 @@ func TestNewestWorker(t *testing.T) {
 		{"managed like the new ones", []docker.ContainerListEntry{entry("worker-0", ""), entry("worker-1", "false")}, true, "sind-dev-worker-0"},
 		{"unmanaged like the new ones", []docker.ContainerListEntry{entry("worker-0", "false"), entry("worker-1", "")}, false, "sind-dev-worker-0"},
 		{"any worker without a match", []docker.ContainerListEntry{entry("worker-0", ""), entry("worker-1", "")}, false, "sind-dev-worker-1"},
+		{"worker-0 alone without a match", []docker.ContainerListEntry{entry("worker-0", "")}, false, "sind-dev-worker-0"},
 		{"no worker", []docker.ContainerListEntry{entry("controller", ""), entry("worker-x", "")}, true, ""},
 	}
 	for _, tt := range tests {

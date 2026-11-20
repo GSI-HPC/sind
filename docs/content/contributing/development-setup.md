@@ -11,8 +11,10 @@ toc: true
 - **Docker Engine 28.0+**, a rootful daemon without `userns-remap`
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 - **firejail**, which sandboxes `make test`
-- **golangci-lint v2** for `make lint`, and **Node.js 22+** (npx) for `make lint-docs`
+- **golangci-lint v2** for `make lint`, and **Node.js 22+** for `make lint-docs` (npx) and `make test-js`
+- **Hugo** (the version that `.github/workflows/docs.yml` installs) and **Python 3.11+** for `make check-docs`, when you change the docs site
 - **actionlint** and **shellcheck** for `make lint-ci`, when you change a workflow or a shell script
+- **zizmor** for `make audit-ci`, when you change a workflow or `.github/dependabot.yml` (`pipx install zizmor`, the version that `.github/workflows/ci.yml` installs)
 
 ## Clone and build
 
@@ -40,16 +42,20 @@ All common tasks are available via `make`:
 | `make build` | Build the sind binary |
 | `make install` | Install sind to `GOPATH/bin` |
 | `make test` | Run unit tests with race detector, sandboxed with firejail |
+| `make test-js` | Run the tests of the page scripts of `sind ui` with `node --test` |
 | `make fuzz` | Run every fuzz target for `FUZZTIME` each (default `30s`) |
 | `make mutation` | Report the mutation score of the packages in `MUTATION_PACKAGES` (takes minutes) |
 | `make check-models` | Check the TLA+ models in `spec/tla` with TLC (needs Java) |
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
 | `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
-| `make lint` | Run golangci-lint on the unit and on the integration build (`-tags integration`) |
+| `make lint` | Run golangci-lint, with `gosec`, on the unit and on the integration build (`-tags integration`) |
 | `make lint-ci` | Lint the workflows with actionlint and the shell scripts with shellcheck |
+| `make audit-ci` | Audit the workflows and the Dependabot config for security defects with zizmor; `.github/zizmor.yml` lists the findings that are accepted |
 | `make lint-docs` | Lint documentation markdown files |
+| `make check-docs` | Build the docs site with Hugo into `docs/public`, which git ignores: a broken shortcode, template or page reference fails. Then check each link of the site into the site: its page, and the heading of its `#fragment` (needs Python 3.11) |
 | `make docs-shots` | Take the `sind ui` screenshots of the docs into `docs/static/ui-shots` (needs Chromium; not committed) |
+| `make check-ui` | Open the same pages of the `sind ui` demo in Chromium and write no image: a fault of a page fails. Then open 8 tabs at once: each must show its page (needs Chromium) |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
 | `make clean` | Remove build artifacts and coverage files |
 | `make help` | Show all available targets |

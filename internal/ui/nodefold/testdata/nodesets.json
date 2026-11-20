@@ -1,0 +1,39 @@
+{
+  "about": "Node sets that the page script (web/static/js/nodeset.js) and the CLI (go-nodeset) must read alike. internal/ui/jstest/nodeset.test.js checks the script, TestSharedNodeSets of this package checks go-nodeset. folds: the names of nodes of a cluster, and the node set that the script writes for them. reads: a text that a person can type, and the nodes that it names. rejects: a text that is no node set.",
+  "folds": [
+    {"names": [], "set": ""},
+    {"names": ["controller"], "set": "controller"},
+    {"names": ["worker-0"], "set": "worker-0"},
+    {"names": ["worker-0", "worker-1", "worker-3"], "set": "worker-[0-1,3]"},
+    {"names": ["worker-3", "controller", "worker-1", "worker-2"], "set": "controller,worker-[1-3]"},
+    {"names": ["worker-10", "worker-9", "worker-11"], "set": "worker-[9-11]"},
+    {"names": ["worker-0", "worker-2", "worker-4"], "set": "worker-[0,2,4]"},
+    {"names": ["controller", "controller-backup", "db", "api", "submitter", "worker-0"], "set": "controller,controller-backup,db,api,submitter,worker-0"},
+    {"names": ["worker-7", "submitter", "worker-8", "db"], "set": "submitter,db,worker-[7-8]"}
+  ],
+  "reads": [
+    {"text": "", "names": []},
+    {"text": "controller", "names": ["controller"]},
+    {"text": "worker-[0-1,3]", "names": ["worker-0", "worker-1", "worker-3"]},
+    {"text": "controller,worker-[4-5]", "names": ["controller", "worker-4", "worker-5"]},
+    {"text": "worker-[1-3],submitter", "names": ["worker-1", "worker-2", "worker-3", "submitter"]},
+    {"text": "worker-0 worker-1", "names": ["worker-0", "worker-1"]},
+    {"text": "worker-[1 , 2]", "names": ["worker-1", "worker-2"]},
+    {"text": "worker-[0-1],", "names": ["worker-0", "worker-1"]},
+    {"text": ",worker-1", "names": ["worker-1"]},
+    {"text": "worker-[08-11]", "names": ["worker-08", "worker-09", "worker-10", "worker-11"]},
+    {"text": "worker-[007]", "names": ["worker-007"]},
+    {"text": "worker-[0-1].dev", "names": ["worker-0.dev", "worker-1.dev"]},
+    {"text": "a-[0-1]-b-[2-3]", "names": ["a-0-b-2", "a-0-b-3", "a-1-b-2", "a-1-b-3"]}
+  ],
+  "rejects": [
+    "worker-[",
+    "worker-]",
+    "worker-]0[",
+    "worker-[[0-1]]",
+    "worker-[]",
+    "worker-[a]",
+    "worker-[1,,2]",
+    "worker-[3-1]"
+  ]
+}

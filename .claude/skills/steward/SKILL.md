@@ -22,9 +22,16 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    at 100%. Install the tool with
    `go install github.com/vladopajic/go-test-coverage/v2@latest`.
 5. If `docs/content/` changed: `make lint-docs`, which the Docs Lint job of CI runs
-   too. If a workflow or a shell script changed: `make lint-ci` (actionlint,
+   too. If anything under `docs/` or `tools/screenshots/shots.yaml` changed and Hugo
+   is installed: `make check-docs`, the Docs Build job of CI. If a workflow or a shell script changed: `make lint-ci` (actionlint,
    `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`, and shellcheck,
-   `pip install shellcheck-py`).
+   `pip install shellcheck-py`). The Workflow Lint job of CI also runs `make audit-ci`
+   (zizmor): fix what it reports, or list the finding in `.github/zizmor.yml` with
+   the reason. If `internal/ui` or `tools/screenshots` changed and Chromium is
+   installed: `make check-ui`, the UI Pages job of CI; a new page, tab or dialog gets
+   a shot in `tools/screenshots/shots.yaml`. If a script of
+   `internal/ui/web/static/js` that has a test in `internal/ui/jstest` changed:
+   `make test-js`, which the same job runs.
 6. If the CLI surface, output format, config schema or labels changed: `DESIGN.md` and
    `docs/content/` are updated in the same PR.
 7. Re-read the diff: SPDX header on new Go files, tests for new behaviour,
@@ -59,9 +66,11 @@ CI runs for every pull request and every push to `main` and `next`.
 | Job | Runs |
 |-----|------|
 | Lint | golangci-lint |
-| Workflow Lint | `make lint-ci`: actionlint on the workflows, with shellcheck on their `run` steps, and shellcheck on every `*.sh` |
+| Workflow Lint | `make lint-ci`: actionlint on the workflows, with shellcheck on their `run` steps, and shellcheck on every `*.sh`. Then `make audit-ci`: zizmor on the workflows and `.github/dependabot.yml`, with the token of the job |
 | Design Models | `make check-models`: TLC on the TLA+ models of `spec/tla`; each configuration must give the result in its `\* expect:` line |
 | Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
+| Docs Build | `make check-docs`: Hugo builds the site, without videos and screenshots; a broken shortcode, template or `relref` fails, and so does a warning. Then `.github/scripts/check-doc-links.py` fails for a link into the site whose page or `#fragment` does not exist; it does not check links to other sites |
+| UI Pages | `make test-js`: the runner's Node runs the tests of the page scripts (`internal/ui/jstest`). Then `make check-ui`: the runner's Chrome opens each shot of `tools/screenshots/shots.yaml` on `sind ui --demo --still`; an uncaught exception, a `console.error`, a failed request or a status of 400 or more fails. Then it opens 8 tabs at once, 6 of them hidden: a tab that does not show its page fails |
 | Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
@@ -113,10 +122,11 @@ seeds.
   it gets its tags, selected by name (`TESTS` in `image-build.yml`): a PR that renames
   or removes one of them changes that list too.
 - The workflows pin every action to a commit SHA, which Dependabot updates, and the
-  versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo, which it
-  does not: bump those by hand. Dependabot also updates the Go modules at the root and
+  versions of goreleaser, golangci-lint, gotestsum, govulncheck, zizmor, and Hugo (in `ci.yml`
+  and `docs.yml`), which it does not: bump those by hand. Dependabot also updates the Go modules at the root and
   in `tools/screenshots`, the npm packages of `video/` and the pins of
-  `video/voice/requirements.txt`, all against `next`. It leaves out the Hextra docs
+  `video/voice/requirements.txt`, all against `next`, each release 7 days after it
+  came out (`cooldown`; security updates do not wait). It leaves out the Hextra docs
   theme, a Hugo module in `docs/go.mod`, because its `go mod tidy` drops the
   requirement: bump it by hand with `hugo mod get github.com/imfing/hextra@<version>` in
   `docs/`, as the markdownlint-cli2 version that `make lint-docs` runs (`Makefile`).

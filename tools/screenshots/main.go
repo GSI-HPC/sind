@@ -9,6 +9,13 @@
 // not committed.
 //
 //	go build -o sind ../../cmd/sind && go run . -sind ./sind -out /tmp/shots
+//
+// A shot fails when its page reports a fault: an exception that no script
+// catches, a console.error, a request that fails or a response with a status
+// of 400 or more. With -check it opens the shots and writes no image, which
+// makes it a test of the pages in a browser (make check-ui).
+//
+//	go run . -sind ./sind -check
 package main
 
 import (
@@ -49,7 +56,8 @@ func run(args []string) error {
 	fs.StringVar(&o.Sind, "sind", "sind", "the sind executable to take the screenshots of")
 	fs.StringVar(&o.Chromium, "chromium", "", "the Chromium or Chrome executable (default: $CHROMIUM, else the first of chromium, chromium-browser, google-chrome on PATH)")
 	fs.StringVar(&o.Shots, "shots", "shots.yaml", "the shot list")
-	fs.StringVar(&o.Out, "out", "", "the directory for the images (required)")
+	fs.StringVar(&o.Out, "out", "", "the directory for the images (required without -check)")
+	fs.BoolVar(&o.Check, "check", false, "open the shots and write no image, then open 8 tabs at once: only a fault of a page fails")
 	fs.IntVar(&o.Port, "port", 0, "the port of sind ui on 127.0.0.1 (default: a free one)")
 	fs.StringVar(&at, "epoch", epoch, "the time of the still demo, for the clock of the pages")
 	fs.BoolVar(&o.NoSandbox, "no-sandbox", os.Geteuid() == 0, "start Chromium without its sandbox (default: when running as root, as in a container)")
@@ -60,8 +68,8 @@ func run(args []string) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
-	if o.Out == "" {
-		return errors.New("name the directory for the images with -out")
+	if o.Out == "" && !o.Check {
+		return errors.New("name the directory for the images with -out, or check the pages with -check")
 	}
 	var err error
 	if o.Epoch, err = time.Parse(time.RFC3339, at); err != nil {
@@ -93,7 +101,7 @@ type options struct {
 	Sind, Chromium, Shots, Out string
 	Port                       int
 	Epoch                      time.Time
-	NoSandbox                  bool
+	NoSandbox, Check           bool
 	Only                       names
 }
 

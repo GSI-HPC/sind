@@ -1,0 +1,56 @@
+{
+  "realm": "sind",
+  "services": [
+    {
+      "name": "grafana",
+      "container": "sind-grafana",
+      "image": "img-sind-grafana",
+      "interface": "web UI",
+      "ip": "172.18.255.253",
+      "url": "http://grafana.sind.sind:3000",
+      "status": "running",
+      "ready": true,
+      "checked": true
+    },
+    {
+      "name": "prometheus",
+      "container": "sind-prometheus",
+      "image": "img-sind-prometheus",
+      "interface": "web UI + API",
+      "ip": "172.18.255.252",
+      "url": "http://prometheus.sind.sind:9090",
+      "status": "running",
+      "ready": true,
+      "checked": true
+    },
+    {
+      "name": "loki",
+      "container": "sind-loki",
+      "image": "img-sind-loki",
+      "interface": "API",
+      "ip": "172.18.255.251",
+      "url": "http://loki.sind.sind:3100",
+      "status": "running",
+      "ready": true,
+      "checked": true
+    },
+    {
+      "name": "alloy",
+      "container": "sind-alloy",
+      "image": "img-sind-alloy",
+      "interface": "web UI",
+      "ip": "",
+      "url": "",
+      "status": "exited",
+      "ready": false,
+      "checked": false
+    }
+  ],
+  "clusters": [
+    {
+      "name": "dev",
+      "nodes": 2,
+      "slurm_version": "26.05.6"
+    }
+  ]
+}

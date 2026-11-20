@@ -25,13 +25,17 @@ Personal, uncommitted instructions belong in `CLAUDE.local.md` (gitignored).
 
 ```bash
 make build                   # ./sind-<os>-<arch>
-make lint                    # golangci-lint v2 (.golangci.yml, gofmt + goimports)
+make lint                    # golangci-lint v2 (.golangci.yml, gosec, gofmt + goimports)
 go mod download && make test # unit tests, -race, sandboxed with firejail
 make test-integration        # needs Docker; SIND_TEST_IMAGE overrides sind-node:latest
 go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
+make check-docs              # Hugo build of docs/ (shortcodes, templates, relref), then its links and anchors
+make check-ui                # Chromium opens each docs shot on the sind ui demo, then 8 tabs at once; a page fault fails
+make test-js                 # node --test on internal/ui/jstest: the page scripts of sind ui
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
+make audit-ci                # zizmor on the workflows and dependabot.yml (.github/zizmor.yml)
 FUZZTIME=1m make fuzz        # every fuzz target, one after the other (default 30s each)
 make mutation                # mutation score of MUTATION_PACKAGES (gremlins; minutes, no gate)
 make check-models            # TLC on the TLA+ models in spec/tla (needs Java)
@@ -63,10 +67,15 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
   `internal/mock.Executor` (FIFO `AddResult` or `OnCall` dispatcher for concurrent code).
 - Dual-mode tests: `mode_unit_test.go` (`!integration`) and `mode_integration_test.go`
   (`integration`) provide the per-package helpers.
+- A package that starts goroutines has a `main_test.go` with `goleak.VerifyTestMain`:
+  a goroutine that a test leaves fails the package.
 - testify: `require` for fatal checks, `assert` otherwise. Wrap errors with
   `fmt.Errorf("context: %w", err)`. Use strong types for Docker identifiers.
 - Follow the "CLI Design Guidelines" in `DESIGN.md` (verb-noun commands, positional
   cluster names, silent mutations, `-o json` on every `get` subcommand).
+- Golden files in `cmd/sind/testdata` state the commands, flags and `SIND_*` variables
+  (`cli.txt`) and the JSON output of each command that has one (`json/`). After an
+  intended change, write them again with `go test ./cmd/sind -update` and review the diff.
 - Package map and patterns: `docs/content/contributing/architecture-guide.md`.
 
 ## Docs
@@ -87,6 +96,8 @@ Task pages show their steps for the CLI or the web UI, as the reader selects: a
 `tools/screenshots/shots.yaml`, and `webui: none` in the front matter of a page the UI
 cannot do. When a change to `sind ui` changes such steps, update them in the same PR.
 The docs workflow takes the screenshots (`make docs-shots` locally); never commit them.
+The UI Pages job of CI opens the same shots on each pull request (`make check-ui`): a
+page that throws an exception, calls `console.error` or has a request that fails, fails it.
 See "Documentation" in `docs/content/contributing/conventions.md`.
 
 Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in

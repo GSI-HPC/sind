@@ -354,6 +354,7 @@ func TestGetClusters_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "clusters", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-clusters", stdout)
 
 	var got []struct {
 		Name         string `json:"name"`
@@ -373,6 +374,40 @@ func TestGetClusters_JSON(t *testing.T) {
 	assert.Equal(t, 1, got[0].Controllers)
 	assert.Equal(t, 0, got[0].DBs)
 	assert.Equal(t, 1, got[0].Workers)
+}
+
+func TestGetNetworks_JSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"Name":"sind-mesh","Driver":"bridge"}`+"\n"+`{"Name":"sind-dev-net","Driver":"bridge"}`+"\n", "", nil)
+	m.AddResult(`[{"Name":"sind-mesh","IPAM":{"Config":[{"Subnet":"172.19.0.0/16","Gateway":"172.19.0.1"}]}},`+
+		`{"Name":"sind-dev-net","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "networks", "--output", "json")
+	require.NoError(t, err)
+	goldenJSON(t, "get-networks", stdout)
+
+	var got []cluster.NetworkSummary
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, []cluster.NetworkSummary{
+		{Name: "sind-dev-net", Driver: "bridge", Subnet: "172.18.0.0/16", Gateway: "172.18.0.1"},
+		{Name: "sind-mesh", Driver: "bridge", Subnet: "172.19.0.0/16", Gateway: "172.19.0.1"},
+	}, got)
+}
+
+func TestGetVolumes_JSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"Name":"sind-ssh-config","Driver":"local"}`+"\n"+`{"Name":"sind-dev-data","Driver":"local"}`+"\n", "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "volumes", "--output", "json")
+	require.NoError(t, err)
+	goldenJSON(t, "get-volumes", stdout)
+
+	var got []cluster.VolumeSummary
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, []cluster.VolumeSummary{
+		{Name: "sind-dev-data", Driver: "local"},
+		{Name: "sind-ssh-config", Driver: "local"},
+	}, got)
 }
 
 func TestGetClusters_JSONEmpty(t *testing.T) {
@@ -422,6 +457,7 @@ func TestGetRealms_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "realms", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-realms", stdout)
 
 	var got []struct {
 		Name     string `json:"name"`
@@ -462,6 +498,7 @@ func TestGetNodes_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "nodes", "dev", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-nodes", stdout)
 
 	var got []struct {
 		Container string `json:"container"`
@@ -495,6 +532,7 @@ func TestGetDNS_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "dns", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-dns", stdout)
 
 	var got []mesh.DNSRecord
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -513,6 +551,7 @@ func TestGetAuthKey_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-auth-key", stdout)
 	assert.JSONEq(t, `{"type": "munge", "key": "c2VjcmV0LWtleQ=="}`, stdout)
 }
 
@@ -520,6 +559,7 @@ func TestGetSSHConfig_JSON(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "/xdg/state")
 	stdout, _, err := executeCommand("get", "ssh-config", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-ssh-config", stdout)
 
 	var got struct {
 		Path string `json:"path"`
@@ -583,6 +623,7 @@ func TestGetMesh_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-mesh", stdout)
 
 	var got mesh.Info
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -622,6 +663,7 @@ func TestGetCoreDNSConfig_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "coredns-config", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-coredns-config", stdout)
 
 	var got mesh.CoreDNSStub
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -666,6 +708,7 @@ func TestGetSSHPrivateKey_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-private-key", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-ssh-private-key", stdout)
 
 	var got struct {
 		PrivateKey string `json:"private_key"`
@@ -693,6 +736,7 @@ func TestGetSSHPublicKey_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-public-key", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-ssh-public-key", stdout)
 
 	var got struct {
 		PublicKey string `json:"public_key"`
@@ -720,6 +764,7 @@ func TestGetSSHKnownHosts_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-known-hosts", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-ssh-known-hosts", stdout)
 
 	var got struct {
 		KnownHosts string `json:"known_hosts"`
@@ -947,6 +992,7 @@ func TestGetNode_JSON(t *testing.T) {
 
 	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-node", stdout)
 
 	var got cluster.NodeDetail
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -981,6 +1027,7 @@ func TestGetNode_JSONUnmanaged(t *testing.T) {
 
 	stdout, _, err := executeWithMock(m, "get", "node", "worker-0.dev", "--output", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-node_unmanaged", stdout)
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -1076,6 +1123,7 @@ func TestGetCluster_UnknownSlurmVersion(t *testing.T) {
 func TestGetCluster_ControllerPairJSON(t *testing.T) {
 	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-cluster_controller-pair", stdout)
 
 	var got cluster.Status
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -1093,6 +1141,7 @@ func TestGetNode_ControllerPair(t *testing.T) {
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "controller-backup.dev", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-node_backup-controller", stdout)
 	var got cluster.NodeDetail
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	assert.Equal(t, &cluster.HAStatus{Position: "backup", InControl: true}, got.HA)
@@ -1253,6 +1302,7 @@ func TestGet_SlurmState(t *testing.T) {
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "worker-0.dev", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-node_slurm-state", stdout)
 	assert.Contains(t, stdout, `"slurm": {
     "state": "idle",
     "registered": true
@@ -1264,5 +1314,6 @@ func TestGet_SlurmState(t *testing.T) {
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev", "-o", "json")
 	require.NoError(t, err)
+	goldenJSON(t, "get-cluster_slurm-state", stdout)
 	assert.Equal(t, 1, strings.Count(stdout, `"registered": true`), "the worker's, and no other node's")
 }

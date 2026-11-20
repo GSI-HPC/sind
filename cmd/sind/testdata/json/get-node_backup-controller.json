@@ -1,0 +1,18 @@
+{
+  "container": "sind-dev-controller-backup",
+  "cluster": "dev",
+  "role": "controller",
+  "managed": true,
+  "fqdn": "controller-backup.dev.sind.sind",
+  "ip": "10.0.0.2",
+  "status": "running",
+  "services": {
+    "munge": true,
+    "slurmctld": true,
+    "sshd": true
+  },
+  "ha": {
+    "position": "backup",
+    "in_control": true
+  }
+}

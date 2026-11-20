@@ -1,0 +1,154 @@
+sind
+    --progress string (and subcommands)
+    --progress-log string (and subcommands)
+    --realm string (and subcommands)
+    -v, --verbose count (and subcommands)
+sind completion
+sind completion bash
+    --no-descriptions bool
+sind completion fish
+    --no-descriptions bool
+sind completion powershell
+    --no-descriptions bool
+sind completion zsh
+    --no-descriptions bool
+sind connect
+sind connect container CONTAINER...
+sind create
+sind create cluster [NAME]
+    --config string
+    --data string (default .)
+    --monitoring bool
+    --pull bool
+    --wait duration
+sind create worker [CLUSTER]
+    --cap-add stringSlice
+    --cap-drop stringSlice
+    --count int (default 1)
+    --cpus int
+    --device stringSlice
+    --image string
+    --memory string
+    --pull bool
+    --security-opt stringSlice
+    --tmp-size string
+    --unmanaged bool
+    --wait duration
+sind delete
+sind delete cluster [NAME]
+    --all bool
+sind delete realm
+sind delete worker NODES
+sind disconnect
+sind disconnect container CONTAINER...
+sind doctor
+    -o, --output string
+sind enter [CLUSTER]
+    -u, --user string
+sind exec [flags] [CLUSTER] -- COMMAND [ARGS...]
+    -u, --user string
+sind get
+    -o, --output string (and subcommands)
+sind get auth-key [CLUSTER]
+    --type string
+sind get cluster [NAME]
+sind get clusters
+sind get coredns-config
+sind get dns
+sind get mesh
+sind get monitoring
+sind get networks
+sind get node NODE
+sind get nodes [CLUSTER]
+sind get realms
+sind get ssh-config
+sind get ssh-known-hosts
+sind get ssh-private-key
+sind get ssh-public-key
+sind get volumes
+sind help [command]
+sind logs NODE [SERVICE]
+    -f, --follow bool
+    -n, --tail int
+sind mcp
+sind mcp claude
+sind mcp claude disable
+    --config-path string
+    --server-name string (default sind)
+sind mcp claude enable
+    --config-path string
+    -e, --env stringToString
+    --log-level string
+    --server-name string (default sind)
+sind mcp claude list
+    --config-path string
+sind mcp cursor
+sind mcp cursor disable
+    --config-path string
+    --server-name string (default sind)
+    --workspace bool
+sind mcp cursor enable
+    --config-path string
+    -e, --env stringToString
+    --log-level string
+    --server-name string (default sind)
+    --workspace bool
+sind mcp cursor list
+    --config-path string
+    --workspace bool
+sind mcp start
+    --log-level string
+sind mcp stream
+    --host string (default 127.0.0.1)
+    --log-level string
+    --port int (default 8080)
+sind mcp tools
+    --log-level string
+sind mcp vscode
+sind mcp vscode disable
+    --config-path string
+    --server-name string (default sind)
+    --workspace bool
+sind mcp vscode enable
+    --config-path string
+    -e, --env stringToString
+    --log-level string
+    --server-name string (default sind)
+    --workspace bool
+sind mcp vscode list
+    --config-path string
+    --workspace bool
+sind power
+sind power cut NODES
+sind power cycle NODES
+    --wait duration
+sind power freeze NODES
+sind power on NODES
+    --wait duration
+sind power reboot NODES
+    --wait duration
+sind power shutdown NODES  (aliases: off)
+sind power unfreeze NODES
+    --wait duration
+sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]
+sind ui
+    --demo bool
+    --monitoring-interval duration (default 30s)
+    --no-open bool (hidden)
+    --open bool
+    --port int
+    --still bool (hidden)
+sind version
+    --json bool
+
+environment variables:
+    SIND_CLUSTER
+    SIND_LOG_TIMESTAMPS
+    SIND_MCP_TOKEN
+    SIND_OUTPUT
+    SIND_PROGRESS
+    SIND_PROGRESS_LOG
+    SIND_PULL
+    SIND_REALM
+    SIND_VERBOSE
+    SIND_WAIT

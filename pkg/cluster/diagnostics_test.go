@@ -3,12 +3,15 @@
 package cluster
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,12 +23,25 @@ func TestLogContainerDiagnostics(t *testing.T) {
 		name    string
 		results []mock.Result
 		want    []string // the calls' commands
+		wantLog string   // the line it logs, after its time and level
 	}{
-		{"inspect error", []mock.Result{{Err: fmt.Errorf("no such container")}}, []string{"inspect"}},
-		{"running skipped", []mock.Result{inspect("running", 0, false)}, []string{"inspect"}},
-		{"exited with logs", []mock.Result{inspect("exited", 1, false), {Stdout: "slurmctld: fatal: Unable to process configuration file\n"}}, []string{"inspect", "logs"}},
-		{"oom killed", []mock.Result{inspect("exited", 137, true), {}}, []string{"inspect", "logs"}},
-		{"logs error", []mock.Result{inspect("exited", 1, false), {Err: fmt.Errorf("logs failed")}}, []string{"inspect", "logs"}},
+		{"inspect error", []mock.Result{{Err: fmt.Errorf("no such container")}}, []string{"inspect"}, ""},
+		{"running skipped", []mock.Result{inspect("running", 0, false)}, []string{"inspect"}, ""},
+		{
+			"exited with logs", []mock.Result{inspect("exited", 1, false), {Stdout: "slurmctld: fatal: Unable to process configuration file\n"}},
+			[]string{"inspect", "logs"},
+			`msg="container failed" container=sind-dev-worker-0 status=exited exitCode=1 logs="slurmctld: fatal: Unable to process configuration file"`,
+		},
+		{
+			"oom killed, without logs", []mock.Result{inspect("exited", 137, true), {Stdout: " \n"}},
+			[]string{"inspect", "logs"},
+			`msg="container failed" container=sind-dev-worker-0 status=exited exitCode=137 oomKilled=true`,
+		},
+		{
+			"logs error", []mock.Result{inspect("exited", 1, false), {Stdout: "half a line", Err: fmt.Errorf("logs failed")}},
+			[]string{"inspect", "logs"},
+			`msg="container failed" container=sind-dev-worker-0 status=exited exitCode=1`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,14 +49,22 @@ func TestLogContainerDiagnostics(t *testing.T) {
 			for _, r := range tt.results {
 				m.AddResult(r.Stdout, r.Stderr, r.Err)
 			}
+			var logs bytes.Buffer
+			ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 
-			logContainerDiagnostics(t.Context(), docker.NewClient(&m), "sind-dev-worker-0")
+			logContainerDiagnostics(ctx, docker.NewClient(&m), "sind-dev-worker-0")
 
 			got := make([]string, len(m.Calls))
 			for i, c := range m.Calls {
 				got[i] = c.Args[0]
 			}
 			assert.Equal(t, tt.want, got)
+			if tt.wantLog == "" {
+				assert.Empty(t, logs.String())
+				return
+			}
+			_, line, _ := strings.Cut(logs.String(), "level=ERROR ")
+			assert.Equal(t, tt.wantLog+"\n", line)
 		})
 	}
 }

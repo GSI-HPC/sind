@@ -1,0 +1,13 @@
+# Findings of zizmor (make audit-ci) that are accepted, each with its reason.
+rules:
+  cache-poisoning:
+    ignore:
+      # The Build job of CI runs GoReleaser as a snapshot, which publishes
+      # nothing. The Release workflow, which publishes, uses no cache.
+      - ci.yml
+  self-repository:
+    ignore:
+      # zizmor asks for $/ in place of ./ for the workflow of this
+      # repository. actionlint v1.7.12, which the Workflow Lint job runs,
+      # does not accept that form.
+      - image.yml

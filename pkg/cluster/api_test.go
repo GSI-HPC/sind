@@ -169,6 +169,7 @@ func TestGetAuthKey_Types(t *testing.T) {
 		{"slurm", []testutil.PsEntry{clientIDsController}, AuthSlurm, AuthSlurm, "sind-dev-controller:/etc/slurm/slurm.key", ""},
 		{"jwt", []testutil.PsEntry{controller, api}, AuthJWT, AuthJWT, "sind-dev-api:/etc/slurm/jwt_hs256.key", ""},
 		{"jwt with clientIds", []testutil.PsEntry{clientIDsController, api}, AuthJWT, AuthJWT, "sind-dev-api:/etc/slurm/jwt_hs256.key", ""},
+		{"jwt with the api node first", []testutil.PsEntry{api, controller}, AuthJWT, AuthJWT, "sind-dev-api:/etc/slurm/jwt_hs256.key", ""},
 		{"default with an api node", []testutil.PsEntry{api, controller}, "", AuthMunge, "sind-dev-api:/etc/munge/munge.key", ""},
 		{"munge under clientIds", []testutil.PsEntry{clientIDsController}, AuthMunge, "", "", `cluster "dev" has no munge key: its identity clientIds uses auth/slurm with slurm.key instead`},
 		{"slurm without clientIds", []testutil.PsEntry{controller}, AuthSlurm, "", "", `cluster "dev" has no slurm.key: only identity clientIds uses auth/slurm, and the cluster uses munge`},

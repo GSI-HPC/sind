@@ -216,13 +216,17 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 		stopInner()
 		return nil, nil, fmt.Errorf("starting the MCP server: %w", err)
 	}
+	info := *session.InitializeResult().ServerInfo
+	server := mcp.NewServer(&info, nil)
+	// The sessions of the HTTP clients end with the stream: one that its
+	// client did not end would wait for requests until mcpSessionTimeout.
 	stop := func() {
+		for clientSession := range server.Sessions() {
+			_ = clientSession.Close()
+		}
 		_ = session.Close()
 		stopInner()
 	}
-
-	info := *session.InitializeResult().ServerInfo
-	server := mcp.NewServer(&info, nil)
 	for tool, err := range session.Tools(innerCtx, nil) {
 		if err != nil {
 			stop()

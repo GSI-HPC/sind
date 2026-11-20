@@ -167,6 +167,51 @@ step slurm total=2 [fold]: ok
 
 The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets every `SIND_*` variable that sind reads (`envvar.All`) and points `XDG_STATE_HOME` at a temporary directory, so that a developer's own settings reach no test and no test writes the activity log into a real home; a test of the log gives itself a directory with `t.Setenv("XDG_STATE_HOME", t.TempDir())`.
 
+## Golden files of the command line
+
+Scripts, sind-action and the MCP tools depend on the commands, the flags and the JSON output of sind. The tests of `cmd/sind` compare them with golden files in `cmd/sind/testdata`:
+
+| File | Content | Test |
+|---|---|---|
+| `cli.txt` | Each command with its arguments and aliases, each flag with its type and default, and the `SIND_*` variables | `TestCLISurface` |
+| `json/<command>.json` | The JSON output of a command, byte for byte: the fields, their order and the layout. A second case of a command is `json/<command>_<case>.json` | The JSON test of the command, with `goldenJSON` |
+
+- A test fails when its output differs from its file. If the change is intended, write the files again with `go test ./cmd/sind -update`, read the diff, and update `DESIGN.md` and the docs in the same commit. A field or flag that is removed or renamed breaks the scripts of users: say so in the commit.
+- Every `get` subcommand, `doctor` and `version` must have a golden file of its JSON output (`TestJSONGoldens_CoverTheCommands`). For a new `get` subcommand, write a test that runs it with `-o json` on a mock executor and calls `goldenJSON(t, "get-<name>", stdout)`.
+- A value that changes with the build or the machine is replaced before the comparison, as the Go version in `TestVersionCommand_JSONOutput`.
+
+## Goroutine leaks
+
+A package that starts goroutines has a `main_test.go` whose `TestMain` calls [`goleak.VerifyTestMain`](https://pkg.go.dev/go.uber.org/goleak#VerifyTestMain): when all tests of the package passed, it fails the package if a goroutine that a test started still runs, and prints the stack of each one. `cmd/sind` has a `TestMain` of its own, which does the same check with `goleak.Find`.
+
+- A test ends what it starts: it cancels the context of a watcher, a stream or a server, or closes it, and waits for it where the code gives a way to.
+- The check tells that a goroutine is left, not which test left it. Run the tests of the package one at a time (`go test ./<pkg> -run '^TestXxx$'`), or call `goleak.VerifyNone(t, goleak.IgnoreCurrent())` in the test that you suspect.
+- When a new package starts a goroutine (`go`, `errgroup`, `sync.WaitGroup.Go`, `context.AfterFunc`), give it the same `main_test.go`.
+
+## The web UI in a browser
+
+The Go tests of `internal/ui` check the HTML that the server writes. They do not run the scripts of the pages. `make check-ui` does: it starts `sind ui --demo --still` and opens each shot of `tools/screenshots/shots.yaml` in Chromium, in the light and the dark theme and in each size of the shot, with the steps of the shot (a click, a dialog, typed text). It writes no image. The UI Pages job of CI runs it on each pull request.
+
+A page fails the check when it reports a fault:
+
+- an exception that no script catches
+- a call of `console.error` or `console.assert`; htmx reports its own errors this way, such as an out-of-band part whose element the page does not have
+- a request that fails, or a response with a status of 400 or more
+
+The docs workflow takes the screenshots with the same tool, so a fault also fails a screenshot.
+
+After the shots, the check opens 8 tabs at once. A browser opens at most 6 connections to `sind ui`, and each page holds one for its live stream, so a page that is hidden lets its stream go after 10 seconds. The check opens 6 tabs, hides their pages, and opens 2 more: each must show its page and open its stream. A hidden page that keeps its stream fails the check, because the next tab then stays empty. `-only` leaves this part out.
+
+- A new page, tab or dialog gets a shot in `shots.yaml`. The docs can then show it, and the check opens it.
+- To look at one shot, name it: `cd tools/screenshots && go run . -sind ../../sind-linux-amd64 -check -only new-cluster-retry`.
+- Chromium is found as `chromium`, `chromium-browser` or `google-chrome` on `PATH`, or named with `$CHROMIUM`. `SHOTS_FLAGS=-no-sandbox` starts it without its sandbox, as CI does.
+
+### Tests of the page scripts
+
+A script whose functions take and give plain values has tests that Node runs without a browser: `make test-js` runs each `*.test.js` of `internal/ui/jstest` with `node --test`, and the UI Pages job runs it first. A test sets `window`, loads the script from `internal/ui/web/static/js`, and calls the functions that the script puts on `window`.
+
+`nodeset.js` reads and writes node sets in the pages; the CLI reads them with go-nodeset. Both have the same cases, in `internal/ui/nodefold/testdata/nodesets.json`: `nodeset.test.js` checks the script, and `TestSharedNodeSets` of `internal/ui/nodefold` checks go-nodeset. A node set that a page writes names the same nodes for the CLI, and so does a text that a person types in a page. A change to how `nodeset.js` reads or writes a node set adds its case to this file.
+
 ## Fuzz tests
 
 A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".
@@ -205,6 +250,8 @@ func TestCompare_IsATotalOrder(t *testing.T) {
 | `pkg/config` | `Parse` reads back the file that the YAML encoder writes for any config, which the web UI depends on; a second `ApplyDefaults` changes nothing, and an ID that it assigns is free |
 | `internal/slurm` | The `slurm.conf` of any main section and options sets no parameter that the main section sets; `sind-nodes.conf` stays well-formed over any sequence of worker additions and removals |
 | `pkg/cluster` | No two Docker resources of sind get the same name (`naming_collision_test.go`, which checks every name up to a length instead of drawing some) |
+| `pkg/mesh` | A pinned mesh network gets a layout exactly when its subnet is a /21 or larger; the DNS address is the last one before the broadcast address, outside the range that the other containers get their addresses from |
+| `internal/ui/run` | Every child of the task runner of `sind ui` gets exactly one SIGINT, whatever the order of start, stop and shutdown (`race_test.go`, which runs the three at once in 200 rounds instead of drawing inputs) |
 
 - Write a generator for the inputs that the property is about (`rapid.Custom`), and draw each value with a label: rapid prints the labelled values of the smallest input that fails.
 - For a sequence of operations, keep a model next to the real thing and compare the two after each step (`t.Repeat`, as `TestNodesConf_EditsKeepTheFileWellFormed` does).

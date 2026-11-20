@@ -196,6 +196,19 @@ func TestActPreview_NewClusterPageParts(t *testing.T) {
 		assert.Contains(t, body, want)
 	}
 
+	// The foot of Copy a cluster comes with the forms that have the card:
+	// not with a form that tries a run again, and not without a cluster to
+	// copy.
+	const copyFoot = `<span class="act-tmeta" id="act-copy-foot" hx-swap-oob="innerHTML">`
+	assert.Contains(t, body, copyFoot+`pick one</span>`)
+	f.st.SetRuns([]store.Run{retryRun()})
+	assert.NotContains(t, f.post("/actions/create-cluster/preview", actForm("name", "bench", "from", "rb")).Body.String(), `id="act-copy-foot"`)
+	assert.Contains(t, f.post("/actions/create-cluster/preview", actForm("name", "bench", "from", "nope")).Body.String(), copyFoot, "no such run: the form has the starts")
+	f.st.SetRuns(nil)
+	f.st.SetClusters("sind", nil)
+	assert.NotContains(t, f.post("/actions/create-cluster/preview", actForm("name", "hpc")).Body.String(), `id="act-copy-foot"`)
+	f.st.SetClusters("sind", []cluster.Summary{{Name: "default"}, {Name: "dev"}})
+
 	// A name that is taken is not free, and a plan without a config counts
 	// no nodes.
 	body = f.post("/actions/create-cluster/preview", actForm("name", "dev")).Body.String()

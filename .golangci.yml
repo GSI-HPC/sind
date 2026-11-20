@@ -5,6 +5,7 @@ linters:
     - copyloopvar
     - errcheck
     - forbidigo
+    - gosec
     - govet
     - ineffassign
     - misspell
@@ -19,10 +20,22 @@ linters:
         # the test's own deadline too.
         - pattern: ^(require|assert)\.Error$
           msg: name the expected error with ErrorContains, ErrorIs or EqualError
+    gosec:
+      excludes:
+        # sind runs docker and the commands that its user names.
+        - G204
+        # sind reads and writes the files that its user names.
+        - G304
+        # Reports the index of a range loop; Go checks each index at run time.
+        - G602
   exclusions:
     rules:
       - linters: [forbidigo]
         path-except: ^pkg/cluster/.*_test\.go$
+      # Tests write scripts and files with open modes into temporary
+      # directories and run them.
+      - linters: [gosec]
+        path: _test\.go$
 
 formatters:
   enable:

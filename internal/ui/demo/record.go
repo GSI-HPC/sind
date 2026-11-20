@@ -23,6 +23,7 @@ const version = "0.16.0"
 
 // traceID returns the trace the n-th run of the demo belongs to.
 func traceID(n int) progress.TraceContext {
+	//nolint:gosec // G115: the four low bytes of n
 	return progress.TraceContext{ID: progress.TraceID{0xde, 0x70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}}
 }
 
@@ -31,7 +32,7 @@ func traceID(n int) progress.TraceContext {
 // that marks the run as one of sind ui.
 func uiTrace(n int) progress.TraceContext {
 	tc := traceID(n)
-	tc.Parent, tc.Flags, tc.State = progress.SpanID(0x5a<<56|n), 1, store.UITraceState
+	tc.Parent, tc.Flags, tc.State = progress.SpanID(0x5a<<56|n), 1, store.UITraceState //nolint:gosec // G115: n counts the runs of the demo
 	return tc
 }
 
