@@ -57,7 +57,7 @@ func run(args []string) error {
 	fs.StringVar(&o.Chromium, "chromium", "", "the Chromium or Chrome executable (default: $CHROMIUM, else the first of chromium, chromium-browser, google-chrome on PATH)")
 	fs.StringVar(&o.Shots, "shots", "shots.yaml", "the shot list")
 	fs.StringVar(&o.Out, "out", "", "the directory for the images (required without -check)")
-	fs.BoolVar(&o.Check, "check", false, "open the shots and write no image: only a fault of a page fails")
+	fs.BoolVar(&o.Check, "check", false, "open the shots and write no image, then open 8 tabs at once: only a fault of a page fails")
 	fs.IntVar(&o.Port, "port", 0, "the port of sind ui on 127.0.0.1 (default: a free one)")
 	fs.StringVar(&at, "epoch", epoch, "the time of the still demo, for the clock of the pages")
 	fs.BoolVar(&o.NoSandbox, "no-sandbox", os.Geteuid() == 0, "start Chromium without its sandbox (default: when running as root, as in a container)")

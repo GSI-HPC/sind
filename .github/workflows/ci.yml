@@ -137,6 +137,7 @@ jobs:
   # exception, a console.error, a request that fails or a response with a
   # status of 400 or more. It writes no image: the Deploy docs workflow
   # takes the screenshots after the merge, and fails on the same faults.
+  # Then it opens 8 tabs at once, 6 of them hidden: each must show its page.
   check-ui:
     name: UI Pages
     runs-on: ubuntu-latest

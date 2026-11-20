@@ -32,7 +32,7 @@ go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
 make check-docs              # Hugo build of docs/ (shortcodes, templates, relref), then its links and anchors
-make check-ui                # Chromium opens each docs shot on the sind ui demo; a page fault fails
+make check-ui                # Chromium opens each docs shot on the sind ui demo, then 8 tabs at once; a page fault fails
 make test-js                 # node --test on internal/ui/jstest: the page scripts of sind ui
 make lint-ci                 # actionlint on .github/workflows, shellcheck on *.sh
 make audit-ci                # zizmor on the workflows and dependabot.yml (.github/zizmor.yml)

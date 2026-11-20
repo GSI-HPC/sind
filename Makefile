@@ -68,7 +68,7 @@ check-docs: ## Build the docs site into docs/public: a broken shortcode, templat
 docs-shots: build ## Take the sind ui screenshots of the docs into docs/static/ui-shots (needs Chromium)
 	cd tools/screenshots && go run . $(SHOTS_FLAGS) -sind ../../$(BINARY) -out ../../docs/static/ui-shots
 
-check-ui: build ## Open the pages of the sind ui demo in Chromium; a fault of a page fails (needs Chromium)
+check-ui: build ## Open the pages of the sind ui demo in Chromium, then 8 tabs at once; a fault of a page fails (needs Chromium)
 	cd tools/screenshots && go run . $(SHOTS_FLAGS) -sind ../../$(BINARY) -check
 
 test: ## Run unit tests (sandboxed with firejail to catch host leaks)

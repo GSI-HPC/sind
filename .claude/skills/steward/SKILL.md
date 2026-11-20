@@ -70,7 +70,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Design Models | `make check-models`: TLC on the TLA+ models of `spec/tla`; each configuration must give the result in its `\* expect:` line |
 | Docs Lint | `make lint-docs`: markdownlint-cli2 on `docs/content`, on the runner's Node |
 | Docs Build | `make check-docs`: Hugo builds the site, without videos and screenshots; a broken shortcode, template or `relref` fails, and so does a warning. Then `.github/scripts/check-doc-links.py` fails for a link into the site whose page or `#fragment` does not exist; it does not check links to other sites |
-| UI Pages | `make test-js`: the runner's Node runs the tests of the page scripts (`internal/ui/jstest`). Then `make check-ui`: the runner's Chrome opens each shot of `tools/screenshots/shots.yaml` on `sind ui --demo --still`; an uncaught exception, a `console.error`, a failed request or a status of 400 or more fails |
+| UI Pages | `make test-js`: the runner's Node runs the tests of the page scripts (`internal/ui/jstest`). Then `make check-ui`: the runner's Chrome opens each shot of `tools/screenshots/shots.yaml` on `sind ui --demo --still`; an uncaught exception, a `console.error`, a failed request or a status of 400 or more fails. Then it opens 8 tabs at once, 6 of them hidden: a tab that does not show its page fails |
 | Unit Test | `make test` under firejail, writing the coverage profile, then `go vet` and `go test` of `tools/screenshots`, a module of its own |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |

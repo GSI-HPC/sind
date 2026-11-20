@@ -81,6 +81,17 @@ func takeShots(ctx context.Context, o options, l Shots, base string) error {
 	}
 	if o.Check {
 		fmt.Printf("opened %d pages; none reports a fault\n", taken)
+		if len(o.Only) > 0 {
+			return nil
+		}
+		// The first tab, which swapped the token, holds no stream.
+		if err := chromedp.Do(bctx, chromedp.Navigate("about:blank")); err != nil {
+			return err
+		}
+		if err := checkTabs(bctx, root); err != nil {
+			return fmt.Errorf("%d tabs at once: %w", tabsHeld+tabsMore, err)
+		}
+		fmt.Printf("opened %d tabs at once; each shows its page\n", tabsHeld+tabsMore)
 		return nil
 	}
 	fmt.Printf("took %d screenshots into %s\n", taken, o.Out)

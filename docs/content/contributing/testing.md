@@ -200,6 +200,8 @@ A page fails the check when it reports a fault:
 
 The docs workflow takes the screenshots with the same tool, so a fault also fails a screenshot.
 
+After the shots, the check opens 8 tabs at once. A browser opens at most 6 connections to `sind ui`, and each page holds one for its live stream, so a page that is hidden lets its stream go after 10 seconds. The check opens 6 tabs, hides their pages, and opens 2 more: each must show its page and open its stream. A hidden page that keeps its stream fails the check, because the next tab then stays empty. `-only` leaves this part out.
+
 - A new page, tab or dialog gets a shot in `shots.yaml`. The docs can then show it, and the check opens it.
 - To look at one shot, name it: `cd tools/screenshots && go run . -sind ../../sind-linux-amd64 -check -only new-cluster-retry`.
 - Chromium is found as `chromium`, `chromium-browser` or `google-chrome` on `PATH`, or named with `$CHROMIUM`. `SHOTS_FLAGS=-no-sandbox` starts it without its sandbox, as CI does.
