@@ -106,8 +106,11 @@ assert.Empty(t, d.Networks())
 | Create, one call fails | The create rolls back to the realm as it was, or goes on to the cluster of a create without a failure |
 | Create, the daemon goes away | The create fails, and a delete of the cluster returns the realm to what it was. What the create left has no `known_hosts` entry of the cluster without a DNS record of it: a delete of a cluster without containers looks for the records |
 | Delete, one call fails or the daemon goes away | The next delete returns the realm to what it was before the cluster, without a warning. A delete that reports success without a warning has done so itself |
+| Create, the daemon goes away; then delete, one call fails or the daemon goes away | The same as for the delete: two failures, one in each command. `spec/tla/CreateRecover.tla` showed that one failure in each sweep does not find what a create and a delete leave together |
 
 The sweeps run on `fakeDaemon` (`fakedaemon_test.go`), a Docker daemon in memory that keeps the networks, volumes and containers and the files of the mesh. A test thus compares what a run left behind (`state()`), not the calls. Each sweep runs in an empty realm, whose mesh comes and goes with the cluster, and in a realm with another cluster, whose mesh stays. A realm with a monitoring stack is not swept: `spec/tla/DeleteRetry.tla` covers its part of the delete, and `spec/tla/CreateRecover.tla` its part of the create.
+
+The sweep with two failures (`TestCreateDelete_TwoFaultSweep`) runs the deletes once for each state that the creates leave, on a copy of the daemon (`clone`): about 45 states and 1,400 deletes.
 
 A docker call that a change adds to create or delete is swept with no change to the tests. A sweep that fails names the call that failed and the lines of the state that differ.
 

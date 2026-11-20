@@ -100,6 +100,21 @@ func newFakeDocker(t *testing.T) *fakeDaemon {
 	}
 }
 
+// clone returns a daemon that holds a copy of what d holds, without
+// failures and with no call counted: a second run from the same state.
+func (d *fakeDaemon) clone() *fakeDaemon {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := newFakeDocker(d.t)
+	maps.Copy(c.networks, d.networks)
+	maps.Copy(c.volumes, d.volumes)
+	maps.Copy(c.files, d.files)
+	for name, ctr := range d.containers {
+		c.containers[name] = &fakeContainer{labels: ctr.labels, networks: slices.Clone(ctr.networks), running: ctr.running}
+	}
+	return c
+}
+
 // executor returns an executor on the daemon, with docker events that
 // tell nothing.
 func (d *fakeDaemon) executor() *mock.Executor {
