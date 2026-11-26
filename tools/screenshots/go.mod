@@ -3,8 +3,8 @@ module github.com/GSI-HPC/sind/tools/screenshots
 go 1.26.0
 
 require (
-	github.com/chromedp/cdproto v0.160.0
-	github.com/chromedp/chromedp v0.23.0
+	github.com/chromedp/cdproto v0.160.6
+	github.com/chromedp/chromedp v0.24.0
 	go.yaml.in/yaml/v3 v3.0.6
 )
 
