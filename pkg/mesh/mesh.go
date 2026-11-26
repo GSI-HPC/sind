@@ -97,7 +97,8 @@ func dnsFiles(realm string, entries []string) docker.FileContents {
 // Its changes of a mesh file, the Corefile (AddDNSRecords) or the relay's
 // known_hosts (AddKnownHosts), are read-modify-writes: two changes of the
 // same file must not run at once, while changes of different files may, as
-// Create runs AddDNSRecords and AddKnownHosts together. Other sind
+// the delete of a worker runs RemoveDNSRecords and RemoveKnownHosts
+// together. Other sind
 // processes change the files too: callers hold the realm lock
 // (state.LockRealm) while they change the realm.
 type Manager struct {
@@ -507,6 +508,11 @@ func (m *Manager) Created() bool {
 // Docker's "already exists" error then counts as an existing network, so
 // that the caller's failure handling never removes it, and its labels are
 // read again for the address it pins the DNS container to.
+//
+// spec/tla/MeshNetwork.tla is the model of these steps. With the lock, the
+// DNS container of a mesh with a pinned address has that address, and a
+// create that ended well keeps its mesh. Without the lock, the model shows
+// only that a create removes no network that another client created.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	_, err := m.ensureMeshNetwork(ctx)
 	return err

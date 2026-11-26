@@ -97,6 +97,25 @@ func sweepRealm(t *testing.T, other bool) *fakeDaemon {
 	return d
 }
 
+// hostsWithoutRecords returns the known_hosts entries of the cluster in a
+// state whose mesh DNS has no record of the cluster. A delete of the
+// cluster, once its containers are gone, looks only for the records, and
+// would not find these entries (KnownHasRecords in
+// spec/tla/CreateRecover.tla, here on the code).
+func hostsWithoutRecords(state []string, cluster string) []string {
+	domain := "." + dnsSearchDomain(cluster, mesh.DefaultRealm)
+	var hosts []string
+	for _, line := range state {
+		switch {
+		case strings.Contains(line, "/Corefile: ") && strings.HasSuffix(line, domain):
+			return nil
+		case strings.Contains(line, "/known_hosts: ") && strings.Contains(line, domain+" "):
+			hosts = append(hosts, line)
+		}
+	}
+	return hosts
+}
+
 // first returns the first of the calls that failed, shortened.
 func first(failed []string) string {
 	call, _, _ := strings.Cut(failed[0], "\n")
@@ -106,7 +125,9 @@ func first(failed []string) string {
 // A create in which one docker call fails, whichever it is, either rolls
 // back to the realm as it was, or goes on to the cluster of a create
 // without a failure. A create that loses the daemon at any call fails, and
-// a delete of the cluster then returns the realm to what it was.
+// a delete of the cluster then returns the realm to what it was. What such
+// a create leaves has no known_hosts entry of the cluster without a DNS
+// record of it (hostsWithoutRecords).
 //
 // The calls of a create run in part at the same time, so the k-th call is
 // not the same in every run: each run of the test sweeps the calls in
@@ -143,6 +164,7 @@ func TestCreate_FaultSweep(t *testing.T) {
 				_, err = sweepCreate(t, d, "dev", sweepWait)
 				what := fmt.Sprintf("the daemon is gone from call %d on (%s)", k, first(d.heal()))
 				require.ErrorContains(t, err, errFault.Error(), what)
+				assert.Empty(t, hostsWithoutRecords(d.state(), "dev"), "%s: known_hosts entries without a DNS record", what)
 				_, err = sweepDelete(t, d, "dev")
 				require.NoError(t, err, "%s: the delete after it", what)
 				assert.Empty(t, stateDiff(before, d.state()), "%s: the delete after it", what)
@@ -201,6 +223,75 @@ func TestDelete_FaultSweep(t *testing.T) {
 				}
 			}
 			assert.Positive(t, swept, "some calls failed")
+		})
+	}
+}
+
+// A create that loses the daemon at any call, and then a delete in which
+// one call fails, or that loses the daemon as well, leave a realm that the
+// next delete returns to what it was before the cluster, without a
+// warning: a failure in each of two commands, where the sweeps above have
+// one. It is CleanAfterSuccess of spec/tla/CreateRecover.tla on the code,
+// which found known_hosts entries that no delete removed.
+//
+// The delete is swept once for each state that the creates leave: a create
+// that loses the daemon at a call that only reads leaves the state of the
+// call before.
+func TestCreateDelete_TwoFaultSweep(t *testing.T) {
+	for _, realm := range sweepRealms {
+		t.Run(realm.name, func(t *testing.T) {
+			d := sweepRealm(t, realm.other)
+			before, start := d.state(), d.count()
+			_, err := sweepCreate(t, d, "dev", 0)
+			require.NoError(t, err)
+			calls := d.count() - start
+
+			left := map[string]bool{}
+			swept := 0
+			for k := 1; k <= calls; k++ {
+				d := sweepRealm(t, realm.other)
+				d.failAt(k, true)
+				_, err := sweepCreate(t, d, "dev", sweepWait)
+				lost := d.heal()
+				if len(lost) == 0 {
+					continue // this run made fewer calls
+				}
+				require.ErrorContains(t, err, errFault.Error())
+				state := strings.Join(d.state(), "\n")
+				if left[state] {
+					continue
+				}
+				left[state] = true
+
+				for j, more := 1, true; more; j++ {
+					more = false
+					for _, onward := range []bool{false, true} {
+						d := d.clone()
+						d.failAt(j, onward)
+						warned, err := sweepDelete(t, d, "dev")
+						failed := d.heal()
+						if len(failed) == 0 {
+							continue // the delete made fewer calls
+						}
+						more = true
+						swept++
+						what := fmt.Sprintf("the create lost the daemon at call %d (%s), call %d of the delete fails (%s)", k, first(lost), j, first(failed))
+						if onward {
+							what += ", and every call after it"
+						}
+						if err == nil && warned == 0 {
+							assert.Empty(t, stateDiff(before, d.state()), "%s: the delete reported success", what)
+						}
+						warned, err = sweepDelete(t, d, "dev")
+						require.NoError(t, err, "%s: the next delete", what)
+						assert.Zero(t, warned, "%s: the next delete", what)
+						assert.Empty(t, stateDiff(before, d.state()), "%s: the next delete", what)
+					}
+				}
+			}
+			assert.Greater(t, len(left), 1, "the creates leave more than one state")
+			assert.Positive(t, swept, "some calls of the deletes failed")
+			t.Logf("%d states of a create that lost the daemon, %d deletes with a failure", len(left), swept)
 		})
 	}
 }

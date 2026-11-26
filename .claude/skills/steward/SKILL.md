@@ -46,8 +46,11 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
    `MUTATION_PACKAGES=<pkg> make mutation` and add a test for each mutant in the new
    code that lived, or say in the PR why the changed code is as right as the old.
 9. If the change touches the readiness wait (`internal/probe`, the broadcast loop of
-   `internal/monitor`), the realm lock (`pkg/state/daemonlock.go`) or the delete of a
-   cluster (`pkg/cluster/delete.go`): change the TLA+ model in `spec/tla` with it, and
+   `internal/monitor`), the realm lock (`pkg/state/daemonlock.go`), the mesh network
+   and its DNS container (`ensureMeshNetwork` and `ensureDNS` of `pkg/mesh/mesh.go`,
+   and what `pkg/cluster/create.go` does with `Created`), the steps of a create that
+   make something a delete removes (`Create`, `createResources`, `registerNodes`) or the
+   delete of a cluster (`pkg/cluster/delete.go`): change the TLA+ model in `spec/tla` with it, and
    run `make check-models` (Java 11 or later). See "Design models" in
    `docs/content/contributing/testing.md`.
 
@@ -100,6 +103,14 @@ seeds.
 - A leftover that the Integration Test job names after the tests passed is a test
   without `t.Cleanup`, or a delete that leaves a resource behind: find which test made
   it by the realm in its name (`it-<prefix>-<id>`), and fix the cause.
+- `TestDeleteAfterKilledCreate` and `TestDeleteAfterKilledDelete` (Integration Test)
+  kill `sind create cluster` and `sind delete cluster` when a line of their plain
+  progress appears (the start of a step, a wait); a step or a wait that is renamed
+  changes `killPoints` or `deleteKillLines` of the tests too. When the delete after a
+  kill leaves something, the test has found what a killed sind leaves and
+  `sind delete cluster` does not remove: the log of the subtest has the progress lines
+  of the killed command and what it left, and the failure names what the delete left.
+  It is a defect to fix, in the delete or in the order of the create, not a flake.
 - Integration Test fetches sources while building the image: the Slurm, UCX, PMIx,
   PRRTE and Open MPI tarballs, and a `git clone` of libjwt from github.com. A failure in
   that build step with a network error on any source fetch of the Dockerfile (e.g.

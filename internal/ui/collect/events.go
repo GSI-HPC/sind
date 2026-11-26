@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/execopt"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -126,7 +127,9 @@ var errStreamEnded = errors.New("stream ended")
 // ends, which it reports as an error, or ctx does. The error of a stream
 // whose docker command failed says why, in docker's words.
 func (e *Events) stream(ctx context.Context) error {
-	proc, err := e.Docker.Start(ctx, EventsArgs()...)
+	// docker events does not end with its reader, so the kernel ends it
+	// with this process.
+	proc, err := e.Docker.Start(execopt.WithDiesWithParent(ctx), EventsArgs()...)
 	if err != nil {
 		return err
 	}

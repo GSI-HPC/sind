@@ -104,12 +104,19 @@ assert.Empty(t, d.Networks())
 | Run | What must hold |
 |-----|----------------|
 | Create, one call fails | The create rolls back to the realm as it was, or goes on to the cluster of a create without a failure |
-| Create, the daemon goes away | The create fails, and a delete of the cluster returns the realm to what it was |
+| Create, the daemon goes away | The create fails, and a delete of the cluster returns the realm to what it was. What the create left has no `known_hosts` entry of the cluster without a DNS record of it: a delete of a cluster without containers looks for the records |
 | Delete, one call fails or the daemon goes away | The next delete returns the realm to what it was before the cluster, without a warning. A delete that reports success without a warning has done so itself |
+| Create, the daemon goes away; then delete, one call fails or the daemon goes away | The same as for the delete: two failures, one in each command. `spec/tla/CreateRecover.tla` showed that one failure in each sweep does not find what a create and a delete leave together |
 
-The sweeps run on `fakeDaemon` (`fakedaemon_test.go`), a Docker daemon in memory that keeps the networks, volumes and containers and the files of the mesh. A test thus compares what a run left behind (`state()`), not the calls. Each sweep runs in an empty realm, whose mesh comes and goes with the cluster, and in a realm with another cluster, whose mesh stays. A realm with a monitoring stack is not swept: `spec/tla/DeleteRetry.tla` covers its part of the delete.
+The sweeps run on `fakeDaemon` (`fakedaemon_test.go`), a Docker daemon in memory that keeps the networks, volumes and containers and the files of the mesh. A test thus compares what a run left behind (`state()`), not the calls. Each sweep runs in an empty realm, whose mesh comes and goes with the cluster, and in a realm with another cluster, whose mesh stays. A realm with a monitoring stack is not swept: `spec/tla/DeleteRetry.tla` covers its part of the delete, and `spec/tla/CreateRecover.tla` its part of the create.
+
+The sweep with two failures (`TestCreateDelete_TwoFaultSweep`) runs the deletes once for each state that the creates leave, on a copy of the daemon (`clone`): about 45 states and 1,400 deletes.
 
 A docker call that a change adds to create or delete is swept with no change to the tests. A sweep that fails names the call that failed and the lines of the state that differ.
+
+The integration test `TestDeleteAfterKilledCreate` (`cmd/sind`) checks the same rule on a real daemon. It starts `sind create cluster --progress plain` as a process and kills it with SIGKILL at 7 points, one after the other and each in a realm of its own: 1 and 3 seconds after its start, and when a line of the progress appears: the start of the step `nodes`, the wait for the controller to boot, the start of the step `mesh registration`, and the two waits of the step `slurm`. A line gives the same point on a fast and on a slow runner, where a time does not. Then it runs `sind delete cluster`. The delete must succeed, and once it reports no warning, Docker holds no container, network or volume with the label of the realm. A real daemon adds what the fake one does not have: the docker calls of the killed create are processes of their own, and the containers that it started still run. When a subtest fails, its log has the progress lines of the create and what the create left. On Linux the test also fails when a docker call of the killed create still runs after the delete: `docker events` of the readiness watcher does not end with its reader, so sind has the kernel end it (`execopt.WithDiesWithParent`).
+
+`TestDeleteAfterKilledDelete` does the same for a delete. In a realm with a second cluster, which keeps the mesh, it kills `sind delete cluster` at the start of each of its steps (`mesh deregistration`, `nodes`, `network`, `volumes`) and runs it again. Once the delete reports no warning, the cluster has no container, network or volume, and no DNS record or `known_hosts` entry on the mesh. Then it kills the delete of the second cluster when it starts to remove the mesh, and the next delete must leave the realm empty. It is the rule of `spec/tla/DeleteRetry.tla` on a real daemon.
 
 ## Simulating missing resources
 
@@ -212,6 +219,10 @@ A script whose functions take and give plain values has tests that Node runs wit
 
 `nodeset.js` reads and writes node sets in the pages; the CLI reads them with go-nodeset. Both have the same cases, in `internal/ui/nodefold/testdata/nodesets.json`: `nodeset.test.js` checks the script, and `TestSharedNodeSets` of `internal/ui/nodefold` checks go-nodeset. A node set that a page writes names the same nodes for the CLI, and so does a text that a person types in a page. A change to how `nodeset.js` reads or writes a node set adds its case to this file.
 
+`gantt.js` draws the summary and the timeline of the run page from the data of the run, once a frame, and puts no function on `window`. `gantt.test.js` gives it a document in memory, draws one frame for the data of a run at a time of its clock, and reads the texts and the classes of the elements: the headline, the counts, the note, the time left, the rows, and the labels of the axis. It also sends the clicks and the key that open a step and change the range of the axis. The document, `dom.js`, has the elements, attributes and selectors that the script uses, and no layout. It is not a browser: `make check-ui` opens the run page in one. A change to what the run page says for a run changes this test.
+
+The server and `gantt.js` each write the text of a duration and of a size, and a page shows both. They have the same cases, in `internal/ui/testdata/runtexts.json`: `gantt.test.js` checks the script, and `TestSharedRunTexts` of `internal/ui` checks `runDur` and `runBytes`. A change to how one of them writes a duration or a size adds its case to this file.
+
 ## Fuzz tests
 
 A function that reads text sind did not write has a fuzz target, a `FuzzXxx` function in the `fuzz_test.go` of its package: a cluster configuration, a `slurm.conf` or `sind-nodes.conf` that a user changed, the output of Docker and of Slurm's commands, what an image prints, an editor's MCP configuration, a node argument. A target states what holds for every input: at least that the function does not panic, and where there is one, a property of the result, such as "a configuration that validates reads back as the same cluster".
@@ -285,7 +296,9 @@ Some rules of sind are about every order in which steps can run, fail and run ag
 |---|---|---|
 | `ReadinessCache.tla` | `internal/probe` (`untilReady`), `internal/monitor` (`broadcastLoop`) | When a wait says "ready", every probe holds, with events that are dropped, a monitor that attaches late and a monitor that stops |
 | `RealmLock.tla` | `pkg/state` (`lockDaemon`) | No two clients change a realm at once, with clients on two hosts that can be killed at any time |
+| `MeshNetwork.tla` | `pkg/mesh` (`ensureMeshNetwork`, `ensureDNS`), `pkg/cluster` (`CreateInRealm`, the rollback of `Create`) | A create removes only a mesh network that it created; the DNS container of a mesh with a pinned address has that address; a cluster whose create ended well keeps its mesh. With steps that fail and clients that are killed. The last two rules need the realm lock, which two configurations show |
 | `DeleteRetry.tla` | `pkg/cluster` (`deleteClusterResources`) | A delete that reports success leaves nothing of the cluster, with steps that fail, a process that is killed, and a second run |
+| `CreateRecover.tla` | `pkg/cluster` (`Create` and its rollback, `registerNodes`), with the steps of `DeleteRetry.tla` | A delete, or the rollback of a create, that reports success leaves nothing of the cluster, whatever a create that failed or was killed left before. The rule needs the DNS records of a create before its `known_hosts` entries, which one configuration shows |
 
 Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC must give in a comment:
 
@@ -293,6 +306,16 @@ Each model has configurations, `<Model>.<name>.cfg`, with the result that TLC mu
 - `\* expect: <Invariant> is violated`: a design that the model rules out, such as a realm lock removed by its name. It must go on to fail: that shows that the model still finds the defect, and records why the code is as it is.
 
 When you change code that a model describes, change the model with it. When TLC reports a violation, it prints the steps that lead to it: run `spec/tla/check.sh` and read the trace of the configuration that failed. The script needs Java 11 or later. It fetches the release of the TLA+ tools that it pins and checks its sha256, or uses the `tla2tools.jar` that `TLA2TOOLS` names.
+
+## Comparisons with Slurm
+
+sind reads text in forms that Slurm defines. An integration test can compare how sind reads such a text with how Slurm reads it, in the node image:
+
+| Test | sind | Slurm |
+|---|---|---|
+| `TestNodeSetsAsSlurmReadsThem` (`cmd/sind`) | The nodes of a node argument (`parseNodeArgs`, with go-nodeset) | `scontrol show hostnames` |
+
+The test has a list of node sets that both read alike, 300 more from a fixed seed, and a list of the node sets that the two are known to read differently, with the nodes of each. A difference that ends fails the test too, so the list stays true. sind also takes what Slurm does not, such as steps and the operators of a node set; the test has none of these.
 
 ## Integration test prerequisites
 

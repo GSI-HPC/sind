@@ -677,7 +677,8 @@ func runAmount(s store.Span) string {
 	return fmt.Sprintf("%d %s", s.Amount, s.Unit)
 }
 
-// runBytes writes a size in decimal units, as docker does.
+// runBytes writes a size in decimal units, as docker does. The script of
+// the run page writes the same text (TestSharedRunTexts).
 func runBytes(n int64) string {
 	if n < 1000 {
 		return fmt.Sprintf("%d B", max(n, 0))
@@ -690,10 +691,12 @@ func runBytes(n int64) string {
 		f /= 1000
 		i++
 	}
-	if math.Round(f*10) < 100 {
-		return fmt.Sprintf("%.1f %s", f, units[i])
+	// Half of the last digit rounds up, as in the script of the run page
+	// (gantt.js): 1,250 B reads 1.3 kB in both.
+	if tenths := int64(math.Round(f * 10)); tenths < 100 {
+		return fmt.Sprintf("%d.%d %s", tenths/10, tenths%10, units[i])
 	}
-	return fmt.Sprintf("%.0f %s", f, units[i])
+	return fmt.Sprintf("%d %s", int64(math.Round(f)), units[i])
 }
 
 // runSpanPct is the part of its work that a span has done, in percent and
