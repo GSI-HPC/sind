@@ -21,6 +21,9 @@ type Target struct {
 	Managed     bool // sind manages Slurm on the node (the sind.managed label)
 	Container   docker.ContainerName
 	ContainerID docker.ContainerID // the full ID, which names the node's cgroup
+	// SlurmVersion is the cluster's Slurm version (the sind.slurm.version
+	// label), empty when the node has none.
+	SlurmVersion string
 }
 
 // Check is a health probe of a Slurm daemon on a node.

@@ -32,7 +32,8 @@ var statusLinePattern = regexp.MustCompile(`^HTTP/1\.[01] ([0-9]{3})\b`)
 
 // HTTPStatus returns the status line a daemon on the node answers a GET
 // request for path on port with, and whether its code is 2xx: /livez and
-// /readyz answer 204, the metrics endpoints 200.
+// /readyz answer 204, and 200 from Slurm 26.11 on, the metrics endpoints
+// 200.
 func HTTPStatus(ctx context.Context, client *docker.Client, name docker.ContainerName, port, path string) (line string, ok bool, err error) {
 	stdout, err := client.Exec(ctx, name, "bash", "-c", httpStatusScript, "bash", port, path)
 	if err != nil {

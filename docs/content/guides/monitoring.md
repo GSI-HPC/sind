@@ -105,7 +105,7 @@ There is no login: every visitor is an anonymous org Editor, who can use Explore
 | Resource use | CPU, memory, processes and disk I/O of each node's container, of each systemd unit in it and of each job | the nodes' cgroups on the host, every 15 s |
 | Logs | Each node's whole journal: the Slurm daemons, MariaDB, systemd and every other unit | the node's persistent journal |
 
-Every series and log line has the labels `realm`, `cluster`, `node` and `role`. Logs also have `unit` and `level`. The Slurm daemons and MariaDB log every line at journal priority info, so sind reads the level from the message: a slurmctld `error: ...` line has `level="err"`, a MariaDB `[Warning]` line `level="warning"`. Resource series have `unit` for a systemd unit's cgroup and `job_id` for a job's.
+Every series and log line has the labels `realm`, `cluster`, `node` and `role`. Slurm metrics also have `slurm_version`, the cluster's Slurm version. Logs also have `unit` and `level`. The Slurm daemons and MariaDB log every line at journal priority info, so sind reads the level from the message: a slurmctld `error: ...` line has `level="err"`, a MariaDB `[Warning]` line `level="warning"`. Resource series have `unit` for a systemd unit's cgroup and `job_id` for a job's.
 
 A standby slurmctld redirects the metrics to the controller in control, so on a cluster with a [backup controller]({{< relref "/guides/controller-failover" >}}) the scrape's `up` is 1 only on the controller in control.
 
@@ -213,5 +213,5 @@ The stack's images come from Docker Hub; a runner that cannot reach it needs the
 
 - Anyone who reaches the mesh is a Grafana org Editor and reads everything that the stack holds: local users of the host, jobs on the nodes, and web pages that a browser on the host opens. A page reaches the stack by its address or by DNS rebinding, and needs no answer to write: it can add series to Prometheus through its remote-write receiver, add log lines to Loki, and stop Loki with `/ingester/shutdown`, which `sind get monitoring` then shows and `sind power on` repairs. Loki refuses deletes. Browsers that ask before a page reaches a local network, such as Chrome from version 142, ask first. Prometheus and Loki have no authentication. The stack is a development tool: do not browse untrusted pages on a host where it holds data that matters.
 - Grafana, Prometheus and Loki get 1 GB of memory each, Alloy 512 MB.
-- Slurm reports memory in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in its metric names says.
+- Slurm 26.05 reports the node memory of its metrics, such as `slurm_node_memory_bytes`, in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in the names says. Slurm 26.11 and later report bytes. The dashboards show bytes for both. In a query of your own, multiply by 1048576 the series whose `slurm_version` is a 26.05 release. Slurm reports the memory of jobs and partitions in MiB in every release.
 - Job history, such as efficiency and timelines as `sacct` shows them, is not collected: no metric carries accounting data.

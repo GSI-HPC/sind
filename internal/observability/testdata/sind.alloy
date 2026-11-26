@@ -10,7 +10,7 @@ prometheus.remote_write "local" {
 
 prometheus.scrape "slurm_jobs" {
   targets = [
-    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller" },
+    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller", "slurm_version" = "26.11.0" },
   ]
   job_name         = "slurm_jobs"
   metrics_path     = "/metrics/jobs"
@@ -21,7 +21,7 @@ prometheus.scrape "slurm_jobs" {
 
 prometheus.scrape "slurm_nodes" {
   targets = [
-    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller" },
+    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller", "slurm_version" = "26.11.0" },
   ]
   job_name         = "slurm_nodes"
   metrics_path     = "/metrics/nodes"
@@ -32,7 +32,7 @@ prometheus.scrape "slurm_nodes" {
 
 prometheus.scrape "slurm_partitions" {
   targets = [
-    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller" },
+    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller", "slurm_version" = "26.11.0" },
   ]
   job_name         = "slurm_partitions"
   metrics_path     = "/metrics/partitions"
@@ -43,7 +43,7 @@ prometheus.scrape "slurm_partitions" {
 
 prometheus.scrape "slurm_scheduler" {
   targets = [
-    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller" },
+    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller", "slurm_version" = "26.11.0" },
   ]
   job_name         = "slurm_scheduler"
   metrics_path     = "/metrics/scheduler"
@@ -54,7 +54,7 @@ prometheus.scrape "slurm_scheduler" {
 
 prometheus.scrape "slurm_users" {
   targets = [
-    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller" },
+    { "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller", "slurm_version" = "26.11.0" },
   ]
   job_name         = "slurm_users"
   metrics_path     = "/metrics/jobs-users-accts"

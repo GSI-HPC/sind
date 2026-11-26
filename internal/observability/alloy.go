@@ -84,7 +84,8 @@ func nodeLabels(t Target) []string {
 //   - prometheus.scrape of slurmctld's metrics endpoints on every managed
 //     controller, by container name on the mesh network, without following
 //     redirects: a standby controller answers 303, so up is 1 only on the
-//     controller in control;
+//     controller in control; its series carry the cluster's
+//     slurm_version;
 //   - prometheus.exporter.blackbox with the Slurm daemon probes of
 //     Collect;
 //   - prometheus.exporter.cadvisor on the nodes' cgroups, read from the
@@ -127,6 +128,17 @@ func GenerateAlloyConfig(realm, cgroupDriver string, targets []Target) string {
 	return w.b.String()
 }
 
+// slurmLabels returns the labels of the series scraped from a controller's
+// slurmctld: the node's, and slurm_version when the target has one, as
+// the unit of some metrics depends on it (see slurmMemory).
+func slurmLabels(t Target) []string {
+	labels := nodeLabels(t)
+	if t.SlurmVersion != "" {
+		labels = append(labels, "slurm_version", t.SlurmVersion)
+	}
+	return labels
+}
+
 // writeSlurmScrapes writes a scrape of each slurmctld endpoint over the
 // targets with SlurmMetrics, none without such a target.
 func writeSlurmScrapes(w *alloyWriter, targets []Target) {
@@ -145,7 +157,7 @@ func writeSlurmScrapes(w *alloyWriter, targets []Target) {
 		w.line("targets = [")
 		w.indent++
 		for _, t := range controllers {
-			w.line("%s,", labelMap(append([]string{"__address__", string(t.Container) + ":" + slurm.SlurmctldPort}, nodeLabels(t)...)...))
+			w.line("%s,", labelMap(append([]string{"__address__", string(t.Container) + ":" + slurm.SlurmctldPort}, slurmLabels(t)...)...))
 		}
 		w.indent--
 		w.line("]")
