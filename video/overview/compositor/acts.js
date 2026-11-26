@@ -184,8 +184,9 @@
     const gp = g.play("grafana", "end", { beats: { grafana: { cap: ["grafana", "The Slurm dashboards of the cluster, in Grafana."] } }, cursor: false, lead: 0.3 });
     if (!gp) V.hold(0.5);
     // images
-    const rel = (REC.slurm || ["26.05", "25.11"]);
-    V.cap(V.t, ["images", `Slurm ${rel.join(" and ")}, on amd64 and arm64. CVMFS on request.`]);
+    const rel = (REC.slurm || ["26.11", "26.05", "25.11"]);
+    const lines = rel.length > 1 ? `${rel.slice(0, -1).join(", ")} and ${rel[rel.length - 1]}` : rel[0];
+    V.cap(V.t, ["images", `Slurm ${lines}, on amd64 and arm64. CVMFS on request.`]);
     const i0 = V.t;
     const chips = rel.map(r => `<span class="chip">sind-node:${r}</span>`).join("") + '<span class="chip">linux/amd64</span><span class="chip">linux/arm64</span>';
     V.hold(7);

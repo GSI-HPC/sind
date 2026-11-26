@@ -33,7 +33,7 @@ sind create cluster --config cluster.yaml
 {{< /ui >}}
 {{< /ways >}}
 
-slurmrestd comes with the Slurm 26.05 images, such as the default image and the `26.05` tag. The 25.11 images have none: `sind create cluster` then fails with the image's name. Without a db node, the API serves only the `/slurm/` endpoints; with a managed one, also the `/slurmdb/` endpoints for accounting.
+slurmrestd comes with the images of Slurm 26.05 and later, such as the default image and the `26.11` and `26.05` tags. The 25.11 images have none: `sind create cluster` then fails with the image's name. Without a db node, the API serves only the `/slurm/` endpoints; with a managed one, also the `/slurmdb/` endpoints for accounting.
 
 sind starts slurmrestd on the api node and sets up JWT authentication for it: a key, `/etc/slurm/jwt_hs256.key`, readable only by `slurm`, and `AuthAltTypes=auth/jwt` with `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key` in `slurm.conf` and `slurmdbd.conf`. `sind get cluster` lists `slurmrestd` on the api node, and `sind logs api slurmrestd` shows its log.
 
@@ -80,7 +80,7 @@ curl -s -X POST -H "X-SLURM-USER-NAME: root" -H @<(echo "X-SLURM-USER-TOKEN: $TO
   $API/slurm/v0.0.45/job/submit
 ```
 
-`/openapi/v3` describes every endpoint of the cluster's Slurm version. `v0.0.45` is the newest version of the data format in Slurm 26.05; slurmrestd serves the older ones too.
+`/openapi/v3` describes every endpoint of the cluster's Slurm version. The examples use `v0.0.45`, the newest version of the data format in Slurm 26.05, which Slurm 26.11 serves too; 26.11 adds `v0.0.46`. slurmrestd serves older versions too, back to `v0.0.43` in 26.11.
 
 ## Tokens for users
 

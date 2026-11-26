@@ -28,7 +28,8 @@ import (
 )
 
 // restVersion is the data format version of the REST requests: the newest
-// of Slurm 26.05, the first release line whose images have slurmrestd.
+// of Slurm 26.05, the first release line whose images have slurmrestd,
+// which Slurm 26.11 serves too.
 const restVersion = "v0.0.45"
 
 // apiCluster creates a cluster with an api node from the config body

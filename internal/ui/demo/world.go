@@ -99,11 +99,11 @@ func NewWorld() *World {
 	return &World{nextNet: 18, published: map[string]bool{}}
 }
 
-// The Slurm versions of the images of the demo clusters: the releases
-// that docker-bake.hcl builds the official images of, newest line first.
-// The docs take their screenshots from the demo.
+// The Slurm versions of the images of the demo clusters: the newest and
+// the oldest of the releases that docker-bake.hcl builds the official
+// images of. The docs take their screenshots from the demo.
 const (
-	slurmNew = "26.05.6"
+	slurmNew = "26.11.0"
 	slurmOld = "25.11.9"
 )
 

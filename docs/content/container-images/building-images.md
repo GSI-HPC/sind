@@ -13,7 +13,8 @@ sind publishes a multi-role node image for each supported Slurm release line to 
 
 | Slurm release line | Image tags |
 |--------------------|------------|
-| 26.05 | `latest`, `26.05`, `26.05.6` |
+| 26.11 | `latest`, `26.11`, `26.11.0` |
+| 26.05 | `26.05`, `26.05.6` |
 | 25.11 | `25.11`, `25.11.9` |
 
 - `latest` is the newest release line. sind built from a commit between releases or from a modified tree uses it when `defaults.image` is not specified.
@@ -59,7 +60,7 @@ Every official image:
 - Sends MariaDB's error log to the journal (`skip-log-error` in `/etc/my.cnf.d/mariadb-sind.cnf`), so `sind logs db mariadb` shows MariaDB's own messages, as `sind logs db slurmdbd` does slurmdbd's
 - Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
 - Includes nss_slurm, Slurm's NSS module for job users, as `/usr/lib64/libnss_slurm.so.2`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x, and the `serializer/json` plugin they need, built with json-c; and `sackd`, Slurm's authentication daemon for login nodes
-- From Slurm 26.05 on, includes slurmrestd, Slurm's REST API daemon, built with Rocky Linux's llhttp, with its JWT plugin and a `slurmrestd` user to run it as. Slurm 25.11 builds slurmrestd only with the archived nodejs http-parser, which Rocky Linux 10 does not package, so the 25.11 images have none. The same HTTP parser lets slurmctld and slurmd of the 26.05 images serve the HTTP endpoints [monitoring]({{< relref "/guides/monitoring" >}}) uses, so only they can be monitored
+- From Slurm 26.05 on, includes slurmrestd, Slurm's REST API daemon, built with Rocky Linux's llhttp, with its JWT plugin and a `slurmrestd` user to run it as. Slurm 25.11 builds slurmrestd only with the archived nodejs http-parser, which Rocky Linux 10 does not package, so the 25.11 images have none. The same HTTP parser lets slurmctld and slurmd of the 26.05 and later images serve the HTTP endpoints [monitoring]({{< relref "/guides/monitoring" >}}) uses, so only they can be monitored
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1), with the journal capped at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 

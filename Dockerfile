@@ -170,8 +170,8 @@ FROM builder-base AS slurm-builder
 # Every RUN after an ARG sees it, so a new value invalidates its cache. The
 # packages come first, so they survive Slurm, PMIx and libjwt bumps and
 # install while PMIx and libjwt build.
-# llhttp (CRB) is the HTTP parser slurmrestd needs. Slurm 26.05 builds
-# slurmrestd with it; 25.11 only knows the archived nodejs http-parser,
+# llhttp (CRB) is the HTTP parser slurmrestd needs. Slurm 26.05 and later
+# build slurmrestd with it; 25.11 only knows the archived nodejs http-parser,
 # which Rocky 10 does not package, so its images have no slurmrestd.
 RUN dnf -y install \
         jansson-devel \

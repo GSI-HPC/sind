@@ -25,7 +25,7 @@
       link: usage/node-arguments
     - icon: layers
       title: Multiple Slurm versions
-      text: Official node images for Slurm 26.05 and 25.11 on linux/amd64 and linux/arm64 — or bring your own.
+      text: Official node images for Slurm 26.11, 26.05 and 25.11 on linux/amd64 and linux/arm64 — or bring your own.
       link: container-images
 - name: Slurm services
   blurb: The daemons and integrations a production site runs.
@@ -36,7 +36,7 @@
       link: configuration/node-definitions#database-node
     - icon: api
       title: REST API
-      text: slurmrestd on an api node with JWT authentication, for portals, workflow engines and tests (Slurm 26.05).
+      text: slurmrestd on an api node with JWT authentication, for portals, workflow engines and tests (Slurm 26.05 and later).
       link: guides/rest-api
     - icon: users
       title: Users and identity
@@ -48,7 +48,7 @@
       link: guides/cvmfs
     - icon: chart
       title: Monitoring
-      text: An opt-in Prometheus, Loki and Grafana stack per realm collects Slurm's metrics, the nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05).
+      text: An opt-in Prometheus, Loki and Grafana stack per realm collects Slurm's metrics, the nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05 and later).
       link: guides/monitoring
 - name: Workflow
   blurb: Built for automation, pleasant by hand.

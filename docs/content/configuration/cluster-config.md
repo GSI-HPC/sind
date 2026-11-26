@@ -91,7 +91,7 @@ nodes:
 
   - role: db
 
-  - role: api                    # slurmrestd, Slurm 26.05 images only
+  - role: api                    # slurmrestd, Slurm 26.05 and later images
 
   - role: submitter
 
@@ -284,7 +284,7 @@ The `slurm.conf` parameters are set unless the [`main` section](#slurm-section) 
 monitoring: true    # default: false
 ```
 
-`sind create cluster --monitoring` does the same, also on top of a config; `--monitoring=false` does not turn off `monitoring: true`. The setting is fixed for the cluster's life, and workers added with `sind create worker` follow it. It needs a managed cluster and images with Slurm 26.05 or later and its HTTP parser plugin, as the official 26.05 images have; `sind create cluster` checks the images before it creates any node. On a monitored cluster sind sets `MetricsType=metrics/openmetrics` in `slurm.conf`, unless the [`main` section](#slurm-section) sets it, and every node mounts its journal directory from the realm's volume `<realm>-journal`. See [Monitoring]({{< relref "/guides/monitoring" >}}).
+`sind create cluster --monitoring` does the same, also on top of a config; `--monitoring=false` does not turn off `monitoring: true`. The setting is fixed for the cluster's life, and workers added with `sind create worker` follow it. It needs a managed cluster and images with Slurm 26.05 or later and its HTTP parser plugin, as the official images of 26.05 and later have; `sind create cluster` checks the images before it creates any node. On a monitored cluster sind sets `MetricsType=metrics/openmetrics` in `slurm.conf`, unless the [`main` section](#slurm-section) sets it, and every node mounts its journal directory from the realm's volume `<realm>-journal`. See [Monitoring]({{< relref "/guides/monitoring" >}}).
 
 ## Slurm section
 
