@@ -67,7 +67,7 @@ jobs:
         run: make lint-ci
 
       - name: Install zizmor
-        run: pipx install zizmor==1.32.0
+        run: pipx install zizmor==1.33.1
 
       # With the token, zizmor also asks GitHub about each action that the
       # workflows use: known vulnerabilities, and the commit behind a pin.
@@ -127,7 +127,7 @@ jobs:
       - name: Install Hugo
         uses: peaceiris/actions-hugo@d1c81a15d4e6dca7086a17b9c2565cb70fd576bf # v3.3.0
         with:
-          hugo-version: "0.169.0"
+          hugo-version: "0.170.1"
 
       - name: Build the docs
         run: make check-docs
@@ -248,7 +248,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
 
   # The go line of go.mod is the oldest Go a library caller may build sind
   # with; the toolchain line, which the other jobs use, does not reach
@@ -447,5 +447,5 @@ jobs:
       # publishing, so a broken config fails here instead of at release.
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.20.2
+          version: v2.20.3
           args: release --snapshot --clean
