@@ -24,7 +24,7 @@ import (
 const (
 	AlloyImage      = "grafana/alloy:v1.22.0"
 	PrometheusImage = "prom/prometheus:v3.16.0"
-	LokiImage       = "grafana/loki:3.7.10"
+	LokiImage       = "grafana/loki:3.7.11"
 	GrafanaImage    = "grafana/grafana:13.3.2"
 )
 
