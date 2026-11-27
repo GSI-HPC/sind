@@ -16,7 +16,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 ## Supported Versions
 
 - Slurm 26.05 and 25.11 (one node image per release line)
-- OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.22)
+- OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.23)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 - llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
 - Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.22, Prometheus 3.16, Loki 3.7 and Grafana 13.3, pinned in `internal/observability`
@@ -662,7 +662,7 @@ dev      5      26.05.6
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.1", "interface": "web UI",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.2", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
   "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.6",
@@ -1557,7 +1557,7 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
-| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.1` |
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.3.2` |
 | Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.16.0` |
 | Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.10` |
 | Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.22.0` |
