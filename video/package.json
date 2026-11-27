@@ -14,7 +14,7 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "gsap": "^3.15.1",
-    "hyperframes": "0.9.72",
+    "hyperframes": "0.9.88",
     "puppeteer-core": "^25.18.1"
   },
   "overrides": {
