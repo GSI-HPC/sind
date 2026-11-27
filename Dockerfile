@@ -85,8 +85,11 @@ FROM builder-base AS pmix-builder
 
 ARG PMIX_VERSION=6.1.0
 
+# PMIx dropped its v6 series and removed the v6 release tarballs from GitHub.
+# Spack's source cache keeps pmix-6.1.0.tar.bz2 under its sha256, the same
+# file that this checksum pinned from the GitHub release.
 ADD --checksum=sha256:bb9021c8e100a376f5070ecca727f83a29b5f652dfe381793b88daa79a3b98a2 \
-    https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2 \
+    https://mirror.spack.io/_source-cache/archive/bb/bb9021c8e100a376f5070ecca727f83a29b5f652dfe381793b88daa79a3b98a2.tar.bz2 \
     /tmp/pmix.tar.bz2
 
 WORKDIR /tmp
