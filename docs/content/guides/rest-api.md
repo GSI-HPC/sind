@@ -116,6 +116,10 @@ The [identity mode]({{< relref "/configuration/cluster-config#identity-section" 
 | `clientIds` | rejected | `/slurm/` and `/slurmdb/` |
 | `clientIds` with `controllerUsers: true` | `/slurm/` only: the db node has no users | `/slurm/` and `/slurmdb/` |
 
+{{< callout type="warning" >}}
+Slurm 26.11.0 does not reject a job that alice submits to `/slurm/` with a token from `scontrol token` under `clientIds`: it takes the job with uid 4294967294 (`NO_VAL`), which is not alice's. This is a bug of that release. Cancel such a job as root with `scancel`.
+{{< /callout >}}
+
 With `clientIds`, only the login node has the users, and slurmctld and slurmdbd learn them from sackd's tokens. The REST API counterpart is a token that carries the identity, which sind accepts there with `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key,use_jwt_client_ids`.
 
 ## Sign your own tokens

@@ -117,6 +117,9 @@ func signToken(t *testing.T, key []byte, claims map[string]any) string {
 // jobScript is the body of a job submission that prints its user.
 const jobScript = `{"job": {"name": "rest", "script": "#!/bin/sh\nid -un", "current_working_directory": "/tmp", "environment": ["PATH=/usr/bin:/bin"]}}`
 
+// heldJobScript is jobScript held, so that it does not start.
+const heldJobScript = `{"job": {"name": "rest", "script": "#!/bin/sh\nid -un", "current_working_directory": "/tmp", "environment": ["PATH=/usr/bin:/bin"], "hold": true}}`
+
 // waitJob waits until sacct on controller reports the job with want
 // (User|State).
 func waitJob(ctx context.Context, t *testing.T, c *docker.Client, controller docker.ContainerName, jobID int, want string) {
@@ -230,13 +233,29 @@ nodes:
 	assert.Equal(t, "jwt_key=/etc/slurm/jwt_hs256.key,use_jwt_client_ids", params["AuthAltParameters"])
 
 	// The controller has no alice: a token from slurmctld names her, but
-	// slurmctld cannot look her up, and refuses her job.
+	// slurmctld cannot look her up, and refuses her job. The job is held, so
+	// that a Slurm that takes it does not start it.
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
 	waitNodeIdle(t, c, controller, "worker-0")
 	submit := apiURL(t, result, "/slurm/"+restVersion+"/job/submit")
 	aliceToken := scontrolToken(ctx, t, c, controller, "alice")
-	code, job, body := rest(ctx, t, http.MethodPost, submit, "alice", aliceToken, jobScript)
-	assert.Zero(t, job.JobID, body)
-	assert.True(t, code != http.StatusOK || len(job.Errors) > 0, "alice's job accepted: %s", body)
+	code, job, body := rest(ctx, t, http.MethodPost, submit, "alice", aliceToken, heldJobScript)
+	if status.SlurmVersion == "26.11.0" {
+		// Slurm 26.11.0 takes the job with uid NO_VAL: slurmrestd sends it
+		// without a uid, and _valid_id checks the job's uid for NO_VAL before
+		// it sets the uid of the token.
+		require.Positive(t, job.JobID, "Slurm 26.11.0 refused alice's job, remove this case: %s", body)
+		id := strconv.Itoa(job.JobID)
+		uid, err := c.Exec(ctx, controller, "squeue", "-h", "-j", id, "-o", "%U")
+		require.NoError(t, err)
+		assert.Equal(t, "4294967294", strings.TrimSpace(uid), "uid of alice's job")
+		_, err = c.Exec(ctx, controller, "scancel", id)
+		require.NoError(t, err)
+	} else {
+		assert.Zero(t, job.JobID, body)
+		assert.True(t, code != http.StatusOK || len(job.Errors) > 0, "alice's job accepted: %s", body)
+	}
 
 	// A token with her identity works without the accounts: her job runs
 	// as her on the worker (nss_slurm), under her association.
@@ -256,7 +275,7 @@ nodes:
 	assert.Equal(t, http.StatusOK, code, body)
 
 	// The api node has no users and no munge under clientIds.
-	status, err := GetStatus(ctx, c, realm, clusterName)
+	status, err = GetStatus(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	i := slices.IndexFunc(status.Nodes, func(n *NodeStatus) bool { return n.Role == config.RoleAPI })
 	require.NotEqual(t, -1, i)
