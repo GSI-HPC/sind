@@ -67,7 +67,7 @@ jobs:
         run: make lint-ci
 
       - name: Install zizmor
-        run: pipx install zizmor==1.32.0
+        run: pipx install zizmor==1.33.1
 
       # With the token, zizmor also asks GitHub about each action that the
       # workflows use: known vulnerabilities, and the commit behind a pin.
