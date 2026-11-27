@@ -59,7 +59,7 @@ audit-ci: ## Audit the workflows and the Dependabot config for security defects 
 	zizmor .
 
 lint-docs: ## Lint documentation markdown files
-	npx markdownlint-cli2@0.24.1 "docs/content/**/*.md"
+	npx markdownlint-cli2@0.24.2 "docs/content/**/*.md"
 
 check-docs: ## Build the docs site into docs/public: a broken shortcode, template, page reference, link or anchor fails (requires Hugo)
 	hugo --source docs --destination public --cleanDestinationDir --panicOnWarning
