@@ -62,12 +62,13 @@ func monitoringTargets(ctx context.Context, client *docker.Client, realm string)
 	for _, c := range containers {
 		cluster := c.Labels[LabelCluster]
 		targets = append(targets, observability.Target{
-			Cluster:     cluster,
-			Node:        strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, cluster)),
-			Role:        config.Role(c.Labels[LabelRole]),
-			Managed:     isManaged(c.Labels),
-			Container:   c.Name,
-			ContainerID: c.ID,
+			Cluster:      cluster,
+			Node:         strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, cluster)),
+			Role:         config.Role(c.Labels[LabelRole]),
+			Managed:      isManaged(c.Labels),
+			Container:    c.Name,
+			ContainerID:  c.ID,
+			SlurmVersion: c.Labels[LabelSlurmVersion],
 		})
 	}
 	return targets, nil

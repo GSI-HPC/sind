@@ -20,7 +20,7 @@ default of sind built from that release (its binaries, `go install`, library cal
 |-----------|-----|-------------|
 | Slurm | `SLURM_RELEASES` entry (`version`, `sha256`) | `https://download.schedmd.com/slurm/slurm-${V}.tar.bz2` |
 | UCX | `UCX_VERSION` | `https://github.com/openucx/ucx/releases/download/v${V}/ucx-${V}.tar.gz` |
-| PMIx | `PMIX_VERSION` | `https://github.com/openpmix/openpmix/releases/download/v${V}/pmix-${V}.tar.bz2` |
+| PMIx | `PMIX_VERSION` | `https://github.com/openpmix/openpmix/releases/download/v${V}/pmix-${V}.tar.bz2`; 6.1.0, whose release PMIx removed, comes from Spack's source cache, `https://mirror.spack.io/_source-cache/archive/<first two hex digits of the sha256>/<sha256>.tar.bz2` |
 | PRRTE | `PRRTE_VERSION` | `https://github.com/openpmix/prrte/releases/download/v${V}/prrte-${V}.tar.bz2` |
 | Open MPI | `OMPI_VERSION` | `https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-${V}.tar.bz2` |
 | libjwt | `LIBJWT_VERSION`, `LIBJWT_COMMIT` | tag `v${V}` of `https://github.com/benmcollins/libjwt.git`; `LIBJWT_COMMIT` is the commit it points to (`git ls-remote https://github.com/benmcollins/libjwt 'v${V}^{}'`). Stay on 1.x: Slurm's auth/slurm uses the 1.x API, which libjwt 3 dropped |

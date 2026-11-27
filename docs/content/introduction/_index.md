@@ -34,7 +34,7 @@ sind runs on standard GitHub Actions runners with the runner's Docker daemon —
 
 ### Multiple Slurm versions
 
-[Official node images]({{< relref "/container-images/building-images#official-images" >}}) cover the supported Slurm release lines, 26.05 and 25.11, on linux/amd64 and linux/arm64, each with a full MPI stack. Pin a release line, test against several, or bring your own image.
+[Official node images]({{< relref "/container-images/building-images#official-images" >}}) cover the supported Slurm release lines, 26.11, 26.05 and 25.11, on linux/amd64 and linux/arm64, each with a full MPI stack. Pin a release line, test against several, or bring your own image.
 
 ### Worker lifecycle
 
@@ -46,7 +46,7 @@ A [db node]({{< relref "/configuration/node-definitions#database-node" >}}) runs
 
 ### REST API
 
-An [api node]({{< relref "/guides/rest-api" >}}) runs slurmrestd, Slurm's REST API daemon, with JWT authentication (Slurm 26.05), so portals, workflow engines and tests can drive the cluster over HTTP.
+An [api node]({{< relref "/guides/rest-api" >}}) runs slurmrestd, Slurm's REST API daemon, with JWT authentication (Slurm 26.05 and later), so portals, workflow engines and tests can drive the cluster over HTTP.
 
 ### CVMFS
 
@@ -54,7 +54,7 @@ With `storage.cvmfs`, every node [mounts `/cvmfs`]({{< relref "/guides/cvmfs" >}
 
 ### Monitoring
 
-With `monitoring: true`, or `sind create cluster --monitoring`, a [monitoring stack]({{< relref "/guides/monitoring" >}}) of Prometheus, Loki and Grafana collects the cluster's Slurm metrics, its nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05). The stack is shared by the realm's clusters.
+With `monitoring: true`, or `sind create cluster --monitoring`, a [monitoring stack]({{< relref "/guides/monitoring" >}}) of Prometheus, Loki and Grafana collects the cluster's Slurm metrics, its nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05 and later). The stack is shared by the realm's clusters.
 
 ### Web UI
 

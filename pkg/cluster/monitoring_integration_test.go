@@ -55,6 +55,30 @@ func stackQuery(ctx context.Context, t *testing.T, c *docker.Client, realm strin
 	return r
 }
 
+// dashboardQuery returns the query of a panel of one of sind's dashboards,
+// by the panel's title and the query's place, with the dashboard
+// variables set to a cluster of a realm and all its nodes.
+func dashboardQuery(t *testing.T, dashboard, title string, i int, realm, cluster string) string {
+	t.Helper()
+	var d struct {
+		Panels []struct {
+			Title   string `json:"title"`
+			Targets []struct {
+				Expr string `json:"expr"`
+			} `json:"targets"`
+		} `json:"panels"`
+	}
+	require.NoError(t, json.Unmarshal(observability.Dashboards()[dashboard], &d))
+	for _, p := range d.Panels {
+		if p.Title == title {
+			require.Greater(t, len(p.Targets), i, title)
+			return strings.NewReplacer("$realm", realm, "$cluster", cluster, "$node", ".*").Replace(p.Targets[i].Expr)
+		}
+	}
+	require.FailNow(t, "no panel "+title+" in "+dashboard)
+	return ""
+}
+
 // TestMonitoring creates a monitored cluster with a db node and checks
 // that the stack runs and collects its metrics and logs, that Grafana
 // serves its datasources and dashboards anonymously to an Editor without
@@ -114,6 +138,15 @@ func TestMonitoring(t *testing.T) {
 		return len(prom(`up{job="slurm_nodes", cluster="`+name+`"} == 1`).Data.Result) == 1 &&
 			len(prom(`slurm_nodes{cluster="`+name+`"}`).Data.Result) > 0
 	}, 2*time.Minute, 2*time.Second, "no slurmctld metrics in Prometheus")
+	// slurmctld's series carry the cluster's Slurm version, and the Nodes
+	// dashboard shows the worker's RealMemory, its 512 MiB, in bytes,
+	// whether its Slurm reports MiB (26.05) or bytes (26.11 and later).
+	total := dashboardQuery(t, "nodes.json", "Memory allocated by Slurm", 1, realm, name)
+	assert.Eventually(t, func() bool {
+		r := prom(total).Data.Result
+		return len(r) == 1 && r[0].Metric["exported_node"] == "worker-0" && r[0].Metric["slurm_version"] == version &&
+			len(r[0].Value) == 2 && r[0].Value[1] == "536870912"
+	}, time.Minute, 2*time.Second, "no memory of the worker in bytes on the Nodes dashboard")
 	// GetMonitoring reads the key numbers from them: the one worker is
 	// Slurm's one node.
 	assert.Eventually(t, func() bool {

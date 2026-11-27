@@ -15,7 +15,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 ## Supported Versions
 
-- Slurm 26.05 and 25.11 (one node image per release line)
+- Slurm 26.11, 26.05 and 25.11 (one node image per release line)
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.23)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 - llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
@@ -508,7 +508,7 @@ Example output:
 ```
 $ sind get clusters
 NAME     NODES (S/C/D/A/W)  SLURM    STATUS
-default  5 (1/1/0/1/2)      26.05.6  running
+default  5 (1/1/0/1/2)      26.11.0  running
 dev      4 (0/1/1/0/2)      25.11.9  running
 ```
 
@@ -652,8 +652,8 @@ loki serves an API only, no web UI. To see its data, open Grafana and use Explor
 
 CLUSTERS
 NAME     NODES  SLURM
-default  3      26.05.6
-dev      5      26.05.6
+default  3      26.11.0
+dev      5      26.11.0
 ```
 
 `TYPE` says what the port serves: `web UI` (Grafana, Alloy), `web UI + API` (Prometheus) or `API` (Loki). A browser that opens an API-only address gets an error page, so the hint below the table points to Grafana's Explore for the data. The JSON output has it as `interface`. `ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. The JSON output adds each cluster's key numbers under `slurm`, as slurmctld reports them to Prometheus: its nodes, those down and those draining (a node can be both), and its running and pending jobs (`cluster.SlurmCounts`). sind reads them with one instant query through Grafana's `curl` (`observability.Manager.Query`), the highest value of each cluster, as only the controller in control answers the scrape; `slurm` is left out while Grafana or Prometheus does not run, the query fails, or Prometheus has no numbers of the cluster yet. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
@@ -665,7 +665,7 @@ dev      5      26.05.6
     {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.3.2", "interface": "web UI",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.6",
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.11.0",
                 "slurm": {"nodes": 1, "nodes_down": 0, "nodes_drain": 0, "jobs_running": 2, "jobs_pending": 5}}]
 }
 ```
@@ -1512,7 +1512,7 @@ nodes: [controller, db, api, worker: 2]
 - **JWT:** sind writes `jwt_hs256.key`, 32 random bytes as Slurm's JWT guide creates it, to the config volume, owned by `slurm` with mode `0600` (slurmctld refuses a key that others can read). `slurm.conf`, and `slurmdbd.conf` with a managed db node, get `AuthAltTypes=auth/jwt` and `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key`, with identity `clientIds` followed by `,use_jwt_client_ids`, each unless `slurm.main` (or `slurm.slurmdbd`) sets it. An `AuthAltTypes` there must list `auth/jwt`; an `AuthAltParameters` there is taken as written, e.g. to test a JWKS setup (`jwks=…`), and then sind's key is unused. slurmdbd has no default key path, so a `slurm.slurmdbd` that sets `AuthAltParameters` without `jwt_key=` or `jwks=` keeps slurmdbd from starting.
 - **Two checks per request:** slurmrestd holds no key and looks no user up; it passes the caller's token (`X-SLURM-USER-NAME`, `X-SLURM-USER-TOKEN`) on with each RPC. slurmctld (for `/slurm/`) or slurmdbd (for `/slurmdb/`) checks the signature and expiry with the key, the same in every identity mode, and then resolves the user: from the token's identity claims when `use_jwt_client_ids` is set and they are complete, otherwise by looking the name up in its own node's `/etc/passwd`.
 - **Tokens:** `scontrol token username=USER [lifespan=SECONDS]`, run as root (`sind exec`), prints `SLURM_JWT=<token>`; such a token carries only the user name (`sun`). `sind get auth-key --type jwt` exports the key, so that tooling can sign tokens of its own (HS256), with any lifespan, also while slurmctld is down. Such a token can also carry the identity: `uid`, `gid` and `id` with `name` (equal to `sun`), a non-empty `gecos`, `dir`, `shell` and `gids` or `groups`. Whoever holds the key can sign a token for any user, root included.
-- **Identity modes:** in `local` and `nssSlurm` the controller and the db node have the users, so tokens from `scontrol token` work for every user. In `clientIds` they don't: root's tokens work everywhere, a user's only with identity claims, or with `controllerUsers: true` for the `/slurm/` endpoints. This is why sind sets `use_jwt_client_ids` there, the JWT counterpart of sackd's tokens.
+- **Identity modes:** in `local` and `nssSlurm` the controller and the db node have the users, so tokens from `scontrol token` work for every user. In `clientIds` they don't: root's tokens work everywhere, a user's only with identity claims, or with `controllerUsers: true` for the `/slurm/` endpoints. This is why sind sets `use_jwt_client_ids` there, the JWT counterpart of sackd's tokens. Slurm 26.11.0 has a bug here: slurmctld takes a job from slurmrestd with a user's token that it cannot resolve, with uid `NO_VAL` (4294967294), instead of refusing it. slurmrestd sends the job without a uid, and `_valid_id` checks the job's uid for `NO_VAL` before it sets the uid of the token.
 - `sind get cluster` and `sind get node` list slurmrestd on a managed api node, and `sind get clusters` counts it in `NODES (S/C/D/A/W)`.
 - `managed: false` on the api node of a managed cluster makes it a bare node, labelled `sind.managed=false`, for testing your own slurmrestd provisioning: sind starts no slurmrestd and sets up no JWT. In an unmanaged cluster the api node is a bare node like the others.
 
@@ -2033,7 +2033,7 @@ sind generates Alloy's whole configuration from Docker state: the realm's node c
 - slurmdbd serves no HTTP, hence the TCP probe. sackd, slurmrestd, munge, sshd and MariaDB get no probe: each unit runs in a cgroup of its own, whose use cAdvisor reports.
 - cAdvisor runs with `docker_only = false` and `raw_cgroup_prefix_allowlist` listing each node's cgroup, `/system.slice/docker-<id>.scope` under the systemd cgroup driver and `/docker/<id>` under cgroupfs, from the container IDs, and with `disabled_metrics` set to Alloy's default list of disabled metric kinds without `process` (the attribute replaces that list), so that cAdvisor reports `container_processes`. A relabeling generated with it maps the cgroup path to `cluster`, `node` and `role`, the rest of the path to `cgroup`, a `job_<id>` in it to `job_id`, and a `<unit>.service` at its end to `unit`; series of other cgroups are dropped. `container_processes` counts only the processes directly in a cgroup, and a node's own cgroup holds none, as its PID 1 runs in `init.scope`, so the Nodes dashboard sums it over all of the node's cgroups.
 - Each journal source sets `unit` from `_SYSTEMD_UNIT`, or `UNIT` for PID 1's messages about a unit ("Started", "Failed with result"), as `journalctl -u` and so `sind logs` show them, and `level` from the journal priority, by journalctl's names (`err` for priority 3, which Alloy's keyword calls `error`). journald files every stderr line of a service at priority info, so for the Slurm daemons' units (slurmctld, slurmd, slurmdbd, sackd, slurmrestd) the level is parsed from the message (`fatal:` becomes `crit`, `error:` `err`, `warning:` and `debug...:` stay), and for `mariadb.service` from `[ERROR]`, `[Warning]` and `[Note]` (`err`, `warning`, `info`).
-- Every series and log line carries `realm`, `cluster`, `node` and `role` (the probes also `service` and `check`), so a dashboard can link a panel to the matching logs.
+- Every series and log line carries `realm`, `cluster`, `node` and `role` (the probes also `service` and `check`), so a dashboard can link a panel to the matching logs. slurmctld's series also carry `slurm_version`, the cluster's Slurm version (the `sind.slurm.version` label of the controller), as the unit of its node memory depends on it (see Dashboards).
 - Component names are `n_<cluster>__<node>` with `-` turned into `_`, as Alloy labels must be identifiers and cluster names may start with a digit. They stay the same across sind versions: Alloy keys a journal's read position by them.
 
 What a node gets depends only on its role and its `sind.managed` label (`observability.Collect`):
@@ -2115,7 +2115,7 @@ The dashboards are generated in `internal/observability` for sind's labels and v
 | Users and accounts | OpenMetrics and cAdvisor | Running and pending jobs and allocated CPUs per user and per account; CPU and memory per running job, from its cgroup on the workers |
 | Logs | Loki | The nodes' journals, filtered by node, unit, level and a search text, with the log volume by level. The other dashboards link their node panels into it |
 
-Slurm reports memory in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in its metric names says; the panels say so. Job history, efficiency and timelines as `sacct` shows them need accounting data, which no metric carries.
+Slurm 26.05 reports the node memory of `/metrics/nodes` (`slurm_node_memory_bytes` and the other `slurm_node_memory_*bytes`) in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in the names says; Slurm 26.11 and later report bytes. The memory panels show bytes: they multiply by 1048576 the series whose `slurm_version` is a 26.05 release, and those without the label, which sind scraped before it set the label, from Slurm 26.05, the oldest release monitoring takes. Slurm reports the memory of jobs and partitions in MiB in every release. Job history, efficiency and timelines as `sacct` shows them need accounting data, which no metric carries.
 
 ## Command Routing
 
@@ -2167,7 +2167,7 @@ The generic image:
 - Caps the systemd journal at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 - sind enables the appropriate services based on node role
 
-The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX, PMIx and libjwt build in parallel; PRRTE depends on PMIx, Slurm on PMIx and libjwt, and OpenMPI on UCX, PMIx and PRRTE. UCX, PMIx, PRRTE, OpenMPI and libjwt are pinned only in the Dockerfile: their versions are `ARG` defaults, the tarballs are checked with `ADD --checksum`, and libjwt, which published no release tarball for 1.18.4, is cloned by tag and checked against `LIBJWT_COMMIT`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only. The targets use the host network (`network = "host"`), which bake grants only with `--allow=network.host`; `make image` and CI pass it. The image workflow builds all targets of a platform in one build, so the release lines share every layer up to the Slurm one: the Dockerfile copies Slurm last and declares the version `ARG`s right before the `LABEL`.
+The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX, PMIx and libjwt build in parallel; PRRTE depends on PMIx, Slurm on PMIx and libjwt, and OpenMPI on UCX, PMIx and PRRTE. UCX, PMIx, PRRTE, OpenMPI and libjwt are pinned only in the Dockerfile: their versions are `ARG` defaults, the tarballs are checked with `ADD --checksum`, and libjwt, which published no release tarball for 1.18.4, is cloned by tag and checked against `LIBJWT_COMMIT`. PMIx removed its v6 releases from GitHub, so the PMIx 6.1.0 tarball comes from Spack's source cache, under the checksum of the former GitHub release. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only. The targets use the host network (`network = "host"`), which bake grants only with `--allow=network.host`; `make image` and CI pass it. The image workflow builds all targets of a platform in one build, so the release lines share every layer up to the Slurm one: the Dockerfile copies Slurm last and declares the version `ARG`s right before the `LABEL`.
 
 ### Custom Images
 
@@ -2329,7 +2329,7 @@ While it creates the cluster network and volumes, sind runs an ephemeral contain
 
 ```bash
 docker run --rm --entrypoint slurmctld <controller image> -V
-# Output: "slurm 26.05.6"
+# Output: "slurm 26.11.0"
 ```
 
 The version must have the form `X.Y.Z`, optionally with a pre-release suffix such as `-0rc1` (`[0-9A-Za-z.]`); any other output, such as a version followed by a terminal control sequence from an untrusted image, fails the create.
@@ -2337,7 +2337,7 @@ The version must have the form `X.Y.Z`, optionally with a pre-release suffix suc
 The discovered version is stored as a label on each node container:
 
 ```
---label sind.slurm.version=26.05.6
+--label sind.slurm.version=26.11.0
 ```
 
 Workers added with `sind create worker` copy the controller's label. Without `--image` they run an image the cluster already runs, by ID. With `--image`, sind discovers the image's version the same way and refuses managed workers whose version differs from the label. At cluster creation, nodes whose `image` differs from the controller's carry the controller's version too: `sind create cluster` does not discover versions per image or compare them.

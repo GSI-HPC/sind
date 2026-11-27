@@ -321,10 +321,10 @@ func clusterDashboard() dashboard {
 	jobsPanel := series("Jobs by state", "short", 12, jobs...)
 	jobsPanel.stack = true
 	part := func(metric string) string { return sel(metric, selCluster) }
-	memAlloc := series("Memory allocated", "mbytes", 12,
-		pq(`sum(`+sel("slurm_node_memory_alloc_bytes", selCluster)+`)`, "allocated"),
-		pq(`sum(`+sel("slurm_node_memory_effective_bytes", selCluster)+`)`, "allocatable"))
-	memAlloc.description = memoryMiB
+	memAlloc := series("Memory allocated", "bytes", 12,
+		pq(`sum(`+slurmMemory("slurm_node_memory_alloc_bytes", selCluster)+`)`, "allocated"),
+		pq(`sum(`+slurmMemory("slurm_node_memory_effective_bytes", selCluster)+`)`, "allocatable"))
+	memAlloc.description = slurmMemoryNote
 	return dashboard{
 		uid: uidCluster, title: "Slurm cluster",
 		description: "The cluster as slurmctld reports it through its OpenMetrics endpoints.",
@@ -377,10 +377,25 @@ func withThresholds(p panel, steps []any) panel {
 	return p
 }
 
-// memoryMiB explains the unit of Slurm's memory metrics: slurmctld reports
-// RealMemory and allocations in MiB, as slurm.conf states them, whatever
-// the _bytes in their names says.
-const memoryMiB = "Slurm reports memory in MiB, as slurm.conf states RealMemory."
+// slurmMiBVersions matches the slurm_version of a controller whose
+// slurmctld reports the memory of /metrics/nodes, the
+// slurm_node_memory_*bytes series, in MiB, as slurm.conf states
+// RealMemory, whatever the bytes in their names say: Slurm 26.05. Slurm
+// 26.11 and later report bytes. It also matches series without the
+// label, which sind scraped before it set the label, from Slurm 26.05,
+// the oldest release that monitoring takes.
+const slurmMiBVersions = `|26[.]05[.].*`
+
+// slurmMemory returns a node memory metric of slurmctld, selected by
+// matchers, in bytes: the series of the Slurm releases that report MiB
+// (slurmMiBVersions) times 1048576, and the others as they are.
+func slurmMemory(metric, matchers string) string {
+	return "(" + sel(metric, matchers+`, slurm_version=~"`+slurmMiBVersions+`"`) + " * 1048576 or " +
+		sel(metric, matchers+`, slurm_version!~"`+slurmMiBVersions+`"`) + ")"
+}
+
+// slurmMemoryNote explains the memory panels that come from slurmctld.
+const slurmMemoryNote = "Slurm 26.05 reports this memory in MiB, 26.11 and later in bytes; the panel shows bytes."
 
 // nodesDashboard puts Slurm's per-node allocation next to what each node's
 // container and units really use.
@@ -398,11 +413,11 @@ func nodesDashboard() dashboard {
 		pq(sel("slurm_node_cpus_alloc", selCluster+`, exported_node=~"$node"`), "{{exported_node}} allocated"),
 		pq(sel("slurm_node_cpus", selCluster+`, exported_node=~"$node"`), "{{exported_node}} total"))
 	slurmCPU.links = logsLink("exported_node")
-	slurmMem := series("Memory allocated by Slurm", "mbytes", 12,
-		pq(sel("slurm_node_memory_alloc_bytes", selCluster+`, exported_node=~"$node"`), "{{exported_node}} allocated"),
-		pq(sel("slurm_node_memory_bytes", selCluster+`, exported_node=~"$node"`), "{{exported_node}} total"))
+	slurmMem := series("Memory allocated by Slurm", "bytes", 12,
+		pq(slurmMemory("slurm_node_memory_alloc_bytes", selCluster+`, exported_node=~"$node"`), "{{exported_node}} allocated"),
+		pq(slurmMemory("slurm_node_memory_bytes", selCluster+`, exported_node=~"$node"`), "{{exported_node}} total"))
 	slurmMem.links = logsLink("exported_node")
-	slurmMem.description = memoryMiB
+	slurmMem.description = slurmMemoryNote
 	return dashboard{
 		uid: uidNodes, title: "Nodes",
 		description: "Each node's resource use, from its container's cgroups, next to what Slurm has allocated on it. Slurm reports allocation per node and states per cluster, not per node.",

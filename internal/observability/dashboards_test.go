@@ -144,6 +144,40 @@ func TestDashboards_Processes(t *testing.T) {
 	assert.Equal(t, []string{`sum by (node) (container_processes{realm="$realm", cluster="$cluster", node=~"$node"})`}, exprs)
 }
 
+func TestDashboards_SlurmMemory(t *testing.T) {
+	// Slurm 26.05 reports the node memory in MiB, 26.11 in bytes: the
+	// panels show bytes for both, and for series without slurm_version,
+	// which come from 26.05.
+	exprs := map[string][]string{}
+	for _, name := range []string{"slurm-cluster.json", "nodes.json"} {
+		var d grafanaDashboard
+		require.NoError(t, json.Unmarshal(Dashboards()[name], &d))
+		for _, p := range d.Panels {
+			for _, q := range p.Targets {
+				if strings.Contains(q.Expr, "slurm_node_memory") {
+					exprs[p.Title] = append(exprs[p.Title], q.Expr)
+				}
+			}
+		}
+	}
+	c, n := `realm="$realm", cluster="$cluster"`, `realm="$realm", cluster="$cluster", exported_node=~"$node"`
+	assert.Equal(t, map[string][]string{
+		"Memory allocated": {
+			`sum((slurm_node_memory_alloc_bytes{` + c + `, slurm_version=~"|26[.]05[.].*"} * 1048576 or slurm_node_memory_alloc_bytes{` + c + `, slurm_version!~"|26[.]05[.].*"}))`,
+			`sum((slurm_node_memory_effective_bytes{` + c + `, slurm_version=~"|26[.]05[.].*"} * 1048576 or slurm_node_memory_effective_bytes{` + c + `, slurm_version!~"|26[.]05[.].*"}))`,
+		},
+		"Memory allocated by Slurm": {
+			`(slurm_node_memory_alloc_bytes{` + n + `, slurm_version=~"|26[.]05[.].*"} * 1048576 or slurm_node_memory_alloc_bytes{` + n + `, slurm_version!~"|26[.]05[.].*"})`,
+			`(slurm_node_memory_bytes{` + n + `, slurm_version=~"|26[.]05[.].*"} * 1048576 or slurm_node_memory_bytes{` + n + `, slurm_version!~"|26[.]05[.].*"})`,
+		},
+	}, exprs)
+
+	versions := regexp.MustCompile(`^(?:` + slurmMiBVersions + `)$`)
+	for v, mib := range map[string]bool{"": true, "26.05.0-0rc1": true, "26.05.6": true, "26.11.0": false, "26.11.0-0rc2": false, "27.05.1": false, "126.05.1": false} {
+		assert.Equal(t, mib, versions.MatchString(v), v)
+	}
+}
+
 func TestDashboards_LinksToLogs(t *testing.T) {
 	var d grafanaDashboard
 	require.NoError(t, json.Unmarshal(Dashboards()["nodes.json"], &d))

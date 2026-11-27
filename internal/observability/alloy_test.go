@@ -32,7 +32,7 @@ func golden(t *testing.T, name, got string) {
 // controller, worker and db node, and an unmanaged worker, out of order.
 var testTargets = []Target{
 	{Cluster: "dev", Node: "worker-0", Role: config.RoleWorker, Managed: true, Container: "sind-dev-worker-0", ContainerID: "bbbb"},
-	{Cluster: "dev", Node: "controller", Role: config.RoleController, Managed: true, Container: "sind-dev-controller", ContainerID: "aaaa"},
+	{Cluster: "dev", Node: "controller", Role: config.RoleController, Managed: true, Container: "sind-dev-controller", ContainerID: "aaaa", SlurmVersion: "26.11.0"},
 	{Cluster: "dev", Node: "db", Role: config.RoleDB, Managed: true, Container: "sind-dev-db", ContainerID: "cccc"},
 	{Cluster: "dev", Node: "worker-1", Role: config.RoleWorker, Container: "sind-dev-worker-1", ContainerID: "dddd"},
 	{Cluster: "2nd", Node: "submitter", Role: config.RoleSubmitter, Managed: true, Container: "sind-2nd-submitter", ContainerID: "eeee"},
@@ -60,6 +60,16 @@ func TestGenerateAlloyConfig_NoSlurm(t *testing.T) {
 	assert.NotContains(t, got, "blackbox")
 	assert.Contains(t, got, `loki.source.journal "n_dev__worker_1"`)
 	assert.Contains(t, got, `prometheus.exporter.cadvisor "nodes"`)
+}
+
+func TestGenerateAlloyConfig_NoSlurmVersion(t *testing.T) {
+	// A controller without a version gets no slurm_version label, which
+	// the dashboards read as 26.05.
+	ctld := testTargets[1]
+	ctld.SlurmVersion = ""
+	got := GenerateAlloyConfig("sind", "systemd", []Target{ctld})
+	assert.Contains(t, got, `{ "__address__" = "sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller" },`)
+	assert.NotContains(t, got, "slurm_version")
 }
 
 func TestSortTargets(t *testing.T) {

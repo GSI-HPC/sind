@@ -195,9 +195,9 @@ func TestWorld_Monitoring(t *testing.T) {
 	assert.Equal(t, observability.Images(), images, "the images that sind pins")
 }
 
-// The demo has the Slurm releases of the official images, as the docs take
-// their screenshots from it: a bump in docker-bake.hcl changes slurmNew or
-// slurmOld too.
+// The demo has the newest and the oldest Slurm release of the official
+// images, as the docs take their screenshots from it: a bump in
+// docker-bake.hcl changes slurmNew or slurmOld too.
 func TestSlurmReleases(t *testing.T) {
 	bake, err := os.ReadFile("../../../docker-bake.hcl")
 	require.NoError(t, err)
@@ -205,7 +205,8 @@ func TestSlurmReleases(t *testing.T) {
 	for _, m := range regexp.MustCompile(`(?m)^\s*version\s*=\s*"([^"]+)"`).FindAllSubmatch(bake, -1) {
 		releases = append(releases, string(m[1]))
 	}
-	assert.Equal(t, []string{slurmNew, slurmOld}, releases, "the SLURM_RELEASES of docker-bake.hcl")
+	require.NotEmpty(t, releases, "the SLURM_RELEASES of docker-bake.hcl")
+	assert.Equal(t, []string{slurmNew, slurmOld}, []string{releases[0], releases[len(releases)-1]}, "the newest and the oldest of SLURM_RELEASES in docker-bake.hcl")
 }
 
 func TestWorld_Connect(t *testing.T) {

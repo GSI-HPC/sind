@@ -423,12 +423,15 @@ func TestMonitored(t *testing.T) {
 
 func TestAlloyConfig(t *testing.T) {
 	f := newStackFake(t)
-	f.nodes = []docker.ContainerListEntry{monitoredNode("dev", "controller", "controller"), monitoredNode("dev", "worker-0", "worker")}
+	ctl := monitoredNode("dev", "controller", "controller")
+	ctl.Labels[LabelSlurmVersion] = "26.11.0"
+	f.nodes = []docker.ContainerListEntry{ctl, monitoredNode("dev", "worker-0", "worker")}
 	client, m := f.client()
 
 	conf, err := alloyConfig(t.Context(), client, "sind")
 	require.NoError(t, err)
-	assert.Contains(t, conf, "sind-dev-controller:6817")
+	assert.Contains(t, conf, `"sind-dev-controller:6817", "cluster" = "dev", "node" = "controller", "role" = "controller", "slurm_version" = "26.11.0" }`,
+		"slurmctld's series carry the cluster's Slurm version")
 	assert.Contains(t, conf, "sind-dev-worker-0:6818")
 	assert.Contains(t, conf, "/system.slice/docker-id-dev-worker-0.scope")
 	assert.True(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
