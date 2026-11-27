@@ -92,10 +92,10 @@ sind needs a rootful Docker daemon. Rootless Docker and a daemon with `userns-re
 
 ## Container image
 
-sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is the official image published with your sind release, for sind v0.17.0 for example:
+sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is the official image published with your sind release, for sind v0.18.0 for example:
 
 ```
-ghcr.io/gsi-hpc/sind-node:v0.17.0
+ghcr.io/gsi-hpc/sind-node:v0.18.0
 ```
 
 It carries the newest Slurm release line that release supports and is published for linux/amd64 and linux/arm64. sind installed with `go install` at a release (`@vX.Y.Z`, or `@latest`), or built with `make build` in a clean checkout of a release tag, defaults to that release's image too; built from any other commit (`go install ...@main`, `make build` between releases) it defaults to `ghcr.io/gsi-hpc/sind-node:latest` instead, the newest supported release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images]({{< relref "/container-images/building-images#official-images" >}}) for the available tags.
